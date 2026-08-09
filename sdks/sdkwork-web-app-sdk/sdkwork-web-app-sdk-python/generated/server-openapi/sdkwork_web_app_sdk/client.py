@@ -1,5 +1,5 @@
 from .http_client import HttpClient, SdkConfig
-from .api.site import SiteApi
+from .api.application import ApplicationApi
 from .api.domain import DomainApi
 from .api.certificate import CertificateApi
 from .api.source_version import SourceVersionApi
@@ -13,7 +13,7 @@ class SdkworkAppClient:
 
     def __init__(self, config: SdkConfig):
         self._client = HttpClient(config)
-        self.site: SiteApi
+        self.application: ApplicationApi
         self.domain: DomainApi
         self.certificate: CertificateApi
         self.source_version: SourceVersionApi
@@ -22,7 +22,7 @@ class SdkworkAppClient:
         self.monitor: MonitorApi
 
         # Initialize API modules
-        self.site = SiteApi(self._client)
+        self.application = ApplicationApi(self._client)
         self.domain = DomainApi(self._client)
         self.certificate = CertificateApi(self._client)
         self.source_version = SourceVersionApi(self._client)

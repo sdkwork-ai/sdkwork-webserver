@@ -39,9 +39,9 @@ const STANDALONE_DRIVE_ROOT = 'share/sdkwork/drive';
 const STANDALONE_SAME_ORIGIN_PATHS = Object.freeze({
   shell: '/',
   runtimeEnv: '/runtime-env.json',
-  navigation: '/console/sites',
+  navigation: '/console/applications',
   openapi: '/openapi.json',
-  webSites: '/app/v3/api/sites',
+  webApplications: '/app/v3/api/applications',
   iamSession: '/app/v3/api/auth/sessions/current',
   driveAssets: '/app/v3/api/assets',
   missingApi: '/app/v3/api/__sdkwork_release_smoke_missing__',
@@ -415,7 +415,7 @@ async function verifyStandaloneSameOriginIngress({ gateway, packageRoot, tempora
     assertContentType(openapi, 'application/json', 'standalone OpenAPI');
     const openapiDocument = JSON.parse(openapi.body);
     for (const ownerPath of [
-      STANDALONE_SAME_ORIGIN_PATHS.webSites,
+      STANDALONE_SAME_ORIGIN_PATHS.webApplications,
       STANDALONE_SAME_ORIGIN_PATHS.iamSession,
       STANDALONE_SAME_ORIGIN_PATHS.driveAssets,
     ]) {
@@ -426,9 +426,9 @@ async function verifyStandaloneSameOriginIngress({ gateway, packageRoot, tempora
 
     for (const ownerRoute of [
       {
-        label: 'standalone unauthenticated Web sites',
-        path: STANDALONE_SAME_ORIGIN_PATHS.webSites,
-        operationId: 'sites.list',
+        label: 'standalone unauthenticated Web applications',
+        path: STANDALONE_SAME_ORIGIN_PATHS.webApplications,
+        operationId: 'applications.list',
       },
       {
         label: 'standalone unauthenticated IAM current session',

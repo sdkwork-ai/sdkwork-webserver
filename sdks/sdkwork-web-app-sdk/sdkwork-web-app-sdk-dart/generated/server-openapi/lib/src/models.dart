@@ -270,7 +270,7 @@ class ApplicationStoreListing {
   }
 }
 
-class CreateSiteRequest {
+class CreateApplicationRequest {
   final String? name;
   final String? slug;
   final String? description;
@@ -279,7 +279,7 @@ class CreateSiteRequest {
   final Map<String, dynamic>? runtimeConfig;
   final ApplicationStoreListing? storeListing;
 
-  CreateSiteRequest({
+  CreateApplicationRequest({
     this.name,
     this.slug,
     this.description,
@@ -289,8 +289,8 @@ class CreateSiteRequest {
     this.storeListing
   });
 
-  factory CreateSiteRequest.fromJson(Map<String, dynamic> json) {
-    return CreateSiteRequest(
+  factory CreateApplicationRequest.fromJson(Map<String, dynamic> json) {
+    return CreateApplicationRequest(
       name: json['name']?.toString(),
       slug: json['slug']?.toString(),
       description: json['description']?.toString(),
@@ -317,21 +317,21 @@ class CreateSiteRequest {
   }
 }
 
-class UpdateSiteRequest {
+class UpdateApplicationRequest {
   final String? name;
   final String? description;
   final Map<String, dynamic>? runtimeConfig;
   final ApplicationStoreListing? storeListing;
 
-  UpdateSiteRequest({
+  UpdateApplicationRequest({
     this.name,
     this.description,
     this.runtimeConfig,
     this.storeListing
   });
 
-  factory UpdateSiteRequest.fromJson(Map<String, dynamic> json) {
-    return UpdateSiteRequest(
+  factory UpdateApplicationRequest.fromJson(Map<String, dynamic> json) {
+    return UpdateApplicationRequest(
       name: json['name']?.toString(),
       description: json['description']?.toString(),
       runtimeConfig: _sdkworkAsMap(json['runtimeConfig']),
@@ -352,11 +352,12 @@ class UpdateSiteRequest {
   }
 }
 
-class SiteResponse {
+class ApplicationResponse {
   final String? id;
   final String? name;
   final String? slug;
   final String? description;
+  final String? siteId;
   final String? applicationType;
   final int? siteType;
   final int? status;
@@ -365,11 +366,12 @@ class SiteResponse {
   final String? createdAt;
   final String? updatedAt;
 
-  SiteResponse({
+  ApplicationResponse({
     this.id,
     this.name,
     this.slug,
     this.description,
+    this.siteId,
     this.applicationType,
     this.siteType,
     this.status,
@@ -379,12 +381,13 @@ class SiteResponse {
     this.updatedAt
   });
 
-  factory SiteResponse.fromJson(Map<String, dynamic> json) {
-    return SiteResponse(
+  factory ApplicationResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationResponse(
       id: json['id']?.toString(),
       name: json['name']?.toString(),
       slug: json['slug']?.toString(),
       description: json['description']?.toString(),
+      siteId: json['siteId']?.toString(),
       applicationType: json['applicationType']?.toString(),
       siteType: json['siteType'] is int ? json['siteType'] : null,
       status: json['status'] is int ? json['status'] : null,
@@ -404,6 +407,7 @@ class SiteResponse {
       'name': name,
       'slug': slug,
       'description': description,
+      'siteId': siteId,
       'applicationType': applicationType,
       'siteType': siteType,
       'status': status,
@@ -415,21 +419,21 @@ class SiteResponse {
   }
 }
 
-class SitePage {
-  final List<SiteResponse>? items;
+class ApplicationPage {
+  final List<ApplicationResponse>? items;
   final String? total;
   final int? page;
   final int? pageSize;
 
-  SitePage({
+  ApplicationPage({
     this.items,
     this.total,
     this.page,
     this.pageSize
   });
 
-  factory SitePage.fromJson(Map<String, dynamic> json) {
-    return SitePage(
+  factory ApplicationPage.fromJson(Map<String, dynamic> json) {
+    return ApplicationPage(
       items: (() {
         final list = _sdkworkAsList(json['items']);
         if (list == null) {
@@ -438,9 +442,9 @@ class SitePage {
         return list
             .map((item) => (() {
         final map = _sdkworkAsMap(item);
-        return map == null ? null : SiteResponse.fromJson(map);
+        return map == null ? null : ApplicationResponse.fromJson(map);
       })())
-            .whereType<SiteResponse>()
+            .whereType<ApplicationResponse>()
             .toList();
       })(),
       total: json['total']?.toString(),
@@ -756,7 +760,7 @@ class ImportGitSourceVersionRequest {
 
 class SourceVersionResponse {
   final String? id;
-  final String? siteId;
+  final String? applicationId;
   final String? versionTag;
   final String? sourceType;
   final String? sourceRef;
@@ -771,7 +775,7 @@ class SourceVersionResponse {
 
   SourceVersionResponse({
     this.id,
-    this.siteId,
+    this.applicationId,
     this.versionTag,
     this.sourceType,
     this.sourceRef,
@@ -788,7 +792,7 @@ class SourceVersionResponse {
   factory SourceVersionResponse.fromJson(Map<String, dynamic> json) {
     return SourceVersionResponse(
       id: json['id']?.toString(),
-      siteId: json['siteId']?.toString(),
+      applicationId: json['applicationId']?.toString(),
       versionTag: json['versionTag']?.toString(),
       sourceType: json['sourceType']?.toString(),
       sourceRef: json['sourceRef']?.toString(),
@@ -809,7 +813,7 @@ class SourceVersionResponse {
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'id': id,
-      'siteId': siteId,
+      'applicationId': applicationId,
       'versionTag': versionTag,
       'sourceType': sourceType,
       'sourceRef': sourceRef,
@@ -915,7 +919,7 @@ class CreateDeploymentRequest {
 
 class DeploymentResponse {
   final String? id;
-  final String? siteId;
+  final String? applicationId;
   final int? deployType;
   final String? sourceVersionId;
   final String? versionTag;
@@ -934,7 +938,7 @@ class DeploymentResponse {
 
   DeploymentResponse({
     this.id,
-    this.siteId,
+    this.applicationId,
     this.deployType,
     this.sourceVersionId,
     this.versionTag,
@@ -955,7 +959,7 @@ class DeploymentResponse {
   factory DeploymentResponse.fromJson(Map<String, dynamic> json) {
     return DeploymentResponse(
       id: json['id']?.toString(),
-      siteId: json['siteId']?.toString(),
+      applicationId: json['applicationId']?.toString(),
       deployType: json['deployType'] is int ? json['deployType'] : null,
       sourceVersionId: json['sourceVersionId']?.toString(),
       versionTag: json['versionTag']?.toString(),
@@ -977,7 +981,7 @@ class DeploymentResponse {
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'id': id,
-      'siteId': siteId,
+      'applicationId': applicationId,
       'deployType': deployType,
       'sourceVersionId': sourceVersionId,
       'versionTag': versionTag,
@@ -1227,7 +1231,7 @@ class CreateListenerCertificateBindingRequest {
 
 class ListenerCertificateBindingResponse {
   final String? id;
-  final String? siteId;
+  final String? applicationId;
   final String? domainId;
   final String? certificateId;
   final String? desiredCertificateVersionId;
@@ -1244,7 +1248,7 @@ class ListenerCertificateBindingResponse {
 
   ListenerCertificateBindingResponse({
     this.id,
-    this.siteId,
+    this.applicationId,
     this.domainId,
     this.certificateId,
     this.desiredCertificateVersionId,
@@ -1263,7 +1267,7 @@ class ListenerCertificateBindingResponse {
   factory ListenerCertificateBindingResponse.fromJson(Map<String, dynamic> json) {
     return ListenerCertificateBindingResponse(
       id: json['id']?.toString(),
-      siteId: json['siteId']?.toString(),
+      applicationId: json['applicationId']?.toString(),
       domainId: json['domainId']?.toString(),
       certificateId: json['certificateId']?.toString(),
       desiredCertificateVersionId: json['desiredCertificateVersionId']?.toString(),
@@ -1289,7 +1293,7 @@ class ListenerCertificateBindingResponse {
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'id': id,
-      'siteId': siteId,
+      'applicationId': applicationId,
       'domainId': domainId,
       'certificateId': certificateId,
       'desiredCertificateVersionId': desiredCertificateVersionId,
@@ -1779,19 +1783,19 @@ class SdkWorkCommandResponse {
   }
 }
 
-class SitesListResponse {
+class ApplicationsListResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesListResponse({
+  ApplicationsListResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesListResponse.fromJson(Map<String, dynamic> json) {
-    return SitesListResponse(
+  factory ApplicationsListResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsListResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -1807,19 +1811,19 @@ class SitesListResponse {
   }
 }
 
-class SitesCreateResponse201 {
+class ApplicationsCreateResponse201 {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesCreateResponse201({
+  ApplicationsCreateResponse201({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesCreateResponse201.fromJson(Map<String, dynamic> json) {
-    return SitesCreateResponse201(
+  factory ApplicationsCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return ApplicationsCreateResponse201(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -1835,19 +1839,19 @@ class SitesCreateResponse201 {
   }
 }
 
-class SitesRetrieveResponse {
+class ApplicationsRetrieveResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesRetrieveResponse({
+  ApplicationsRetrieveResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesRetrieveResponse.fromJson(Map<String, dynamic> json) {
-    return SitesRetrieveResponse(
+  factory ApplicationsRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsRetrieveResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -1863,19 +1867,19 @@ class SitesRetrieveResponse {
   }
 }
 
-class SitesUpdateResponse {
+class ApplicationsUpdateResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesUpdateResponse({
+  ApplicationsUpdateResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesUpdateResponse.fromJson(Map<String, dynamic> json) {
-    return SitesUpdateResponse(
+  factory ApplicationsUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsUpdateResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -1891,19 +1895,19 @@ class SitesUpdateResponse {
   }
 }
 
-class SitesActivateResponse {
+class ApplicationsActivateResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesActivateResponse({
+  ApplicationsActivateResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesActivateResponse.fromJson(Map<String, dynamic> json) {
-    return SitesActivateResponse(
+  factory ApplicationsActivateResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsActivateResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -1919,19 +1923,19 @@ class SitesActivateResponse {
   }
 }
 
-class SitesPauseResponse {
+class ApplicationsPauseResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesPauseResponse({
+  ApplicationsPauseResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesPauseResponse.fromJson(Map<String, dynamic> json) {
-    return SitesPauseResponse(
+  factory ApplicationsPauseResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsPauseResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -1947,19 +1951,19 @@ class SitesPauseResponse {
   }
 }
 
-class SitesDomainsListResponse {
+class ApplicationsDomainsListResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesDomainsListResponse({
+  ApplicationsDomainsListResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesDomainsListResponse.fromJson(Map<String, dynamic> json) {
-    return SitesDomainsListResponse(
+  factory ApplicationsDomainsListResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsDomainsListResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -1975,19 +1979,19 @@ class SitesDomainsListResponse {
   }
 }
 
-class SitesDomainsCreateResponse201 {
+class ApplicationsDomainsCreateResponse201 {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesDomainsCreateResponse201({
+  ApplicationsDomainsCreateResponse201({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesDomainsCreateResponse201.fromJson(Map<String, dynamic> json) {
-    return SitesDomainsCreateResponse201(
+  factory ApplicationsDomainsCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return ApplicationsDomainsCreateResponse201(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -2003,19 +2007,19 @@ class SitesDomainsCreateResponse201 {
   }
 }
 
-class SitesDomainsRetrieveResponse {
+class ApplicationsDomainsRetrieveResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesDomainsRetrieveResponse({
+  ApplicationsDomainsRetrieveResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesDomainsRetrieveResponse.fromJson(Map<String, dynamic> json) {
-    return SitesDomainsRetrieveResponse(
+  factory ApplicationsDomainsRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsDomainsRetrieveResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -2031,19 +2035,19 @@ class SitesDomainsRetrieveResponse {
   }
 }
 
-class SitesDomainsVerifyResponse {
+class ApplicationsDomainsVerifyResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesDomainsVerifyResponse({
+  ApplicationsDomainsVerifyResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesDomainsVerifyResponse.fromJson(Map<String, dynamic> json) {
-    return SitesDomainsVerifyResponse(
+  factory ApplicationsDomainsVerifyResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsDomainsVerifyResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -2059,19 +2063,19 @@ class SitesDomainsVerifyResponse {
   }
 }
 
-class SitesDomainsListenerCertificateBindingsListResponse {
+class ApplicationsDomainsListenerCertificateBindingsListResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesDomainsListenerCertificateBindingsListResponse({
+  ApplicationsDomainsListenerCertificateBindingsListResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesDomainsListenerCertificateBindingsListResponse.fromJson(Map<String, dynamic> json) {
-    return SitesDomainsListenerCertificateBindingsListResponse(
+  factory ApplicationsDomainsListenerCertificateBindingsListResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsDomainsListenerCertificateBindingsListResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -2087,19 +2091,19 @@ class SitesDomainsListenerCertificateBindingsListResponse {
   }
 }
 
-class SitesDomainsListenerCertificateBindingsCreateResponse201 {
+class ApplicationsDomainsListenerCertificateBindingsCreateResponse201 {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesDomainsListenerCertificateBindingsCreateResponse201({
+  ApplicationsDomainsListenerCertificateBindingsCreateResponse201({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesDomainsListenerCertificateBindingsCreateResponse201.fromJson(Map<String, dynamic> json) {
-    return SitesDomainsListenerCertificateBindingsCreateResponse201(
+  factory ApplicationsDomainsListenerCertificateBindingsCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return ApplicationsDomainsListenerCertificateBindingsCreateResponse201(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -2115,19 +2119,19 @@ class SitesDomainsListenerCertificateBindingsCreateResponse201 {
   }
 }
 
-class SitesSourceVersionsListResponse {
+class ApplicationsSourceVersionsListResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesSourceVersionsListResponse({
+  ApplicationsSourceVersionsListResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesSourceVersionsListResponse.fromJson(Map<String, dynamic> json) {
-    return SitesSourceVersionsListResponse(
+  factory ApplicationsSourceVersionsListResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsSourceVersionsListResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -2143,19 +2147,19 @@ class SitesSourceVersionsListResponse {
   }
 }
 
-class SitesSourceVersionsCreateResponse201 {
+class ApplicationsSourceVersionsCreateResponse201 {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesSourceVersionsCreateResponse201({
+  ApplicationsSourceVersionsCreateResponse201({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesSourceVersionsCreateResponse201.fromJson(Map<String, dynamic> json) {
-    return SitesSourceVersionsCreateResponse201(
+  factory ApplicationsSourceVersionsCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return ApplicationsSourceVersionsCreateResponse201(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -2171,19 +2175,19 @@ class SitesSourceVersionsCreateResponse201 {
   }
 }
 
-class SitesSourceVersionsGitImportCreateResponse201 {
+class ApplicationsSourceVersionsGitImportCreateResponse201 {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesSourceVersionsGitImportCreateResponse201({
+  ApplicationsSourceVersionsGitImportCreateResponse201({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesSourceVersionsGitImportCreateResponse201.fromJson(Map<String, dynamic> json) {
-    return SitesSourceVersionsGitImportCreateResponse201(
+  factory ApplicationsSourceVersionsGitImportCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return ApplicationsSourceVersionsGitImportCreateResponse201(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -2199,19 +2203,19 @@ class SitesSourceVersionsGitImportCreateResponse201 {
   }
 }
 
-class SitesSourceVersionsRetrieveResponse {
+class ApplicationsSourceVersionsRetrieveResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesSourceVersionsRetrieveResponse({
+  ApplicationsSourceVersionsRetrieveResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesSourceVersionsRetrieveResponse.fromJson(Map<String, dynamic> json) {
-    return SitesSourceVersionsRetrieveResponse(
+  factory ApplicationsSourceVersionsRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsSourceVersionsRetrieveResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -2227,19 +2231,19 @@ class SitesSourceVersionsRetrieveResponse {
   }
 }
 
-class SitesDeploymentsListResponse {
+class ApplicationsDeploymentsListResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesDeploymentsListResponse({
+  ApplicationsDeploymentsListResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesDeploymentsListResponse.fromJson(Map<String, dynamic> json) {
-    return SitesDeploymentsListResponse(
+  factory ApplicationsDeploymentsListResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsDeploymentsListResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -2255,19 +2259,19 @@ class SitesDeploymentsListResponse {
   }
 }
 
-class SitesDeploymentsCreateResponse201 {
+class ApplicationsDeploymentsCreateResponse201 {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesDeploymentsCreateResponse201({
+  ApplicationsDeploymentsCreateResponse201({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesDeploymentsCreateResponse201.fromJson(Map<String, dynamic> json) {
-    return SitesDeploymentsCreateResponse201(
+  factory ApplicationsDeploymentsCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return ApplicationsDeploymentsCreateResponse201(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -2283,19 +2287,19 @@ class SitesDeploymentsCreateResponse201 {
   }
 }
 
-class SitesDeploymentsRetrieveResponse {
+class ApplicationsDeploymentsRetrieveResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesDeploymentsRetrieveResponse({
+  ApplicationsDeploymentsRetrieveResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesDeploymentsRetrieveResponse.fromJson(Map<String, dynamic> json) {
-    return SitesDeploymentsRetrieveResponse(
+  factory ApplicationsDeploymentsRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsDeploymentsRetrieveResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -2311,19 +2315,19 @@ class SitesDeploymentsRetrieveResponse {
   }
 }
 
-class SitesDeploymentsRollbackResponse {
+class ApplicationsDeploymentsRollbackResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesDeploymentsRollbackResponse({
+  ApplicationsDeploymentsRollbackResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesDeploymentsRollbackResponse.fromJson(Map<String, dynamic> json) {
-    return SitesDeploymentsRollbackResponse(
+  factory ApplicationsDeploymentsRollbackResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsDeploymentsRollbackResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -2339,19 +2343,19 @@ class SitesDeploymentsRollbackResponse {
   }
 }
 
-class SitesEnvVariablesListResponse {
+class ApplicationsEnvVariablesListResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesEnvVariablesListResponse({
+  ApplicationsEnvVariablesListResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesEnvVariablesListResponse.fromJson(Map<String, dynamic> json) {
-    return SitesEnvVariablesListResponse(
+  factory ApplicationsEnvVariablesListResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsEnvVariablesListResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -2367,19 +2371,19 @@ class SitesEnvVariablesListResponse {
   }
 }
 
-class SitesEnvVariablesCreateResponse201 {
+class ApplicationsEnvVariablesCreateResponse201 {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesEnvVariablesCreateResponse201({
+  ApplicationsEnvVariablesCreateResponse201({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesEnvVariablesCreateResponse201.fromJson(Map<String, dynamic> json) {
-    return SitesEnvVariablesCreateResponse201(
+  factory ApplicationsEnvVariablesCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return ApplicationsEnvVariablesCreateResponse201(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -2395,19 +2399,19 @@ class SitesEnvVariablesCreateResponse201 {
   }
 }
 
-class SitesEnvVariablesUpdateResponse {
+class ApplicationsEnvVariablesUpdateResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesEnvVariablesUpdateResponse({
+  ApplicationsEnvVariablesUpdateResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesEnvVariablesUpdateResponse.fromJson(Map<String, dynamic> json) {
-    return SitesEnvVariablesUpdateResponse(
+  factory ApplicationsEnvVariablesUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsEnvVariablesUpdateResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -2451,19 +2455,19 @@ class DomainsListResponse {
   }
 }
 
-class SitesHealthChecksListResponse {
+class ApplicationsHealthChecksListResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesHealthChecksListResponse({
+  ApplicationsHealthChecksListResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesHealthChecksListResponse.fromJson(Map<String, dynamic> json) {
-    return SitesHealthChecksListResponse(
+  factory ApplicationsHealthChecksListResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsHealthChecksListResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -2479,19 +2483,19 @@ class SitesHealthChecksListResponse {
   }
 }
 
-class SitesHealthChecksCreateResponse201 {
+class ApplicationsHealthChecksCreateResponse201 {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  SitesHealthChecksCreateResponse201({
+  ApplicationsHealthChecksCreateResponse201({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory SitesHealthChecksCreateResponse201.fromJson(Map<String, dynamic> json) {
-    return SitesHealthChecksCreateResponse201(
+  factory ApplicationsHealthChecksCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return ApplicationsHealthChecksCreateResponse201(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()

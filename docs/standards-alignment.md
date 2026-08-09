@@ -147,7 +147,7 @@ approval. Normative requirements are owned by `../sdkwork-specs`.
   root-domain hostname responses, so the two listing paths return consistent deployment
   visibility.
 - Environment variables support in-place rotation and soft deletion
-  (`PATCH`/`DELETE /app/v3/api/sites/{siteId}/env_variables/{variableId}`); the active-key unique
+  (`PATCH`/`DELETE /app/v3/api/applications/{siteId}/env_variables/{variableId}`); the active-key unique
   index releases keys on deactivation.
 - Optimistic concurrency: `version` columns are enforced with compare-and-swap updates on site,
   Nginx configuration, and environment-variable writes, returning `409` on concurrent

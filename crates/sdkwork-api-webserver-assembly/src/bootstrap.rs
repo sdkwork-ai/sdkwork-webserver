@@ -214,8 +214,9 @@ pub async fn migrate_database_from_env() -> Result<(), ApiAssemblyError> {
     // Migrate every in-process database module in startup order
     // (DATABASE_FRAMEWORK_SPEC §4.3): the Web module first, then the
     // Deployments domain/certificate blocks composed by the standalone
-    // gateway. Each module's baseline bootstraps empty databases; versioned
-    // forward migrations converge existing ones.
+    // gateway, then the Skills and MCP modules. Each module's baseline
+    // bootstraps empty databases; versioned forward migrations converge
+    // existing ones.
     std::env::set_var("SDKWORK_DATABASE_AUTO_MIGRATE", "true");
     sdkwork_webserver_database_host::bootstrap_web_database_from_env()
         .await
@@ -223,6 +224,14 @@ pub async fn migrate_database_from_env() -> Result<(), ApiAssemblyError> {
         .map_err(|detail| ApiAssemblyError::DatabaseMigration { detail })?;
     sdkwork_api_deployments_assembly::migrate_database_from_env()
         .await
+        .map_err(|detail| ApiAssemblyError::DatabaseMigration { detail })?;
+    sdkwork_skills_database_host::bootstrap_skills_database_from_env()
+        .await
+        .map(|_| ())
+        .map_err(|detail| ApiAssemblyError::DatabaseMigration { detail })?;
+    sdkwork_mcp_database_host::bootstrap_mcp_database_from_env()
+        .await
+        .map(|_| ())
         .map_err(|detail| ApiAssemblyError::DatabaseMigration { detail })?;
     Ok(())
 }

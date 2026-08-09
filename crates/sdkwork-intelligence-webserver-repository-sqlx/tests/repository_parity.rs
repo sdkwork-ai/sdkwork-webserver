@@ -11,14 +11,14 @@ use sdkwork_intelligence_webserver_service::{
 };
 use sdkwork_webserver_contract::{
     AgentCertificateObservation, AgentHeartbeatRequest, ApplicationStoreListing,
-    CertificateIssueUpdate, CertificateOperationLease, CreateDeploymentRequest,
-    CreateDomainRequest, CreateEnvVariableRequest, CreateHealthCheckRequest,
-    CreateListenerCertificateBindingRequest, CreateManagedDomainRequest, CreateNginxConfigRequest,
-    CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
-    CreateSiteRequest, CreateSourceVersionRequest, IssueCertificateRequest, ListAuditLogsQuery,
-    ListNginxConfigsQuery, ListRootDomainsQuery, ListSitesQuery, MediaResource,
-    RevokeCertificateRequest, RuntimeObservationState, SourceVersionConfigSnapshot,
-    UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest, UpdateSiteRequest,
+    CertificateIssueUpdate, CertificateOperationLease, CreateApplicationRequest,
+    CreateDeploymentRequest, CreateDomainRequest, CreateEnvVariableRequest,
+    CreateHealthCheckRequest, CreateListenerCertificateBindingRequest, CreateManagedDomainRequest,
+    CreateNginxConfigRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest,
+    CreateServerRequest, CreateSourceVersionRequest, IssueCertificateRequest,
+    ListApplicationsQuery, ListAuditLogsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
+    MediaResource, RevokeCertificateRequest, RuntimeObservationState, SourceVersionConfigSnapshot,
+    UpdateApplicationRequest, UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest,
     WebServiceErrorKind, WebsiteRuntimeSetSnapshot,
 };
 use sdkwork_webserver_core::website_runtime::website_runtime_set_snapshot_sha256;
@@ -192,11 +192,11 @@ async fn postgres_repository_transactions_tenants_idempotency_and_pagination_are
 async fn verify_certificate_revocation_ari_and_tls_projection(context: &TestContext) {
     let repository = &context.repository;
     let site = repository
-        .create_site(
+        .create_application(
             TENANT_A,
             Some(31),
             Some(91),
-            &CreateSiteRequest {
+            &CreateApplicationRequest {
                 name: "Parity Revocation Site".to_string(),
                 slug: Some("parity-revocation".to_string()),
                 description: None,
@@ -478,11 +478,11 @@ async fn verify_certificate_revocation_ari_and_tls_projection(context: &TestCont
 async fn verify_certificate_activation_compensation(context: &TestContext) {
     let site = context
         .repository
-        .create_site(
+        .create_application(
             TENANT_A,
             Some(31),
             Some(93),
-            &CreateSiteRequest {
+            &CreateApplicationRequest {
                 name: "Certificate Compensation Site".to_string(),
                 slug: Some("certificate-compensation".to_string()),
                 description: None,
@@ -643,11 +643,11 @@ async fn verify_repository_contract(context: &TestContext) {
     for index in 0..4 {
         sites.push(
             repository
-                .create_site(
+                .create_application(
                     TENANT_A,
                     Some(31),
                     Some(91),
-                    &CreateSiteRequest {
+                    &CreateApplicationRequest {
                         name: format!("Alpha Site {index}"),
                         slug: Some(format!("alpha-{index}")),
                         description: None,
@@ -662,11 +662,11 @@ async fn verify_repository_contract(context: &TestContext) {
         );
     }
     let api_application = repository
-        .create_site(
+        .create_application(
             TENANT_A,
             Some(31),
             Some(91),
-            &CreateSiteRequest {
+            &CreateApplicationRequest {
                 name: "Alpha API".to_owned(),
                 slug: Some("alpha-api".to_owned()),
                 description: None,
@@ -680,10 +680,10 @@ async fn verify_repository_contract(context: &TestContext) {
         .expect("create API application");
     assert_eq!(api_application.application_type, "API");
     let api_page = repository
-        .list_sites(
+        .list_applications(
             TENANT_A,
             None,
-            &ListSitesQuery {
+            &ListApplicationsQuery {
                 page: 1,
                 page_size: 20,
                 status: Some(0),
@@ -697,10 +697,10 @@ async fn verify_repository_contract(context: &TestContext) {
     assert_eq!(api_page.total, 1);
     assert_eq!(api_page.items[0].id, api_application.id);
     let owner_page = repository
-        .list_sites(
+        .list_applications(
             TENANT_A,
             Some(91),
-            &ListSitesQuery {
+            &ListApplicationsQuery {
                 page: 1,
                 page_size: 100,
                 status: None,
@@ -713,10 +713,10 @@ async fn verify_repository_contract(context: &TestContext) {
         .expect("list applications for the owning user");
     assert_eq!(owner_page.total, 5);
     assert!(repository
-        .list_sites(
+        .list_applications(
             TENANT_A,
             Some(92),
-            &ListSitesQuery {
+            &ListApplicationsQuery {
                 page: 1,
                 page_size: 100,
                 status: None,
@@ -730,19 +730,19 @@ async fn verify_repository_contract(context: &TestContext) {
         .items
         .is_empty());
     repository
-        .retrieve_site(TENANT_A, Some(92), &api_application.id)
+        .retrieve_application(TENANT_A, Some(92), &api_application.id)
         .await
         .expect_err("another user must not retrieve an owner-scoped application");
     repository
-        .retrieve_site(TENANT_A, None, &api_application.id)
+        .retrieve_application(TENANT_A, None, &api_application.id)
         .await
         .expect("tenant admin must retrieve an owner-scoped application");
     let tenant_b_site = repository
-        .create_site(
+        .create_application(
             TENANT_B,
             None,
             None,
-            &CreateSiteRequest {
+            &CreateApplicationRequest {
                 name: "Tenant B".to_owned(),
                 slug: Some("alpha-0".to_owned()),
                 description: None,
@@ -757,11 +757,11 @@ async fn verify_repository_contract(context: &TestContext) {
     assert_ne!(sites[0].id, tenant_b_site.id);
 
     let duplicate_slug = repository
-        .create_site(
+        .create_application(
             TENANT_A,
             None,
             None,
-            &CreateSiteRequest {
+            &CreateApplicationRequest {
                 name: "Duplicate".to_owned(),
                 slug: Some("alpha-0".to_owned()),
                 description: None,
@@ -776,11 +776,11 @@ async fn verify_repository_contract(context: &TestContext) {
     assert_eq!(duplicate_slug.kind(), WebServiceErrorKind::Conflict);
 
     repository
-        .retrieve_site(TENANT_A, None, &tenant_b_site.id)
+        .retrieve_application(TENANT_A, None, &tenant_b_site.id)
         .await
         .expect_err("tenant A must not retrieve tenant B site");
     repository
-        .retrieve_site(TENANT_B, None, &sites[0].id)
+        .retrieve_application(TENANT_B, None, &sites[0].id)
         .await
         .expect_err("tenant B must not retrieve tenant A site");
 
@@ -791,7 +791,7 @@ async fn verify_repository_contract(context: &TestContext) {
         .execute(&context.pool)
         .await
         .expect("create deterministic pagination ties");
-    let query = ListSitesQuery {
+    let query = ListApplicationsQuery {
         page: 1,
         page_size: 2,
         status: Some(0),
@@ -800,14 +800,14 @@ async fn verify_repository_contract(context: &TestContext) {
         keyword: Some(" alpha ".to_owned()),
     };
     let first_page = repository
-        .list_sites(TENANT_A, None, &query)
+        .list_applications(TENANT_A, None, &query)
         .await
         .expect("list first filtered page");
     let second_page = repository
-        .list_sites(
+        .list_applications(
             TENANT_A,
             None,
-            &ListSitesQuery {
+            &ListApplicationsQuery {
                 page: 2,
                 ..query.clone()
             },
@@ -846,10 +846,10 @@ async fn verify_repository_contract(context: &TestContext) {
     assert_eq!(observed, expected);
 
     let deep_page = repository
-        .list_sites(
+        .list_applications(
             TENANT_A,
             None,
-            &ListSitesQuery {
+            &ListApplicationsQuery {
                 page: i32::MAX,
                 page_size: i32::MAX,
                 status: None,
@@ -1144,10 +1144,10 @@ async fn verify_public_repository_surface(context: &TestContext, site_id: &str) 
         .await
         .expect("seed unrelated site metadata");
     let updated_site = repository
-        .update_site(
+        .update_application(
             TENANT_A,
             site_id,
-            &UpdateSiteRequest {
+            &UpdateApplicationRequest {
                 name: Some("Alpha Site Updated".to_string()),
                 description: Some("dual-engine repository parity".to_string()),
                 runtime_config: Some(serde_json::json!({
@@ -1204,7 +1204,7 @@ async fn verify_public_repository_surface(context: &TestContext, site_id: &str) 
     );
     assert_eq!(
         repository
-            .set_site_status(TENANT_A, site_id, 1)
+            .set_application_status(TENANT_A, site_id, 1)
             .await
             .expect("update site status timestamp")
             .status,
@@ -2232,20 +2232,20 @@ async fn verify_public_repository_surface(context: &TestContext, site_id: &str) 
         .items
         .is_empty());
     let active_delete = repository
-        .delete_site(TENANT_A, site_id, Some(91))
+        .delete_application(TENANT_A, site_id, Some(91))
         .await
         .expect_err("active site deletion must be rejected");
     assert_eq!(active_delete.kind(), WebServiceErrorKind::Conflict);
     repository
-        .set_site_status(TENANT_A, site_id, 2)
+        .set_application_status(TENANT_A, site_id, 2)
         .await
         .expect("disable site before deletion");
     repository
-        .delete_site(TENANT_A, site_id, Some(91))
+        .delete_application(TENANT_A, site_id, Some(91))
         .await
         .expect("soft-delete site timestamps");
     repository
-        .retrieve_site(TENANT_A, None, site_id)
+        .retrieve_application(TENANT_A, None, site_id)
         .await
         .expect_err("soft-deleted site must not be retrievable");
 }
@@ -3086,7 +3086,7 @@ async fn verify_rollback_atomicity(context: &TestContext, site_id: &str) {
         )
         .await
         .expect("rollback succeeds after removing failure trigger");
-    assert_eq!(rollback.site_id, site_id);
+    assert_eq!(rollback.application_id, site_id);
     assert_eq!(rollback.version_tag.as_deref(), Some("rollback-source"));
     assert_eq!(
         rollback.artifact_drive_uri.as_deref(),
@@ -3181,7 +3181,7 @@ async fn verify_nginx_activation_rollback(
         "SELECT config.uuid
          FROM web_nginx_config config
          INNER JOIN web_site site
-           ON site.id = config.site_id AND site.tenant_id = config.tenant_id
+           ON site.id = config.application_id AND site.tenant_id = config.tenant_id
          WHERE config.tenant_id = $1 AND site.uuid = $2 AND config.is_active = TRUE",
     )
     .bind(TENANT_A)

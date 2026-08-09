@@ -104,7 +104,7 @@ public struct ApplicationStoreListing: Codable {
     }
 }
 
-public struct CreateSiteRequest: Codable {
+public struct CreateApplicationRequest: Codable {
     public let name: String?
     public let slug: String?
     public let description: String?
@@ -125,7 +125,7 @@ public struct CreateSiteRequest: Codable {
     }
 }
 
-public struct UpdateSiteRequest: Codable {
+public struct UpdateApplicationRequest: Codable {
     public let name: String?
     public let description: String?
     public let runtimeConfig: [String: Any]?
@@ -140,11 +140,12 @@ public struct UpdateSiteRequest: Codable {
     }
 }
 
-public struct SiteResponse: Codable {
+public struct ApplicationResponse: Codable {
     public let id: String?
     public let name: String?
     public let slug: String?
     public let description: String?
+    public let siteId: String?
     public let applicationType: String?
     public let siteType: Int?
     public let status: Int?
@@ -154,11 +155,12 @@ public struct SiteResponse: Codable {
     public let updatedAt: String?
 
 
-    public init(id: String? = nil, name: String? = nil, slug: String? = nil, description: String? = nil, applicationType: String? = nil, siteType: Int? = nil, status: Int? = nil, runtimeConfig: [String: Any]? = nil, storeListing: ApplicationStoreListing? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
+    public init(id: String? = nil, name: String? = nil, slug: String? = nil, description: String? = nil, siteId: String? = nil, applicationType: String? = nil, siteType: Int? = nil, status: Int? = nil, runtimeConfig: [String: Any]? = nil, storeListing: ApplicationStoreListing? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
         self.id = id
         self.name = name
         self.slug = slug
         self.description = description
+        self.siteId = siteId
         self.applicationType = applicationType
         self.siteType = siteType
         self.status = status
@@ -169,14 +171,14 @@ public struct SiteResponse: Codable {
     }
 }
 
-public struct SitePage: Codable {
-    public let items: [SiteResponse]?
+public struct ApplicationPage: Codable {
+    public let items: [ApplicationResponse]?
     public let total: String?
     public let page: Int?
     public let pageSize: Int?
 
 
-    public init(items: [SiteResponse]? = nil, total: String? = nil, page: Int? = nil, pageSize: Int? = nil) {
+    public init(items: [ApplicationResponse]? = nil, total: String? = nil, page: Int? = nil, pageSize: Int? = nil) {
         self.items = items
         self.total = total
         self.page = page
@@ -319,7 +321,7 @@ public struct ImportGitSourceVersionRequest: Codable {
 
 public struct SourceVersionResponse: Codable {
     public let id: String?
-    public let siteId: String?
+    public let applicationId: String?
     public let versionTag: String?
     public let sourceType: String?
     public let sourceRef: String?
@@ -333,9 +335,9 @@ public struct SourceVersionResponse: Codable {
     public let createdAt: String?
 
 
-    public init(id: String? = nil, siteId: String? = nil, versionTag: String? = nil, sourceType: String? = nil, sourceRef: String? = nil, commitHash: String? = nil, artifactDriveUri: String? = nil, artifactSize: String? = nil, artifactHash: String? = nil, configSnapshot: SourceVersionConfigSnapshot? = nil, status: Int? = nil, retained: Bool? = nil, createdAt: String? = nil) {
+    public init(id: String? = nil, applicationId: String? = nil, versionTag: String? = nil, sourceType: String? = nil, sourceRef: String? = nil, commitHash: String? = nil, artifactDriveUri: String? = nil, artifactSize: String? = nil, artifactHash: String? = nil, configSnapshot: SourceVersionConfigSnapshot? = nil, status: Int? = nil, retained: Bool? = nil, createdAt: String? = nil) {
         self.id = id
-        self.siteId = siteId
+        self.applicationId = applicationId
         self.versionTag = versionTag
         self.sourceType = sourceType
         self.sourceRef = sourceRef
@@ -388,7 +390,7 @@ public struct CreateDeploymentRequest: Codable {
 
 public struct DeploymentResponse: Codable {
     public let id: String?
-    public let siteId: String?
+    public let applicationId: String?
     public let deployType: Int?
     public let sourceVersionId: String?
     public let versionTag: String?
@@ -406,9 +408,9 @@ public struct DeploymentResponse: Codable {
     public let createdAt: String?
 
 
-    public init(id: String? = nil, siteId: String? = nil, deployType: Int? = nil, sourceVersionId: String? = nil, versionTag: String? = nil, commitHash: String? = nil, sourceRef: String? = nil, rollbackFromDeploymentId: String? = nil, environment: String? = nil, artifactDriveUri: String? = nil, artifactSize: String? = nil, artifactHash: String? = nil, status: Int? = nil, startedAt: String? = nil, completedAt: String? = nil, durationMs: String? = nil, createdAt: String? = nil) {
+    public init(id: String? = nil, applicationId: String? = nil, deployType: Int? = nil, sourceVersionId: String? = nil, versionTag: String? = nil, commitHash: String? = nil, sourceRef: String? = nil, rollbackFromDeploymentId: String? = nil, environment: String? = nil, artifactDriveUri: String? = nil, artifactSize: String? = nil, artifactHash: String? = nil, status: Int? = nil, startedAt: String? = nil, completedAt: String? = nil, durationMs: String? = nil, createdAt: String? = nil) {
         self.id = id
-        self.siteId = siteId
+        self.applicationId = applicationId
         self.deployType = deployType
         self.sourceVersionId = sourceVersionId
         self.versionTag = versionTag
@@ -524,7 +526,7 @@ public struct CreateListenerCertificateBindingRequest: Codable {
 
 public struct ListenerCertificateBindingResponse: Codable {
     public let id: String?
-    public let siteId: String?
+    public let applicationId: String?
     public let domainId: String?
     public let certificateId: String?
     public let desiredCertificateVersionId: String?
@@ -540,9 +542,9 @@ public struct ListenerCertificateBindingResponse: Codable {
     public let updatedAt: String?
 
 
-    public init(id: String? = nil, siteId: String? = nil, domainId: String? = nil, certificateId: String? = nil, desiredCertificateVersionId: String? = nil, currentCertificateVersionId: String? = nil, desiredCertificate: ListenerCertificateSummaryResponse? = nil, currentCertificate: ListenerCertificateSummaryResponse? = nil, keyAlgorithm: String? = nil, priority: Int? = nil, isDefault: Bool? = nil, status: String? = nil, activatedAt: String? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
+    public init(id: String? = nil, applicationId: String? = nil, domainId: String? = nil, certificateId: String? = nil, desiredCertificateVersionId: String? = nil, currentCertificateVersionId: String? = nil, desiredCertificate: ListenerCertificateSummaryResponse? = nil, currentCertificate: ListenerCertificateSummaryResponse? = nil, keyAlgorithm: String? = nil, priority: Int? = nil, isDefault: Bool? = nil, status: String? = nil, activatedAt: String? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
         self.id = id
-        self.siteId = siteId
+        self.applicationId = applicationId
         self.domainId = domainId
         self.certificateId = certificateId
         self.desiredCertificateVersionId = desiredCertificateVersionId
@@ -763,7 +765,7 @@ public struct SdkWorkCommandResponse: Codable {
     }
 }
 
-public struct SitesListResponse: Codable {
+public struct ApplicationsListResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -776,7 +778,7 @@ public struct SitesListResponse: Codable {
     }
 }
 
-public struct SitesCreateResponse201: Codable {
+public struct ApplicationsCreateResponse201: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -789,7 +791,7 @@ public struct SitesCreateResponse201: Codable {
     }
 }
 
-public struct SitesRetrieveResponse: Codable {
+public struct ApplicationsRetrieveResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -802,7 +804,7 @@ public struct SitesRetrieveResponse: Codable {
     }
 }
 
-public struct SitesUpdateResponse: Codable {
+public struct ApplicationsUpdateResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -815,7 +817,7 @@ public struct SitesUpdateResponse: Codable {
     }
 }
 
-public struct SitesActivateResponse: Codable {
+public struct ApplicationsActivateResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -828,7 +830,7 @@ public struct SitesActivateResponse: Codable {
     }
 }
 
-public struct SitesPauseResponse: Codable {
+public struct ApplicationsPauseResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -841,7 +843,7 @@ public struct SitesPauseResponse: Codable {
     }
 }
 
-public struct SitesDomainsListResponse: Codable {
+public struct ApplicationsDomainsListResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -854,7 +856,7 @@ public struct SitesDomainsListResponse: Codable {
     }
 }
 
-public struct SitesDomainsCreateResponse201: Codable {
+public struct ApplicationsDomainsCreateResponse201: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -867,7 +869,7 @@ public struct SitesDomainsCreateResponse201: Codable {
     }
 }
 
-public struct SitesDomainsRetrieveResponse: Codable {
+public struct ApplicationsDomainsRetrieveResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -880,7 +882,7 @@ public struct SitesDomainsRetrieveResponse: Codable {
     }
 }
 
-public struct SitesDomainsVerifyResponse: Codable {
+public struct ApplicationsDomainsVerifyResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -893,7 +895,7 @@ public struct SitesDomainsVerifyResponse: Codable {
     }
 }
 
-public struct SitesDomainsListenerCertificateBindingsListResponse: Codable {
+public struct ApplicationsDomainsListenerCertificateBindingsListResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -906,7 +908,7 @@ public struct SitesDomainsListenerCertificateBindingsListResponse: Codable {
     }
 }
 
-public struct SitesDomainsListenerCertificateBindingsCreateResponse201: Codable {
+public struct ApplicationsDomainsListenerCertificateBindingsCreateResponse201: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -919,7 +921,7 @@ public struct SitesDomainsListenerCertificateBindingsCreateResponse201: Codable 
     }
 }
 
-public struct SitesSourceVersionsListResponse: Codable {
+public struct ApplicationsSourceVersionsListResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -932,7 +934,7 @@ public struct SitesSourceVersionsListResponse: Codable {
     }
 }
 
-public struct SitesSourceVersionsCreateResponse201: Codable {
+public struct ApplicationsSourceVersionsCreateResponse201: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -945,7 +947,7 @@ public struct SitesSourceVersionsCreateResponse201: Codable {
     }
 }
 
-public struct SitesSourceVersionsGitImportCreateResponse201: Codable {
+public struct ApplicationsSourceVersionsGitImportCreateResponse201: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -958,7 +960,7 @@ public struct SitesSourceVersionsGitImportCreateResponse201: Codable {
     }
 }
 
-public struct SitesSourceVersionsRetrieveResponse: Codable {
+public struct ApplicationsSourceVersionsRetrieveResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -971,7 +973,7 @@ public struct SitesSourceVersionsRetrieveResponse: Codable {
     }
 }
 
-public struct SitesDeploymentsListResponse: Codable {
+public struct ApplicationsDeploymentsListResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -984,7 +986,7 @@ public struct SitesDeploymentsListResponse: Codable {
     }
 }
 
-public struct SitesDeploymentsCreateResponse201: Codable {
+public struct ApplicationsDeploymentsCreateResponse201: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -997,7 +999,7 @@ public struct SitesDeploymentsCreateResponse201: Codable {
     }
 }
 
-public struct SitesDeploymentsRetrieveResponse: Codable {
+public struct ApplicationsDeploymentsRetrieveResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -1010,7 +1012,7 @@ public struct SitesDeploymentsRetrieveResponse: Codable {
     }
 }
 
-public struct SitesDeploymentsRollbackResponse: Codable {
+public struct ApplicationsDeploymentsRollbackResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -1023,7 +1025,7 @@ public struct SitesDeploymentsRollbackResponse: Codable {
     }
 }
 
-public struct SitesEnvVariablesListResponse: Codable {
+public struct ApplicationsEnvVariablesListResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -1036,7 +1038,7 @@ public struct SitesEnvVariablesListResponse: Codable {
     }
 }
 
-public struct SitesEnvVariablesCreateResponse201: Codable {
+public struct ApplicationsEnvVariablesCreateResponse201: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -1049,7 +1051,7 @@ public struct SitesEnvVariablesCreateResponse201: Codable {
     }
 }
 
-public struct SitesEnvVariablesUpdateResponse: Codable {
+public struct ApplicationsEnvVariablesUpdateResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -1075,7 +1077,7 @@ public struct DomainsListResponse: Codable {
     }
 }
 
-public struct SitesHealthChecksListResponse: Codable {
+public struct ApplicationsHealthChecksListResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -1088,7 +1090,7 @@ public struct SitesHealthChecksListResponse: Codable {
     }
 }
 
-public struct SitesHealthChecksCreateResponse201: Codable {
+public struct ApplicationsHealthChecksCreateResponse201: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?

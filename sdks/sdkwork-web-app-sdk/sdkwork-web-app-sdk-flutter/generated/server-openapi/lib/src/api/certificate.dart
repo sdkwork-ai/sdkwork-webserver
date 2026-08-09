@@ -12,20 +12,20 @@ class CertificateApi {
   CertificateApi(this._client);
 
   /// List certificates active on the domain listener
-  Future<SitesDomainsListenerCertificateBindingsListResponse?> sitesDomainsListenerCertificateBindingsList(String siteId, String domainId, [int? page, int? pageSize]) async {
+  Future<ApplicationsDomainsListenerCertificateBindingsListResponse?> applicationsDomainsListenerCertificateBindingsList(String applicationId, String domainId, [int? page, int? pageSize]) async {
     final query = buildQueryString([
       QueryParameterSpec('page', page, 'form', true, false, null),
       QueryParameterSpec('page_size', pageSize, 'form', true, false, null)
     ]);
-    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/domains/${serializePathParameter(domainId, const PathParameterSpec('domainId', 'simple', false))}/listener_certificate_bindings'), query));
+    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/domains/${serializePathParameter(domainId, const PathParameterSpec('domainId', 'simple', false))}/listener_certificate_bindings'), query));
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : SitesDomainsListenerCertificateBindingsListResponse.fromJson(map);
+      return map == null ? null : ApplicationsDomainsListenerCertificateBindingsListResponse.fromJson(map);
     })();
   }
 
   /// Bind a certificate version to the domain listener
-  Future<SitesDomainsListenerCertificateBindingsCreateResponse201?> sitesDomainsListenerCertificateBindingsCreate(String siteId, String domainId, CreateListenerCertificateBindingRequest body, String idempotencyKey) async {
+  Future<ApplicationsDomainsListenerCertificateBindingsCreateResponse201?> applicationsDomainsListenerCertificateBindingsCreate(String applicationId, String domainId, CreateListenerCertificateBindingRequest body, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(
       <String, HeaderParameterSpec>{
         'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
@@ -33,22 +33,22 @@ class CertificateApi {
       <String, HeaderParameterSpec>{},
     );
     final payload = body.toJson();
-    final response = await _client.post(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/domains/${serializePathParameter(domainId, const PathParameterSpec('domainId', 'simple', false))}/listener_certificate_bindings'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    final response = await _client.post(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/domains/${serializePathParameter(domainId, const PathParameterSpec('domainId', 'simple', false))}/listener_certificate_bindings'), body: payload, headers: requestHeaders, contentType: 'application/json');
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : SitesDomainsListenerCertificateBindingsCreateResponse201.fromJson(map);
+      return map == null ? null : ApplicationsDomainsListenerCertificateBindingsCreateResponse201.fromJson(map);
     })();
   }
 
   /// Remove a certificate from the domain listener
-  Future<void> sitesDomainsListenerCertificateBindingsDelete(String siteId, String domainId, String bindingId, String idempotencyKey) async {
+  Future<void> applicationsDomainsListenerCertificateBindingsDelete(String applicationId, String domainId, String bindingId, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(
       <String, HeaderParameterSpec>{
         'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
       },
       <String, HeaderParameterSpec>{},
     );
-    await _client.delete(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/domains/${serializePathParameter(domainId, const PathParameterSpec('domainId', 'simple', false))}/listener_certificate_bindings/${serializePathParameter(bindingId, const PathParameterSpec('bindingId', 'simple', false))}'), headers: requestHeaders);
+    await _client.delete(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/domains/${serializePathParameter(domainId, const PathParameterSpec('domainId', 'simple', false))}/listener_certificate_bindings/${serializePathParameter(bindingId, const PathParameterSpec('bindingId', 'simple', false))}'), headers: requestHeaders);
   }
 }
 

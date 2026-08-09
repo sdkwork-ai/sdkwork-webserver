@@ -18,55 +18,55 @@ func NewSourceVersionApi(client *sdkhttp.Client) *SourceVersionApi {
 }
 
 // 获取应用源码版本
-func (a *SourceVersionApi) SitesSourceVersionsList(siteId string, pageSize *int, cursor *string) (sdktypes.SitesSourceVersionsListResponse, error) {
+func (a *SourceVersionApi) ApplicationsSourceVersionsList(applicationId string, pageSize *int, cursor *string) (sdktypes.ApplicationsSourceVersionsListResponse, error) {
     query := BuildQueryString([]QueryParameterSpec{
         {Name: "page_size", Value: func() interface{} { if pageSize == nil { return nil }; return *pageSize }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "cursor", Value: func() interface{} { if cursor == nil { return nil }; return *cursor }(), Style: "form", Explode: true, AllowReserved: false},
     })
-    raw, err := a.client.Get(AppendQueryString(AppApiPath(fmt.Sprintf("/sites/%s/source_versions", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}))), query), nil, nil)
+    raw, err := a.client.Get(AppendQueryString(AppApiPath(fmt.Sprintf("/applications/%s/source_versions", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}))), query), nil, nil)
     if err != nil {
-        var zero sdktypes.SitesSourceVersionsListResponse
+        var zero sdktypes.ApplicationsSourceVersionsListResponse
         return zero, err
     }
-    return decodeResult[sdktypes.SitesSourceVersionsListResponse](raw)
+    return decodeResult[sdktypes.ApplicationsSourceVersionsListResponse](raw)
 }
 
 // 登记 Drive 中的应用源码版本
-func (a *SourceVersionApi) SitesSourceVersionsCreate(siteId string, body sdktypes.CreateSourceVersionRequest, idempotencyKey string) (sdktypes.SitesSourceVersionsCreateResponse201, error) {
+func (a *SourceVersionApi) ApplicationsSourceVersionsCreate(applicationId string, body sdktypes.CreateSourceVersionRequest, idempotencyKey string) (sdktypes.ApplicationsSourceVersionsCreateResponse201, error) {
     headers := BuildRequestHeaders(
         map[string]ParameterSpec{"Idempotency-Key": ParameterSpec{Value: idempotencyKey, Style: "simple", Explode: false},},
         map[string]ParameterSpec{},
     )
-    raw, err := a.client.Post(AppApiPath(fmt.Sprintf("/sites/%s/source_versions", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
+    raw, err := a.client.Post(AppApiPath(fmt.Sprintf("/applications/%s/source_versions", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
     if err != nil {
-        var zero sdktypes.SitesSourceVersionsCreateResponse201
+        var zero sdktypes.ApplicationsSourceVersionsCreateResponse201
         return zero, err
     }
-    return decodeResult[sdktypes.SitesSourceVersionsCreateResponse201](raw)
+    return decodeResult[sdktypes.ApplicationsSourceVersionsCreateResponse201](raw)
 }
 
 // 从公共 Git 仓库导入应用源码版本
-func (a *SourceVersionApi) SitesSourceVersionsGitImportCreate(siteId string, body sdktypes.ImportGitSourceVersionRequest, idempotencyKey string) (sdktypes.SitesSourceVersionsGitImportCreateResponse201, error) {
+func (a *SourceVersionApi) ApplicationsSourceVersionsGitImportCreate(applicationId string, body sdktypes.ImportGitSourceVersionRequest, idempotencyKey string) (sdktypes.ApplicationsSourceVersionsGitImportCreateResponse201, error) {
     headers := BuildRequestHeaders(
         map[string]ParameterSpec{"Idempotency-Key": ParameterSpec{Value: idempotencyKey, Style: "simple", Explode: false},},
         map[string]ParameterSpec{},
     )
-    raw, err := a.client.Post(AppApiPath(fmt.Sprintf("/sites/%s/source_versions/git_import", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
+    raw, err := a.client.Post(AppApiPath(fmt.Sprintf("/applications/%s/source_versions/git_import", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
     if err != nil {
-        var zero sdktypes.SitesSourceVersionsGitImportCreateResponse201
+        var zero sdktypes.ApplicationsSourceVersionsGitImportCreateResponse201
         return zero, err
     }
-    return decodeResult[sdktypes.SitesSourceVersionsGitImportCreateResponse201](raw)
+    return decodeResult[sdktypes.ApplicationsSourceVersionsGitImportCreateResponse201](raw)
 }
 
 // 获取应用源码版本详情
-func (a *SourceVersionApi) SitesSourceVersionsRetrieve(siteId string, sourceVersionId string) (sdktypes.SitesSourceVersionsRetrieveResponse, error) {
-    raw, err := a.client.Get(AppApiPath(fmt.Sprintf("/sites/%s/source_versions/%s", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}), SerializePathParameter(sourceVersionId, PathParameterSpec{Name: "sourceVersionId", Style: "simple", Explode: false}))), nil, nil)
+func (a *SourceVersionApi) ApplicationsSourceVersionsRetrieve(applicationId string, sourceVersionId string) (sdktypes.ApplicationsSourceVersionsRetrieveResponse, error) {
+    raw, err := a.client.Get(AppApiPath(fmt.Sprintf("/applications/%s/source_versions/%s", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}), SerializePathParameter(sourceVersionId, PathParameterSpec{Name: "sourceVersionId", Style: "simple", Explode: false}))), nil, nil)
     if err != nil {
-        var zero sdktypes.SitesSourceVersionsRetrieveResponse
+        var zero sdktypes.ApplicationsSourceVersionsRetrieveResponse
         return zero, err
     }
-    return decodeResult[sdktypes.SitesSourceVersionsRetrieveResponse](raw)
+    return decodeResult[sdktypes.ApplicationsSourceVersionsRetrieveResponse](raw)
 }
 
 type PathParameterSpec struct {

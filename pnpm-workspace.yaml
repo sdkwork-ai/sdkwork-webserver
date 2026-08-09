@@ -24,6 +24,7 @@ packages:
   - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-credential-entry"
   - "../sdkwork-appbase/packages/common/foundation/sdkwork-runtime-bootstrap"
   - "../sdkwork-appbase/packages/pc-react/foundation/sdkwork-appbase-pc-react"
+  - "../sdkwork-appbase/sdks/sdkwork-base-data-backend-sdk/sdkwork-base-data-backend-sdk-typescript"
   - "../sdkwork-appbase/packages/pc-react/foundation/sdkwork-i18n-pc-react"
   - "../sdkwork-core/sdkwork-core-pc-react"
   - "../sdkwork-ui/sdkwork-ui-pc-react"

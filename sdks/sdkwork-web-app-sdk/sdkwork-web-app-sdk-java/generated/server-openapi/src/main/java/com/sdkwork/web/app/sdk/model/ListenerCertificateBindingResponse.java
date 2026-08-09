@@ -3,7 +3,7 @@ package com.sdkwork.web.app.sdk.model;
 
 public class ListenerCertificateBindingResponse {
     private String id;
-    private String siteId;
+    private String applicationId;
     private String domainId;
     private String certificateId;
     private String desiredCertificateVersionId;
@@ -26,12 +26,12 @@ public class ListenerCertificateBindingResponse {
         this.id = id;
     }
 
-    public String getSiteId() {
-        return this.siteId;
+    public String getApplicationId() {
+        return this.applicationId;
     }
 
-    public void setSiteId(String siteId) {
-        this.siteId = siteId;
+    public void setApplicationId(String applicationId) {
+        this.applicationId = applicationId;
     }
 
     public String getDomainId() {

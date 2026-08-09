@@ -27,7 +27,7 @@ import {
   type CreateHealthCheckRequest,
   type CreateSourceVersionRequest,
   type SdkworkAppClient as SdkworkWebAppClient,
-  type UpdateSiteRequest,
+  type UpdateApplicationRequest,
 } from "@sdkwork/web-app-sdk";
 import { createContext, useContext, type ReactNode } from "react";
 
@@ -222,7 +222,7 @@ export function createWebserverConsoleRegistry(
 ): WebserverResourceRegistry {
   const client = clients.web;
   return {
-    sites: source((query) => client.site.list({ page: query.page, pageSize: query.pageSize, keyword: query.search }), [
+    applications: source((query) => client.application.list({ page: query.page, pageSize: query.pageSize, keyword: query.search }), [
       action(
         "create",
         "Create application",
@@ -255,7 +255,7 @@ export function createWebserverConsoleRegistry(
             siteType: [1, 2, 3, 4, 5, 6],
             environment: ["production", "staging", "test", "development"],
           },
-          permission: "web.sites.write",
+          permission: "web.applications.write",
           requiredFields: ["name", "versionTag"],
           sourceInput: "archive-directory-or-git",
         },
@@ -271,10 +271,10 @@ export function createWebserverConsoleRegistry(
         supportUrl: "",
         privacyPolicyUrl: "",
         officialWebsiteUrl: "",
-      }, (context) => updateApplicationListing(clients, mediaStorage, context), { applicationSubmission: "update", permission: "web.sites.write", selection: true }),
+      }, (context) => updateApplicationListing(clients, mediaStorage, context), { applicationSubmission: "update", permission: "web.applications.write", selection: true }),
       action("update-source", "Update code", { versionTag: "" }, (context) => storeApplicationSourceVersion(clients, sourceStorage, context), {
         loadSourceInputDefaults: async (context) => {
-          const versions = await client.sourceVersion.sites.sourceVersions.list(
+          const versions = await client.sourceVersion.applications.sourceVersions.list(
             selectedId(context, "siteId"),
             { pageSize: 1 },
           );
@@ -283,7 +283,7 @@ export function createWebserverConsoleRegistry(
             ? { mode: "git", repository: latest.sourceRef }
             : {};
         },
-        permission: "web.sites.write",
+        permission: "web.applications.write",
         requiredFields: ["versionTag"],
         selection: true,
         sourceInput: "archive-directory-or-git",
@@ -292,7 +292,7 @@ export function createWebserverConsoleRegistry(
         confirmation: true,
         fieldOptions: { deployType: [1], sourceVersionId: [], environment: ["production", "staging", "test", "development"] },
         loadFieldOptions: async (context) => {
-          const versions = await client.sourceVersion.sites.sourceVersions.list(selectedId(context, "siteId"), { pageSize: 100 });
+          const versions = await client.sourceVersion.applications.sourceVersions.list(selectedId(context, "siteId"), { pageSize: 100 });
           return {
             sourceVersionId: versions.items
               .filter((version) => version.status === 1 && version.retained)
@@ -303,21 +303,21 @@ export function createWebserverConsoleRegistry(
               })),
           };
         },
-        permission: "web.sites.write",
+        permission: "web.applications.write",
         readOnlyFields: ["versionTag"],
         requiredFields: ["sourceVersionId", "versionTag"],
         selection: true,
       }),
-      action("activate", "Activate", {}, (context) => client.site.activate(selectedId(context, "siteId")), { availableWhen: ({ selectedItem }) => Number(selectedItem?.status) !== 1, permission: "web.sites.write", selection: true }),
-      action("pause", "Disable", {}, (context) => client.site.pause(selectedId(context, "siteId")), { availableWhen: ({ selectedItem }) => Number(selectedItem?.status) === 1, dangerous: true, permission: "web.sites.write", selection: true }),
-      action("delete", "Delete", {}, (context) => client.site.delete(selectedId(context, "siteId")), { availableWhen: ({ selectedItem }) => Number(selectedItem?.status) !== 1, dangerous: true, permission: "web.sites.write", selection: true }),
+      action("activate", "Activate", {}, (context) => client.application.activate(selectedId(context, "siteId")), { availableWhen: ({ selectedItem }) => Number(selectedItem?.status) !== 1, permission: "web.applications.write", selection: true }),
+      action("pause", "Disable", {}, (context) => client.application.pause(selectedId(context, "siteId")), { availableWhen: ({ selectedItem }) => Number(selectedItem?.status) === 1, dangerous: true, permission: "web.applications.write", selection: true }),
+      action("delete", "Delete", {}, (context) => client.application.delete(selectedId(context, "siteId")), { availableWhen: ({ selectedItem }) => Number(selectedItem?.status) !== 1, dangerous: true, permission: "web.applications.write", selection: true }),
     ]),
-    configuration: scopedSource((query) => client.envVariable.sites.envVariables.list(requiredScope(query.scopeId)), [
-      action("create-variable", "Add variable", { key: "", value: "", environment: "production", isSecret: false }, async (context) => client.envVariable.sites.envVariables.create(requiredScope(context.scopeId), createEnvVariableRequest(context.body), idempotencyParams(context)), { permission: "web.sites.write", scope: true }),
-      action("create-check", "Add health check", { checkType: 1, checkUrl: "/health", checkInterval: 30, timeoutMs: 5_000, retryCount: 3 }, async (context) => client.monitor.sites.healthChecks.create(requiredScope(context.scopeId), createHealthCheckRequest(context.body), idempotencyParams(context)), { fieldOptions: { checkType: [1, 2, 3] }, permission: "web.sites.write", scope: true }),
+    configuration: scopedSource((query) => client.envVariable.applications.envVariables.list(requiredScope(query.scopeId)), [
+      action("create-variable", "Add variable", { key: "", value: "", environment: "production", isSecret: false }, async (context) => client.envVariable.applications.envVariables.create(requiredScope(context.scopeId), createEnvVariableRequest(context.body), idempotencyParams(context)), { permission: "web.applications.write", scope: true }),
+      action("create-check", "Add health check", { checkType: 1, checkUrl: "/health", checkInterval: 30, timeoutMs: 5_000, retryCount: 3 }, async (context) => client.monitor.applications.healthChecks.create(requiredScope(context.scopeId), createHealthCheckRequest(context.body), idempotencyParams(context)), { fieldOptions: { checkType: [1, 2, 3] }, permission: "web.applications.write", scope: true }),
     ]),
     "source-versions": scopedSource(
-      (query) => client.sourceVersion.sites.sourceVersions.list(requiredScope(query.scopeId), { cursor: query.cursor, pageSize: query.pageSize }),
+      (query) => client.sourceVersion.applications.sourceVersions.list(requiredScope(query.scopeId), { cursor: query.cursor, pageSize: query.pageSize }),
       [
         action(
           "create",
@@ -325,7 +325,7 @@ export function createWebserverConsoleRegistry(
           { versionTag: "" },
           (context) => storeApplicationSourceVersion(clients, sourceStorage, context),
           {
-            permission: "web.sites.write",
+            permission: "web.applications.write",
             requiredFields: ["versionTag"],
             scope: true,
             sourceInput: "archive-directory-or-git",
@@ -333,12 +333,12 @@ export function createWebserverConsoleRegistry(
         ),
       ],
     ),
-    deployments: scopedSource((query) => client.deployment.sites.deployments.list(requiredScope(query.scopeId), { cursor: query.cursor, pageSize: query.pageSize }), [
+    deployments: scopedSource((query) => client.deployment.applications.deployments.list(requiredScope(query.scopeId), { cursor: query.cursor, pageSize: query.pageSize }), [
       action("deploy", "Deploy", { deployType: 1, sourceVersionId: "", environment: "production", versionTag: "" }, (context) => deployApplication(clients, context), {
         confirmation: true,
         fieldOptions: { deployType: [1], sourceVersionId: [], environment: ["production", "staging", "test", "development"] },
         loadFieldOptions: async (context) => {
-          const versions = await client.sourceVersion.sites.sourceVersions.list(requiredScope(context.scopeId), { pageSize: 100 });
+          const versions = await client.sourceVersion.applications.sourceVersions.list(requiredScope(context.scopeId), { pageSize: 100 });
           return {
             sourceVersionId: versions.items
               .filter((version) => version.status === 1 && version.retained)
@@ -349,14 +349,14 @@ export function createWebserverConsoleRegistry(
               })),
           };
         },
-        permission: "web.sites.write",
+        permission: "web.applications.write",
         requiredFields: ["sourceVersionId", "versionTag"],
         scope: true,
       }),
-      action("rollback", "Restore this version", {}, (context) => client.deployment.sites.deployments.rollback(requiredScope(context.scopeId), selectedId(context, "deploymentId"), idempotencyParams(context)), {
+      action("rollback", "Restore this version", {}, (context) => client.deployment.applications.deployments.rollback(requiredScope(context.scopeId), selectedId(context, "deploymentId"), idempotencyParams(context)), {
         availableWhen: (context) => Number(context.selectedItem?.status) === 2,
         confirmation: true,
-        permission: "web.sites.write",
+        permission: "web.applications.write",
         scope: true,
         selection: true,
       }),
@@ -411,7 +411,7 @@ async function deployApplication(clients: WebserverConsoleSdkClients, context: W
   );
   let deployment: unknown;
   try {
-    deployment = await clients.web.deployment.sites.deployments.create(
+    deployment = await clients.web.deployment.applications.deployments.create(
       siteId,
       request,
       idempotency,
@@ -440,7 +440,7 @@ async function createApplicationWithInitialVersion(
   const prepared = context.sourceInputMode === "git"
     ? undefined
     : await prepareSource(sourceStorage, context, 0, 14);
-  const site = await clients.web.site.create(siteRequest, idempotency);
+  const site = await clients.web.application.create(siteRequest, idempotency);
   const siteId = site.id?.trim();
   if (!siteId) throw new Error("The created application did not return an ID");
   context.onProgress?.(16);
@@ -454,7 +454,7 @@ async function createApplicationWithInitialVersion(
       signal: context.signal,
       submission: requiredApplicationSubmission(context),
     });
-    await clients.web.site.update(
+    await clients.web.application.update(
       siteId,
       { storeListing: sdkStoreListing(storeListing) },
       idempotency,
@@ -471,7 +471,7 @@ async function createApplicationWithInitialVersion(
   if (prepared) {
     try {
       const stored = await storeSource(sourceStorage, siteId, prepared, context, 48, 86);
-      const sourceVersion = await clients.web.sourceVersion.sites.sourceVersions.create(
+      const sourceVersion = await clients.web.sourceVersion.applications.sourceVersions.create(
         siteId,
         sourceVersionRequest(context, stored, prepared.inputMode),
         idempotency,
@@ -487,7 +487,7 @@ async function createApplicationWithInitialVersion(
     }
   } else {
     try {
-      const sourceVersion = await clients.web.sourceVersion.sites.sourceVersions.gitImport.create(
+      const sourceVersion = await clients.web.sourceVersion.applications.sourceVersions.gitImport.create(
         siteId,
         {
           repositoryUrl: normalizeApplicationGitRepositoryUrl(context.sourceRepository),
@@ -506,7 +506,7 @@ async function createApplicationWithInitialVersion(
     }
   }
   try {
-    const deployment = await clients.web.deployment.sites.deployments.create(
+    const deployment = await clients.web.deployment.applications.deployments.create(
       siteId,
       deploymentRequest(context, sourceVersionId),
       idempotency,
@@ -540,7 +540,7 @@ async function updateApplicationListing(
     submission: requiredApplicationSubmission(context),
   });
   context.onProgress?.(96);
-  const result = await clients.web.site.update(
+  const result = await clients.web.application.update(
     siteId,
     updateSiteRequest(context.body, storeListing),
     idempotencyParams(context),
@@ -590,7 +590,7 @@ async function storeApplicationSourceVersion(
   const idempotency = idempotencyParams(context);
   if (context.sourceInputMode === "git") {
     context.onProgress?.(8);
-    const sourceVersion = await clients.web.sourceVersion.sites.sourceVersions.gitImport.create(
+    const sourceVersion = await clients.web.sourceVersion.applications.sourceVersions.gitImport.create(
       siteId,
       {
         repositoryUrl: normalizeApplicationGitRepositoryUrl(context.sourceRepository),
@@ -603,7 +603,7 @@ async function storeApplicationSourceVersion(
   }
   const prepared = await prepareSource(sourceStorage, context, 0, 24);
   const stored = await storeSource(sourceStorage, siteId, prepared, context, 24, 88);
-  const sourceVersion = await clients.web.sourceVersion.sites.sourceVersions.create(
+  const sourceVersion = await clients.web.sourceVersion.applications.sourceVersions.create(
     siteId,
     sourceVersionRequest(context, stored, prepared.inputMode),
     idempotency,
@@ -717,7 +717,7 @@ function optionalText(value: unknown): string | undefined {
 function updateSiteRequest(
   body: Readonly<Record<string, unknown>>,
   storeListing: ApplicationStoreListingInput,
-): UpdateSiteRequest {
+): UpdateApplicationRequest {
   const name = boundedOptionalText(body.name, "Application name", 100, false);
   const description = boundedOptionalText(body.description, "Description", 500, true);
   return { name, description, storeListing: sdkStoreListing(storeListing) };
@@ -725,7 +725,7 @@ function updateSiteRequest(
 
 function sdkStoreListing(
   storeListing: ApplicationStoreListingInput,
-): NonNullable<UpdateSiteRequest["storeListing"]> {
+): NonNullable<UpdateApplicationRequest["storeListing"]> {
   return {
     ...storeListing,
     keywords: storeListing.keywords ? [...storeListing.keywords] : undefined,

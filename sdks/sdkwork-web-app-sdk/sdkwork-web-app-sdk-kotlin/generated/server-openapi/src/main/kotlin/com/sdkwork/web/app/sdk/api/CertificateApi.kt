@@ -9,36 +9,36 @@ import com.sdkwork.web.app.sdk.http.HttpClient
 class CertificateApi(private val client: HttpClient) {
 
     /** List certificates active on the domain listener */
-    suspend fun sitesDomainsListenerCertificateBindingsList(siteId: String, domainId: String, page: Int? = null, pageSize: Int? = null): SitesDomainsListenerCertificateBindingsListResponse? {
+    suspend fun applicationsDomainsListenerCertificateBindingsList(applicationId: String, domainId: String, page: Int? = null, pageSize: Int? = null): ApplicationsDomainsListenerCertificateBindingsListResponse? {
         val query = buildQueryString(listOf(
             QueryParameterSpec("page", page, "form", true, false, null),
             QueryParameterSpec("page_size", pageSize, "form", true, false, null)
         ))
-        val raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/sites/${serializePathParameter(siteId, PathParameterSpec("siteId", "simple", false))}/domains/${serializePathParameter(domainId, PathParameterSpec("domainId", "simple", false))}/listener_certificate_bindings"), query))
-        return client.convertValue(raw, object : TypeReference<SitesDomainsListenerCertificateBindingsListResponse>() {})
+        val raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/applications/${serializePathParameter(applicationId, PathParameterSpec("applicationId", "simple", false))}/domains/${serializePathParameter(domainId, PathParameterSpec("domainId", "simple", false))}/listener_certificate_bindings"), query))
+        return client.convertValue(raw, object : TypeReference<ApplicationsDomainsListenerCertificateBindingsListResponse>() {})
     }
 
     /** Bind a certificate version to the domain listener */
-    suspend fun sitesDomainsListenerCertificateBindingsCreate(siteId: String, domainId: String, body: CreateListenerCertificateBindingRequest, idempotencyKey: String): SitesDomainsListenerCertificateBindingsCreateResponse201? {
+    suspend fun applicationsDomainsListenerCertificateBindingsCreate(applicationId: String, domainId: String, body: CreateListenerCertificateBindingRequest, idempotencyKey: String): ApplicationsDomainsListenerCertificateBindingsCreateResponse201? {
         val requestHeaders = buildRequestHeaders(
             mapOf(
                 "Idempotency-Key" to HeaderParameterSpec(idempotencyKey, "simple", false, null),
             ),
             emptyMap()
         )
-        val raw = client.post(ApiPaths.appPath("/sites/${serializePathParameter(siteId, PathParameterSpec("siteId", "simple", false))}/domains/${serializePathParameter(domainId, PathParameterSpec("domainId", "simple", false))}/listener_certificate_bindings"), body, null, requestHeaders, "application/json")
-        return client.convertValue(raw, object : TypeReference<SitesDomainsListenerCertificateBindingsCreateResponse201>() {})
+        val raw = client.post(ApiPaths.appPath("/applications/${serializePathParameter(applicationId, PathParameterSpec("applicationId", "simple", false))}/domains/${serializePathParameter(domainId, PathParameterSpec("domainId", "simple", false))}/listener_certificate_bindings"), body, null, requestHeaders, "application/json")
+        return client.convertValue(raw, object : TypeReference<ApplicationsDomainsListenerCertificateBindingsCreateResponse201>() {})
     }
 
     /** Remove a certificate from the domain listener */
-    suspend fun sitesDomainsListenerCertificateBindingsDelete(siteId: String, domainId: String, bindingId: String, idempotencyKey: String): Unit {
+    suspend fun applicationsDomainsListenerCertificateBindingsDelete(applicationId: String, domainId: String, bindingId: String, idempotencyKey: String): Unit {
         val requestHeaders = buildRequestHeaders(
             mapOf(
                 "Idempotency-Key" to HeaderParameterSpec(idempotencyKey, "simple", false, null),
             ),
             emptyMap()
         )
-        client.delete(ApiPaths.appPath("/sites/${serializePathParameter(siteId, PathParameterSpec("siteId", "simple", false))}/domains/${serializePathParameter(domainId, PathParameterSpec("domainId", "simple", false))}/listener_certificate_bindings/${serializePathParameter(bindingId, PathParameterSpec("bindingId", "simple", false))}"), null, requestHeaders)
+        client.delete(ApiPaths.appPath("/applications/${serializePathParameter(applicationId, PathParameterSpec("applicationId", "simple", false))}/domains/${serializePathParameter(domainId, PathParameterSpec("domainId", "simple", false))}/listener_certificate_bindings/${serializePathParameter(bindingId, PathParameterSpec("bindingId", "simple", false))}"), null, requestHeaders)
     }
 
     private data class PathParameterSpec(val name: String, val style: String, val explode: Boolean)

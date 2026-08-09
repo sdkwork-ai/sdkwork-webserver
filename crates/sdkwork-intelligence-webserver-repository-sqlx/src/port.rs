@@ -17,16 +17,16 @@ use sdkwork_webserver_contract::{
     CreateListenerCertificateBindingRequest, ListenerCertificateBindingPage,
     ListenerCertificateBindingResponse,
     CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
-    CreateServerResponse, CreateSiteRequest, CreateSourceVersionRequest, DeploymentPage,
+    CreateServerResponse, CreateApplicationRequest, CreateSourceVersionRequest, DeploymentPage,
     DeploymentResponse, DomainPage, DomainResponse, EnvVariablePage, EnvVariableResponse,
     UpdateEnvVariableRequest,
     HealthCheckPage, HealthCheckResponse, ListNginxConfigsQuery,
-    ListRootDomainsQuery, ListSitesQuery, NginxConfigPage, NginxConfigResponse,
+    ListRootDomainsQuery, ListApplicationsQuery, NginxConfigPage, NginxConfigResponse,
     NginxStatusResponse, RootDomainPage,
     RootDomainResponse, RuntimeAssignment, RuntimeAssignmentDelivery, RuntimeObservation,
-    ServerPage, SitePage, SiteResponse, SourceVersionPage, SourceVersionResponse,
+    ServerPage, ApplicationPage, ApplicationResponse, SourceVersionPage, SourceVersionResponse,
     TlsCertificateAssignmentMaterial, UpdateDomainApplicationBindingRequest,
-    UpdateNginxConfigRequest, UpdateSiteRequest, RevokeCertificateRequest,
+    UpdateNginxConfigRequest, UpdateApplicationRequest, RevokeCertificateRequest,
 };
 use sdkwork_webserver_contract::{WebServiceError, WebServiceResult};
 
@@ -43,60 +43,68 @@ impl WebRepositoryPort for WebRepository {
         Ok(())
     }
 
-    async fn list_sites(
+    async fn list_applications(
         &self,
         tenant_id: i64,
         owner_id: Option<i64>,
-        query: &ListSitesQuery,
-    ) -> WebServiceResult<SitePage> {
-        self.list_sites_repo(tenant_id, owner_id, query).await
+        query: &ListApplicationsQuery,
+    ) -> WebServiceResult<ApplicationPage> {
+        self.list_applications_repo(tenant_id, owner_id, query).await
     }
 
-    async fn create_site(
+    async fn create_application(
         &self,
         tenant_id: i64,
         organization_id: Option<i64>,
         owner_id: Option<i64>,
-        request: &CreateSiteRequest,
-    ) -> WebServiceResult<SiteResponse> {
-        self.create_site_repo(tenant_id, organization_id, owner_id, request)
+        request: &CreateApplicationRequest,
+    ) -> WebServiceResult<ApplicationResponse> {
+        self.create_application_repo(tenant_id, organization_id, owner_id, request)
             .await
     }
 
-    async fn retrieve_site(
+    async fn retrieve_application(
         &self,
         tenant_id: i64,
         owner_id: Option<i64>,
-        site_id: &str,
-    ) -> WebServiceResult<SiteResponse> {
-        self.retrieve_site_repo(tenant_id, owner_id, site_id).await
+        application_id: &str,
+    ) -> WebServiceResult<ApplicationResponse> {
+        self.retrieve_application_repo(tenant_id, owner_id, application_id).await
     }
 
-    async fn update_site(
+    async fn update_application(
         &self,
         tenant_id: i64,
-        site_id: &str,
-        request: &UpdateSiteRequest,
-    ) -> WebServiceResult<SiteResponse> {
-        self.update_site_repo(tenant_id, site_id, request).await
+        application_id: &str,
+        request: &UpdateApplicationRequest,
+    ) -> WebServiceResult<ApplicationResponse> {
+        self.update_application_repo(tenant_id, application_id, request).await
     }
 
-    async fn delete_site(
+    async fn delete_application(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         actor_id: Option<i64>,
     ) -> WebServiceResult<()> {
-        self.delete_site_repo(tenant_id, site_id, actor_id).await
+        self.delete_application_repo(tenant_id, application_id, actor_id).await
     }
 
-    async fn set_site_status(
+    async fn set_application_status(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         status: i32,
-    ) -> WebServiceResult<SiteResponse> {
-        self.set_site_status_repo(tenant_id, site_id, status).await
+    ) -> WebServiceResult<ApplicationResponse> {
+        self.set_application_status_repo(tenant_id, application_id, status).await
+    }
+
+    async fn resolve_site_id(
+        &self,
+        tenant_id: i64,
+        application_id: &str,
+    ) -> WebServiceResult<String> {
+        self.resolve_site_id_repo(tenant_id, application_id).await
     }
 
     async fn list_domains(

@@ -14,39 +14,39 @@ public class SourceVersionApi {
     }
 
     /** 获取应用源码版本 */
-    public SitesSourceVersionsListResponse sitesSourceVersionsList(String siteId, Integer pageSize, String cursor) throws Exception {
+    public ApplicationsSourceVersionsListResponse applicationsSourceVersionsList(String applicationId, Integer pageSize, String cursor) throws Exception {
         String query = buildQueryString(List.of(
             new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             new QueryParameterSpec("cursor", cursor, "form", true, false, null)
         ));
-        Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/source_versions"), query));
-        return client.convertValue(raw, new TypeReference<SitesSourceVersionsListResponse>() {});
+        Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/source_versions"), query));
+        return client.convertValue(raw, new TypeReference<ApplicationsSourceVersionsListResponse>() {});
     }
 
     /** 登记 Drive 中的应用源码版本 */
-    public SitesSourceVersionsCreateResponse201 sitesSourceVersionsCreate(String siteId, CreateSourceVersionRequest body, String idempotencyKey) throws Exception {
+    public ApplicationsSourceVersionsCreateResponse201 applicationsSourceVersionsCreate(String applicationId, CreateSourceVersionRequest body, String idempotencyKey) throws Exception {
         Map<String, String> requestHeaders = buildRequestHeaders(
                 Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
                 Map.of()
         );
-        Object raw = client.post(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/source_versions"), body, null, requestHeaders, "application/json");
-        return client.convertValue(raw, new TypeReference<SitesSourceVersionsCreateResponse201>() {});
+        Object raw = client.post(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/source_versions"), body, null, requestHeaders, "application/json");
+        return client.convertValue(raw, new TypeReference<ApplicationsSourceVersionsCreateResponse201>() {});
     }
 
     /** 从公共 Git 仓库导入应用源码版本 */
-    public SitesSourceVersionsGitImportCreateResponse201 sitesSourceVersionsGitImportCreate(String siteId, ImportGitSourceVersionRequest body, String idempotencyKey) throws Exception {
+    public ApplicationsSourceVersionsGitImportCreateResponse201 applicationsSourceVersionsGitImportCreate(String applicationId, ImportGitSourceVersionRequest body, String idempotencyKey) throws Exception {
         Map<String, String> requestHeaders = buildRequestHeaders(
                 Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
                 Map.of()
         );
-        Object raw = client.post(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/source_versions/git_import"), body, null, requestHeaders, "application/json");
-        return client.convertValue(raw, new TypeReference<SitesSourceVersionsGitImportCreateResponse201>() {});
+        Object raw = client.post(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/source_versions/git_import"), body, null, requestHeaders, "application/json");
+        return client.convertValue(raw, new TypeReference<ApplicationsSourceVersionsGitImportCreateResponse201>() {});
     }
 
     /** 获取应用源码版本详情 */
-    public SitesSourceVersionsRetrieveResponse sitesSourceVersionsRetrieve(String siteId, String sourceVersionId) throws Exception {
-        Object raw = client.get(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/source_versions/" + serializePathParameter(sourceVersionId, new PathParameterSpec("sourceVersionId", "simple", false)) + ""));
-        return client.convertValue(raw, new TypeReference<SitesSourceVersionsRetrieveResponse>() {});
+    public ApplicationsSourceVersionsRetrieveResponse applicationsSourceVersionsRetrieve(String applicationId, String sourceVersionId) throws Exception {
+        Object raw = client.get(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/source_versions/" + serializePathParameter(sourceVersionId, new PathParameterSpec("sourceVersionId", "simple", false)) + ""));
+        return client.convertValue(raw, new TypeReference<ApplicationsSourceVersionsRetrieveResponse>() {});
     }
 
     private record PathParameterSpec(String name, String style, boolean explode) {}

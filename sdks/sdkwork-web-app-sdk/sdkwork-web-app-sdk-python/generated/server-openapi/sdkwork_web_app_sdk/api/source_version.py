@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 from ..http_client import HttpClient
-from ..models import CreateSourceVersionRequest, ImportGitSourceVersionRequest, SitesSourceVersionsCreateResponse201, SitesSourceVersionsGitImportCreateResponse201, SitesSourceVersionsListResponse, SitesSourceVersionsRetrieveResponse
+from ..models import ApplicationsSourceVersionsCreateResponse201, ApplicationsSourceVersionsGitImportCreateResponse201, ApplicationsSourceVersionsListResponse, ApplicationsSourceVersionsRetrieveResponse, CreateSourceVersionRequest, ImportGitSourceVersionRequest
 
 def _append_query_string(path: str, raw_query_string: str) -> str:
     query = raw_query_string.lstrip('?')
@@ -242,34 +242,34 @@ class SourceVersionApi:
 
     def __init__(self, client: HttpClient):
         self._client = client
-        self.sites = SourceVersionSitesApi(client)
+        self.applications = SourceVersionApplicationsApi(client)
 
 
-class SourceVersionSitesApi:
-    """source_version source_version.sites API client."""
-
-    def __init__(self, client: HttpClient):
-        self._client = client
-        self.source_versions = SourceVersionSitesSourceVersionsApi(client)
-
-
-class SourceVersionSitesSourceVersionsApi:
-    """source_version source_version.sites.source_versions API client."""
+class SourceVersionApplicationsApi:
+    """source_version source_version.applications API client."""
 
     def __init__(self, client: HttpClient):
         self._client = client
-        self.git_import = SourceVersionSitesSourceVersionsGitImportApi(client)
+        self.source_versions = SourceVersionApplicationsSourceVersionsApi(client)
 
 
-    def list(self, site_id: str, page_size: Optional[int] = None, cursor: Optional[str] = None) -> SitesSourceVersionsListResponse:
+class SourceVersionApplicationsSourceVersionsApi:
+    """source_version source_version.applications.source_versions API client."""
+
+    def __init__(self, client: HttpClient):
+        self._client = client
+        self.git_import = SourceVersionApplicationsSourceVersionsGitImportApi(client)
+
+
+    def list(self, application_id: str, page_size: Optional[int] = None, cursor: Optional[str] = None) -> ApplicationsSourceVersionsListResponse:
         """获取应用源码版本"""
         query = build_query_string([
             {'name': 'page_size', 'value': page_size, 'style': 'form', 'explode': True, 'allow_reserved': False},
             {'name': 'cursor', 'value': cursor, 'style': 'form', 'explode': True, 'allow_reserved': False},
         ])
-        return self._client.get(_append_query_string(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/source_versions", query))
+        return self._client.get(_append_query_string(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/source_versions", query))
 
-    def create(self, site_id: str, body: CreateSourceVersionRequest, idempotency_key: str) -> SitesSourceVersionsCreateResponse201:
+    def create(self, application_id: str, body: CreateSourceVersionRequest, idempotency_key: str) -> ApplicationsSourceVersionsCreateResponse201:
         """登记 Drive 中的应用源码版本"""
         request_headers = build_request_headers(
             {
@@ -277,20 +277,20 @@ class SourceVersionSitesSourceVersionsApi:
             },
             {}
         )
-        return self._client.post(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/source_versions", json=body, headers=request_headers)
+        return self._client.post(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/source_versions", json=body, headers=request_headers)
 
-    def retrieve(self, site_id: str, source_version_id: str) -> SitesSourceVersionsRetrieveResponse:
+    def retrieve(self, application_id: str, source_version_id: str) -> ApplicationsSourceVersionsRetrieveResponse:
         """获取应用源码版本详情"""
-        return self._client.get(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/source_versions/{serialize_path_parameter(source_version_id, {'name': 'sourceVersionId', 'style': 'simple', 'explode': False})}")
+        return self._client.get(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/source_versions/{serialize_path_parameter(source_version_id, {'name': 'sourceVersionId', 'style': 'simple', 'explode': False})}")
 
-class SourceVersionSitesSourceVersionsGitImportApi:
-    """source_version source_version.sites.source_versions.git_import API client."""
+class SourceVersionApplicationsSourceVersionsGitImportApi:
+    """source_version source_version.applications.source_versions.git_import API client."""
 
     def __init__(self, client: HttpClient):
         self._client = client
 
 
-    def create(self, site_id: str, body: ImportGitSourceVersionRequest, idempotency_key: str) -> SitesSourceVersionsGitImportCreateResponse201:
+    def create(self, application_id: str, body: ImportGitSourceVersionRequest, idempotency_key: str) -> ApplicationsSourceVersionsGitImportCreateResponse201:
         """从公共 Git 仓库导入应用源码版本"""
         request_headers = build_request_headers(
             {
@@ -298,4 +298,4 @@ class SourceVersionSitesSourceVersionsGitImportApi:
             },
             {}
         )
-        return self._client.post(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/source_versions/git_import", json=body, headers=request_headers)
+        return self._client.post(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/source_versions/git_import", json=body, headers=request_headers)

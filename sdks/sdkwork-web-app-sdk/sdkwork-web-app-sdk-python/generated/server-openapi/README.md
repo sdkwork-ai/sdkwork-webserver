@@ -52,7 +52,7 @@ client.set_header('X-Custom-Header', 'value')
 
 ## API Modules
 
-- `client.site` - site API
+- `client.application` - application API
 - `client.domain` - domain API
 - `client.certificate` - certificate API
 - `client.source_version` - source_version API
@@ -62,10 +62,10 @@ client.set_header('X-Custom-Header', 'value')
 
 ## Usage Examples
 
-### site
+### application
 
 ```python
-# 获取站点列表
+# 获取应用列表
 params = {
     'page': 1,
     'page_size': 2,
@@ -74,7 +74,7 @@ params = {
     'site_type': 1,
     'keyword': 'keyword',
 }
-result = client.site.list(params)
+result = client.application.list(params)
 print(result)
 ```
 
@@ -94,13 +94,13 @@ print(result)
 
 ```python
 # List certificates active on the domain listener
-site_id = '1'
+application_id = '1'
 domain_id = '1'
 params = {
     'page': 1,
     'page_size': 2,
 }
-result = client.certificate.sites.domains.listener_certificate_bindings.list(site_id, domain_id, params)
+result = client.certificate.applications.domains.listener_certificate_bindings.list(application_id, domain_id, params)
 print(result)
 ```
 
@@ -108,12 +108,12 @@ print(result)
 
 ```python
 # 获取应用源码版本
-site_id = '1'
+application_id = '1'
 params = {
     'page_size': 1,
     'cursor': 'cursor',
 }
-result = client.source_version.sites.source_versions.list(site_id, params)
+result = client.source_version.applications.source_versions.list(application_id, params)
 print(result)
 ```
 
@@ -121,13 +121,13 @@ print(result)
 
 ```python
 # 获取部署历史
-site_id = '1'
+application_id = '1'
 params = {
     'page_size': 1,
     'cursor': 'cursor',
     'status': 0,
 }
-result = client.deployment.sites.deployments.list(site_id, params)
+result = client.deployment.applications.deployments.list(application_id, params)
 print(result)
 ```
 
@@ -135,11 +135,11 @@ print(result)
 
 ```python
 # 获取环境变量列表
-site_id = '1'
+application_id = '1'
 params = {
     'environment': 'environment',
 }
-result = client.env_variable.sites.env_variables.list(site_id, params)
+result = client.env_variable.applications.env_variables.list(application_id, params)
 print(result)
 ```
 
@@ -147,8 +147,8 @@ print(result)
 
 ```python
 # 获取健康检查配置
-site_id = '1'
-result = client.monitor.sites.health_checks.list(site_id)
+application_id = '1'
+result = client.monitor.applications.health_checks.list(application_id)
 print(result)
 ```
 

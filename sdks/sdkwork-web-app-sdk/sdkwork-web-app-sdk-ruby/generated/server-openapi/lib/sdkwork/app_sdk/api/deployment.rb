@@ -1,17 +1,17 @@
 require_relative 'base_api'
+require_relative '../models/applications_deployments_create_response201'
+require_relative '../models/applications_deployments_list_response'
+require_relative '../models/applications_deployments_retrieve_response'
+require_relative '../models/applications_deployments_rollback_response'
 require_relative '../models/create_deployment_request'
-require_relative '../models/sites_deployments_create_response201'
-require_relative '../models/sites_deployments_list_response'
-require_relative '../models/sites_deployments_retrieve_response'
-require_relative '../models/sites_deployments_rollback_response'
 
 module Sdkwork
   module AppSdk
     module Api
       class DeploymentApi < BaseApi
           # 获取部署历史
-          def sites_deployments_list(site_id, page_size: nil, cursor: nil, status: nil)
-            path = interpolate_path('/app/v3/api/sites/{siteId}/deployments', siteId: serialize_path_parameter(site_id, PathParameterSpec.new('siteId', 'simple', false)))
+          def applications_deployments_list(application_id, page_size: nil, cursor: nil, status: nil)
+            path = interpolate_path('/app/v3/api/applications/{applicationId}/deployments', applicationId: serialize_path_parameter(application_id, PathParameterSpec.new('applicationId', 'simple', false)))
             query = build_query_string([
               QueryParameterSpec.new('page_size', page_size, 'form', true, false, nil),
               QueryParameterSpec.new('cursor', cursor, 'form', true, false, nil),
@@ -21,12 +21,12 @@ module Sdkwork
             options = {}
 
             result = @client.request('GET', path, **options)
-            result.is_a?(Hash) ? Models::SitesDeploymentsListResponse.from_hash(result) : nil
+            result.is_a?(Hash) ? Models::ApplicationsDeploymentsListResponse.from_hash(result) : nil
           end
 
           # 发起部署
-          def sites_deployments_create(site_id, idempotency_key, body: nil)
-            path = interpolate_path('/app/v3/api/sites/{siteId}/deployments', siteId: serialize_path_parameter(site_id, PathParameterSpec.new('siteId', 'simple', false)))
+          def applications_deployments_create(application_id, idempotency_key, body: nil)
+            path = interpolate_path('/app/v3/api/applications/{applicationId}/deployments', applicationId: serialize_path_parameter(application_id, PathParameterSpec.new('applicationId', 'simple', false)))
             payload = body.respond_to?(:to_hash) ? body.to_hash : body
             request_headers = build_request_headers(
               {
@@ -38,21 +38,21 @@ module Sdkwork
             options[:headers] = request_headers unless request_headers.empty?
             options[:json] = payload unless payload.nil?
             result = @client.request('POST', path, **options)
-            result.is_a?(Hash) ? Models::SitesDeploymentsCreateResponse201.from_hash(result) : nil
+            result.is_a?(Hash) ? Models::ApplicationsDeploymentsCreateResponse201.from_hash(result) : nil
           end
 
           # 获取部署详情
-          def sites_deployments_retrieve(site_id, deployment_id)
-            path = interpolate_path('/app/v3/api/sites/{siteId}/deployments/{deploymentId}', siteId: serialize_path_parameter(site_id, PathParameterSpec.new('siteId', 'simple', false)), deploymentId: serialize_path_parameter(deployment_id, PathParameterSpec.new('deploymentId', 'simple', false)))
+          def applications_deployments_retrieve(application_id, deployment_id)
+            path = interpolate_path('/app/v3/api/applications/{applicationId}/deployments/{deploymentId}', applicationId: serialize_path_parameter(application_id, PathParameterSpec.new('applicationId', 'simple', false)), deploymentId: serialize_path_parameter(deployment_id, PathParameterSpec.new('deploymentId', 'simple', false)))
             options = {}
 
             result = @client.request('GET', path, **options)
-            result.is_a?(Hash) ? Models::SitesDeploymentsRetrieveResponse.from_hash(result) : nil
+            result.is_a?(Hash) ? Models::ApplicationsDeploymentsRetrieveResponse.from_hash(result) : nil
           end
 
           # 基于历史成功版本创建快速还原命令
-          def sites_deployments_rollback(site_id, deployment_id, idempotency_key)
-            path = interpolate_path('/app/v3/api/sites/{siteId}/deployments/{deploymentId}/rollback', siteId: serialize_path_parameter(site_id, PathParameterSpec.new('siteId', 'simple', false)), deploymentId: serialize_path_parameter(deployment_id, PathParameterSpec.new('deploymentId', 'simple', false)))
+          def applications_deployments_rollback(application_id, deployment_id, idempotency_key)
+            path = interpolate_path('/app/v3/api/applications/{applicationId}/deployments/{deploymentId}/rollback', applicationId: serialize_path_parameter(application_id, PathParameterSpec.new('applicationId', 'simple', false)), deploymentId: serialize_path_parameter(deployment_id, PathParameterSpec.new('deploymentId', 'simple', false)))
             request_headers = build_request_headers(
               {
                 'Idempotency-Key' => HeaderParameterSpec.new(idempotency_key, 'simple', false, nil),
@@ -62,7 +62,7 @@ module Sdkwork
             options = {}
             options[:headers] = request_headers unless request_headers.empty?
             result = @client.request('POST', path, **options)
-            result.is_a?(Hash) ? Models::SitesDeploymentsRollbackResponse.from_hash(result) : nil
+            result.is_a?(Hash) ? Models::ApplicationsDeploymentsRollbackResponse.from_hash(result) : nil
           end
 
         private

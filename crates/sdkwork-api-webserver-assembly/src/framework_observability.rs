@@ -23,6 +23,21 @@ impl WebFrameworkAuditEmitter {
 #[async_trait]
 impl AuditEmitter for WebFrameworkAuditEmitter {
     async fn emit(&self, fact: AuditFact) -> Result<(), WebFrameworkError> {
+        // Audit is an observability side-channel and must never fail the
+        // business response. A fact without a positive numeric tenant
+        // subject (anonymous public endpoints such as login or password
+        // reset) or with an unresolvable one (IAM-injection anomaly) is
+        // skipped instead of persisted: an audit row must never carry a
+        // fabricated tenant id of 0. Persistence failures are logged and
+        // downgraded for the same reason.
+        let Some(tenant_id) = numeric_subject_id(fact.tenant_id.as_deref()) else {
+            tracing::debug!(
+                request_id = %fact.request_id,
+                operation_id = fact.operation_id.as_deref().unwrap_or("unknown"),
+                "skipping audit fact without a positive numeric tenant subject"
+            );
+            return Ok(());
+        };
         let action = fact.operation_id.as_deref().unwrap_or(&fact.method);
         let metadata_json = serde_json::to_string(&serde_json::json!({
             "apiSurface": &fact.api_surface,
@@ -33,15 +48,8 @@ impl AuditEmitter for WebFrameworkAuditEmitter {
             "subjectId": fact.user_id.as_deref(),
         }))
         .map_err(|_| WebFrameworkError::dependency_unavailable("encode Web audit metadata"))?;
-        // Audit rows must never land with a fabricated tenant id of 0: a
-        // subject that cannot be resolved to a positive numeric tenant is an
-        // IAM-injection anomaly and the audit write fails closed.
-        let tenant_id = resolved_numeric_subject_id(
-            fact.tenant_id.as_deref(),
-            "audit tenant subject is not a positive numeric id",
-        )?;
-
-        self.service
+        if let Err(error) = self
+            .service
             .record_audit_log(AuditLogWrite {
                 tenant_id,
                 organization_id: 0,
@@ -59,9 +67,14 @@ impl AuditEmitter for WebFrameworkAuditEmitter {
                 metadata_json: &metadata_json,
             })
             .await
-            .map_err(|_| {
-                WebFrameworkError::dependency_unavailable("Web audit persistence is unavailable")
-            })
+        {
+            tracing::error!(
+                request_id = %fact.request_id,
+                error = %error,
+                "Web audit persistence is unavailable; audit fact skipped"
+            );
+        }
+        Ok(())
     }
 }
 
@@ -78,6 +91,18 @@ impl WebFrameworkSecurityEventEmitter {
 #[async_trait]
 impl SecurityEventEmitter for WebFrameworkSecurityEventEmitter {
     async fn emit(&self, event: SecurityEvent) -> Result<(), WebFrameworkError> {
+        // Same downgrade rule as the audit emitter: security events without
+        // a positive numeric tenant subject (anonymous endpoints) are
+        // skipped, and persistence failures are logged without failing the
+        // business response.
+        let Some(tenant_id) = numeric_subject_id(event.tenant_id.as_deref()) else {
+            tracing::debug!(
+                request_id = event.request_id.as_deref().unwrap_or("unknown"),
+                kind = ?event.kind,
+                "skipping security event without a positive numeric tenant subject"
+            );
+            return Ok(());
+        };
         let metadata_json = serde_json::to_string(&serde_json::json!({
             "apiSurface": &event.api_surface,
             "method": &event.method,
@@ -87,12 +112,10 @@ impl SecurityEventEmitter for WebFrameworkSecurityEventEmitter {
         }))
         .map_err(|_| WebFrameworkError::dependency_unavailable("encode Web security event"))?;
 
-        self.service
+        if let Err(error) = self
+            .service
             .record_audit_log(AuditLogWrite {
-                tenant_id: resolved_numeric_subject_id(
-                    event.tenant_id.as_deref(),
-                    "security-event tenant subject is not a positive numeric id",
-                )?,
+                tenant_id,
                 organization_id: 0,
                 operator_id: 0,
                 operator_type: "SYSTEM",
@@ -104,11 +127,14 @@ impl SecurityEventEmitter for WebFrameworkSecurityEventEmitter {
                 metadata_json: &metadata_json,
             })
             .await
-            .map_err(|_| {
-                WebFrameworkError::dependency_unavailable(
-                    "Web security-event persistence is unavailable",
-                )
-            })
+        {
+            tracing::error!(
+                request_id = event.request_id.as_deref().unwrap_or("unknown"),
+                error = %error,
+                "Web security-event persistence is unavailable; security event skipped"
+            );
+        }
+        Ok(())
     }
 }
 
@@ -116,15 +142,6 @@ fn numeric_subject_id(value: Option<&str>) -> Option<i64> {
     value
         .and_then(|value| value.parse::<i64>().ok())
         .filter(|value| *value > 0)
-}
-
-/// Resolves a required positive numeric subject id, rejecting the write
-/// instead of persisting a fabricated zero.
-fn resolved_numeric_subject_id(
-    value: Option<&str>,
-    detail: &'static str,
-) -> Result<i64, WebFrameworkError> {
-    numeric_subject_id(value).ok_or_else(|| WebFrameworkError::bad_request(detail))
 }
 
 fn bounded_text(value: &str, maximum_bytes: usize) -> &str {

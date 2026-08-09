@@ -18,20 +18,20 @@ namespace SDKWork.Web.AppSdk.Api
         /// <summary>
         /// List certificates active on the domain listener
         /// </summary>
-        public async Task<SDKWork.Web.AppSdk.Models.SitesDomainsListenerCertificateBindingsListResponse?> SitesDomainsListenerCertificateBindingsListAsync(string siteId, string domainId, int? page = null, int? pageSize = null)
+        public async Task<SDKWork.Web.AppSdk.Models.ApplicationsDomainsListenerCertificateBindingsListResponse?> ApplicationsDomainsListenerCertificateBindingsListAsync(string applicationId, string domainId, int? page = null, int? pageSize = null)
         {
             var queryString = BuildQueryString(new[]
             {
                 new QueryParameterSpec("page", page, "form", true, false, null),
                 new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Web.AppSdk.Models.SitesDomainsListenerCertificateBindingsListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath($"/sites/{SerializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false))}/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}/listener_certificate_bindings"), queryString));
+            return await _client.GetAsync<SDKWork.Web.AppSdk.Models.ApplicationsDomainsListenerCertificateBindingsListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}/listener_certificate_bindings"), queryString));
         }
 
         /// <summary>
         /// Bind a certificate version to the domain listener
         /// </summary>
-        public async Task<SDKWork.Web.AppSdk.Models.SitesDomainsListenerCertificateBindingsCreateResponse201?> SitesDomainsListenerCertificateBindingsCreateAsync(string siteId, string domainId, SDKWork.Web.AppSdk.Models.CreateListenerCertificateBindingRequest body, string idempotencyKey)
+        public async Task<SDKWork.Web.AppSdk.Models.ApplicationsDomainsListenerCertificateBindingsCreateResponse201?> ApplicationsDomainsListenerCertificateBindingsCreateAsync(string applicationId, string domainId, SDKWork.Web.AppSdk.Models.CreateListenerCertificateBindingRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -40,13 +40,13 @@ namespace SDKWork.Web.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Web.AppSdk.Models.SitesDomainsListenerCertificateBindingsCreateResponse201>(ApiPaths.AppPath($"/sites/{SerializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false))}/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}/listener_certificate_bindings"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.Web.AppSdk.Models.ApplicationsDomainsListenerCertificateBindingsCreateResponse201>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}/listener_certificate_bindings"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
         /// Remove a certificate from the domain listener
         /// </summary>
-        public async Task SitesDomainsListenerCertificateBindingsDeleteAsync(string siteId, string domainId, string bindingId, string idempotencyKey)
+        public async Task ApplicationsDomainsListenerCertificateBindingsDeleteAsync(string applicationId, string domainId, string bindingId, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -55,7 +55,7 @@ namespace SDKWork.Web.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            await _client.DeleteAsync<object>(ApiPaths.AppPath($"/sites/{SerializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false))}/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}/listener_certificate_bindings/{SerializePathParameter(bindingId, new PathParameterSpec("bindingId", "simple", false))}"), null, requestHeaders);
+            await _client.DeleteAsync<object>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}/listener_certificate_bindings/{SerializePathParameter(bindingId, new PathParameterSpec("bindingId", "simple", false))}"), null, requestHeaders);
         }
 
         private sealed record PathParameterSpec(string Name, string Style, bool Explode);

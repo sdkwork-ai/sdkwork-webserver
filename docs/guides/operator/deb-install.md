@@ -116,6 +116,28 @@ Secret material is never inlined: the TOML references `0600` files
 in-process. Every configuration item, including the database connection, is
 kept under `/etc/sdkwork/webserver` on this single-application host.
 
+### 4.2 Login Page Bootstrap Token
+
+The PC login page (`/auth/login`, reached from the Console entry) loads the
+identity-service metadata endpoints
+(`/app/v3/api/system/iam/runtime`, `/app/v3/api/system/iam/verification_policy`)
+with a credential-entry bootstrap Access-Token (`x-sdkwork-auth-mode:
+credential-entry-bootstrap`). The installer writes this token to
+`/etc/sdkwork/webserver/secrets/credential-entry-bootstrap-access-token`
+(`0600`, referenced from the TOML `[secrets]` section) and the gateway
+injects it into the served `index.html` as an inline script.
+
+- **Test package**: the installer generates a locally provisioned unsigned
+  fixture JWT (`@sdkwork/iam-credential-entry` dev-bootstrap shape, claims
+  from `sdkwork.app.config.json` backend identity). The test IAM resolver
+  accepts it through the development authentication fallback, so the login
+  page renders immediately after install.
+- **Production package**: the installer intentionally leaves the token unset —
+  the iam-credential-entry contract requires production bootstrap tokens to
+  be provisioned from a private secret source (a real IAM-issued credential).
+  Until a production credential provisioning path exists, the production
+  login page cannot bootstrap; the identity endpoints fail closed instead.
+
 ## 5. Verify
 
 ```bash

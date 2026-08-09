@@ -8,40 +8,40 @@ public class DeploymentApi {
     }
 
     /// 获取部署历史
-    public func sitesDeploymentsList(siteId: String, pageSize: Int? = nil, cursor: String? = nil, status: Int? = nil) async throws -> SitesDeploymentsListResponse? {
+    public func applicationsDeploymentsList(applicationId: String, pageSize: Int? = nil, cursor: String? = nil, status: Int? = nil) async throws -> ApplicationsDeploymentsListResponse? {
         let query = buildQueryString([
             QueryParameterSpec(name: "page_size", value: pageSize, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "cursor", value: cursor, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "status", value: status, style: "form", explode: true, allowReserved: false, contentType: nil)
         ])
-        return try await client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/deployments"), query), responseType: SitesDeploymentsListResponse.self)
+        return try await client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/deployments"), query), responseType: ApplicationsDeploymentsListResponse.self)
     }
 
     /// 发起部署
-    public func sitesDeploymentsCreate(siteId: String, body: CreateDeploymentRequest, idempotencyKey: String) async throws -> SitesDeploymentsCreateResponse201? {
+    public func applicationsDeploymentsCreate(applicationId: String, body: CreateDeploymentRequest, idempotencyKey: String) async throws -> ApplicationsDeploymentsCreateResponse201? {
         let requestHeaders = buildRequestHeaders(
             [
                 "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
             ],
             [:]
         )
-        return try await client.post(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/deployments"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: SitesDeploymentsCreateResponse201.self)
+        return try await client.post(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/deployments"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: ApplicationsDeploymentsCreateResponse201.self)
     }
 
     /// 获取部署详情
-    public func sitesDeploymentsRetrieve(siteId: String, deploymentId: String) async throws -> SitesDeploymentsRetrieveResponse? {
-        return try await client.get(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/deployments/\(serializePathParameter(deploymentId, PathParameterSpec(name: "deploymentId", style: "simple", explode: false)))"), responseType: SitesDeploymentsRetrieveResponse.self)
+    public func applicationsDeploymentsRetrieve(applicationId: String, deploymentId: String) async throws -> ApplicationsDeploymentsRetrieveResponse? {
+        return try await client.get(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/deployments/\(serializePathParameter(deploymentId, PathParameterSpec(name: "deploymentId", style: "simple", explode: false)))"), responseType: ApplicationsDeploymentsRetrieveResponse.self)
     }
 
     /// 基于历史成功版本创建快速还原命令
-    public func sitesDeploymentsRollback(siteId: String, deploymentId: String, idempotencyKey: String) async throws -> SitesDeploymentsRollbackResponse? {
+    public func applicationsDeploymentsRollback(applicationId: String, deploymentId: String, idempotencyKey: String) async throws -> ApplicationsDeploymentsRollbackResponse? {
         let requestHeaders = buildRequestHeaders(
             [
                 "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
             ],
             [:]
         )
-        return try await client.post(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/deployments/\(serializePathParameter(deploymentId, PathParameterSpec(name: "deploymentId", style: "simple", explode: false)))/rollback"), body: nil, params: nil, headers: requestHeaders, responseType: SitesDeploymentsRollbackResponse.self)
+        return try await client.post(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/deployments/\(serializePathParameter(deploymentId, PathParameterSpec(name: "deploymentId", style: "simple", explode: false)))/rollback"), body: nil, params: nil, headers: requestHeaders, responseType: ApplicationsDeploymentsRollbackResponse.self)
     }
 
     private struct PathParameterSpec {

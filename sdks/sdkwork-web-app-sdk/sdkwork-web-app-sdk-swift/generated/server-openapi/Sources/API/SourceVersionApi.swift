@@ -8,39 +8,39 @@ public class SourceVersionApi {
     }
 
     /// 获取应用源码版本
-    public func sitesSourceVersionsList(siteId: String, pageSize: Int? = nil, cursor: String? = nil) async throws -> SitesSourceVersionsListResponse? {
+    public func applicationsSourceVersionsList(applicationId: String, pageSize: Int? = nil, cursor: String? = nil) async throws -> ApplicationsSourceVersionsListResponse? {
         let query = buildQueryString([
             QueryParameterSpec(name: "page_size", value: pageSize, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "cursor", value: cursor, style: "form", explode: true, allowReserved: false, contentType: nil)
         ])
-        return try await client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/source_versions"), query), responseType: SitesSourceVersionsListResponse.self)
+        return try await client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/source_versions"), query), responseType: ApplicationsSourceVersionsListResponse.self)
     }
 
     /// 登记 Drive 中的应用源码版本
-    public func sitesSourceVersionsCreate(siteId: String, body: CreateSourceVersionRequest, idempotencyKey: String) async throws -> SitesSourceVersionsCreateResponse201? {
+    public func applicationsSourceVersionsCreate(applicationId: String, body: CreateSourceVersionRequest, idempotencyKey: String) async throws -> ApplicationsSourceVersionsCreateResponse201? {
         let requestHeaders = buildRequestHeaders(
             [
                 "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
             ],
             [:]
         )
-        return try await client.post(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/source_versions"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: SitesSourceVersionsCreateResponse201.self)
+        return try await client.post(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/source_versions"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: ApplicationsSourceVersionsCreateResponse201.self)
     }
 
     /// 从公共 Git 仓库导入应用源码版本
-    public func sitesSourceVersionsGitImportCreate(siteId: String, body: ImportGitSourceVersionRequest, idempotencyKey: String) async throws -> SitesSourceVersionsGitImportCreateResponse201? {
+    public func applicationsSourceVersionsGitImportCreate(applicationId: String, body: ImportGitSourceVersionRequest, idempotencyKey: String) async throws -> ApplicationsSourceVersionsGitImportCreateResponse201? {
         let requestHeaders = buildRequestHeaders(
             [
                 "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
             ],
             [:]
         )
-        return try await client.post(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/source_versions/git_import"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: SitesSourceVersionsGitImportCreateResponse201.self)
+        return try await client.post(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/source_versions/git_import"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: ApplicationsSourceVersionsGitImportCreateResponse201.self)
     }
 
     /// 获取应用源码版本详情
-    public func sitesSourceVersionsRetrieve(siteId: String, sourceVersionId: String) async throws -> SitesSourceVersionsRetrieveResponse? {
-        return try await client.get(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/source_versions/\(serializePathParameter(sourceVersionId, PathParameterSpec(name: "sourceVersionId", style: "simple", explode: false)))"), responseType: SitesSourceVersionsRetrieveResponse.self)
+    public func applicationsSourceVersionsRetrieve(applicationId: String, sourceVersionId: String) async throws -> ApplicationsSourceVersionsRetrieveResponse? {
+        return try await client.get(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/source_versions/\(serializePathParameter(sourceVersionId, PathParameterSpec(name: "sourceVersionId", style: "simple", explode: false)))"), responseType: ApplicationsSourceVersionsRetrieveResponse.self)
     }
 
     private struct PathParameterSpec {

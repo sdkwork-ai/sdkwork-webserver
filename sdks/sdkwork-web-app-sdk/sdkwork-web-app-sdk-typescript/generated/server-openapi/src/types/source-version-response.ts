@@ -2,7 +2,7 @@ import type { SourceVersionConfigSnapshot } from './source-version-config-snapsh
 
 export interface SourceVersionResponse {
   id: string;
-  siteId: string;
+  applicationId: string;
   versionTag: string;
   sourceType: 'ARCHIVE' | 'DIRECTORY' | 'GIT';
   sourceRef?: string;

@@ -18,20 +18,20 @@ namespace SDKWork.Web.AppSdk.Api
         /// <summary>
         /// 获取应用源码版本
         /// </summary>
-        public async Task<SDKWork.Web.AppSdk.Models.SitesSourceVersionsListResponse?> SitesSourceVersionsListAsync(string siteId, int? pageSize = null, string? cursor = null)
+        public async Task<SDKWork.Web.AppSdk.Models.ApplicationsSourceVersionsListResponse?> ApplicationsSourceVersionsListAsync(string applicationId, int? pageSize = null, string? cursor = null)
         {
             var queryString = BuildQueryString(new[]
             {
                 new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
                 new QueryParameterSpec("cursor", cursor, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Web.AppSdk.Models.SitesSourceVersionsListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath($"/sites/{SerializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false))}/source_versions"), queryString));
+            return await _client.GetAsync<SDKWork.Web.AppSdk.Models.ApplicationsSourceVersionsListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/source_versions"), queryString));
         }
 
         /// <summary>
         /// 登记 Drive 中的应用源码版本
         /// </summary>
-        public async Task<SDKWork.Web.AppSdk.Models.SitesSourceVersionsCreateResponse201?> SitesSourceVersionsCreateAsync(string siteId, SDKWork.Web.AppSdk.Models.CreateSourceVersionRequest body, string idempotencyKey)
+        public async Task<SDKWork.Web.AppSdk.Models.ApplicationsSourceVersionsCreateResponse201?> ApplicationsSourceVersionsCreateAsync(string applicationId, SDKWork.Web.AppSdk.Models.CreateSourceVersionRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -40,13 +40,13 @@ namespace SDKWork.Web.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Web.AppSdk.Models.SitesSourceVersionsCreateResponse201>(ApiPaths.AppPath($"/sites/{SerializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false))}/source_versions"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.Web.AppSdk.Models.ApplicationsSourceVersionsCreateResponse201>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/source_versions"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
         /// 从公共 Git 仓库导入应用源码版本
         /// </summary>
-        public async Task<SDKWork.Web.AppSdk.Models.SitesSourceVersionsGitImportCreateResponse201?> SitesSourceVersionsGitImportCreateAsync(string siteId, SDKWork.Web.AppSdk.Models.ImportGitSourceVersionRequest body, string idempotencyKey)
+        public async Task<SDKWork.Web.AppSdk.Models.ApplicationsSourceVersionsGitImportCreateResponse201?> ApplicationsSourceVersionsGitImportCreateAsync(string applicationId, SDKWork.Web.AppSdk.Models.ImportGitSourceVersionRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -55,15 +55,15 @@ namespace SDKWork.Web.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Web.AppSdk.Models.SitesSourceVersionsGitImportCreateResponse201>(ApiPaths.AppPath($"/sites/{SerializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false))}/source_versions/git_import"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.Web.AppSdk.Models.ApplicationsSourceVersionsGitImportCreateResponse201>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/source_versions/git_import"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
         /// 获取应用源码版本详情
         /// </summary>
-        public async Task<SDKWork.Web.AppSdk.Models.SitesSourceVersionsRetrieveResponse?> SitesSourceVersionsRetrieveAsync(string siteId, string sourceVersionId)
+        public async Task<SDKWork.Web.AppSdk.Models.ApplicationsSourceVersionsRetrieveResponse?> ApplicationsSourceVersionsRetrieveAsync(string applicationId, string sourceVersionId)
         {
-            return await _client.GetAsync<SDKWork.Web.AppSdk.Models.SitesSourceVersionsRetrieveResponse>(ApiPaths.AppPath($"/sites/{SerializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false))}/source_versions/{SerializePathParameter(sourceVersionId, new PathParameterSpec("sourceVersionId", "simple", false))}"));
+            return await _client.GetAsync<SDKWork.Web.AppSdk.Models.ApplicationsSourceVersionsRetrieveResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/source_versions/{SerializePathParameter(sourceVersionId, new PathParameterSpec("sourceVersionId", "simple", false))}"));
         }
 
         private sealed record PathParameterSpec(string Name, string Style, bool Explode);

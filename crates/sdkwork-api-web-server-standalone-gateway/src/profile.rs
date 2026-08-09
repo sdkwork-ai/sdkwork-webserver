@@ -89,6 +89,12 @@ pub(crate) async fn assemble_standalone_profile(
     let drive = sdkwork_api_drive_assembly::assemble_app_api_contribution()
         .await
         .map_err(|error| StandaloneProfileError::assembly_unavailable("sdkwork-drive", error))?;
+    let skills = sdkwork_api_skills_assembly::assemble_app_api_contribution()
+        .await
+        .map_err(|error| StandaloneProfileError::assembly_unavailable("sdkwork-skills", error))?;
+    let mcp = sdkwork_api_mcp_assembly::assemble_app_api_contribution()
+        .await
+        .map_err(|error| StandaloneProfileError::assembly_unavailable("sdkwork-mcp", error))?;
     let machine_authenticator = web.machine_credential_authenticator.clone();
     let audit_emitter = web.audit_emitter.clone();
     let security_event_emitter = web.security_event_emitter.clone();
@@ -121,6 +127,24 @@ pub(crate) async fn assemble_standalone_profile(
                 permission_catalog: drive.permission_catalog,
                 domain_context_injectors: drive.domain_context_injectors,
                 readiness_check: drive.readiness_check,
+            },
+            OwnerApiContribution {
+                owner: "sdkwork-skills",
+                router: skills.router,
+                route_manifest: skills.route_manifest,
+                openapi: skills.openapi,
+                permission_catalog: skills.permission_catalog,
+                domain_context_injectors: skills.domain_context_injectors,
+                readiness_check: skills.readiness_check,
+            },
+            OwnerApiContribution {
+                owner: "sdkwork-mcp",
+                router: mcp.router,
+                route_manifest: mcp.route_manifest,
+                openapi: mcp.openapi,
+                permission_catalog: mcp.permission_catalog,
+                domain_context_injectors: mcp.domain_context_injectors,
+                readiness_check: mcp.readiness_check,
             },
         ],
         machine_authenticator,

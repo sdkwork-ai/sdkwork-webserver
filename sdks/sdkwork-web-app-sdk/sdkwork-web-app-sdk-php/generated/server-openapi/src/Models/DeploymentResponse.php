@@ -8,7 +8,7 @@ final class DeploymentResponse
 {
     public ?string $id = null;
 
-    public ?string $siteId = null;
+    public ?string $applicationId = null;
 
     public ?int $deployType = null;
 
@@ -47,8 +47,8 @@ final class DeploymentResponse
         $this->id = array_key_exists('id', $data)
             ? $data['id']
             : null;
-        $this->siteId = array_key_exists('siteId', $data)
-            ? $data['siteId']
+        $this->applicationId = array_key_exists('applicationId', $data)
+            ? $data['applicationId']
             : null;
         $this->deployType = array_key_exists('deployType', $data)
             ? $data['deployType']
@@ -106,7 +106,7 @@ final class DeploymentResponse
     {
         return [
             'id' => $this->id,
-            'siteId' => $this->siteId,
+            'applicationId' => $this->applicationId,
             'deployType' => $this->deployType,
             'sourceVersionId' => $this->sourceVersionId,
             'versionTag' => $this->versionTag,

@@ -58,7 +58,7 @@ const client = new SdkworkAppClient({
 
 ## API Modules
 
-- `client.site` - site API
+- `client.application` - application API
 - `client.domain` - domain API
 - `client.certificate` - certificate API
 - `client.sourceVersion` - source_version API
@@ -68,10 +68,10 @@ const client = new SdkworkAppClient({
 
 ## Usage Examples
 
-### site
+### application
 
 ```typescript
-// 获取站点列表
+// 获取应用列表
 const params = {
   page: 1,
   page_size: 2,
@@ -80,7 +80,7 @@ const params = {
   site_type: 1,
   keyword: 'keyword',
 };
-const result = await client.site.list(params);
+const result = await client.application.list(params);
 ```
 
 ### domain
@@ -98,57 +98,57 @@ const result = await client.domain.list(params);
 
 ```typescript
 // List certificates active on the domain listener
-const siteId = '1';
+const applicationId = '1';
 const domainId = '1';
 const params = {
   page: 1,
   page_size: 2,
 };
-const result = await client.certificate.sites.domains.listenerCertificateBindings.list(siteId, domainId, params);
+const result = await client.certificate.applications.domains.listenerCertificateBindings.list(applicationId, domainId, params);
 ```
 
 ### source_version
 
 ```typescript
 // 获取应用源码版本
-const siteId = '1';
+const applicationId = '1';
 const params = {
   page_size: 1,
   cursor: 'cursor',
 };
-const result = await client.sourceVersion.sites.sourceVersions.list(siteId, params);
+const result = await client.sourceVersion.applications.sourceVersions.list(applicationId, params);
 ```
 
 ### deployment
 
 ```typescript
 // 获取部署历史
-const siteId = '1';
+const applicationId = '1';
 const params = {
   page_size: 1,
   cursor: 'cursor',
   status: 0,
 };
-const result = await client.deployment.sites.deployments.list(siteId, params);
+const result = await client.deployment.applications.deployments.list(applicationId, params);
 ```
 
 ### env_variable
 
 ```typescript
 // 获取环境变量列表
-const siteId = '1';
+const applicationId = '1';
 const params = {
   environment: 'environment',
 };
-const result = await client.envVariable.sites.envVariables.list(siteId, params);
+const result = await client.envVariable.applications.envVariables.list(applicationId, params);
 ```
 
 ### monitor
 
 ```typescript
 // 获取健康检查配置
-const siteId = '1';
-const result = await client.monitor.sites.healthChecks.list(siteId);
+const applicationId = '1';
+const result = await client.monitor.applications.healthChecks.list(applicationId);
 ```
 
 ## Error Handling

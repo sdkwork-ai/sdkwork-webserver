@@ -4,32 +4,32 @@ declare(strict_types=1);
 
 namespace SDKWork\Web\AppSdk\Api;
 
+use SDKWork\Web\AppSdk\Models\ApplicationsSourceVersionsCreateResponse201;
+use SDKWork\Web\AppSdk\Models\ApplicationsSourceVersionsGitImportCreateResponse201;
+use SDKWork\Web\AppSdk\Models\ApplicationsSourceVersionsListResponse;
+use SDKWork\Web\AppSdk\Models\ApplicationsSourceVersionsRetrieveResponse;
 use SDKWork\Web\AppSdk\Models\CreateSourceVersionRequest;
 use SDKWork\Web\AppSdk\Models\ImportGitSourceVersionRequest;
-use SDKWork\Web\AppSdk\Models\SitesSourceVersionsCreateResponse201;
-use SDKWork\Web\AppSdk\Models\SitesSourceVersionsGitImportCreateResponse201;
-use SDKWork\Web\AppSdk\Models\SitesSourceVersionsListResponse;
-use SDKWork\Web\AppSdk\Models\SitesSourceVersionsRetrieveResponse;
 
 final class SourceVersionApi extends BaseApi
 {
     /** 获取应用源码版本 */
-    public function sitesSourceVersionsList(string $siteId, ?int $pageSize = null, ?string $cursor = null): ?SitesSourceVersionsListResponse
+    public function applicationsSourceVersionsList(string $applicationId, ?int $pageSize = null, ?string $cursor = null): ?ApplicationsSourceVersionsListResponse
     {
-        $path = $this->interpolatePath('/app/v3/api/sites/{siteId}/source_versions', ['siteId' => $this->serializePathParameter($siteId, new PathParameterSpec('siteId', 'simple', false))]);
+        $path = $this->interpolatePath('/app/v3/api/applications/{applicationId}/source_versions', ['applicationId' => $this->serializePathParameter($applicationId, new PathParameterSpec('applicationId', 'simple', false))]);
         $query = $this->buildQueryString([
             new QueryParameterSpec('page_size', $pageSize, 'form', true, false, null),
             new QueryParameterSpec('cursor', $cursor, 'form', true, false, null),
         ]);
         $path = $this->appendQueryString($path, $query);
         $result = $this->client->request('GET', $path, []);
-        return is_array($result) ? SitesSourceVersionsListResponse::fromArray($result) : null;
+        return is_array($result) ? ApplicationsSourceVersionsListResponse::fromArray($result) : null;
     }
 
     /** 登记 Drive 中的应用源码版本 */
-    public function sitesSourceVersionsCreate(string $siteId, array|CreateSourceVersionRequest $body, string $idempotencyKey): ?SitesSourceVersionsCreateResponse201
+    public function applicationsSourceVersionsCreate(string $applicationId, array|CreateSourceVersionRequest $body, string $idempotencyKey): ?ApplicationsSourceVersionsCreateResponse201
     {
-        $path = $this->interpolatePath('/app/v3/api/sites/{siteId}/source_versions', ['siteId' => $this->serializePathParameter($siteId, new PathParameterSpec('siteId', 'simple', false))]);
+        $path = $this->interpolatePath('/app/v3/api/applications/{applicationId}/source_versions', ['applicationId' => $this->serializePathParameter($applicationId, new PathParameterSpec('applicationId', 'simple', false))]);
         $payload = $body instanceof CreateSourceVersionRequest ? $body->toArray() : $body;
         $requestHeaders = $this->buildRequestHeaders(
             [
@@ -41,13 +41,13 @@ final class SourceVersionApi extends BaseApi
             'headers' => $requestHeaders,
             'json' => $payload,
         ]);
-        return is_array($result) ? SitesSourceVersionsCreateResponse201::fromArray($result) : null;
+        return is_array($result) ? ApplicationsSourceVersionsCreateResponse201::fromArray($result) : null;
     }
 
     /** 从公共 Git 仓库导入应用源码版本 */
-    public function sitesSourceVersionsGitImportCreate(string $siteId, array|ImportGitSourceVersionRequest $body, string $idempotencyKey): ?SitesSourceVersionsGitImportCreateResponse201
+    public function applicationsSourceVersionsGitImportCreate(string $applicationId, array|ImportGitSourceVersionRequest $body, string $idempotencyKey): ?ApplicationsSourceVersionsGitImportCreateResponse201
     {
-        $path = $this->interpolatePath('/app/v3/api/sites/{siteId}/source_versions/git_import', ['siteId' => $this->serializePathParameter($siteId, new PathParameterSpec('siteId', 'simple', false))]);
+        $path = $this->interpolatePath('/app/v3/api/applications/{applicationId}/source_versions/git_import', ['applicationId' => $this->serializePathParameter($applicationId, new PathParameterSpec('applicationId', 'simple', false))]);
         $payload = $body instanceof ImportGitSourceVersionRequest ? $body->toArray() : $body;
         $requestHeaders = $this->buildRequestHeaders(
             [
@@ -59,15 +59,15 @@ final class SourceVersionApi extends BaseApi
             'headers' => $requestHeaders,
             'json' => $payload,
         ]);
-        return is_array($result) ? SitesSourceVersionsGitImportCreateResponse201::fromArray($result) : null;
+        return is_array($result) ? ApplicationsSourceVersionsGitImportCreateResponse201::fromArray($result) : null;
     }
 
     /** 获取应用源码版本详情 */
-    public function sitesSourceVersionsRetrieve(string $siteId, string $sourceVersionId): ?SitesSourceVersionsRetrieveResponse
+    public function applicationsSourceVersionsRetrieve(string $applicationId, string $sourceVersionId): ?ApplicationsSourceVersionsRetrieveResponse
     {
-        $path = $this->interpolatePath('/app/v3/api/sites/{siteId}/source_versions/{sourceVersionId}', ['siteId' => $this->serializePathParameter($siteId, new PathParameterSpec('siteId', 'simple', false)), 'sourceVersionId' => $this->serializePathParameter($sourceVersionId, new PathParameterSpec('sourceVersionId', 'simple', false))]);
+        $path = $this->interpolatePath('/app/v3/api/applications/{applicationId}/source_versions/{sourceVersionId}', ['applicationId' => $this->serializePathParameter($applicationId, new PathParameterSpec('applicationId', 'simple', false)), 'sourceVersionId' => $this->serializePathParameter($sourceVersionId, new PathParameterSpec('sourceVersionId', 'simple', false))]);
         $result = $this->client->request('GET', $path, []);
-        return is_array($result) ? SitesSourceVersionsRetrieveResponse::fromArray($result) : null;
+        return is_array($result) ? ApplicationsSourceVersionsRetrieveResponse::fromArray($result) : null;
     }
 
     private function buildRequestHeaders(array $headers, array $cookies): array

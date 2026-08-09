@@ -66,7 +66,7 @@ client.getHttpClient().setHeader("X-Custom-Header", "value");
 
 ## API Modules
 
-- `client.getSite()` - site API
+- `client.getApplication()` - application API
 - `client.getDomain()` - domain API
 - `client.getCertificate()` - certificate API
 - `client.getSourceVersion()` - source_version API
@@ -76,10 +76,10 @@ client.getHttpClient().setHeader("X-Custom-Header", "value");
 
 ## Usage Examples
 
-### site
+### application
 
 ```java
-// 获取站点列表
+// 获取应用列表
 Map<String, Object> params = new LinkedHashMap<>();
 params.put("page", 1);
 params.put("page_size", 2);
@@ -87,7 +87,7 @@ params.put("status", 0);
 params.put("application_type", "WEB");
 params.put("site_type", 1);
 params.put("keyword", "keyword");
-SitesListResponse result = client.getSite().sitesList(params);
+ApplicationsListResponse result = client.getApplication().applicationsList(params);
 System.out.println(result);
 ```
 
@@ -106,12 +106,12 @@ System.out.println(result);
 
 ```java
 // List certificates active on the domain listener
-String siteId = "1";
+String applicationId = "1";
 String domainId = "1";
 Map<String, Object> params = new LinkedHashMap<>();
 params.put("page", 1);
 params.put("page_size", 2);
-SitesDomainsListenerCertificateBindingsListResponse result = client.getCertificate().sitesDomainsListenerCertificateBindingsList(siteId, domainId, params);
+ApplicationsDomainsListenerCertificateBindingsListResponse result = client.getCertificate().applicationsDomainsListenerCertificateBindingsList(applicationId, domainId, params);
 System.out.println(result);
 ```
 
@@ -119,11 +119,11 @@ System.out.println(result);
 
 ```java
 // 获取应用源码版本
-String siteId = "1";
+String applicationId = "1";
 Map<String, Object> params = new LinkedHashMap<>();
 params.put("page_size", 1);
 params.put("cursor", "cursor");
-SitesSourceVersionsListResponse result = client.getSourceVersion().sitesSourceVersionsList(siteId, params);
+ApplicationsSourceVersionsListResponse result = client.getSourceVersion().applicationsSourceVersionsList(applicationId, params);
 System.out.println(result);
 ```
 
@@ -131,12 +131,12 @@ System.out.println(result);
 
 ```java
 // 获取部署历史
-String siteId = "1";
+String applicationId = "1";
 Map<String, Object> params = new LinkedHashMap<>();
 params.put("page_size", 1);
 params.put("cursor", "cursor");
 params.put("status", 0);
-SitesDeploymentsListResponse result = client.getDeployment().sitesDeploymentsList(siteId, params);
+ApplicationsDeploymentsListResponse result = client.getDeployment().applicationsDeploymentsList(applicationId, params);
 System.out.println(result);
 ```
 
@@ -144,10 +144,10 @@ System.out.println(result);
 
 ```java
 // 获取环境变量列表
-String siteId = "1";
+String applicationId = "1";
 Map<String, Object> params = new LinkedHashMap<>();
 params.put("environment", "environment");
-SitesEnvVariablesListResponse result = client.getEnvVariable().sitesEnvVariablesList(siteId, params);
+ApplicationsEnvVariablesListResponse result = client.getEnvVariable().applicationsEnvVariablesList(applicationId, params);
 System.out.println(result);
 ```
 
@@ -155,8 +155,8 @@ System.out.println(result);
 
 ```java
 // 获取健康检查配置
-String siteId = "1";
-SitesHealthChecksListResponse result = client.getMonitor().sitesHealthChecksList(siteId);
+String applicationId = "1";
+ApplicationsHealthChecksListResponse result = client.getMonitor().applicationsHealthChecksList(applicationId);
 System.out.println(result);
 ```
 

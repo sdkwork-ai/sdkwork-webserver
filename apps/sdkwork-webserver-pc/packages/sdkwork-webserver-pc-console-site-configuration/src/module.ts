@@ -5,6 +5,6 @@ export const webserverModule = {
   label: "site configuration",
   surface: "app-console",
   entries: [
-    { resource: "configuration", label: "Configuration", description: "Environment variables and health checks", permission: "web.sites.write", order: 1 }
+    { resource: "configuration", label: "Configuration", description: "Environment variables and health checks", permission: "web.applications.write", order: 1 }
   ],
 } as const satisfies WebserverPcModuleDefinition;

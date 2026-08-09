@@ -9,12 +9,12 @@
     "protocol": "http",
     "packageName": "@sdkwork/web-backend-sdk"
   },
-  "changeFingerprint": "278c2beb174e9b45ebd96bf2bd124bb95e3afcfdad25d15671e5ced59efe777e",
+  "changeFingerprint": "0364fce0453143106e5aac153a2bba4116133806d72d301a183b2f13e0d0a617",
   "changes": {
     "createdGeneratedFiles": [],
     "updatedGeneratedFiles": [
-      "src/api/certificate.ts",
-      "src/types/index.ts"
+      "package.json",
+      "src/http/client.ts"
     ],
     "unchangedGeneratedFiles": [
       "bin/publish-core.mjs",
@@ -24,7 +24,6 @@
       "bin/sdk-gen.sh",
       "CHANGELOG.md",
       "LICENSE",
-      "package.json",
       "README.md",
       "sdkwork-sdk.json",
       "src/api/agent.ts",
@@ -35,13 +34,13 @@
       "src/api/audit.ts",
       "src/api/base.ts",
       "src/api/certificate-distribution.ts",
+      "src/api/certificate.ts",
       "src/api/domain.ts",
       "src/api/index.ts",
       "src/api/nginx.ts",
       "src/api/paths.ts",
       "src/api/server.ts",
       "src/auth/index.ts",
-      "src/http/client.ts",
       "src/http/index.ts",
       "src/index.ts",
       "src/sdk.ts",
@@ -116,6 +115,7 @@
       "src/types/field-error.ts",
       "src/types/heartbeat-response.ts",
       "src/types/import-application-git-source-version-request.ts",
+      "src/types/index.ts",
       "src/types/int64-string.ts",
       "src/types/issue-certificate-request.ts",
       "src/types/listener-certificate-binding-response.ts",
@@ -165,44 +165,48 @@
       "custom/build-runtime.mjs",
       "custom/README.md"
     ],
-    "backedUpFiles": [
-      "src/api/certificate.ts",
-      "src/types/index.ts"
-    ]
+    "backedUpFiles": []
   },
   "impact": {
     "schemaVersion": 1,
     "areas": [
       "api-surface",
-      "models"
+      "runtime",
+      "build-metadata"
     ],
     "details": [
       {
         "area": "api-surface",
         "paths": [
-          "src/api/certificate.ts"
+          "src/http/client.ts"
         ]
       },
       {
-        "area": "models",
+        "area": "runtime",
         "paths": [
-          "src/types/index.ts"
+          "src/http/client.ts"
+        ]
+      },
+      {
+        "area": "build-metadata",
+        "paths": [
+          "package.json"
         ]
       }
     ],
     "requiresVerification": true,
-    "summary": "Detected impact areas: api-surface, models. Verification is required."
+    "summary": "Detected impact areas: api-surface, runtime, build-metadata. Verification is required."
   },
   "verificationPlan": {
     "shouldRun": true,
     "runPhase": "now",
-    "summary": "Detected impact areas: api-surface, models. Verification is required. Run the required verification commands now against the generated SDK output.",
+    "summary": "Detected impact areas: api-surface, runtime, build-metadata. Verification is required. Run the required verification commands now against the generated SDK output.",
     "steps": [
       {
         "id": "check",
         "title": "Unified package check",
         "required": true,
-        "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models.",
+        "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, runtime, build-metadata.",
         "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-backend-sdk\\sdkwork-web-backend-sdk-typescript\\generated\\server-openapi",
         "command": "node",
         "args": [
@@ -220,7 +224,7 @@
         "id": "build",
         "title": "Unified package build",
         "required": true,
-        "rationale": "Run the full package build because this language uses a lighter check path than the final build. Triggered by: api-surface, models.",
+        "rationale": "Run the full package build because this language uses a lighter check path than the final build. Triggered by: api-surface, runtime, build-metadata.",
         "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-backend-sdk\\sdkwork-web-backend-sdk-typescript\\generated\\server-openapi",
         "command": "node",
         "args": [
@@ -238,14 +242,12 @@
   },
   "executionDecision": {
     "schemaVersion": 1,
-    "riskLevel": "high",
+    "riskLevel": "medium",
     "nextAction": "verify",
     "requiresManualReview": false,
     "applyRequiresExpectedFingerprint": false,
     "summary": "Changes have been applied. Run the required verification plan now.",
     "reasons": [
-      "backed-up-generated-files",
-      "manual-review-required",
       "verification-required"
     ]
   },

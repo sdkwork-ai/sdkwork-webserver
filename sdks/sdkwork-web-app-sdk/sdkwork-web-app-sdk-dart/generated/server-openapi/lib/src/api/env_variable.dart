@@ -12,19 +12,19 @@ class EnvVariableApi {
   EnvVariableApi(this._client);
 
   /// 获取环境变量列表
-  Future<SitesEnvVariablesListResponse?> sitesEnvVariablesList(String siteId, [String? environment]) async {
+  Future<ApplicationsEnvVariablesListResponse?> applicationsEnvVariablesList(String applicationId, [String? environment]) async {
     final query = buildQueryString([
       QueryParameterSpec('environment', environment, 'form', true, false, null)
     ]);
-    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/env_variables'), query));
+    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/env_variables'), query));
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : SitesEnvVariablesListResponse.fromJson(map);
+      return map == null ? null : ApplicationsEnvVariablesListResponse.fromJson(map);
     })();
   }
 
   /// 创建环境变量
-  Future<SitesEnvVariablesCreateResponse201?> sitesEnvVariablesCreate(String siteId, CreateEnvVariableRequest body, String idempotencyKey) async {
+  Future<ApplicationsEnvVariablesCreateResponse201?> applicationsEnvVariablesCreate(String applicationId, CreateEnvVariableRequest body, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(
       <String, HeaderParameterSpec>{
         'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
@@ -32,15 +32,15 @@ class EnvVariableApi {
       <String, HeaderParameterSpec>{},
     );
     final payload = body.toJson();
-    final response = await _client.post(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/env_variables'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    final response = await _client.post(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/env_variables'), body: payload, headers: requestHeaders, contentType: 'application/json');
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : SitesEnvVariablesCreateResponse201.fromJson(map);
+      return map == null ? null : ApplicationsEnvVariablesCreateResponse201.fromJson(map);
     })();
   }
 
   /// 轮换环境变量值
-  Future<SitesEnvVariablesUpdateResponse?> sitesEnvVariablesUpdate(String siteId, String variableId, UpdateEnvVariableRequest body, String idempotencyKey) async {
+  Future<ApplicationsEnvVariablesUpdateResponse?> applicationsEnvVariablesUpdate(String applicationId, String variableId, UpdateEnvVariableRequest body, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(
       <String, HeaderParameterSpec>{
         'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
@@ -48,22 +48,22 @@ class EnvVariableApi {
       <String, HeaderParameterSpec>{},
     );
     final payload = body.toJson();
-    final response = await _client.patch(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/env_variables/${serializePathParameter(variableId, const PathParameterSpec('variableId', 'simple', false))}'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    final response = await _client.patch(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/env_variables/${serializePathParameter(variableId, const PathParameterSpec('variableId', 'simple', false))}'), body: payload, headers: requestHeaders, contentType: 'application/json');
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : SitesEnvVariablesUpdateResponse.fromJson(map);
+      return map == null ? null : ApplicationsEnvVariablesUpdateResponse.fromJson(map);
     })();
   }
 
   /// 删除环境变量
-  Future<void> sitesEnvVariablesDelete(String siteId, String variableId, String idempotencyKey) async {
+  Future<void> applicationsEnvVariablesDelete(String applicationId, String variableId, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(
       <String, HeaderParameterSpec>{
         'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
       },
       <String, HeaderParameterSpec>{},
     );
-    await _client.delete(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/env_variables/${serializePathParameter(variableId, const PathParameterSpec('variableId', 'simple', false))}'), headers: requestHeaders);
+    await _client.delete(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/env_variables/${serializePathParameter(variableId, const PathParameterSpec('variableId', 'simple', false))}'), headers: requestHeaders);
   }
 }
 

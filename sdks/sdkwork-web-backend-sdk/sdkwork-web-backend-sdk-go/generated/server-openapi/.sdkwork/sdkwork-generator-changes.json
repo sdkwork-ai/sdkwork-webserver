@@ -9,12 +9,10 @@
     "protocol": "http",
     "packageName": "github.com/sdkwork/sdkwork-web-backend-sdk"
   },
-  "changeFingerprint": "d09f914e40b573846ca9220634550b3fb6cc92dcf00de0bac4644bf40cf1f190",
+  "changeFingerprint": "7523218d111dac94f4bd1cccca618f5853ade536aeb02ed24c5b46774cef48d4",
   "changes": {
     "createdGeneratedFiles": [],
-    "updatedGeneratedFiles": [
-      "api/certificate.go"
-    ],
+    "updatedGeneratedFiles": [],
     "unchangedGeneratedFiles": [
       "api/agent.go",
       "api/application_deployment.go",
@@ -24,6 +22,7 @@
       "api/audit.go",
       "api/base.go",
       "api/certificate_distribution.go",
+      "api/certificate.go",
       "api/doc.go",
       "api/domain.go",
       "api/nginx.go",
@@ -160,62 +159,30 @@
     "preservedScaffoldFiles": [
       "custom/README.md"
     ],
-    "backedUpFiles": [
-      "api/certificate.go"
-    ]
+    "backedUpFiles": []
   },
   "impact": {
     "schemaVersion": 1,
-    "areas": [
-      "api-surface"
-    ],
-    "details": [
-      {
-        "area": "api-surface",
-        "paths": [
-          "api/certificate.go"
-        ]
-      }
-    ],
-    "requiresVerification": true,
-    "summary": "Detected impact areas: api-surface. Verification is required."
+    "areas": [],
+    "details": [],
+    "requiresVerification": false,
+    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped."
   },
   "verificationPlan": {
-    "shouldRun": true,
-    "runPhase": "now",
-    "summary": "Detected impact areas: api-surface. Verification is required. Run the required verification commands now against the generated SDK output.",
-    "steps": [
-      {
-        "id": "check",
-        "title": "Unified package check",
-        "required": true,
-        "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface.",
-        "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-backend-sdk\\sdkwork-web-backend-sdk-go\\generated\\server-openapi",
-        "command": "node",
-        "args": [
-          "./bin/publish-core.mjs",
-          "--language",
-          "go",
-          "--project-dir",
-          ".",
-          "--action",
-          "check"
-        ],
-        "displayCommand": "node ./bin/publish-core.mjs --language go --project-dir . --action check"
-      }
-    ]
+    "shouldRun": false,
+    "runPhase": "skip",
+    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped.",
+    "steps": []
   },
   "executionDecision": {
     "schemaVersion": 1,
-    "riskLevel": "high",
-    "nextAction": "verify",
+    "riskLevel": "low",
+    "nextAction": "skip",
     "requiresManualReview": false,
     "applyRequiresExpectedFingerprint": false,
-    "summary": "Changes have been applied. Run the required verification plan now.",
+    "summary": "No actionable changes were detected. No apply or verification step is required.",
     "reasons": [
-      "backed-up-generated-files",
-      "manual-review-required",
-      "verification-required"
+      "no-actionable-changes"
     ]
   },
   "preservedLegacyFiles": false

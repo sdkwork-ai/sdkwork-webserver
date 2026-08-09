@@ -18,15 +18,15 @@ namespace SDKWork.Web.AppSdk.Api
         /// <summary>
         /// 获取健康检查配置
         /// </summary>
-        public async Task<SDKWork.Web.AppSdk.Models.SitesHealthChecksListResponse?> SitesHealthChecksListAsync(string siteId)
+        public async Task<SDKWork.Web.AppSdk.Models.ApplicationsHealthChecksListResponse?> ApplicationsHealthChecksListAsync(string applicationId)
         {
-            return await _client.GetAsync<SDKWork.Web.AppSdk.Models.SitesHealthChecksListResponse>(ApiPaths.AppPath($"/sites/{SerializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false))}/health_checks"));
+            return await _client.GetAsync<SDKWork.Web.AppSdk.Models.ApplicationsHealthChecksListResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/health_checks"));
         }
 
         /// <summary>
         /// 创建健康检查
         /// </summary>
-        public async Task<SDKWork.Web.AppSdk.Models.SitesHealthChecksCreateResponse201?> SitesHealthChecksCreateAsync(string siteId, SDKWork.Web.AppSdk.Models.CreateHealthCheckRequest body, string idempotencyKey)
+        public async Task<SDKWork.Web.AppSdk.Models.ApplicationsHealthChecksCreateResponse201?> ApplicationsHealthChecksCreateAsync(string applicationId, SDKWork.Web.AppSdk.Models.CreateHealthCheckRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -35,7 +35,7 @@ namespace SDKWork.Web.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Web.AppSdk.Models.SitesHealthChecksCreateResponse201>(ApiPaths.AppPath($"/sites/{SerializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false))}/health_checks"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.Web.AppSdk.Models.ApplicationsHealthChecksCreateResponse201>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/health_checks"), body, null, requestHeaders, "application/json");
         }
 
         private sealed record PathParameterSpec(string Name, string Style, bool Explode);

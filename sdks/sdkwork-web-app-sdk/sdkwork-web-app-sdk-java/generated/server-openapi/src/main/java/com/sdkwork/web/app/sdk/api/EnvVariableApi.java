@@ -14,41 +14,41 @@ public class EnvVariableApi {
     }
 
     /** 获取环境变量列表 */
-    public SitesEnvVariablesListResponse sitesEnvVariablesList(String siteId, String environment) throws Exception {
+    public ApplicationsEnvVariablesListResponse applicationsEnvVariablesList(String applicationId, String environment) throws Exception {
         String query = buildQueryString(List.of(
             new QueryParameterSpec("environment", environment, "form", true, false, null)
         ));
-        Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/env_variables"), query));
-        return client.convertValue(raw, new TypeReference<SitesEnvVariablesListResponse>() {});
+        Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/env_variables"), query));
+        return client.convertValue(raw, new TypeReference<ApplicationsEnvVariablesListResponse>() {});
     }
 
     /** 创建环境变量 */
-    public SitesEnvVariablesCreateResponse201 sitesEnvVariablesCreate(String siteId, CreateEnvVariableRequest body, String idempotencyKey) throws Exception {
+    public ApplicationsEnvVariablesCreateResponse201 applicationsEnvVariablesCreate(String applicationId, CreateEnvVariableRequest body, String idempotencyKey) throws Exception {
         Map<String, String> requestHeaders = buildRequestHeaders(
                 Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
                 Map.of()
         );
-        Object raw = client.post(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/env_variables"), body, null, requestHeaders, "application/json");
-        return client.convertValue(raw, new TypeReference<SitesEnvVariablesCreateResponse201>() {});
+        Object raw = client.post(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/env_variables"), body, null, requestHeaders, "application/json");
+        return client.convertValue(raw, new TypeReference<ApplicationsEnvVariablesCreateResponse201>() {});
     }
 
     /** 轮换环境变量值 */
-    public SitesEnvVariablesUpdateResponse sitesEnvVariablesUpdate(String siteId, String variableId, UpdateEnvVariableRequest body, String idempotencyKey) throws Exception {
+    public ApplicationsEnvVariablesUpdateResponse applicationsEnvVariablesUpdate(String applicationId, String variableId, UpdateEnvVariableRequest body, String idempotencyKey) throws Exception {
         Map<String, String> requestHeaders = buildRequestHeaders(
                 Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
                 Map.of()
         );
-        Object raw = client.patch(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/env_variables/" + serializePathParameter(variableId, new PathParameterSpec("variableId", "simple", false)) + ""), body, null, requestHeaders, "application/json");
-        return client.convertValue(raw, new TypeReference<SitesEnvVariablesUpdateResponse>() {});
+        Object raw = client.patch(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/env_variables/" + serializePathParameter(variableId, new PathParameterSpec("variableId", "simple", false)) + ""), body, null, requestHeaders, "application/json");
+        return client.convertValue(raw, new TypeReference<ApplicationsEnvVariablesUpdateResponse>() {});
     }
 
     /** 删除环境变量 */
-    public Void sitesEnvVariablesDelete(String siteId, String variableId, String idempotencyKey) throws Exception {
+    public Void applicationsEnvVariablesDelete(String applicationId, String variableId, String idempotencyKey) throws Exception {
         Map<String, String> requestHeaders = buildRequestHeaders(
                 Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
                 Map.of()
         );
-        client.delete(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/env_variables/" + serializePathParameter(variableId, new PathParameterSpec("variableId", "simple", false)) + ""), null, requestHeaders);
+        client.delete(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/env_variables/" + serializePathParameter(variableId, new PathParameterSpec("variableId", "simple", false)) + ""), null, requestHeaders);
         return null;
     }
 

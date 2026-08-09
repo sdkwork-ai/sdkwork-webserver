@@ -2,11 +2,12 @@
 
 use async_trait::async_trait;
 use sdkwork_webserver_contract::{
-    ApplicationStoreListing, CreateDeploymentRequest, CreateDomainRequest,
-    CreateEnvVariableRequest, CreateHealthCheckRequest, CreateListenerCertificateBindingRequest,
-    CreateSiteRequest, CreateSourceVersionRequest, ImportGitSourceVersionRequest,
-    IssueCertificateRequest, ListSitesQuery, MediaResource, UpdateSiteRequest, WebAppApi,
-    WebAppRequestContext, WebAppResourceScope, WebServiceError, WebServiceResult,
+    ApplicationStoreListing, CreateApplicationRequest, CreateDeploymentRequest,
+    CreateDomainRequest, CreateEnvVariableRequest, CreateHealthCheckRequest,
+    CreateListenerCertificateBindingRequest, CreateSourceVersionRequest,
+    ImportGitSourceVersionRequest, IssueCertificateRequest, ListApplicationsQuery, MediaResource,
+    UpdateApplicationRequest, WebAppApi, WebAppRequestContext, WebAppResourceScope,
+    WebServiceError, WebServiceResult,
 };
 use std::collections::HashSet;
 
@@ -40,17 +41,21 @@ impl WebService {
         }
     }
 
-    async fn require_site_access(
+    async fn require_application_access(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
-    ) -> WebServiceResult<i64> {
+        application_id: &str,
+    ) -> WebServiceResult<(i64, String)> {
         let tenant_id = Self::require_tenant(context)?;
         let owner_id = Self::owner_filter(context)?;
         self.repository
-            .retrieve_site(tenant_id, owner_id, site_id)
+            .retrieve_application(tenant_id, owner_id, application_id)
             .await?;
-        Ok(tenant_id)
+        let site_id = self
+            .repository
+            .resolve_site_id(tenant_id, application_id)
+            .await?;
+        Ok((tenant_id, site_id))
     }
 
     pub(crate) fn validate_application_type(value: &str) -> WebServiceResult<()> {
@@ -818,95 +823,106 @@ mod resource_scope_tests {
 
 #[async_trait]
 impl WebAppApi for WebService {
-    async fn list_sites(
+    async fn list_applications(
         &self,
         context: &WebAppRequestContext,
-        query: &ListSitesQuery,
-    ) -> WebServiceResult<sdkwork_webserver_contract::SitePage> {
+        query: &ListApplicationsQuery,
+    ) -> WebServiceResult<sdkwork_webserver_contract::ApplicationPage> {
         let tenant_id = Self::require_tenant(context)?;
         if let Some(application_type) = query.application_type.as_deref() {
             Self::validate_application_type(application_type)?;
         }
         let owner_id = Self::owner_filter(context)?;
-        self.repository.list_sites(tenant_id, owner_id, query).await
+        self.repository
+            .list_applications(tenant_id, owner_id, query)
+            .await
     }
 
-    async fn create_site(
+    async fn create_application(
         &self,
         context: &WebAppRequestContext,
-        request: &CreateSiteRequest,
-    ) -> WebServiceResult<sdkwork_webserver_contract::SiteResponse> {
+        request: &CreateApplicationRequest,
+    ) -> WebServiceResult<sdkwork_webserver_contract::ApplicationResponse> {
         let tenant_id = Self::require_tenant(context)?;
         let owner_id = Self::owner_filter(context)?;
         Self::validate_application_type(&request.application_type)?;
         Self::validate_store_listing(request.store_listing.as_ref(), false)?;
         let site = self
             .repository
-            .create_site(tenant_id, context.organization_id, owner_id, request)
+            .create_application(tenant_id, context.organization_id, owner_id, request)
             .await?;
-        self.audit_site_action(context, "sites.create", &site.id)
+        self.audit_site_action(context, "applications.create", &site.id)
             .await;
         Ok(site)
     }
 
-    async fn retrieve_site(
+    async fn retrieve_application(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
-    ) -> WebServiceResult<sdkwork_webserver_contract::SiteResponse> {
+        application_id: &str,
+    ) -> WebServiceResult<sdkwork_webserver_contract::ApplicationResponse> {
         let tenant_id = Self::require_tenant(context)?;
         let owner_id = Self::owner_filter(context)?;
         self.repository
-            .retrieve_site(tenant_id, owner_id, site_id)
+            .retrieve_application(tenant_id, owner_id, application_id)
             .await
     }
 
-    async fn update_site(
+    async fn update_application(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
-        request: &UpdateSiteRequest,
-    ) -> WebServiceResult<sdkwork_webserver_contract::SiteResponse> {
+        application_id: &str,
+        request: &UpdateApplicationRequest,
+    ) -> WebServiceResult<sdkwork_webserver_contract::ApplicationResponse> {
         Self::validate_store_listing(request.store_listing.as_ref(), false)?;
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        let tenant_id = self
+            .require_application_access(context, application_id)
+            .await?
+            .0;
         let site = self
             .repository
-            .update_site(tenant_id, site_id, request)
+            .update_application(tenant_id, application_id, request)
             .await?;
-        self.audit_site_action(context, "sites.update", site_id)
+        self.audit_site_action(context, "applications.update", application_id)
             .await;
         Ok(site)
     }
 
-    async fn delete_site(
+    async fn delete_application(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
     ) -> WebServiceResult<()> {
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        let tenant_id = self
+            .require_application_access(context, application_id)
+            .await?
+            .0;
         self.repository
-            .delete_site(tenant_id, site_id, context.actor_id)
+            .delete_application(tenant_id, application_id, context.actor_id)
             .await?;
-        self.audit_site_action(context, "sites.delete", site_id)
+        self.audit_site_action(context, "applications.delete", application_id)
             .await;
         Ok(())
     }
 
-    async fn activate_site(
+    async fn activate_application(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
-    ) -> WebServiceResult<sdkwork_webserver_contract::SiteResponse> {
+        application_id: &str,
+    ) -> WebServiceResult<sdkwork_webserver_contract::ApplicationResponse> {
         let tenant_id = Self::require_tenant(context)?;
         let owner_id = Self::owner_filter(context)?;
         let site = self
             .repository
-            .retrieve_site(tenant_id, owner_id, site_id)
+            .retrieve_application(tenant_id, owner_id, application_id)
             .await?;
         Self::validate_store_listing(site.store_listing.as_ref(), true)?;
+        let (_, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         let successful_deployments = self
             .repository
-            .list_deployments(tenant_id, site_id, 1, 1, Some(2), None)
+            .list_deployments(tenant_id, &site_id, 1, 1, Some(2), None)
             .await?;
         if successful_deployments.total == 0 {
             return Err(sdkwork_webserver_contract::WebServiceError::conflict(
@@ -915,24 +931,27 @@ impl WebAppApi for WebService {
         }
         let site = self
             .repository
-            .set_site_status(tenant_id, site_id, 1)
+            .set_application_status(tenant_id, application_id, 1)
             .await?;
-        self.audit_site_action(context, "sites.activate", site_id)
+        self.audit_site_action(context, "applications.activate", application_id)
             .await;
         Ok(site)
     }
 
-    async fn pause_site(
+    async fn pause_application(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
-    ) -> WebServiceResult<sdkwork_webserver_contract::SiteResponse> {
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        application_id: &str,
+    ) -> WebServiceResult<sdkwork_webserver_contract::ApplicationResponse> {
+        let tenant_id = self
+            .require_application_access(context, application_id)
+            .await?
+            .0;
         let site = self
             .repository
-            .set_site_status(tenant_id, site_id, 2)
+            .set_application_status(tenant_id, application_id, 2)
             .await?;
-        self.audit_site_action(context, "sites.pause", site_id)
+        self.audit_site_action(context, "applications.pause", application_id)
             .await;
         Ok(site)
     }
@@ -940,13 +959,15 @@ impl WebAppApi for WebService {
     async fn list_domains(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         page: i32,
         page_size: i32,
     ) -> WebServiceResult<sdkwork_webserver_contract::DomainPage> {
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         self.repository
-            .list_domains(tenant_id, site_id, page, page_size)
+            .list_domains(tenant_id, &site_id, page, page_size)
             .await
     }
 
@@ -968,50 +989,58 @@ impl WebAppApi for WebService {
     async fn create_domain(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         request: &CreateDomainRequest,
     ) -> WebServiceResult<sdkwork_webserver_contract::DomainResponse> {
         Self::validate_domain_request(request)?;
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         self.repository
-            .create_domain(tenant_id, site_id, request)
+            .create_domain(tenant_id, &site_id, request)
             .await
     }
 
     async fn retrieve_domain(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         domain_id: &str,
     ) -> WebServiceResult<sdkwork_webserver_contract::DomainResponse> {
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         self.repository
-            .retrieve_domain(tenant_id, site_id, domain_id)
+            .retrieve_domain(tenant_id, &site_id, domain_id)
             .await
     }
 
     async fn delete_domain(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         domain_id: &str,
     ) -> WebServiceResult<()> {
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         self.repository
-            .delete_domain(tenant_id, site_id, domain_id)
+            .delete_domain(tenant_id, &site_id, domain_id)
             .await
     }
 
     async fn verify_domain(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         domain_id: &str,
     ) -> WebServiceResult<sdkwork_webserver_contract::DomainVerifyResponse> {
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         let challenge = self
             .repository
-            .prepare_domain_verification(tenant_id, site_id, domain_id)
+            .prepare_domain_verification(tenant_id, &site_id, domain_id)
             .await?;
         self.execute_domain_verification(tenant_id, challenge).await
     }
@@ -1019,35 +1048,38 @@ impl WebAppApi for WebService {
     async fn list_source_versions(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         page: i32,
         page_size: i32,
         cursor: Option<&str>,
     ) -> WebServiceResult<sdkwork_webserver_contract::SourceVersionPage> {
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         self.repository
-            .list_source_versions(tenant_id, site_id, page, page_size, cursor)
+            .list_source_versions(tenant_id, &site_id, page, page_size, cursor)
             .await
     }
 
     async fn create_source_version(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         request: &CreateSourceVersionRequest,
     ) -> WebServiceResult<sdkwork_webserver_contract::SourceVersionResponse> {
         Self::validate_source_version_request(request)?;
-        let tenant_id = Self::require_tenant(context)?;
-        let owner_id = Self::owner_filter(context)?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         let site = self
             .repository
-            .retrieve_site(tenant_id, owner_id, site_id)
+            .retrieve_application(tenant_id, None, application_id)
             .await?;
         let retention_limit = Self::source_version_retention_limit(site.runtime_config.as_ref())?;
         self.repository
             .create_source_version(
                 tenant_id,
-                site_id,
+                &site_id,
                 context.actor_id,
                 retention_limit,
                 request,
@@ -1058,7 +1090,7 @@ impl WebAppApi for WebService {
     async fn import_git_source_version(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         request: &ImportGitSourceVersionRequest,
     ) -> WebServiceResult<sdkwork_webserver_contract::SourceVersionResponse> {
         validate_required_text("versionTag", &request.version_tag, 100)?;
@@ -1074,11 +1106,12 @@ impl WebAppApi for WebService {
                 ));
             }
         }
-        let tenant_id = Self::require_tenant(context)?;
-        let owner_id = Self::owner_filter(context)?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         let site = self
             .repository
-            .retrieve_site(tenant_id, owner_id, site_id)
+            .retrieve_application(tenant_id, None, application_id)
             .await?;
         let imported = self
             .source_importer
@@ -1096,7 +1129,7 @@ impl WebAppApi for WebService {
         self.repository
             .create_source_version(
                 tenant_id,
-                site_id,
+                &site_id,
                 context.actor_id,
                 retention_limit,
                 &CreateSourceVersionRequest {
@@ -1116,19 +1149,21 @@ impl WebAppApi for WebService {
     async fn retrieve_source_version(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         source_version_id: &str,
     ) -> WebServiceResult<sdkwork_webserver_contract::SourceVersionResponse> {
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         self.repository
-            .retrieve_source_version(tenant_id, site_id, source_version_id)
+            .retrieve_source_version(tenant_id, &site_id, source_version_id)
             .await
     }
 
     async fn list_deployments(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         page: i32,
         page_size: i32,
         status: Option<i32>,
@@ -1139,16 +1174,18 @@ impl WebAppApi for WebService {
                 "status must be between 0 and 6",
             ));
         }
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         self.repository
-            .list_deployments(tenant_id, site_id, page, page_size, status, cursor)
+            .list_deployments(tenant_id, &site_id, page, page_size, status, cursor)
             .await
     }
 
     async fn create_deployment(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         request: &CreateDeploymentRequest,
     ) -> WebServiceResult<sdkwork_webserver_contract::DeploymentResponse> {
         let mut request = request.clone();
@@ -1156,17 +1193,18 @@ impl WebAppApi for WebService {
             request.idempotency_key = Some(idempotency_key.clone());
         }
         Self::validate_deployment_request(&request)?;
-        let tenant_id = Self::require_tenant(context)?;
-        let owner_id = Self::owner_filter(context)?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         let site = self
             .repository
-            .retrieve_site(tenant_id, owner_id, site_id)
+            .retrieve_application(tenant_id, None, application_id)
             .await?;
         Self::validate_store_listing(site.store_listing.as_ref(), true)?;
         if let Some(source_version_id) = request.source_version_id.as_deref() {
             let source_version = self
                 .repository
-                .retrieve_source_version(tenant_id, site_id, source_version_id)
+                .retrieve_source_version(tenant_id, &site_id, source_version_id)
                 .await?;
             if source_version.status != 1 || !source_version.retained {
                 return Err(sdkwork_webserver_contract::WebServiceError::conflict(
@@ -1188,34 +1226,38 @@ impl WebAppApi for WebService {
             request.artifact_hash = Some(source_version.artifact_hash);
         }
         self.repository
-            .create_deployment(tenant_id, site_id, context.actor_id, &request)
+            .create_deployment(tenant_id, &site_id, context.actor_id, &request)
             .await
     }
 
     async fn retrieve_deployment(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         deployment_id: &str,
     ) -> WebServiceResult<sdkwork_webserver_contract::DeploymentResponse> {
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         self.repository
-            .retrieve_deployment(tenant_id, site_id, deployment_id)
+            .retrieve_deployment(tenant_id, &site_id, deployment_id)
             .await
     }
 
     async fn rollback_deployment(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         deployment_id: &str,
     ) -> WebServiceResult<sdkwork_webserver_contract::DeploymentResponse> {
         validate_idempotency_key(context.idempotency_key.as_deref())?;
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         self.repository
             .rollback_deployment(
                 tenant_id,
-                site_id,
+                &site_id,
                 deployment_id,
                 context.actor_id,
                 context.idempotency_key.as_deref(),
@@ -1226,51 +1268,59 @@ impl WebAppApi for WebService {
     async fn list_env_variables(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         environment: Option<&str>,
     ) -> WebServiceResult<sdkwork_webserver_contract::EnvVariablePage> {
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         self.repository
-            .list_env_variables(tenant_id, site_id, environment)
+            .list_env_variables(tenant_id, &site_id, environment)
             .await
     }
 
     async fn create_env_variable(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         request: &CreateEnvVariableRequest,
     ) -> WebServiceResult<sdkwork_webserver_contract::EnvVariableResponse> {
         Self::validate_env_variable_request(request)?;
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         self.repository
-            .create_env_variable(tenant_id, site_id, request)
+            .create_env_variable(tenant_id, &site_id, request)
             .await
     }
 
     async fn update_env_variable(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         variable_id: &str,
         request: &sdkwork_webserver_contract::UpdateEnvVariableRequest,
     ) -> WebServiceResult<sdkwork_webserver_contract::EnvVariableResponse> {
         Self::validate_env_variable_value(&request.value)?;
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         self.repository
-            .update_env_variable(tenant_id, site_id, variable_id, request)
+            .update_env_variable(tenant_id, &site_id, variable_id, request)
             .await
     }
 
     async fn delete_env_variable(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         variable_id: &str,
     ) -> WebServiceResult<()> {
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         self.repository
-            .delete_env_variable(tenant_id, site_id, variable_id)
+            .delete_env_variable(tenant_id, &site_id, variable_id)
             .await
     }
 
@@ -1283,7 +1333,7 @@ impl WebAppApi for WebService {
         page_size: i32,
     ) -> WebServiceResult<sdkwork_webserver_contract::CertificatePage> {
         let tenant_id = if let Some(site_id) = site_id {
-            self.require_site_access(context, site_id).await?
+            self.require_application_access(context, site_id).await?.0
         } else {
             Self::require_tenant(context)?
         };
@@ -1316,33 +1366,37 @@ impl WebAppApi for WebService {
     async fn list_listener_certificate_bindings(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         domain_id: &str,
         page: i32,
         page_size: i32,
     ) -> WebServiceResult<sdkwork_webserver_contract::ListenerCertificateBindingPage> {
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         self.repository
-            .list_listener_certificate_bindings(tenant_id, site_id, domain_id, page, page_size)
+            .list_listener_certificate_bindings(tenant_id, &site_id, domain_id, page, page_size)
             .await
     }
 
     async fn bind_listener_certificate(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         domain_id: &str,
         request: &CreateListenerCertificateBindingRequest,
     ) -> WebServiceResult<sdkwork_webserver_contract::ListenerCertificateBindingResponse> {
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         let binding = self
             .repository
-            .bind_listener_certificate(tenant_id, site_id, domain_id, request)
+            .bind_listener_certificate(tenant_id, &site_id, domain_id, request)
             .await?;
         self.audit_site_action(
             context,
             "sites.domains.listener_certificate_bindings.create",
-            site_id,
+            &site_id,
         )
         .await;
         // A binding change alters the node's served certificate set; publish
@@ -1356,18 +1410,20 @@ impl WebAppApi for WebService {
     async fn unbind_listener_certificate(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         domain_id: &str,
         binding_id: &str,
     ) -> WebServiceResult<()> {
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         self.repository
-            .unbind_listener_certificate(tenant_id, site_id, domain_id, binding_id)
+            .unbind_listener_certificate(tenant_id, &site_id, domain_id, binding_id)
             .await?;
         self.audit_site_action(
             context,
             "sites.domains.listener_certificate_bindings.delete",
-            site_id,
+            &site_id,
         )
         .await;
         self.publish_node_tls_material_best_effort("listener_certificate_unbind")
@@ -1378,22 +1434,28 @@ impl WebAppApi for WebService {
     async fn list_health_checks(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
     ) -> WebServiceResult<sdkwork_webserver_contract::HealthCheckPage> {
-        let tenant_id = self.require_site_access(context, site_id).await?;
-        self.repository.list_health_checks(tenant_id, site_id).await
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
+        self.repository
+            .list_health_checks(tenant_id, &site_id)
+            .await
     }
 
     async fn create_health_check(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         request: &CreateHealthCheckRequest,
     ) -> WebServiceResult<sdkwork_webserver_contract::HealthCheckResponse> {
         Self::validate_health_check_request(request)?;
-        let tenant_id = self.require_site_access(context, site_id).await?;
+        let (tenant_id, site_id) = self
+            .require_application_access(context, application_id)
+            .await?;
         self.repository
-            .create_health_check(tenant_id, site_id, request)
+            .create_health_check(tenant_id, &site_id, request)
             .await
     }
 }

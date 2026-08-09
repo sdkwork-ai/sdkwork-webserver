@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 from ..http_client import HttpClient
-from ..models import CreateDomainRequest, DomainsListResponse, SitesDomainsCreateResponse201, SitesDomainsListResponse, SitesDomainsRetrieveResponse, SitesDomainsVerifyResponse
+from ..models import ApplicationsDomainsCreateResponse201, ApplicationsDomainsListResponse, ApplicationsDomainsRetrieveResponse, ApplicationsDomainsVerifyResponse, CreateDomainRequest, DomainsListResponse
 
 def _append_query_string(path: str, raw_query_string: str) -> str:
     query = raw_query_string.lstrip('?')
@@ -242,7 +242,7 @@ class DomainApi:
 
     def __init__(self, client: HttpClient):
         self._client = client
-        self.sites = DomainSitesApi(client)
+        self.applications = DomainApplicationsApi(client)
 
 
     def list(self, page: Optional[int] = None, page_size: Optional[int] = None) -> DomainsListResponse:
@@ -253,30 +253,30 @@ class DomainApi:
         ])
         return self._client.get(_append_query_string(f"/app/v3/api/domains", query))
 
-class DomainSitesApi:
-    """domain domain.sites API client."""
+class DomainApplicationsApi:
+    """domain domain.applications API client."""
 
     def __init__(self, client: HttpClient):
         self._client = client
-        self.domains = DomainSitesDomainsApi(client)
+        self.domains = DomainApplicationsDomainsApi(client)
 
 
-class DomainSitesDomainsApi:
-    """domain domain.sites.domains API client."""
+class DomainApplicationsDomainsApi:
+    """domain domain.applications.domains API client."""
 
     def __init__(self, client: HttpClient):
         self._client = client
 
 
-    def list(self, site_id: str, page: Optional[int] = None, page_size: Optional[int] = None) -> SitesDomainsListResponse:
+    def list(self, application_id: str, page: Optional[int] = None, page_size: Optional[int] = None) -> ApplicationsDomainsListResponse:
         """获取站点域名列表"""
         query = build_query_string([
             {'name': 'page', 'value': page, 'style': 'form', 'explode': True, 'allow_reserved': False},
             {'name': 'page_size', 'value': page_size, 'style': 'form', 'explode': True, 'allow_reserved': False},
         ])
-        return self._client.get(_append_query_string(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/domains", query))
+        return self._client.get(_append_query_string(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/domains", query))
 
-    def create(self, site_id: str, body: CreateDomainRequest, idempotency_key: str) -> SitesDomainsCreateResponse201:
+    def create(self, application_id: str, body: CreateDomainRequest, idempotency_key: str) -> ApplicationsDomainsCreateResponse201:
         """绑定域名"""
         request_headers = build_request_headers(
             {
@@ -284,17 +284,17 @@ class DomainSitesDomainsApi:
             },
             {}
         )
-        return self._client.post(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/domains", json=body, headers=request_headers)
+        return self._client.post(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/domains", json=body, headers=request_headers)
 
-    def retrieve(self, site_id: str, domain_id: str) -> SitesDomainsRetrieveResponse:
+    def retrieve(self, application_id: str, domain_id: str) -> ApplicationsDomainsRetrieveResponse:
         """获取域名详情"""
-        return self._client.get(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/domains/{serialize_path_parameter(domain_id, {'name': 'domainId', 'style': 'simple', 'explode': False})}")
+        return self._client.get(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/domains/{serialize_path_parameter(domain_id, {'name': 'domainId', 'style': 'simple', 'explode': False})}")
 
-    def delete(self, site_id: str, domain_id: str) -> None:
+    def delete(self, application_id: str, domain_id: str) -> None:
         """解绑域名"""
-        return self._client.delete(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/domains/{serialize_path_parameter(domain_id, {'name': 'domainId', 'style': 'simple', 'explode': False})}")
+        return self._client.delete(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/domains/{serialize_path_parameter(domain_id, {'name': 'domainId', 'style': 'simple', 'explode': False})}")
 
-    def verify(self, site_id: str, domain_id: str, idempotency_key: str) -> SitesDomainsVerifyResponse:
+    def verify(self, application_id: str, domain_id: str, idempotency_key: str) -> ApplicationsDomainsVerifyResponse:
         """创建或检查域名所有权验证挑战"""
         request_headers = build_request_headers(
             {
@@ -302,4 +302,4 @@ class DomainSitesDomainsApi:
             },
             {}
         )
-        return self._client.post(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/domains/{serialize_path_parameter(domain_id, {'name': 'domainId', 'style': 'simple', 'explode': False})}/verify", headers=request_headers)
+        return self._client.post(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/domains/{serialize_path_parameter(domain_id, {'name': 'domainId', 'style': 'simple', 'explode': False})}/verify", headers=request_headers)

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Optional, List, Dict, Any
 @dataclass
 class DeploymentResponse:
     id: str
-    site_id: str
+    application_id: str
     deploy_type: int
     environment: str
     status: int

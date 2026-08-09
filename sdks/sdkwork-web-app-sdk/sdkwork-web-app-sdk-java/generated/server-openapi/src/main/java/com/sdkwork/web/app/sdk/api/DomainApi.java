@@ -14,45 +14,45 @@ public class DomainApi {
     }
 
     /** 获取站点域名列表 */
-    public SitesDomainsListResponse sitesDomainsList(String siteId, Integer page, Integer pageSize) throws Exception {
+    public ApplicationsDomainsListResponse applicationsDomainsList(String applicationId, Integer page, Integer pageSize) throws Exception {
         String query = buildQueryString(List.of(
             new QueryParameterSpec("page", page, "form", true, false, null),
             new QueryParameterSpec("page_size", pageSize, "form", true, false, null)
         ));
-        Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/domains"), query));
-        return client.convertValue(raw, new TypeReference<SitesDomainsListResponse>() {});
+        Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/domains"), query));
+        return client.convertValue(raw, new TypeReference<ApplicationsDomainsListResponse>() {});
     }
 
     /** 绑定域名 */
-    public SitesDomainsCreateResponse201 sitesDomainsCreate(String siteId, CreateDomainRequest body, String idempotencyKey) throws Exception {
+    public ApplicationsDomainsCreateResponse201 applicationsDomainsCreate(String applicationId, CreateDomainRequest body, String idempotencyKey) throws Exception {
         Map<String, String> requestHeaders = buildRequestHeaders(
                 Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
                 Map.of()
         );
-        Object raw = client.post(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/domains"), body, null, requestHeaders, "application/json");
-        return client.convertValue(raw, new TypeReference<SitesDomainsCreateResponse201>() {});
+        Object raw = client.post(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/domains"), body, null, requestHeaders, "application/json");
+        return client.convertValue(raw, new TypeReference<ApplicationsDomainsCreateResponse201>() {});
     }
 
     /** 获取域名详情 */
-    public SitesDomainsRetrieveResponse sitesDomainsRetrieve(String siteId, String domainId) throws Exception {
-        Object raw = client.get(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/domains/" + serializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false)) + ""));
-        return client.convertValue(raw, new TypeReference<SitesDomainsRetrieveResponse>() {});
+    public ApplicationsDomainsRetrieveResponse applicationsDomainsRetrieve(String applicationId, String domainId) throws Exception {
+        Object raw = client.get(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/domains/" + serializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false)) + ""));
+        return client.convertValue(raw, new TypeReference<ApplicationsDomainsRetrieveResponse>() {});
     }
 
     /** 解绑域名 */
-    public Void sitesDomainsDelete(String siteId, String domainId) throws Exception {
-        client.delete(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/domains/" + serializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false)) + ""));
+    public Void applicationsDomainsDelete(String applicationId, String domainId) throws Exception {
+        client.delete(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/domains/" + serializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false)) + ""));
         return null;
     }
 
     /** 创建或检查域名所有权验证挑战 */
-    public SitesDomainsVerifyResponse sitesDomainsVerify(String siteId, String domainId, String idempotencyKey) throws Exception {
+    public ApplicationsDomainsVerifyResponse applicationsDomainsVerify(String applicationId, String domainId, String idempotencyKey) throws Exception {
         Map<String, String> requestHeaders = buildRequestHeaders(
                 Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
                 Map.of()
         );
-        Object raw = client.post(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/domains/" + serializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false)) + "/verify"), null, null, requestHeaders);
-        return client.convertValue(raw, new TypeReference<SitesDomainsVerifyResponse>() {});
+        Object raw = client.post(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/domains/" + serializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false)) + "/verify"), null, null, requestHeaders);
+        return client.convertValue(raw, new TypeReference<ApplicationsDomainsVerifyResponse>() {});
     }
 
     /** 获取证书可签发域名列表 */

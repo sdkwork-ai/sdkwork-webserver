@@ -14,32 +14,32 @@ public class CertificateApi {
     }
 
     /** List certificates active on the domain listener */
-    public SitesDomainsListenerCertificateBindingsListResponse sitesDomainsListenerCertificateBindingsList(String siteId, String domainId, Integer page, Integer pageSize) throws Exception {
+    public ApplicationsDomainsListenerCertificateBindingsListResponse applicationsDomainsListenerCertificateBindingsList(String applicationId, String domainId, Integer page, Integer pageSize) throws Exception {
         String query = buildQueryString(List.of(
             new QueryParameterSpec("page", page, "form", true, false, null),
             new QueryParameterSpec("page_size", pageSize, "form", true, false, null)
         ));
-        Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/domains/" + serializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false)) + "/listener_certificate_bindings"), query));
-        return client.convertValue(raw, new TypeReference<SitesDomainsListenerCertificateBindingsListResponse>() {});
+        Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/domains/" + serializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false)) + "/listener_certificate_bindings"), query));
+        return client.convertValue(raw, new TypeReference<ApplicationsDomainsListenerCertificateBindingsListResponse>() {});
     }
 
     /** Bind a certificate version to the domain listener */
-    public SitesDomainsListenerCertificateBindingsCreateResponse201 sitesDomainsListenerCertificateBindingsCreate(String siteId, String domainId, CreateListenerCertificateBindingRequest body, String idempotencyKey) throws Exception {
+    public ApplicationsDomainsListenerCertificateBindingsCreateResponse201 applicationsDomainsListenerCertificateBindingsCreate(String applicationId, String domainId, CreateListenerCertificateBindingRequest body, String idempotencyKey) throws Exception {
         Map<String, String> requestHeaders = buildRequestHeaders(
                 Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
                 Map.of()
         );
-        Object raw = client.post(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/domains/" + serializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false)) + "/listener_certificate_bindings"), body, null, requestHeaders, "application/json");
-        return client.convertValue(raw, new TypeReference<SitesDomainsListenerCertificateBindingsCreateResponse201>() {});
+        Object raw = client.post(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/domains/" + serializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false)) + "/listener_certificate_bindings"), body, null, requestHeaders, "application/json");
+        return client.convertValue(raw, new TypeReference<ApplicationsDomainsListenerCertificateBindingsCreateResponse201>() {});
     }
 
     /** Remove a certificate from the domain listener */
-    public Void sitesDomainsListenerCertificateBindingsDelete(String siteId, String domainId, String bindingId, String idempotencyKey) throws Exception {
+    public Void applicationsDomainsListenerCertificateBindingsDelete(String applicationId, String domainId, String bindingId, String idempotencyKey) throws Exception {
         Map<String, String> requestHeaders = buildRequestHeaders(
                 Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
                 Map.of()
         );
-        client.delete(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/domains/" + serializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false)) + "/listener_certificate_bindings/" + serializePathParameter(bindingId, new PathParameterSpec("bindingId", "simple", false)) + ""), null, requestHeaders);
+        client.delete(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/domains/" + serializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false)) + "/listener_certificate_bindings/" + serializePathParameter(bindingId, new PathParameterSpec("bindingId", "simple", false)) + ""), null, requestHeaders);
         return null;
     }
 

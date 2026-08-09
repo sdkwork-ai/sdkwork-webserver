@@ -27,8 +27,8 @@
     "tenantId": "100001",
     "organizationId": "0",
     "accessTokenPermissionScope": [
-      "web.sites.read",
-      "web.sites.write",
+      "web.applications.read",
+      "web.applications.write",
       "web.certificates.read",
       "web.certificates.write",
       "web.nginx.write",

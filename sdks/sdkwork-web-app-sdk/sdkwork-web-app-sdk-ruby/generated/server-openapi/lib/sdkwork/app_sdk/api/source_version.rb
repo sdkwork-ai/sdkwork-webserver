@@ -1,18 +1,18 @@
 require_relative 'base_api'
+require_relative '../models/applications_source_versions_create_response201'
+require_relative '../models/applications_source_versions_git_import_create_response201'
+require_relative '../models/applications_source_versions_list_response'
+require_relative '../models/applications_source_versions_retrieve_response'
 require_relative '../models/create_source_version_request'
 require_relative '../models/import_git_source_version_request'
-require_relative '../models/sites_source_versions_create_response201'
-require_relative '../models/sites_source_versions_git_import_create_response201'
-require_relative '../models/sites_source_versions_list_response'
-require_relative '../models/sites_source_versions_retrieve_response'
 
 module Sdkwork
   module AppSdk
     module Api
       class SourceVersionApi < BaseApi
           # 获取应用源码版本
-          def sites_source_versions_list(site_id, page_size: nil, cursor: nil)
-            path = interpolate_path('/app/v3/api/sites/{siteId}/source_versions', siteId: serialize_path_parameter(site_id, PathParameterSpec.new('siteId', 'simple', false)))
+          def applications_source_versions_list(application_id, page_size: nil, cursor: nil)
+            path = interpolate_path('/app/v3/api/applications/{applicationId}/source_versions', applicationId: serialize_path_parameter(application_id, PathParameterSpec.new('applicationId', 'simple', false)))
             query = build_query_string([
               QueryParameterSpec.new('page_size', page_size, 'form', true, false, nil),
               QueryParameterSpec.new('cursor', cursor, 'form', true, false, nil),
@@ -21,12 +21,12 @@ module Sdkwork
             options = {}
 
             result = @client.request('GET', path, **options)
-            result.is_a?(Hash) ? Models::SitesSourceVersionsListResponse.from_hash(result) : nil
+            result.is_a?(Hash) ? Models::ApplicationsSourceVersionsListResponse.from_hash(result) : nil
           end
 
           # 登记 Drive 中的应用源码版本
-          def sites_source_versions_create(site_id, idempotency_key, body: nil)
-            path = interpolate_path('/app/v3/api/sites/{siteId}/source_versions', siteId: serialize_path_parameter(site_id, PathParameterSpec.new('siteId', 'simple', false)))
+          def applications_source_versions_create(application_id, idempotency_key, body: nil)
+            path = interpolate_path('/app/v3/api/applications/{applicationId}/source_versions', applicationId: serialize_path_parameter(application_id, PathParameterSpec.new('applicationId', 'simple', false)))
             payload = body.respond_to?(:to_hash) ? body.to_hash : body
             request_headers = build_request_headers(
               {
@@ -38,12 +38,12 @@ module Sdkwork
             options[:headers] = request_headers unless request_headers.empty?
             options[:json] = payload unless payload.nil?
             result = @client.request('POST', path, **options)
-            result.is_a?(Hash) ? Models::SitesSourceVersionsCreateResponse201.from_hash(result) : nil
+            result.is_a?(Hash) ? Models::ApplicationsSourceVersionsCreateResponse201.from_hash(result) : nil
           end
 
           # 从公共 Git 仓库导入应用源码版本
-          def sites_source_versions_git_import_create(site_id, idempotency_key, body: nil)
-            path = interpolate_path('/app/v3/api/sites/{siteId}/source_versions/git_import', siteId: serialize_path_parameter(site_id, PathParameterSpec.new('siteId', 'simple', false)))
+          def applications_source_versions_git_import_create(application_id, idempotency_key, body: nil)
+            path = interpolate_path('/app/v3/api/applications/{applicationId}/source_versions/git_import', applicationId: serialize_path_parameter(application_id, PathParameterSpec.new('applicationId', 'simple', false)))
             payload = body.respond_to?(:to_hash) ? body.to_hash : body
             request_headers = build_request_headers(
               {
@@ -55,16 +55,16 @@ module Sdkwork
             options[:headers] = request_headers unless request_headers.empty?
             options[:json] = payload unless payload.nil?
             result = @client.request('POST', path, **options)
-            result.is_a?(Hash) ? Models::SitesSourceVersionsGitImportCreateResponse201.from_hash(result) : nil
+            result.is_a?(Hash) ? Models::ApplicationsSourceVersionsGitImportCreateResponse201.from_hash(result) : nil
           end
 
           # 获取应用源码版本详情
-          def sites_source_versions_retrieve(site_id, source_version_id)
-            path = interpolate_path('/app/v3/api/sites/{siteId}/source_versions/{sourceVersionId}', siteId: serialize_path_parameter(site_id, PathParameterSpec.new('siteId', 'simple', false)), sourceVersionId: serialize_path_parameter(source_version_id, PathParameterSpec.new('sourceVersionId', 'simple', false)))
+          def applications_source_versions_retrieve(application_id, source_version_id)
+            path = interpolate_path('/app/v3/api/applications/{applicationId}/source_versions/{sourceVersionId}', applicationId: serialize_path_parameter(application_id, PathParameterSpec.new('applicationId', 'simple', false)), sourceVersionId: serialize_path_parameter(source_version_id, PathParameterSpec.new('sourceVersionId', 'simple', false)))
             options = {}
 
             result = @client.request('GET', path, **options)
-            result.is_a?(Hash) ? Models::SitesSourceVersionsRetrieveResponse.from_hash(result) : nil
+            result.is_a?(Hash) ? Models::ApplicationsSourceVersionsRetrieveResponse.from_hash(result) : nil
           end
 
         private

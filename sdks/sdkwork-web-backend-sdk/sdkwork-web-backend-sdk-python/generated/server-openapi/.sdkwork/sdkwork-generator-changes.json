@@ -9,13 +9,10 @@
     "protocol": "http",
     "packageName": "sdkwork-web-backend-sdk"
   },
-  "changeFingerprint": "4dba31bfd9424bcbfdbbebdd190c251660906f689abec104f271542bf8bc3843",
+  "changeFingerprint": "5b995f8e24669bfe69253f5a6443b60a1962daa3f0ce4387cc829f5aa3e958a2",
   "changes": {
     "createdGeneratedFiles": [],
-    "updatedGeneratedFiles": [
-      "sdkwork_web_backend_sdk/api/certificate.py",
-      "sdkwork_web_backend_sdk/models/__init__.py"
-    ],
+    "updatedGeneratedFiles": [],
     "unchangedGeneratedFiles": [
       "bin/publish-core.mjs",
       "bin/publish.ps1",
@@ -35,11 +32,13 @@
       "sdkwork_web_backend_sdk/api/application.py",
       "sdkwork_web_backend_sdk/api/audit.py",
       "sdkwork_web_backend_sdk/api/certificate_distribution.py",
+      "sdkwork_web_backend_sdk/api/certificate.py",
       "sdkwork_web_backend_sdk/api/domain.py",
       "sdkwork_web_backend_sdk/api/nginx.py",
       "sdkwork_web_backend_sdk/api/server.py",
       "sdkwork_web_backend_sdk/client.py",
       "sdkwork_web_backend_sdk/http_client.py",
+      "sdkwork_web_backend_sdk/models/__init__.py",
       "sdkwork_web_backend_sdk/models/agent_certificate_bundle.py",
       "sdkwork_web_backend_sdk/models/agent_certificate_observation.py",
       "sdkwork_web_backend_sdk/models/agent_heartbeat_request.py",
@@ -157,71 +156,30 @@
     "preservedScaffoldFiles": [
       "custom/README.md"
     ],
-    "backedUpFiles": [
-      "sdkwork_web_backend_sdk/api/certificate.py",
-      "sdkwork_web_backend_sdk/models/__init__.py"
-    ]
+    "backedUpFiles": []
   },
   "impact": {
     "schemaVersion": 1,
-    "areas": [
-      "api-surface",
-      "models"
-    ],
-    "details": [
-      {
-        "area": "api-surface",
-        "paths": [
-          "sdkwork_web_backend_sdk/api/certificate.py",
-          "sdkwork_web_backend_sdk/models/__init__.py"
-        ]
-      },
-      {
-        "area": "models",
-        "paths": [
-          "sdkwork_web_backend_sdk/models/__init__.py"
-        ]
-      }
-    ],
-    "requiresVerification": true,
-    "summary": "Detected impact areas: api-surface, models. Verification is required."
+    "areas": [],
+    "details": [],
+    "requiresVerification": false,
+    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped."
   },
   "verificationPlan": {
-    "shouldRun": true,
-    "runPhase": "now",
-    "summary": "Detected impact areas: api-surface, models. Verification is required. Run the required verification commands now against the generated SDK output.",
-    "steps": [
-      {
-        "id": "check",
-        "title": "Unified package check",
-        "required": true,
-        "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models.",
-        "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-backend-sdk\\sdkwork-web-backend-sdk-python\\generated\\server-openapi",
-        "command": "node",
-        "args": [
-          "./bin/publish-core.mjs",
-          "--language",
-          "python",
-          "--project-dir",
-          ".",
-          "--action",
-          "check"
-        ],
-        "displayCommand": "node ./bin/publish-core.mjs --language python --project-dir . --action check"
-      }
-    ]
+    "shouldRun": false,
+    "runPhase": "skip",
+    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped.",
+    "steps": []
   },
   "executionDecision": {
     "schemaVersion": 1,
-    "riskLevel": "high",
-    "nextAction": "verify",
+    "riskLevel": "low",
+    "nextAction": "skip",
     "requiresManualReview": false,
     "applyRequiresExpectedFingerprint": false,
-    "summary": "Changes have been applied. Run the required verification plan now.",
+    "summary": "No actionable changes were detected. No apply or verification step is required.",
     "reasons": [
-      "backed-up-generated-files",
-      "manual-review-required",
-      "verification-required"
+      "no-actionable-changes"
     ]
   },
   "preservedLegacyFiles": false

@@ -2,13 +2,13 @@
 
 use async_trait::async_trait;
 use sdkwork_webserver_contract::{
-    CreateDeploymentRequest, CreateDomainRequest, CreateListenerCertificateBindingRequest,
-    CreateManagedDomainRequest, CreateNginxConfigRequest, CreateRootDomainHostnameRequest,
-    CreateRootDomainRequest, CreateServerRequest, CreateSiteRequest, CreateSourceVersionRequest,
-    ImportGitSourceVersionRequest, IssueCertificateRequest, ListNginxConfigsQuery,
-    ListRootDomainsQuery, ListSitesQuery, UpdateCertificateRequest,
-    UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest, UpdateSiteRequest, WebAppApi,
-    WebAppRequestContext, WebAppResourceScope, WebBackendApi, WebBackendRequestContext,
+    CreateApplicationRequest, CreateDeploymentRequest, CreateDomainRequest,
+    CreateListenerCertificateBindingRequest, CreateManagedDomainRequest, CreateNginxConfigRequest,
+    CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
+    CreateSourceVersionRequest, ImportGitSourceVersionRequest, IssueCertificateRequest,
+    ListApplicationsQuery, ListNginxConfigsQuery, ListRootDomainsQuery, UpdateApplicationRequest,
+    UpdateCertificateRequest, UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest,
+    WebAppApi, WebAppRequestContext, WebAppResourceScope, WebBackendApi, WebBackendRequestContext,
     WebServiceError, WebServiceResult,
 };
 
@@ -138,38 +138,38 @@ impl WebBackendApi for WebService {
     async fn list_applications(
         &self,
         context: &WebBackendRequestContext,
-        query: &ListSitesQuery,
-    ) -> WebServiceResult<sdkwork_webserver_contract::SitePage> {
+        query: &ListApplicationsQuery,
+    ) -> WebServiceResult<sdkwork_webserver_contract::ApplicationPage> {
         let app_context = Self::backend_app_context(context)?;
-        WebAppApi::list_sites(self, &app_context, query).await
+        WebAppApi::list_applications(self, &app_context, query).await
     }
 
     async fn create_application(
         &self,
         context: &WebBackendRequestContext,
-        request: &CreateSiteRequest,
-    ) -> WebServiceResult<sdkwork_webserver_contract::SiteResponse> {
+        request: &CreateApplicationRequest,
+    ) -> WebServiceResult<sdkwork_webserver_contract::ApplicationResponse> {
         let app_context = Self::backend_app_context(context)?;
-        WebAppApi::create_site(self, &app_context, request).await
+        WebAppApi::create_application(self, &app_context, request).await
     }
 
     async fn retrieve_application(
         &self,
         context: &WebBackendRequestContext,
         application_id: &str,
-    ) -> WebServiceResult<sdkwork_webserver_contract::SiteResponse> {
+    ) -> WebServiceResult<sdkwork_webserver_contract::ApplicationResponse> {
         let app_context = Self::backend_app_context(context)?;
-        WebAppApi::retrieve_site(self, &app_context, application_id).await
+        WebAppApi::retrieve_application(self, &app_context, application_id).await
     }
 
     async fn update_application(
         &self,
         context: &WebBackendRequestContext,
         application_id: &str,
-        request: &UpdateSiteRequest,
-    ) -> WebServiceResult<sdkwork_webserver_contract::SiteResponse> {
+        request: &UpdateApplicationRequest,
+    ) -> WebServiceResult<sdkwork_webserver_contract::ApplicationResponse> {
         let app_context = Self::backend_app_context(context)?;
-        WebAppApi::update_site(self, &app_context, application_id, request).await
+        WebAppApi::update_application(self, &app_context, application_id, request).await
     }
 
     async fn delete_application(
@@ -178,25 +178,25 @@ impl WebBackendApi for WebService {
         application_id: &str,
     ) -> WebServiceResult<()> {
         let app_context = Self::backend_app_context(context)?;
-        WebAppApi::delete_site(self, &app_context, application_id).await
+        WebAppApi::delete_application(self, &app_context, application_id).await
     }
 
     async fn activate_application(
         &self,
         context: &WebBackendRequestContext,
         application_id: &str,
-    ) -> WebServiceResult<sdkwork_webserver_contract::SiteResponse> {
+    ) -> WebServiceResult<sdkwork_webserver_contract::ApplicationResponse> {
         let app_context = Self::backend_app_context(context)?;
-        WebAppApi::activate_site(self, &app_context, application_id).await
+        WebAppApi::activate_application(self, &app_context, application_id).await
     }
 
     async fn pause_application(
         &self,
         context: &WebBackendRequestContext,
         application_id: &str,
-    ) -> WebServiceResult<sdkwork_webserver_contract::SiteResponse> {
+    ) -> WebServiceResult<sdkwork_webserver_contract::ApplicationResponse> {
         let app_context = Self::backend_app_context(context)?;
-        WebAppApi::pause_site(self, &app_context, application_id).await
+        WebAppApi::pause_application(self, &app_context, application_id).await
     }
 
     async fn list_application_domains(

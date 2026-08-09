@@ -1,10 +1,10 @@
 import type { WebserverPcModuleDefinition } from "@sdkwork/webserver-pc-commons";
 
 export const webserverModule = {
-  id: "sites",
-  label: "sites",
+  id: "applications",
+  label: "applications",
   surface: "app-console",
   entries: [
-    { resource: "sites", label: "Sites", description: "Site lifecycle and availability", permission: "web.sites.read", order: 1 }
+    { resource: "applications", label: "Applications", description: "Application lifecycle and availability", permission: "web.applications.read", order: 1 }
   ],
 } as const satisfies WebserverPcModuleDefinition;

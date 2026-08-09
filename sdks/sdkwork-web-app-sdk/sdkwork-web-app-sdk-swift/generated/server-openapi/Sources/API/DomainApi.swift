@@ -8,44 +8,44 @@ public class DomainApi {
     }
 
     /// 获取站点域名列表
-    public func sitesDomainsList(siteId: String, page: Int? = nil, pageSize: Int? = nil) async throws -> SitesDomainsListResponse? {
+    public func applicationsDomainsList(applicationId: String, page: Int? = nil, pageSize: Int? = nil) async throws -> ApplicationsDomainsListResponse? {
         let query = buildQueryString([
             QueryParameterSpec(name: "page", value: page, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "page_size", value: pageSize, style: "form", explode: true, allowReserved: false, contentType: nil)
         ])
-        return try await client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/domains"), query), responseType: SitesDomainsListResponse.self)
+        return try await client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/domains"), query), responseType: ApplicationsDomainsListResponse.self)
     }
 
     /// 绑定域名
-    public func sitesDomainsCreate(siteId: String, body: CreateDomainRequest, idempotencyKey: String) async throws -> SitesDomainsCreateResponse201? {
+    public func applicationsDomainsCreate(applicationId: String, body: CreateDomainRequest, idempotencyKey: String) async throws -> ApplicationsDomainsCreateResponse201? {
         let requestHeaders = buildRequestHeaders(
             [
                 "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
             ],
             [:]
         )
-        return try await client.post(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/domains"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: SitesDomainsCreateResponse201.self)
+        return try await client.post(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/domains"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: ApplicationsDomainsCreateResponse201.self)
     }
 
     /// 获取域名详情
-    public func sitesDomainsRetrieve(siteId: String, domainId: String) async throws -> SitesDomainsRetrieveResponse? {
-        return try await client.get(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/domains/\(serializePathParameter(domainId, PathParameterSpec(name: "domainId", style: "simple", explode: false)))"), responseType: SitesDomainsRetrieveResponse.self)
+    public func applicationsDomainsRetrieve(applicationId: String, domainId: String) async throws -> ApplicationsDomainsRetrieveResponse? {
+        return try await client.get(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/domains/\(serializePathParameter(domainId, PathParameterSpec(name: "domainId", style: "simple", explode: false)))"), responseType: ApplicationsDomainsRetrieveResponse.self)
     }
 
     /// 解绑域名
-    public func sitesDomainsDelete(siteId: String, domainId: String) async throws -> Void {
-        _ = try await client.delete(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/domains/\(serializePathParameter(domainId, PathParameterSpec(name: "domainId", style: "simple", explode: false)))"))
+    public func applicationsDomainsDelete(applicationId: String, domainId: String) async throws -> Void {
+        _ = try await client.delete(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/domains/\(serializePathParameter(domainId, PathParameterSpec(name: "domainId", style: "simple", explode: false)))"))
     }
 
     /// 创建或检查域名所有权验证挑战
-    public func sitesDomainsVerify(siteId: String, domainId: String, idempotencyKey: String) async throws -> SitesDomainsVerifyResponse? {
+    public func applicationsDomainsVerify(applicationId: String, domainId: String, idempotencyKey: String) async throws -> ApplicationsDomainsVerifyResponse? {
         let requestHeaders = buildRequestHeaders(
             [
                 "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
             ],
             [:]
         )
-        return try await client.post(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/domains/\(serializePathParameter(domainId, PathParameterSpec(name: "domainId", style: "simple", explode: false)))/verify"), body: nil, params: nil, headers: requestHeaders, responseType: SitesDomainsVerifyResponse.self)
+        return try await client.post(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/domains/\(serializePathParameter(domainId, PathParameterSpec(name: "domainId", style: "simple", explode: false)))/verify"), body: nil, params: nil, headers: requestHeaders, responseType: ApplicationsDomainsVerifyResponse.self)
     }
 
     /// 获取证书可签发域名列表

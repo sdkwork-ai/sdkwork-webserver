@@ -204,8 +204,8 @@ function ResourcePage({
   const t = (key: WebserverMessageKey, values?: Record<string, string | number>) =>
     translateWebserver(locale, key, values);
   const authorized = hasWebserverPermission(permissionScope, entry.permission);
-  const scopeKind = source?.scopeKind ?? "site";
-  const scopeSource = scopeKind === "application" ? registry.applications : registry.sites;
+  const scopeKind = source?.scopeKind ?? "application";
+  const scopeSource = registry.applications;
   const scopeStorageKey = `sdkwork.webserver.${scopeKind}Id`;
   const [items, setItems] = useState<readonly Record<string, unknown>[]>([]);
   const [page, setPage] = useState(1);
@@ -367,7 +367,7 @@ function ResourcePage({
     () => resourceColumns(entry.resource, items),
     [entry.resource, items],
   );
-  const scopeLabel = t(scopeKind === "application" ? "toolbar.application" : "toolbar.site");
+  const scopeLabel = t(scopeKind === "application" ? "toolbar.application" : "toolbar.application");
   const resourceLabel = resourceText(t, entry.resource, "label");
 
   return (
@@ -692,7 +692,7 @@ function ActionIcon({ action }: { action: WebserverResourceAction }) {
 }
 
 function isApplicationResource(resource: WebserverResourceKey): boolean {
-  return resource === "applications" || resource === "sites";
+  return resource === "applications";
 }
 
 function isApplicationRowAction(action: WebserverResourceAction): boolean {
@@ -2727,10 +2727,10 @@ interface ScopeOption {
 
 function scopeOption(
   item: Record<string, unknown>,
-  scopeKind: "application" | "site",
+  scopeKind: "application",
 ): ScopeOption | undefined {
   const rawId = item.id
-    ?? item[scopeKind === "application" ? "applicationId" : "siteId"];
+    ?? item.applicationId;
   if (typeof rawId !== "string" && typeof rawId !== "number") return undefined;
   const id = String(rawId);
   const rawLabel = item.name ?? item.slug ?? item.hostname;
@@ -2776,7 +2776,7 @@ function recordKey(item: Record<string, unknown>, index: number): string {
 }
 
 function recordLabel(item: Record<string, unknown>, index: number): string {
-  const value = item.name ?? item.slug ?? item.id ?? item.siteId;
+  const value = item.name ?? item.slug ?? item.id ?? item.applicationId;
   return typeof value === "string" || typeof value === "number"
     ? String(value)
     : String(index + 1);
@@ -2784,7 +2784,7 @@ function recordLabel(item: Record<string, unknown>, index: number): string {
 
 function displayValue(value: unknown, column: string, resource: WebserverResourceKey, locale: WebserverLocale): ReactNode {
   if (value === null || value === undefined) return "-";
-  if ((resource === "sites" || resource === "applications") && column === "status") {
+  if (resource === "applications" && column === "status") {
     return <span className={`status-badge application-status-${String(value).toLowerCase()}`}>{applicationStatus(value, locale)}</span>;
   }
   if (resource === "servers" && column === "status") {
@@ -3135,7 +3135,6 @@ function resourceColumns(
 ): string[] {
   const available = Array.from(new Set(items.flatMap((item) => Object.keys(item))));
   const preferred: Partial<Record<WebserverResourceKey, readonly string[]>> = {
-    sites: ["id", "name", "applicationType", "siteType", "status", "updatedAt", "createdAt"],
     applications: ["id", "name", "applicationType", "siteType", "status", "updatedAt", "createdAt"],
     deployments: ["versionTag", "environment", "status", "rollbackFromDeploymentId", "artifactHash", "createdAt", "startedAt", "completedAt", "durationMs"],
     "source-versions": ["versionTag", "sourceType", "retained", "configSnapshot", "artifactSize", "artifactHash", "status", "createdAt"],

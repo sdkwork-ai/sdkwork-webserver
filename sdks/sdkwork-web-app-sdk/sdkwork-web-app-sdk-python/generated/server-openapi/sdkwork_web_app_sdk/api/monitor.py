@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 from ..http_client import HttpClient
-from ..models import CreateHealthCheckRequest, SitesHealthChecksCreateResponse201, SitesHealthChecksListResponse
+from ..models import ApplicationsHealthChecksCreateResponse201, ApplicationsHealthChecksListResponse, CreateHealthCheckRequest
 
 def _append_query_string(path: str, raw_query_string: str) -> str:
     query = raw_query_string.lstrip('?')
@@ -132,29 +132,29 @@ class MonitorApi:
 
     def __init__(self, client: HttpClient):
         self._client = client
-        self.sites = MonitorSitesApi(client)
+        self.applications = MonitorApplicationsApi(client)
 
 
-class MonitorSitesApi:
-    """monitor monitor.sites API client."""
-
-    def __init__(self, client: HttpClient):
-        self._client = client
-        self.health_checks = MonitorSitesHealthChecksApi(client)
-
-
-class MonitorSitesHealthChecksApi:
-    """monitor monitor.sites.health_checks API client."""
+class MonitorApplicationsApi:
+    """monitor monitor.applications API client."""
 
     def __init__(self, client: HttpClient):
         self._client = client
+        self.health_checks = MonitorApplicationsHealthChecksApi(client)
 
 
-    def list(self, site_id: str) -> SitesHealthChecksListResponse:
+class MonitorApplicationsHealthChecksApi:
+    """monitor monitor.applications.health_checks API client."""
+
+    def __init__(self, client: HttpClient):
+        self._client = client
+
+
+    def list(self, application_id: str) -> ApplicationsHealthChecksListResponse:
         """获取健康检查配置"""
-        return self._client.get(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/health_checks")
+        return self._client.get(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/health_checks")
 
-    def create(self, site_id: str, body: CreateHealthCheckRequest, idempotency_key: str) -> SitesHealthChecksCreateResponse201:
+    def create(self, application_id: str, body: CreateHealthCheckRequest, idempotency_key: str) -> ApplicationsHealthChecksCreateResponse201:
         """创建健康检查"""
         request_headers = build_request_headers(
             {
@@ -162,4 +162,4 @@ class MonitorSitesHealthChecksApi:
             },
             {}
         )
-        return self._client.post(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/health_checks", json=body, headers=request_headers)
+        return self._client.post(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/health_checks", json=body, headers=request_headers)

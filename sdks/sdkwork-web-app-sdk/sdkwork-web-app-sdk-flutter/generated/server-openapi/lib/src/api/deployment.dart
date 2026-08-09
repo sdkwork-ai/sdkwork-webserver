@@ -12,21 +12,21 @@ class DeploymentApi {
   DeploymentApi(this._client);
 
   /// 获取部署历史
-  Future<SitesDeploymentsListResponse?> sitesDeploymentsList(String siteId, [int? pageSize, String? cursor, int? status]) async {
+  Future<ApplicationsDeploymentsListResponse?> applicationsDeploymentsList(String applicationId, [int? pageSize, String? cursor, int? status]) async {
     final query = buildQueryString([
       QueryParameterSpec('page_size', pageSize, 'form', true, false, null),
       QueryParameterSpec('cursor', cursor, 'form', true, false, null),
       QueryParameterSpec('status', status, 'form', true, false, null)
     ]);
-    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/deployments'), query));
+    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/deployments'), query));
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : SitesDeploymentsListResponse.fromJson(map);
+      return map == null ? null : ApplicationsDeploymentsListResponse.fromJson(map);
     })();
   }
 
   /// 发起部署
-  Future<SitesDeploymentsCreateResponse201?> sitesDeploymentsCreate(String siteId, CreateDeploymentRequest body, String idempotencyKey) async {
+  Future<ApplicationsDeploymentsCreateResponse201?> applicationsDeploymentsCreate(String applicationId, CreateDeploymentRequest body, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(
       <String, HeaderParameterSpec>{
         'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
@@ -34,34 +34,34 @@ class DeploymentApi {
       <String, HeaderParameterSpec>{},
     );
     final payload = body.toJson();
-    final response = await _client.post(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/deployments'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    final response = await _client.post(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/deployments'), body: payload, headers: requestHeaders, contentType: 'application/json');
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : SitesDeploymentsCreateResponse201.fromJson(map);
+      return map == null ? null : ApplicationsDeploymentsCreateResponse201.fromJson(map);
     })();
   }
 
   /// 获取部署详情
-  Future<SitesDeploymentsRetrieveResponse?> sitesDeploymentsRetrieve(String siteId, String deploymentId) async {
-    final response = await _client.get(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/deployments/${serializePathParameter(deploymentId, const PathParameterSpec('deploymentId', 'simple', false))}'));
+  Future<ApplicationsDeploymentsRetrieveResponse?> applicationsDeploymentsRetrieve(String applicationId, String deploymentId) async {
+    final response = await _client.get(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/deployments/${serializePathParameter(deploymentId, const PathParameterSpec('deploymentId', 'simple', false))}'));
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : SitesDeploymentsRetrieveResponse.fromJson(map);
+      return map == null ? null : ApplicationsDeploymentsRetrieveResponse.fromJson(map);
     })();
   }
 
   /// 基于历史成功版本创建快速还原命令
-  Future<SitesDeploymentsRollbackResponse?> sitesDeploymentsRollback(String siteId, String deploymentId, String idempotencyKey) async {
+  Future<ApplicationsDeploymentsRollbackResponse?> applicationsDeploymentsRollback(String applicationId, String deploymentId, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(
       <String, HeaderParameterSpec>{
         'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
       },
       <String, HeaderParameterSpec>{},
     );
-    final response = await _client.post(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/deployments/${serializePathParameter(deploymentId, const PathParameterSpec('deploymentId', 'simple', false))}/rollback'), headers: requestHeaders);
+    final response = await _client.post(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/deployments/${serializePathParameter(deploymentId, const PathParameterSpec('deploymentId', 'simple', false))}/rollback'), headers: requestHeaders);
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : SitesDeploymentsRollbackResponse.fromJson(map);
+      return map == null ? null : ApplicationsDeploymentsRollbackResponse.fromJson(map);
     })();
   }
 }

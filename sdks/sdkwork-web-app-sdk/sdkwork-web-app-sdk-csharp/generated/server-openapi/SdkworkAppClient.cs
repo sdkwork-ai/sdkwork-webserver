@@ -9,7 +9,7 @@ namespace SDKWork.Web.AppSdk
     {
         private readonly SdkHttpClient _httpClient;
 
-        public SiteApi Site { get; }
+        public ApplicationApi Application { get; }
         public DomainApi Domain { get; }
         public CertificateApi Certificate { get; }
         public SourceVersionApi SourceVersion { get; }
@@ -20,7 +20,7 @@ namespace SDKWork.Web.AppSdk
         public SdkworkAppClient(string baseUrl)
         {
             _httpClient = new SdkHttpClient(baseUrl);
-            Site = new SiteApi(_httpClient);
+            Application = new ApplicationApi(_httpClient);
             Domain = new DomainApi(_httpClient);
             Certificate = new CertificateApi(_httpClient);
             SourceVersion = new SourceVersionApi(_httpClient);
@@ -32,7 +32,7 @@ namespace SDKWork.Web.AppSdk
         public SdkworkAppClient(SdkConfig config)
         {
             _httpClient = new SdkHttpClient(config);
-            Site = new SiteApi(_httpClient);
+            Application = new ApplicationApi(_httpClient);
             Domain = new DomainApi(_httpClient);
             Certificate = new CertificateApi(_httpClient);
             SourceVersion = new SourceVersionApi(_httpClient);

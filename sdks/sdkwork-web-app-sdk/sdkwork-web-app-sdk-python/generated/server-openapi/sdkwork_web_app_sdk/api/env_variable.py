@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 from ..http_client import HttpClient
-from ..models import CreateEnvVariableRequest, SitesEnvVariablesCreateResponse201, SitesEnvVariablesListResponse, SitesEnvVariablesUpdateResponse, UpdateEnvVariableRequest
+from ..models import ApplicationsEnvVariablesCreateResponse201, ApplicationsEnvVariablesListResponse, ApplicationsEnvVariablesUpdateResponse, CreateEnvVariableRequest, UpdateEnvVariableRequest
 
 def _append_query_string(path: str, raw_query_string: str) -> str:
     query = raw_query_string.lstrip('?')
@@ -242,32 +242,32 @@ class EnvVariableApi:
 
     def __init__(self, client: HttpClient):
         self._client = client
-        self.sites = EnvVariableSitesApi(client)
+        self.applications = EnvVariableApplicationsApi(client)
 
 
-class EnvVariableSitesApi:
-    """env_variable env_variable.sites API client."""
-
-    def __init__(self, client: HttpClient):
-        self._client = client
-        self.env_variables = EnvVariableSitesEnvVariablesApi(client)
-
-
-class EnvVariableSitesEnvVariablesApi:
-    """env_variable env_variable.sites.env_variables API client."""
+class EnvVariableApplicationsApi:
+    """env_variable env_variable.applications API client."""
 
     def __init__(self, client: HttpClient):
         self._client = client
+        self.env_variables = EnvVariableApplicationsEnvVariablesApi(client)
 
 
-    def list(self, site_id: str, environment: Optional[str] = None) -> SitesEnvVariablesListResponse:
+class EnvVariableApplicationsEnvVariablesApi:
+    """env_variable env_variable.applications.env_variables API client."""
+
+    def __init__(self, client: HttpClient):
+        self._client = client
+
+
+    def list(self, application_id: str, environment: Optional[str] = None) -> ApplicationsEnvVariablesListResponse:
         """获取环境变量列表"""
         query = build_query_string([
             {'name': 'environment', 'value': environment, 'style': 'form', 'explode': True, 'allow_reserved': False},
         ])
-        return self._client.get(_append_query_string(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/env_variables", query))
+        return self._client.get(_append_query_string(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/env_variables", query))
 
-    def create(self, site_id: str, body: CreateEnvVariableRequest, idempotency_key: str) -> SitesEnvVariablesCreateResponse201:
+    def create(self, application_id: str, body: CreateEnvVariableRequest, idempotency_key: str) -> ApplicationsEnvVariablesCreateResponse201:
         """创建环境变量"""
         request_headers = build_request_headers(
             {
@@ -275,9 +275,9 @@ class EnvVariableSitesEnvVariablesApi:
             },
             {}
         )
-        return self._client.post(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/env_variables", json=body, headers=request_headers)
+        return self._client.post(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/env_variables", json=body, headers=request_headers)
 
-    def update(self, site_id: str, variable_id: str, body: UpdateEnvVariableRequest, idempotency_key: str) -> SitesEnvVariablesUpdateResponse:
+    def update(self, application_id: str, variable_id: str, body: UpdateEnvVariableRequest, idempotency_key: str) -> ApplicationsEnvVariablesUpdateResponse:
         """轮换环境变量值"""
         request_headers = build_request_headers(
             {
@@ -285,9 +285,9 @@ class EnvVariableSitesEnvVariablesApi:
             },
             {}
         )
-        return self._client.patch(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/env_variables/{serialize_path_parameter(variable_id, {'name': 'variableId', 'style': 'simple', 'explode': False})}", json=body, headers=request_headers)
+        return self._client.patch(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/env_variables/{serialize_path_parameter(variable_id, {'name': 'variableId', 'style': 'simple', 'explode': False})}", json=body, headers=request_headers)
 
-    def delete(self, site_id: str, variable_id: str, idempotency_key: str) -> None:
+    def delete(self, application_id: str, variable_id: str, idempotency_key: str) -> None:
         """删除环境变量"""
         request_headers = build_request_headers(
             {
@@ -295,4 +295,4 @@ class EnvVariableSitesEnvVariablesApi:
             },
             {}
         )
-        return self._client.delete(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/env_variables/{serialize_path_parameter(variable_id, {'name': 'variableId', 'style': 'simple', 'explode': False})}", headers=request_headers)
+        return self._client.delete(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/env_variables/{serialize_path_parameter(variable_id, {'name': 'variableId', 'style': 'simple', 'explode': False})}", headers=request_headers)

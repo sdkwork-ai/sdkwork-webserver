@@ -4,24 +4,24 @@ declare(strict_types=1);
 
 namespace SDKWork\Web\AppSdk\Api;
 
+use SDKWork\Web\AppSdk\Models\ApplicationsHealthChecksCreateResponse201;
+use SDKWork\Web\AppSdk\Models\ApplicationsHealthChecksListResponse;
 use SDKWork\Web\AppSdk\Models\CreateHealthCheckRequest;
-use SDKWork\Web\AppSdk\Models\SitesHealthChecksCreateResponse201;
-use SDKWork\Web\AppSdk\Models\SitesHealthChecksListResponse;
 
 final class MonitorApi extends BaseApi
 {
     /** 获取健康检查配置 */
-    public function sitesHealthChecksList(string $siteId): ?SitesHealthChecksListResponse
+    public function applicationsHealthChecksList(string $applicationId): ?ApplicationsHealthChecksListResponse
     {
-        $path = $this->interpolatePath('/app/v3/api/sites/{siteId}/health_checks', ['siteId' => $this->serializePathParameter($siteId, new PathParameterSpec('siteId', 'simple', false))]);
+        $path = $this->interpolatePath('/app/v3/api/applications/{applicationId}/health_checks', ['applicationId' => $this->serializePathParameter($applicationId, new PathParameterSpec('applicationId', 'simple', false))]);
         $result = $this->client->request('GET', $path, []);
-        return is_array($result) ? SitesHealthChecksListResponse::fromArray($result) : null;
+        return is_array($result) ? ApplicationsHealthChecksListResponse::fromArray($result) : null;
     }
 
     /** 创建健康检查 */
-    public function sitesHealthChecksCreate(string $siteId, array|CreateHealthCheckRequest $body, string $idempotencyKey): ?SitesHealthChecksCreateResponse201
+    public function applicationsHealthChecksCreate(string $applicationId, array|CreateHealthCheckRequest $body, string $idempotencyKey): ?ApplicationsHealthChecksCreateResponse201
     {
-        $path = $this->interpolatePath('/app/v3/api/sites/{siteId}/health_checks', ['siteId' => $this->serializePathParameter($siteId, new PathParameterSpec('siteId', 'simple', false))]);
+        $path = $this->interpolatePath('/app/v3/api/applications/{applicationId}/health_checks', ['applicationId' => $this->serializePathParameter($applicationId, new PathParameterSpec('applicationId', 'simple', false))]);
         $payload = $body instanceof CreateHealthCheckRequest ? $body->toArray() : $body;
         $requestHeaders = $this->buildRequestHeaders(
             [
@@ -33,7 +33,7 @@ final class MonitorApi extends BaseApi
             'headers' => $requestHeaders,
             'json' => $payload,
         ]);
-        return is_array($result) ? SitesHealthChecksCreateResponse201::fromArray($result) : null;
+        return is_array($result) ? ApplicationsHealthChecksCreateResponse201::fromArray($result) : null;
     }
 
     private function buildRequestHeaders(array $headers, array $cookies): array

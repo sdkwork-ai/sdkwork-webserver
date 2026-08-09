@@ -1,3 +1,3 @@
 pub mod client;
 
-pub use client::{QueryParams, RequestHeaders, SdkworkConfig, SdkworkError, SdkworkHttpClient, SseStream};
+pub use client::{BinaryResponseStream, QueryParams, RequestHeaders, SdkworkConfig, SdkworkError, SdkworkHttpClient, SseStream};

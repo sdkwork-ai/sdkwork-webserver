@@ -18,53 +18,53 @@ func NewEnvVariableApi(client *sdkhttp.Client) *EnvVariableApi {
 }
 
 // 获取环境变量列表
-func (a *EnvVariableApi) SitesEnvVariablesList(siteId string, environment *string) (sdktypes.SitesEnvVariablesListResponse, error) {
+func (a *EnvVariableApi) ApplicationsEnvVariablesList(applicationId string, environment *string) (sdktypes.ApplicationsEnvVariablesListResponse, error) {
     query := BuildQueryString([]QueryParameterSpec{
         {Name: "environment", Value: func() interface{} { if environment == nil { return nil }; return *environment }(), Style: "form", Explode: true, AllowReserved: false},
     })
-    raw, err := a.client.Get(AppendQueryString(AppApiPath(fmt.Sprintf("/sites/%s/env_variables", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}))), query), nil, nil)
+    raw, err := a.client.Get(AppendQueryString(AppApiPath(fmt.Sprintf("/applications/%s/env_variables", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}))), query), nil, nil)
     if err != nil {
-        var zero sdktypes.SitesEnvVariablesListResponse
+        var zero sdktypes.ApplicationsEnvVariablesListResponse
         return zero, err
     }
-    return decodeResult[sdktypes.SitesEnvVariablesListResponse](raw)
+    return decodeResult[sdktypes.ApplicationsEnvVariablesListResponse](raw)
 }
 
 // 创建环境变量
-func (a *EnvVariableApi) SitesEnvVariablesCreate(siteId string, body sdktypes.CreateEnvVariableRequest, idempotencyKey string) (sdktypes.SitesEnvVariablesCreateResponse201, error) {
+func (a *EnvVariableApi) ApplicationsEnvVariablesCreate(applicationId string, body sdktypes.CreateEnvVariableRequest, idempotencyKey string) (sdktypes.ApplicationsEnvVariablesCreateResponse201, error) {
     headers := BuildRequestHeaders(
         map[string]ParameterSpec{"Idempotency-Key": ParameterSpec{Value: idempotencyKey, Style: "simple", Explode: false},},
         map[string]ParameterSpec{},
     )
-    raw, err := a.client.Post(AppApiPath(fmt.Sprintf("/sites/%s/env_variables", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
+    raw, err := a.client.Post(AppApiPath(fmt.Sprintf("/applications/%s/env_variables", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
     if err != nil {
-        var zero sdktypes.SitesEnvVariablesCreateResponse201
+        var zero sdktypes.ApplicationsEnvVariablesCreateResponse201
         return zero, err
     }
-    return decodeResult[sdktypes.SitesEnvVariablesCreateResponse201](raw)
+    return decodeResult[sdktypes.ApplicationsEnvVariablesCreateResponse201](raw)
 }
 
 // 轮换环境变量值
-func (a *EnvVariableApi) SitesEnvVariablesUpdate(siteId string, variableId string, body sdktypes.UpdateEnvVariableRequest, idempotencyKey string) (sdktypes.SitesEnvVariablesUpdateResponse, error) {
+func (a *EnvVariableApi) ApplicationsEnvVariablesUpdate(applicationId string, variableId string, body sdktypes.UpdateEnvVariableRequest, idempotencyKey string) (sdktypes.ApplicationsEnvVariablesUpdateResponse, error) {
     headers := BuildRequestHeaders(
         map[string]ParameterSpec{"Idempotency-Key": ParameterSpec{Value: idempotencyKey, Style: "simple", Explode: false},},
         map[string]ParameterSpec{},
     )
-    raw, err := a.client.Patch(AppApiPath(fmt.Sprintf("/sites/%s/env_variables/%s", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}), SerializePathParameter(variableId, PathParameterSpec{Name: "variableId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
+    raw, err := a.client.Patch(AppApiPath(fmt.Sprintf("/applications/%s/env_variables/%s", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}), SerializePathParameter(variableId, PathParameterSpec{Name: "variableId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
     if err != nil {
-        var zero sdktypes.SitesEnvVariablesUpdateResponse
+        var zero sdktypes.ApplicationsEnvVariablesUpdateResponse
         return zero, err
     }
-    return decodeResult[sdktypes.SitesEnvVariablesUpdateResponse](raw)
+    return decodeResult[sdktypes.ApplicationsEnvVariablesUpdateResponse](raw)
 }
 
 // 删除环境变量
-func (a *EnvVariableApi) SitesEnvVariablesDelete(siteId string, variableId string, idempotencyKey string) (struct{}, error) {
+func (a *EnvVariableApi) ApplicationsEnvVariablesDelete(applicationId string, variableId string, idempotencyKey string) (struct{}, error) {
     headers := BuildRequestHeaders(
         map[string]ParameterSpec{"Idempotency-Key": ParameterSpec{Value: idempotencyKey, Style: "simple", Explode: false},},
         map[string]ParameterSpec{},
     )
-    raw, err := a.client.Delete(AppApiPath(fmt.Sprintf("/sites/%s/env_variables/%s", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}), SerializePathParameter(variableId, PathParameterSpec{Name: "variableId", Style: "simple", Explode: false}))), nil, headers)
+    raw, err := a.client.Delete(AppApiPath(fmt.Sprintf("/applications/%s/env_variables/%s", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}), SerializePathParameter(variableId, PathParameterSpec{Name: "variableId", Style: "simple", Explode: false}))), nil, headers)
     if err != nil {
         var zero struct{}
         return zero, err

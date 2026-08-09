@@ -9,48 +9,48 @@ import com.sdkwork.web.app.sdk.http.HttpClient
 class DomainApi(private val client: HttpClient) {
 
     /** 获取站点域名列表 */
-    suspend fun sitesDomainsList(siteId: String, page: Int? = null, pageSize: Int? = null): SitesDomainsListResponse? {
+    suspend fun applicationsDomainsList(applicationId: String, page: Int? = null, pageSize: Int? = null): ApplicationsDomainsListResponse? {
         val query = buildQueryString(listOf(
             QueryParameterSpec("page", page, "form", true, false, null),
             QueryParameterSpec("page_size", pageSize, "form", true, false, null)
         ))
-        val raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/sites/${serializePathParameter(siteId, PathParameterSpec("siteId", "simple", false))}/domains"), query))
-        return client.convertValue(raw, object : TypeReference<SitesDomainsListResponse>() {})
+        val raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/applications/${serializePathParameter(applicationId, PathParameterSpec("applicationId", "simple", false))}/domains"), query))
+        return client.convertValue(raw, object : TypeReference<ApplicationsDomainsListResponse>() {})
     }
 
     /** 绑定域名 */
-    suspend fun sitesDomainsCreate(siteId: String, body: CreateDomainRequest, idempotencyKey: String): SitesDomainsCreateResponse201? {
+    suspend fun applicationsDomainsCreate(applicationId: String, body: CreateDomainRequest, idempotencyKey: String): ApplicationsDomainsCreateResponse201? {
         val requestHeaders = buildRequestHeaders(
             mapOf(
                 "Idempotency-Key" to HeaderParameterSpec(idempotencyKey, "simple", false, null),
             ),
             emptyMap()
         )
-        val raw = client.post(ApiPaths.appPath("/sites/${serializePathParameter(siteId, PathParameterSpec("siteId", "simple", false))}/domains"), body, null, requestHeaders, "application/json")
-        return client.convertValue(raw, object : TypeReference<SitesDomainsCreateResponse201>() {})
+        val raw = client.post(ApiPaths.appPath("/applications/${serializePathParameter(applicationId, PathParameterSpec("applicationId", "simple", false))}/domains"), body, null, requestHeaders, "application/json")
+        return client.convertValue(raw, object : TypeReference<ApplicationsDomainsCreateResponse201>() {})
     }
 
     /** 获取域名详情 */
-    suspend fun sitesDomainsRetrieve(siteId: String, domainId: String): SitesDomainsRetrieveResponse? {
-        val raw = client.get(ApiPaths.appPath("/sites/${serializePathParameter(siteId, PathParameterSpec("siteId", "simple", false))}/domains/${serializePathParameter(domainId, PathParameterSpec("domainId", "simple", false))}"))
-        return client.convertValue(raw, object : TypeReference<SitesDomainsRetrieveResponse>() {})
+    suspend fun applicationsDomainsRetrieve(applicationId: String, domainId: String): ApplicationsDomainsRetrieveResponse? {
+        val raw = client.get(ApiPaths.appPath("/applications/${serializePathParameter(applicationId, PathParameterSpec("applicationId", "simple", false))}/domains/${serializePathParameter(domainId, PathParameterSpec("domainId", "simple", false))}"))
+        return client.convertValue(raw, object : TypeReference<ApplicationsDomainsRetrieveResponse>() {})
     }
 
     /** 解绑域名 */
-    suspend fun sitesDomainsDelete(siteId: String, domainId: String): Unit {
-        client.delete(ApiPaths.appPath("/sites/${serializePathParameter(siteId, PathParameterSpec("siteId", "simple", false))}/domains/${serializePathParameter(domainId, PathParameterSpec("domainId", "simple", false))}"))
+    suspend fun applicationsDomainsDelete(applicationId: String, domainId: String): Unit {
+        client.delete(ApiPaths.appPath("/applications/${serializePathParameter(applicationId, PathParameterSpec("applicationId", "simple", false))}/domains/${serializePathParameter(domainId, PathParameterSpec("domainId", "simple", false))}"))
     }
 
     /** 创建或检查域名所有权验证挑战 */
-    suspend fun sitesDomainsVerify(siteId: String, domainId: String, idempotencyKey: String): SitesDomainsVerifyResponse? {
+    suspend fun applicationsDomainsVerify(applicationId: String, domainId: String, idempotencyKey: String): ApplicationsDomainsVerifyResponse? {
         val requestHeaders = buildRequestHeaders(
             mapOf(
                 "Idempotency-Key" to HeaderParameterSpec(idempotencyKey, "simple", false, null),
             ),
             emptyMap()
         )
-        val raw = client.post(ApiPaths.appPath("/sites/${serializePathParameter(siteId, PathParameterSpec("siteId", "simple", false))}/domains/${serializePathParameter(domainId, PathParameterSpec("domainId", "simple", false))}/verify"), null, null, requestHeaders)
-        return client.convertValue(raw, object : TypeReference<SitesDomainsVerifyResponse>() {})
+        val raw = client.post(ApiPaths.appPath("/applications/${serializePathParameter(applicationId, PathParameterSpec("applicationId", "simple", false))}/domains/${serializePathParameter(domainId, PathParameterSpec("domainId", "simple", false))}/verify"), null, null, requestHeaders)
+        return client.convertValue(raw, object : TypeReference<ApplicationsDomainsVerifyResponse>() {})
     }
 
     /** 获取证书可签发域名列表 */

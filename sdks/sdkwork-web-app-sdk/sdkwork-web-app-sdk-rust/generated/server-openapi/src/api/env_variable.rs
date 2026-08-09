@@ -17,17 +17,17 @@ impl EnvVariableApi {
     }
 
     /// 获取环境变量列表
-    pub async fn sites_env_variables_list(&self, site_id: &str, environment: Option<&str>) -> Result<serde_json::Value, SdkworkError> {
+    pub async fn applications_env_variables_list(&self, application_id: &str, environment: Option<&str>) -> Result<serde_json::Value, SdkworkError> {
         let query = build_query_string(&[
             QueryParameterSpec::new("environment", environment, "form", true, false, None),
         ]);
-        let path = append_query_string(app_path(&format!("/sites/{}/env_variables", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false)))), &query);
+        let path = append_query_string(app_path(&format!("/applications/{}/env_variables", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false)))), &query);
         self.client.get(&path, None, None).await
     }
 
     /// 创建环境变量
-    pub async fn sites_env_variables_create(&self, site_id: &str, body: &CreateEnvVariableRequest, idempotency_key: &str) -> Result<EnvVariableResponse, SdkworkError> {
-        let path = app_path(&format!("/sites/{}/env_variables", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false))));
+    pub async fn applications_env_variables_create(&self, application_id: &str, body: &CreateEnvVariableRequest, idempotency_key: &str) -> Result<EnvVariableResponse, SdkworkError> {
+        let path = app_path(&format!("/applications/{}/env_variables", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false))));
         let headers = build_request_headers(
             &[
                 ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
@@ -38,8 +38,8 @@ impl EnvVariableApi {
     }
 
     /// 轮换环境变量值
-    pub async fn sites_env_variables_update(&self, site_id: &str, variable_id: &str, body: &UpdateEnvVariableRequest, idempotency_key: &str) -> Result<EnvVariableResponse, SdkworkError> {
-        let path = app_path(&format!("/sites/{}/env_variables/{}", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false)), serialize_path_parameter(variable_id, PathParameterSpec::new("variableId", "simple", false))));
+    pub async fn applications_env_variables_update(&self, application_id: &str, variable_id: &str, body: &UpdateEnvVariableRequest, idempotency_key: &str) -> Result<EnvVariableResponse, SdkworkError> {
+        let path = app_path(&format!("/applications/{}/env_variables/{}", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false)), serialize_path_parameter(variable_id, PathParameterSpec::new("variableId", "simple", false))));
         let headers = build_request_headers(
             &[
                 ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
@@ -50,8 +50,8 @@ impl EnvVariableApi {
     }
 
     /// 删除环境变量
-    pub async fn sites_env_variables_delete(&self, site_id: &str, variable_id: &str, idempotency_key: &str) -> Result<(), SdkworkError> {
-        let path = app_path(&format!("/sites/{}/env_variables/{}", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false)), serialize_path_parameter(variable_id, PathParameterSpec::new("variableId", "simple", false))));
+    pub async fn applications_env_variables_delete(&self, application_id: &str, variable_id: &str, idempotency_key: &str) -> Result<(), SdkworkError> {
+        let path = app_path(&format!("/applications/{}/env_variables/{}", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false)), serialize_path_parameter(variable_id, PathParameterSpec::new("variableId", "simple", false))));
         let headers = build_request_headers(
             &[
                 ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),

@@ -1,18 +1,18 @@
 require_relative 'base_api'
+require_relative '../models/applications_domains_create_response201'
+require_relative '../models/applications_domains_list_response'
+require_relative '../models/applications_domains_retrieve_response'
+require_relative '../models/applications_domains_verify_response'
 require_relative '../models/create_domain_request'
 require_relative '../models/domains_list_response'
-require_relative '../models/sites_domains_create_response201'
-require_relative '../models/sites_domains_list_response'
-require_relative '../models/sites_domains_retrieve_response'
-require_relative '../models/sites_domains_verify_response'
 
 module Sdkwork
   module AppSdk
     module Api
       class DomainApi < BaseApi
           # 获取站点域名列表
-          def sites_domains_list(site_id, page: nil, page_size: nil)
-            path = interpolate_path('/app/v3/api/sites/{siteId}/domains', siteId: serialize_path_parameter(site_id, PathParameterSpec.new('siteId', 'simple', false)))
+          def applications_domains_list(application_id, page: nil, page_size: nil)
+            path = interpolate_path('/app/v3/api/applications/{applicationId}/domains', applicationId: serialize_path_parameter(application_id, PathParameterSpec.new('applicationId', 'simple', false)))
             query = build_query_string([
               QueryParameterSpec.new('page', page, 'form', true, false, nil),
               QueryParameterSpec.new('page_size', page_size, 'form', true, false, nil),
@@ -21,12 +21,12 @@ module Sdkwork
             options = {}
 
             result = @client.request('GET', path, **options)
-            result.is_a?(Hash) ? Models::SitesDomainsListResponse.from_hash(result) : nil
+            result.is_a?(Hash) ? Models::ApplicationsDomainsListResponse.from_hash(result) : nil
           end
 
           # 绑定域名
-          def sites_domains_create(site_id, idempotency_key, body: nil)
-            path = interpolate_path('/app/v3/api/sites/{siteId}/domains', siteId: serialize_path_parameter(site_id, PathParameterSpec.new('siteId', 'simple', false)))
+          def applications_domains_create(application_id, idempotency_key, body: nil)
+            path = interpolate_path('/app/v3/api/applications/{applicationId}/domains', applicationId: serialize_path_parameter(application_id, PathParameterSpec.new('applicationId', 'simple', false)))
             payload = body.respond_to?(:to_hash) ? body.to_hash : body
             request_headers = build_request_headers(
               {
@@ -38,21 +38,21 @@ module Sdkwork
             options[:headers] = request_headers unless request_headers.empty?
             options[:json] = payload unless payload.nil?
             result = @client.request('POST', path, **options)
-            result.is_a?(Hash) ? Models::SitesDomainsCreateResponse201.from_hash(result) : nil
+            result.is_a?(Hash) ? Models::ApplicationsDomainsCreateResponse201.from_hash(result) : nil
           end
 
           # 获取域名详情
-          def sites_domains_retrieve(site_id, domain_id)
-            path = interpolate_path('/app/v3/api/sites/{siteId}/domains/{domainId}', siteId: serialize_path_parameter(site_id, PathParameterSpec.new('siteId', 'simple', false)), domainId: serialize_path_parameter(domain_id, PathParameterSpec.new('domainId', 'simple', false)))
+          def applications_domains_retrieve(application_id, domain_id)
+            path = interpolate_path('/app/v3/api/applications/{applicationId}/domains/{domainId}', applicationId: serialize_path_parameter(application_id, PathParameterSpec.new('applicationId', 'simple', false)), domainId: serialize_path_parameter(domain_id, PathParameterSpec.new('domainId', 'simple', false)))
             options = {}
 
             result = @client.request('GET', path, **options)
-            result.is_a?(Hash) ? Models::SitesDomainsRetrieveResponse.from_hash(result) : nil
+            result.is_a?(Hash) ? Models::ApplicationsDomainsRetrieveResponse.from_hash(result) : nil
           end
 
           # 解绑域名
-          def sites_domains_delete(site_id, domain_id)
-            path = interpolate_path('/app/v3/api/sites/{siteId}/domains/{domainId}', siteId: serialize_path_parameter(site_id, PathParameterSpec.new('siteId', 'simple', false)), domainId: serialize_path_parameter(domain_id, PathParameterSpec.new('domainId', 'simple', false)))
+          def applications_domains_delete(application_id, domain_id)
+            path = interpolate_path('/app/v3/api/applications/{applicationId}/domains/{domainId}', applicationId: serialize_path_parameter(application_id, PathParameterSpec.new('applicationId', 'simple', false)), domainId: serialize_path_parameter(domain_id, PathParameterSpec.new('domainId', 'simple', false)))
             options = {}
 
             result = @client.request('DELETE', path, **options)
@@ -60,8 +60,8 @@ module Sdkwork
           end
 
           # 创建或检查域名所有权验证挑战
-          def sites_domains_verify(site_id, domain_id, idempotency_key)
-            path = interpolate_path('/app/v3/api/sites/{siteId}/domains/{domainId}/verify', siteId: serialize_path_parameter(site_id, PathParameterSpec.new('siteId', 'simple', false)), domainId: serialize_path_parameter(domain_id, PathParameterSpec.new('domainId', 'simple', false)))
+          def applications_domains_verify(application_id, domain_id, idempotency_key)
+            path = interpolate_path('/app/v3/api/applications/{applicationId}/domains/{domainId}/verify', applicationId: serialize_path_parameter(application_id, PathParameterSpec.new('applicationId', 'simple', false)), domainId: serialize_path_parameter(domain_id, PathParameterSpec.new('domainId', 'simple', false)))
             request_headers = build_request_headers(
               {
                 'Idempotency-Key' => HeaderParameterSpec.new(idempotency_key, 'simple', false, nil),
@@ -71,7 +71,7 @@ module Sdkwork
             options = {}
             options[:headers] = request_headers unless request_headers.empty?
             result = @client.request('POST', path, **options)
-            result.is_a?(Hash) ? Models::SitesDomainsVerifyResponse.from_hash(result) : nil
+            result.is_a?(Hash) ? Models::ApplicationsDomainsVerifyResponse.from_hash(result) : nil
           end
 
           # 获取证书可签发域名列表

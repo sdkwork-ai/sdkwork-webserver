@@ -7,8 +7,8 @@ const WEBSERVER_ADMIN_PERMISSIONS = [
 ] as const;
 
 const WEBSERVER_SUPER_ADMIN_PERMISSIONS = [
-  "web.sites.read",
-  "web.sites.write",
+  "web.applications.read",
+  "web.applications.write",
   "web.certificates.read",
   "web.certificates.write",
   "web.nginx.write",

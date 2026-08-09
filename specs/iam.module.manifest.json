@@ -9,18 +9,18 @@
   "permissions": {
     "catalog": [
       {
-        "code": "web.sites.read",
+        "code": "web.applications.read",
         "name": "Read sites and applications",
-        "resource": "sites",
+        "resource": "applications",
         "action": "read",
         "status": "active",
         "since": "1.0.0",
         "replacementCode": null
       },
       {
-        "code": "web.sites.write",
+        "code": "web.applications.write",
         "name": "Manage sites and applications",
-        "resource": "sites",
+        "resource": "applications",
         "action": "write",
         "status": "active",
         "since": "1.0.0",
@@ -134,7 +134,7 @@
       {
         "roleCode": "app_user",
         "patterns": [
-          "web.sites.*",
+          "web.applications.*",
           "web.certificates.*"
         ]
       },

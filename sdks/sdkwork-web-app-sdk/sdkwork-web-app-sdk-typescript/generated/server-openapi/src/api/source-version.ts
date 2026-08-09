@@ -4,11 +4,11 @@ import type { ApiRequestOptions, HttpClient } from '../http/client';
 import type { CreateSourceVersionRequest, ImportGitSourceVersionRequest, PageInfo, SourceVersionResponse } from '../types';
 
 
-export interface SourceVersionSitesSourceVersionsGitImportCreateParams {
+export interface SourceVersionApplicationsSourceVersionsGitImportCreateParams {
   idempotencyKey: string;
 }
 
-export class SourceVersionSitesSourceVersionsGitImportApi {
+export class SourceVersionApplicationsSourceVersionsGitImportApi {
   private client: HttpClient;
 
   constructor(client: HttpClient) {
@@ -17,80 +17,80 @@ export class SourceVersionSitesSourceVersionsGitImportApi {
 
 
 /** 从公共 Git 仓库导入应用源码版本 */
-  async create(siteId: string | number, body: ImportGitSourceVersionRequest, params: SourceVersionSitesSourceVersionsGitImportCreateParams, requestOptions?: ApiRequestOptions): Promise<SourceVersionResponse> {
+  async create(applicationId: string | number, body: ImportGitSourceVersionRequest, params: SourceVersionApplicationsSourceVersionsGitImportCreateParams, requestOptions?: ApiRequestOptions): Promise<SourceVersionResponse> {
     const requestHeaders = buildRequestHeaders(
       {
         'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
-    return this.client.request<SourceVersionResponse>(appApiPath(`/sites/${serializePathParameter(siteId, { name: 'siteId', style: 'simple', explode: false })}/source_versions/git_import`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+    return this.client.request<SourceVersionResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/source_versions/git_import`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
   }
 }
 
-export interface SourceVersionSitesSourceVersionsListParams {
+export interface SourceVersionApplicationsSourceVersionsListParams {
   pageSize?: number;
   cursor?: string;
 }
 
-export interface SourceVersionSitesSourceVersionsCreateParams {
+export interface SourceVersionApplicationsSourceVersionsCreateParams {
   idempotencyKey: string;
 }
 
-export class SourceVersionSitesSourceVersionsApi {
+export class SourceVersionApplicationsSourceVersionsApi {
   private client: HttpClient;
-  public readonly gitImport: SourceVersionSitesSourceVersionsGitImportApi;
+  public readonly gitImport: SourceVersionApplicationsSourceVersionsGitImportApi;
 
   constructor(client: HttpClient) {
     this.client = client;
-    this.gitImport = new SourceVersionSitesSourceVersionsGitImportApi(client);
+    this.gitImport = new SourceVersionApplicationsSourceVersionsGitImportApi(client);
   }
 
 
 /** 获取应用源码版本 */
-  async list(siteId: string | number, params?: SourceVersionSitesSourceVersionsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: SourceVersionResponse[]; pageInfo: PageInfo; }> {
+  async list(applicationId: string | number, params?: SourceVersionApplicationsSourceVersionsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: SourceVersionResponse[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.request<{ items: SourceVersionResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/sites/${serializePathParameter(siteId, { name: 'siteId', style: 'simple', explode: false })}/source_versions`), query), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+    return this.client.request<{ items: SourceVersionResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/source_versions`), query), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
 /** 登记 Drive 中的应用源码版本 */
-  async create(siteId: string | number, body: CreateSourceVersionRequest, params: SourceVersionSitesSourceVersionsCreateParams, requestOptions?: ApiRequestOptions): Promise<SourceVersionResponse> {
+  async create(applicationId: string | number, body: CreateSourceVersionRequest, params: SourceVersionApplicationsSourceVersionsCreateParams, requestOptions?: ApiRequestOptions): Promise<SourceVersionResponse> {
     const requestHeaders = buildRequestHeaders(
       {
         'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
-    return this.client.request<SourceVersionResponse>(appApiPath(`/sites/${serializePathParameter(siteId, { name: 'siteId', style: 'simple', explode: false })}/source_versions`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+    return this.client.request<SourceVersionResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/source_versions`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
   }
 
 /** 获取应用源码版本详情 */
-  async retrieve(siteId: string | number, sourceVersionId: string, requestOptions?: ApiRequestOptions): Promise<SourceVersionResponse> {
-    return this.client.request<SourceVersionResponse>(appApiPath(`/sites/${serializePathParameter(siteId, { name: 'siteId', style: 'simple', explode: false })}/source_versions/${serializePathParameter(sourceVersionId, { name: 'sourceVersionId', style: 'simple', explode: false })}`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  async retrieve(applicationId: string | number, sourceVersionId: string, requestOptions?: ApiRequestOptions): Promise<SourceVersionResponse> {
+    return this.client.request<SourceVersionResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/source_versions/${serializePathParameter(sourceVersionId, { name: 'sourceVersionId', style: 'simple', explode: false })}`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 }
 
-export class SourceVersionSitesApi {
+export class SourceVersionApplicationsApi {
   private client: HttpClient;
-  public readonly sourceVersions: SourceVersionSitesSourceVersionsApi;
+  public readonly sourceVersions: SourceVersionApplicationsSourceVersionsApi;
 
   constructor(client: HttpClient) {
     this.client = client;
-    this.sourceVersions = new SourceVersionSitesSourceVersionsApi(client);
+    this.sourceVersions = new SourceVersionApplicationsSourceVersionsApi(client);
   }
 
 }
 
 export class SourceVersionApi {
   private client: HttpClient;
-  public readonly sites: SourceVersionSitesApi;
+  public readonly applications: SourceVersionApplicationsApi;
 
   constructor(client: HttpClient) {
     this.client = client;
-    this.sites = new SourceVersionSitesApi(client);
+    this.applications = new SourceVersionApplicationsApi(client);
   }
 
 }

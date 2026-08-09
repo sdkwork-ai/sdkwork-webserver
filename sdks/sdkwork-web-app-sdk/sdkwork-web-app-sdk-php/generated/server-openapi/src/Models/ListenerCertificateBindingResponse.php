@@ -10,7 +10,7 @@ final class ListenerCertificateBindingResponse
 {
     public ?string $id = null;
 
-    public ?string $siteId = null;
+    public ?string $applicationId = null;
 
     public ?string $domainId = null;
 
@@ -43,8 +43,8 @@ final class ListenerCertificateBindingResponse
         $this->id = array_key_exists('id', $data)
             ? $data['id']
             : null;
-        $this->siteId = array_key_exists('siteId', $data)
-            ? $data['siteId']
+        $this->applicationId = array_key_exists('applicationId', $data)
+            ? $data['applicationId']
             : null;
         $this->domainId = array_key_exists('domainId', $data)
             ? $data['domainId']
@@ -96,7 +96,7 @@ final class ListenerCertificateBindingResponse
     {
         return [
             'id' => $this->id,
-            'siteId' => $this->siteId,
+            'applicationId' => $this->applicationId,
             'domainId' => $this->domainId,
             'certificateId' => $this->certificateId,
             'desiredCertificateVersionId' => $this->desiredCertificateVersionId,

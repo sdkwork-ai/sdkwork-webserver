@@ -4,20 +4,20 @@ import type { ApiRequestOptions, HttpClient } from '../http/client';
 import type { CreateDomainRequest, DomainResponse, DomainVerifyResponse, PageInfo } from '../types';
 
 
-export interface DomainSitesDomainsListParams {
+export interface DomainApplicationsDomainsListParams {
   page?: number;
   pageSize?: number;
 }
 
-export interface DomainSitesDomainsCreateParams {
+export interface DomainApplicationsDomainsCreateParams {
   idempotencyKey: string;
 }
 
-export interface DomainSitesDomainsVerifyParams {
+export interface DomainApplicationsDomainsVerifyParams {
   idempotencyKey: string;
 }
 
-export class DomainSitesDomainsApi {
+export class DomainApplicationsDomainsApi {
   private client: HttpClient;
 
   constructor(client: HttpClient) {
@@ -26,54 +26,54 @@ export class DomainSitesDomainsApi {
 
 
 /** 获取站点域名列表 */
-  async list(siteId: string | number, params?: DomainSitesDomainsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: DomainResponse[]; pageInfo: PageInfo; }> {
+  async list(applicationId: string | number, params?: DomainApplicationsDomainsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: DomainResponse[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
       { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.request<{ items: DomainResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/sites/${serializePathParameter(siteId, { name: 'siteId', style: 'simple', explode: false })}/domains`), query), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+    return this.client.request<{ items: DomainResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/domains`), query), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
 /** 绑定域名 */
-  async create(siteId: string | number, body: CreateDomainRequest, params: DomainSitesDomainsCreateParams, requestOptions?: ApiRequestOptions): Promise<DomainResponse> {
+  async create(applicationId: string | number, body: CreateDomainRequest, params: DomainApplicationsDomainsCreateParams, requestOptions?: ApiRequestOptions): Promise<DomainResponse> {
     const requestHeaders = buildRequestHeaders(
       {
         'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
-    return this.client.request<DomainResponse>(appApiPath(`/sites/${serializePathParameter(siteId, { name: 'siteId', style: 'simple', explode: false })}/domains`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+    return this.client.request<DomainResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/domains`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
   }
 
 /** 获取域名详情 */
-  async retrieve(siteId: string | number, domainId: string | number, requestOptions?: ApiRequestOptions): Promise<DomainResponse> {
-    return this.client.request<DomainResponse>(appApiPath(`/sites/${serializePathParameter(siteId, { name: 'siteId', style: 'simple', explode: false })}/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  async retrieve(applicationId: string | number, domainId: string | number, requestOptions?: ApiRequestOptions): Promise<DomainResponse> {
+    return this.client.request<DomainResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 
 /** 解绑域名 */
-  async delete(siteId: string | number, domainId: string | number, requestOptions?: ApiRequestOptions): Promise<void> {
-    return this.client.request<void>(appApiPath(`/sites/${serializePathParameter(siteId, { name: 'siteId', style: 'simple', explode: false })}/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'DELETE' as any });
+  async delete(applicationId: string | number, domainId: string | number, requestOptions?: ApiRequestOptions): Promise<void> {
+    return this.client.request<void>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'DELETE' as any });
   }
 
 /** 创建或检查域名所有权验证挑战 */
-  async verify(siteId: string | number, domainId: string | number, params: DomainSitesDomainsVerifyParams, requestOptions?: ApiRequestOptions): Promise<DomainVerifyResponse> {
+  async verify(applicationId: string | number, domainId: string | number, params: DomainApplicationsDomainsVerifyParams, requestOptions?: ApiRequestOptions): Promise<DomainVerifyResponse> {
     const requestHeaders = buildRequestHeaders(
       {
         'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
-    return this.client.request<DomainVerifyResponse>(appApiPath(`/sites/${serializePathParameter(siteId, { name: 'siteId', style: 'simple', explode: false })}/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/verify`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, headers: requestHeaders, sdkworkUnwrapKind: 'item' });
+    return this.client.request<DomainVerifyResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/verify`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, headers: requestHeaders, sdkworkUnwrapKind: 'item' });
   }
 }
 
-export class DomainSitesApi {
+export class DomainApplicationsApi {
   private client: HttpClient;
-  public readonly domains: DomainSitesDomainsApi;
+  public readonly domains: DomainApplicationsDomainsApi;
 
   constructor(client: HttpClient) {
     this.client = client;
-    this.domains = new DomainSitesDomainsApi(client);
+    this.domains = new DomainApplicationsDomainsApi(client);
   }
 
 }
@@ -85,11 +85,11 @@ export interface DomainListParams {
 
 export class DomainApi {
   private client: HttpClient;
-  public readonly sites: DomainSitesApi;
+  public readonly applications: DomainApplicationsApi;
 
   constructor(client: HttpClient) {
     this.client = client;
-    this.sites = new DomainSitesApi(client);
+    this.applications = new DomainApplicationsApi(client);
   }
 
 

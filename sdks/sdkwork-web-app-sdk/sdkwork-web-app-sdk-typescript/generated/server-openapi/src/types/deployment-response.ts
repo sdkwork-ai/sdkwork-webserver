@@ -1,6 +1,6 @@
 export interface DeploymentResponse {
   id: string;
-  siteId: string;
+  applicationId: string;
   deployType: number;
   sourceVersionId?: string;
   versionTag?: string;

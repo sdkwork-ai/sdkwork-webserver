@@ -17,18 +17,18 @@ impl SourceVersionApi {
     }
 
     /// 获取应用源码版本
-    pub async fn sites_source_versions_list(&self, site_id: &str, page_size: Option<i64>, cursor: Option<&str>) -> Result<serde_json::Value, SdkworkError> {
+    pub async fn applications_source_versions_list(&self, application_id: &str, page_size: Option<i64>, cursor: Option<&str>) -> Result<serde_json::Value, SdkworkError> {
         let query = build_query_string(&[
             QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
             QueryParameterSpec::new("cursor", cursor, "form", true, false, None),
         ]);
-        let path = append_query_string(app_path(&format!("/sites/{}/source_versions", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false)))), &query);
+        let path = append_query_string(app_path(&format!("/applications/{}/source_versions", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false)))), &query);
         self.client.get(&path, None, None).await
     }
 
     /// 登记 Drive 中的应用源码版本
-    pub async fn sites_source_versions_create(&self, site_id: &str, body: &CreateSourceVersionRequest, idempotency_key: &str) -> Result<SourceVersionResponse, SdkworkError> {
-        let path = app_path(&format!("/sites/{}/source_versions", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false))));
+    pub async fn applications_source_versions_create(&self, application_id: &str, body: &CreateSourceVersionRequest, idempotency_key: &str) -> Result<SourceVersionResponse, SdkworkError> {
+        let path = app_path(&format!("/applications/{}/source_versions", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false))));
         let headers = build_request_headers(
             &[
                 ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
@@ -39,8 +39,8 @@ impl SourceVersionApi {
     }
 
     /// 从公共 Git 仓库导入应用源码版本
-    pub async fn sites_source_versions_git_import_create(&self, site_id: &str, body: &ImportGitSourceVersionRequest, idempotency_key: &str) -> Result<SourceVersionResponse, SdkworkError> {
-        let path = app_path(&format!("/sites/{}/source_versions/git_import", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false))));
+    pub async fn applications_source_versions_git_import_create(&self, application_id: &str, body: &ImportGitSourceVersionRequest, idempotency_key: &str) -> Result<SourceVersionResponse, SdkworkError> {
+        let path = app_path(&format!("/applications/{}/source_versions/git_import", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false))));
         let headers = build_request_headers(
             &[
                 ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
@@ -51,8 +51,8 @@ impl SourceVersionApi {
     }
 
     /// 获取应用源码版本详情
-    pub async fn sites_source_versions_retrieve(&self, site_id: &str, source_version_id: &str) -> Result<SourceVersionResponse, SdkworkError> {
-        let path = app_path(&format!("/sites/{}/source_versions/{}", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false)), serialize_path_parameter(source_version_id, PathParameterSpec::new("sourceVersionId", "simple", false))));
+    pub async fn applications_source_versions_retrieve(&self, application_id: &str, source_version_id: &str) -> Result<SourceVersionResponse, SdkworkError> {
+        let path = app_path(&format!("/applications/{}/source_versions/{}", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false)), serialize_path_parameter(source_version_id, PathParameterSpec::new("sourceVersionId", "simple", false))));
         self.client.get(&path, None, None).await
     }
 

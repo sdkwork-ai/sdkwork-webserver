@@ -7,7 +7,7 @@ namespace SDKWork.Web.AppSdk.Models
     public class DeploymentResponse
     {
         public string Id { get; set; }
-        public string SiteId { get; set; }
+        public string ApplicationId { get; set; }
         public int DeployType { get; set; }
         public string? SourceVersionId { get; set; }
         public string? VersionTag { get; set; }

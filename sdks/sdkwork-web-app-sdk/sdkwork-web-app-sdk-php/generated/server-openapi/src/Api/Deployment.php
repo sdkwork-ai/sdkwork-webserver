@@ -4,18 +4,18 @@ declare(strict_types=1);
 
 namespace SDKWork\Web\AppSdk\Api;
 
+use SDKWork\Web\AppSdk\Models\ApplicationsDeploymentsCreateResponse201;
+use SDKWork\Web\AppSdk\Models\ApplicationsDeploymentsListResponse;
+use SDKWork\Web\AppSdk\Models\ApplicationsDeploymentsRetrieveResponse;
+use SDKWork\Web\AppSdk\Models\ApplicationsDeploymentsRollbackResponse;
 use SDKWork\Web\AppSdk\Models\CreateDeploymentRequest;
-use SDKWork\Web\AppSdk\Models\SitesDeploymentsCreateResponse201;
-use SDKWork\Web\AppSdk\Models\SitesDeploymentsListResponse;
-use SDKWork\Web\AppSdk\Models\SitesDeploymentsRetrieveResponse;
-use SDKWork\Web\AppSdk\Models\SitesDeploymentsRollbackResponse;
 
 final class DeploymentApi extends BaseApi
 {
     /** 获取部署历史 */
-    public function sitesDeploymentsList(string $siteId, ?int $pageSize = null, ?string $cursor = null, ?int $status = null): ?SitesDeploymentsListResponse
+    public function applicationsDeploymentsList(string $applicationId, ?int $pageSize = null, ?string $cursor = null, ?int $status = null): ?ApplicationsDeploymentsListResponse
     {
-        $path = $this->interpolatePath('/app/v3/api/sites/{siteId}/deployments', ['siteId' => $this->serializePathParameter($siteId, new PathParameterSpec('siteId', 'simple', false))]);
+        $path = $this->interpolatePath('/app/v3/api/applications/{applicationId}/deployments', ['applicationId' => $this->serializePathParameter($applicationId, new PathParameterSpec('applicationId', 'simple', false))]);
         $query = $this->buildQueryString([
             new QueryParameterSpec('page_size', $pageSize, 'form', true, false, null),
             new QueryParameterSpec('cursor', $cursor, 'form', true, false, null),
@@ -23,13 +23,13 @@ final class DeploymentApi extends BaseApi
         ]);
         $path = $this->appendQueryString($path, $query);
         $result = $this->client->request('GET', $path, []);
-        return is_array($result) ? SitesDeploymentsListResponse::fromArray($result) : null;
+        return is_array($result) ? ApplicationsDeploymentsListResponse::fromArray($result) : null;
     }
 
     /** 发起部署 */
-    public function sitesDeploymentsCreate(string $siteId, array|CreateDeploymentRequest $body, string $idempotencyKey): ?SitesDeploymentsCreateResponse201
+    public function applicationsDeploymentsCreate(string $applicationId, array|CreateDeploymentRequest $body, string $idempotencyKey): ?ApplicationsDeploymentsCreateResponse201
     {
-        $path = $this->interpolatePath('/app/v3/api/sites/{siteId}/deployments', ['siteId' => $this->serializePathParameter($siteId, new PathParameterSpec('siteId', 'simple', false))]);
+        $path = $this->interpolatePath('/app/v3/api/applications/{applicationId}/deployments', ['applicationId' => $this->serializePathParameter($applicationId, new PathParameterSpec('applicationId', 'simple', false))]);
         $payload = $body instanceof CreateDeploymentRequest ? $body->toArray() : $body;
         $requestHeaders = $this->buildRequestHeaders(
             [
@@ -41,21 +41,21 @@ final class DeploymentApi extends BaseApi
             'headers' => $requestHeaders,
             'json' => $payload,
         ]);
-        return is_array($result) ? SitesDeploymentsCreateResponse201::fromArray($result) : null;
+        return is_array($result) ? ApplicationsDeploymentsCreateResponse201::fromArray($result) : null;
     }
 
     /** 获取部署详情 */
-    public function sitesDeploymentsRetrieve(string $siteId, string $deploymentId): ?SitesDeploymentsRetrieveResponse
+    public function applicationsDeploymentsRetrieve(string $applicationId, string $deploymentId): ?ApplicationsDeploymentsRetrieveResponse
     {
-        $path = $this->interpolatePath('/app/v3/api/sites/{siteId}/deployments/{deploymentId}', ['siteId' => $this->serializePathParameter($siteId, new PathParameterSpec('siteId', 'simple', false)), 'deploymentId' => $this->serializePathParameter($deploymentId, new PathParameterSpec('deploymentId', 'simple', false))]);
+        $path = $this->interpolatePath('/app/v3/api/applications/{applicationId}/deployments/{deploymentId}', ['applicationId' => $this->serializePathParameter($applicationId, new PathParameterSpec('applicationId', 'simple', false)), 'deploymentId' => $this->serializePathParameter($deploymentId, new PathParameterSpec('deploymentId', 'simple', false))]);
         $result = $this->client->request('GET', $path, []);
-        return is_array($result) ? SitesDeploymentsRetrieveResponse::fromArray($result) : null;
+        return is_array($result) ? ApplicationsDeploymentsRetrieveResponse::fromArray($result) : null;
     }
 
     /** 基于历史成功版本创建快速还原命令 */
-    public function sitesDeploymentsRollback(string $siteId, string $deploymentId, string $idempotencyKey): ?SitesDeploymentsRollbackResponse
+    public function applicationsDeploymentsRollback(string $applicationId, string $deploymentId, string $idempotencyKey): ?ApplicationsDeploymentsRollbackResponse
     {
-        $path = $this->interpolatePath('/app/v3/api/sites/{siteId}/deployments/{deploymentId}/rollback', ['siteId' => $this->serializePathParameter($siteId, new PathParameterSpec('siteId', 'simple', false)), 'deploymentId' => $this->serializePathParameter($deploymentId, new PathParameterSpec('deploymentId', 'simple', false))]);
+        $path = $this->interpolatePath('/app/v3/api/applications/{applicationId}/deployments/{deploymentId}/rollback', ['applicationId' => $this->serializePathParameter($applicationId, new PathParameterSpec('applicationId', 'simple', false)), 'deploymentId' => $this->serializePathParameter($deploymentId, new PathParameterSpec('deploymentId', 'simple', false))]);
         $requestHeaders = $this->buildRequestHeaders(
             [
                 'Idempotency-Key' => new HeaderParameterSpec($idempotencyKey, 'simple', false, null),
@@ -65,7 +65,7 @@ final class DeploymentApi extends BaseApi
         $result = $this->client->request('POST', $path, [
             'headers' => $requestHeaders,
         ]);
-        return is_array($result) ? SitesDeploymentsRollbackResponse::fromArray($result) : null;
+        return is_array($result) ? ApplicationsDeploymentsRollbackResponse::fromArray($result) : null;
     }
 
     private function buildRequestHeaders(array $headers, array $cookies): array

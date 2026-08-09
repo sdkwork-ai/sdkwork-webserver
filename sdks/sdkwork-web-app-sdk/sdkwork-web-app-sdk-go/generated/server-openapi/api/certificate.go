@@ -18,40 +18,40 @@ func NewCertificateApi(client *sdkhttp.Client) *CertificateApi {
 }
 
 // List certificates active on the domain listener
-func (a *CertificateApi) SitesDomainsListenerCertificateBindingsList(siteId string, domainId string, page *int, pageSize *int) (sdktypes.SitesDomainsListenerCertificateBindingsListResponse, error) {
+func (a *CertificateApi) ApplicationsDomainsListenerCertificateBindingsList(applicationId string, domainId string, page *int, pageSize *int) (sdktypes.ApplicationsDomainsListenerCertificateBindingsListResponse, error) {
     query := BuildQueryString([]QueryParameterSpec{
         {Name: "page", Value: func() interface{} { if page == nil { return nil }; return *page }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "page_size", Value: func() interface{} { if pageSize == nil { return nil }; return *pageSize }(), Style: "form", Explode: true, AllowReserved: false},
     })
-    raw, err := a.client.Get(AppendQueryString(AppApiPath(fmt.Sprintf("/sites/%s/domains/%s/listener_certificate_bindings", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}), SerializePathParameter(domainId, PathParameterSpec{Name: "domainId", Style: "simple", Explode: false}))), query), nil, nil)
+    raw, err := a.client.Get(AppendQueryString(AppApiPath(fmt.Sprintf("/applications/%s/domains/%s/listener_certificate_bindings", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}), SerializePathParameter(domainId, PathParameterSpec{Name: "domainId", Style: "simple", Explode: false}))), query), nil, nil)
     if err != nil {
-        var zero sdktypes.SitesDomainsListenerCertificateBindingsListResponse
+        var zero sdktypes.ApplicationsDomainsListenerCertificateBindingsListResponse
         return zero, err
     }
-    return decodeResult[sdktypes.SitesDomainsListenerCertificateBindingsListResponse](raw)
+    return decodeResult[sdktypes.ApplicationsDomainsListenerCertificateBindingsListResponse](raw)
 }
 
 // Bind a certificate version to the domain listener
-func (a *CertificateApi) SitesDomainsListenerCertificateBindingsCreate(siteId string, domainId string, body sdktypes.CreateListenerCertificateBindingRequest, idempotencyKey string) (sdktypes.SitesDomainsListenerCertificateBindingsCreateResponse201, error) {
+func (a *CertificateApi) ApplicationsDomainsListenerCertificateBindingsCreate(applicationId string, domainId string, body sdktypes.CreateListenerCertificateBindingRequest, idempotencyKey string) (sdktypes.ApplicationsDomainsListenerCertificateBindingsCreateResponse201, error) {
     headers := BuildRequestHeaders(
         map[string]ParameterSpec{"Idempotency-Key": ParameterSpec{Value: idempotencyKey, Style: "simple", Explode: false},},
         map[string]ParameterSpec{},
     )
-    raw, err := a.client.Post(AppApiPath(fmt.Sprintf("/sites/%s/domains/%s/listener_certificate_bindings", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}), SerializePathParameter(domainId, PathParameterSpec{Name: "domainId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
+    raw, err := a.client.Post(AppApiPath(fmt.Sprintf("/applications/%s/domains/%s/listener_certificate_bindings", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}), SerializePathParameter(domainId, PathParameterSpec{Name: "domainId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
     if err != nil {
-        var zero sdktypes.SitesDomainsListenerCertificateBindingsCreateResponse201
+        var zero sdktypes.ApplicationsDomainsListenerCertificateBindingsCreateResponse201
         return zero, err
     }
-    return decodeResult[sdktypes.SitesDomainsListenerCertificateBindingsCreateResponse201](raw)
+    return decodeResult[sdktypes.ApplicationsDomainsListenerCertificateBindingsCreateResponse201](raw)
 }
 
 // Remove a certificate from the domain listener
-func (a *CertificateApi) SitesDomainsListenerCertificateBindingsDelete(siteId string, domainId string, bindingId string, idempotencyKey string) (struct{}, error) {
+func (a *CertificateApi) ApplicationsDomainsListenerCertificateBindingsDelete(applicationId string, domainId string, bindingId string, idempotencyKey string) (struct{}, error) {
     headers := BuildRequestHeaders(
         map[string]ParameterSpec{"Idempotency-Key": ParameterSpec{Value: idempotencyKey, Style: "simple", Explode: false},},
         map[string]ParameterSpec{},
     )
-    raw, err := a.client.Delete(AppApiPath(fmt.Sprintf("/sites/%s/domains/%s/listener_certificate_bindings/%s", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}), SerializePathParameter(domainId, PathParameterSpec{Name: "domainId", Style: "simple", Explode: false}), SerializePathParameter(bindingId, PathParameterSpec{Name: "bindingId", Style: "simple", Explode: false}))), nil, headers)
+    raw, err := a.client.Delete(AppApiPath(fmt.Sprintf("/applications/%s/domains/%s/listener_certificate_bindings/%s", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}), SerializePathParameter(domainId, PathParameterSpec{Name: "domainId", Style: "simple", Explode: false}), SerializePathParameter(bindingId, PathParameterSpec{Name: "bindingId", Style: "simple", Explode: false}))), nil, headers)
     if err != nil {
         var zero struct{}
         return zero, err

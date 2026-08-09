@@ -7,7 +7,7 @@ namespace SDKWork.Web.AppSdk.Models
     public class SourceVersionResponse
     {
         public string Id { get; set; }
-        public string SiteId { get; set; }
+        public string ApplicationId { get; set; }
         public string VersionTag { get; set; }
         public string SourceType { get; set; }
         public string? SourceRef { get; set; }

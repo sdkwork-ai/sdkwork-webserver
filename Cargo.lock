@@ -3567,7 +3567,6 @@ dependencies = [
  "hyper-util",
  "js-sys",
  "log",
- "mime_guess",
  "percent-encoding",
  "pin-project-lite",
  "quinn",
@@ -3937,6 +3936,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "sdkwork-api-mcp-assembly"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "sdkwork-intelligence-mcp-repository-sqlx",
+ "sdkwork-intelligence-mcp-service",
+ "sdkwork-mcp-database-host",
+ "sdkwork-routes-mcp-app-api",
+ "sdkwork-routes-mcp-backend-api",
+ "sdkwork-routes-mcp-shared",
+ "sdkwork-web-bootstrap",
+ "sdkwork-web-core",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
+name = "sdkwork-api-skills-assembly"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "sdkwork-database-sqlx",
+ "sdkwork-intelligence-skills-repository-sqlx",
+ "sdkwork-intelligence-skills-service",
+ "sdkwork-routes-skills-app-api",
+ "sdkwork-routes-skills-backend-api",
+ "sdkwork-skills-database-host",
+ "sdkwork-web-bootstrap",
+ "sdkwork-web-contract",
+ "sdkwork-web-core",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "sdkwork-api-web-server-standalone-gateway"
 version = "0.1.0"
 dependencies = [
@@ -3968,6 +4002,8 @@ dependencies = [
  "rustls 0.23.43",
  "sdkwork-api-drive-assembly",
  "sdkwork-api-iam-assembly",
+ "sdkwork-api-mcp-assembly",
+ "sdkwork-api-skills-assembly",
  "sdkwork-api-webserver-assembly",
  "sdkwork-database-sqlx",
  "sdkwork-drive-contract",
@@ -4019,9 +4055,11 @@ dependencies = [
  "sdkwork-api-deployments-assembly",
  "sdkwork-intelligence-webserver-repository-sqlx",
  "sdkwork-intelligence-webserver-service",
+ "sdkwork-mcp-database-host",
  "sdkwork-routes-webserver-app-api",
  "sdkwork-routes-webserver-backend-api",
  "sdkwork-routes-webserver-internal-api",
+ "sdkwork-skills-database-host",
  "sdkwork-web-bootstrap",
  "sdkwork-web-contract",
  "sdkwork-web-core",
@@ -4030,6 +4068,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.19",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -4614,6 +4653,61 @@ dependencies = [
 ]
 
 [[package]]
+name = "sdkwork-intelligence-mcp-repository-sqlx"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "sdkwork-id-core",
+ "sdkwork-intelligence-mcp-service",
+ "sdkwork-mcp-contract",
+ "sdkwork-utils-rust",
+ "serde_json",
+ "sqlx",
+]
+
+[[package]]
+name = "sdkwork-intelligence-mcp-service"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "regex-lite",
+ "sdkwork-drive-contract",
+ "sdkwork-mcp-contract",
+ "sdkwork-utils-rust",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "sdkwork-intelligence-skills-repository-sqlx"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "sdkwork-database-id",
+ "sdkwork-database-sqlx",
+ "sdkwork-intelligence-skills-service",
+ "sdkwork-skills-contract",
+ "sdkwork-utils-rust",
+ "serde_json",
+ "sqlx",
+]
+
+[[package]]
+name = "sdkwork-intelligence-skills-service"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "regex-lite",
+ "sdkwork-drive-contract",
+ "sdkwork-skills-contract",
+ "sdkwork-utils-rust",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "sdkwork-intelligence-webserver-repository-sqlx"
 version = "0.1.0"
 dependencies = [
@@ -4669,6 +4763,28 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "sdkwork-mcp-contract"
+version = "0.1.0"
+dependencies = [
+ "sdkwork-utils-rust",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "sdkwork-mcp-database-host"
+version = "0.1.0"
+dependencies = [
+ "dotenvy",
+ "sdkwork-database-config",
+ "sdkwork-database-lifecycle",
+ "sdkwork-database-spi",
+ "sdkwork-database-sqlx",
+ "sqlx",
 ]
 
 [[package]]
@@ -4895,6 +5011,94 @@ dependencies = [
 ]
 
 [[package]]
+name = "sdkwork-routes-mcp-app-api"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "sdkwork-iam-web-adapter",
+ "sdkwork-intelligence-mcp-service",
+ "sdkwork-mcp-contract",
+ "sdkwork-routes-mcp-shared",
+ "sdkwork-web-axum",
+ "sdkwork-web-bootstrap",
+ "sdkwork-web-core",
+ "serde",
+ "serde_json",
+ "sqlx",
+]
+
+[[package]]
+name = "sdkwork-routes-mcp-backend-api"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "sdkwork-iam-web-adapter",
+ "sdkwork-intelligence-mcp-service",
+ "sdkwork-mcp-contract",
+ "sdkwork-routes-mcp-shared",
+ "sdkwork-web-axum",
+ "sdkwork-web-core",
+ "serde",
+ "serde_json",
+ "sqlx",
+]
+
+[[package]]
+name = "sdkwork-routes-mcp-shared"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "sdkwork-intelligence-mcp-service",
+ "sdkwork-mcp-contract",
+ "sdkwork-utils-rust",
+ "sdkwork-web-bootstrap",
+ "sdkwork-web-core",
+ "serde",
+ "serde_json",
+ "sqlx",
+]
+
+[[package]]
+name = "sdkwork-routes-skills-app-api"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "sdkwork-intelligence-skills-service",
+ "sdkwork-routes-skills-common",
+ "sdkwork-skills-contract",
+ "sdkwork-web-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "sdkwork-routes-skills-backend-api"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "sdkwork-intelligence-skills-service",
+ "sdkwork-routes-skills-common",
+ "sdkwork-skills-contract",
+ "sdkwork-web-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "sdkwork-routes-skills-common"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "sdkwork-intelligence-skills-service",
+ "sdkwork-skills-contract",
+ "sdkwork-utils-rust",
+ "sdkwork-web-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "sdkwork-routes-storage-backend-api"
 version = "0.1.0"
 dependencies = [
@@ -4991,6 +5195,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "sdkwork-skills-contract"
+version = "0.1.0"
+dependencies = [
+ "sdkwork-utils-rust",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "sdkwork-skills-database-host"
+version = "0.1.0"
+dependencies = [
+ "dotenvy",
+ "sdkwork-database-config",
+ "sdkwork-database-id",
+ "sdkwork-database-lifecycle",
+ "sdkwork-database-spi",
+ "sdkwork-database-sqlx",
+ "sqlx",
+]
+
+[[package]]
 name = "sdkwork-utils-rust"
 version = "0.11.0"
 dependencies = [
@@ -5049,7 +5276,7 @@ name = "sdkwork-web-backend-sdk"
 version = "1.0.0"
 dependencies = [
  "http 1.5.0",
- "reqwest 0.12.28",
+ "reqwest 0.13.4",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -5109,7 +5336,7 @@ name = "sdkwork-web-internal-sdk"
 version = "1.0.0"
 dependencies = [
  "http 1.5.0",
- "reqwest 0.12.28",
+ "reqwest 0.13.4",
  "serde",
  "serde_json",
  "thiserror 1.0.69",

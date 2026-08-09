@@ -47,7 +47,7 @@ client.set_header("X-Custom-Header", "value");
 
 ## API Modules
 
-- `client.site()` - site API
+- `client.application()` - application API
 - `client.domain()` - domain API
 - `client.certificate()` - certificate API
 - `client.source_version()` - source_version API
@@ -57,11 +57,11 @@ client.set_header("X-Custom-Header", "value");
 
 ## Usage Examples
 
-### site
+### application
 
 ```rust
 use std::collections::HashMap;
-// 获取站点列表
+// 获取应用列表
 let mut query = HashMap::new();
 query.insert("page".to_string(), serde_json::json!(1));
 query.insert("page_size".to_string(), serde_json::json!(2));
@@ -69,7 +69,7 @@ query.insert("status".to_string(), serde_json::json!(0));
 query.insert("application_type".to_string(), serde_json::json!("WEB"));
 query.insert("site_type".to_string(), serde_json::json!(1));
 query.insert("keyword".to_string(), serde_json::json!("keyword"));
-let result = client.site().sites_list(Some(&query)).await?;
+let result = client.application().applications_list(Some(&query)).await?;
 println!("{result:?}");
 ```
 
@@ -90,12 +90,12 @@ println!("{result:?}");
 ```rust
 use std::collections::HashMap;
 // List certificates active on the domain listener
-let site_id = "1";
+let application_id = "1";
 let domain_id = "1";
 let mut query = HashMap::new();
 query.insert("page".to_string(), serde_json::json!(1));
 query.insert("page_size".to_string(), serde_json::json!(2));
-let result = client.certificate().sites_domains_listener_certificate_bindings_list(site_id, domain_id, Some(&query)).await?;
+let result = client.certificate().applications_domains_listener_certificate_bindings_list(application_id, domain_id, Some(&query)).await?;
 println!("{result:?}");
 ```
 
@@ -104,11 +104,11 @@ println!("{result:?}");
 ```rust
 use std::collections::HashMap;
 // 获取应用源码版本
-let site_id = "1";
+let application_id = "1";
 let mut query = HashMap::new();
 query.insert("page_size".to_string(), serde_json::json!(1));
 query.insert("cursor".to_string(), serde_json::json!("cursor"));
-let result = client.source_version().sites_source_versions_list(site_id, Some(&query)).await?;
+let result = client.source_version().applications_source_versions_list(application_id, Some(&query)).await?;
 println!("{result:?}");
 ```
 
@@ -117,12 +117,12 @@ println!("{result:?}");
 ```rust
 use std::collections::HashMap;
 // 获取部署历史
-let site_id = "1";
+let application_id = "1";
 let mut query = HashMap::new();
 query.insert("page_size".to_string(), serde_json::json!(1));
 query.insert("cursor".to_string(), serde_json::json!("cursor"));
 query.insert("status".to_string(), serde_json::json!(0));
-let result = client.deployment().sites_deployments_list(site_id, Some(&query)).await?;
+let result = client.deployment().applications_deployments_list(application_id, Some(&query)).await?;
 println!("{result:?}");
 ```
 
@@ -131,10 +131,10 @@ println!("{result:?}");
 ```rust
 use std::collections::HashMap;
 // 获取环境变量列表
-let site_id = "1";
+let application_id = "1";
 let mut query = HashMap::new();
 query.insert("environment".to_string(), serde_json::json!("environment"));
-let result = client.env_variable().sites_env_variables_list(site_id, Some(&query)).await?;
+let result = client.env_variable().applications_env_variables_list(application_id, Some(&query)).await?;
 println!("{result:?}");
 ```
 
@@ -142,8 +142,8 @@ println!("{result:?}");
 
 ```rust
 // 获取健康检查配置
-let site_id = "1";
-let result = client.monitor().sites_health_checks_list(site_id).await?;
+let application_id = "1";
+let result = client.monitor().applications_health_checks_list(application_id).await?;
 println!("{result:?}");
 ```
 

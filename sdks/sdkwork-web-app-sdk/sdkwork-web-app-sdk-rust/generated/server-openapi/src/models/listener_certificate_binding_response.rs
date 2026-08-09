@@ -6,8 +6,8 @@ use crate::models::{ListenerCertificateSummaryResponse};
 pub struct ListenerCertificateBindingResponse {
     pub id: String,
 
-    #[serde(rename = "siteId")]
-    pub site_id: String,
+    #[serde(rename = "applicationId")]
+    pub application_id: String,
 
     #[serde(rename = "domainId")]
     pub domain_id: String,

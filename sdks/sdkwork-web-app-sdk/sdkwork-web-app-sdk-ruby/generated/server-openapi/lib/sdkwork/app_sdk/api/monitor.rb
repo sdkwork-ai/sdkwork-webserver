@@ -1,24 +1,24 @@
 require_relative 'base_api'
+require_relative '../models/applications_health_checks_create_response201'
+require_relative '../models/applications_health_checks_list_response'
 require_relative '../models/create_health_check_request'
-require_relative '../models/sites_health_checks_create_response201'
-require_relative '../models/sites_health_checks_list_response'
 
 module Sdkwork
   module AppSdk
     module Api
       class MonitorApi < BaseApi
           # 获取健康检查配置
-          def sites_health_checks_list(site_id)
-            path = interpolate_path('/app/v3/api/sites/{siteId}/health_checks', siteId: serialize_path_parameter(site_id, PathParameterSpec.new('siteId', 'simple', false)))
+          def applications_health_checks_list(application_id)
+            path = interpolate_path('/app/v3/api/applications/{applicationId}/health_checks', applicationId: serialize_path_parameter(application_id, PathParameterSpec.new('applicationId', 'simple', false)))
             options = {}
 
             result = @client.request('GET', path, **options)
-            result.is_a?(Hash) ? Models::SitesHealthChecksListResponse.from_hash(result) : nil
+            result.is_a?(Hash) ? Models::ApplicationsHealthChecksListResponse.from_hash(result) : nil
           end
 
           # 创建健康检查
-          def sites_health_checks_create(site_id, idempotency_key, body: nil)
-            path = interpolate_path('/app/v3/api/sites/{siteId}/health_checks', siteId: serialize_path_parameter(site_id, PathParameterSpec.new('siteId', 'simple', false)))
+          def applications_health_checks_create(application_id, idempotency_key, body: nil)
+            path = interpolate_path('/app/v3/api/applications/{applicationId}/health_checks', applicationId: serialize_path_parameter(application_id, PathParameterSpec.new('applicationId', 'simple', false)))
             payload = body.respond_to?(:to_hash) ? body.to_hash : body
             request_headers = build_request_headers(
               {
@@ -30,7 +30,7 @@ module Sdkwork
             options[:headers] = request_headers unless request_headers.empty?
             options[:json] = payload unless payload.nil?
             result = @client.request('POST', path, **options)
-            result.is_a?(Hash) ? Models::SitesHealthChecksCreateResponse201.from_hash(result) : nil
+            result.is_a?(Hash) ? Models::ApplicationsHealthChecksCreateResponse201.from_hash(result) : nil
           end
 
         private

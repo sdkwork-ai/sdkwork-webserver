@@ -18,19 +18,19 @@ namespace SDKWork.Web.AppSdk.Api
         /// <summary>
         /// 获取环境变量列表
         /// </summary>
-        public async Task<SDKWork.Web.AppSdk.Models.SitesEnvVariablesListResponse?> SitesEnvVariablesListAsync(string siteId, string? environment = null)
+        public async Task<SDKWork.Web.AppSdk.Models.ApplicationsEnvVariablesListResponse?> ApplicationsEnvVariablesListAsync(string applicationId, string? environment = null)
         {
             var queryString = BuildQueryString(new[]
             {
                 new QueryParameterSpec("environment", environment, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Web.AppSdk.Models.SitesEnvVariablesListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath($"/sites/{SerializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false))}/env_variables"), queryString));
+            return await _client.GetAsync<SDKWork.Web.AppSdk.Models.ApplicationsEnvVariablesListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/env_variables"), queryString));
         }
 
         /// <summary>
         /// 创建环境变量
         /// </summary>
-        public async Task<SDKWork.Web.AppSdk.Models.SitesEnvVariablesCreateResponse201?> SitesEnvVariablesCreateAsync(string siteId, SDKWork.Web.AppSdk.Models.CreateEnvVariableRequest body, string idempotencyKey)
+        public async Task<SDKWork.Web.AppSdk.Models.ApplicationsEnvVariablesCreateResponse201?> ApplicationsEnvVariablesCreateAsync(string applicationId, SDKWork.Web.AppSdk.Models.CreateEnvVariableRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -39,13 +39,13 @@ namespace SDKWork.Web.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Web.AppSdk.Models.SitesEnvVariablesCreateResponse201>(ApiPaths.AppPath($"/sites/{SerializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false))}/env_variables"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.Web.AppSdk.Models.ApplicationsEnvVariablesCreateResponse201>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/env_variables"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
         /// 轮换环境变量值
         /// </summary>
-        public async Task<SDKWork.Web.AppSdk.Models.SitesEnvVariablesUpdateResponse?> SitesEnvVariablesUpdateAsync(string siteId, string variableId, SDKWork.Web.AppSdk.Models.UpdateEnvVariableRequest body, string idempotencyKey)
+        public async Task<SDKWork.Web.AppSdk.Models.ApplicationsEnvVariablesUpdateResponse?> ApplicationsEnvVariablesUpdateAsync(string applicationId, string variableId, SDKWork.Web.AppSdk.Models.UpdateEnvVariableRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -54,13 +54,13 @@ namespace SDKWork.Web.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PatchAsync<SDKWork.Web.AppSdk.Models.SitesEnvVariablesUpdateResponse>(ApiPaths.AppPath($"/sites/{SerializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false))}/env_variables/{SerializePathParameter(variableId, new PathParameterSpec("variableId", "simple", false))}"), body, null, requestHeaders, "application/json");
+            return await _client.PatchAsync<SDKWork.Web.AppSdk.Models.ApplicationsEnvVariablesUpdateResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/env_variables/{SerializePathParameter(variableId, new PathParameterSpec("variableId", "simple", false))}"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
         /// 删除环境变量
         /// </summary>
-        public async Task SitesEnvVariablesDeleteAsync(string siteId, string variableId, string idempotencyKey)
+        public async Task ApplicationsEnvVariablesDeleteAsync(string applicationId, string variableId, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -69,7 +69,7 @@ namespace SDKWork.Web.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            await _client.DeleteAsync<object>(ApiPaths.AppPath($"/sites/{SerializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false))}/env_variables/{SerializePathParameter(variableId, new PathParameterSpec("variableId", "simple", false))}"), null, requestHeaders);
+            await _client.DeleteAsync<object>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/env_variables/{SerializePathParameter(variableId, new PathParameterSpec("variableId", "simple", false))}"), null, requestHeaders);
         }
 
         private sealed record PathParameterSpec(string Name, string Style, bool Explode);

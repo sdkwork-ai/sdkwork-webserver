@@ -1,6 +1,6 @@
 export { BaseApi } from './base';
 export { appApiPath } from './paths';
-export { SiteApi, createSiteApi } from './site';
+export { ApplicationApi, createApplicationApi } from './application';
 export { DomainApi, createDomainApi } from './domain';
 export { CertificateApi, createCertificateApi } from './certificate';
 export { SourceVersionApi, createSourceVersionApi } from './source-version';

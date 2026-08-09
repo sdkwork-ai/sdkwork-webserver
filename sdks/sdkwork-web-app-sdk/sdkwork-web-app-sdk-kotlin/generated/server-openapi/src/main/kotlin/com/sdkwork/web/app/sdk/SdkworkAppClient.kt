@@ -2,7 +2,7 @@ package com.sdkwork.web.app.sdk
 
 import com.sdkwork.common.core.SdkConfig
 import com.sdkwork.web.app.sdk.http.HttpClient
-import com.sdkwork.web.app.sdk.api.SiteApi
+import com.sdkwork.web.app.sdk.api.ApplicationApi
 import com.sdkwork.web.app.sdk.api.DomainApi
 import com.sdkwork.web.app.sdk.api.CertificateApi
 import com.sdkwork.web.app.sdk.api.SourceVersionApi
@@ -13,7 +13,7 @@ import com.sdkwork.web.app.sdk.api.MonitorApi
 open class SdkworkAppClient {
     private val httpClient: HttpClient
 
-    lateinit var site: SiteApi
+    lateinit var application: ApplicationApi
     lateinit var domain: DomainApi
     lateinit var certificate: CertificateApi
     lateinit var sourceVersion: SourceVersionApi
@@ -23,7 +23,7 @@ open class SdkworkAppClient {
 
     constructor(baseUrl: String) {
         this.httpClient = HttpClient(baseUrl)
-        site = SiteApi(httpClient)
+        application = ApplicationApi(httpClient)
         domain = DomainApi(httpClient)
         certificate = CertificateApi(httpClient)
         sourceVersion = SourceVersionApi(httpClient)
@@ -34,7 +34,7 @@ open class SdkworkAppClient {
 
     constructor(config: SdkConfig) {
         this.httpClient = HttpClient(config)
-        site = SiteApi(httpClient)
+        application = ApplicationApi(httpClient)
         domain = DomainApi(httpClient)
         certificate = CertificateApi(httpClient)
         sourceVersion = SourceVersionApi(httpClient)

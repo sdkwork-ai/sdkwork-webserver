@@ -726,7 +726,7 @@ impl WebRepository {
 fn map_deployment_row(row: &EngineRow, site_id: &str) -> Result<DeploymentResponse, sqlx::Error> {
     Ok(DeploymentResponse {
         id: row.try_get("uuid")?,
-        site_id: site_id.to_owned(),
+        application_id: site_id.to_owned(),
         status: row.try_get("status")?,
         deploy_type: row.try_get("deploy_type")?,
         source_version_id: row.try_get("source_version_id")?,

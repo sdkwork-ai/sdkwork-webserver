@@ -9,44 +9,44 @@ import com.sdkwork.web.app.sdk.http.HttpClient
 class DeploymentApi(private val client: HttpClient) {
 
     /** 获取部署历史 */
-    suspend fun sitesDeploymentsList(siteId: String, pageSize: Int? = null, cursor: String? = null, status: Int? = null): SitesDeploymentsListResponse? {
+    suspend fun applicationsDeploymentsList(applicationId: String, pageSize: Int? = null, cursor: String? = null, status: Int? = null): ApplicationsDeploymentsListResponse? {
         val query = buildQueryString(listOf(
             QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             QueryParameterSpec("cursor", cursor, "form", true, false, null),
             QueryParameterSpec("status", status, "form", true, false, null)
         ))
-        val raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/sites/${serializePathParameter(siteId, PathParameterSpec("siteId", "simple", false))}/deployments"), query))
-        return client.convertValue(raw, object : TypeReference<SitesDeploymentsListResponse>() {})
+        val raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/applications/${serializePathParameter(applicationId, PathParameterSpec("applicationId", "simple", false))}/deployments"), query))
+        return client.convertValue(raw, object : TypeReference<ApplicationsDeploymentsListResponse>() {})
     }
 
     /** 发起部署 */
-    suspend fun sitesDeploymentsCreate(siteId: String, body: CreateDeploymentRequest, idempotencyKey: String): SitesDeploymentsCreateResponse201? {
+    suspend fun applicationsDeploymentsCreate(applicationId: String, body: CreateDeploymentRequest, idempotencyKey: String): ApplicationsDeploymentsCreateResponse201? {
         val requestHeaders = buildRequestHeaders(
             mapOf(
                 "Idempotency-Key" to HeaderParameterSpec(idempotencyKey, "simple", false, null),
             ),
             emptyMap()
         )
-        val raw = client.post(ApiPaths.appPath("/sites/${serializePathParameter(siteId, PathParameterSpec("siteId", "simple", false))}/deployments"), body, null, requestHeaders, "application/json")
-        return client.convertValue(raw, object : TypeReference<SitesDeploymentsCreateResponse201>() {})
+        val raw = client.post(ApiPaths.appPath("/applications/${serializePathParameter(applicationId, PathParameterSpec("applicationId", "simple", false))}/deployments"), body, null, requestHeaders, "application/json")
+        return client.convertValue(raw, object : TypeReference<ApplicationsDeploymentsCreateResponse201>() {})
     }
 
     /** 获取部署详情 */
-    suspend fun sitesDeploymentsRetrieve(siteId: String, deploymentId: String): SitesDeploymentsRetrieveResponse? {
-        val raw = client.get(ApiPaths.appPath("/sites/${serializePathParameter(siteId, PathParameterSpec("siteId", "simple", false))}/deployments/${serializePathParameter(deploymentId, PathParameterSpec("deploymentId", "simple", false))}"))
-        return client.convertValue(raw, object : TypeReference<SitesDeploymentsRetrieveResponse>() {})
+    suspend fun applicationsDeploymentsRetrieve(applicationId: String, deploymentId: String): ApplicationsDeploymentsRetrieveResponse? {
+        val raw = client.get(ApiPaths.appPath("/applications/${serializePathParameter(applicationId, PathParameterSpec("applicationId", "simple", false))}/deployments/${serializePathParameter(deploymentId, PathParameterSpec("deploymentId", "simple", false))}"))
+        return client.convertValue(raw, object : TypeReference<ApplicationsDeploymentsRetrieveResponse>() {})
     }
 
     /** 基于历史成功版本创建快速还原命令 */
-    suspend fun sitesDeploymentsRollback(siteId: String, deploymentId: String, idempotencyKey: String): SitesDeploymentsRollbackResponse? {
+    suspend fun applicationsDeploymentsRollback(applicationId: String, deploymentId: String, idempotencyKey: String): ApplicationsDeploymentsRollbackResponse? {
         val requestHeaders = buildRequestHeaders(
             mapOf(
                 "Idempotency-Key" to HeaderParameterSpec(idempotencyKey, "simple", false, null),
             ),
             emptyMap()
         )
-        val raw = client.post(ApiPaths.appPath("/sites/${serializePathParameter(siteId, PathParameterSpec("siteId", "simple", false))}/deployments/${serializePathParameter(deploymentId, PathParameterSpec("deploymentId", "simple", false))}/rollback"), null, null, requestHeaders)
-        return client.convertValue(raw, object : TypeReference<SitesDeploymentsRollbackResponse>() {})
+        val raw = client.post(ApiPaths.appPath("/applications/${serializePathParameter(applicationId, PathParameterSpec("applicationId", "simple", false))}/deployments/${serializePathParameter(deploymentId, PathParameterSpec("deploymentId", "simple", false))}/rollback"), null, null, requestHeaders)
+        return client.convertValue(raw, object : TypeReference<ApplicationsDeploymentsRollbackResponse>() {})
     }
 
     private data class PathParameterSpec(val name: String, val style: String, val explode: Boolean)

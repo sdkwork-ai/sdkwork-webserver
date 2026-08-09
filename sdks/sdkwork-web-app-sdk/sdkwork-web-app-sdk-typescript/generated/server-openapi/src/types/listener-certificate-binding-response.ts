@@ -2,7 +2,7 @@ import type { ListenerCertificateSummaryResponse } from './listener-certificate-
 
 export interface ListenerCertificateBindingResponse {
   id: string;
-  siteId: string;
+  applicationId: string;
   domainId: string;
   certificateId: string;
   desiredCertificateVersionId: string;

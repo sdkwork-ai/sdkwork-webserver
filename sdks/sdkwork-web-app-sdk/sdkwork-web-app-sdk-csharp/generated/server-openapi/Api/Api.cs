@@ -5,7 +5,7 @@ namespace SDKWork.Web.AppSdk.Api
     /// </summary>
     public static class Api
     {
-        public static SiteApi? Site { get; set; }
+        public static ApplicationApi? Application { get; set; }
         public static DomainApi? Domain { get; set; }
         public static CertificateApi? Certificate { get; set; }
         public static SourceVersionApi? SourceVersion { get; set; }

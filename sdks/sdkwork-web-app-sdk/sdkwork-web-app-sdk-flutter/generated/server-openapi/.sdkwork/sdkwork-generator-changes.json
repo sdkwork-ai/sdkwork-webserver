@@ -9,36 +9,40 @@
     "protocol": "http",
     "packageName": "sdkwork_web_app_sdk"
   },
-  "changeFingerprint": "c65c7946596d5044de4003962cb51f486f98ed824eab645cd5e33ae1259d20c3",
+  "changeFingerprint": "7dd15dfd249603826f3abe1a4117c0bdb3fa76147a1f87117918277651b99f52",
   "changes": {
-    "createdGeneratedFiles": [],
-    "updatedGeneratedFiles": [],
-    "unchangedGeneratedFiles": [
-      "bin/publish-core.mjs",
-      "bin/publish.ps1",
-      "bin/publish.sh",
-      "CHANGELOG.md",
+    "createdGeneratedFiles": [
+      "lib/src/api/application.dart"
+    ],
+    "updatedGeneratedFiles": [
       "lib/app_client.dart",
-      "lib/sdkwork_web_app_sdk.dart",
       "lib/src/api/api.dart",
       "lib/src/api/certificate.dart",
       "lib/src/api/deployment.dart",
       "lib/src/api/domain.dart",
       "lib/src/api/env_variable.dart",
       "lib/src/api/monitor.dart",
+      "lib/src/api/source_version.dart",
+      "lib/src/models.dart",
+      "README.md"
+    ],
+    "unchangedGeneratedFiles": [
+      "bin/publish-core.mjs",
+      "bin/publish.ps1",
+      "bin/publish.sh",
+      "CHANGELOG.md",
+      "lib/sdkwork_web_app_sdk.dart",
       "lib/src/api/paths.dart",
       "lib/src/api/response_helpers.dart",
-      "lib/src/api/site.dart",
-      "lib/src/api/source_version.dart",
       "lib/src/http/client.dart",
-      "lib/src/models.dart",
       "LICENSE",
       "pubspec_overrides.yaml",
       "pubspec.yaml",
-      "README.md",
       "sdkwork-sdk.json"
     ],
-    "deletedGeneratedFiles": [],
+    "deletedGeneratedFiles": [
+      "lib/src/api/site.dart"
+    ],
     "scaffoldedFiles": [],
     "preservedScaffoldFiles": [
       "custom/README.md"
@@ -47,26 +51,79 @@
   },
   "impact": {
     "schemaVersion": 1,
-    "areas": [],
-    "details": [],
-    "requiresVerification": false,
-    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped."
+    "areas": [
+      "api-surface",
+      "models",
+      "documentation"
+    ],
+    "details": [
+      {
+        "area": "api-surface",
+        "paths": [
+          "lib/app_client.dart",
+          "lib/src/api/api.dart",
+          "lib/src/api/application.dart",
+          "lib/src/api/certificate.dart",
+          "lib/src/api/deployment.dart",
+          "lib/src/api/domain.dart",
+          "lib/src/api/env_variable.dart",
+          "lib/src/api/monitor.dart",
+          "lib/src/api/site.dart",
+          "lib/src/api/source_version.dart"
+        ]
+      },
+      {
+        "area": "models",
+        "paths": [
+          "lib/src/models.dart"
+        ]
+      },
+      {
+        "area": "documentation",
+        "paths": [
+          "README.md"
+        ]
+      }
+    ],
+    "requiresVerification": true,
+    "summary": "Detected impact areas: api-surface, models, documentation. Verification is required."
   },
   "verificationPlan": {
-    "shouldRun": false,
-    "runPhase": "skip",
-    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped.",
-    "steps": []
+    "shouldRun": true,
+    "runPhase": "now",
+    "summary": "Detected impact areas: api-surface, models, documentation. Verification is required. Run the required verification commands now against the generated SDK output.",
+    "steps": [
+      {
+        "id": "check",
+        "title": "Unified package check",
+        "required": true,
+        "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, documentation.",
+        "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-app-sdk\\sdkwork-web-app-sdk-flutter\\generated\\server-openapi",
+        "command": "node",
+        "args": [
+          "./bin/publish-core.mjs",
+          "--language",
+          "flutter",
+          "--project-dir",
+          ".",
+          "--action",
+          "check"
+        ],
+        "displayCommand": "node ./bin/publish-core.mjs --language flutter --project-dir . --action check"
+      }
+    ]
   },
   "executionDecision": {
     "schemaVersion": 1,
-    "riskLevel": "low",
-    "nextAction": "skip",
+    "riskLevel": "high",
+    "nextAction": "verify",
     "requiresManualReview": false,
     "applyRequiresExpectedFingerprint": false,
-    "summary": "No actionable changes were detected. No apply or verification step is required.",
+    "summary": "Changes have been applied. Run the required verification plan now.",
     "reasons": [
-      "no-actionable-changes"
+      "deleted-generated-files",
+      "manual-review-required",
+      "verification-required"
     ]
   },
   "preservedLegacyFiles": false

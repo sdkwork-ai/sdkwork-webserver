@@ -8,19 +8,19 @@ public class MonitorApi {
     }
 
     /// 获取健康检查配置
-    public func sitesHealthChecksList(siteId: String) async throws -> SitesHealthChecksListResponse? {
-        return try await client.get(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/health_checks"), responseType: SitesHealthChecksListResponse.self)
+    public func applicationsHealthChecksList(applicationId: String) async throws -> ApplicationsHealthChecksListResponse? {
+        return try await client.get(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/health_checks"), responseType: ApplicationsHealthChecksListResponse.self)
     }
 
     /// 创建健康检查
-    public func sitesHealthChecksCreate(siteId: String, body: CreateHealthCheckRequest, idempotencyKey: String) async throws -> SitesHealthChecksCreateResponse201? {
+    public func applicationsHealthChecksCreate(applicationId: String, body: CreateHealthCheckRequest, idempotencyKey: String) async throws -> ApplicationsHealthChecksCreateResponse201? {
         let requestHeaders = buildRequestHeaders(
             [
                 "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
             ],
             [:]
         )
-        return try await client.post(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/health_checks"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: SitesHealthChecksCreateResponse201.self)
+        return try await client.post(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/health_checks"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: ApplicationsHealthChecksCreateResponse201.self)
     }
 
     private struct PathParameterSpec {

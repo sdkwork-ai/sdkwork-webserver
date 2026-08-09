@@ -2,7 +2,7 @@ package com.sdkwork.web.app.sdk;
 
 import com.sdkwork.common.core.Types;
 import com.sdkwork.web.app.sdk.http.HttpClient;
-import com.sdkwork.web.app.sdk.api.SiteApi;
+import com.sdkwork.web.app.sdk.api.ApplicationApi;
 import com.sdkwork.web.app.sdk.api.DomainApi;
 import com.sdkwork.web.app.sdk.api.CertificateApi;
 import com.sdkwork.web.app.sdk.api.SourceVersionApi;
@@ -12,7 +12,7 @@ import com.sdkwork.web.app.sdk.api.MonitorApi;
 
 public class SdkworkAppClient {
     private final HttpClient httpClient;
-    private SiteApi site;
+    private ApplicationApi application;
     private DomainApi domain;
     private CertificateApi certificate;
     private SourceVersionApi sourceVersion;
@@ -22,7 +22,7 @@ public class SdkworkAppClient {
 
     public SdkworkAppClient(String baseUrl) {
         this.httpClient = new HttpClient(baseUrl);
-        this.site = new SiteApi(httpClient);
+        this.application = new ApplicationApi(httpClient);
         this.domain = new DomainApi(httpClient);
         this.certificate = new CertificateApi(httpClient);
         this.sourceVersion = new SourceVersionApi(httpClient);
@@ -33,7 +33,7 @@ public class SdkworkAppClient {
 
     public SdkworkAppClient(Types.SdkConfig config) {
         this.httpClient = new HttpClient(config);
-        this.site = new SiteApi(httpClient);
+        this.application = new ApplicationApi(httpClient);
         this.domain = new DomainApi(httpClient);
         this.certificate = new CertificateApi(httpClient);
         this.sourceVersion = new SourceVersionApi(httpClient);
@@ -42,8 +42,8 @@ public class SdkworkAppClient {
         this.monitor = new MonitorApi(httpClient);
     }
 
-    public SiteApi getSite() {
-        return this.site;
+    public ApplicationApi getApplication() {
+        return this.application;
     }
 
     public DomainApi getDomain() {

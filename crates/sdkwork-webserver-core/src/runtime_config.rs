@@ -316,7 +316,9 @@ pub struct DatabaseSection {
     pub schema: Option<String>,
     pub schema_fallback_public: Option<bool>,
     pub username: Option<String>,
-    /// Workspace database secret file (`/etc/sdkwork/database/database.secret`);
+    /// Workspace database secret file
+    /// (`/etc/sdkwork/webserver/secrets/database.secret` on a
+    /// single-application host, ENVIRONMENT_SPEC section 7.3 exception);
     /// its content is injected in-process as `SDKWORK_DATABASE_PASSWORD`
     /// (the Drive dependency requires the direct value).
     pub password_file: Option<String>,
@@ -377,6 +379,11 @@ pub struct SecretsSection {
     /// Deployments domain encryption master key file
     /// (`SDKWORK_DEPLOY_SECRET_ENCRYPTION_KEY`).
     pub deploy_encryption_key_file: Option<String>,
+    /// Credential-entry bootstrap Access-Token file for the PC login page
+    /// (`SDKWORK_WEBSERVER_CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN`). The
+    /// gateway injects its content into the served `index.html` so the
+    /// identity-service metadata endpoints accept the login renderer.
+    pub credential_entry_bootstrap_access_token_file: Option<String>,
 }
 
 impl SecretsSection {
@@ -392,6 +399,22 @@ impl SecretsSection {
                 "SDKWORK_DEPLOY_SECRET_ENCRYPTION_KEY",
                 &read_secret_file(value)?,
             );
+        }
+        if let Some(value) = &self.credential_entry_bootstrap_access_token_file {
+            // Optional secret: when the file is absent (production without a
+            // provisioned credential-entry bootstrap token) the login page
+            // simply is not bootstrapped; the gateway fails closed on the
+            // identity endpoints instead of failing startup.
+            match read_secret_file(value) {
+                Ok(token) => set_env(
+                    "SDKWORK_WEBSERVER_CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN",
+                    &token,
+                ),
+                Err(_) => set_env(
+                    "SDKWORK_WEBSERVER_CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN",
+                    "",
+                ),
+            }
         }
         Ok(())
     }
@@ -555,7 +578,7 @@ name = "sdkwork_ai_test"
 schema = "sdkwork_ai_test"
 schema_fallback_public = false
 username = "sdkwork_ai_test"
-password_file = "/etc/sdkwork/database/database.secret"
+password_file = "/etc/sdkwork/webserver/secrets/database.secret"
 ssl_mode = "disable"
 max_connections = 10
 auto_migrate = true

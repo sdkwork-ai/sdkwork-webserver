@@ -31,7 +31,7 @@ export function createBrowserPortalStatistics(
   return {
     async load() {
       const client = await loadClient();
-      const result = await client.site.list({ page: 1, pageSize: 1, status: 1 });
+      const result = await client.application.list({ page: 1, pageSize: 1, status: 1 });
       const totalItems = result.pageInfo.totalItems?.trim();
       if (totalItems && /^\d+$/.test(totalItems)) {
         return { deployedApplications: totalItems.replace(/^0+(?=\d)/, "") };

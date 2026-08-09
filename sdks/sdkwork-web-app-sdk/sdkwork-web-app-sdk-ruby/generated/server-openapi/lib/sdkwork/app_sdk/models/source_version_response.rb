@@ -2,12 +2,12 @@ module Sdkwork
   module AppSdk
     module Models
       class SourceVersionResponse
-              attr_accessor :id, :site_id, :version_tag, :source_type, :source_ref, :commit_hash, :artifact_drive_uri, :artifact_size, :artifact_hash, :config_snapshot, :status, :retained, :created_at
+              attr_accessor :id, :application_id, :version_tag, :source_type, :source_ref, :commit_hash, :artifact_drive_uri, :artifact_size, :artifact_hash, :config_snapshot, :status, :retained, :created_at
 
               def initialize(attributes = {})
                 attributes = (attributes || {}).transform_keys(&:to_s)
                 @id = attributes['id']
-                @site_id = attributes['siteId']
+                @application_id = attributes['applicationId']
                 @version_tag = attributes['versionTag']
                 @source_type = attributes['sourceType']
                 @source_ref = attributes['sourceRef']
@@ -30,7 +30,7 @@ module Sdkwork
               def to_hash
                 {
                   'id' => @id,
-                  'siteId' => @site_id,
+                  'applicationId' => @application_id,
                   'versionTag' => @version_tag,
                   'sourceType' => @source_type,
                   'sourceRef' => @source_ref,

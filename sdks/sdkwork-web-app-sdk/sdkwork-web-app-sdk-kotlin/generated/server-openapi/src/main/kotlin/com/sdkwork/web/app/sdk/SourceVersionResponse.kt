@@ -2,7 +2,7 @@ package com.sdkwork.web.app.sdk
 
 data class SourceVersionResponse(
     val id: String? = null,
-    val siteId: String? = null,
+    val applicationId: String? = null,
     val versionTag: String? = null,
     val sourceType: String? = null,
     val sourceRef: String? = null,

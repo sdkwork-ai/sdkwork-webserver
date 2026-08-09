@@ -18,46 +18,46 @@ func NewDomainApi(client *sdkhttp.Client) *DomainApi {
 }
 
 // 获取站点域名列表
-func (a *DomainApi) SitesDomainsList(siteId string, page *int, pageSize *int) (sdktypes.SitesDomainsListResponse, error) {
+func (a *DomainApi) ApplicationsDomainsList(applicationId string, page *int, pageSize *int) (sdktypes.ApplicationsDomainsListResponse, error) {
     query := BuildQueryString([]QueryParameterSpec{
         {Name: "page", Value: func() interface{} { if page == nil { return nil }; return *page }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "page_size", Value: func() interface{} { if pageSize == nil { return nil }; return *pageSize }(), Style: "form", Explode: true, AllowReserved: false},
     })
-    raw, err := a.client.Get(AppendQueryString(AppApiPath(fmt.Sprintf("/sites/%s/domains", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}))), query), nil, nil)
+    raw, err := a.client.Get(AppendQueryString(AppApiPath(fmt.Sprintf("/applications/%s/domains", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}))), query), nil, nil)
     if err != nil {
-        var zero sdktypes.SitesDomainsListResponse
+        var zero sdktypes.ApplicationsDomainsListResponse
         return zero, err
     }
-    return decodeResult[sdktypes.SitesDomainsListResponse](raw)
+    return decodeResult[sdktypes.ApplicationsDomainsListResponse](raw)
 }
 
 // 绑定域名
-func (a *DomainApi) SitesDomainsCreate(siteId string, body sdktypes.CreateDomainRequest, idempotencyKey string) (sdktypes.SitesDomainsCreateResponse201, error) {
+func (a *DomainApi) ApplicationsDomainsCreate(applicationId string, body sdktypes.CreateDomainRequest, idempotencyKey string) (sdktypes.ApplicationsDomainsCreateResponse201, error) {
     headers := BuildRequestHeaders(
         map[string]ParameterSpec{"Idempotency-Key": ParameterSpec{Value: idempotencyKey, Style: "simple", Explode: false},},
         map[string]ParameterSpec{},
     )
-    raw, err := a.client.Post(AppApiPath(fmt.Sprintf("/sites/%s/domains", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
+    raw, err := a.client.Post(AppApiPath(fmt.Sprintf("/applications/%s/domains", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
     if err != nil {
-        var zero sdktypes.SitesDomainsCreateResponse201
+        var zero sdktypes.ApplicationsDomainsCreateResponse201
         return zero, err
     }
-    return decodeResult[sdktypes.SitesDomainsCreateResponse201](raw)
+    return decodeResult[sdktypes.ApplicationsDomainsCreateResponse201](raw)
 }
 
 // 获取域名详情
-func (a *DomainApi) SitesDomainsRetrieve(siteId string, domainId string) (sdktypes.SitesDomainsRetrieveResponse, error) {
-    raw, err := a.client.Get(AppApiPath(fmt.Sprintf("/sites/%s/domains/%s", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}), SerializePathParameter(domainId, PathParameterSpec{Name: "domainId", Style: "simple", Explode: false}))), nil, nil)
+func (a *DomainApi) ApplicationsDomainsRetrieve(applicationId string, domainId string) (sdktypes.ApplicationsDomainsRetrieveResponse, error) {
+    raw, err := a.client.Get(AppApiPath(fmt.Sprintf("/applications/%s/domains/%s", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}), SerializePathParameter(domainId, PathParameterSpec{Name: "domainId", Style: "simple", Explode: false}))), nil, nil)
     if err != nil {
-        var zero sdktypes.SitesDomainsRetrieveResponse
+        var zero sdktypes.ApplicationsDomainsRetrieveResponse
         return zero, err
     }
-    return decodeResult[sdktypes.SitesDomainsRetrieveResponse](raw)
+    return decodeResult[sdktypes.ApplicationsDomainsRetrieveResponse](raw)
 }
 
 // 解绑域名
-func (a *DomainApi) SitesDomainsDelete(siteId string, domainId string) (struct{}, error) {
-    raw, err := a.client.Delete(AppApiPath(fmt.Sprintf("/sites/%s/domains/%s", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}), SerializePathParameter(domainId, PathParameterSpec{Name: "domainId", Style: "simple", Explode: false}))), nil, nil)
+func (a *DomainApi) ApplicationsDomainsDelete(applicationId string, domainId string) (struct{}, error) {
+    raw, err := a.client.Delete(AppApiPath(fmt.Sprintf("/applications/%s/domains/%s", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}), SerializePathParameter(domainId, PathParameterSpec{Name: "domainId", Style: "simple", Explode: false}))), nil, nil)
     if err != nil {
         var zero struct{}
         return zero, err
@@ -66,17 +66,17 @@ func (a *DomainApi) SitesDomainsDelete(siteId string, domainId string) (struct{}
 }
 
 // 创建或检查域名所有权验证挑战
-func (a *DomainApi) SitesDomainsVerify(siteId string, domainId string, idempotencyKey string) (sdktypes.SitesDomainsVerifyResponse, error) {
+func (a *DomainApi) ApplicationsDomainsVerify(applicationId string, domainId string, idempotencyKey string) (sdktypes.ApplicationsDomainsVerifyResponse, error) {
     headers := BuildRequestHeaders(
         map[string]ParameterSpec{"Idempotency-Key": ParameterSpec{Value: idempotencyKey, Style: "simple", Explode: false},},
         map[string]ParameterSpec{},
     )
-    raw, err := a.client.Post(AppApiPath(fmt.Sprintf("/sites/%s/domains/%s/verify", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}), SerializePathParameter(domainId, PathParameterSpec{Name: "domainId", Style: "simple", Explode: false}))), nil, nil, headers, "")
+    raw, err := a.client.Post(AppApiPath(fmt.Sprintf("/applications/%s/domains/%s/verify", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}), SerializePathParameter(domainId, PathParameterSpec{Name: "domainId", Style: "simple", Explode: false}))), nil, nil, headers, "")
     if err != nil {
-        var zero sdktypes.SitesDomainsVerifyResponse
+        var zero sdktypes.ApplicationsDomainsVerifyResponse
         return zero, err
     }
-    return decodeResult[sdktypes.SitesDomainsVerifyResponse](raw)
+    return decodeResult[sdktypes.ApplicationsDomainsVerifyResponse](raw)
 }
 
 // 获取证书可签发域名列表

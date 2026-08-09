@@ -2,12 +2,12 @@ module Sdkwork
   module AppSdk
     module Models
       class ListenerCertificateBindingResponse
-              attr_accessor :id, :site_id, :domain_id, :certificate_id, :desired_certificate_version_id, :current_certificate_version_id, :desired_certificate, :current_certificate, :key_algorithm, :priority, :is_default, :status, :activated_at, :created_at, :updated_at
+              attr_accessor :id, :application_id, :domain_id, :certificate_id, :desired_certificate_version_id, :current_certificate_version_id, :desired_certificate, :current_certificate, :key_algorithm, :priority, :is_default, :status, :activated_at, :created_at, :updated_at
 
               def initialize(attributes = {})
                 attributes = (attributes || {}).transform_keys(&:to_s)
                 @id = attributes['id']
-                @site_id = attributes['siteId']
+                @application_id = attributes['applicationId']
                 @domain_id = attributes['domainId']
                 @certificate_id = attributes['certificateId']
                 @desired_certificate_version_id = attributes['desiredCertificateVersionId']
@@ -32,7 +32,7 @@ module Sdkwork
               def to_hash
                 {
                   'id' => @id,
-                  'siteId' => @site_id,
+                  'applicationId' => @application_id,
                   'domainId' => @domain_id,
                   'certificateId' => @certificate_id,
                   'desiredCertificateVersionId' => @desired_certificate_version_id,

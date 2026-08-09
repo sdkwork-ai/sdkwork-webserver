@@ -3,7 +3,7 @@ package types
 
 type SourceVersionResponse struct {
 	Id string `json:"id"`
-	SiteId string `json:"siteId"`
+	ApplicationId string `json:"applicationId"`
 	VersionTag string `json:"versionTag"`
 	SourceType string `json:"sourceType"`
 	SourceRef string `json:"sourceRef"`

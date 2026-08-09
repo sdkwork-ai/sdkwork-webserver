@@ -4,32 +4,32 @@ declare(strict_types=1);
 
 namespace SDKWork\Web\AppSdk\Api;
 
+use SDKWork\Web\AppSdk\Models\ApplicationsDomainsCreateResponse201;
+use SDKWork\Web\AppSdk\Models\ApplicationsDomainsListResponse;
+use SDKWork\Web\AppSdk\Models\ApplicationsDomainsRetrieveResponse;
+use SDKWork\Web\AppSdk\Models\ApplicationsDomainsVerifyResponse;
 use SDKWork\Web\AppSdk\Models\CreateDomainRequest;
 use SDKWork\Web\AppSdk\Models\DomainsListResponse;
-use SDKWork\Web\AppSdk\Models\SitesDomainsCreateResponse201;
-use SDKWork\Web\AppSdk\Models\SitesDomainsListResponse;
-use SDKWork\Web\AppSdk\Models\SitesDomainsRetrieveResponse;
-use SDKWork\Web\AppSdk\Models\SitesDomainsVerifyResponse;
 
 final class DomainApi extends BaseApi
 {
     /** 获取站点域名列表 */
-    public function sitesDomainsList(string $siteId, ?int $page = null, ?int $pageSize = null): ?SitesDomainsListResponse
+    public function applicationsDomainsList(string $applicationId, ?int $page = null, ?int $pageSize = null): ?ApplicationsDomainsListResponse
     {
-        $path = $this->interpolatePath('/app/v3/api/sites/{siteId}/domains', ['siteId' => $this->serializePathParameter($siteId, new PathParameterSpec('siteId', 'simple', false))]);
+        $path = $this->interpolatePath('/app/v3/api/applications/{applicationId}/domains', ['applicationId' => $this->serializePathParameter($applicationId, new PathParameterSpec('applicationId', 'simple', false))]);
         $query = $this->buildQueryString([
             new QueryParameterSpec('page', $page, 'form', true, false, null),
             new QueryParameterSpec('page_size', $pageSize, 'form', true, false, null),
         ]);
         $path = $this->appendQueryString($path, $query);
         $result = $this->client->request('GET', $path, []);
-        return is_array($result) ? SitesDomainsListResponse::fromArray($result) : null;
+        return is_array($result) ? ApplicationsDomainsListResponse::fromArray($result) : null;
     }
 
     /** 绑定域名 */
-    public function sitesDomainsCreate(string $siteId, array|CreateDomainRequest $body, string $idempotencyKey): ?SitesDomainsCreateResponse201
+    public function applicationsDomainsCreate(string $applicationId, array|CreateDomainRequest $body, string $idempotencyKey): ?ApplicationsDomainsCreateResponse201
     {
-        $path = $this->interpolatePath('/app/v3/api/sites/{siteId}/domains', ['siteId' => $this->serializePathParameter($siteId, new PathParameterSpec('siteId', 'simple', false))]);
+        $path = $this->interpolatePath('/app/v3/api/applications/{applicationId}/domains', ['applicationId' => $this->serializePathParameter($applicationId, new PathParameterSpec('applicationId', 'simple', false))]);
         $payload = $body instanceof CreateDomainRequest ? $body->toArray() : $body;
         $requestHeaders = $this->buildRequestHeaders(
             [
@@ -41,29 +41,29 @@ final class DomainApi extends BaseApi
             'headers' => $requestHeaders,
             'json' => $payload,
         ]);
-        return is_array($result) ? SitesDomainsCreateResponse201::fromArray($result) : null;
+        return is_array($result) ? ApplicationsDomainsCreateResponse201::fromArray($result) : null;
     }
 
     /** 获取域名详情 */
-    public function sitesDomainsRetrieve(string $siteId, string $domainId): ?SitesDomainsRetrieveResponse
+    public function applicationsDomainsRetrieve(string $applicationId, string $domainId): ?ApplicationsDomainsRetrieveResponse
     {
-        $path = $this->interpolatePath('/app/v3/api/sites/{siteId}/domains/{domainId}', ['siteId' => $this->serializePathParameter($siteId, new PathParameterSpec('siteId', 'simple', false)), 'domainId' => $this->serializePathParameter($domainId, new PathParameterSpec('domainId', 'simple', false))]);
+        $path = $this->interpolatePath('/app/v3/api/applications/{applicationId}/domains/{domainId}', ['applicationId' => $this->serializePathParameter($applicationId, new PathParameterSpec('applicationId', 'simple', false)), 'domainId' => $this->serializePathParameter($domainId, new PathParameterSpec('domainId', 'simple', false))]);
         $result = $this->client->request('GET', $path, []);
-        return is_array($result) ? SitesDomainsRetrieveResponse::fromArray($result) : null;
+        return is_array($result) ? ApplicationsDomainsRetrieveResponse::fromArray($result) : null;
     }
 
     /** 解绑域名 */
-    public function sitesDomainsDelete(string $siteId, string $domainId): mixed
+    public function applicationsDomainsDelete(string $applicationId, string $domainId): mixed
     {
-        $path = $this->interpolatePath('/app/v3/api/sites/{siteId}/domains/{domainId}', ['siteId' => $this->serializePathParameter($siteId, new PathParameterSpec('siteId', 'simple', false)), 'domainId' => $this->serializePathParameter($domainId, new PathParameterSpec('domainId', 'simple', false))]);
+        $path = $this->interpolatePath('/app/v3/api/applications/{applicationId}/domains/{domainId}', ['applicationId' => $this->serializePathParameter($applicationId, new PathParameterSpec('applicationId', 'simple', false)), 'domainId' => $this->serializePathParameter($domainId, new PathParameterSpec('domainId', 'simple', false))]);
         $result = $this->client->request('DELETE', $path, []);
         return $result;
     }
 
     /** 创建或检查域名所有权验证挑战 */
-    public function sitesDomainsVerify(string $siteId, string $domainId, string $idempotencyKey): ?SitesDomainsVerifyResponse
+    public function applicationsDomainsVerify(string $applicationId, string $domainId, string $idempotencyKey): ?ApplicationsDomainsVerifyResponse
     {
-        $path = $this->interpolatePath('/app/v3/api/sites/{siteId}/domains/{domainId}/verify', ['siteId' => $this->serializePathParameter($siteId, new PathParameterSpec('siteId', 'simple', false)), 'domainId' => $this->serializePathParameter($domainId, new PathParameterSpec('domainId', 'simple', false))]);
+        $path = $this->interpolatePath('/app/v3/api/applications/{applicationId}/domains/{domainId}/verify', ['applicationId' => $this->serializePathParameter($applicationId, new PathParameterSpec('applicationId', 'simple', false)), 'domainId' => $this->serializePathParameter($domainId, new PathParameterSpec('domainId', 'simple', false))]);
         $requestHeaders = $this->buildRequestHeaders(
             [
                 'Idempotency-Key' => new HeaderParameterSpec($idempotencyKey, 'simple', false, null),
@@ -73,7 +73,7 @@ final class DomainApi extends BaseApi
         $result = $this->client->request('POST', $path, [
             'headers' => $requestHeaders,
         ]);
-        return is_array($result) ? SitesDomainsVerifyResponse::fromArray($result) : null;
+        return is_array($result) ? ApplicationsDomainsVerifyResponse::fromArray($result) : null;
     }
 
     /** 获取证书可签发域名列表 */

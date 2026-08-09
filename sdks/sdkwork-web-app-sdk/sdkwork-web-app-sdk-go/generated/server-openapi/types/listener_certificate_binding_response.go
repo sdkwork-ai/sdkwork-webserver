@@ -3,7 +3,7 @@ package types
 
 type ListenerCertificateBindingResponse struct {
 	Id string `json:"id"`
-	SiteId string `json:"siteId"`
+	ApplicationId string `json:"applicationId"`
 	DomainId string `json:"domainId"`
 	CertificateId string `json:"certificateId"`
 	DesiredCertificateVersionId string `json:"desiredCertificateVersionId"`

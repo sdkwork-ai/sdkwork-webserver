@@ -17,10 +17,10 @@
   "routes": [
     {
       "method": "GET",
-      "path": "/app/v3/api/sites",
-      "operationId": "sites.list",
+      "path": "/app/v3/api/applications",
+      "operationId": "applications.list",
       "tags": [
-        "site"
+        "application"
       ],
       "auth": {
         "mode": "dual-token",
@@ -37,16 +37,16 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.read",
+      "permission": "web.applications.read",
       "idempotent": false,
       "rateLimitTier": null
     },
     {
       "method": "POST",
-      "path": "/app/v3/api/sites",
-      "operationId": "sites.create",
+      "path": "/app/v3/api/applications",
+      "operationId": "applications.create",
       "tags": [
-        "site"
+        "application"
       ],
       "auth": {
         "mode": "dual-token",
@@ -63,16 +63,16 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": null
     },
     {
       "method": "GET",
-      "path": "/app/v3/api/sites/{siteId}",
-      "operationId": "sites.retrieve",
+      "path": "/app/v3/api/applications/{applicationId}",
+      "operationId": "applications.retrieve",
       "tags": [
-        "site"
+        "application"
       ],
       "auth": {
         "mode": "dual-token",
@@ -89,16 +89,16 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.read",
+      "permission": "web.applications.read",
       "idempotent": false,
       "rateLimitTier": null
     },
     {
       "method": "PATCH",
-      "path": "/app/v3/api/sites/{siteId}",
-      "operationId": "sites.update",
+      "path": "/app/v3/api/applications/{applicationId}",
+      "operationId": "applications.update",
       "tags": [
-        "site"
+        "application"
       ],
       "auth": {
         "mode": "dual-token",
@@ -115,16 +115,16 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": null
     },
     {
       "method": "DELETE",
-      "path": "/app/v3/api/sites/{siteId}",
-      "operationId": "sites.delete",
+      "path": "/app/v3/api/applications/{applicationId}",
+      "operationId": "applications.delete",
       "tags": [
-        "site"
+        "application"
       ],
       "auth": {
         "mode": "dual-token",
@@ -141,16 +141,16 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": false,
       "rateLimitTier": null
     },
     {
       "method": "POST",
-      "path": "/app/v3/api/sites/{siteId}/activate",
-      "operationId": "sites.activate",
+      "path": "/app/v3/api/applications/{applicationId}/activate",
+      "operationId": "applications.activate",
       "tags": [
-        "site"
+        "application"
       ],
       "auth": {
         "mode": "dual-token",
@@ -167,16 +167,16 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": false,
       "rateLimitTier": null
     },
     {
       "method": "POST",
-      "path": "/app/v3/api/sites/{siteId}/pause",
-      "operationId": "sites.pause",
+      "path": "/app/v3/api/applications/{applicationId}/pause",
+      "operationId": "applications.pause",
       "tags": [
-        "site"
+        "application"
       ],
       "auth": {
         "mode": "dual-token",
@@ -193,14 +193,14 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": false,
       "rateLimitTier": null
     },
     {
       "method": "GET",
-      "path": "/app/v3/api/sites/{siteId}/domains",
-      "operationId": "sites.domains.list",
+      "path": "/app/v3/api/applications/{applicationId}/domains",
+      "operationId": "applications.domains.list",
       "tags": [
         "domain"
       ],
@@ -219,14 +219,14 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": false,
       "rateLimitTier": null
     },
     {
       "method": "POST",
-      "path": "/app/v3/api/sites/{siteId}/domains",
-      "operationId": "sites.domains.create",
+      "path": "/app/v3/api/applications/{applicationId}/domains",
+      "operationId": "applications.domains.create",
       "tags": [
         "domain"
       ],
@@ -245,14 +245,14 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": null
     },
     {
       "method": "GET",
-      "path": "/app/v3/api/sites/{siteId}/domains/{domainId}",
-      "operationId": "sites.domains.retrieve",
+      "path": "/app/v3/api/applications/{applicationId}/domains/{domainId}",
+      "operationId": "applications.domains.retrieve",
       "tags": [
         "domain"
       ],
@@ -271,14 +271,14 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": false,
       "rateLimitTier": null
     },
     {
       "method": "DELETE",
-      "path": "/app/v3/api/sites/{siteId}/domains/{domainId}",
-      "operationId": "sites.domains.delete",
+      "path": "/app/v3/api/applications/{applicationId}/domains/{domainId}",
+      "operationId": "applications.domains.delete",
       "tags": [
         "domain"
       ],
@@ -297,14 +297,14 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": false,
       "rateLimitTier": null
     },
     {
       "method": "POST",
-      "path": "/app/v3/api/sites/{siteId}/domains/{domainId}/verify",
-      "operationId": "sites.domains.verify",
+      "path": "/app/v3/api/applications/{applicationId}/domains/{domainId}/verify",
+      "operationId": "applications.domains.verify",
       "tags": [
         "domain"
       ],
@@ -323,14 +323,14 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": "auth-critical"
     },
     {
       "method": "GET",
-      "path": "/app/v3/api/sites/{siteId}/domains/{domainId}/listener_certificate_bindings",
-      "operationId": "sites.domains.listenerCertificateBindings.list",
+      "path": "/app/v3/api/applications/{applicationId}/domains/{domainId}/listener_certificate_bindings",
+      "operationId": "applications.domains.listenerCertificateBindings.list",
       "tags": [
         "certificate"
       ],
@@ -355,8 +355,8 @@
     },
     {
       "method": "POST",
-      "path": "/app/v3/api/sites/{siteId}/domains/{domainId}/listener_certificate_bindings",
-      "operationId": "sites.domains.listenerCertificateBindings.create",
+      "path": "/app/v3/api/applications/{applicationId}/domains/{domainId}/listener_certificate_bindings",
+      "operationId": "applications.domains.listenerCertificateBindings.create",
       "tags": [
         "certificate"
       ],
@@ -381,8 +381,8 @@
     },
     {
       "method": "DELETE",
-      "path": "/app/v3/api/sites/{siteId}/domains/{domainId}/listener_certificate_bindings/{bindingId}",
-      "operationId": "sites.domains.listenerCertificateBindings.delete",
+      "path": "/app/v3/api/applications/{applicationId}/domains/{domainId}/listener_certificate_bindings/{bindingId}",
+      "operationId": "applications.domains.listenerCertificateBindings.delete",
       "tags": [
         "certificate"
       ],
@@ -407,8 +407,8 @@
     },
     {
       "method": "GET",
-      "path": "/app/v3/api/sites/{siteId}/source_versions",
-      "operationId": "sites.sourceVersions.list",
+      "path": "/app/v3/api/applications/{applicationId}/source_versions",
+      "operationId": "applications.sourceVersions.list",
       "tags": [
         "sourceVersion"
       ],
@@ -427,14 +427,14 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": false,
       "rateLimitTier": null
     },
     {
       "method": "POST",
-      "path": "/app/v3/api/sites/{siteId}/source_versions",
-      "operationId": "sites.sourceVersions.create",
+      "path": "/app/v3/api/applications/{applicationId}/source_versions",
+      "operationId": "applications.sourceVersions.create",
       "tags": [
         "sourceVersion"
       ],
@@ -453,14 +453,14 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": null
     },
     {
       "method": "POST",
-      "path": "/app/v3/api/sites/{siteId}/source_versions/git_import",
-      "operationId": "sites.sourceVersions.gitImport.create",
+      "path": "/app/v3/api/applications/{applicationId}/source_versions/git_import",
+      "operationId": "applications.sourceVersions.gitImport.create",
       "tags": [
         "sourceVersion"
       ],
@@ -479,92 +479,40 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
-      "idempotent": true,
-      "rateLimitTier": "auth-critical"
-    },
-    {
-      "method": "GET",
-      "path": "/app/v3/api/sites/{siteId}/source_versions/{sourceVersionId}",
-      "operationId": "sites.sourceVersions.retrieve",
-      "tags": [
-        "sourceVersion"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "routeAuth": "dual-token",
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-web",
-        "apiAuthority": "sdkwork-web.app"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "web.sites.write",
-      "idempotent": false,
-      "rateLimitTier": null
-    },
-    {
-      "method": "GET",
-      "path": "/app/v3/api/sites/{siteId}/deployments",
-      "operationId": "sites.deployments.list",
-      "tags": [
-        "deployment"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "routeAuth": "dual-token",
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-web",
-        "apiAuthority": "sdkwork-web.app"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "web.sites.write",
-      "idempotent": false,
-      "rateLimitTier": null
-    },
-    {
-      "method": "POST",
-      "path": "/app/v3/api/sites/{siteId}/deployments",
-      "operationId": "sites.deployments.create",
-      "tags": [
-        "deployment"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "routeAuth": "dual-token",
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-web",
-        "apiAuthority": "sdkwork-web.app"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": "auth-critical"
     },
     {
       "method": "GET",
-      "path": "/app/v3/api/sites/{siteId}/deployments/{deploymentId}",
-      "operationId": "sites.deployments.retrieve",
+      "path": "/app/v3/api/applications/{applicationId}/source_versions/{sourceVersionId}",
+      "operationId": "applications.sourceVersions.retrieve",
+      "tags": [
+        "sourceVersion"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-web",
+        "apiAuthority": "sdkwork-web.app"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "app-api",
+      "permission": "web.applications.write",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "GET",
+      "path": "/app/v3/api/applications/{applicationId}/deployments",
+      "operationId": "applications.deployments.list",
       "tags": [
         "deployment"
       ],
@@ -583,14 +531,14 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": false,
       "rateLimitTier": null
     },
     {
       "method": "POST",
-      "path": "/app/v3/api/sites/{siteId}/deployments/{deploymentId}/rollback",
-      "operationId": "sites.deployments.rollback",
+      "path": "/app/v3/api/applications/{applicationId}/deployments",
+      "operationId": "applications.deployments.create",
       "tags": [
         "deployment"
       ],
@@ -609,14 +557,66 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": "auth-critical"
     },
     {
       "method": "GET",
-      "path": "/app/v3/api/sites/{siteId}/env_variables",
-      "operationId": "sites.envVariables.list",
+      "path": "/app/v3/api/applications/{applicationId}/deployments/{deploymentId}",
+      "operationId": "applications.deployments.retrieve",
+      "tags": [
+        "deployment"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-web",
+        "apiAuthority": "sdkwork-web.app"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "app-api",
+      "permission": "web.applications.write",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "POST",
+      "path": "/app/v3/api/applications/{applicationId}/deployments/{deploymentId}/rollback",
+      "operationId": "applications.deployments.rollback",
+      "tags": [
+        "deployment"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-web",
+        "apiAuthority": "sdkwork-web.app"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "app-api",
+      "permission": "web.applications.write",
+      "idempotent": true,
+      "rateLimitTier": "auth-critical"
+    },
+    {
+      "method": "GET",
+      "path": "/app/v3/api/applications/{applicationId}/env_variables",
+      "operationId": "applications.envVariables.list",
       "tags": [
         "envVariable"
       ],
@@ -635,14 +635,14 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": false,
       "rateLimitTier": null
     },
     {
       "method": "POST",
-      "path": "/app/v3/api/sites/{siteId}/env_variables",
-      "operationId": "sites.envVariables.create",
+      "path": "/app/v3/api/applications/{applicationId}/env_variables",
+      "operationId": "applications.envVariables.create",
       "tags": [
         "envVariable"
       ],
@@ -661,14 +661,14 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": null
     },
     {
       "method": "PATCH",
-      "path": "/app/v3/api/sites/{siteId}/env_variables/{variableId}",
-      "operationId": "sites.envVariables.update",
+      "path": "/app/v3/api/applications/{applicationId}/env_variables/{variableId}",
+      "operationId": "applications.envVariables.update",
       "tags": [
         "envVariable"
       ],
@@ -687,14 +687,14 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": null
     },
     {
       "method": "DELETE",
-      "path": "/app/v3/api/sites/{siteId}/env_variables/{variableId}",
-      "operationId": "sites.envVariables.delete",
+      "path": "/app/v3/api/applications/{applicationId}/env_variables/{variableId}",
+      "operationId": "applications.envVariables.delete",
       "tags": [
         "envVariable"
       ],
@@ -713,7 +713,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": null
     },
@@ -745,8 +745,8 @@
     },
     {
       "method": "GET",
-      "path": "/app/v3/api/sites/{siteId}/health_checks",
-      "operationId": "sites.healthChecks.list",
+      "path": "/app/v3/api/applications/{applicationId}/health_checks",
+      "operationId": "applications.healthChecks.list",
       "tags": [
         "monitor"
       ],
@@ -765,14 +765,14 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": false,
       "rateLimitTier": null
     },
     {
       "method": "POST",
-      "path": "/app/v3/api/sites/{siteId}/health_checks",
-      "operationId": "sites.healthChecks.create",
+      "path": "/app/v3/api/applications/{applicationId}/health_checks",
+      "operationId": "applications.healthChecks.create",
       "tags": [
         "monitor"
       ],
@@ -791,7 +791,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": null
     }

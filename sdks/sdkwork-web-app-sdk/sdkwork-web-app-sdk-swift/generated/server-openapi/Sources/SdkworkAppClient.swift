@@ -3,7 +3,7 @@ import SDKworkCommon
 
 public class SdkworkAppClient {
     private let httpClient: HttpClient
-    public let site: SiteApi
+    public let application: ApplicationApi
     public let domain: DomainApi
     public let certificate: CertificateApi
     public let sourceVersion: SourceVersionApi
@@ -13,7 +13,7 @@ public class SdkworkAppClient {
 
     public init(baseURL: String) {
         self.httpClient = HttpClient(baseURL: baseURL)
-        self.site = SiteApi(client: httpClient)
+        self.application = ApplicationApi(client: httpClient)
         self.domain = DomainApi(client: httpClient)
         self.certificate = CertificateApi(client: httpClient)
         self.sourceVersion = SourceVersionApi(client: httpClient)
@@ -24,7 +24,7 @@ public class SdkworkAppClient {
 
     public init(config: SdkConfig) {
         self.httpClient = HttpClient(config: config)
-        self.site = SiteApi(client: httpClient)
+        self.application = ApplicationApi(client: httpClient)
         self.domain = DomainApi(client: httpClient)
         self.certificate = CertificateApi(client: httpClient)
         self.sourceVersion = SourceVersionApi(client: httpClient)

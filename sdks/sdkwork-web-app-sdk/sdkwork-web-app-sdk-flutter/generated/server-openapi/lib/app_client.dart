@@ -1,6 +1,6 @@
 import 'package:sdkwork_common_flutter/sdkwork_common_flutter.dart';
 import 'src/http/client.dart';
-import 'src/api/site.dart';
+import 'src/api/application.dart';
 import 'src/api/domain.dart';
 import 'src/api/certificate.dart';
 import 'src/api/source_version.dart';
@@ -11,7 +11,7 @@ import 'src/api/monitor.dart';
 class SdkworkAppClient {
   final HttpClient _httpClient;
 
-  late final SiteApi site;
+  late final ApplicationApi application;
   late final DomainApi domain;
   late final CertificateApi certificate;
   late final SourceVersionApi sourceVersion;
@@ -22,7 +22,7 @@ class SdkworkAppClient {
   SdkworkAppClient({
     required SdkConfig config,
   }) : _httpClient = HttpClient(config: config) {
-    site = SiteApi(_httpClient);
+    application = ApplicationApi(_httpClient);
     domain = DomainApi(_httpClient);
     certificate = CertificateApi(_httpClient);
     sourceVersion = SourceVersionApi(_httpClient);

@@ -407,7 +407,7 @@ fn map_listener_binding_row(
     };
     Ok(ListenerCertificateBindingResponse {
         id: row.try_get("uuid")?,
-        site_id: row.try_get("site_id")?,
+        application_id: row.try_get("site_id")?,
         domain_id: row.try_get("domain_id")?,
         certificate_id: row.try_get("certificate_id")?,
         desired_certificate_version_id: row.try_get("desired_certificate_version_id")?,

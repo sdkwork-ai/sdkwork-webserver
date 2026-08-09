@@ -884,3 +884,6 @@ tables:
       - { name: uk_web_runtime_observation_state, columns: [tenant_id, assignment_id, state], unique: true }
       - { name: idx_web_runtime_observation_assignment, columns: [tenant_id, assignment_id, id] }
       - { name: idx_web_runtime_observation_node_time, columns: [tenant_id, server_id, observed_at] }
+  - name: web_application
+    lifecycle_status: active
+    owner: web-platform

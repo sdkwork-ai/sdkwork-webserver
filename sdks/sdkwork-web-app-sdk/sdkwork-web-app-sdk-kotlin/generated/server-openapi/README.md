@@ -57,7 +57,7 @@ val client = SdkworkAppClient(config)
 
 ## API Modules
 
-- `client.site` - site API
+- `client.application` - application API
 - `client.domain` - domain API
 - `client.certificate` - certificate API
 - `client.sourceVersion` - source_version API
@@ -67,10 +67,10 @@ val client = SdkworkAppClient(config)
 
 ## Usage Examples
 
-### site
+### application
 
 ```kotlin
-// 获取站点列表
+// 获取应用列表
 val params = linkedMapOf<String, Any>(
     "page" to 1,
     "page_size" to 2,
@@ -79,7 +79,7 @@ val params = linkedMapOf<String, Any>(
     "site_type" to 1,
     "keyword" to "keyword"
 )
-val result = client.site.sitesList(params)
+val result = client.application.applicationsList(params)
 println(result)
 ```
 
@@ -99,13 +99,13 @@ println(result)
 
 ```kotlin
 // List certificates active on the domain listener
-val siteId = "1"
+val applicationId = "1"
 val domainId = "1"
 val params = linkedMapOf<String, Any>(
     "page" to 1,
     "page_size" to 2
 )
-val result = client.certificate.sitesDomainsListenerCertificateBindingsList(siteId, domainId, params)
+val result = client.certificate.applicationsDomainsListenerCertificateBindingsList(applicationId, domainId, params)
 println(result)
 ```
 
@@ -113,12 +113,12 @@ println(result)
 
 ```kotlin
 // 获取应用源码版本
-val siteId = "1"
+val applicationId = "1"
 val params = linkedMapOf<String, Any>(
     "page_size" to 1,
     "cursor" to "cursor"
 )
-val result = client.sourceVersion.sitesSourceVersionsList(siteId, params)
+val result = client.sourceVersion.applicationsSourceVersionsList(applicationId, params)
 println(result)
 ```
 
@@ -126,13 +126,13 @@ println(result)
 
 ```kotlin
 // 获取部署历史
-val siteId = "1"
+val applicationId = "1"
 val params = linkedMapOf<String, Any>(
     "page_size" to 1,
     "cursor" to "cursor",
     "status" to 0
 )
-val result = client.deployment.sitesDeploymentsList(siteId, params)
+val result = client.deployment.applicationsDeploymentsList(applicationId, params)
 println(result)
 ```
 
@@ -140,11 +140,11 @@ println(result)
 
 ```kotlin
 // 获取环境变量列表
-val siteId = "1"
+val applicationId = "1"
 val params = linkedMapOf<String, Any>(
     "environment" to "environment"
 )
-val result = client.envVariable.sitesEnvVariablesList(siteId, params)
+val result = client.envVariable.applicationsEnvVariablesList(applicationId, params)
 println(result)
 ```
 
@@ -152,8 +152,8 @@ println(result)
 
 ```kotlin
 // 获取健康检查配置
-val siteId = "1"
-val result = client.monitor.sitesHealthChecksList(siteId)
+val applicationId = "1"
+val result = client.monitor.applicationsHealthChecksList(applicationId)
 println(result)
 ```
 

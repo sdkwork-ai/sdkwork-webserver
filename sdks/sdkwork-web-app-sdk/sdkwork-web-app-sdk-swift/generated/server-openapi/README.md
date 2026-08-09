@@ -52,7 +52,7 @@ client.setHeader("X-Custom-Header", value: "value")
 
 ## API Modules
 
-- `client.site` - site API
+- `client.application` - application API
 - `client.domain` - domain API
 - `client.certificate` - certificate API
 - `client.sourceVersion` - source_version API
@@ -62,10 +62,10 @@ client.setHeader("X-Custom-Header", value: "value")
 
 ## Usage Examples
 
-### site
+### application
 
 ```swift
-// 获取站点列表
+// 获取应用列表
 let params: [String: Any] = [
     "page": 1,
     "page_size": 2,
@@ -74,7 +74,7 @@ let params: [String: Any] = [
     "site_type": 1,
     "keyword": "keyword"
 ]
-let result = try await client.site.sitesList(params: params)
+let result = try await client.application.applicationsList(params: params)
 print(result)
 ```
 
@@ -94,13 +94,13 @@ print(result)
 
 ```swift
 // List certificates active on the domain listener
-let siteId = "1"
+let applicationId = "1"
 let domainId = "1"
 let params: [String: Any] = [
     "page": 1,
     "page_size": 2
 ]
-let result = try await client.certificate.sitesDomainsListenerCertificateBindingsList(siteId: siteId, domainId: domainId, params: params)
+let result = try await client.certificate.applicationsDomainsListenerCertificateBindingsList(applicationId: applicationId, domainId: domainId, params: params)
 print(result)
 ```
 
@@ -108,12 +108,12 @@ print(result)
 
 ```swift
 // 获取应用源码版本
-let siteId = "1"
+let applicationId = "1"
 let params: [String: Any] = [
     "page_size": 1,
     "cursor": "cursor"
 ]
-let result = try await client.sourceVersion.sitesSourceVersionsList(siteId: siteId, params: params)
+let result = try await client.sourceVersion.applicationsSourceVersionsList(applicationId: applicationId, params: params)
 print(result)
 ```
 
@@ -121,13 +121,13 @@ print(result)
 
 ```swift
 // 获取部署历史
-let siteId = "1"
+let applicationId = "1"
 let params: [String: Any] = [
     "page_size": 1,
     "cursor": "cursor",
     "status": 0
 ]
-let result = try await client.deployment.sitesDeploymentsList(siteId: siteId, params: params)
+let result = try await client.deployment.applicationsDeploymentsList(applicationId: applicationId, params: params)
 print(result)
 ```
 
@@ -135,11 +135,11 @@ print(result)
 
 ```swift
 // 获取环境变量列表
-let siteId = "1"
+let applicationId = "1"
 let params: [String: Any] = [
     "environment": "environment"
 ]
-let result = try await client.envVariable.sitesEnvVariablesList(siteId: siteId, params: params)
+let result = try await client.envVariable.applicationsEnvVariablesList(applicationId: applicationId, params: params)
 print(result)
 ```
 
@@ -147,8 +147,8 @@ print(result)
 
 ```swift
 // 获取健康检查配置
-let siteId = "1"
-let result = try await client.monitor.sitesHealthChecksList(siteId: siteId)
+let applicationId = "1"
+let result = try await client.monitor.applicationsHealthChecksList(applicationId: applicationId)
 print(result)
 ```
 

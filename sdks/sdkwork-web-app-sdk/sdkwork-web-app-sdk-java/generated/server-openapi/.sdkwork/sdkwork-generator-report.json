@@ -10,37 +10,169 @@
   },
   "status": "ok",
   "mode": "apply",
-  "hasChanges": false,
-  "hasDestructiveChanges": false,
-  "changeFingerprint": "dcc1a883f19e5fe6f86b9153e9cf3fd94dfd9bb3d2924c3778c5fdea4acea6c2",
+  "hasChanges": true,
+  "hasDestructiveChanges": true,
+  "changeFingerprint": "c0db52ec9ffc84f1273b892e8fa484960016c9e0cec8a110baf8182a89094b96",
   "changeImpact": {
     "schemaVersion": 1,
-    "areas": [],
-    "details": [],
-    "requiresVerification": false,
-    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped."
+    "areas": [
+      "api-surface",
+      "models",
+      "documentation"
+    ],
+    "details": [
+      {
+        "area": "api-surface",
+        "paths": [
+          "src/main/java/com/sdkwork/web/app/sdk/api/ApplicationApi.java",
+          "src/main/java/com/sdkwork/web/app/sdk/api/CertificateApi.java",
+          "src/main/java/com/sdkwork/web/app/sdk/api/DeploymentApi.java",
+          "src/main/java/com/sdkwork/web/app/sdk/api/DomainApi.java",
+          "src/main/java/com/sdkwork/web/app/sdk/api/EnvVariableApi.java",
+          "src/main/java/com/sdkwork/web/app/sdk/api/MonitorApi.java",
+          "src/main/java/com/sdkwork/web/app/sdk/api/package-info.java",
+          "src/main/java/com/sdkwork/web/app/sdk/api/SiteApi.java",
+          "src/main/java/com/sdkwork/web/app/sdk/api/SourceVersionApi.java",
+          "src/main/java/com/sdkwork/web/app/sdk/SdkworkAppClient.java"
+        ]
+      },
+      {
+        "area": "models",
+        "paths": [
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationPage.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsActivateResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsCreateResponse201.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDeploymentsCreateResponse201.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDeploymentsListResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDeploymentsRetrieveResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDeploymentsRollbackResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDomainsCreateResponse201.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDomainsListenerCertificateBindingsCreateResponse201.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDomainsListenerCertificateBindingsListResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDomainsListResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDomainsRetrieveResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDomainsVerifyResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsEnvVariablesCreateResponse201.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsEnvVariablesListResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsEnvVariablesUpdateResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsHealthChecksCreateResponse201.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsHealthChecksListResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsListResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsPauseResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsRetrieveResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsSourceVersionsCreateResponse201.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsSourceVersionsGitImportCreateResponse201.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsSourceVersionsListResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsSourceVersionsRetrieveResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsUpdateResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/CreateApplicationRequest.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/CreateSiteRequest.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/DeploymentResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/ListenerCertificateBindingResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitePage.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SiteResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesActivateResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesCreateResponse201.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesDeploymentsCreateResponse201.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesDeploymentsListResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesDeploymentsRetrieveResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesDeploymentsRollbackResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesDomainsCreateResponse201.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesDomainsListenerCertificateBindingsCreateResponse201.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesDomainsListenerCertificateBindingsListResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesDomainsListResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesDomainsRetrieveResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesDomainsVerifyResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesEnvVariablesCreateResponse201.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesEnvVariablesListResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesEnvVariablesUpdateResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesHealthChecksCreateResponse201.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesHealthChecksListResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesListResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesPauseResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesRetrieveResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesSourceVersionsCreateResponse201.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesSourceVersionsGitImportCreateResponse201.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesSourceVersionsListResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesSourceVersionsRetrieveResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SitesUpdateResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/SourceVersionResponse.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/UpdateApplicationRequest.java",
+          "src/main/java/com/sdkwork/web/app/sdk/model/UpdateSiteRequest.java"
+        ]
+      },
+      {
+        "area": "documentation",
+        "paths": [
+          "README.md"
+        ]
+      }
+    ],
+    "requiresVerification": true,
+    "summary": "Detected impact areas: api-surface, models, documentation. Verification is required."
   },
   "executionDecision": {
     "schemaVersion": 1,
-    "riskLevel": "low",
-    "nextAction": "skip",
+    "riskLevel": "high",
+    "nextAction": "verify",
     "requiresManualReview": false,
     "applyRequiresExpectedFingerprint": false,
-    "summary": "No actionable changes were detected. No apply or verification step is required.",
+    "summary": "Changes have been applied. Run the required verification plan now.",
     "reasons": [
-      "no-actionable-changes"
+      "deleted-generated-files",
+      "manual-review-required",
+      "verification-required"
     ]
   },
   "executionHandoff": {
     "schemaVersion": 1,
-    "summary": "No further commands are required.",
-    "steps": []
+    "summary": "Run the required verification commands now.",
+    "steps": [
+      {
+        "id": "verify-check",
+        "title": "Unified package check",
+        "required": true,
+        "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, documentation.",
+        "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-app-sdk\\sdkwork-web-app-sdk-java\\generated\\server-openapi",
+        "command": "node",
+        "args": [
+          "./bin/publish-core.mjs",
+          "--language",
+          "java",
+          "--project-dir",
+          ".",
+          "--action",
+          "check"
+        ],
+        "displayCommand": "node ./bin/publish-core.mjs --language java --project-dir . --action check"
+      }
+    ]
   },
   "verificationPlan": {
-    "shouldRun": false,
-    "runPhase": "skip",
-    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped.",
-    "steps": []
+    "shouldRun": true,
+    "runPhase": "now",
+    "summary": "Detected impact areas: api-surface, models, documentation. Verification is required. Run the required verification commands now against the generated SDK output.",
+    "steps": [
+      {
+        "id": "check",
+        "title": "Unified package check",
+        "required": true,
+        "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, documentation.",
+        "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-app-sdk\\sdkwork-web-app-sdk-java\\generated\\server-openapi",
+        "command": "node",
+        "args": [
+          "./bin/publish-core.mjs",
+          "--language",
+          "java",
+          "--project-dir",
+          ".",
+          "--action",
+          "check"
+        ],
+        "displayCommand": "node ./bin/publish-core.mjs --language java --project-dir . --action check"
+      }
+    ]
   },
   "sdk": {
     "name": "sdkwork-web-app-sdk",
@@ -65,15 +197,59 @@
   "syncSummary": {
     "dryRun": false,
     "controlPlaneEnabled": true,
-    "writtenFiles": 0,
+    "writtenFiles": 42,
     "skippedScaffoldFiles": 1,
-    "skippedUnchangedGeneratedFiles": 86,
-    "deletedGeneratedFiles": 0,
+    "skippedUnchangedGeneratedFiles": 44,
+    "deletedGeneratedFiles": 30,
     "changeSummaryPath": ".sdkwork/sdkwork-generator-changes.json",
-    "changeFingerprint": "dcc1a883f19e5fe6f86b9153e9cf3fd94dfd9bb3d2924c3778c5fdea4acea6c2",
+    "changeFingerprint": "c0db52ec9ffc84f1273b892e8fa484960016c9e0cec8a110baf8182a89094b96",
     "changes": {
-      "createdGeneratedFiles": [],
-      "updatedGeneratedFiles": [],
+      "createdGeneratedFiles": [
+        "src/main/java/com/sdkwork/web/app/sdk/api/ApplicationApi.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationPage.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsActivateResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsCreateResponse201.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDeploymentsCreateResponse201.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDeploymentsListResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDeploymentsRetrieveResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDeploymentsRollbackResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDomainsCreateResponse201.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDomainsListenerCertificateBindingsCreateResponse201.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDomainsListenerCertificateBindingsListResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDomainsListResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDomainsRetrieveResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDomainsVerifyResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsEnvVariablesCreateResponse201.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsEnvVariablesListResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsEnvVariablesUpdateResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsHealthChecksCreateResponse201.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsHealthChecksListResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsListResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsPauseResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsRetrieveResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsSourceVersionsCreateResponse201.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsSourceVersionsGitImportCreateResponse201.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsSourceVersionsListResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsSourceVersionsRetrieveResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsUpdateResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/CreateApplicationRequest.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/UpdateApplicationRequest.java"
+      ],
+      "updatedGeneratedFiles": [
+        "README.md",
+        "src/main/java/com/sdkwork/web/app/sdk/api/CertificateApi.java",
+        "src/main/java/com/sdkwork/web/app/sdk/api/DeploymentApi.java",
+        "src/main/java/com/sdkwork/web/app/sdk/api/DomainApi.java",
+        "src/main/java/com/sdkwork/web/app/sdk/api/EnvVariableApi.java",
+        "src/main/java/com/sdkwork/web/app/sdk/api/MonitorApi.java",
+        "src/main/java/com/sdkwork/web/app/sdk/api/package-info.java",
+        "src/main/java/com/sdkwork/web/app/sdk/api/SourceVersionApi.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/DeploymentResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/ListenerCertificateBindingResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/SourceVersionResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/SdkworkAppClient.java"
+      ],
       "unchangedGeneratedFiles": [
         "bin/publish-core.mjs",
         "bin/publish.ps1",
@@ -81,17 +257,8 @@
         "CHANGELOG.md",
         "LICENSE",
         "pom.xml",
-        "README.md",
         "sdkwork-sdk.json",
         "src/main/java/com/sdkwork/web/app/sdk/api/ApiPaths.java",
-        "src/main/java/com/sdkwork/web/app/sdk/api/CertificateApi.java",
-        "src/main/java/com/sdkwork/web/app/sdk/api/DeploymentApi.java",
-        "src/main/java/com/sdkwork/web/app/sdk/api/DomainApi.java",
-        "src/main/java/com/sdkwork/web/app/sdk/api/EnvVariableApi.java",
-        "src/main/java/com/sdkwork/web/app/sdk/api/MonitorApi.java",
-        "src/main/java/com/sdkwork/web/app/sdk/api/package-info.java",
-        "src/main/java/com/sdkwork/web/app/sdk/api/SiteApi.java",
-        "src/main/java/com/sdkwork/web/app/sdk/api/SourceVersionApi.java",
         "src/main/java/com/sdkwork/web/app/sdk/http/HttpClient.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationStoreListing.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/CertificateIdentifierResponse.java",
@@ -100,10 +267,8 @@
         "src/main/java/com/sdkwork/web/app/sdk/model/CreateEnvVariableRequest.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/CreateHealthCheckRequest.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/CreateListenerCertificateBindingRequest.java",
-        "src/main/java/com/sdkwork/web/app/sdk/model/CreateSiteRequest.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/CreateSourceVersionRequest.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/DeploymentPage.java",
-        "src/main/java/com/sdkwork/web/app/sdk/model/DeploymentResponse.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/DomainPage.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/DomainResponse.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/DomainsListResponse.java",
@@ -114,7 +279,6 @@
         "src/main/java/com/sdkwork/web/app/sdk/model/HealthCheckPage.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/HealthCheckResponse.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/ImportGitSourceVersionRequest.java",
-        "src/main/java/com/sdkwork/web/app/sdk/model/ListenerCertificateBindingResponse.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/ListenerCertificateSummaryResponse.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/MediaChecksum.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/MediaResource.java",
@@ -128,6 +292,13 @@
         "src/main/java/com/sdkwork/web/app/sdk/model/SdkWorkPageData.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/SdkWorkResourceData.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/SdkWorkResourceResponse.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/SourceVersionConfigSnapshot.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/SourceVersionPage.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/UpdateEnvVariableRequest.java"
+      ],
+      "deletedGeneratedFiles": [
+        "src/main/java/com/sdkwork/web/app/sdk/api/SiteApi.java",
+        "src/main/java/com/sdkwork/web/app/sdk/model/CreateSiteRequest.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/SitePage.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/SiteResponse.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/SitesActivateResponse.java",
@@ -155,14 +326,8 @@
         "src/main/java/com/sdkwork/web/app/sdk/model/SitesSourceVersionsListResponse.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/SitesSourceVersionsRetrieveResponse.java",
         "src/main/java/com/sdkwork/web/app/sdk/model/SitesUpdateResponse.java",
-        "src/main/java/com/sdkwork/web/app/sdk/model/SourceVersionConfigSnapshot.java",
-        "src/main/java/com/sdkwork/web/app/sdk/model/SourceVersionPage.java",
-        "src/main/java/com/sdkwork/web/app/sdk/model/SourceVersionResponse.java",
-        "src/main/java/com/sdkwork/web/app/sdk/model/UpdateEnvVariableRequest.java",
-        "src/main/java/com/sdkwork/web/app/sdk/model/UpdateSiteRequest.java",
-        "src/main/java/com/sdkwork/web/app/sdk/SdkworkAppClient.java"
+        "src/main/java/com/sdkwork/web/app/sdk/model/UpdateSiteRequest.java"
       ],
-      "deletedGeneratedFiles": [],
       "scaffoldedFiles": [],
       "preservedScaffoldFiles": [
         "custom/README.md"
@@ -171,26 +336,139 @@
     },
     "impact": {
       "schemaVersion": 1,
-      "areas": [],
-      "details": [],
-      "requiresVerification": false,
-      "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped."
+      "areas": [
+        "api-surface",
+        "models",
+        "documentation"
+      ],
+      "details": [
+        {
+          "area": "api-surface",
+          "paths": [
+            "src/main/java/com/sdkwork/web/app/sdk/api/ApplicationApi.java",
+            "src/main/java/com/sdkwork/web/app/sdk/api/CertificateApi.java",
+            "src/main/java/com/sdkwork/web/app/sdk/api/DeploymentApi.java",
+            "src/main/java/com/sdkwork/web/app/sdk/api/DomainApi.java",
+            "src/main/java/com/sdkwork/web/app/sdk/api/EnvVariableApi.java",
+            "src/main/java/com/sdkwork/web/app/sdk/api/MonitorApi.java",
+            "src/main/java/com/sdkwork/web/app/sdk/api/package-info.java",
+            "src/main/java/com/sdkwork/web/app/sdk/api/SiteApi.java",
+            "src/main/java/com/sdkwork/web/app/sdk/api/SourceVersionApi.java",
+            "src/main/java/com/sdkwork/web/app/sdk/SdkworkAppClient.java"
+          ]
+        },
+        {
+          "area": "models",
+          "paths": [
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationPage.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsActivateResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsCreateResponse201.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDeploymentsCreateResponse201.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDeploymentsListResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDeploymentsRetrieveResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDeploymentsRollbackResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDomainsCreateResponse201.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDomainsListenerCertificateBindingsCreateResponse201.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDomainsListenerCertificateBindingsListResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDomainsListResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDomainsRetrieveResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsDomainsVerifyResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsEnvVariablesCreateResponse201.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsEnvVariablesListResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsEnvVariablesUpdateResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsHealthChecksCreateResponse201.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsHealthChecksListResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsListResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsPauseResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsRetrieveResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsSourceVersionsCreateResponse201.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsSourceVersionsGitImportCreateResponse201.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsSourceVersionsListResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsSourceVersionsRetrieveResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ApplicationsUpdateResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/CreateApplicationRequest.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/CreateSiteRequest.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/DeploymentResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/ListenerCertificateBindingResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitePage.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SiteResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesActivateResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesCreateResponse201.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesDeploymentsCreateResponse201.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesDeploymentsListResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesDeploymentsRetrieveResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesDeploymentsRollbackResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesDomainsCreateResponse201.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesDomainsListenerCertificateBindingsCreateResponse201.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesDomainsListenerCertificateBindingsListResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesDomainsListResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesDomainsRetrieveResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesDomainsVerifyResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesEnvVariablesCreateResponse201.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesEnvVariablesListResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesEnvVariablesUpdateResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesHealthChecksCreateResponse201.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesHealthChecksListResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesListResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesPauseResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesRetrieveResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesSourceVersionsCreateResponse201.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesSourceVersionsGitImportCreateResponse201.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesSourceVersionsListResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesSourceVersionsRetrieveResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SitesUpdateResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/SourceVersionResponse.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/UpdateApplicationRequest.java",
+            "src/main/java/com/sdkwork/web/app/sdk/model/UpdateSiteRequest.java"
+          ]
+        },
+        {
+          "area": "documentation",
+          "paths": [
+            "README.md"
+          ]
+        }
+      ],
+      "requiresVerification": true,
+      "summary": "Detected impact areas: api-surface, models, documentation. Verification is required."
     },
     "verificationPlan": {
-      "shouldRun": false,
-      "runPhase": "skip",
-      "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped.",
-      "steps": []
+      "shouldRun": true,
+      "runPhase": "now",
+      "summary": "Detected impact areas: api-surface, models, documentation. Verification is required. Run the required verification commands now against the generated SDK output.",
+      "steps": [
+        {
+          "id": "check",
+          "title": "Unified package check",
+          "required": true,
+          "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, documentation.",
+          "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-app-sdk\\sdkwork-web-app-sdk-java\\generated\\server-openapi",
+          "command": "node",
+          "args": [
+            "./bin/publish-core.mjs",
+            "--language",
+            "java",
+            "--project-dir",
+            ".",
+            "--action",
+            "check"
+          ],
+          "displayCommand": "node ./bin/publish-core.mjs --language java --project-dir . --action check"
+        }
+      ]
     },
     "executionDecision": {
       "schemaVersion": 1,
-      "riskLevel": "low",
-      "nextAction": "skip",
+      "riskLevel": "high",
+      "nextAction": "verify",
       "requiresManualReview": false,
       "applyRequiresExpectedFingerprint": false,
-      "summary": "No actionable changes were detected. No apply or verification step is required.",
+      "summary": "Changes have been applied. Run the required verification plan now.",
       "reasons": [
-        "no-actionable-changes"
+        "deleted-generated-files",
+        "manual-review-required",
+        "verification-required"
       ]
     },
     "backedUpFiles": [],

@@ -297,7 +297,7 @@ fn map_source_version_row(
         .unwrap_or_default();
     Ok(SourceVersionResponse {
         id: row.try_get("uuid")?,
-        site_id: site_id.to_string(),
+        application_id: site_id.to_string(),
         version_tag: row.try_get("version_tag")?,
         source_type: row.try_get("source_type")?,
         source_ref: row.try_get("source_ref")?,

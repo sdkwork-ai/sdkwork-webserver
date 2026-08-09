@@ -7,7 +7,7 @@ import (
 
 type SdkworkAppClient struct {
     http *sdkhttp.Client
-    Site *api.SiteApi
+    Application *api.ApplicationApi
     Domain *api.DomainApi
     Certificate *api.CertificateApi
     SourceVersion *api.SourceVersionApi
@@ -25,7 +25,7 @@ func NewSdkworkAppClientWithConfig(config sdkhttp.Config) *SdkworkAppClient {
     client := sdkhttp.NewClient(config)
     return &SdkworkAppClient{
         http: client,
-        Site: api.NewSiteApi(client),
+        Application: api.NewApplicationApi(client),
         Domain: api.NewDomainApi(client),
         Certificate: api.NewCertificateApi(client),
         SourceVersion: api.NewSourceVersionApi(client),

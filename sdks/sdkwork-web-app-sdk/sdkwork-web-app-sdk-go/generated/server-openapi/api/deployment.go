@@ -18,56 +18,56 @@ func NewDeploymentApi(client *sdkhttp.Client) *DeploymentApi {
 }
 
 // 获取部署历史
-func (a *DeploymentApi) SitesDeploymentsList(siteId string, pageSize *int, cursor *string, status *int) (sdktypes.SitesDeploymentsListResponse, error) {
+func (a *DeploymentApi) ApplicationsDeploymentsList(applicationId string, pageSize *int, cursor *string, status *int) (sdktypes.ApplicationsDeploymentsListResponse, error) {
     query := BuildQueryString([]QueryParameterSpec{
         {Name: "page_size", Value: func() interface{} { if pageSize == nil { return nil }; return *pageSize }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "cursor", Value: func() interface{} { if cursor == nil { return nil }; return *cursor }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "status", Value: func() interface{} { if status == nil { return nil }; return *status }(), Style: "form", Explode: true, AllowReserved: false},
     })
-    raw, err := a.client.Get(AppendQueryString(AppApiPath(fmt.Sprintf("/sites/%s/deployments", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}))), query), nil, nil)
+    raw, err := a.client.Get(AppendQueryString(AppApiPath(fmt.Sprintf("/applications/%s/deployments", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}))), query), nil, nil)
     if err != nil {
-        var zero sdktypes.SitesDeploymentsListResponse
+        var zero sdktypes.ApplicationsDeploymentsListResponse
         return zero, err
     }
-    return decodeResult[sdktypes.SitesDeploymentsListResponse](raw)
+    return decodeResult[sdktypes.ApplicationsDeploymentsListResponse](raw)
 }
 
 // 发起部署
-func (a *DeploymentApi) SitesDeploymentsCreate(siteId string, body sdktypes.CreateDeploymentRequest, idempotencyKey string) (sdktypes.SitesDeploymentsCreateResponse201, error) {
+func (a *DeploymentApi) ApplicationsDeploymentsCreate(applicationId string, body sdktypes.CreateDeploymentRequest, idempotencyKey string) (sdktypes.ApplicationsDeploymentsCreateResponse201, error) {
     headers := BuildRequestHeaders(
         map[string]ParameterSpec{"Idempotency-Key": ParameterSpec{Value: idempotencyKey, Style: "simple", Explode: false},},
         map[string]ParameterSpec{},
     )
-    raw, err := a.client.Post(AppApiPath(fmt.Sprintf("/sites/%s/deployments", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
+    raw, err := a.client.Post(AppApiPath(fmt.Sprintf("/applications/%s/deployments", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
     if err != nil {
-        var zero sdktypes.SitesDeploymentsCreateResponse201
+        var zero sdktypes.ApplicationsDeploymentsCreateResponse201
         return zero, err
     }
-    return decodeResult[sdktypes.SitesDeploymentsCreateResponse201](raw)
+    return decodeResult[sdktypes.ApplicationsDeploymentsCreateResponse201](raw)
 }
 
 // 获取部署详情
-func (a *DeploymentApi) SitesDeploymentsRetrieve(siteId string, deploymentId string) (sdktypes.SitesDeploymentsRetrieveResponse, error) {
-    raw, err := a.client.Get(AppApiPath(fmt.Sprintf("/sites/%s/deployments/%s", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}), SerializePathParameter(deploymentId, PathParameterSpec{Name: "deploymentId", Style: "simple", Explode: false}))), nil, nil)
+func (a *DeploymentApi) ApplicationsDeploymentsRetrieve(applicationId string, deploymentId string) (sdktypes.ApplicationsDeploymentsRetrieveResponse, error) {
+    raw, err := a.client.Get(AppApiPath(fmt.Sprintf("/applications/%s/deployments/%s", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}), SerializePathParameter(deploymentId, PathParameterSpec{Name: "deploymentId", Style: "simple", Explode: false}))), nil, nil)
     if err != nil {
-        var zero sdktypes.SitesDeploymentsRetrieveResponse
+        var zero sdktypes.ApplicationsDeploymentsRetrieveResponse
         return zero, err
     }
-    return decodeResult[sdktypes.SitesDeploymentsRetrieveResponse](raw)
+    return decodeResult[sdktypes.ApplicationsDeploymentsRetrieveResponse](raw)
 }
 
 // 基于历史成功版本创建快速还原命令
-func (a *DeploymentApi) SitesDeploymentsRollback(siteId string, deploymentId string, idempotencyKey string) (sdktypes.SitesDeploymentsRollbackResponse, error) {
+func (a *DeploymentApi) ApplicationsDeploymentsRollback(applicationId string, deploymentId string, idempotencyKey string) (sdktypes.ApplicationsDeploymentsRollbackResponse, error) {
     headers := BuildRequestHeaders(
         map[string]ParameterSpec{"Idempotency-Key": ParameterSpec{Value: idempotencyKey, Style: "simple", Explode: false},},
         map[string]ParameterSpec{},
     )
-    raw, err := a.client.Post(AppApiPath(fmt.Sprintf("/sites/%s/deployments/%s/rollback", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}), SerializePathParameter(deploymentId, PathParameterSpec{Name: "deploymentId", Style: "simple", Explode: false}))), nil, nil, headers, "")
+    raw, err := a.client.Post(AppApiPath(fmt.Sprintf("/applications/%s/deployments/%s/rollback", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}), SerializePathParameter(deploymentId, PathParameterSpec{Name: "deploymentId", Style: "simple", Explode: false}))), nil, nil, headers, "")
     if err != nil {
-        var zero sdktypes.SitesDeploymentsRollbackResponse
+        var zero sdktypes.ApplicationsDeploymentsRollbackResponse
         return zero, err
     }
-    return decodeResult[sdktypes.SitesDeploymentsRollbackResponse](raw)
+    return decodeResult[sdktypes.ApplicationsDeploymentsRollbackResponse](raw)
 }
 
 type PathParameterSpec struct {

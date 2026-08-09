@@ -16,14 +16,14 @@ impl MonitorApi {
     }
 
     /// 获取健康检查配置
-    pub async fn sites_health_checks_list(&self, site_id: &str) -> Result<serde_json::Value, SdkworkError> {
-        let path = app_path(&format!("/sites/{}/health_checks", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false))));
+    pub async fn applications_health_checks_list(&self, application_id: &str) -> Result<serde_json::Value, SdkworkError> {
+        let path = app_path(&format!("/applications/{}/health_checks", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false))));
         self.client.get(&path, None, None).await
     }
 
     /// 创建健康检查
-    pub async fn sites_health_checks_create(&self, site_id: &str, body: &CreateHealthCheckRequest, idempotency_key: &str) -> Result<HealthCheckResponse, SdkworkError> {
-        let path = app_path(&format!("/sites/{}/health_checks", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false))));
+    pub async fn applications_health_checks_create(&self, application_id: &str, body: &CreateHealthCheckRequest, idempotency_key: &str) -> Result<HealthCheckResponse, SdkworkError> {
+        let path = app_path(&format!("/applications/{}/health_checks", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false))));
         let headers = build_request_headers(
             &[
                 ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),

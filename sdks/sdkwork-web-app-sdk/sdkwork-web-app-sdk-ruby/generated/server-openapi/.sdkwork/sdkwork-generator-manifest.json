@@ -32,7 +32,11 @@
     },
     {
       "path": "lib/sdkwork/app_sdk.rb",
-      "sha256": "76febf4714b8e488e170428bb7ebb23f66356a5383f3c863ce045455a68fcbe4"
+      "sha256": "4b316f4d46d4a0960cc5079f144f183f7aeb8cfafc84959fe15f390ccc314b1b"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/api/application.rb",
+      "sha256": "eef2fb4aca6aa6f09ff1ed491c1bc3a9c3e972cb7595a8cf880552836838251c"
     },
     {
       "path": "lib/sdkwork/app_sdk/api/base_api.rb",
@@ -40,47 +44,155 @@
     },
     {
       "path": "lib/sdkwork/app_sdk/api/certificate.rb",
-      "sha256": "e231b56a93fde13f4eddfbd18bf2811dc544dd638924363b5fee77e287fd284e"
+      "sha256": "6c15db3393efbc3dc5b1f7405c4a198051165fbd6c48e743b959334e463aacfc"
     },
     {
       "path": "lib/sdkwork/app_sdk/api/deployment.rb",
-      "sha256": "e46ef41cf552ce7aa511f00347b9b2325e51d3a07667372c65dbbd3d916b0d8d"
+      "sha256": "d6b59cae3e118706fda2d307bcfb983b1fd8e32f44daa7ce1d3a183afcdf6f4e"
     },
     {
       "path": "lib/sdkwork/app_sdk/api/domain.rb",
-      "sha256": "be49094294caa403eb5ccd1db47536d7bfccdddf73e0d96fab57cbd953ad555c"
+      "sha256": "8d45efb2d3443f61e2b5f7cae574e3fb10a48e9465b7d0611e6d8e7f5c77a3ce"
     },
     {
       "path": "lib/sdkwork/app_sdk/api/env_variable.rb",
-      "sha256": "a1364f8145c44afda616a70c3bcafadec7d8e8860acbdf0b126c8447d1a27df6"
+      "sha256": "c17b0da51a9a4d4d7f7e809f3bdb0bb6c96f35abb4b3457501239ab2be7294b0"
     },
     {
       "path": "lib/sdkwork/app_sdk/api/monitor.rb",
-      "sha256": "3c0b65c12d7b0380f388f4b762e07f26de64b6cff4b2141a7f648b93d0e9d9e3"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/api/site.rb",
-      "sha256": "f716860ebcba8bb9504f3382b9d81fe58f1b7c44f7eedaf15d39e34d486c7b29"
+      "sha256": "478f514fd5e327b2f2298de159c00f7988a0934a4b958762a97ae00cf9af6ed5"
     },
     {
       "path": "lib/sdkwork/app_sdk/api/source_version.rb",
-      "sha256": "6bcc4a746bb6f359ef748bc323bb24fde0ce32a09b0b5b898922912b55ffd119"
+      "sha256": "c789887396b684ddcea3e5f4ab0c3f173a0b75d23cc642b6fd9af997908c60f9"
     },
     {
       "path": "lib/sdkwork/app_sdk/client.rb",
-      "sha256": "3c406e31cdd4c57cf4ac0d4d18faab92f765e89f8dc2824ae12b19dc77bc5c0d"
+      "sha256": "0f67709f6218b5395ef089e6f2b07f059f7f0d17a8d10f6e748b9fa304b4dbda"
     },
     {
       "path": "lib/sdkwork/app_sdk/http/client.rb",
       "sha256": "544b33a7401948786089dfb9c6f3b68b70cb3378da20783b76ceb5027607938a"
     },
     {
+      "path": "lib/sdkwork/app_sdk/models/application_page.rb",
+      "sha256": "225e035e7326339198bad260a7dc4187c94def11493ccc2d8ee6b7bd3ed60720"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/application_response.rb",
+      "sha256": "6e4f0393c1477e34e02ce3b82382a41071fa069b7bc31949bdd6c59ae1d5e6f5"
+    },
+    {
       "path": "lib/sdkwork/app_sdk/models/application_store_listing.rb",
       "sha256": "705ef9bb6bf6b54ab05aab3b275a9d750cb4a6af17173aff13b08cd0760cf52f"
     },
     {
+      "path": "lib/sdkwork/app_sdk/models/applications_activate_response.rb",
+      "sha256": "3a82dbc9e9bda8c683c89eeaa686dfcdf3b2c8811ebabf2517388397e8eb7807"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_create_response201.rb",
+      "sha256": "e08914182a616477ec0457cca1b1315d3e612d4b0f664efa551bafd51f9fa504"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_deployments_create_response201.rb",
+      "sha256": "e7ce70240483eebba76bba12edfe83c8dfafcb99d04faa1383edca2b5686b560"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_deployments_list_response.rb",
+      "sha256": "e47790adffe8df19cc798819ef2ab5376791b6fc7d5c72bb60234c4660f7e4c1"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_deployments_retrieve_response.rb",
+      "sha256": "486c6936f82bc42afdd89761a2075654d59cc218af1a10fac0635f0ceada61ca"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_deployments_rollback_response.rb",
+      "sha256": "02c80a984d1126d8b0d971e9551325cdee2c4f2f44c973126187470524e687f7"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_domains_create_response201.rb",
+      "sha256": "4fab763ea7645a5be4f27d428f965b918613821a34547e7b11c695f7ade1b7ef"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_domains_list_response.rb",
+      "sha256": "0bab56f05eb40cbfeea3b09a14c6bea69434660a504a845a175c33f3a2a469cd"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_domains_listener_certificate_bindings_create_response201.rb",
+      "sha256": "64e0d908e20b70c8440582c6ff07ad31fdff52515c59334f02f87d405cd389e1"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_domains_listener_certificate_bindings_list_response.rb",
+      "sha256": "5ab68f167d88ee486126985f41a99846a437326007bcaa2e4ccf1737d240146f"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_domains_retrieve_response.rb",
+      "sha256": "70811ea201999a19efe9432fdc268b7f1e47bdb43d7cfcd7ab4cf002a620f27f"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_domains_verify_response.rb",
+      "sha256": "016c3de782be15c53ac0a54aeec00b02359d74a04d120f4c590414b577a9244d"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_env_variables_create_response201.rb",
+      "sha256": "b7090638e64847dc86813e0389155a10923c57697f82408d7f3b97150f779d46"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_env_variables_list_response.rb",
+      "sha256": "669215b59d47c4e308287460aaa5245eec3d690dd6c977c8e9cf106d44dbe051"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_env_variables_update_response.rb",
+      "sha256": "c7903120239ae7a98b87e510bbb917e64b3a979d31cf07c3de30d98e6dcf9c02"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_health_checks_create_response201.rb",
+      "sha256": "c0ad4f323fa027856cd9bf35b02270ca4d22366cd3d4f76b345c8cb8673558b5"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_health_checks_list_response.rb",
+      "sha256": "5f8b750b7d2a892a4de78a374f34a0d70daecd8b6a8774d2aeda486ed4ed657b"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_list_response.rb",
+      "sha256": "37e4010733127a87e0f4f8184248a39c6e7f99736e1af6cac573813f3f64c48a"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_pause_response.rb",
+      "sha256": "15857663b4e99da7e260e91957d36e843be72edfada801264591d4e949e93898"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_retrieve_response.rb",
+      "sha256": "7e98a412f60be5d9cd79654fef03ca14e28328ea5602c76b514784783d7c7a00"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_source_versions_create_response201.rb",
+      "sha256": "06617a12dbc5af220fc37ae610b641749f58bb77dfb778746b43aae7749a5211"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_source_versions_git_import_create_response201.rb",
+      "sha256": "843602883c0db72198b2a1b3378a5ca51d37b8333e6bfdf4004b68d11f462574"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_source_versions_list_response.rb",
+      "sha256": "015db4300da95adf1d6e03da1b2303dda5b30a53824d7bae01c7449ea3faef77"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_source_versions_retrieve_response.rb",
+      "sha256": "cf4e97d05b7781db0afaba74cb3cdafe8ee5d73f5820c300b62184af4114527e"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/applications_update_response.rb",
+      "sha256": "e5a6f0ae6f7514444c8965bd71b73b2c32ab8c03e0b4adfc73ca2c7395c5c122"
+    },
+    {
       "path": "lib/sdkwork/app_sdk/models/certificate_identifier_response.rb",
       "sha256": "a3295629aaab17110c2f42274c24d77442190762226cb6baa5bdf964e99d5b54"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/create_application_request.rb",
+      "sha256": "496f3f70bf1ccd2495ff75c42d3a51898d62cc4b1c07910807230e5e3196e45c"
     },
     {
       "path": "lib/sdkwork/app_sdk/models/create_deployment_request.rb",
@@ -103,10 +215,6 @@
       "sha256": "824333c0ee17add52dd3758faa9ce74660db3c932a9da415a6ea0a2516b8b3f6"
     },
     {
-      "path": "lib/sdkwork/app_sdk/models/create_site_request.rb",
-      "sha256": "7833124373bf4076ac46acbf84fd99cb9ef313436709b147ccd66380956ca065"
-    },
-    {
       "path": "lib/sdkwork/app_sdk/models/create_source_version_request.rb",
       "sha256": "5026ae97272ef152d08deed016c32c2aed9729fd7521951799cf8943aade77ba"
     },
@@ -116,7 +224,7 @@
     },
     {
       "path": "lib/sdkwork/app_sdk/models/deployment_response.rb",
-      "sha256": "7c0c7f6d7077f98163b3505e0d2e6b5795a68c73296a836d0c2721d8cd48a777"
+      "sha256": "b4a0ff3b557320e4ebe2419aeb736ed9af9ae21460189fb657bc54a7018fef1b"
     },
     {
       "path": "lib/sdkwork/app_sdk/models/domain_page.rb",
@@ -160,7 +268,7 @@
     },
     {
       "path": "lib/sdkwork/app_sdk/models/listener_certificate_binding_response.rb",
-      "sha256": "de0ac16acfb9cd4b0af61008ac5b19208d4fe2cb1c2c8dd92b318df5d050822f"
+      "sha256": "cd1129354fc9c9db12c168ea2cef14ab3f6a6ecc2a32c45e67ea12bf45ac02a4"
     },
     {
       "path": "lib/sdkwork/app_sdk/models/listener_certificate_summary_response.rb",
@@ -215,114 +323,6 @@
       "sha256": "3988ba1c31c588cc823d8848631f55c913f451dcd62bc2e50e68eebffbb86d50"
     },
     {
-      "path": "lib/sdkwork/app_sdk/models/site_page.rb",
-      "sha256": "5be5d052af25ed5276085e28a522e9528a26215f9f57d8ae8a9a05085bef583a"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/site_response.rb",
-      "sha256": "181db1deb0f62f78c72ae158a2e90239655157c5cefa015be7371c5c48d16e58"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_activate_response.rb",
-      "sha256": "1443c0816262edc6da493957ed3f69bd05e01d45a939272fffd7a9ecef0e676b"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_create_response201.rb",
-      "sha256": "b3bc620f0b4fa9d5138f3b0be4384b3fb9f5f5cd78acae6174f6efc1a5b25fe1"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_deployments_create_response201.rb",
-      "sha256": "cf2deea561d95331166d56d1d29f006ed9141a2ace8ecf233243b7f9f02f8d54"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_deployments_list_response.rb",
-      "sha256": "8c75a483addc72125455010a3a737458c80a29ae7c401f66554377f91c9bfa1c"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_deployments_retrieve_response.rb",
-      "sha256": "bd45287fb5b7cf38646b8267d08b8f365617b20c1500caf0c6e8f05761756d74"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_deployments_rollback_response.rb",
-      "sha256": "3d449ca6b470156424cf94120e16e5cb14c2e9bd4dee021e0cef233942ef46f7"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_domains_create_response201.rb",
-      "sha256": "6204afca21cda462c8385219a8d56566214566fe1eb4e25208683f32ce1b6070"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_domains_list_response.rb",
-      "sha256": "3a3772aec4260bdec7118c8ffd96c097842cac9ed96143247acf1afafffc0403"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_domains_listener_certificate_bindings_create_response201.rb",
-      "sha256": "bd2d48641877844334e2d33367094cbe1cd50c3cb0d3f6a3ba26e2a1d027d704"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_domains_listener_certificate_bindings_list_response.rb",
-      "sha256": "36e2dd40b5de3eecaa86e5718804bb20db907b5bd961b6f68886a26dfed41cae"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_domains_retrieve_response.rb",
-      "sha256": "916342189d91ec0973b14069cd6990bd835cb91f2efb0334d3767ddb94762282"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_domains_verify_response.rb",
-      "sha256": "01f210a2a4dd9c2cf9b65bbaeb454b66c50c72e54d2f66f61bed6936eb758598"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_env_variables_create_response201.rb",
-      "sha256": "204aba5d8334b14d77185fcf6371e8c719dc482a1fbea4d4ea9a168957e9f23e"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_env_variables_list_response.rb",
-      "sha256": "f2d0c18c1a9b40bbe73c6ae4f30496776bdef3019378e01d30faaa5207cc7133"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_env_variables_update_response.rb",
-      "sha256": "fc79125f782931c81ce5411d7a8e2f122fefdf4e0da30a10d7a043c7438e00aa"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_health_checks_create_response201.rb",
-      "sha256": "d806b0c94a22b21fa16c55e9098303489e141240f624e11193adad121a56d398"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_health_checks_list_response.rb",
-      "sha256": "bdc06b7b1c0e8a2138ace2f8d343bddf9c04806a0fc5371ef37d43054ea46d9f"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_list_response.rb",
-      "sha256": "806fa301f84926272837f81cbaabacaeb76575060dbb4b1fc8be67f5c149aa79"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_pause_response.rb",
-      "sha256": "95168bd0423fef9e2cd35911e097f2b181ff5da494705cc40eecc94f3363241e"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_retrieve_response.rb",
-      "sha256": "ba37f20751004258b862d2238cafbecbd390691a4b20cffb519aac6af1dca808"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_source_versions_create_response201.rb",
-      "sha256": "14e863c9b43a3e427991a18e11fabcee256a5d3e2b7c7b4526b2c215411d30f3"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_source_versions_git_import_create_response201.rb",
-      "sha256": "1e54b16afce5ca90ff0e0a49c7f015f389a72f9c0fd46c6c74d9393ed90fdef1"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_source_versions_list_response.rb",
-      "sha256": "fc6739ea28af05eb839b5f1c0938cc50aab6e00a8ab749b22633c14bb66cb218"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_source_versions_retrieve_response.rb",
-      "sha256": "f7aaa249d00b04bdf098f31c6305aa3514bf3058220bc22641c580072ecc5774"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/sites_update_response.rb",
-      "sha256": "ac6917b49945de189758d25214cc8dce6341fcad96029323129d3b2d112b29c5"
-    },
-    {
       "path": "lib/sdkwork/app_sdk/models/source_version_config_snapshot.rb",
       "sha256": "89d7054857d5c9a880ebe8c599616c35b91546e0a19a01b30bd27694ac155843"
     },
@@ -332,15 +332,15 @@
     },
     {
       "path": "lib/sdkwork/app_sdk/models/source_version_response.rb",
-      "sha256": "5258516d8c83c603082bf2bc46cc24a58fde9007782fc9c691a48834b9cdada0"
+      "sha256": "cebfc472c590bfbb7cd9d2be38d611c04c710dc7e4ebfdeb438ad1458d1d8361"
+    },
+    {
+      "path": "lib/sdkwork/app_sdk/models/update_application_request.rb",
+      "sha256": "7e24d428ed0e7720d3206075e2039ded23f5ae2b6b2fd8dea1ba114e099f1618"
     },
     {
       "path": "lib/sdkwork/app_sdk/models/update_env_variable_request.rb",
       "sha256": "880f2f995bb6697d4b3684dbcdf0889b8e534817084111d7eaf26ed3b0665ba8"
-    },
-    {
-      "path": "lib/sdkwork/app_sdk/models/update_site_request.rb",
-      "sha256": "a6e3cbbb6750855f84702cbbefa55c009c297eccbdd8ae32b42cb30a9c5e734e"
     },
     {
       "path": "lib/sdkwork/app_sdk/sdk_config.rb",
@@ -356,7 +356,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "dacea188a039d15903651934317435f6e35adf2fa17cb0e2a8921972b3160459"
+      "sha256": "61ef567640fa039d8b5e976c9d4119142b2a02a9354df254722f050488ff398f"
     },
     {
       "path": "sdkwork-sdk.json",

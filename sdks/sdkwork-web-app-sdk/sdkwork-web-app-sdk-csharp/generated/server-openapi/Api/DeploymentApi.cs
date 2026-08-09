@@ -18,7 +18,7 @@ namespace SDKWork.Web.AppSdk.Api
         /// <summary>
         /// 获取部署历史
         /// </summary>
-        public async Task<SDKWork.Web.AppSdk.Models.SitesDeploymentsListResponse?> SitesDeploymentsListAsync(string siteId, int? pageSize = null, string? cursor = null, int? status = null)
+        public async Task<SDKWork.Web.AppSdk.Models.ApplicationsDeploymentsListResponse?> ApplicationsDeploymentsListAsync(string applicationId, int? pageSize = null, string? cursor = null, int? status = null)
         {
             var queryString = BuildQueryString(new[]
             {
@@ -26,13 +26,13 @@ namespace SDKWork.Web.AppSdk.Api
                 new QueryParameterSpec("cursor", cursor, "form", true, false, null),
                 new QueryParameterSpec("status", status, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Web.AppSdk.Models.SitesDeploymentsListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath($"/sites/{SerializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false))}/deployments"), queryString));
+            return await _client.GetAsync<SDKWork.Web.AppSdk.Models.ApplicationsDeploymentsListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/deployments"), queryString));
         }
 
         /// <summary>
         /// 发起部署
         /// </summary>
-        public async Task<SDKWork.Web.AppSdk.Models.SitesDeploymentsCreateResponse201?> SitesDeploymentsCreateAsync(string siteId, SDKWork.Web.AppSdk.Models.CreateDeploymentRequest body, string idempotencyKey)
+        public async Task<SDKWork.Web.AppSdk.Models.ApplicationsDeploymentsCreateResponse201?> ApplicationsDeploymentsCreateAsync(string applicationId, SDKWork.Web.AppSdk.Models.CreateDeploymentRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -41,21 +41,21 @@ namespace SDKWork.Web.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Web.AppSdk.Models.SitesDeploymentsCreateResponse201>(ApiPaths.AppPath($"/sites/{SerializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false))}/deployments"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.Web.AppSdk.Models.ApplicationsDeploymentsCreateResponse201>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/deployments"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
         /// 获取部署详情
         /// </summary>
-        public async Task<SDKWork.Web.AppSdk.Models.SitesDeploymentsRetrieveResponse?> SitesDeploymentsRetrieveAsync(string siteId, string deploymentId)
+        public async Task<SDKWork.Web.AppSdk.Models.ApplicationsDeploymentsRetrieveResponse?> ApplicationsDeploymentsRetrieveAsync(string applicationId, string deploymentId)
         {
-            return await _client.GetAsync<SDKWork.Web.AppSdk.Models.SitesDeploymentsRetrieveResponse>(ApiPaths.AppPath($"/sites/{SerializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false))}/deployments/{SerializePathParameter(deploymentId, new PathParameterSpec("deploymentId", "simple", false))}"));
+            return await _client.GetAsync<SDKWork.Web.AppSdk.Models.ApplicationsDeploymentsRetrieveResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/deployments/{SerializePathParameter(deploymentId, new PathParameterSpec("deploymentId", "simple", false))}"));
         }
 
         /// <summary>
         /// 基于历史成功版本创建快速还原命令
         /// </summary>
-        public async Task<SDKWork.Web.AppSdk.Models.SitesDeploymentsRollbackResponse?> SitesDeploymentsRollbackAsync(string siteId, string deploymentId, string idempotencyKey)
+        public async Task<SDKWork.Web.AppSdk.Models.ApplicationsDeploymentsRollbackResponse?> ApplicationsDeploymentsRollbackAsync(string applicationId, string deploymentId, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -64,7 +64,7 @@ namespace SDKWork.Web.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Web.AppSdk.Models.SitesDeploymentsRollbackResponse>(ApiPaths.AppPath($"/sites/{SerializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false))}/deployments/{SerializePathParameter(deploymentId, new PathParameterSpec("deploymentId", "simple", false))}/rollback"), null, null, requestHeaders);
+            return await _client.PostAsync<SDKWork.Web.AppSdk.Models.ApplicationsDeploymentsRollbackResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/deployments/{SerializePathParameter(deploymentId, new PathParameterSpec("deploymentId", "simple", false))}/rollback"), null, null, requestHeaders);
         }
 
         private sealed record PathParameterSpec(string Name, string Style, bool Explode);

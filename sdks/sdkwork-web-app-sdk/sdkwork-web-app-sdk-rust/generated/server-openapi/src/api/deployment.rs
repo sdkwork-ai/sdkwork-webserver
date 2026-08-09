@@ -17,19 +17,19 @@ impl DeploymentApi {
     }
 
     /// 获取部署历史
-    pub async fn sites_deployments_list(&self, site_id: &str, page_size: Option<i64>, cursor: Option<&str>, status: Option<i64>) -> Result<serde_json::Value, SdkworkError> {
+    pub async fn applications_deployments_list(&self, application_id: &str, page_size: Option<i64>, cursor: Option<&str>, status: Option<i64>) -> Result<serde_json::Value, SdkworkError> {
         let query = build_query_string(&[
             QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
             QueryParameterSpec::new("cursor", cursor, "form", true, false, None),
             QueryParameterSpec::new("status", status, "form", true, false, None),
         ]);
-        let path = append_query_string(app_path(&format!("/sites/{}/deployments", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false)))), &query);
+        let path = append_query_string(app_path(&format!("/applications/{}/deployments", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false)))), &query);
         self.client.get(&path, None, None).await
     }
 
     /// 发起部署
-    pub async fn sites_deployments_create(&self, site_id: &str, body: &CreateDeploymentRequest, idempotency_key: &str) -> Result<DeploymentResponse, SdkworkError> {
-        let path = app_path(&format!("/sites/{}/deployments", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false))));
+    pub async fn applications_deployments_create(&self, application_id: &str, body: &CreateDeploymentRequest, idempotency_key: &str) -> Result<DeploymentResponse, SdkworkError> {
+        let path = app_path(&format!("/applications/{}/deployments", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false))));
         let headers = build_request_headers(
             &[
                 ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
@@ -40,14 +40,14 @@ impl DeploymentApi {
     }
 
     /// 获取部署详情
-    pub async fn sites_deployments_retrieve(&self, site_id: &str, deployment_id: &str) -> Result<DeploymentResponse, SdkworkError> {
-        let path = app_path(&format!("/sites/{}/deployments/{}", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false)), serialize_path_parameter(deployment_id, PathParameterSpec::new("deploymentId", "simple", false))));
+    pub async fn applications_deployments_retrieve(&self, application_id: &str, deployment_id: &str) -> Result<DeploymentResponse, SdkworkError> {
+        let path = app_path(&format!("/applications/{}/deployments/{}", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false)), serialize_path_parameter(deployment_id, PathParameterSpec::new("deploymentId", "simple", false))));
         self.client.get(&path, None, None).await
     }
 
     /// 基于历史成功版本创建快速还原命令
-    pub async fn sites_deployments_rollback(&self, site_id: &str, deployment_id: &str, idempotency_key: &str) -> Result<DeploymentResponse, SdkworkError> {
-        let path = app_path(&format!("/sites/{}/deployments/{}/rollback", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false)), serialize_path_parameter(deployment_id, PathParameterSpec::new("deploymentId", "simple", false))));
+    pub async fn applications_deployments_rollback(&self, application_id: &str, deployment_id: &str, idempotency_key: &str) -> Result<DeploymentResponse, SdkworkError> {
+        let path = app_path(&format!("/applications/{}/deployments/{}/rollback", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false)), serialize_path_parameter(deployment_id, PathParameterSpec::new("deploymentId", "simple", false))));
         let headers = build_request_headers(
             &[
                 ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),

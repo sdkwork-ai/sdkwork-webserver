@@ -14,40 +14,40 @@ public class DeploymentApi {
     }
 
     /** 获取部署历史 */
-    public SitesDeploymentsListResponse sitesDeploymentsList(String siteId, Integer pageSize, String cursor, Integer status) throws Exception {
+    public ApplicationsDeploymentsListResponse applicationsDeploymentsList(String applicationId, Integer pageSize, String cursor, Integer status) throws Exception {
         String query = buildQueryString(List.of(
             new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             new QueryParameterSpec("cursor", cursor, "form", true, false, null),
             new QueryParameterSpec("status", status, "form", true, false, null)
         ));
-        Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/deployments"), query));
-        return client.convertValue(raw, new TypeReference<SitesDeploymentsListResponse>() {});
+        Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/deployments"), query));
+        return client.convertValue(raw, new TypeReference<ApplicationsDeploymentsListResponse>() {});
     }
 
     /** 发起部署 */
-    public SitesDeploymentsCreateResponse201 sitesDeploymentsCreate(String siteId, CreateDeploymentRequest body, String idempotencyKey) throws Exception {
+    public ApplicationsDeploymentsCreateResponse201 applicationsDeploymentsCreate(String applicationId, CreateDeploymentRequest body, String idempotencyKey) throws Exception {
         Map<String, String> requestHeaders = buildRequestHeaders(
                 Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
                 Map.of()
         );
-        Object raw = client.post(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/deployments"), body, null, requestHeaders, "application/json");
-        return client.convertValue(raw, new TypeReference<SitesDeploymentsCreateResponse201>() {});
+        Object raw = client.post(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/deployments"), body, null, requestHeaders, "application/json");
+        return client.convertValue(raw, new TypeReference<ApplicationsDeploymentsCreateResponse201>() {});
     }
 
     /** 获取部署详情 */
-    public SitesDeploymentsRetrieveResponse sitesDeploymentsRetrieve(String siteId, String deploymentId) throws Exception {
-        Object raw = client.get(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/deployments/" + serializePathParameter(deploymentId, new PathParameterSpec("deploymentId", "simple", false)) + ""));
-        return client.convertValue(raw, new TypeReference<SitesDeploymentsRetrieveResponse>() {});
+    public ApplicationsDeploymentsRetrieveResponse applicationsDeploymentsRetrieve(String applicationId, String deploymentId) throws Exception {
+        Object raw = client.get(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/deployments/" + serializePathParameter(deploymentId, new PathParameterSpec("deploymentId", "simple", false)) + ""));
+        return client.convertValue(raw, new TypeReference<ApplicationsDeploymentsRetrieveResponse>() {});
     }
 
     /** 基于历史成功版本创建快速还原命令 */
-    public SitesDeploymentsRollbackResponse sitesDeploymentsRollback(String siteId, String deploymentId, String idempotencyKey) throws Exception {
+    public ApplicationsDeploymentsRollbackResponse applicationsDeploymentsRollback(String applicationId, String deploymentId, String idempotencyKey) throws Exception {
         Map<String, String> requestHeaders = buildRequestHeaders(
                 Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
                 Map.of()
         );
-        Object raw = client.post(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/deployments/" + serializePathParameter(deploymentId, new PathParameterSpec("deploymentId", "simple", false)) + "/rollback"), null, null, requestHeaders);
-        return client.convertValue(raw, new TypeReference<SitesDeploymentsRollbackResponse>() {});
+        Object raw = client.post(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/deployments/" + serializePathParameter(deploymentId, new PathParameterSpec("deploymentId", "simple", false)) + "/rollback"), null, null, requestHeaders);
+        return client.convertValue(raw, new TypeReference<ApplicationsDeploymentsRollbackResponse>() {});
     }
 
     private record PathParameterSpec(String name, String style, boolean explode) {}

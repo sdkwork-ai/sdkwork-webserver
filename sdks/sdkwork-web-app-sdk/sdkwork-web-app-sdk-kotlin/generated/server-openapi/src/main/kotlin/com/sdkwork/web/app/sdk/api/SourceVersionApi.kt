@@ -9,43 +9,43 @@ import com.sdkwork.web.app.sdk.http.HttpClient
 class SourceVersionApi(private val client: HttpClient) {
 
     /** 获取应用源码版本 */
-    suspend fun sitesSourceVersionsList(siteId: String, pageSize: Int? = null, cursor: String? = null): SitesSourceVersionsListResponse? {
+    suspend fun applicationsSourceVersionsList(applicationId: String, pageSize: Int? = null, cursor: String? = null): ApplicationsSourceVersionsListResponse? {
         val query = buildQueryString(listOf(
             QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             QueryParameterSpec("cursor", cursor, "form", true, false, null)
         ))
-        val raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/sites/${serializePathParameter(siteId, PathParameterSpec("siteId", "simple", false))}/source_versions"), query))
-        return client.convertValue(raw, object : TypeReference<SitesSourceVersionsListResponse>() {})
+        val raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/applications/${serializePathParameter(applicationId, PathParameterSpec("applicationId", "simple", false))}/source_versions"), query))
+        return client.convertValue(raw, object : TypeReference<ApplicationsSourceVersionsListResponse>() {})
     }
 
     /** 登记 Drive 中的应用源码版本 */
-    suspend fun sitesSourceVersionsCreate(siteId: String, body: CreateSourceVersionRequest, idempotencyKey: String): SitesSourceVersionsCreateResponse201? {
+    suspend fun applicationsSourceVersionsCreate(applicationId: String, body: CreateSourceVersionRequest, idempotencyKey: String): ApplicationsSourceVersionsCreateResponse201? {
         val requestHeaders = buildRequestHeaders(
             mapOf(
                 "Idempotency-Key" to HeaderParameterSpec(idempotencyKey, "simple", false, null),
             ),
             emptyMap()
         )
-        val raw = client.post(ApiPaths.appPath("/sites/${serializePathParameter(siteId, PathParameterSpec("siteId", "simple", false))}/source_versions"), body, null, requestHeaders, "application/json")
-        return client.convertValue(raw, object : TypeReference<SitesSourceVersionsCreateResponse201>() {})
+        val raw = client.post(ApiPaths.appPath("/applications/${serializePathParameter(applicationId, PathParameterSpec("applicationId", "simple", false))}/source_versions"), body, null, requestHeaders, "application/json")
+        return client.convertValue(raw, object : TypeReference<ApplicationsSourceVersionsCreateResponse201>() {})
     }
 
     /** 从公共 Git 仓库导入应用源码版本 */
-    suspend fun sitesSourceVersionsGitImportCreate(siteId: String, body: ImportGitSourceVersionRequest, idempotencyKey: String): SitesSourceVersionsGitImportCreateResponse201? {
+    suspend fun applicationsSourceVersionsGitImportCreate(applicationId: String, body: ImportGitSourceVersionRequest, idempotencyKey: String): ApplicationsSourceVersionsGitImportCreateResponse201? {
         val requestHeaders = buildRequestHeaders(
             mapOf(
                 "Idempotency-Key" to HeaderParameterSpec(idempotencyKey, "simple", false, null),
             ),
             emptyMap()
         )
-        val raw = client.post(ApiPaths.appPath("/sites/${serializePathParameter(siteId, PathParameterSpec("siteId", "simple", false))}/source_versions/git_import"), body, null, requestHeaders, "application/json")
-        return client.convertValue(raw, object : TypeReference<SitesSourceVersionsGitImportCreateResponse201>() {})
+        val raw = client.post(ApiPaths.appPath("/applications/${serializePathParameter(applicationId, PathParameterSpec("applicationId", "simple", false))}/source_versions/git_import"), body, null, requestHeaders, "application/json")
+        return client.convertValue(raw, object : TypeReference<ApplicationsSourceVersionsGitImportCreateResponse201>() {})
     }
 
     /** 获取应用源码版本详情 */
-    suspend fun sitesSourceVersionsRetrieve(siteId: String, sourceVersionId: String): SitesSourceVersionsRetrieveResponse? {
-        val raw = client.get(ApiPaths.appPath("/sites/${serializePathParameter(siteId, PathParameterSpec("siteId", "simple", false))}/source_versions/${serializePathParameter(sourceVersionId, PathParameterSpec("sourceVersionId", "simple", false))}"))
-        return client.convertValue(raw, object : TypeReference<SitesSourceVersionsRetrieveResponse>() {})
+    suspend fun applicationsSourceVersionsRetrieve(applicationId: String, sourceVersionId: String): ApplicationsSourceVersionsRetrieveResponse? {
+        val raw = client.get(ApiPaths.appPath("/applications/${serializePathParameter(applicationId, PathParameterSpec("applicationId", "simple", false))}/source_versions/${serializePathParameter(sourceVersionId, PathParameterSpec("sourceVersionId", "simple", false))}"))
+        return client.convertValue(raw, object : TypeReference<ApplicationsSourceVersionsRetrieveResponse>() {})
     }
 
     private data class PathParameterSpec(val name: String, val style: String, val explode: Boolean)

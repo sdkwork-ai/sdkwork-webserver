@@ -6,8 +6,8 @@ use crate::models::{SourceVersionConfigSnapshot};
 pub struct SourceVersionResponse {
     pub id: String,
 
-    #[serde(rename = "siteId")]
-    pub site_id: String,
+    #[serde(rename = "applicationId")]
+    pub application_id: String,
 
     #[serde(rename = "versionTag")]
     pub version_tag: String,

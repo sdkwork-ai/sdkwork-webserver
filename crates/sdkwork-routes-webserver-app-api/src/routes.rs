@@ -5,18 +5,18 @@ use axum::{
     Extension, Json, Router,
 };
 use sdkwork_webserver_contract::{
-    CreateDeploymentRequest, CreateDomainRequest, CreateEnvVariableRequest,
-    CreateHealthCheckRequest, CreateListenerCertificateBindingRequest, CreateSiteRequest,
-    CreateSourceVersionRequest, ImportGitSourceVersionRequest, ListSitesQuery,
-    UpdateEnvVariableRequest, UpdateSiteRequest, WebAppApi, WebAppRequestContext,
+    CreateApplicationRequest, CreateDeploymentRequest, CreateDomainRequest,
+    CreateEnvVariableRequest, CreateHealthCheckRequest, CreateListenerCertificateBindingRequest,
+    CreateSourceVersionRequest, ImportGitSourceVersionRequest, ListApplicationsQuery,
+    UpdateApplicationRequest, UpdateEnvVariableRequest, WebAppApi, WebAppRequestContext,
 };
 use serde::Deserialize;
 use std::sync::Arc;
 
 use crate::{auth::require_app_context, paths};
 use sdkwork_routes_webserver_common::{
-    created_resource, no_content, ok_deployment_page, ok_domain_page, ok_env_variable_page,
-    ok_health_check_page, ok_listener_certificate_binding_page, ok_resource, ok_site_page,
+    created_resource, no_content, ok_application_page, ok_deployment_page, ok_domain_page,
+    ok_env_variable_page, ok_health_check_page, ok_listener_certificate_binding_page, ok_resource,
     ok_source_version_page, validate_pagination_query, WebApiError,
 };
 
@@ -34,53 +34,67 @@ where
 
 pub fn build_router_with_shared_app_api(api: Arc<dyn WebAppApi>) -> Router {
     Router::new()
-        .route(paths::SITES, get(list_sites).post(create_site))
         .route(
-            paths::SITE,
-            get(retrieve_site).patch(update_site).delete(delete_site),
+            paths::APPLICATIONS,
+            get(list_applications).post(create_application),
         )
-        .route(paths::SITE_ACTIVATE, post(activate_site))
-        .route(paths::SITE_PAUSE, post(pause_site))
-        .route(paths::SITE_DOMAINS, get(list_domains).post(create_domain))
         .route(
-            paths::SITE_DOMAIN,
+            paths::APPLICATION,
+            get(retrieve_application)
+                .patch(update_application)
+                .delete(delete_application),
+        )
+        .route(paths::APPLICATION_ACTIVATE, post(activate_application))
+        .route(paths::APPLICATION_PAUSE, post(pause_application))
+        .route(
+            paths::APPLICATION_DOMAINS,
+            get(list_domains).post(create_domain),
+        )
+        .route(
+            paths::APPLICATION_DOMAIN,
             get(retrieve_domain).delete(delete_domain),
         )
-        .route(paths::SITE_DOMAIN_VERIFY, post(verify_domain))
+        .route(paths::APPLICATION_DOMAIN_VERIFY, post(verify_domain))
         .route(paths::DOMAINS, get(list_certificate_domains))
         .route(
-            paths::SITE_DOMAIN_LISTENER_CERTIFICATE_BINDINGS,
+            paths::APPLICATION_DOMAIN_LISTENER_CERTIFICATE_BINDINGS,
             get(list_listener_certificate_bindings).post(bind_listener_certificate),
         )
         .route(
-            paths::SITE_DOMAIN_LISTENER_CERTIFICATE_BINDING,
+            paths::APPLICATION_DOMAIN_LISTENER_CERTIFICATE_BINDING,
             axum::routing::delete(unbind_listener_certificate),
         )
         .route(
-            paths::SITE_SOURCE_VERSIONS,
+            paths::APPLICATION_SOURCE_VERSIONS,
             get(list_source_versions).post(create_source_version),
         )
         .route(
-            paths::SITE_SOURCE_VERSION_GIT_IMPORT,
+            paths::APPLICATION_SOURCE_VERSION_GIT_IMPORT,
             post(import_git_source_version),
         )
-        .route(paths::SITE_SOURCE_VERSION, get(retrieve_source_version))
         .route(
-            paths::SITE_DEPLOYMENTS,
+            paths::APPLICATION_SOURCE_VERSION,
+            get(retrieve_source_version),
+        )
+        .route(
+            paths::APPLICATION_DEPLOYMENTS,
             get(list_deployments).post(create_deployment),
         )
-        .route(paths::SITE_DEPLOYMENT, get(retrieve_deployment))
-        .route(paths::SITE_DEPLOYMENT_ROLLBACK, post(rollback_deployment))
+        .route(paths::APPLICATION_DEPLOYMENT, get(retrieve_deployment))
         .route(
-            paths::SITE_ENV_VARIABLES,
+            paths::APPLICATION_DEPLOYMENT_ROLLBACK,
+            post(rollback_deployment),
+        )
+        .route(
+            paths::APPLICATION_ENV_VARIABLES,
             get(list_env_variables).post(create_env_variable),
         )
         .route(
-            paths::SITE_ENV_VARIABLE,
+            paths::APPLICATION_ENV_VARIABLE,
             axum::routing::patch(update_env_variable).delete(delete_env_variable),
         )
         .route(
-            paths::SITE_HEALTH_CHECKS,
+            paths::APPLICATION_HEALTH_CHECKS,
             get(list_health_checks).post(create_health_check),
         )
         .layer(axum::middleware::from_fn(validate_pagination_query))
@@ -119,81 +133,101 @@ fn default_page_size() -> i32 {
     20
 }
 
-async fn list_sites(
+async fn list_applications(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Query(query): Query<ListSitesQuery>,
+    Query(query): Query<ListApplicationsQuery>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
-    ok_site_page(state.api.list_sites(&context, &query).await)
+    ok_application_page(state.api.list_applications(&context, &query).await)
 }
 
-async fn create_site(
+async fn create_application(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Json(request): Json<CreateSiteRequest>,
+    Json(request): Json<CreateApplicationRequest>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
-    created_resource(state.api.create_site(&context, &request).await)
+    created_resource(state.api.create_application(&context, &request).await)
 }
 
-async fn retrieve_site(
+async fn retrieve_application(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path(site_id): Path<String>,
+    Path(application_id): Path<String>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
-    ok_resource(state.api.retrieve_site(&context, &site_id).await)
+    ok_resource(
+        state
+            .api
+            .retrieve_application(&context, &application_id)
+            .await,
+    )
 }
 
-async fn update_site(
+async fn update_application(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path(site_id): Path<String>,
-    Json(request): Json<UpdateSiteRequest>,
+    Path(application_id): Path<String>,
+    Json(request): Json<UpdateApplicationRequest>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
-    ok_resource(state.api.update_site(&context, &site_id, &request).await)
+    ok_resource(
+        state
+            .api
+            .update_application(&context, &application_id, &request)
+            .await,
+    )
 }
 
-async fn delete_site(
+async fn delete_application(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path(site_id): Path<String>,
+    Path(application_id): Path<String>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
-    no_content(state.api.delete_site(&context, &site_id).await)
+    no_content(
+        state
+            .api
+            .delete_application(&context, &application_id)
+            .await,
+    )
 }
 
-async fn activate_site(
+async fn activate_application(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path(site_id): Path<String>,
+    Path(application_id): Path<String>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
-    ok_resource(state.api.activate_site(&context, &site_id).await)
+    ok_resource(
+        state
+            .api
+            .activate_application(&context, &application_id)
+            .await,
+    )
 }
 
-async fn pause_site(
+async fn pause_application(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path(site_id): Path<String>,
+    Path(application_id): Path<String>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
-    ok_resource(state.api.pause_site(&context, &site_id).await)
+    ok_resource(state.api.pause_application(&context, &application_id).await)
 }
 
 async fn list_domains(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path(site_id): Path<String>,
+    Path(application_id): Path<String>,
     Query(query): Query<PageQuery>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
     ok_domain_page(
         state
             .api
-            .list_domains(&context, &site_id, query.page, query.page_size)
+            .list_domains(&context, &application_id, query.page, query.page_size)
             .await,
         query.page,
         query.page_size,
@@ -219,23 +253,28 @@ async fn list_certificate_domains(
 async fn create_domain(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path(site_id): Path<String>,
+    Path(application_id): Path<String>,
     Json(request): Json<CreateDomainRequest>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
-    created_resource(state.api.create_domain(&context, &site_id, &request).await)
+    created_resource(
+        state
+            .api
+            .create_domain(&context, &application_id, &request)
+            .await,
+    )
 }
 
 async fn retrieve_domain(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path((site_id, domain_id)): Path<(String, String)>,
+    Path((application_id, domain_id)): Path<(String, String)>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
     ok_resource(
         state
             .api
-            .retrieve_domain(&context, &site_id, &domain_id)
+            .retrieve_domain(&context, &application_id, &domain_id)
             .await,
     )
 }
@@ -243,13 +282,13 @@ async fn retrieve_domain(
 async fn delete_domain(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path((site_id, domain_id)): Path<(String, String)>,
+    Path((application_id, domain_id)): Path<(String, String)>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
     no_content(
         state
             .api
-            .delete_domain(&context, &site_id, &domain_id)
+            .delete_domain(&context, &application_id, &domain_id)
             .await,
     )
 }
@@ -257,13 +296,13 @@ async fn delete_domain(
 async fn verify_domain(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path((site_id, domain_id)): Path<(String, String)>,
+    Path((application_id, domain_id)): Path<(String, String)>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
     ok_resource(
         state
             .api
-            .verify_domain(&context, &site_id, &domain_id)
+            .verify_domain(&context, &application_id, &domain_id)
             .await,
     )
 }
@@ -271,7 +310,7 @@ async fn verify_domain(
 async fn list_deployments(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path(site_id): Path<String>,
+    Path(application_id): Path<String>,
     Query(query): Query<DeploymentListQuery>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
@@ -280,7 +319,7 @@ async fn list_deployments(
             .api
             .list_deployments(
                 &context,
-                &site_id,
+                &application_id,
                 query.page,
                 query.page_size,
                 query.status,
@@ -293,7 +332,7 @@ async fn list_deployments(
 async fn list_source_versions(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path(site_id): Path<String>,
+    Path(application_id): Path<String>,
     Query(query): Query<PageQuery>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
@@ -302,7 +341,7 @@ async fn list_source_versions(
             .api
             .list_source_versions(
                 &context,
-                &site_id,
+                &application_id,
                 query.page,
                 query.page_size,
                 query.cursor.as_deref(),
@@ -314,14 +353,14 @@ async fn list_source_versions(
 async fn create_source_version(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path(site_id): Path<String>,
+    Path(application_id): Path<String>,
     Json(request): Json<CreateSourceVersionRequest>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
     created_resource(
         state
             .api
-            .create_source_version(&context, &site_id, &request)
+            .create_source_version(&context, &application_id, &request)
             .await,
     )
 }
@@ -329,14 +368,14 @@ async fn create_source_version(
 async fn import_git_source_version(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path(site_id): Path<String>,
+    Path(application_id): Path<String>,
     Json(request): Json<ImportGitSourceVersionRequest>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
     created_resource(
         state
             .api
-            .import_git_source_version(&context, &site_id, &request)
+            .import_git_source_version(&context, &application_id, &request)
             .await,
     )
 }
@@ -344,13 +383,13 @@ async fn import_git_source_version(
 async fn retrieve_source_version(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path((site_id, source_version_id)): Path<(String, String)>,
+    Path((application_id, source_version_id)): Path<(String, String)>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
     ok_resource(
         state
             .api
-            .retrieve_source_version(&context, &site_id, &source_version_id)
+            .retrieve_source_version(&context, &application_id, &source_version_id)
             .await,
     )
 }
@@ -358,14 +397,14 @@ async fn retrieve_source_version(
 async fn create_deployment(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path(site_id): Path<String>,
+    Path(application_id): Path<String>,
     Json(request): Json<CreateDeploymentRequest>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
     created_resource(
         state
             .api
-            .create_deployment(&context, &site_id, &request)
+            .create_deployment(&context, &application_id, &request)
             .await,
     )
 }
@@ -373,13 +412,13 @@ async fn create_deployment(
 async fn retrieve_deployment(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path((site_id, deployment_id)): Path<(String, String)>,
+    Path((application_id, deployment_id)): Path<(String, String)>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
     ok_resource(
         state
             .api
-            .retrieve_deployment(&context, &site_id, &deployment_id)
+            .retrieve_deployment(&context, &application_id, &deployment_id)
             .await,
     )
 }
@@ -387,13 +426,13 @@ async fn retrieve_deployment(
 async fn rollback_deployment(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path((site_id, deployment_id)): Path<(String, String)>,
+    Path((application_id, deployment_id)): Path<(String, String)>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
     ok_resource(
         state
             .api
-            .rollback_deployment(&context, &site_id, &deployment_id)
+            .rollback_deployment(&context, &application_id, &deployment_id)
             .await,
     )
 }
@@ -401,14 +440,14 @@ async fn rollback_deployment(
 async fn list_env_variables(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path(site_id): Path<String>,
+    Path(application_id): Path<String>,
     Query(query): Query<EnvVariableListQuery>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
     ok_env_variable_page(
         state
             .api
-            .list_env_variables(&context, &site_id, query.environment.as_deref())
+            .list_env_variables(&context, &application_id, query.environment.as_deref())
             .await,
     )
 }
@@ -416,14 +455,14 @@ async fn list_env_variables(
 async fn create_env_variable(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path(site_id): Path<String>,
+    Path(application_id): Path<String>,
     Json(request): Json<CreateEnvVariableRequest>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
     created_resource(
         state
             .api
-            .create_env_variable(&context, &site_id, &request)
+            .create_env_variable(&context, &application_id, &request)
             .await,
     )
 }
@@ -431,14 +470,14 @@ async fn create_env_variable(
 async fn update_env_variable(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path((site_id, variable_id)): Path<(String, String)>,
+    Path((application_id, variable_id)): Path<(String, String)>,
     Json(request): Json<UpdateEnvVariableRequest>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
     ok_resource(
         state
             .api
-            .update_env_variable(&context, &site_id, &variable_id, &request)
+            .update_env_variable(&context, &application_id, &variable_id, &request)
             .await,
     )
 }
@@ -446,13 +485,13 @@ async fn update_env_variable(
 async fn delete_env_variable(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path((site_id, variable_id)): Path<(String, String)>,
+    Path((application_id, variable_id)): Path<(String, String)>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
     no_content(
         state
             .api
-            .delete_env_variable(&context, &site_id, &variable_id)
+            .delete_env_variable(&context, &application_id, &variable_id)
             .await,
     )
 }
@@ -460,7 +499,7 @@ async fn delete_env_variable(
 async fn list_listener_certificate_bindings(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path((site_id, domain_id)): Path<(String, String)>,
+    Path((application_id, domain_id)): Path<(String, String)>,
     Query(query): Query<PageQuery>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
@@ -469,7 +508,7 @@ async fn list_listener_certificate_bindings(
             .api
             .list_listener_certificate_bindings(
                 &context,
-                &site_id,
+                &application_id,
                 &domain_id,
                 query.page,
                 query.page_size,
@@ -483,14 +522,14 @@ async fn list_listener_certificate_bindings(
 async fn bind_listener_certificate(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path((site_id, domain_id)): Path<(String, String)>,
+    Path((application_id, domain_id)): Path<(String, String)>,
     Json(request): Json<CreateListenerCertificateBindingRequest>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
     created_resource(
         state
             .api
-            .bind_listener_certificate(&context, &site_id, &domain_id, &request)
+            .bind_listener_certificate(&context, &application_id, &domain_id, &request)
             .await,
     )
 }
@@ -498,13 +537,13 @@ async fn bind_listener_certificate(
 async fn unbind_listener_certificate(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path((site_id, domain_id, binding_id)): Path<(String, String, String)>,
+    Path((application_id, domain_id, binding_id)): Path<(String, String, String)>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
     no_content(
         state
             .api
-            .unbind_listener_certificate(&context, &site_id, &domain_id, &binding_id)
+            .unbind_listener_certificate(&context, &application_id, &domain_id, &binding_id)
             .await,
     )
 }
@@ -512,23 +551,28 @@ async fn unbind_listener_certificate(
 async fn list_health_checks(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path(site_id): Path<String>,
+    Path(application_id): Path<String>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
-    ok_health_check_page(state.api.list_health_checks(&context, &site_id).await)
+    ok_health_check_page(
+        state
+            .api
+            .list_health_checks(&context, &application_id)
+            .await,
+    )
 }
 
 async fn create_health_check(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
-    Path(site_id): Path<String>,
+    Path(application_id): Path<String>,
     Json(request): Json<CreateHealthCheckRequest>,
 ) -> Result<Response, WebApiError> {
     let context = require_app_context(context)?;
     created_resource(
         state
             .api
-            .create_health_check(&context, &site_id, &request)
+            .create_health_check(&context, &application_id, &request)
             .await,
     )
 }

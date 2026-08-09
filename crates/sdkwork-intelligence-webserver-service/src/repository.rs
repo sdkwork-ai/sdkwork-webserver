@@ -3,22 +3,23 @@
 use async_trait::async_trait;
 use sdkwork_webserver_contract::WebServiceResult;
 use sdkwork_webserver_contract::{
-    AgentHeartbeatRequest, AgentHeartbeatResponse, AgentSyncResponse, AuditLogPage,
-    CertificateDistributionPage, CertificateIssueUpdate, CertificateOperationAcceptedResponse,
-    CertificateOperationLease, CertificateOperationResponse, CertificatePage, CertificateResponse,
-    CreateDeploymentRequest, CreateDomainRequest, CreateEnvVariableRequest,
-    CreateHealthCheckRequest, CreateListenerCertificateBindingRequest, CreateManagedDomainRequest,
-    CreateNginxConfigRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest,
-    CreateServerRequest, CreateServerResponse, CreateSiteRequest, CreateSourceVersionRequest,
-    DeploymentPage, DeploymentResponse, DomainPage, DomainResponse, EnvVariablePage,
-    EnvVariableResponse, HealthCheckPage, HealthCheckResponse, IssueCertificateRequest,
-    ListAuditLogsQuery, ListNginxConfigsQuery, ListRootDomainsQuery, ListSitesQuery,
-    ListenerCertificateBindingPage, ListenerCertificateBindingResponse, NginxConfigPage,
-    NginxConfigResponse, NginxStatusResponse, RevokeCertificateRequest, RootDomainPage,
-    RootDomainResponse, RuntimeAssignment, RuntimeAssignmentDelivery, RuntimeObservation,
-    RuntimeObservationState, ServerPage, SitePage, SiteResponse, SourceVersionPage,
-    SourceVersionResponse, TlsCertificateAssignmentMaterial, UpdateDomainApplicationBindingRequest,
-    UpdateEnvVariableRequest, UpdateNginxConfigRequest, UpdateSiteRequest,
+    AgentHeartbeatRequest, AgentHeartbeatResponse, AgentSyncResponse, ApplicationPage,
+    ApplicationResponse, AuditLogPage, CertificateDistributionPage, CertificateIssueUpdate,
+    CertificateOperationAcceptedResponse, CertificateOperationLease, CertificateOperationResponse,
+    CertificatePage, CertificateResponse, CreateApplicationRequest, CreateDeploymentRequest,
+    CreateDomainRequest, CreateEnvVariableRequest, CreateHealthCheckRequest,
+    CreateListenerCertificateBindingRequest, CreateManagedDomainRequest, CreateNginxConfigRequest,
+    CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
+    CreateServerResponse, CreateSourceVersionRequest, DeploymentPage, DeploymentResponse,
+    DomainPage, DomainResponse, EnvVariablePage, EnvVariableResponse, HealthCheckPage,
+    HealthCheckResponse, IssueCertificateRequest, ListApplicationsQuery, ListAuditLogsQuery,
+    ListNginxConfigsQuery, ListRootDomainsQuery, ListenerCertificateBindingPage,
+    ListenerCertificateBindingResponse, NginxConfigPage, NginxConfigResponse, NginxStatusResponse,
+    RevokeCertificateRequest, RootDomainPage, RootDomainResponse, RuntimeAssignment,
+    RuntimeAssignmentDelivery, RuntimeObservation, RuntimeObservationState, ServerPage,
+    SourceVersionPage, SourceVersionResponse, TlsCertificateAssignmentMaterial,
+    UpdateApplicationRequest, UpdateDomainApplicationBindingRequest, UpdateEnvVariableRequest,
+    UpdateNginxConfigRequest,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -102,53 +103,62 @@ pub struct AuditLogWrite<'a> {
 pub trait WebRepositoryPort: Send + Sync {
     async fn ready_check(&self) -> WebServiceResult<()>;
 
-    async fn list_sites(
+    async fn list_applications(
         &self,
         tenant_id: i64,
         owner_id: Option<i64>,
-        query: &ListSitesQuery,
-    ) -> WebServiceResult<SitePage>;
+        query: &ListApplicationsQuery,
+    ) -> WebServiceResult<ApplicationPage>;
 
-    async fn create_site(
+    async fn create_application(
         &self,
         tenant_id: i64,
         organization_id: Option<i64>,
         owner_id: Option<i64>,
-        request: &CreateSiteRequest,
-    ) -> WebServiceResult<SiteResponse>;
+        request: &CreateApplicationRequest,
+    ) -> WebServiceResult<ApplicationResponse>;
 
-    async fn retrieve_site(
+    async fn retrieve_application(
         &self,
         tenant_id: i64,
         owner_id: Option<i64>,
-        site_id: &str,
-    ) -> WebServiceResult<SiteResponse>;
+        application_id: &str,
+    ) -> WebServiceResult<ApplicationResponse>;
 
-    async fn update_site(
+    async fn update_application(
         &self,
         tenant_id: i64,
-        site_id: &str,
-        request: &UpdateSiteRequest,
-    ) -> WebServiceResult<SiteResponse>;
+        application_id: &str,
+        request: &UpdateApplicationRequest,
+    ) -> WebServiceResult<ApplicationResponse>;
 
-    async fn delete_site(
+    async fn delete_application(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         actor_id: Option<i64>,
     ) -> WebServiceResult<()>;
 
-    async fn set_site_status(
+    async fn set_application_status(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         status: i32,
-    ) -> WebServiceResult<SiteResponse>;
+    ) -> WebServiceResult<ApplicationResponse>;
+
+    /// Resolves the backing site id for an application resource. The site is
+    /// the internal carrier row; all child resources (domains, deployments,
+    /// source versions, env variables, health checks) are site-scoped.
+    async fn resolve_site_id(
+        &self,
+        tenant_id: i64,
+        application_id: &str,
+    ) -> WebServiceResult<String>;
 
     async fn list_domains(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         page: i32,
         page_size: i32,
     ) -> WebServiceResult<DomainPage>;
@@ -167,28 +177,28 @@ pub trait WebRepositoryPort: Send + Sync {
     async fn create_domain(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         request: &CreateDomainRequest,
     ) -> WebServiceResult<DomainResponse>;
 
     async fn retrieve_domain(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         domain_id: &str,
     ) -> WebServiceResult<DomainResponse>;
 
     async fn delete_domain(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         domain_id: &str,
     ) -> WebServiceResult<()>;
 
     async fn prepare_domain_verification(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         domain_id: &str,
     ) -> WebServiceResult<DomainVerificationChallenge>;
 
@@ -275,7 +285,7 @@ pub trait WebRepositoryPort: Send + Sync {
     async fn list_source_versions(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         page: i32,
         page_size: i32,
         cursor: Option<&str>,
@@ -284,7 +294,7 @@ pub trait WebRepositoryPort: Send + Sync {
     async fn create_source_version(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         actor_id: Option<i64>,
         retention_limit: i32,
         request: &CreateSourceVersionRequest,
@@ -293,14 +303,14 @@ pub trait WebRepositoryPort: Send + Sync {
     async fn retrieve_source_version(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         source_version_id: &str,
     ) -> WebServiceResult<SourceVersionResponse>;
 
     async fn list_deployments(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         page: i32,
         page_size: i32,
         status: Option<i32>,
@@ -310,7 +320,7 @@ pub trait WebRepositoryPort: Send + Sync {
     async fn create_deployment(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         actor_id: Option<i64>,
         request: &CreateDeploymentRequest,
     ) -> WebServiceResult<DeploymentResponse>;
@@ -318,14 +328,14 @@ pub trait WebRepositoryPort: Send + Sync {
     async fn retrieve_deployment(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         deployment_id: &str,
     ) -> WebServiceResult<DeploymentResponse>;
 
     async fn rollback_deployment(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         deployment_id: &str,
         actor_id: Option<i64>,
         idempotency_key: Option<&str>,
@@ -334,21 +344,21 @@ pub trait WebRepositoryPort: Send + Sync {
     async fn list_env_variables(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         environment: Option<&str>,
     ) -> WebServiceResult<EnvVariablePage>;
 
     async fn create_env_variable(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         request: &CreateEnvVariableRequest,
     ) -> WebServiceResult<EnvVariableResponse>;
 
     async fn update_env_variable(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         variable_id: &str,
         request: &UpdateEnvVariableRequest,
     ) -> WebServiceResult<EnvVariableResponse>;
@@ -356,7 +366,7 @@ pub trait WebRepositoryPort: Send + Sync {
     async fn delete_env_variable(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         variable_id: &str,
     ) -> WebServiceResult<()>;
 
@@ -423,7 +433,7 @@ pub trait WebRepositoryPort: Send + Sync {
     async fn list_listener_certificate_bindings(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         domain_id: &str,
         page: i32,
         page_size: i32,
@@ -432,7 +442,7 @@ pub trait WebRepositoryPort: Send + Sync {
     async fn bind_listener_certificate(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         domain_id: &str,
         request: &CreateListenerCertificateBindingRequest,
     ) -> WebServiceResult<ListenerCertificateBindingResponse>;
@@ -440,7 +450,7 @@ pub trait WebRepositoryPort: Send + Sync {
     async fn unbind_listener_certificate(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         domain_id: &str,
         binding_id: &str,
     ) -> WebServiceResult<()>;
@@ -515,13 +525,13 @@ pub trait WebRepositoryPort: Send + Sync {
     async fn list_health_checks(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
     ) -> WebServiceResult<HealthCheckPage>;
 
     async fn create_health_check(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
         request: &CreateHealthCheckRequest,
     ) -> WebServiceResult<HealthCheckResponse>;
 
@@ -562,7 +572,7 @@ pub trait WebRepositoryPort: Send + Sync {
     async fn load_active_nginx_config_content(
         &self,
         tenant_id: i64,
-        site_id: &str,
+        application_id: &str,
     ) -> WebServiceResult<Option<String>>;
 
     async fn resolve_site_primary_hostname(

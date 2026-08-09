@@ -133,7 +133,7 @@ export function WorkspaceSidebar({ basePath, entries, t }: WorkspaceSidebarProps
 function ResourceIcon({ resource }: { resource: WebserverResourceKey }): ReactNode {
   const iconProps = { "aria-hidden": true, size: 17 } as const;
   switch (resource) {
-    case "sites":
+    case "applications":
     case "applications":
       return <AppWindow {...iconProps} />;
     case "configuration":

@@ -44,7 +44,7 @@ const emptySource: WebserverResourceDataSource = {
 };
 
 const registry: WebserverResourceRegistry = {
-  sites: {
+  applications: {
     actions: [{
       id: "create",
       label: "Create application",
@@ -207,7 +207,7 @@ const registry: WebserverResourceRegistry = {
       };
     },
     requiresScope: true,
-    scopeKind: "site",
+    scopeKind: "application",
   },
 };
 

@@ -2,7 +2,7 @@ import { HttpClient, createHttpClient } from './http/client';
 import type { SdkworkAppConfig } from './types/common';
 import type { AuthTokenManager } from '@sdkwork/sdk-common';
 
-import { SiteApi, createSiteApi } from './api/site';
+import { ApplicationApi, createApplicationApi } from './api/application';
 import { DomainApi, createDomainApi } from './api/domain';
 import { CertificateApi, createCertificateApi } from './api/certificate';
 import { SourceVersionApi, createSourceVersionApi } from './api/source-version';
@@ -13,7 +13,7 @@ import { MonitorApi, createMonitorApi } from './api/monitor';
 export class SdkworkAppClient {
   private httpClient: HttpClient;
 
-  public readonly site: SiteApi;
+  public readonly application: ApplicationApi;
   public readonly domain: DomainApi;
   public readonly certificate: CertificateApi;
   public readonly sourceVersion: SourceVersionApi;
@@ -23,7 +23,7 @@ export class SdkworkAppClient {
 
   constructor(config: SdkworkAppConfig) {
     this.httpClient = createHttpClient(config);
-    this.site = createSiteApi(this.httpClient);
+    this.application = createApplicationApi(this.httpClient);
 
     this.domain = createDomainApi(this.httpClient);
 

@@ -12,20 +12,20 @@ class SourceVersionApi {
   SourceVersionApi(this._client);
 
   /// 获取应用源码版本
-  Future<SitesSourceVersionsListResponse?> sitesSourceVersionsList(String siteId, [int? pageSize, String? cursor]) async {
+  Future<ApplicationsSourceVersionsListResponse?> applicationsSourceVersionsList(String applicationId, [int? pageSize, String? cursor]) async {
     final query = buildQueryString([
       QueryParameterSpec('page_size', pageSize, 'form', true, false, null),
       QueryParameterSpec('cursor', cursor, 'form', true, false, null)
     ]);
-    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/source_versions'), query));
+    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/source_versions'), query));
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : SitesSourceVersionsListResponse.fromJson(map);
+      return map == null ? null : ApplicationsSourceVersionsListResponse.fromJson(map);
     })();
   }
 
   /// 登记 Drive 中的应用源码版本
-  Future<SitesSourceVersionsCreateResponse201?> sitesSourceVersionsCreate(String siteId, CreateSourceVersionRequest body, String idempotencyKey) async {
+  Future<ApplicationsSourceVersionsCreateResponse201?> applicationsSourceVersionsCreate(String applicationId, CreateSourceVersionRequest body, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(
       <String, HeaderParameterSpec>{
         'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
@@ -33,15 +33,15 @@ class SourceVersionApi {
       <String, HeaderParameterSpec>{},
     );
     final payload = body.toJson();
-    final response = await _client.post(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/source_versions'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    final response = await _client.post(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/source_versions'), body: payload, headers: requestHeaders, contentType: 'application/json');
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : SitesSourceVersionsCreateResponse201.fromJson(map);
+      return map == null ? null : ApplicationsSourceVersionsCreateResponse201.fromJson(map);
     })();
   }
 
   /// 从公共 Git 仓库导入应用源码版本
-  Future<SitesSourceVersionsGitImportCreateResponse201?> sitesSourceVersionsGitImportCreate(String siteId, ImportGitSourceVersionRequest body, String idempotencyKey) async {
+  Future<ApplicationsSourceVersionsGitImportCreateResponse201?> applicationsSourceVersionsGitImportCreate(String applicationId, ImportGitSourceVersionRequest body, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(
       <String, HeaderParameterSpec>{
         'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
@@ -49,19 +49,19 @@ class SourceVersionApi {
       <String, HeaderParameterSpec>{},
     );
     final payload = body.toJson();
-    final response = await _client.post(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/source_versions/git_import'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    final response = await _client.post(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/source_versions/git_import'), body: payload, headers: requestHeaders, contentType: 'application/json');
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : SitesSourceVersionsGitImportCreateResponse201.fromJson(map);
+      return map == null ? null : ApplicationsSourceVersionsGitImportCreateResponse201.fromJson(map);
     })();
   }
 
   /// 获取应用源码版本详情
-  Future<SitesSourceVersionsRetrieveResponse?> sitesSourceVersionsRetrieve(String siteId, String sourceVersionId) async {
-    final response = await _client.get(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/source_versions/${serializePathParameter(sourceVersionId, const PathParameterSpec('sourceVersionId', 'simple', false))}'));
+  Future<ApplicationsSourceVersionsRetrieveResponse?> applicationsSourceVersionsRetrieve(String applicationId, String sourceVersionId) async {
+    final response = await _client.get(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/source_versions/${serializePathParameter(sourceVersionId, const PathParameterSpec('sourceVersionId', 'simple', false))}'));
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : SitesSourceVersionsRetrieveResponse.fromJson(map);
+      return map == null ? null : ApplicationsSourceVersionsRetrieveResponse.fromJson(map);
     })();
   }
 }

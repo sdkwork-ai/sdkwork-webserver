@@ -18,27 +18,27 @@ func NewMonitorApi(client *sdkhttp.Client) *MonitorApi {
 }
 
 // 获取健康检查配置
-func (a *MonitorApi) SitesHealthChecksList(siteId string) (sdktypes.SitesHealthChecksListResponse, error) {
-    raw, err := a.client.Get(AppApiPath(fmt.Sprintf("/sites/%s/health_checks", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}))), nil, nil)
+func (a *MonitorApi) ApplicationsHealthChecksList(applicationId string) (sdktypes.ApplicationsHealthChecksListResponse, error) {
+    raw, err := a.client.Get(AppApiPath(fmt.Sprintf("/applications/%s/health_checks", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}))), nil, nil)
     if err != nil {
-        var zero sdktypes.SitesHealthChecksListResponse
+        var zero sdktypes.ApplicationsHealthChecksListResponse
         return zero, err
     }
-    return decodeResult[sdktypes.SitesHealthChecksListResponse](raw)
+    return decodeResult[sdktypes.ApplicationsHealthChecksListResponse](raw)
 }
 
 // 创建健康检查
-func (a *MonitorApi) SitesHealthChecksCreate(siteId string, body sdktypes.CreateHealthCheckRequest, idempotencyKey string) (sdktypes.SitesHealthChecksCreateResponse201, error) {
+func (a *MonitorApi) ApplicationsHealthChecksCreate(applicationId string, body sdktypes.CreateHealthCheckRequest, idempotencyKey string) (sdktypes.ApplicationsHealthChecksCreateResponse201, error) {
     headers := BuildRequestHeaders(
         map[string]ParameterSpec{"Idempotency-Key": ParameterSpec{Value: idempotencyKey, Style: "simple", Explode: false},},
         map[string]ParameterSpec{},
     )
-    raw, err := a.client.Post(AppApiPath(fmt.Sprintf("/sites/%s/health_checks", SerializePathParameter(siteId, PathParameterSpec{Name: "siteId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
+    raw, err := a.client.Post(AppApiPath(fmt.Sprintf("/applications/%s/health_checks", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
     if err != nil {
-        var zero sdktypes.SitesHealthChecksCreateResponse201
+        var zero sdktypes.ApplicationsHealthChecksCreateResponse201
         return zero, err
     }
-    return decodeResult[sdktypes.SitesHealthChecksCreateResponse201](raw)
+    return decodeResult[sdktypes.ApplicationsHealthChecksCreateResponse201](raw)
 }
 
 type PathParameterSpec struct {

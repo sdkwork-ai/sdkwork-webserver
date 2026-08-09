@@ -18,7 +18,7 @@ export class WebserverActionError extends Error {
 }
 
 export type WebserverResourceKey =
-  | "sites"
+  | "applications"
   | "configuration"
   | "source-versions"
   | "domains"
@@ -164,7 +164,7 @@ export interface WebserverResourceDataSource {
   filters?: readonly WebserverResourceFilter[];
   load(query: WebserverResourceQuery): Promise<WebserverResourcePage>;
   requiresScope?: boolean;
-  scopeKind?: "application" | "site";
+  scopeKind?: "application";
 }
 
 export type WebserverResourceRegistry = Partial<Record<WebserverResourceKey, WebserverResourceDataSource>>;

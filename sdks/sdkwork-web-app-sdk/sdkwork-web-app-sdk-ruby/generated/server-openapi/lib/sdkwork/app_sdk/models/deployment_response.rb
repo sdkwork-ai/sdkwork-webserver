@@ -2,12 +2,12 @@ module Sdkwork
   module AppSdk
     module Models
       class DeploymentResponse
-              attr_accessor :id, :site_id, :deploy_type, :source_version_id, :version_tag, :commit_hash, :source_ref, :rollback_from_deployment_id, :environment, :artifact_drive_uri, :artifact_size, :artifact_hash, :status, :started_at, :completed_at, :duration_ms, :created_at
+              attr_accessor :id, :application_id, :deploy_type, :source_version_id, :version_tag, :commit_hash, :source_ref, :rollback_from_deployment_id, :environment, :artifact_drive_uri, :artifact_size, :artifact_hash, :status, :started_at, :completed_at, :duration_ms, :created_at
 
               def initialize(attributes = {})
                 attributes = (attributes || {}).transform_keys(&:to_s)
                 @id = attributes['id']
-                @site_id = attributes['siteId']
+                @application_id = attributes['applicationId']
                 @deploy_type = attributes['deployType']
                 @source_version_id = attributes['sourceVersionId']
                 @version_tag = attributes['versionTag']
@@ -34,7 +34,7 @@ module Sdkwork
               def to_hash
                 {
                   'id' => @id,
-                  'siteId' => @site_id,
+                  'applicationId' => @application_id,
                   'deployType' => @deploy_type,
                   'sourceVersionId' => @source_version_id,
                   'versionTag' => @version_tag,

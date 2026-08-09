@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 @dataclass
 class ListenerCertificateBindingResponse:
     id: str
-    site_id: str
+    application_id: str
     domain_id: str
     certificate_id: str
     desired_certificate_version_id: str

@@ -9,6 +9,8 @@ management = [
   "dep:sdkwork-api-webserver-assembly",
   "dep:sdkwork-api-iam-assembly",
   "dep:sdkwork-api-drive-assembly",
+  "dep:sdkwork-api-skills-assembly",
+  "dep:sdkwork-api-mcp-assembly",
   "dep:sdkwork-database-sqlx",
   "dep:sdkwork-web-axum",
   "dep:sdkwork-web-contract",
@@ -30,6 +32,8 @@ required-features = ["management"]
 sdkwork-api-webserver-assembly = { workspace = true, optional = true }
 sdkwork-api-iam-assembly = { workspace = true, optional = true }
 sdkwork-api-drive-assembly = { workspace = true, optional = true }
+sdkwork-api-skills-assembly = { workspace = true, optional = true }
+sdkwork-api-mcp-assembly = { workspace = true, optional = true }
 atomic-waker.workspace = true
 arc-swap.workspace = true
 axum.workspace = true

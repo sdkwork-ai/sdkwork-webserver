@@ -10,37 +10,176 @@
   },
   "status": "ok",
   "mode": "apply",
-  "hasChanges": false,
-  "hasDestructiveChanges": false,
-  "changeFingerprint": "1b9135edbb711bb670166c57e1055263503e2af0a9812e0bf785901d964d46d1",
+  "hasChanges": true,
+  "hasDestructiveChanges": true,
+  "changeFingerprint": "aa0e109c40bc9e1d8a40ab8c405929e40221dcaad56680693ec00dd6bb14add9",
   "changeImpact": {
     "schemaVersion": 1,
-    "areas": [],
-    "details": [],
-    "requiresVerification": false,
-    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped."
+    "areas": [
+      "api-surface",
+      "models",
+      "documentation",
+      "unknown"
+    ],
+    "details": [
+      {
+        "area": "api-surface",
+        "paths": [
+          "lib/sdkwork/app_sdk/api/application.rb",
+          "lib/sdkwork/app_sdk/api/certificate.rb",
+          "lib/sdkwork/app_sdk/api/deployment.rb",
+          "lib/sdkwork/app_sdk/api/domain.rb",
+          "lib/sdkwork/app_sdk/api/env_variable.rb",
+          "lib/sdkwork/app_sdk/api/monitor.rb",
+          "lib/sdkwork/app_sdk/api/site.rb",
+          "lib/sdkwork/app_sdk/api/source_version.rb",
+          "lib/sdkwork/app_sdk/client.rb"
+        ]
+      },
+      {
+        "area": "models",
+        "paths": [
+          "lib/sdkwork/app_sdk/models/application_page.rb",
+          "lib/sdkwork/app_sdk/models/application_response.rb",
+          "lib/sdkwork/app_sdk/models/applications_activate_response.rb",
+          "lib/sdkwork/app_sdk/models/applications_create_response201.rb",
+          "lib/sdkwork/app_sdk/models/applications_deployments_create_response201.rb",
+          "lib/sdkwork/app_sdk/models/applications_deployments_list_response.rb",
+          "lib/sdkwork/app_sdk/models/applications_deployments_retrieve_response.rb",
+          "lib/sdkwork/app_sdk/models/applications_deployments_rollback_response.rb",
+          "lib/sdkwork/app_sdk/models/applications_domains_create_response201.rb",
+          "lib/sdkwork/app_sdk/models/applications_domains_list_response.rb",
+          "lib/sdkwork/app_sdk/models/applications_domains_listener_certificate_bindings_create_response201.rb",
+          "lib/sdkwork/app_sdk/models/applications_domains_listener_certificate_bindings_list_response.rb",
+          "lib/sdkwork/app_sdk/models/applications_domains_retrieve_response.rb",
+          "lib/sdkwork/app_sdk/models/applications_domains_verify_response.rb",
+          "lib/sdkwork/app_sdk/models/applications_env_variables_create_response201.rb",
+          "lib/sdkwork/app_sdk/models/applications_env_variables_list_response.rb",
+          "lib/sdkwork/app_sdk/models/applications_env_variables_update_response.rb",
+          "lib/sdkwork/app_sdk/models/applications_health_checks_create_response201.rb",
+          "lib/sdkwork/app_sdk/models/applications_health_checks_list_response.rb",
+          "lib/sdkwork/app_sdk/models/applications_list_response.rb",
+          "lib/sdkwork/app_sdk/models/applications_pause_response.rb",
+          "lib/sdkwork/app_sdk/models/applications_retrieve_response.rb",
+          "lib/sdkwork/app_sdk/models/applications_source_versions_create_response201.rb",
+          "lib/sdkwork/app_sdk/models/applications_source_versions_git_import_create_response201.rb",
+          "lib/sdkwork/app_sdk/models/applications_source_versions_list_response.rb",
+          "lib/sdkwork/app_sdk/models/applications_source_versions_retrieve_response.rb",
+          "lib/sdkwork/app_sdk/models/applications_update_response.rb",
+          "lib/sdkwork/app_sdk/models/create_application_request.rb",
+          "lib/sdkwork/app_sdk/models/create_site_request.rb",
+          "lib/sdkwork/app_sdk/models/deployment_response.rb",
+          "lib/sdkwork/app_sdk/models/listener_certificate_binding_response.rb",
+          "lib/sdkwork/app_sdk/models/site_page.rb",
+          "lib/sdkwork/app_sdk/models/site_response.rb",
+          "lib/sdkwork/app_sdk/models/sites_activate_response.rb",
+          "lib/sdkwork/app_sdk/models/sites_create_response201.rb",
+          "lib/sdkwork/app_sdk/models/sites_deployments_create_response201.rb",
+          "lib/sdkwork/app_sdk/models/sites_deployments_list_response.rb",
+          "lib/sdkwork/app_sdk/models/sites_deployments_retrieve_response.rb",
+          "lib/sdkwork/app_sdk/models/sites_deployments_rollback_response.rb",
+          "lib/sdkwork/app_sdk/models/sites_domains_create_response201.rb",
+          "lib/sdkwork/app_sdk/models/sites_domains_list_response.rb",
+          "lib/sdkwork/app_sdk/models/sites_domains_listener_certificate_bindings_create_response201.rb",
+          "lib/sdkwork/app_sdk/models/sites_domains_listener_certificate_bindings_list_response.rb",
+          "lib/sdkwork/app_sdk/models/sites_domains_retrieve_response.rb",
+          "lib/sdkwork/app_sdk/models/sites_domains_verify_response.rb",
+          "lib/sdkwork/app_sdk/models/sites_env_variables_create_response201.rb",
+          "lib/sdkwork/app_sdk/models/sites_env_variables_list_response.rb",
+          "lib/sdkwork/app_sdk/models/sites_env_variables_update_response.rb",
+          "lib/sdkwork/app_sdk/models/sites_health_checks_create_response201.rb",
+          "lib/sdkwork/app_sdk/models/sites_health_checks_list_response.rb",
+          "lib/sdkwork/app_sdk/models/sites_list_response.rb",
+          "lib/sdkwork/app_sdk/models/sites_pause_response.rb",
+          "lib/sdkwork/app_sdk/models/sites_retrieve_response.rb",
+          "lib/sdkwork/app_sdk/models/sites_source_versions_create_response201.rb",
+          "lib/sdkwork/app_sdk/models/sites_source_versions_git_import_create_response201.rb",
+          "lib/sdkwork/app_sdk/models/sites_source_versions_list_response.rb",
+          "lib/sdkwork/app_sdk/models/sites_source_versions_retrieve_response.rb",
+          "lib/sdkwork/app_sdk/models/sites_update_response.rb",
+          "lib/sdkwork/app_sdk/models/source_version_response.rb",
+          "lib/sdkwork/app_sdk/models/update_application_request.rb",
+          "lib/sdkwork/app_sdk/models/update_site_request.rb"
+        ]
+      },
+      {
+        "area": "documentation",
+        "paths": [
+          "README.md"
+        ]
+      },
+      {
+        "area": "unknown",
+        "paths": [
+          "lib/sdkwork/app_sdk.rb"
+        ]
+      }
+    ],
+    "requiresVerification": true,
+    "summary": "Detected impact areas: api-surface, models, documentation, unknown. Verification is required."
   },
   "executionDecision": {
     "schemaVersion": 1,
-    "riskLevel": "low",
-    "nextAction": "skip",
+    "riskLevel": "high",
+    "nextAction": "verify",
     "requiresManualReview": false,
     "applyRequiresExpectedFingerprint": false,
-    "summary": "No actionable changes were detected. No apply or verification step is required.",
+    "summary": "Changes have been applied. Run the required verification plan now.",
     "reasons": [
-      "no-actionable-changes"
+      "deleted-generated-files",
+      "manual-review-required",
+      "unknown-impact",
+      "verification-required"
     ]
   },
   "executionHandoff": {
     "schemaVersion": 1,
-    "summary": "No further commands are required.",
-    "steps": []
+    "summary": "Run the required verification commands now.",
+    "steps": [
+      {
+        "id": "verify-check",
+        "title": "Unified package check",
+        "required": true,
+        "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, documentation, unknown.",
+        "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-app-sdk\\sdkwork-web-app-sdk-ruby\\generated\\server-openapi",
+        "command": "node",
+        "args": [
+          "./bin/publish-core.mjs",
+          "--language",
+          "ruby",
+          "--project-dir",
+          ".",
+          "--action",
+          "check"
+        ],
+        "displayCommand": "node ./bin/publish-core.mjs --language ruby --project-dir . --action check"
+      }
+    ]
   },
   "verificationPlan": {
-    "shouldRun": false,
-    "runPhase": "skip",
-    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped.",
-    "steps": []
+    "shouldRun": true,
+    "runPhase": "now",
+    "summary": "Detected impact areas: api-surface, models, documentation, unknown. Verification is required. Run the required verification commands now against the generated SDK output.",
+    "steps": [
+      {
+        "id": "check",
+        "title": "Unified package check",
+        "required": true,
+        "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, documentation, unknown.",
+        "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-app-sdk\\sdkwork-web-app-sdk-ruby\\generated\\server-openapi",
+        "command": "node",
+        "args": [
+          "./bin/publish-core.mjs",
+          "--language",
+          "ruby",
+          "--project-dir",
+          ".",
+          "--action",
+          "check"
+        ],
+        "displayCommand": "node ./bin/publish-core.mjs --language ruby --project-dir . --action check"
+      }
+    ]
   },
   "sdk": {
     "name": "sdkwork-web-app-sdk",
@@ -65,31 +204,66 @@
   "syncSummary": {
     "dryRun": false,
     "controlPlaneEnabled": true,
-    "writtenFiles": 0,
+    "writtenFiles": 42,
     "skippedScaffoldFiles": 1,
-    "skippedUnchangedGeneratedFiles": 89,
-    "deletedGeneratedFiles": 0,
+    "skippedUnchangedGeneratedFiles": 47,
+    "deletedGeneratedFiles": 30,
     "changeSummaryPath": ".sdkwork/sdkwork-generator-changes.json",
-    "changeFingerprint": "1b9135edbb711bb670166c57e1055263503e2af0a9812e0bf785901d964d46d1",
+    "changeFingerprint": "aa0e109c40bc9e1d8a40ab8c405929e40221dcaad56680693ec00dd6bb14add9",
     "changes": {
-      "createdGeneratedFiles": [],
-      "updatedGeneratedFiles": [],
+      "createdGeneratedFiles": [
+        "lib/sdkwork/app_sdk/api/application.rb",
+        "lib/sdkwork/app_sdk/models/application_page.rb",
+        "lib/sdkwork/app_sdk/models/application_response.rb",
+        "lib/sdkwork/app_sdk/models/applications_activate_response.rb",
+        "lib/sdkwork/app_sdk/models/applications_create_response201.rb",
+        "lib/sdkwork/app_sdk/models/applications_deployments_create_response201.rb",
+        "lib/sdkwork/app_sdk/models/applications_deployments_list_response.rb",
+        "lib/sdkwork/app_sdk/models/applications_deployments_retrieve_response.rb",
+        "lib/sdkwork/app_sdk/models/applications_deployments_rollback_response.rb",
+        "lib/sdkwork/app_sdk/models/applications_domains_create_response201.rb",
+        "lib/sdkwork/app_sdk/models/applications_domains_list_response.rb",
+        "lib/sdkwork/app_sdk/models/applications_domains_listener_certificate_bindings_create_response201.rb",
+        "lib/sdkwork/app_sdk/models/applications_domains_listener_certificate_bindings_list_response.rb",
+        "lib/sdkwork/app_sdk/models/applications_domains_retrieve_response.rb",
+        "lib/sdkwork/app_sdk/models/applications_domains_verify_response.rb",
+        "lib/sdkwork/app_sdk/models/applications_env_variables_create_response201.rb",
+        "lib/sdkwork/app_sdk/models/applications_env_variables_list_response.rb",
+        "lib/sdkwork/app_sdk/models/applications_env_variables_update_response.rb",
+        "lib/sdkwork/app_sdk/models/applications_health_checks_create_response201.rb",
+        "lib/sdkwork/app_sdk/models/applications_health_checks_list_response.rb",
+        "lib/sdkwork/app_sdk/models/applications_list_response.rb",
+        "lib/sdkwork/app_sdk/models/applications_pause_response.rb",
+        "lib/sdkwork/app_sdk/models/applications_retrieve_response.rb",
+        "lib/sdkwork/app_sdk/models/applications_source_versions_create_response201.rb",
+        "lib/sdkwork/app_sdk/models/applications_source_versions_git_import_create_response201.rb",
+        "lib/sdkwork/app_sdk/models/applications_source_versions_list_response.rb",
+        "lib/sdkwork/app_sdk/models/applications_source_versions_retrieve_response.rb",
+        "lib/sdkwork/app_sdk/models/applications_update_response.rb",
+        "lib/sdkwork/app_sdk/models/create_application_request.rb",
+        "lib/sdkwork/app_sdk/models/update_application_request.rb"
+      ],
+      "updatedGeneratedFiles": [
+        "lib/sdkwork/app_sdk.rb",
+        "lib/sdkwork/app_sdk/api/certificate.rb",
+        "lib/sdkwork/app_sdk/api/deployment.rb",
+        "lib/sdkwork/app_sdk/api/domain.rb",
+        "lib/sdkwork/app_sdk/api/env_variable.rb",
+        "lib/sdkwork/app_sdk/api/monitor.rb",
+        "lib/sdkwork/app_sdk/api/source_version.rb",
+        "lib/sdkwork/app_sdk/client.rb",
+        "lib/sdkwork/app_sdk/models/deployment_response.rb",
+        "lib/sdkwork/app_sdk/models/listener_certificate_binding_response.rb",
+        "lib/sdkwork/app_sdk/models/source_version_response.rb",
+        "README.md"
+      ],
       "unchangedGeneratedFiles": [
         "bin/publish-core.mjs",
         "bin/publish.ps1",
         "bin/publish.sh",
         "CHANGELOG.md",
         "Gemfile",
-        "lib/sdkwork/app_sdk.rb",
         "lib/sdkwork/app_sdk/api/base_api.rb",
-        "lib/sdkwork/app_sdk/api/certificate.rb",
-        "lib/sdkwork/app_sdk/api/deployment.rb",
-        "lib/sdkwork/app_sdk/api/domain.rb",
-        "lib/sdkwork/app_sdk/api/env_variable.rb",
-        "lib/sdkwork/app_sdk/api/monitor.rb",
-        "lib/sdkwork/app_sdk/api/site.rb",
-        "lib/sdkwork/app_sdk/api/source_version.rb",
-        "lib/sdkwork/app_sdk/client.rb",
         "lib/sdkwork/app_sdk/http/client.rb",
         "lib/sdkwork/app_sdk/models/application_store_listing.rb",
         "lib/sdkwork/app_sdk/models/certificate_identifier_response.rb",
@@ -98,10 +272,8 @@
         "lib/sdkwork/app_sdk/models/create_env_variable_request.rb",
         "lib/sdkwork/app_sdk/models/create_health_check_request.rb",
         "lib/sdkwork/app_sdk/models/create_listener_certificate_binding_request.rb",
-        "lib/sdkwork/app_sdk/models/create_site_request.rb",
         "lib/sdkwork/app_sdk/models/create_source_version_request.rb",
         "lib/sdkwork/app_sdk/models/deployment_page.rb",
-        "lib/sdkwork/app_sdk/models/deployment_response.rb",
         "lib/sdkwork/app_sdk/models/domain_page.rb",
         "lib/sdkwork/app_sdk/models/domain_response.rb",
         "lib/sdkwork/app_sdk/models/domain_verify_response.rb",
@@ -112,7 +284,6 @@
         "lib/sdkwork/app_sdk/models/health_check_page.rb",
         "lib/sdkwork/app_sdk/models/health_check_response.rb",
         "lib/sdkwork/app_sdk/models/import_git_source_version_request.rb",
-        "lib/sdkwork/app_sdk/models/listener_certificate_binding_response.rb",
         "lib/sdkwork/app_sdk/models/listener_certificate_summary_response.rb",
         "lib/sdkwork/app_sdk/models/media_checksum.rb",
         "lib/sdkwork/app_sdk/models/media_resource.rb",
@@ -126,6 +297,18 @@
         "lib/sdkwork/app_sdk/models/sdk_work_page_data.rb",
         "lib/sdkwork/app_sdk/models/sdk_work_resource_data.rb",
         "lib/sdkwork/app_sdk/models/sdk_work_resource_response.rb",
+        "lib/sdkwork/app_sdk/models/source_version_config_snapshot.rb",
+        "lib/sdkwork/app_sdk/models/source_version_page.rb",
+        "lib/sdkwork/app_sdk/models/update_env_variable_request.rb",
+        "lib/sdkwork/app_sdk/sdk_config.rb",
+        "lib/sdkwork/app_sdk/version.rb",
+        "LICENSE",
+        "sdkwork-sdk.json",
+        "sdkwork-web-app-sdk.gemspec"
+      ],
+      "deletedGeneratedFiles": [
+        "lib/sdkwork/app_sdk/api/site.rb",
+        "lib/sdkwork/app_sdk/models/create_site_request.rb",
         "lib/sdkwork/app_sdk/models/site_page.rb",
         "lib/sdkwork/app_sdk/models/site_response.rb",
         "lib/sdkwork/app_sdk/models/sites_activate_response.rb",
@@ -153,19 +336,8 @@
         "lib/sdkwork/app_sdk/models/sites_source_versions_list_response.rb",
         "lib/sdkwork/app_sdk/models/sites_source_versions_retrieve_response.rb",
         "lib/sdkwork/app_sdk/models/sites_update_response.rb",
-        "lib/sdkwork/app_sdk/models/source_version_config_snapshot.rb",
-        "lib/sdkwork/app_sdk/models/source_version_page.rb",
-        "lib/sdkwork/app_sdk/models/source_version_response.rb",
-        "lib/sdkwork/app_sdk/models/update_env_variable_request.rb",
-        "lib/sdkwork/app_sdk/models/update_site_request.rb",
-        "lib/sdkwork/app_sdk/sdk_config.rb",
-        "lib/sdkwork/app_sdk/version.rb",
-        "LICENSE",
-        "README.md",
-        "sdkwork-sdk.json",
-        "sdkwork-web-app-sdk.gemspec"
+        "lib/sdkwork/app_sdk/models/update_site_request.rb"
       ],
-      "deletedGeneratedFiles": [],
       "scaffoldedFiles": [],
       "preservedScaffoldFiles": [
         "custom/README.md"
@@ -174,26 +346,146 @@
     },
     "impact": {
       "schemaVersion": 1,
-      "areas": [],
-      "details": [],
-      "requiresVerification": false,
-      "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped."
+      "areas": [
+        "api-surface",
+        "models",
+        "documentation",
+        "unknown"
+      ],
+      "details": [
+        {
+          "area": "api-surface",
+          "paths": [
+            "lib/sdkwork/app_sdk/api/application.rb",
+            "lib/sdkwork/app_sdk/api/certificate.rb",
+            "lib/sdkwork/app_sdk/api/deployment.rb",
+            "lib/sdkwork/app_sdk/api/domain.rb",
+            "lib/sdkwork/app_sdk/api/env_variable.rb",
+            "lib/sdkwork/app_sdk/api/monitor.rb",
+            "lib/sdkwork/app_sdk/api/site.rb",
+            "lib/sdkwork/app_sdk/api/source_version.rb",
+            "lib/sdkwork/app_sdk/client.rb"
+          ]
+        },
+        {
+          "area": "models",
+          "paths": [
+            "lib/sdkwork/app_sdk/models/application_page.rb",
+            "lib/sdkwork/app_sdk/models/application_response.rb",
+            "lib/sdkwork/app_sdk/models/applications_activate_response.rb",
+            "lib/sdkwork/app_sdk/models/applications_create_response201.rb",
+            "lib/sdkwork/app_sdk/models/applications_deployments_create_response201.rb",
+            "lib/sdkwork/app_sdk/models/applications_deployments_list_response.rb",
+            "lib/sdkwork/app_sdk/models/applications_deployments_retrieve_response.rb",
+            "lib/sdkwork/app_sdk/models/applications_deployments_rollback_response.rb",
+            "lib/sdkwork/app_sdk/models/applications_domains_create_response201.rb",
+            "lib/sdkwork/app_sdk/models/applications_domains_list_response.rb",
+            "lib/sdkwork/app_sdk/models/applications_domains_listener_certificate_bindings_create_response201.rb",
+            "lib/sdkwork/app_sdk/models/applications_domains_listener_certificate_bindings_list_response.rb",
+            "lib/sdkwork/app_sdk/models/applications_domains_retrieve_response.rb",
+            "lib/sdkwork/app_sdk/models/applications_domains_verify_response.rb",
+            "lib/sdkwork/app_sdk/models/applications_env_variables_create_response201.rb",
+            "lib/sdkwork/app_sdk/models/applications_env_variables_list_response.rb",
+            "lib/sdkwork/app_sdk/models/applications_env_variables_update_response.rb",
+            "lib/sdkwork/app_sdk/models/applications_health_checks_create_response201.rb",
+            "lib/sdkwork/app_sdk/models/applications_health_checks_list_response.rb",
+            "lib/sdkwork/app_sdk/models/applications_list_response.rb",
+            "lib/sdkwork/app_sdk/models/applications_pause_response.rb",
+            "lib/sdkwork/app_sdk/models/applications_retrieve_response.rb",
+            "lib/sdkwork/app_sdk/models/applications_source_versions_create_response201.rb",
+            "lib/sdkwork/app_sdk/models/applications_source_versions_git_import_create_response201.rb",
+            "lib/sdkwork/app_sdk/models/applications_source_versions_list_response.rb",
+            "lib/sdkwork/app_sdk/models/applications_source_versions_retrieve_response.rb",
+            "lib/sdkwork/app_sdk/models/applications_update_response.rb",
+            "lib/sdkwork/app_sdk/models/create_application_request.rb",
+            "lib/sdkwork/app_sdk/models/create_site_request.rb",
+            "lib/sdkwork/app_sdk/models/deployment_response.rb",
+            "lib/sdkwork/app_sdk/models/listener_certificate_binding_response.rb",
+            "lib/sdkwork/app_sdk/models/site_page.rb",
+            "lib/sdkwork/app_sdk/models/site_response.rb",
+            "lib/sdkwork/app_sdk/models/sites_activate_response.rb",
+            "lib/sdkwork/app_sdk/models/sites_create_response201.rb",
+            "lib/sdkwork/app_sdk/models/sites_deployments_create_response201.rb",
+            "lib/sdkwork/app_sdk/models/sites_deployments_list_response.rb",
+            "lib/sdkwork/app_sdk/models/sites_deployments_retrieve_response.rb",
+            "lib/sdkwork/app_sdk/models/sites_deployments_rollback_response.rb",
+            "lib/sdkwork/app_sdk/models/sites_domains_create_response201.rb",
+            "lib/sdkwork/app_sdk/models/sites_domains_list_response.rb",
+            "lib/sdkwork/app_sdk/models/sites_domains_listener_certificate_bindings_create_response201.rb",
+            "lib/sdkwork/app_sdk/models/sites_domains_listener_certificate_bindings_list_response.rb",
+            "lib/sdkwork/app_sdk/models/sites_domains_retrieve_response.rb",
+            "lib/sdkwork/app_sdk/models/sites_domains_verify_response.rb",
+            "lib/sdkwork/app_sdk/models/sites_env_variables_create_response201.rb",
+            "lib/sdkwork/app_sdk/models/sites_env_variables_list_response.rb",
+            "lib/sdkwork/app_sdk/models/sites_env_variables_update_response.rb",
+            "lib/sdkwork/app_sdk/models/sites_health_checks_create_response201.rb",
+            "lib/sdkwork/app_sdk/models/sites_health_checks_list_response.rb",
+            "lib/sdkwork/app_sdk/models/sites_list_response.rb",
+            "lib/sdkwork/app_sdk/models/sites_pause_response.rb",
+            "lib/sdkwork/app_sdk/models/sites_retrieve_response.rb",
+            "lib/sdkwork/app_sdk/models/sites_source_versions_create_response201.rb",
+            "lib/sdkwork/app_sdk/models/sites_source_versions_git_import_create_response201.rb",
+            "lib/sdkwork/app_sdk/models/sites_source_versions_list_response.rb",
+            "lib/sdkwork/app_sdk/models/sites_source_versions_retrieve_response.rb",
+            "lib/sdkwork/app_sdk/models/sites_update_response.rb",
+            "lib/sdkwork/app_sdk/models/source_version_response.rb",
+            "lib/sdkwork/app_sdk/models/update_application_request.rb",
+            "lib/sdkwork/app_sdk/models/update_site_request.rb"
+          ]
+        },
+        {
+          "area": "documentation",
+          "paths": [
+            "README.md"
+          ]
+        },
+        {
+          "area": "unknown",
+          "paths": [
+            "lib/sdkwork/app_sdk.rb"
+          ]
+        }
+      ],
+      "requiresVerification": true,
+      "summary": "Detected impact areas: api-surface, models, documentation, unknown. Verification is required."
     },
     "verificationPlan": {
-      "shouldRun": false,
-      "runPhase": "skip",
-      "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped.",
-      "steps": []
+      "shouldRun": true,
+      "runPhase": "now",
+      "summary": "Detected impact areas: api-surface, models, documentation, unknown. Verification is required. Run the required verification commands now against the generated SDK output.",
+      "steps": [
+        {
+          "id": "check",
+          "title": "Unified package check",
+          "required": true,
+          "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, documentation, unknown.",
+          "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-app-sdk\\sdkwork-web-app-sdk-ruby\\generated\\server-openapi",
+          "command": "node",
+          "args": [
+            "./bin/publish-core.mjs",
+            "--language",
+            "ruby",
+            "--project-dir",
+            ".",
+            "--action",
+            "check"
+          ],
+          "displayCommand": "node ./bin/publish-core.mjs --language ruby --project-dir . --action check"
+        }
+      ]
     },
     "executionDecision": {
       "schemaVersion": 1,
-      "riskLevel": "low",
-      "nextAction": "skip",
+      "riskLevel": "high",
+      "nextAction": "verify",
       "requiresManualReview": false,
       "applyRequiresExpectedFingerprint": false,
-      "summary": "No actionable changes were detected. No apply or verification step is required.",
+      "summary": "Changes have been applied. Run the required verification plan now.",
       "reasons": [
-        "no-actionable-changes"
+        "deleted-generated-files",
+        "manual-review-required",
+        "unknown-impact",
+        "verification-required"
       ]
     },
     "backedUpFiles": [],

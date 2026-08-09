@@ -2,7 +2,7 @@ import Foundation
 
 /// API modules for sdkwork-web-app-sdk
 public struct API {
-    public static let site = SiteApi.self
+    public static let application = ApplicationApi.self
     public static let domain = DomainApi.self
     public static let certificate = CertificateApi.self
     public static let sourceVersion = SourceVersionApi.self

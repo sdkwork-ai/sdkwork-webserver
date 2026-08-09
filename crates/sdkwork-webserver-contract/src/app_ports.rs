@@ -37,7 +37,7 @@ pub struct WebBackendRequestContext {
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct ListSitesQuery {
+pub struct ListApplicationsQuery {
     #[serde(default = "crate::dto::default_page")]
     pub page: i32,
     #[serde(default = "crate::dto::default_page_size")]
@@ -81,53 +81,53 @@ pub struct ListRootDomainsQuery {
 
 #[async_trait]
 pub trait WebAppApi: Send + Sync {
-    async fn list_sites(
+    async fn list_applications(
         &self,
         context: &WebAppRequestContext,
-        query: &ListSitesQuery,
-    ) -> WebServiceResult<SitePage>;
+        query: &ListApplicationsQuery,
+    ) -> WebServiceResult<ApplicationPage>;
 
-    async fn create_site(
+    async fn create_application(
         &self,
         context: &WebAppRequestContext,
-        request: &CreateSiteRequest,
-    ) -> WebServiceResult<SiteResponse>;
+        request: &CreateApplicationRequest,
+    ) -> WebServiceResult<ApplicationResponse>;
 
-    async fn retrieve_site(
+    async fn retrieve_application(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
-    ) -> WebServiceResult<SiteResponse>;
+        application_id: &str,
+    ) -> WebServiceResult<ApplicationResponse>;
 
-    async fn update_site(
+    async fn update_application(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
-        request: &UpdateSiteRequest,
-    ) -> WebServiceResult<SiteResponse>;
+        application_id: &str,
+        request: &UpdateApplicationRequest,
+    ) -> WebServiceResult<ApplicationResponse>;
 
-    async fn delete_site(
+    async fn delete_application(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
     ) -> WebServiceResult<()>;
 
-    async fn activate_site(
+    async fn activate_application(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
-    ) -> WebServiceResult<SiteResponse>;
+        application_id: &str,
+    ) -> WebServiceResult<ApplicationResponse>;
 
-    async fn pause_site(
+    async fn pause_application(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
-    ) -> WebServiceResult<SiteResponse>;
+        application_id: &str,
+    ) -> WebServiceResult<ApplicationResponse>;
 
     async fn list_domains(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         page: i32,
         page_size: i32,
     ) -> WebServiceResult<DomainPage>;
@@ -145,35 +145,35 @@ pub trait WebAppApi: Send + Sync {
     async fn create_domain(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         request: &CreateDomainRequest,
     ) -> WebServiceResult<DomainResponse>;
 
     async fn retrieve_domain(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         domain_id: &str,
     ) -> WebServiceResult<DomainResponse>;
 
     async fn delete_domain(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         domain_id: &str,
     ) -> WebServiceResult<()>;
 
     async fn verify_domain(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         domain_id: &str,
     ) -> WebServiceResult<DomainVerifyResponse>;
 
     async fn list_source_versions(
         &self,
         _context: &WebAppRequestContext,
-        _site_id: &str,
+        _application_id: &str,
         _page: i32,
         _page_size: i32,
         _cursor: Option<&str>,
@@ -186,7 +186,7 @@ pub trait WebAppApi: Send + Sync {
     async fn create_source_version(
         &self,
         _context: &WebAppRequestContext,
-        _site_id: &str,
+        _application_id: &str,
         _request: &CreateSourceVersionRequest,
     ) -> WebServiceResult<SourceVersionResponse> {
         Err(crate::WebServiceError::Internal(
@@ -197,7 +197,7 @@ pub trait WebAppApi: Send + Sync {
     async fn import_git_source_version(
         &self,
         _context: &WebAppRequestContext,
-        _site_id: &str,
+        _application_id: &str,
         _request: &ImportGitSourceVersionRequest,
     ) -> WebServiceResult<SourceVersionResponse> {
         Err(crate::WebServiceError::Internal(
@@ -208,7 +208,7 @@ pub trait WebAppApi: Send + Sync {
     async fn retrieve_source_version(
         &self,
         _context: &WebAppRequestContext,
-        _site_id: &str,
+        _application_id: &str,
         _source_version_id: &str,
     ) -> WebServiceResult<SourceVersionResponse> {
         Err(crate::WebServiceError::Internal(
@@ -219,7 +219,7 @@ pub trait WebAppApi: Send + Sync {
     async fn list_deployments(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         page: i32,
         page_size: i32,
         status: Option<i32>,
@@ -229,42 +229,42 @@ pub trait WebAppApi: Send + Sync {
     async fn create_deployment(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         request: &CreateDeploymentRequest,
     ) -> WebServiceResult<DeploymentResponse>;
 
     async fn retrieve_deployment(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         deployment_id: &str,
     ) -> WebServiceResult<DeploymentResponse>;
 
     async fn rollback_deployment(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         deployment_id: &str,
     ) -> WebServiceResult<DeploymentResponse>;
 
     async fn list_env_variables(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         environment: Option<&str>,
     ) -> WebServiceResult<EnvVariablePage>;
 
     async fn create_env_variable(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         request: &CreateEnvVariableRequest,
     ) -> WebServiceResult<EnvVariableResponse>;
 
     async fn update_env_variable(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         variable_id: &str,
         request: &UpdateEnvVariableRequest,
     ) -> WebServiceResult<EnvVariableResponse>;
@@ -272,14 +272,14 @@ pub trait WebAppApi: Send + Sync {
     async fn delete_env_variable(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         variable_id: &str,
     ) -> WebServiceResult<()>;
 
     async fn list_certificates(
         &self,
         context: &WebAppRequestContext,
-        site_id: Option<&str>,
+        application_id: Option<&str>,
         domain_id: Option<&str>,
         page: i32,
         page_size: i32,
@@ -300,7 +300,7 @@ pub trait WebAppApi: Send + Sync {
     async fn list_listener_certificate_bindings(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         domain_id: &str,
         page: i32,
         page_size: i32,
@@ -309,7 +309,7 @@ pub trait WebAppApi: Send + Sync {
     async fn bind_listener_certificate(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         domain_id: &str,
         request: &CreateListenerCertificateBindingRequest,
     ) -> WebServiceResult<ListenerCertificateBindingResponse>;
@@ -317,7 +317,7 @@ pub trait WebAppApi: Send + Sync {
     async fn unbind_listener_certificate(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         domain_id: &str,
         binding_id: &str,
     ) -> WebServiceResult<()>;
@@ -325,13 +325,13 @@ pub trait WebAppApi: Send + Sync {
     async fn list_health_checks(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
     ) -> WebServiceResult<HealthCheckPage>;
 
     async fn create_health_check(
         &self,
         context: &WebAppRequestContext,
-        site_id: &str,
+        application_id: &str,
         request: &CreateHealthCheckRequest,
     ) -> WebServiceResult<HealthCheckResponse>;
 }
@@ -341,27 +341,27 @@ pub trait WebBackendApi: Send + Sync {
     async fn list_applications(
         &self,
         context: &WebBackendRequestContext,
-        query: &ListSitesQuery,
-    ) -> WebServiceResult<SitePage>;
+        query: &ListApplicationsQuery,
+    ) -> WebServiceResult<ApplicationPage>;
 
     async fn create_application(
         &self,
         context: &WebBackendRequestContext,
-        request: &CreateSiteRequest,
-    ) -> WebServiceResult<SiteResponse>;
+        request: &CreateApplicationRequest,
+    ) -> WebServiceResult<ApplicationResponse>;
 
     async fn retrieve_application(
         &self,
         context: &WebBackendRequestContext,
         application_id: &str,
-    ) -> WebServiceResult<SiteResponse>;
+    ) -> WebServiceResult<ApplicationResponse>;
 
     async fn update_application(
         &self,
         context: &WebBackendRequestContext,
         application_id: &str,
-        request: &UpdateSiteRequest,
-    ) -> WebServiceResult<SiteResponse>;
+        request: &UpdateApplicationRequest,
+    ) -> WebServiceResult<ApplicationResponse>;
 
     async fn delete_application(
         &self,
@@ -373,13 +373,13 @@ pub trait WebBackendApi: Send + Sync {
         &self,
         context: &WebBackendRequestContext,
         application_id: &str,
-    ) -> WebServiceResult<SiteResponse>;
+    ) -> WebServiceResult<ApplicationResponse>;
 
     async fn pause_application(
         &self,
         context: &WebBackendRequestContext,
         application_id: &str,
-    ) -> WebServiceResult<SiteResponse>;
+    ) -> WebServiceResult<ApplicationResponse>;
 
     async fn list_application_domains(
         &self,

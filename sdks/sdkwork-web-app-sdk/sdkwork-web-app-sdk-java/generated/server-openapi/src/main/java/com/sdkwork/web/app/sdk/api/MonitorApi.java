@@ -14,19 +14,19 @@ public class MonitorApi {
     }
 
     /** 获取健康检查配置 */
-    public SitesHealthChecksListResponse sitesHealthChecksList(String siteId) throws Exception {
-        Object raw = client.get(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/health_checks"));
-        return client.convertValue(raw, new TypeReference<SitesHealthChecksListResponse>() {});
+    public ApplicationsHealthChecksListResponse applicationsHealthChecksList(String applicationId) throws Exception {
+        Object raw = client.get(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/health_checks"));
+        return client.convertValue(raw, new TypeReference<ApplicationsHealthChecksListResponse>() {});
     }
 
     /** 创建健康检查 */
-    public SitesHealthChecksCreateResponse201 sitesHealthChecksCreate(String siteId, CreateHealthCheckRequest body, String idempotencyKey) throws Exception {
+    public ApplicationsHealthChecksCreateResponse201 applicationsHealthChecksCreate(String applicationId, CreateHealthCheckRequest body, String idempotencyKey) throws Exception {
         Map<String, String> requestHeaders = buildRequestHeaders(
                 Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
                 Map.of()
         );
-        Object raw = client.post(ApiPaths.appPath("/sites/" + serializePathParameter(siteId, new PathParameterSpec("siteId", "simple", false)) + "/health_checks"), body, null, requestHeaders, "application/json");
-        return client.convertValue(raw, new TypeReference<SitesHealthChecksCreateResponse201>() {});
+        Object raw = client.post(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/health_checks"), body, null, requestHeaders, "application/json");
+        return client.convertValue(raw, new TypeReference<ApplicationsHealthChecksCreateResponse201>() {});
     }
 
     private record PathParameterSpec(String name, String style, boolean explode) {}

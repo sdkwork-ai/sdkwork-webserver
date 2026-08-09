@@ -17,18 +17,18 @@ impl DomainApi {
     }
 
     /// 获取站点域名列表
-    pub async fn sites_domains_list(&self, site_id: &str, page: Option<i64>, page_size: Option<i64>) -> Result<serde_json::Value, SdkworkError> {
+    pub async fn applications_domains_list(&self, application_id: &str, page: Option<i64>, page_size: Option<i64>) -> Result<serde_json::Value, SdkworkError> {
         let query = build_query_string(&[
             QueryParameterSpec::new("page", page, "form", true, false, None),
             QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
         ]);
-        let path = append_query_string(app_path(&format!("/sites/{}/domains", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false)))), &query);
+        let path = append_query_string(app_path(&format!("/applications/{}/domains", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false)))), &query);
         self.client.get(&path, None, None).await
     }
 
     /// 绑定域名
-    pub async fn sites_domains_create(&self, site_id: &str, body: &CreateDomainRequest, idempotency_key: &str) -> Result<DomainResponse, SdkworkError> {
-        let path = app_path(&format!("/sites/{}/domains", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false))));
+    pub async fn applications_domains_create(&self, application_id: &str, body: &CreateDomainRequest, idempotency_key: &str) -> Result<DomainResponse, SdkworkError> {
+        let path = app_path(&format!("/applications/{}/domains", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false))));
         let headers = build_request_headers(
             &[
                 ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
@@ -39,20 +39,20 @@ impl DomainApi {
     }
 
     /// 获取域名详情
-    pub async fn sites_domains_retrieve(&self, site_id: &str, domain_id: &str) -> Result<DomainResponse, SdkworkError> {
-        let path = app_path(&format!("/sites/{}/domains/{}", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false)), serialize_path_parameter(domain_id, PathParameterSpec::new("domainId", "simple", false))));
+    pub async fn applications_domains_retrieve(&self, application_id: &str, domain_id: &str) -> Result<DomainResponse, SdkworkError> {
+        let path = app_path(&format!("/applications/{}/domains/{}", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false)), serialize_path_parameter(domain_id, PathParameterSpec::new("domainId", "simple", false))));
         self.client.get(&path, None, None).await
     }
 
     /// 解绑域名
-    pub async fn sites_domains_delete(&self, site_id: &str, domain_id: &str) -> Result<(), SdkworkError> {
-        let path = app_path(&format!("/sites/{}/domains/{}", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false)), serialize_path_parameter(domain_id, PathParameterSpec::new("domainId", "simple", false))));
+    pub async fn applications_domains_delete(&self, application_id: &str, domain_id: &str) -> Result<(), SdkworkError> {
+        let path = app_path(&format!("/applications/{}/domains/{}", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false)), serialize_path_parameter(domain_id, PathParameterSpec::new("domainId", "simple", false))));
         self.client.delete(&path, None, None).await
     }
 
     /// 创建或检查域名所有权验证挑战
-    pub async fn sites_domains_verify(&self, site_id: &str, domain_id: &str, idempotency_key: &str) -> Result<DomainVerifyResponse, SdkworkError> {
-        let path = app_path(&format!("/sites/{}/domains/{}/verify", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false)), serialize_path_parameter(domain_id, PathParameterSpec::new("domainId", "simple", false))));
+    pub async fn applications_domains_verify(&self, application_id: &str, domain_id: &str, idempotency_key: &str) -> Result<DomainVerifyResponse, SdkworkError> {
+        let path = app_path(&format!("/applications/{}/domains/{}/verify", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false)), serialize_path_parameter(domain_id, PathParameterSpec::new("domainId", "simple", false))));
         let headers = build_request_headers(
             &[
                 ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),

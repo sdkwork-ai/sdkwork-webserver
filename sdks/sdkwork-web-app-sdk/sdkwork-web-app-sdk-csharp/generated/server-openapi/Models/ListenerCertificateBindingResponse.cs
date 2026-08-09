@@ -7,7 +7,7 @@ namespace SDKWork.Web.AppSdk.Models
     public class ListenerCertificateBindingResponse
     {
         public string Id { get; set; }
-        public string SiteId { get; set; }
+        public string ApplicationId { get; set; }
         public string DomainId { get; set; }
         public string CertificateId { get; set; }
         public string DesiredCertificateVersionId { get; set; }

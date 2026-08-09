@@ -5,23 +5,24 @@ use axum::{
     Extension, Json, Router,
 };
 use sdkwork_webserver_contract::{
-    CreateDeploymentRequest, CreateDomainRequest, CreateListenerCertificateBindingRequest,
-    CreateManagedDomainRequest, CreateNginxConfigRequest, CreateRootDomainHostnameRequest,
-    CreateRootDomainRequest, CreateServerRequest, CreateSiteRequest, CreateSourceVersionRequest,
-    ImportGitSourceVersionRequest, IssueCertificateRequest, ListAuditLogsQuery,
-    ListNginxConfigsQuery, ListRootDomainsQuery, ListSitesQuery, RevokeCertificateRequest,
-    UpdateCertificateRequest, UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest,
-    UpdateSiteRequest, WebBackendApi, WebBackendRequestContext,
+    CreateApplicationRequest, CreateDeploymentRequest, CreateDomainRequest,
+    CreateListenerCertificateBindingRequest, CreateManagedDomainRequest, CreateNginxConfigRequest,
+    CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
+    CreateSourceVersionRequest, ImportGitSourceVersionRequest, IssueCertificateRequest,
+    ListApplicationsQuery, ListAuditLogsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
+    RevokeCertificateRequest, UpdateApplicationRequest, UpdateCertificateRequest,
+    UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest, WebBackendApi,
+    WebBackendRequestContext,
 };
 use serde::Deserialize;
 use std::sync::Arc;
 
 use crate::{agent_routes, auth::require_backend_context, paths};
 use sdkwork_routes_webserver_common::{
-    accepted_async, created_resource, no_content, ok_audit_log_page,
+    accepted_async, created_resource, no_content, ok_application_page, ok_audit_log_page,
     ok_certificate_distribution_page, ok_certificate_page, ok_deployment_page, ok_domain_page,
     ok_listener_certificate_binding_page, ok_nginx_config_page, ok_resource, ok_root_domain_page,
-    ok_server_page, ok_site_page, ok_source_version_page, validate_pagination_query, WebApiError,
+    ok_server_page, ok_source_version_page, validate_pagination_query, WebApiError,
 };
 
 #[derive(Clone)]
@@ -201,16 +202,16 @@ fn default_page_size() -> i32 {
 async fn list_applications(
     State(state): State<BackendState>,
     context: Option<Extension<WebBackendRequestContext>>,
-    Query(query): Query<ListSitesQuery>,
+    Query(query): Query<ListApplicationsQuery>,
 ) -> Result<Response, WebApiError> {
     let context = require_backend_context(context)?;
-    ok_site_page(state.api.list_applications(&context, &query).await)
+    ok_application_page(state.api.list_applications(&context, &query).await)
 }
 
 async fn create_application(
     State(state): State<BackendState>,
     context: Option<Extension<WebBackendRequestContext>>,
-    Json(request): Json<CreateSiteRequest>,
+    Json(request): Json<CreateApplicationRequest>,
 ) -> Result<Response, WebApiError> {
     let context = require_backend_context(context)?;
     created_resource(state.api.create_application(&context, &request).await)
@@ -234,7 +235,7 @@ async fn update_application(
     State(state): State<BackendState>,
     context: Option<Extension<WebBackendRequestContext>>,
     Path(application_id): Path<String>,
-    Json(request): Json<UpdateSiteRequest>,
+    Json(request): Json<UpdateApplicationRequest>,
 ) -> Result<Response, WebApiError> {
     let context = require_backend_context(context)?;
     ok_resource(

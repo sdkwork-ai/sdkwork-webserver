@@ -56,7 +56,7 @@ client.SetHeader("X-Custom-Header", "value");
 
 ## API Modules
 
-- `client.Site` - site API
+- `client.Application` - application API
 - `client.Domain` - domain API
 - `client.Certificate` - certificate API
 - `client.SourceVersion` - source_version API
@@ -66,10 +66,10 @@ client.SetHeader("X-Custom-Header", "value");
 
 ## Usage Examples
 
-### site
+### application
 
 ```csharp
-// 获取站点列表
+// 获取应用列表
 var query = new Dictionary<string, object>
 {
     ["page"] = 1,
@@ -79,7 +79,7 @@ var query = new Dictionary<string, object>
     ["site_type"] = 1,
     ["keyword"] = "keyword",
 };
-var result = await client.Site.SitesListAsync(query);
+var result = await client.Application.ApplicationsListAsync(query);
 Console.WriteLine(result);
 ```
 
@@ -100,14 +100,14 @@ Console.WriteLine(result);
 
 ```csharp
 // List certificates active on the domain listener
-var siteId = "1";
+var applicationId = "1";
 var domainId = "1";
 var query = new Dictionary<string, object>
 {
     ["page"] = 1,
     ["page_size"] = 2,
 };
-var result = await client.Certificate.SitesDomainsListenerCertificateBindingsListAsync(siteId, domainId, query);
+var result = await client.Certificate.ApplicationsDomainsListenerCertificateBindingsListAsync(applicationId, domainId, query);
 Console.WriteLine(result);
 ```
 
@@ -115,13 +115,13 @@ Console.WriteLine(result);
 
 ```csharp
 // 获取应用源码版本
-var siteId = "1";
+var applicationId = "1";
 var query = new Dictionary<string, object>
 {
     ["page_size"] = 1,
     ["cursor"] = "cursor",
 };
-var result = await client.SourceVersion.SitesSourceVersionsListAsync(siteId, query);
+var result = await client.SourceVersion.ApplicationsSourceVersionsListAsync(applicationId, query);
 Console.WriteLine(result);
 ```
 
@@ -129,14 +129,14 @@ Console.WriteLine(result);
 
 ```csharp
 // 获取部署历史
-var siteId = "1";
+var applicationId = "1";
 var query = new Dictionary<string, object>
 {
     ["page_size"] = 1,
     ["cursor"] = "cursor",
     ["status"] = 0,
 };
-var result = await client.Deployment.SitesDeploymentsListAsync(siteId, query);
+var result = await client.Deployment.ApplicationsDeploymentsListAsync(applicationId, query);
 Console.WriteLine(result);
 ```
 
@@ -144,12 +144,12 @@ Console.WriteLine(result);
 
 ```csharp
 // 获取环境变量列表
-var siteId = "1";
+var applicationId = "1";
 var query = new Dictionary<string, object>
 {
     ["environment"] = "environment",
 };
-var result = await client.EnvVariable.SitesEnvVariablesListAsync(siteId, query);
+var result = await client.EnvVariable.ApplicationsEnvVariablesListAsync(applicationId, query);
 Console.WriteLine(result);
 ```
 
@@ -157,8 +157,8 @@ Console.WriteLine(result);
 
 ```csharp
 // 获取健康检查配置
-var siteId = "1";
-var result = await client.Monitor.SitesHealthChecksListAsync(siteId);
+var applicationId = "1";
+var result = await client.Monitor.ApplicationsHealthChecksListAsync(applicationId);
 Console.WriteLine(result);
 ```
 

@@ -9,7 +9,7 @@ use std::{
 use axum::{
     body::Body,
     http::{
-        header::{ACCEPT, CACHE_CONTROL},
+        header::{self, ACCEPT, CACHE_CONTROL},
         HeaderMap, HeaderName, HeaderValue, Method, Request, Response, StatusCode,
     },
     routing::any,
@@ -20,13 +20,15 @@ use serde_json::Value;
 
 use crate::data_plane::{
     static_file_response::serve_opened_file,
-    static_path::{open_static_path, StaticPathError, StaticPathTarget},
+    static_path::{open_static_path, OpenedStaticFile, StaticPathError, StaticPathTarget},
 };
 
 pub(crate) const PC_STATIC_ROOT_ENV: &str = "SDKWORK_WEBSERVER_PC_STATIC_ROOT";
 
 const WEB_DEPLOYMENT_PROFILE_ENV: &str = "SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE";
 const DEPLOYMENT_PROFILE_ENV: &str = "SDKWORK_DEPLOYMENT_PROFILE";
+const CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN_ENV: &str =
+    "SDKWORK_WEBSERVER_CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN";
 const INDEX_FILE: &str = "index.html";
 const RUNTIME_ENV_FILE: &str = "runtime-env.json";
 const RUNTIME_ENV_PATH: &str = "/runtime-env.json";
@@ -61,6 +63,12 @@ pub(crate) struct PcAppShellConfig {
     root: PathBuf,
     environment: String,
     required_files: Arc<Vec<PathBuf>>,
+    /// Credential-entry bootstrap Access-Token injected into the served
+    /// `index.html` (materialized from the TOML `[secrets]`
+    /// `credential_entry_bootstrap_access_token_file` reference). The login
+    /// renderer sends it so the identity-service metadata endpoints accept
+    /// the anonymous credential-entry bootstrap.
+    bootstrap_access_token: Option<String>,
 }
 
 impl PcAppShellConfig {
@@ -114,11 +122,16 @@ impl PcAppShellConfig {
         let environment = canonical_environment(environment)?.to_owned();
         let required_files = collect_static_files(&root)?;
         validate_bootstrap_files(&root, &environment)?;
+        let bootstrap_access_token = env::var(CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN_ENV)
+            .ok()
+            .map(|token| token.trim().to_owned())
+            .filter(|token| !token.is_empty());
 
         Ok(Self {
             root,
             environment,
             required_files: Arc::new(required_files),
+            bootstrap_access_token,
         })
     }
 
@@ -387,6 +400,13 @@ async fn serve_request(config: Arc<PcAppShellConfig>, request: Request<Body>) ->
 
     match target {
         StaticPathTarget::File(file) => {
+            if let Some(token) = config.bootstrap_access_token.as_deref().filter(|_| {
+                file.path_hint
+                    .file_name()
+                    .is_some_and(|name| name == INDEX_FILE)
+            }) {
+                return serve_index_with_bootstrap_token(&config.root, file, token, &method);
+            }
             let mut response = serve_opened_file(file, &method, request.headers()).await;
             response
                 .headers_mut()
@@ -398,6 +418,52 @@ async fn serve_request(config: Arc<PcAppShellConfig>, request: Request<Body>) ->
         }
         StaticPathTarget::RedirectToDirectory => redirect_to_directory(request.uri()),
     }
+}
+
+/// Serves `index.html` with the credential-entry bootstrap Access-Token
+/// injected as an inline script so the identity-service metadata endpoints
+/// accept the anonymous login renderer (`@sdkwork/iam-credential-entry`).
+/// The token is a compact JWT without HTML-significant characters; the
+/// inline script is written before `</head>`. The static path hints are
+/// root-relative, so the file is re-read from the configured root instead of
+/// the process working directory.
+fn serve_index_with_bootstrap_token(
+    root: &Path,
+    file: OpenedStaticFile,
+    token: &str,
+    method: &Method,
+) -> Response<Body> {
+    let html = match fs::read(root.join(&file.path_hint)) {
+        Ok(html) => html,
+        Err(_) => return empty_response(StatusCode::NOT_FOUND),
+    };
+    if method == Method::HEAD {
+        return empty_response(StatusCode::OK);
+    }
+    let injected = format!(
+        "<script>globalThis.__SDKWORK_CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN__=\"{}\";</script>",
+        token
+    );
+    let html = match std::str::from_utf8(&html) {
+        Ok(html) if html.contains("</head>") => html
+            .replacen("</head>", &format!("{injected}</head>"), 1)
+            .into_bytes(),
+        _ => html_into_bytes_with_injected_tail(&html, injected.as_bytes()),
+    };
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+        .header(CACHE_CONTROL, "public, no-cache")
+        .header(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"))
+        .body(Body::from(html))
+        .unwrap_or_else(|_| empty_response(StatusCode::INTERNAL_SERVER_ERROR))
+}
+
+fn html_into_bytes_with_injected_tail(html: &[u8], injected: &[u8]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(html.len() + injected.len() + 8);
+    output.extend_from_slice(html);
+    output.extend_from_slice(injected);
+    output
 }
 
 fn is_reserved_path(path: &str) -> bool {
@@ -641,6 +707,37 @@ mod tests {
             asset.headers()[CACHE_CONTROL],
             "public, max-age=31536000, immutable"
         );
+    }
+
+    #[tokio::test]
+    async fn index_injects_credential_entry_bootstrap_access_token_when_configured() {
+        let temp = fixture_root();
+        let mut config =
+            PcAppShellConfig::preflight(temp.path().to_owned(), "development").unwrap();
+        config.bootstrap_access_token = Some("header.payload.signature".to_owned());
+        let router = config.mount(Router::new());
+
+        let index = request(&router, Method::GET, "/", Some("text/html")).await;
+        assert_eq!(index.status(), StatusCode::OK);
+        let html = body(index).await;
+        assert!(html.contains(
+            "globalThis.__SDKWORK_CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN__=\"header.payload.signature\""
+        ));
+
+        let navigation = request(&router, Method::GET, "/console/sites", Some("text/html")).await;
+        assert_eq!(navigation.status(), StatusCode::OK);
+        assert!(body(navigation).await.contains("BOOTSTRAP_ACCESS_TOKEN"));
+    }
+
+    #[tokio::test]
+    async fn index_without_bootstrap_token_is_served_unchanged() {
+        let temp = fixture_root();
+        let config = PcAppShellConfig::preflight(temp.path().to_owned(), "development").unwrap();
+        let router = config.mount(Router::new());
+
+        let index = request(&router, Method::GET, "/", Some("text/html")).await;
+        assert_eq!(index.status(), StatusCode::OK);
+        assert!(!body(index).await.contains("BOOTSTRAP_ACCESS_TOKEN"));
     }
 
     #[tokio::test]

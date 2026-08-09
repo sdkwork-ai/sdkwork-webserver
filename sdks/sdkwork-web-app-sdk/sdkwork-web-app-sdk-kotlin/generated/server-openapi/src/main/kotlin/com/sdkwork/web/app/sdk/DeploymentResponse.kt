@@ -2,7 +2,7 @@ package com.sdkwork.web.app.sdk
 
 data class DeploymentResponse(
     val id: String? = null,
-    val siteId: String? = null,
+    val applicationId: String? = null,
     val deployType: Int? = null,
     val sourceVersionId: String? = null,
     val versionTag: String? = null,

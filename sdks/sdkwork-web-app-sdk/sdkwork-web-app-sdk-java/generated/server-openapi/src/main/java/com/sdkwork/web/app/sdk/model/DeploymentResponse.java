@@ -3,7 +3,7 @@ package com.sdkwork.web.app.sdk.model;
 
 public class DeploymentResponse {
     private String id;
-    private String siteId;
+    private String applicationId;
     private Integer deployType;
     private String sourceVersionId;
     private String versionTag;
@@ -28,12 +28,12 @@ public class DeploymentResponse {
         this.id = id;
     }
 
-    public String getSiteId() {
-        return this.siteId;
+    public String getApplicationId() {
+        return this.applicationId;
     }
 
-    public void setSiteId(String siteId) {
-        this.siteId = siteId;
+    public void setApplicationId(String applicationId) {
+        this.applicationId = applicationId;
     }
 
     public Integer getDeployType() {

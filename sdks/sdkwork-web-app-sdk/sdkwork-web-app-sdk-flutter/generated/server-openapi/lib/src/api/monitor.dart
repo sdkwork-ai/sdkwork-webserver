@@ -12,16 +12,16 @@ class MonitorApi {
   MonitorApi(this._client);
 
   /// 获取健康检查配置
-  Future<SitesHealthChecksListResponse?> sitesHealthChecksList(String siteId) async {
-    final response = await _client.get(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/health_checks'));
+  Future<ApplicationsHealthChecksListResponse?> applicationsHealthChecksList(String applicationId) async {
+    final response = await _client.get(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/health_checks'));
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : SitesHealthChecksListResponse.fromJson(map);
+      return map == null ? null : ApplicationsHealthChecksListResponse.fromJson(map);
     })();
   }
 
   /// 创建健康检查
-  Future<SitesHealthChecksCreateResponse201?> sitesHealthChecksCreate(String siteId, CreateHealthCheckRequest body, String idempotencyKey) async {
+  Future<ApplicationsHealthChecksCreateResponse201?> applicationsHealthChecksCreate(String applicationId, CreateHealthCheckRequest body, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(
       <String, HeaderParameterSpec>{
         'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
@@ -29,10 +29,10 @@ class MonitorApi {
       <String, HeaderParameterSpec>{},
     );
     final payload = body.toJson();
-    final response = await _client.post(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/health_checks'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    final response = await _client.post(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/health_checks'), body: payload, headers: requestHeaders, contentType: 'application/json');
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : SitesHealthChecksCreateResponse201.fromJson(map);
+      return map == null ? null : ApplicationsHealthChecksCreateResponse201.fromJson(map);
     })();
   }
 }

@@ -3,7 +3,7 @@ package types
 
 type DeploymentResponse struct {
 	Id string `json:"id"`
-	SiteId string `json:"siteId"`
+	ApplicationId string `json:"applicationId"`
 	DeployType int `json:"deployType"`
 	SourceVersionId string `json:"sourceVersionId"`
 	VersionTag string `json:"versionTag"`

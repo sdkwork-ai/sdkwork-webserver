@@ -3,7 +3,7 @@
  */
 package com.sdkwork.web.app.sdk.api;
 
-import com.sdkwork.web.app.sdk.api.SiteApi;
+import com.sdkwork.web.app.sdk.api.ApplicationApi;
 import com.sdkwork.web.app.sdk.api.DomainApi;
 import com.sdkwork.web.app.sdk.api.CertificateApi;
 import com.sdkwork.web.app.sdk.api.SourceVersionApi;

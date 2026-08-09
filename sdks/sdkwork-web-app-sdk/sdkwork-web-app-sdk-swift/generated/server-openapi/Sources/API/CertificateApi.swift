@@ -8,34 +8,34 @@ public class CertificateApi {
     }
 
     /// List certificates active on the domain listener
-    public func sitesDomainsListenerCertificateBindingsList(siteId: String, domainId: String, page: Int? = nil, pageSize: Int? = nil) async throws -> SitesDomainsListenerCertificateBindingsListResponse? {
+    public func applicationsDomainsListenerCertificateBindingsList(applicationId: String, domainId: String, page: Int? = nil, pageSize: Int? = nil) async throws -> ApplicationsDomainsListenerCertificateBindingsListResponse? {
         let query = buildQueryString([
             QueryParameterSpec(name: "page", value: page, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "page_size", value: pageSize, style: "form", explode: true, allowReserved: false, contentType: nil)
         ])
-        return try await client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/domains/\(serializePathParameter(domainId, PathParameterSpec(name: "domainId", style: "simple", explode: false)))/listener_certificate_bindings"), query), responseType: SitesDomainsListenerCertificateBindingsListResponse.self)
+        return try await client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/domains/\(serializePathParameter(domainId, PathParameterSpec(name: "domainId", style: "simple", explode: false)))/listener_certificate_bindings"), query), responseType: ApplicationsDomainsListenerCertificateBindingsListResponse.self)
     }
 
     /// Bind a certificate version to the domain listener
-    public func sitesDomainsListenerCertificateBindingsCreate(siteId: String, domainId: String, body: CreateListenerCertificateBindingRequest, idempotencyKey: String) async throws -> SitesDomainsListenerCertificateBindingsCreateResponse201? {
+    public func applicationsDomainsListenerCertificateBindingsCreate(applicationId: String, domainId: String, body: CreateListenerCertificateBindingRequest, idempotencyKey: String) async throws -> ApplicationsDomainsListenerCertificateBindingsCreateResponse201? {
         let requestHeaders = buildRequestHeaders(
             [
                 "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
             ],
             [:]
         )
-        return try await client.post(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/domains/\(serializePathParameter(domainId, PathParameterSpec(name: "domainId", style: "simple", explode: false)))/listener_certificate_bindings"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: SitesDomainsListenerCertificateBindingsCreateResponse201.self)
+        return try await client.post(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/domains/\(serializePathParameter(domainId, PathParameterSpec(name: "domainId", style: "simple", explode: false)))/listener_certificate_bindings"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: ApplicationsDomainsListenerCertificateBindingsCreateResponse201.self)
     }
 
     /// Remove a certificate from the domain listener
-    public func sitesDomainsListenerCertificateBindingsDelete(siteId: String, domainId: String, bindingId: String, idempotencyKey: String) async throws -> Void {
+    public func applicationsDomainsListenerCertificateBindingsDelete(applicationId: String, domainId: String, bindingId: String, idempotencyKey: String) async throws -> Void {
         let requestHeaders = buildRequestHeaders(
             [
                 "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
             ],
             [:]
         )
-        _ = try await client.delete(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/domains/\(serializePathParameter(domainId, PathParameterSpec(name: "domainId", style: "simple", explode: false)))/listener_certificate_bindings/\(serializePathParameter(bindingId, PathParameterSpec(name: "bindingId", style: "simple", explode: false)))"), params: nil, headers: requestHeaders)
+        _ = try await client.delete(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/domains/\(serializePathParameter(domainId, PathParameterSpec(name: "domainId", style: "simple", explode: false)))/listener_certificate_bindings/\(serializePathParameter(bindingId, PathParameterSpec(name: "bindingId", style: "simple", explode: false)))"), params: nil, headers: requestHeaders)
     }
 
     private struct PathParameterSpec {

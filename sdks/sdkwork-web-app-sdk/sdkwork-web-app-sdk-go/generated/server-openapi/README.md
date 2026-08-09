@@ -59,7 +59,7 @@ client.SetHeader("X-Custom-Header", "value")
 
 ## API Modules
 
-- `client.Site` - site API
+- `client.Application` - application API
 - `client.Domain` - domain API
 - `client.Certificate` - certificate API
 - `client.SourceVersion` - source_version API
@@ -69,10 +69,10 @@ client.SetHeader("X-Custom-Header", "value")
 
 ## Usage Examples
 
-### site
+### application
 
 ```go
-// 获取站点列表
+// 获取应用列表
 params := map[string]interface{}{
     "page": 1,
     "page_size": 2,
@@ -81,7 +81,7 @@ params := map[string]interface{}{
     "site_type": 1,
     "keyword": "keyword",
 }
-result, err := client.Site.SitesList(params)
+result, err := client.Application.ApplicationsList(params)
 if err != nil {
     panic(err)
 }
@@ -107,13 +107,13 @@ fmt.Println(result)
 
 ```go
 // List certificates active on the domain listener
-siteId := "1"
+applicationId := "1"
 domainId := "1"
 params := map[string]interface{}{
     "page": 1,
     "page_size": 2,
 }
-result, err := client.Certificate.SitesDomainsListenerCertificateBindingsList(siteId, domainId, params)
+result, err := client.Certificate.ApplicationsDomainsListenerCertificateBindingsList(applicationId, domainId, params)
 if err != nil {
     panic(err)
 }
@@ -124,12 +124,12 @@ fmt.Println(result)
 
 ```go
 // 获取应用源码版本
-siteId := "1"
+applicationId := "1"
 params := map[string]interface{}{
     "page_size": 1,
     "cursor": "cursor",
 }
-result, err := client.SourceVersion.SitesSourceVersionsList(siteId, params)
+result, err := client.SourceVersion.ApplicationsSourceVersionsList(applicationId, params)
 if err != nil {
     panic(err)
 }
@@ -140,13 +140,13 @@ fmt.Println(result)
 
 ```go
 // 获取部署历史
-siteId := "1"
+applicationId := "1"
 params := map[string]interface{}{
     "page_size": 1,
     "cursor": "cursor",
     "status": 0,
 }
-result, err := client.Deployment.SitesDeploymentsList(siteId, params)
+result, err := client.Deployment.ApplicationsDeploymentsList(applicationId, params)
 if err != nil {
     panic(err)
 }
@@ -157,11 +157,11 @@ fmt.Println(result)
 
 ```go
 // 获取环境变量列表
-siteId := "1"
+applicationId := "1"
 params := map[string]interface{}{
     "environment": "environment",
 }
-result, err := client.EnvVariable.SitesEnvVariablesList(siteId, params)
+result, err := client.EnvVariable.ApplicationsEnvVariablesList(applicationId, params)
 if err != nil {
     panic(err)
 }
@@ -172,8 +172,8 @@ fmt.Println(result)
 
 ```go
 // 获取健康检查配置
-siteId := "1"
-result, err := client.Monitor.SitesHealthChecksList(siteId)
+applicationId := "1"
+result, err := client.Monitor.ApplicationsHealthChecksList(applicationId)
 if err != nil {
     panic(err)
 }

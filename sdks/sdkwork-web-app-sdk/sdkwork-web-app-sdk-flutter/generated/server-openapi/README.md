@@ -48,7 +48,7 @@ client.setHeader('X-Custom-Header', 'value');
 
 ## API Modules
 
-- `client.site` - site API
+- `client.application` - application API
 - `client.domain` - domain API
 - `client.certificate` - certificate API
 - `client.sourceVersion` - source_version API
@@ -58,9 +58,9 @@ client.setHeader('X-Custom-Header', 'value');
 
 ## Usage Examples
 
-### site
+### application
 ```dart
-// 获取站点列表
+// 获取应用列表
 final params = <String, dynamic>{
   'page': 1,
   'page_size': 2,
@@ -69,7 +69,7 @@ final params = <String, dynamic>{
   'site_type': 1,
   'keyword': 'keyword',
 };
-final result = await client.site.sitesList(params);
+final result = await client.application.applicationsList(params);
 print(result);
 ```
 
@@ -87,57 +87,57 @@ print(result);
 ### certificate
 ```dart
 // List certificates active on the domain listener
-final siteId = '1';
+final applicationId = '1';
 final domainId = '1';
 final params = <String, dynamic>{
   'page': 1,
   'page_size': 2,
 };
-final result = await client.certificate.sitesDomainsListenerCertificateBindingsList(siteId, domainId, params);
+final result = await client.certificate.applicationsDomainsListenerCertificateBindingsList(applicationId, domainId, params);
 print(result);
 ```
 
 ### source_version
 ```dart
 // 获取应用源码版本
-final siteId = '1';
+final applicationId = '1';
 final params = <String, dynamic>{
   'page_size': 1,
   'cursor': 'cursor',
 };
-final result = await client.sourceVersion.sitesSourceVersionsList(siteId, params);
+final result = await client.sourceVersion.applicationsSourceVersionsList(applicationId, params);
 print(result);
 ```
 
 ### deployment
 ```dart
 // 获取部署历史
-final siteId = '1';
+final applicationId = '1';
 final params = <String, dynamic>{
   'page_size': 1,
   'cursor': 'cursor',
   'status': 0,
 };
-final result = await client.deployment.sitesDeploymentsList(siteId, params);
+final result = await client.deployment.applicationsDeploymentsList(applicationId, params);
 print(result);
 ```
 
 ### env_variable
 ```dart
 // 获取环境变量列表
-final siteId = '1';
+final applicationId = '1';
 final params = <String, dynamic>{
   'environment': 'environment',
 };
-final result = await client.envVariable.sitesEnvVariablesList(siteId, params);
+final result = await client.envVariable.applicationsEnvVariablesList(applicationId, params);
 print(result);
 ```
 
 ### monitor
 ```dart
 // 获取健康检查配置
-final siteId = '1';
-final result = await client.monitor.sitesHealthChecksList(siteId);
+final applicationId = '1';
+final result = await client.monitor.applicationsHealthChecksList(applicationId);
 print(result);
 ```
 

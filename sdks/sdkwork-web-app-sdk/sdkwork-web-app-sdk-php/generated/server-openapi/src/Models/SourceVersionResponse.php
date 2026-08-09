@@ -10,7 +10,7 @@ final class SourceVersionResponse
 {
     public ?string $id = null;
 
-    public ?string $siteId = null;
+    public ?string $applicationId = null;
 
     public ?string $versionTag = null;
 
@@ -39,8 +39,8 @@ final class SourceVersionResponse
         $this->id = array_key_exists('id', $data)
             ? $data['id']
             : null;
-        $this->siteId = array_key_exists('siteId', $data)
-            ? $data['siteId']
+        $this->applicationId = array_key_exists('applicationId', $data)
+            ? $data['applicationId']
             : null;
         $this->versionTag = array_key_exists('versionTag', $data)
             ? $data['versionTag']
@@ -86,7 +86,7 @@ final class SourceVersionResponse
     {
         return [
             'id' => $this->id,
-            'siteId' => $this->siteId,
+            'applicationId' => $this->applicationId,
             'versionTag' => $this->versionTag,
             'sourceType' => $this->sourceType,
             'sourceRef' => $this->sourceRef,

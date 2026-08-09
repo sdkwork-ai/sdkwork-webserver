@@ -105,10 +105,12 @@ pub struct ApplicationStoreListing {
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct SiteResponse {
+pub struct ApplicationResponse {
     pub id: String,
     pub name: String,
     pub slug: String,
+    #[serde(rename = "siteId", skip_serializing_if = "Option::is_none")]
+    pub site_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(rename = "applicationType")]
@@ -127,8 +129,8 @@ pub struct SiteResponse {
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct SitePage {
-    pub items: Vec<SiteResponse>,
+pub struct ApplicationPage {
+    pub items: Vec<ApplicationResponse>,
     #[serde(with = "sdkwork_utils_rust::serde_int64")]
     pub total: i64,
     pub page: i32,
@@ -136,7 +138,7 @@ pub struct SitePage {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct CreateSiteRequest {
+pub struct CreateApplicationRequest {
     pub name: String,
     #[serde(default)]
     pub slug: Option<String>,
@@ -157,7 +159,7 @@ fn default_application_type() -> String {
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct UpdateSiteRequest {
+pub struct UpdateApplicationRequest {
     #[serde(default)]
     pub name: Option<String>,
     #[serde(default)]
@@ -376,8 +378,8 @@ fn default_deployment_config_path() -> String {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct SourceVersionResponse {
     pub id: String,
-    #[serde(rename = "siteId")]
-    pub site_id: String,
+    #[serde(rename = "applicationId")]
+    pub application_id: String,
     #[serde(rename = "versionTag")]
     pub version_tag: String,
     #[serde(rename = "sourceType")]
@@ -451,8 +453,8 @@ pub struct ImportGitSourceVersionRequest {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct DeploymentResponse {
     pub id: String,
-    #[serde(rename = "siteId")]
-    pub site_id: String,
+    #[serde(rename = "applicationId")]
+    pub application_id: String,
     pub status: i32,
     #[serde(rename = "deployType")]
     pub deploy_type: i32,
@@ -746,8 +748,8 @@ fn default_certificate_binding_priority() -> i32 {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ListenerCertificateBindingResponse {
     pub id: String,
-    #[serde(rename = "siteId")]
-    pub site_id: String,
+    #[serde(rename = "applicationId")]
+    pub application_id: String,
     #[serde(rename = "domainId")]
     pub domain_id: String,
     #[serde(rename = "certificateId")]
@@ -1181,7 +1183,7 @@ mod tests {
 
     #[test]
     fn page_totals_serialize_as_decimal_strings() {
-        let page = SitePage {
+        let page = ApplicationPage {
             items: Vec::new(),
             total: 1_234_567_890_123,
             page: 1,
@@ -1225,7 +1227,7 @@ mod tests {
     #[test]
     fn rejects_non_numeric_int64_string_input() {
         let json = r#"{"items":[],"total":"not-a-number","page":1,"pageSize":20}"#;
-        let result: Result<SitePage, _> = serde_json::from_str(json);
+        let result: Result<ApplicationPage, _> = serde_json::from_str(json);
         assert!(result.is_err());
     }
 }

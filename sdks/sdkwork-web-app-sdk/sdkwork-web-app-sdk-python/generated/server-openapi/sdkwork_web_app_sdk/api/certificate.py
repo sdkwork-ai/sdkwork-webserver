@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 from ..http_client import HttpClient
-from ..models import CreateListenerCertificateBindingRequest, SitesDomainsListenerCertificateBindingsCreateResponse201, SitesDomainsListenerCertificateBindingsListResponse
+from ..models import ApplicationsDomainsListenerCertificateBindingsCreateResponse201, ApplicationsDomainsListenerCertificateBindingsListResponse, CreateListenerCertificateBindingRequest
 
 def _append_query_string(path: str, raw_query_string: str) -> str:
     query = raw_query_string.lstrip('?')
@@ -242,41 +242,41 @@ class CertificateApi:
 
     def __init__(self, client: HttpClient):
         self._client = client
-        self.sites = CertificateSitesApi(client)
+        self.applications = CertificateApplicationsApi(client)
 
 
-class CertificateSitesApi:
-    """certificate certificate.sites API client."""
-
-    def __init__(self, client: HttpClient):
-        self._client = client
-        self.domains = CertificateSitesDomainsApi(client)
-
-
-class CertificateSitesDomainsApi:
-    """certificate certificate.sites.domains API client."""
+class CertificateApplicationsApi:
+    """certificate certificate.applications API client."""
 
     def __init__(self, client: HttpClient):
         self._client = client
-        self.listener_certificate_bindings = CertificateSitesDomainsListenerCertificateBindingsApi(client)
+        self.domains = CertificateApplicationsDomainsApi(client)
 
 
-class CertificateSitesDomainsListenerCertificateBindingsApi:
-    """certificate certificate.sites.domains.listener_certificate_bindings API client."""
+class CertificateApplicationsDomainsApi:
+    """certificate certificate.applications.domains API client."""
+
+    def __init__(self, client: HttpClient):
+        self._client = client
+        self.listener_certificate_bindings = CertificateApplicationsDomainsListenerCertificateBindingsApi(client)
+
+
+class CertificateApplicationsDomainsListenerCertificateBindingsApi:
+    """certificate certificate.applications.domains.listener_certificate_bindings API client."""
 
     def __init__(self, client: HttpClient):
         self._client = client
 
 
-    def list(self, site_id: str, domain_id: str, page: Optional[int] = None, page_size: Optional[int] = None) -> SitesDomainsListenerCertificateBindingsListResponse:
+    def list(self, application_id: str, domain_id: str, page: Optional[int] = None, page_size: Optional[int] = None) -> ApplicationsDomainsListenerCertificateBindingsListResponse:
         """List certificates active on the domain listener"""
         query = build_query_string([
             {'name': 'page', 'value': page, 'style': 'form', 'explode': True, 'allow_reserved': False},
             {'name': 'page_size', 'value': page_size, 'style': 'form', 'explode': True, 'allow_reserved': False},
         ])
-        return self._client.get(_append_query_string(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/domains/{serialize_path_parameter(domain_id, {'name': 'domainId', 'style': 'simple', 'explode': False})}/listener_certificate_bindings", query))
+        return self._client.get(_append_query_string(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/domains/{serialize_path_parameter(domain_id, {'name': 'domainId', 'style': 'simple', 'explode': False})}/listener_certificate_bindings", query))
 
-    def create(self, site_id: str, domain_id: str, body: CreateListenerCertificateBindingRequest, idempotency_key: str) -> SitesDomainsListenerCertificateBindingsCreateResponse201:
+    def create(self, application_id: str, domain_id: str, body: CreateListenerCertificateBindingRequest, idempotency_key: str) -> ApplicationsDomainsListenerCertificateBindingsCreateResponse201:
         """Bind a certificate version to the domain listener"""
         request_headers = build_request_headers(
             {
@@ -284,9 +284,9 @@ class CertificateSitesDomainsListenerCertificateBindingsApi:
             },
             {}
         )
-        return self._client.post(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/domains/{serialize_path_parameter(domain_id, {'name': 'domainId', 'style': 'simple', 'explode': False})}/listener_certificate_bindings", json=body, headers=request_headers)
+        return self._client.post(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/domains/{serialize_path_parameter(domain_id, {'name': 'domainId', 'style': 'simple', 'explode': False})}/listener_certificate_bindings", json=body, headers=request_headers)
 
-    def delete(self, site_id: str, domain_id: str, binding_id: str, idempotency_key: str) -> None:
+    def delete(self, application_id: str, domain_id: str, binding_id: str, idempotency_key: str) -> None:
         """Remove a certificate from the domain listener"""
         request_headers = build_request_headers(
             {
@@ -294,4 +294,4 @@ class CertificateSitesDomainsListenerCertificateBindingsApi:
             },
             {}
         )
-        return self._client.delete(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/domains/{serialize_path_parameter(domain_id, {'name': 'domainId', 'style': 'simple', 'explode': False})}/listener_certificate_bindings/{serialize_path_parameter(binding_id, {'name': 'bindingId', 'style': 'simple', 'explode': False})}", headers=request_headers)
+        return self._client.delete(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/domains/{serialize_path_parameter(domain_id, {'name': 'domainId', 'style': 'simple', 'explode': False})}/listener_certificate_bindings/{serialize_path_parameter(binding_id, {'name': 'bindingId', 'style': 'simple', 'explode': False})}", headers=request_headers)

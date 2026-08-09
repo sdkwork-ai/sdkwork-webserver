@@ -16,7 +16,7 @@ require 'sdkwork/app_sdk'
 config = Sdkwork::AppSdk::SdkConfig.new(base_url: 'http://localhost:3800')
 client = Sdkwork::AppSdk::SdkworkAppClient.new(config)
 params = { 'page' => 1, 'page_size' => 2, 'status' => 0, 'application_type' => 'WEB', 'site_type' => 1, 'keyword' => 'keyword' }
-result = client.site.sites_list(params: params)
+result = client.application.applications_list(params: params)
 
 
 puts result.inspect
@@ -42,7 +42,7 @@ client.set_header('X-Custom-Header', 'value')
 
 ## API Modules
 
-- `client.site` - site API
+- `client.application` - application API
 - `client.domain` - domain API
 - `client.certificate` - certificate API
 - `client.source_version` - source_version API
@@ -52,12 +52,12 @@ client.set_header('X-Custom-Header', 'value')
 
 ## Usage Examples
 
-### site
+### application
 
 ```ruby
-# 获取站点列表
+# 获取应用列表
 params = { 'page' => 1, 'page_size' => 2, 'status' => 0, 'application_type' => 'WEB', 'site_type' => 1, 'keyword' => 'keyword' }
-result = client.site.sites_list(params: params)
+result = client.application.applications_list(params: params)
 puts result.inspect
 ```
 
@@ -74,10 +74,10 @@ puts result.inspect
 
 ```ruby
 # List certificates active on the domain listener
-site_id = '1'
+application_id = '1'
 domain_id = '1'
 params = { 'page' => 1, 'page_size' => 2 }
-result = client.certificate.sites_domains_listener_certificate_bindings_list(site_id, domain_id, params: params)
+result = client.certificate.applications_domains_listener_certificate_bindings_list(application_id, domain_id, params: params)
 puts result.inspect
 ```
 
@@ -85,9 +85,9 @@ puts result.inspect
 
 ```ruby
 # 获取应用源码版本
-site_id = '1'
+application_id = '1'
 params = { 'page_size' => 1, 'cursor' => 'cursor' }
-result = client.source_version.sites_source_versions_list(site_id, params: params)
+result = client.source_version.applications_source_versions_list(application_id, params: params)
 puts result.inspect
 ```
 
@@ -95,9 +95,9 @@ puts result.inspect
 
 ```ruby
 # 获取部署历史
-site_id = '1'
+application_id = '1'
 params = { 'page_size' => 1, 'cursor' => 'cursor', 'status' => 0 }
-result = client.deployment.sites_deployments_list(site_id, params: params)
+result = client.deployment.applications_deployments_list(application_id, params: params)
 puts result.inspect
 ```
 
@@ -105,9 +105,9 @@ puts result.inspect
 
 ```ruby
 # 获取环境变量列表
-site_id = '1'
+application_id = '1'
 params = { 'environment' => 'environment' }
-result = client.env_variable.sites_env_variables_list(site_id, params: params)
+result = client.env_variable.applications_env_variables_list(application_id, params: params)
 puts result.inspect
 ```
 
@@ -115,8 +115,8 @@ puts result.inspect
 
 ```ruby
 # 获取健康检查配置
-site_id = '1'
-result = client.monitor.sites_health_checks_list(site_id)
+application_id = '1'
+result = client.monitor.applications_health_checks_list(application_id)
 puts result.inspect
 ```
 
@@ -125,7 +125,7 @@ puts result.inspect
 ```ruby
 begin
   params = { 'page' => 1, 'page_size' => 2, 'status' => 0, 'application_type' => 'WEB', 'site_type' => 1, 'keyword' => 'keyword' }
-  client.site.sites_list(params: params)
+  client.application.applications_list(params: params)
 rescue StandardError => e
   warn("Error: #{e.message}")
 end

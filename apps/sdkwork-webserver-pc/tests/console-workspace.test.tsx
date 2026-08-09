@@ -26,7 +26,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const consoleModules = [sitesModule, configurationModule, deliveryModule, deploymentsModule];
-const appUserPermissionScope = ["web.sites.*", "web.certificates.*"];
+const appUserPermissionScope = ["web.applications.*", "web.certificates.*"];
 
 function deployRenderers(): Partial<Record<WebserverResourceKey, ReactNode>> {
   const tokenManager = createTokenManager({ accessToken: "test-access-token", authToken: "test-auth-token" });
@@ -96,7 +96,7 @@ describe("console workspace access", () => {
   });
 
   it("matches wildcard scopes and selects an owned application for deployment history", async () => {
-    const listSites = vi.fn().mockResolvedValue({
+    const listApplications = vi.fn().mockResolvedValue({
       items: [{ id: "site-1", name: "Customer portal" }],
       pageInfo: { page: 1, pageSize: 100, hasMore: false },
     });
@@ -105,16 +105,16 @@ describe("console workspace access", () => {
       pageInfo: { page: 1, pageSize: 20, hasMore: false },
     });
     const registry: WebserverResourceRegistry = {
-      sites: { actions: [], load: listSites },
+      applications: { actions: [], load: listApplications },
       deployments: {
         actions: [],
         load: listDeployments,
         requiresScope: true,
-        scopeKind: "site",
+        scopeKind: "application",
       },
     };
 
-    renderWorkspace("/console/deployments", registry, ["web.sites.*"]);
+    renderWorkspace("/console/deployments", registry, ["web.applications.*"]);
 
     const selector = await screen.findByRole("combobox", { name: "My application" });
     expect((selector as HTMLSelectElement).value).toBe("site-1");
@@ -160,11 +160,11 @@ describe("console release controls", () => {
       drive: {},
       web: {
         sourceVersion: {
-          sites: { sourceVersions: { create: createSourceVersion, gitImport: { create: importGit }, list: listSourceVersions } },
+          applications: { sourceVersions: { create: createSourceVersion, gitImport: { create: importGit }, list: listSourceVersions } },
         },
       },
     } as unknown as WebserverConsoleSdkClients, sourceStorage, testMediaStorage());
-    const updateSource = registry.sites?.actions.find((action) => action.id === "update-source");
+    const updateSource = registry.applications?.actions.find((action) => action.id === "update-source");
     if (!updateSource?.loadSourceInputDefaults) throw new Error("update source action is unavailable");
     const selectedItem = { id: "site-1", name: "Customer portal" };
 
@@ -206,7 +206,7 @@ describe("console release controls", () => {
 
   it("targets the selected application for row publishing and deletion", async () => {
     const createDeployment = vi.fn().mockResolvedValue({ id: "deployment-1", status: 0 });
-    const deleteSite = vi.fn().mockResolvedValue(undefined);
+    const deleteApplication = vi.fn().mockResolvedValue(undefined);
     const listSourceVersions = vi.fn().mockResolvedValue({
       items: [{
         id: "source-version-3",
@@ -220,13 +220,13 @@ describe("console release controls", () => {
     const registry = createWebserverConsoleRegistry({
       drive: {},
       web: {
-        deployment: { sites: { deployments: { create: createDeployment } } },
-        site: { delete: deleteSite },
-        sourceVersion: { sites: { sourceVersions: { list: listSourceVersions } } },
+        deployment: { applications: { deployments: { create: createDeployment } } },
+        application: { delete: deleteApplication },
+        sourceVersion: { applications: { sourceVersions: { list: listSourceVersions } } },
       },
     } as unknown as WebserverConsoleSdkClients);
-    const publish = registry.sites?.actions.find((action) => action.id === "publish");
-    const deleteAction = registry.sites?.actions.find((action) => action.id === "delete");
+    const publish = registry.applications?.actions.find((action) => action.id === "publish");
+    const deleteAction = registry.applications?.actions.find((action) => action.id === "delete");
     if (!publish?.loadFieldOptions || !deleteAction) throw new Error("application row actions are unavailable");
 
     const options = await publish.loadFieldOptions({
@@ -261,13 +261,13 @@ describe("console release controls", () => {
       body: {},
       selectedItem: { id: "site-1", name: "Portal", status: 2 },
     });
-    expect(deleteSite).toHaveBeenCalledWith("site-1");
+    expect(deleteApplication).toHaveBeenCalledWith("site-1");
     expect(deleteAction.availableWhen?.({ body: {}, selectedItem: { id: "site-1", status: 1 } })).toBe(false);
   });
 
   it("uses App Store field shapes and enforces the shared description limits", async () => {
     const registry: WebserverResourceRegistry = {
-      sites: {
+      applications: {
         actions: [{
           id: "create",
           label: "Create application",
@@ -304,7 +304,7 @@ describe("console release controls", () => {
   });
 
   it("creates an application, stores its source, and creates the initial deployment command", async () => {
-    const createSite = vi.fn().mockResolvedValue({ id: "site-1", name: "Portal" });
+    const createApplication = vi.fn().mockResolvedValue({ id: "site-1", name: "Portal" });
     const uploadArchive = vi.fn().mockResolvedValue({
       uploadSession: { spaceId: "space-1", nodeId: "source-1" },
     });
@@ -321,12 +321,12 @@ describe("console release controls", () => {
     const registry = createWebserverConsoleRegistry({
       drive: { drive: { archiveEntries: { extract, list: listArchiveEntries } }, uploader: { uploadArchive } },
       web: {
-        site: { create: createSite, update: vi.fn().mockResolvedValue({ id: "site-1" }) },
-        sourceVersion: { sites: { sourceVersions: { create: createSourceVersion } } },
-        deployment: { sites: { deployments: { create: createDeployment } } },
+        application: { create: createApplication, update: vi.fn().mockResolvedValue({ id: "site-1" }) },
+        sourceVersion: { applications: { sourceVersions: { create: createSourceVersion } } },
+        deployment: { applications: { deployments: { create: createDeployment } } },
       },
     } as unknown as WebserverConsoleSdkClients, undefined, testMediaStorage());
-    const create = registry.sites?.actions.find((action) => action.id === "create");
+    const create = registry.applications?.actions.find((action) => action.id === "create");
     const source = new File(["source"], "source.zip", { type: "application/zip" });
 
     await create?.execute({
@@ -348,7 +348,7 @@ describe("console release controls", () => {
       sourceInputMode: "archive",
     });
 
-    expect(createSite).toHaveBeenCalledWith(expect.objectContaining({
+    expect(createApplication).toHaveBeenCalledWith(expect.objectContaining({
       name: "Portal",
       applicationType: "WEB",
       siteType: 1,
@@ -368,7 +368,7 @@ describe("console release controls", () => {
       sourceVersionId: "source-version-1",
       versionTag: "v1.0.0",
     }), { idempotencyKey: "create-portal-v1" });
-    expect(createSite.mock.invocationCallOrder[0]).toBeLessThan(uploadArchive.mock.invocationCallOrder[0]);
+    expect(createApplication.mock.invocationCallOrder[0]).toBeLessThan(uploadArchive.mock.invocationCallOrder[0]);
     expect(uploadArchive.mock.invocationCallOrder[0]).toBeLessThan(createSourceVersion.mock.invocationCallOrder[0]);
     expect(createSourceVersion.mock.invocationCallOrder[0]).toBeLessThan(createDeployment.mock.invocationCallOrder[0]);
   });
@@ -384,15 +384,15 @@ describe("console release controls", () => {
     const registry = createWebserverConsoleRegistry({
       drive: {},
       web: {
-        site: {
+        application: {
           create: vi.fn().mockResolvedValue({ id: "site-1", name: "Git portal" }),
           update: vi.fn().mockResolvedValue({ id: "site-1" }),
         },
-        sourceVersion: { sites: { sourceVersions: { gitImport: { create: importGit } } } },
-        deployment: { sites: { deployments: { create: createDeployment } } },
+        sourceVersion: { applications: { sourceVersions: { gitImport: { create: importGit } } } },
+        deployment: { applications: { deployments: { create: createDeployment } } },
       },
     } as unknown as WebserverConsoleSdkClients, sourceStorage, testMediaStorage());
-    const create = registry.sites?.actions.find((candidate) => candidate.id === "create");
+    const create = registry.applications?.actions.find((candidate) => candidate.id === "create");
     const saveSource = registry["source-versions"]?.actions.find((candidate) => candidate.id === "create");
     const deploy = registry.deployments?.actions.find((candidate) => candidate.id === "deploy");
     if (!create || !saveSource || !deploy) throw new Error("Git source version actions are unavailable");
@@ -455,7 +455,7 @@ describe("console release controls", () => {
 
   it("presents deployment contract fields as localized product labels", async () => {
     const registry: WebserverResourceRegistry = {
-      sites: {
+      applications: {
         actions: [],
         load: vi.fn().mockResolvedValue({
           items: [{ id: "site-1", name: "客户门户" }],
@@ -494,11 +494,11 @@ describe("console release controls", () => {
           pageInfo: { page: 1, pageSize: 20, hasMore: false },
         }),
         requiresScope: true,
-        scopeKind: "site",
+        scopeKind: "application",
       },
     };
 
-    renderWorkspace("/console/deployments", registry, ["web.sites.*"], vi.fn(), "zh-CN");
+    renderWorkspace("/console/deployments", registry, ["web.applications.*"], vi.fn(), "zh-CN");
 
     expect(await screen.findByRole("columnheader", { name: "发布环境" })).toBeTruthy();
     expect(screen.getByText("生产环境")).toBeTruthy();
@@ -523,7 +523,7 @@ describe("console release controls", () => {
     const registry = createWebserverConsoleRegistry({
       drive: { drive: { archiveEntries: { extract, list: listArchiveEntries } }, uploader: { uploadArchive } },
       web: {
-        sourceVersion: { sites: { sourceVersions: { create: createSourceVersion } } },
+        sourceVersion: { applications: { sourceVersions: { create: createSourceVersion } } },
       },
     } as unknown as WebserverConsoleSdkClients);
     const saveSource = registry["source-versions"]?.actions.find((action) => action.id === "create");
@@ -568,7 +568,7 @@ describe("console release controls", () => {
     const registry = createWebserverConsoleRegistry({
       drive: {},
       web: {
-        deployment: { sites: { deployments: { create: createDeployment } } },
+        deployment: { applications: { deployments: { create: createDeployment } } },
       },
     } as unknown as WebserverConsoleSdkClients, sourceStorage);
     const deploy = registry.deployments?.actions.find((action) => action.id === "deploy");
@@ -665,7 +665,7 @@ describe("console release controls", () => {
         },
       },
       web: {
-        sourceVersion: { sites: { sourceVersions: { create: createSourceVersion } } },
+        sourceVersion: { applications: { sourceVersions: { create: createSourceVersion } } },
       },
     } as unknown as WebserverConsoleSdkClients);
     const saveSource = registry["source-versions"]?.actions.find((action) => action.id === "create");
@@ -713,8 +713,8 @@ describe("console release controls", () => {
     const registry = createWebserverConsoleRegistry({
       drive: {},
       web: {
-        envVariable: { sites: { envVariables: { create: createVariable } } },
-        monitor: { sites: { healthChecks: { create: createHealthCheck } } },
+        envVariable: { applications: { envVariables: { create: createVariable } } },
+        monitor: { applications: { healthChecks: { create: createHealthCheck } } },
       },
     } as unknown as WebserverConsoleSdkClients);
     const variable = registry.configuration?.actions.find((candidate) => candidate.id === "create-variable");
@@ -785,14 +785,14 @@ describe("admin access classification", () => {
   it("recognizes module wildcards without treating a normal app user as an admin", () => {
     expect(hasWebserverAdminAccess(["web.*"])).toBe(true);
     expect(hasWebserverAdminAccess(["*"])).toBe(true);
-    expect(hasWebserverAdminAccess(["web.sites.*"])).toBe(false);
+    expect(hasWebserverAdminAccess(["web.applications.*"])).toBe(false);
     expect(hasWebserverAdminAccess([])).toBe(false);
   });
 
   it("distinguishes tenant and platform super administrators from partial operators", () => {
     expect(hasWebserverSuperAdminAccess(["web.*"])).toBe(true);
     expect(hasWebserverSuperAdminAccess(["*"])).toBe(true);
-    expect(hasWebserverSuperAdminAccess(["web.sites.*"])).toBe(false);
+    expect(hasWebserverSuperAdminAccess(["web.applications.*"])).toBe(false);
     expect(hasWebserverSuperAdminAccess(["web.nginx.write", "web.servers.read"])).toBe(false);
     expect(hasPlatformSuperAdminAccess(["*"])).toBe(true);
     expect(hasPlatformSuperAdminAccess(["web.*"])).toBe(false);

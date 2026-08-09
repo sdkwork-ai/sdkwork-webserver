@@ -51,7 +51,7 @@ $client->setHeader('X-Custom-Header', 'value');
 
 ## API Modules
 
-- `$client->site` - site API
+- `$client->application` - application API
 - `$client->domain` - domain API
 - `$client->certificate` - certificate API
 - `$client->sourceVersion` - source_version API
@@ -61,14 +61,14 @@ $client->setHeader('X-Custom-Header', 'value');
 
 ## Usage Examples
 
-### site
+### application
 
 ```php
 <?php
 
-// 获取站点列表
+// 获取应用列表
 $params = ['page' => 1, 'page_size' => 2, 'status' => 0, 'application_type' => 'WEB', 'site_type' => 1, 'keyword' => 'keyword'];
-$result = $client->site->sitesList($params);
+$result = $client->application->applicationsList($params);
 var_dump($result);
 ```
 
@@ -89,10 +89,10 @@ var_dump($result);
 <?php
 
 // List certificates active on the domain listener
-$siteId = '1';
+$applicationId = '1';
 $domainId = '1';
 $params = ['page' => 1, 'page_size' => 2];
-$result = $client->certificate->sitesDomainsListenerCertificateBindingsList($siteId, $domainId, $params);
+$result = $client->certificate->applicationsDomainsListenerCertificateBindingsList($applicationId, $domainId, $params);
 var_dump($result);
 ```
 
@@ -102,9 +102,9 @@ var_dump($result);
 <?php
 
 // 获取应用源码版本
-$siteId = '1';
+$applicationId = '1';
 $params = ['page_size' => 1, 'cursor' => 'cursor'];
-$result = $client->sourceVersion->sitesSourceVersionsList($siteId, $params);
+$result = $client->sourceVersion->applicationsSourceVersionsList($applicationId, $params);
 var_dump($result);
 ```
 
@@ -114,9 +114,9 @@ var_dump($result);
 <?php
 
 // 获取部署历史
-$siteId = '1';
+$applicationId = '1';
 $params = ['page_size' => 1, 'cursor' => 'cursor', 'status' => 0];
-$result = $client->deployment->sitesDeploymentsList($siteId, $params);
+$result = $client->deployment->applicationsDeploymentsList($applicationId, $params);
 var_dump($result);
 ```
 
@@ -126,9 +126,9 @@ var_dump($result);
 <?php
 
 // 获取环境变量列表
-$siteId = '1';
+$applicationId = '1';
 $params = ['environment' => 'environment'];
-$result = $client->envVariable->sitesEnvVariablesList($siteId, $params);
+$result = $client->envVariable->applicationsEnvVariablesList($applicationId, $params);
 var_dump($result);
 ```
 
@@ -138,8 +138,8 @@ var_dump($result);
 <?php
 
 // 获取健康检查配置
-$siteId = '1';
-$result = $client->monitor->sitesHealthChecksList($siteId);
+$applicationId = '1';
+$result = $client->monitor->applicationsHealthChecksList($applicationId);
 var_dump($result);
 ```
 

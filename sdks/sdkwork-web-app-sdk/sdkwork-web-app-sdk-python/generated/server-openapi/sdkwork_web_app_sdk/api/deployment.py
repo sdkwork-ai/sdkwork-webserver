@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 from ..http_client import HttpClient
-from ..models import CreateDeploymentRequest, SitesDeploymentsCreateResponse201, SitesDeploymentsListResponse, SitesDeploymentsRetrieveResponse, SitesDeploymentsRollbackResponse
+from ..models import ApplicationsDeploymentsCreateResponse201, ApplicationsDeploymentsListResponse, ApplicationsDeploymentsRetrieveResponse, ApplicationsDeploymentsRollbackResponse, CreateDeploymentRequest
 
 def _append_query_string(path: str, raw_query_string: str) -> str:
     query = raw_query_string.lstrip('?')
@@ -242,34 +242,34 @@ class DeploymentApi:
 
     def __init__(self, client: HttpClient):
         self._client = client
-        self.sites = DeploymentSitesApi(client)
+        self.applications = DeploymentApplicationsApi(client)
 
 
-class DeploymentSitesApi:
-    """deployment deployment.sites API client."""
-
-    def __init__(self, client: HttpClient):
-        self._client = client
-        self.deployments = DeploymentSitesDeploymentsApi(client)
-
-
-class DeploymentSitesDeploymentsApi:
-    """deployment deployment.sites.deployments API client."""
+class DeploymentApplicationsApi:
+    """deployment deployment.applications API client."""
 
     def __init__(self, client: HttpClient):
         self._client = client
+        self.deployments = DeploymentApplicationsDeploymentsApi(client)
 
 
-    def list(self, site_id: str, page_size: Optional[int] = None, cursor: Optional[str] = None, status: Optional[int] = None) -> SitesDeploymentsListResponse:
+class DeploymentApplicationsDeploymentsApi:
+    """deployment deployment.applications.deployments API client."""
+
+    def __init__(self, client: HttpClient):
+        self._client = client
+
+
+    def list(self, application_id: str, page_size: Optional[int] = None, cursor: Optional[str] = None, status: Optional[int] = None) -> ApplicationsDeploymentsListResponse:
         """获取部署历史"""
         query = build_query_string([
             {'name': 'page_size', 'value': page_size, 'style': 'form', 'explode': True, 'allow_reserved': False},
             {'name': 'cursor', 'value': cursor, 'style': 'form', 'explode': True, 'allow_reserved': False},
             {'name': 'status', 'value': status, 'style': 'form', 'explode': True, 'allow_reserved': False},
         ])
-        return self._client.get(_append_query_string(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/deployments", query))
+        return self._client.get(_append_query_string(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/deployments", query))
 
-    def create(self, site_id: str, body: CreateDeploymentRequest, idempotency_key: str) -> SitesDeploymentsCreateResponse201:
+    def create(self, application_id: str, body: CreateDeploymentRequest, idempotency_key: str) -> ApplicationsDeploymentsCreateResponse201:
         """发起部署"""
         request_headers = build_request_headers(
             {
@@ -277,13 +277,13 @@ class DeploymentSitesDeploymentsApi:
             },
             {}
         )
-        return self._client.post(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/deployments", json=body, headers=request_headers)
+        return self._client.post(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/deployments", json=body, headers=request_headers)
 
-    def retrieve(self, site_id: str, deployment_id: str) -> SitesDeploymentsRetrieveResponse:
+    def retrieve(self, application_id: str, deployment_id: str) -> ApplicationsDeploymentsRetrieveResponse:
         """获取部署详情"""
-        return self._client.get(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/deployments/{serialize_path_parameter(deployment_id, {'name': 'deploymentId', 'style': 'simple', 'explode': False})}")
+        return self._client.get(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/deployments/{serialize_path_parameter(deployment_id, {'name': 'deploymentId', 'style': 'simple', 'explode': False})}")
 
-    def rollback(self, site_id: str, deployment_id: str, idempotency_key: str) -> SitesDeploymentsRollbackResponse:
+    def rollback(self, application_id: str, deployment_id: str, idempotency_key: str) -> ApplicationsDeploymentsRollbackResponse:
         """基于历史成功版本创建快速还原命令"""
         request_headers = build_request_headers(
             {
@@ -291,4 +291,4 @@ class DeploymentSitesDeploymentsApi:
             },
             {}
         )
-        return self._client.post(f"/app/v3/api/sites/{serialize_path_parameter(site_id, {'name': 'siteId', 'style': 'simple', 'explode': False})}/deployments/{serialize_path_parameter(deployment_id, {'name': 'deploymentId', 'style': 'simple', 'explode': False})}/rollback", headers=request_headers)
+        return self._client.post(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/deployments/{serialize_path_parameter(deployment_id, {'name': 'deploymentId', 'style': 'simple', 'explode': False})}/rollback", headers=request_headers)

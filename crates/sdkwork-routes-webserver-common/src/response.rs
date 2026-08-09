@@ -6,9 +6,9 @@ use sdkwork_utils_rust::{
     SDKWORK_TRACE_ID_HEADER,
 };
 use sdkwork_webserver_contract::{
-    AuditLogPage, CertificateDistributionPage, CertificatePage, DeploymentPage, DomainPage,
-    EnvVariablePage, HealthCheckPage, ListenerCertificateBindingPage, NginxConfigPage,
-    RootDomainPage, ServerPage, SitePage, SourceVersionPage, WebServiceResult,
+    ApplicationPage, AuditLogPage, CertificateDistributionPage, CertificatePage, DeploymentPage,
+    DomainPage, EnvVariablePage, HealthCheckPage, ListenerCertificateBindingPage, NginxConfigPage,
+    RootDomainPage, ServerPage, SourceVersionPage, WebServiceResult,
 };
 use serde::Serialize;
 
@@ -83,7 +83,9 @@ pub fn accepted_async<T: Serialize>(result: WebServiceResult<T>) -> Result<Respo
     }
 }
 
-pub fn ok_site_page(result: WebServiceResult<SitePage>) -> Result<Response, WebApiError> {
+pub fn ok_application_page(
+    result: WebServiceResult<ApplicationPage>,
+) -> Result<Response, WebApiError> {
     match result {
         Ok(page) => Ok(envelope(
             StatusCode::OK,

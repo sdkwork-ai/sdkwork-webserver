@@ -23,7 +23,7 @@
     "appId": "sdkwork-webserver-pc",
     "tenantId": "100001",
     "organizationId": "0",
-    "accessTokenPermissionScope": ["web.sites.read", "web.sites.write", "web.certificates.read", "web.certificates.write", "web.nginx.write", "web.servers.read", "web.servers.write", "web.auditLogs.read"]
+    "accessTokenPermissionScope": ["web.applications.read", "web.applications.write", "web.certificates.read", "web.certificates.write", "web.nginx.write", "web.servers.read", "web.servers.write", "web.auditLogs.read"]
   },
   "runtime": { "family": "web", "framework": "react", "runtimes": ["WEB", "BROWSER"], "deliveryModes": ["WEB_URL"], "defaultPlatform": "WEB", "defaultArchitecture": "universal", "supportedDeploymentProfiles": ["standalone", "cloud"], "defaultDeploymentProfile": "standalone" },
   "publish": { "status": "DRAFT", "platforms": ["WEB"], "installPlatforms": ["WEB"], "config": { "workspaceRoot": "apps/sdkwork-webserver-pc", "framework": "react", "managedBy": "sdkwork-webserver" } },

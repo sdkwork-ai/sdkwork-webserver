@@ -17,18 +17,18 @@ impl CertificateApi {
     }
 
     /// List certificates active on the domain listener
-    pub async fn sites_domains_listener_certificate_bindings_list(&self, site_id: &str, domain_id: &str, page: Option<i64>, page_size: Option<i64>) -> Result<serde_json::Value, SdkworkError> {
+    pub async fn applications_domains_listener_certificate_bindings_list(&self, application_id: &str, domain_id: &str, page: Option<i64>, page_size: Option<i64>) -> Result<serde_json::Value, SdkworkError> {
         let query = build_query_string(&[
             QueryParameterSpec::new("page", page, "form", true, false, None),
             QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
         ]);
-        let path = append_query_string(app_path(&format!("/sites/{}/domains/{}/listener_certificate_bindings", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false)), serialize_path_parameter(domain_id, PathParameterSpec::new("domainId", "simple", false)))), &query);
+        let path = append_query_string(app_path(&format!("/applications/{}/domains/{}/listener_certificate_bindings", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false)), serialize_path_parameter(domain_id, PathParameterSpec::new("domainId", "simple", false)))), &query);
         self.client.get(&path, None, None).await
     }
 
     /// Bind a certificate version to the domain listener
-    pub async fn sites_domains_listener_certificate_bindings_create(&self, site_id: &str, domain_id: &str, body: &CreateListenerCertificateBindingRequest, idempotency_key: &str) -> Result<ListenerCertificateBindingResponse, SdkworkError> {
-        let path = app_path(&format!("/sites/{}/domains/{}/listener_certificate_bindings", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false)), serialize_path_parameter(domain_id, PathParameterSpec::new("domainId", "simple", false))));
+    pub async fn applications_domains_listener_certificate_bindings_create(&self, application_id: &str, domain_id: &str, body: &CreateListenerCertificateBindingRequest, idempotency_key: &str) -> Result<ListenerCertificateBindingResponse, SdkworkError> {
+        let path = app_path(&format!("/applications/{}/domains/{}/listener_certificate_bindings", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false)), serialize_path_parameter(domain_id, PathParameterSpec::new("domainId", "simple", false))));
         let headers = build_request_headers(
             &[
                 ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
@@ -39,8 +39,8 @@ impl CertificateApi {
     }
 
     /// Remove a certificate from the domain listener
-    pub async fn sites_domains_listener_certificate_bindings_delete(&self, site_id: &str, domain_id: &str, binding_id: &str, idempotency_key: &str) -> Result<(), SdkworkError> {
-        let path = app_path(&format!("/sites/{}/domains/{}/listener_certificate_bindings/{}", serialize_path_parameter(site_id, PathParameterSpec::new("siteId", "simple", false)), serialize_path_parameter(domain_id, PathParameterSpec::new("domainId", "simple", false)), serialize_path_parameter(binding_id, PathParameterSpec::new("bindingId", "simple", false))));
+    pub async fn applications_domains_listener_certificate_bindings_delete(&self, application_id: &str, domain_id: &str, binding_id: &str, idempotency_key: &str) -> Result<(), SdkworkError> {
+        let path = app_path(&format!("/applications/{}/domains/{}/listener_certificate_bindings/{}", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false)), serialize_path_parameter(domain_id, PathParameterSpec::new("domainId", "simple", false)), serialize_path_parameter(binding_id, PathParameterSpec::new("bindingId", "simple", false))));
         let headers = build_request_headers(
             &[
                 ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),

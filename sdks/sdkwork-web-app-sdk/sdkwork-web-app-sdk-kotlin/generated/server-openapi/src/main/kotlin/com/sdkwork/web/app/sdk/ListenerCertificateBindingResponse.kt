@@ -2,7 +2,7 @@ package com.sdkwork.web.app.sdk
 
 data class ListenerCertificateBindingResponse(
     val id: String? = null,
-    val siteId: String? = null,
+    val applicationId: String? = null,
     val domainId: String? = null,
     val certificateId: String? = null,
     val desiredCertificateVersionId: String? = null,

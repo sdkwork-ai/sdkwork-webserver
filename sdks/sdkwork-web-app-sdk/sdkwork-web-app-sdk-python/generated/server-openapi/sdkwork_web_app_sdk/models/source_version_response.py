@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 @dataclass
 class SourceVersionResponse:
     id: str
-    site_id: str
+    application_id: str
     version_tag: str
     source_type: str
     artifact_drive_uri: str

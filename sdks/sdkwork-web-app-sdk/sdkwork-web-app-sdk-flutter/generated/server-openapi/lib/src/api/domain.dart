@@ -12,20 +12,20 @@ class DomainApi {
   DomainApi(this._client);
 
   /// 获取站点域名列表
-  Future<SitesDomainsListResponse?> sitesDomainsList(String siteId, [int? page, int? pageSize]) async {
+  Future<ApplicationsDomainsListResponse?> applicationsDomainsList(String applicationId, [int? page, int? pageSize]) async {
     final query = buildQueryString([
       QueryParameterSpec('page', page, 'form', true, false, null),
       QueryParameterSpec('page_size', pageSize, 'form', true, false, null)
     ]);
-    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/domains'), query));
+    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/domains'), query));
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : SitesDomainsListResponse.fromJson(map);
+      return map == null ? null : ApplicationsDomainsListResponse.fromJson(map);
     })();
   }
 
   /// 绑定域名
-  Future<SitesDomainsCreateResponse201?> sitesDomainsCreate(String siteId, CreateDomainRequest body, String idempotencyKey) async {
+  Future<ApplicationsDomainsCreateResponse201?> applicationsDomainsCreate(String applicationId, CreateDomainRequest body, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(
       <String, HeaderParameterSpec>{
         'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
@@ -33,39 +33,39 @@ class DomainApi {
       <String, HeaderParameterSpec>{},
     );
     final payload = body.toJson();
-    final response = await _client.post(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/domains'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    final response = await _client.post(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/domains'), body: payload, headers: requestHeaders, contentType: 'application/json');
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : SitesDomainsCreateResponse201.fromJson(map);
+      return map == null ? null : ApplicationsDomainsCreateResponse201.fromJson(map);
     })();
   }
 
   /// 获取域名详情
-  Future<SitesDomainsRetrieveResponse?> sitesDomainsRetrieve(String siteId, String domainId) async {
-    final response = await _client.get(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/domains/${serializePathParameter(domainId, const PathParameterSpec('domainId', 'simple', false))}'));
+  Future<ApplicationsDomainsRetrieveResponse?> applicationsDomainsRetrieve(String applicationId, String domainId) async {
+    final response = await _client.get(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/domains/${serializePathParameter(domainId, const PathParameterSpec('domainId', 'simple', false))}'));
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : SitesDomainsRetrieveResponse.fromJson(map);
+      return map == null ? null : ApplicationsDomainsRetrieveResponse.fromJson(map);
     })();
   }
 
   /// 解绑域名
-  Future<void> sitesDomainsDelete(String siteId, String domainId) async {
-    await _client.delete(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/domains/${serializePathParameter(domainId, const PathParameterSpec('domainId', 'simple', false))}'));
+  Future<void> applicationsDomainsDelete(String applicationId, String domainId) async {
+    await _client.delete(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/domains/${serializePathParameter(domainId, const PathParameterSpec('domainId', 'simple', false))}'));
   }
 
   /// 创建或检查域名所有权验证挑战
-  Future<SitesDomainsVerifyResponse?> sitesDomainsVerify(String siteId, String domainId, String idempotencyKey) async {
+  Future<ApplicationsDomainsVerifyResponse?> applicationsDomainsVerify(String applicationId, String domainId, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(
       <String, HeaderParameterSpec>{
         'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
       },
       <String, HeaderParameterSpec>{},
     );
-    final response = await _client.post(ApiPaths.appPath('/sites/${serializePathParameter(siteId, const PathParameterSpec('siteId', 'simple', false))}/domains/${serializePathParameter(domainId, const PathParameterSpec('domainId', 'simple', false))}/verify'), headers: requestHeaders);
+    final response = await _client.post(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/domains/${serializePathParameter(domainId, const PathParameterSpec('domainId', 'simple', false))}/verify'), headers: requestHeaders);
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : SitesDomainsVerifyResponse.fromJson(map);
+      return map == null ? null : ApplicationsDomainsVerifyResponse.fromJson(map);
     })();
   }
 

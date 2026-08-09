@@ -121,6 +121,10 @@ sdkwork-web-internal-sdk = { path = "sdks/sdkwork-web-internal-sdk/sdkwork-web-i
 sdkwork-iam-web-adapter = { path = "../sdkwork-iam/crates/sdkwork-iam-web-adapter" }
 sdkwork-api-iam-assembly = { path = "../sdkwork-iam/crates/sdkwork-api-iam-assembly" }
 sdkwork-api-drive-assembly = { path = "../sdkwork-drive/crates/sdkwork-api-drive-assembly" }
+sdkwork-api-skills-assembly = { path = "../sdkwork-skills/crates/sdkwork-api-skills-assembly" }
+sdkwork-api-mcp-assembly = { path = "../sdkwork-mcp/crates/sdkwork-api-mcp-assembly" }
+sdkwork-skills-database-host = { path = "../sdkwork-skills/crates/sdkwork-skills-database-host" }
+sdkwork-mcp-database-host = { path = "../sdkwork-mcp/crates/sdkwork-mcp-database-host" }
 sdkwork-iam-database-host = { path = "../sdkwork-iam/crates/sdkwork-iam-database-host" }
 sdkwork-iam-embedded-application-bootstrap = { path = "../sdkwork-iam/crates/sdkwork-iam-embedded-application-bootstrap" }
 sdkwork-web-axum = { path = "../sdkwork-web-framework/crates/sdkwork-web-axum" }

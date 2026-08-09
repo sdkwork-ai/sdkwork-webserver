@@ -4,11 +4,11 @@ import type { ApiRequestOptions, HttpClient } from '../http/client';
 import type { CreateHealthCheckRequest, HealthCheckResponse, PageInfo } from '../types';
 
 
-export interface MonitorSitesHealthChecksCreateParams {
+export interface MonitorApplicationsHealthChecksCreateParams {
   idempotencyKey: string;
 }
 
-export class MonitorSitesHealthChecksApi {
+export class MonitorApplicationsHealthChecksApi {
   private client: HttpClient;
 
   constructor(client: HttpClient) {
@@ -17,40 +17,40 @@ export class MonitorSitesHealthChecksApi {
 
 
 /** 获取健康检查配置 */
-  async list(siteId: string | number, requestOptions?: ApiRequestOptions): Promise<{ items: HealthCheckResponse[]; pageInfo: PageInfo; }> {
-    return this.client.request<{ items: HealthCheckResponse[]; pageInfo: PageInfo; }>(appApiPath(`/sites/${serializePathParameter(siteId, { name: 'siteId', style: 'simple', explode: false })}/health_checks`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+  async list(applicationId: string | number, requestOptions?: ApiRequestOptions): Promise<{ items: HealthCheckResponse[]; pageInfo: PageInfo; }> {
+    return this.client.request<{ items: HealthCheckResponse[]; pageInfo: PageInfo; }>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/health_checks`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
 /** 创建健康检查 */
-  async create(siteId: string | number, body: CreateHealthCheckRequest, params: MonitorSitesHealthChecksCreateParams, requestOptions?: ApiRequestOptions): Promise<HealthCheckResponse> {
+  async create(applicationId: string | number, body: CreateHealthCheckRequest, params: MonitorApplicationsHealthChecksCreateParams, requestOptions?: ApiRequestOptions): Promise<HealthCheckResponse> {
     const requestHeaders = buildRequestHeaders(
       {
         'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
-    return this.client.request<HealthCheckResponse>(appApiPath(`/sites/${serializePathParameter(siteId, { name: 'siteId', style: 'simple', explode: false })}/health_checks`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+    return this.client.request<HealthCheckResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/health_checks`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
   }
 }
 
-export class MonitorSitesApi {
+export class MonitorApplicationsApi {
   private client: HttpClient;
-  public readonly healthChecks: MonitorSitesHealthChecksApi;
+  public readonly healthChecks: MonitorApplicationsHealthChecksApi;
 
   constructor(client: HttpClient) {
     this.client = client;
-    this.healthChecks = new MonitorSitesHealthChecksApi(client);
+    this.healthChecks = new MonitorApplicationsHealthChecksApi(client);
   }
 
 }
 
 export class MonitorApi {
   private client: HttpClient;
-  public readonly sites: MonitorSitesApi;
+  public readonly applications: MonitorApplicationsApi;
 
   constructor(client: HttpClient) {
     this.client = client;
-    this.sites = new MonitorSitesApi(client);
+    this.applications = new MonitorApplicationsApi(client);
   }
 
 }

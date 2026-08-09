@@ -1,7 +1,7 @@
 pub mod base;
 pub mod paths;
-pub mod site;
-pub use site::SiteApi;
+pub mod application;
+pub use application::ApplicationApi;
 pub mod domain;
 pub use domain::DomainApi;
 pub mod certificate;

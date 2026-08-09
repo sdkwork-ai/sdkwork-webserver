@@ -8,44 +8,44 @@ public class EnvVariableApi {
     }
 
     /// 获取环境变量列表
-    public func sitesEnvVariablesList(siteId: String, environment: String? = nil) async throws -> SitesEnvVariablesListResponse? {
+    public func applicationsEnvVariablesList(applicationId: String, environment: String? = nil) async throws -> ApplicationsEnvVariablesListResponse? {
         let query = buildQueryString([
             QueryParameterSpec(name: "environment", value: environment, style: "form", explode: true, allowReserved: false, contentType: nil)
         ])
-        return try await client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/env_variables"), query), responseType: SitesEnvVariablesListResponse.self)
+        return try await client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/env_variables"), query), responseType: ApplicationsEnvVariablesListResponse.self)
     }
 
     /// 创建环境变量
-    public func sitesEnvVariablesCreate(siteId: String, body: CreateEnvVariableRequest, idempotencyKey: String) async throws -> SitesEnvVariablesCreateResponse201? {
+    public func applicationsEnvVariablesCreate(applicationId: String, body: CreateEnvVariableRequest, idempotencyKey: String) async throws -> ApplicationsEnvVariablesCreateResponse201? {
         let requestHeaders = buildRequestHeaders(
             [
                 "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
             ],
             [:]
         )
-        return try await client.post(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/env_variables"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: SitesEnvVariablesCreateResponse201.self)
+        return try await client.post(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/env_variables"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: ApplicationsEnvVariablesCreateResponse201.self)
     }
 
     /// 轮换环境变量值
-    public func sitesEnvVariablesUpdate(siteId: String, variableId: String, body: UpdateEnvVariableRequest, idempotencyKey: String) async throws -> SitesEnvVariablesUpdateResponse? {
+    public func applicationsEnvVariablesUpdate(applicationId: String, variableId: String, body: UpdateEnvVariableRequest, idempotencyKey: String) async throws -> ApplicationsEnvVariablesUpdateResponse? {
         let requestHeaders = buildRequestHeaders(
             [
                 "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
             ],
             [:]
         )
-        return try await client.patch(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/env_variables/\(serializePathParameter(variableId, PathParameterSpec(name: "variableId", style: "simple", explode: false)))"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: SitesEnvVariablesUpdateResponse.self)
+        return try await client.patch(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/env_variables/\(serializePathParameter(variableId, PathParameterSpec(name: "variableId", style: "simple", explode: false)))"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: ApplicationsEnvVariablesUpdateResponse.self)
     }
 
     /// 删除环境变量
-    public func sitesEnvVariablesDelete(siteId: String, variableId: String, idempotencyKey: String) async throws -> Void {
+    public func applicationsEnvVariablesDelete(applicationId: String, variableId: String, idempotencyKey: String) async throws -> Void {
         let requestHeaders = buildRequestHeaders(
             [
                 "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
             ],
             [:]
         )
-        _ = try await client.delete(ApiPaths.appPath("/sites/\(serializePathParameter(siteId, PathParameterSpec(name: "siteId", style: "simple", explode: false)))/env_variables/\(serializePathParameter(variableId, PathParameterSpec(name: "variableId", style: "simple", explode: false)))"), params: nil, headers: requestHeaders)
+        _ = try await client.delete(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/env_variables/\(serializePathParameter(variableId, PathParameterSpec(name: "variableId", style: "simple", explode: false)))"), params: nil, headers: requestHeaders)
     }
 
     private struct PathParameterSpec {
