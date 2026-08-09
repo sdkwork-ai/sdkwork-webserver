@@ -1568,10 +1568,10 @@ mod tests {
 
     #[test]
     fn application_type_is_limited_to_public_business_types() {
-        assert!(WebService::validate_application_type("WEB").is_ok());
-        assert!(WebService::validate_application_type("API").is_ok());
+        assert!(WebService::validate_app_kind("WEB").is_ok());
+        assert!(WebService::validate_app_kind("API").is_ok());
         for invalid in ["web", "STATIC", "", "OTHER"] {
-            assert!(WebService::validate_application_type(invalid).is_err());
+            assert!(WebService::validate_app_kind(invalid).is_err());
         }
     }
 
