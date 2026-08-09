@@ -30,3 +30,7 @@ pub const APPLICATION_ENV_VARIABLE: &str =
 pub const DOMAINS: &str = "/app/v3/api/domains";
 pub const APPLICATION_HEALTH_CHECKS: &str =
     "/app/v3/api/applications/{applicationId}/health_checks";
+pub const APPLICATION_PLATFORM_TARGETS: &str =
+    "/app/v3/api/applications/{applicationId}/platform_targets";
+pub const APPLICATION_PLATFORM_TARGET: &str =
+    "/app/v3/api/applications/{applicationId}/platform_targets/{platformTargetId}";

@@ -4,6 +4,13 @@ const WEBSERVER_ADMIN_PERMISSIONS = [
   "web.nginx.write",
   "web.servers.read",
   "web.auditLogs.read",
+  "skills.packages.manage",
+  "skills.categories.manage",
+  "skills.capabilities.manage",
+  "skills.artifacts.manage",
+  "mcp.admin.server.manage",
+  "mcp.admin.category.manage",
+  "mcp.admin.invocation.read",
 ] as const;
 
 const WEBSERVER_SUPER_ADMIN_PERMISSIONS = [

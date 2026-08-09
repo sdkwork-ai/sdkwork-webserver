@@ -334,6 +334,28 @@ pub trait WebAppApi: Send + Sync {
         application_id: &str,
         request: &CreateHealthCheckRequest,
     ) -> WebServiceResult<HealthCheckResponse>;
+
+    async fn create_platform_target(
+        &self,
+        context: &WebAppRequestContext,
+        application_id: &str,
+        request: &CreatePlatformTargetRequest,
+    ) -> WebServiceResult<PlatformTargetResponse>;
+
+    async fn list_platform_targets(
+        &self,
+        context: &WebAppRequestContext,
+        application_id: &str,
+        page: i32,
+        page_size: i32,
+    ) -> WebServiceResult<PlatformTargetPage>;
+
+    async fn retrieve_platform_target(
+        &self,
+        context: &WebAppRequestContext,
+        application_id: &str,
+        platform_target_id: &str,
+    ) -> WebServiceResult<PlatformTargetResponse>;
 }
 
 #[async_trait]

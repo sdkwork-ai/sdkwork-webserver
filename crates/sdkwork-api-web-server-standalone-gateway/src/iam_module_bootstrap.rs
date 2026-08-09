@@ -41,7 +41,7 @@ mod tests {
             .and_then(|extension| extension["patterns"].as_array())
             .expect("app_user role grant extension");
 
-        for expected in ["web.sites.*", "web.certificates.*"] {
+        for expected in ["web.applications.*", "web.certificates.*"] {
             assert!(
                 app_user_patterns.iter().any(|pattern| pattern == expected),
                 "app_user must receive {expected}"

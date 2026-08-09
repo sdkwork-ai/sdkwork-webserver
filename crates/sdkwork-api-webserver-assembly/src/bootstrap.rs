@@ -352,7 +352,7 @@ mod tests {
         assert!(manifest
             .routes()
             .iter()
-            .any(|route| route.path.starts_with("/app/v3/api/sites")));
+            .any(|route| route.path.starts_with("/app/v3/api/applications")));
         assert!(manifest
             .routes()
             .iter()

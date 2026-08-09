@@ -14,7 +14,9 @@ import {
 import { webserverModule as configurationModule } from "@sdkwork/webserver-pc-console-site-configuration";
 import { DeployDomainManagementSurface, webserverModule as deliveryModule } from "@sdkwork/webserver-pc-console-delivery";
 import { webserverModule as deploymentsModule } from "@sdkwork/webserver-pc-console-deployments";
+import { webserverModule as mcpModule, McpConsoleSurface } from "@sdkwork/webserver-pc-console-mcp";
 import { webserverModule as sitesModule } from "@sdkwork/webserver-pc-console-sites";
+import { webserverModule as skillsModule, SkillsConsoleSurface } from "@sdkwork/webserver-pc-console-skills";
 import {
   createApplicationSourceStorage,
   createWebserverConsoleRegistry,
@@ -25,7 +27,7 @@ import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const consoleModules = [sitesModule, configurationModule, deliveryModule, deploymentsModule];
+const consoleModules = [sitesModule, configurationModule, deliveryModule, deploymentsModule, skillsModule, mcpModule];
 const appUserPermissionScope = ["web.applications.*", "web.certificates.*"];
 
 function deployRenderers(): Partial<Record<WebserverResourceKey, ReactNode>> {
@@ -49,6 +51,24 @@ function deployRenderers(): Partial<Record<WebserverResourceKey, ReactNode>> {
         tokenManager={tokenManager}
       />
     ),
+    skills: (
+      <SkillsConsoleSurface
+        appApiBaseUrl="/"
+        backendApiBaseUrl="/"
+        driveAppApiBaseUrl="/"
+        resource="skills"
+        tokenManager={tokenManager}
+      />
+    ),
+    mcp: (
+      <McpConsoleSurface
+        appApiBaseUrl="/"
+        backendApiBaseUrl="/"
+        driveAppApiBaseUrl="/"
+        resource="mcp"
+        tokenManager={tokenManager}
+      />
+    ),
   };
 }
 
@@ -65,6 +85,8 @@ describe("console workspace access", () => {
     ["/console/domains", "Domains"],
     ["/console/certificates", "Certificates"],
     ["/console/deployments", "Deployment history"],
+    ["/console/skills", "My Skills"],
+    ["/console/mcp", "My MCP Servers"],
   ])("authorizes the app_user role for %s", async (path, heading) => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
       code: 0,

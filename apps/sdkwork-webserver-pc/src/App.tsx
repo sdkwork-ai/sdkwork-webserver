@@ -76,7 +76,7 @@ function PublicPortalApplication({ runtime }: { runtime: BootstrappedWebserverPc
         locale={runtime.locale}
         navigation={{
           consoleHref: "/console",
-          createApplicationHref: "/console/sites",
+          createApplicationHref: "/console/applications",
           deploymentsHref: "/console/deployments",
           documentationHref: "/docs",
           notificationsHref: runtime.config.messagingPcUrl,

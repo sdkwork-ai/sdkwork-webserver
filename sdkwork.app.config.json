@@ -156,7 +156,7 @@
             "domain": "server.sdkwork.com"
           },
           "checksumAlgorithm": "sha256",
-          "checksum": "c4b068663cefc203f852ee41c1337ef79bac3007635a64c0208b413be99d2940"
+          "checksum": "04c91e32f68263f2c82c3c925b697f62fd64e0e6b871253cea8ec73bfc886ef4"
         },
         {
           "id": "linux-ubuntu-x64-standalone-test-server-deb",
@@ -176,7 +176,7 @@
             "domain": "testserver.sdkwork.com"
           },
           "checksumAlgorithm": "sha256",
-          "checksum": "7455cdf8054a43a65aaa18f65c3e84ad7d32018f04322c9fb7bbee9ef5ae1ac7"
+          "checksum": "68ff65ec3211879f6b8aae8a08fdc5cf210eea230de133b537f5fcb3ab7dba96"
         },
         {
           "id": "linux-rhel-x64-standalone-server-rpm",
@@ -196,7 +196,7 @@
             "domain": "server.sdkwork.com"
           },
           "checksumAlgorithm": "sha256",
-          "checksum": "a98dde537a0abe799747f3f9e47e4560651c8558adcd96b42a33aacbede7514b"
+          "checksum": "1d0f8ae85d24ec033dde7d9b4746cf33d8e10dfd1914ea6633149cf9a244a4b6"
         },
         {
           "id": "linux-rhel-x64-standalone-test-server-rpm",
@@ -216,7 +216,7 @@
             "domain": "testserver.sdkwork.com"
           },
           "checksumAlgorithm": "sha256",
-          "checksum": "fa13af784ae26e4312ed9efad72159087350d82170f544c85c7d5e6591c4b8dc"
+          "checksum": "bcb27d89a982e51d52556387af5ec1cd85b29098d850c8a3afe595c0151736ef"
         },
         {
           "id": "linux-arm64-cloud-server-tar-gz",

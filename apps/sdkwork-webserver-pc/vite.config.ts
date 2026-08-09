@@ -71,7 +71,7 @@ export default defineConfig(({ command, mode }) => {
       // singleton aliases above apply inside vitest too.
       server: {
         deps: {
-          inline: [/@sdkwork\/deployments/, "lucide-react"],
+          inline: [/@sdkwork\/(deployments|skills|mcp)/, "lucide-react"],
         },
       },
     },

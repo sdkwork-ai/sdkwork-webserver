@@ -104,6 +104,209 @@ pub struct ApplicationStoreListing {
     pub official_website_url: Option<String>,
 }
 
+/// Business application kind: the user-facing app type. The internal site
+/// carrier row derives its technical type from this value.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum AppKind {
+    #[default]
+    StaticWeb,
+    SpaWeb,
+    ApiService,
+    WechatMiniprogram,
+    DouyinMiniprogram,
+    IosApp,
+    AndroidApp,
+    HarmonyosApp,
+}
+
+impl AppKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            AppKind::StaticWeb => "STATIC_WEB",
+            AppKind::SpaWeb => "SPA_WEB",
+            AppKind::ApiService => "API_SERVICE",
+            AppKind::WechatMiniprogram => "WECHAT_MINIPROGRAM",
+            AppKind::DouyinMiniprogram => "DOUYIN_MINIPROGRAM",
+            AppKind::IosApp => "IOS_APP",
+            AppKind::AndroidApp => "ANDROID_APP",
+            AppKind::HarmonyosApp => "HARMONYOS_APP",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<AppKind> {
+        match value {
+            "STATIC_WEB" => Some(AppKind::StaticWeb),
+            "SPA_WEB" => Some(AppKind::SpaWeb),
+            "API_SERVICE" => Some(AppKind::ApiService),
+            "WECHAT_MINIPROGRAM" => Some(AppKind::WechatMiniprogram),
+            "DOUYIN_MINIPROGRAM" => Some(AppKind::DouyinMiniprogram),
+            "IOS_APP" => Some(AppKind::IosApp),
+            "ANDROID_APP" => Some(AppKind::AndroidApp),
+            "HARMONYOS_APP" => Some(AppKind::HarmonyosApp),
+            _ => None,
+        }
+    }
+
+    /// Derived internal site carrier type (web_site.site_type 1..=6).
+    pub fn carrier_site_type(self) -> i32 {
+        match self {
+            AppKind::StaticWeb => 1,
+            AppKind::SpaWeb => 2,
+            _ => 6,
+        }
+    }
+
+    /// Derived internal carrier application type (web_site.application_type).
+    pub fn carrier_application_type(self) -> &'static str {
+        match self {
+            AppKind::ApiService => "API",
+            _ => "WEB",
+        }
+    }
+}
+
+/// Target deployment platform of an application platform target.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum Platform {
+    Web,
+    Api,
+    Wechat,
+    Douyin,
+    Ios,
+    Android,
+    Harmonyos,
+}
+
+impl Platform {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Platform::Web => "WEB",
+            Platform::Api => "API",
+            Platform::Wechat => "WECHAT",
+            Platform::Douyin => "DOUYIN",
+            Platform::Ios => "IOS",
+            Platform::Android => "ANDROID",
+            Platform::Harmonyos => "HARMONYOS",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Platform> {
+        match value {
+            "WEB" => Some(Platform::Web),
+            "API" => Some(Platform::Api),
+            "WECHAT" => Some(Platform::Wechat),
+            "DOUYIN" => Some(Platform::Douyin),
+            "IOS" => Some(Platform::Ios),
+            "ANDROID" => Some(Platform::Android),
+            "HARMONYOS" => Some(Platform::Harmonyos),
+            _ => None,
+        }
+    }
+}
+
+/// Development technology stack of a platform target.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum TechStack {
+    Flutter,
+    Native,
+    UniApp,
+    Node,
+    Rust,
+    Go,
+    Java,
+    Other,
+}
+
+impl TechStack {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TechStack::Flutter => "FLUTTER",
+            TechStack::Native => "NATIVE",
+            TechStack::UniApp => "UNI_APP",
+            TechStack::Node => "NODE",
+            TechStack::Rust => "RUST",
+            TechStack::Go => "GO",
+            TechStack::Java => "JAVA",
+            TechStack::Other => "OTHER",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<TechStack> {
+        match value {
+            "FLUTTER" => Some(TechStack::Flutter),
+            "NATIVE" => Some(TechStack::Native),
+            "UNI_APP" => Some(TechStack::UniApp),
+            "NODE" => Some(TechStack::Node),
+            "RUST" => Some(TechStack::Rust),
+            "GO" => Some(TechStack::Go),
+            "JAVA" => Some(TechStack::Java),
+            "OTHER" => Some(TechStack::Other),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct PlatformTargetResponse {
+    pub id: String,
+    #[serde(rename = "appId")]
+    pub app_id: String,
+    #[serde(rename = "targetKey")]
+    pub target_key: String,
+    pub platform: String,
+    #[serde(rename = "techStack", skip_serializing_if = "Option::is_none")]
+    pub tech_stack: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub architectures: Option<Vec<String>>,
+    #[serde(rename = "bundleId", skip_serializing_if = "Option::is_none")]
+    pub bundle_id: Option<String>,
+    #[serde(rename = "packageName", skip_serializing_if = "Option::is_none")]
+    pub package_name: Option<String>,
+    #[serde(rename = "appIdValue", skip_serializing_if = "Option::is_none")]
+    pub app_id_value: Option<String>,
+    #[serde(rename = "bundleName", skip_serializing_if = "Option::is_none")]
+    pub bundle_name: Option<String>,
+    #[serde(rename = "targetStatus", skip_serializing_if = "Option::is_none")]
+    pub target_status: Option<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CreatePlatformTargetRequest {
+    #[serde(rename = "targetKey")]
+    pub target_key: String,
+    pub platform: String,
+    #[serde(rename = "techStack", default)]
+    pub tech_stack: Option<String>,
+    #[serde(default)]
+    pub architectures: Option<Vec<String>>,
+    #[serde(rename = "bundleId", default)]
+    pub bundle_id: Option<String>,
+    #[serde(rename = "packageName", default)]
+    pub package_name: Option<String>,
+    #[serde(rename = "appId", default)]
+    pub app_id: Option<String>,
+    #[serde(rename = "bundleName", default)]
+    pub bundle_name: Option<String>,
+    #[serde(rename = "allowedChannels", default)]
+    pub allowed_channels: Option<Vec<String>>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct PlatformTargetPage {
+    pub items: Vec<PlatformTargetResponse>,
+    #[serde(with = "sdkwork_utils_rust::serde_int64")]
+    pub total: i64,
+    pub page: i32,
+    pub page_size: i32,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ApplicationResponse {
     pub id: String,
@@ -113,10 +316,10 @@ pub struct ApplicationResponse {
     pub site_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(rename = "applicationType")]
-    pub application_type: String,
-    #[serde(rename = "siteType")]
-    pub site_type: i32,
+    #[serde(rename = "appKind")]
+    pub app_kind: String,
+    #[serde(rename = "siteType", skip_serializing_if = "Option::is_none")]
+    pub site_type: Option<i32>,
     pub status: i32,
     #[serde(rename = "runtimeConfig", skip_serializing_if = "Option::is_none")]
     pub runtime_config: Option<Value>,
@@ -144,18 +347,12 @@ pub struct CreateApplicationRequest {
     pub slug: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
-    #[serde(rename = "applicationType", default = "default_application_type")]
-    pub application_type: String,
-    #[serde(rename = "siteType")]
-    pub site_type: i32,
+    #[serde(rename = "appKind")]
+    pub app_kind: String,
     #[serde(rename = "runtimeConfig", default)]
     pub runtime_config: Option<Value>,
     #[serde(rename = "storeListing", default)]
     pub store_listing: Option<ApplicationStoreListing>,
-}
-
-fn default_application_type() -> String {
-    "WEB".to_string()
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

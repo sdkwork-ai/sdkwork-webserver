@@ -3940,6 +3940,7 @@ name = "sdkwork-api-mcp-assembly"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "sdkwork-database-sqlx",
  "sdkwork-intelligence-mcp-repository-sqlx",
  "sdkwork-intelligence-mcp-service",
  "sdkwork-mcp-database-host",

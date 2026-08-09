@@ -24,13 +24,15 @@ export type WebserverResourceKey =
   | "domains"
   | "certificates"
   | "deployments"
-  | "applications"
+  | "sites"
   | "application-source-versions"
   | "application-deployments"
   | "nginx"
   | "servers"
   | "diagnostics"
-  | "audit";
+  | "audit"
+  | "skills"
+  | "mcp";
 
 export interface WebserverModuleEntry {
   description: string;

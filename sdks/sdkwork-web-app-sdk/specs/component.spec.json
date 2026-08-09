@@ -32,7 +32,7 @@
     "sdkType": "app",
     "sdkSurface": "app",
     "standardProfile": "sdkwork-v3",
-    "ownerOnlyOperationCount": 30
+    "ownerOnlyOperationCount": 33
   },
   "generator": {
     "package": "@sdkwork/sdk-generator",

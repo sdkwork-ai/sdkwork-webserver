@@ -6,7 +6,7 @@ use sdkwork_webserver_contract::{
     AgentHeartbeatRequest, AgentHeartbeatResponse, AgentSyncResponse, ApplicationPage,
     ApplicationResponse, AuditLogPage, CertificateDistributionPage, CertificateIssueUpdate,
     CertificateOperationAcceptedResponse, CertificateOperationLease, CertificateOperationResponse,
-    CertificatePage, CertificateResponse, CreateApplicationRequest, CreateDeploymentRequest,
+    CertificatePage, CertificateResponse, CreateApplicationRequest, CreateDeploymentRequest, CreatePlatformTargetRequest,
     CreateDomainRequest, CreateEnvVariableRequest, CreateHealthCheckRequest,
     CreateListenerCertificateBindingRequest, CreateManagedDomainRequest, CreateNginxConfigRequest,
     CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
@@ -15,7 +15,7 @@ use sdkwork_webserver_contract::{
     HealthCheckResponse, IssueCertificateRequest, ListApplicationsQuery, ListAuditLogsQuery,
     ListNginxConfigsQuery, ListRootDomainsQuery, ListenerCertificateBindingPage,
     ListenerCertificateBindingResponse, NginxConfigPage, NginxConfigResponse, NginxStatusResponse,
-    RevokeCertificateRequest, RootDomainPage, RootDomainResponse, RuntimeAssignment,
+    PlatformTargetPage, PlatformTargetResponse, RevokeCertificateRequest, RootDomainPage, RootDomainResponse, RuntimeAssignment,
     RuntimeAssignmentDelivery, RuntimeObservation, RuntimeObservationState, ServerPage,
     SourceVersionPage, SourceVersionResponse, TlsCertificateAssignmentMaterial,
     UpdateApplicationRequest, UpdateDomainApplicationBindingRequest, UpdateEnvVariableRequest,
@@ -154,6 +154,28 @@ pub trait WebRepositoryPort: Send + Sync {
         tenant_id: i64,
         application_id: &str,
     ) -> WebServiceResult<String>;
+
+    async fn create_platform_target(
+        &self,
+        tenant_id: i64,
+        application_id: &str,
+        request: &CreatePlatformTargetRequest,
+    ) -> WebServiceResult<PlatformTargetResponse>;
+
+    async fn list_platform_targets(
+        &self,
+        tenant_id: i64,
+        application_id: &str,
+        page: i32,
+        page_size: i32,
+    ) -> WebServiceResult<PlatformTargetPage>;
+
+    async fn retrieve_platform_target(
+        &self,
+        tenant_id: i64,
+        application_id: &str,
+        platform_target_id: &str,
+    ) -> WebServiceResult<PlatformTargetResponse>;
 
     async fn list_domains(
         &self,

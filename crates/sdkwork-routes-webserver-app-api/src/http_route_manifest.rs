@@ -173,6 +173,24 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     ),
     HttpRoute::dual_token(
         HttpMethod::Get,
+        "/app/v3/api/applications/{applicationId}/platform_targets",
+        "application",
+        "applications.platformTargets.list",
+    ).with_required_permission("web.applications.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/app/v3/api/applications/{applicationId}/platform_targets",
+        "application",
+        "applications.platformTargets.create",
+    ).with_required_permission("web.applications.write").with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/app/v3/api/applications/{applicationId}/platform_targets/{platformTargetId}",
+        "application",
+        "applications.platformTargets.retrieve",
+    ).with_required_permission("web.applications.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
         "/app/v3/api/applications/{applicationId}/health_checks",
         "monitor",
         "applications.healthChecks.list",

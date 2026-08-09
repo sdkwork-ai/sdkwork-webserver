@@ -2351,6 +2351,269 @@
         "x-sdkwork-route-auth": "dual-token"
       }
     },
+    "/app/v3/api/applications/{applicationId}/platform_targets": {
+      "get": {
+        "operationId": "applications.platformTargets.list",
+        "summary": "获取应用平台目标列表",
+        "tags": [
+          "application"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-api-authority": "sdkwork-web.app",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.applications.read",
+        "x-sdkwork-owner": "sdkwork-web",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/PageSizeParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "items",
+                            "pageInfo"
+                          ],
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/PlatformTargetResponse"
+                              }
+                            },
+                            "pageInfo": {
+                              "$ref": "#/components/schemas/PageInfo"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "请求过于频繁",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      },
+      "post": {
+        "operationId": "applications.platformTargets.create",
+        "summary": "创建应用平台目标",
+        "tags": [
+          "application"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-api-authority": "sdkwork-web.app",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.applications.write",
+        "x-sdkwork-idempotent": true,
+        "x-sdkwork-owner": "sdkwork-web",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlatformTargetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "创建成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/PlatformTargetResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "请求过于频繁",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
+    },
+    "/app/v3/api/applications/{applicationId}/platform_targets/{platformTargetId}": {
+      "get": {
+        "operationId": "applications.platformTargets.retrieve",
+        "summary": "获取应用平台目标详情",
+        "tags": [
+          "application"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-api-authority": "sdkwork-web.app",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.applications.read",
+        "x-sdkwork-owner": "sdkwork-web",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/PlatformTargetResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "请求过于频繁",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
+    },
     "/app/v3/api/applications/{applicationId}/health_checks": {
       "parameters": [
         {
@@ -2763,6 +3026,153 @@
           }
         }
       },
+      "AppKind": {
+        "type": "string",
+        "enum": [
+          "STATIC_WEB",
+          "SPA_WEB",
+          "API_SERVICE",
+          "WECHAT_MINIPROGRAM",
+          "DOUYIN_MINIPROGRAM",
+          "IOS_APP",
+          "ANDROID_APP",
+          "HARMONYOS_APP"
+        ]
+      },
+      "Platform": {
+        "type": "string",
+        "enum": [
+          "WEB",
+          "API",
+          "WECHAT",
+          "DOUYIN",
+          "IOS",
+          "ANDROID",
+          "HARMONYOS"
+        ]
+      },
+      "TechStack": {
+        "type": "string",
+        "enum": [
+          "FLUTTER",
+          "NATIVE",
+          "UNI_APP",
+          "NODE",
+          "RUST",
+          "GO",
+          "JAVA",
+          "OTHER"
+        ]
+      },
+      "PlatformTargetResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "appId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "targetKey": {
+            "type": "string"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "techStack": {
+            "$ref": "#/components/schemas/TechStack"
+          },
+          "architectures": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bundleId": {
+            "type": "string"
+          },
+          "packageName": {
+            "type": "string"
+          },
+          "appIdValue": {
+            "type": "string"
+          },
+          "bundleName": {
+            "type": "string"
+          },
+          "targetStatus": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CreatePlatformTargetRequest": {
+        "type": "object",
+        "required": [
+          "targetKey",
+          "platform"
+        ],
+        "properties": {
+          "targetKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "techStack": {
+            "$ref": "#/components/schemas/TechStack"
+          },
+          "architectures": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 32
+          },
+          "bundleId": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "packageName": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "appId": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "Platform application id (WeChat / Douyin mini program)"
+          },
+          "bundleName": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "allowedChannels": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "stable",
+                "beta",
+                "alpha",
+                "qa"
+              ]
+            },
+            "maxItems": 8
+          }
+        }
+      },
       "ApplicationStoreListing": {
         "type": "object",
         "additionalProperties": false,
@@ -2832,7 +3242,7 @@
         "type": "object",
         "required": [
           "name",
-          "siteType"
+          "appKind"
         ],
         "properties": {
           "name": {
@@ -2850,24 +3260,8 @@
             "type": "string",
             "maxLength": 500
           },
-          "applicationType": {
-            "type": "string",
-            "enum": [
-              "WEB",
-              "API"
-            ],
-            "default": "WEB"
-          },
-          "siteType": {
-            "type": "integer",
-            "enum": [
-              1,
-              2,
-              3,
-              4,
-              5,
-              6
-            ]
+          "appKind": {
+            "$ref": "#/components/schemas/AppKind"
           },
           "runtimeConfig": {
             "type": "object",
@@ -2935,15 +3329,12 @@
             "format": "uuid",
             "description": "The application's backing site id (internal carrier)"
           },
-          "applicationType": {
-            "type": "string",
-            "enum": [
-              "WEB",
-              "API"
-            ]
+          "appKind": {
+            "$ref": "#/components/schemas/AppKind"
           },
           "siteType": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Internal carrier site type derived from the app kind"
           },
           "status": {
             "type": "integer"

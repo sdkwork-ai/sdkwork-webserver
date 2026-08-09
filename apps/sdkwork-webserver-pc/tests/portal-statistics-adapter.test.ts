@@ -7,7 +7,7 @@ describe("createBrowserPortalStatistics", () => {
       items: [{ id: "site-1" }],
       pageInfo: { hasMore: true, mode: "offset", totalItems: "0042" },
     });
-    const loadClient = vi.fn().mockResolvedValue({ site: { list } } as never);
+    const loadClient = vi.fn().mockResolvedValue({ application: { list } } as never);
     const statistics = createBrowserPortalStatistics(loadClient);
 
     expect(loadClient).not.toHaveBeenCalled();
@@ -18,7 +18,7 @@ describe("createBrowserPortalStatistics", () => {
 
   it("uses an explicit bounded fallback when the API omits totalItems", async () => {
     const statistics = createBrowserPortalStatistics(async () => ({
-      site: {
+      application: {
         list: vi.fn().mockResolvedValue({
           items: [{ id: "site-1" }],
           pageInfo: { hasMore: true, mode: "offset" },

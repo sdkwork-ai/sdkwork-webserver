@@ -7,8 +7,9 @@ use axum::{
 use sdkwork_webserver_contract::{
     CreateApplicationRequest, CreateDeploymentRequest, CreateDomainRequest,
     CreateEnvVariableRequest, CreateHealthCheckRequest, CreateListenerCertificateBindingRequest,
-    CreateSourceVersionRequest, ImportGitSourceVersionRequest, ListApplicationsQuery,
-    UpdateApplicationRequest, UpdateEnvVariableRequest, WebAppApi, WebAppRequestContext,
+    CreatePlatformTargetRequest, CreateSourceVersionRequest, ImportGitSourceVersionRequest,
+    ListApplicationsQuery, UpdateApplicationRequest, UpdateEnvVariableRequest, WebAppApi,
+    WebAppRequestContext,
 };
 use serde::Deserialize;
 use std::sync::Arc;
@@ -16,8 +17,9 @@ use std::sync::Arc;
 use crate::{auth::require_app_context, paths};
 use sdkwork_routes_webserver_common::{
     created_resource, no_content, ok_application_page, ok_deployment_page, ok_domain_page,
-    ok_env_variable_page, ok_health_check_page, ok_listener_certificate_binding_page, ok_resource,
-    ok_source_version_page, validate_pagination_query, WebApiError,
+    ok_env_variable_page, ok_health_check_page, ok_listener_certificate_binding_page,
+    ok_platform_target_page, ok_resource, ok_source_version_page, validate_pagination_query,
+    WebApiError,
 };
 
 #[derive(Clone)]
@@ -97,6 +99,11 @@ pub fn build_router_with_shared_app_api(api: Arc<dyn WebAppApi>) -> Router {
             paths::APPLICATION_HEALTH_CHECKS,
             get(list_health_checks).post(create_health_check),
         )
+        .route(
+            paths::APPLICATION_PLATFORM_TARGETS,
+            get(list_platform_targets).post(create_platform_target),
+        )
+        .route(paths::APPLICATION_PLATFORM_TARGET, get(retrieve_platform_target))
         .layer(axum::middleware::from_fn(validate_pagination_query))
         .with_state(AppState { api })
 }
@@ -576,3 +583,51 @@ async fn create_health_check(
             .await,
     )
 }
+
+
+async fn list_platform_targets(
+    State(state): State<AppState>,
+    context: Option<Extension<WebAppRequestContext>>,
+    Path(application_id): Path<String>,
+    Query(query): Query<PageQuery>,
+) -> Result<Response, WebApiError> {
+    let context = require_app_context(context)?;
+    ok_platform_target_page(
+        state
+            .api
+            .list_platform_targets(&context, &application_id, query.page, query.page_size)
+            .await,
+        query.page,
+        query.page_size,
+    )
+}
+
+async fn create_platform_target(
+    State(state): State<AppState>,
+    context: Option<Extension<WebAppRequestContext>>,
+    Path(application_id): Path<String>,
+    Json(request): Json<CreatePlatformTargetRequest>,
+) -> Result<Response, WebApiError> {
+    let context = require_app_context(context)?;
+    created_resource(
+        state
+            .api
+            .create_platform_target(&context, &application_id, &request)
+            .await,
+    )
+}
+
+async fn retrieve_platform_target(
+    State(state): State<AppState>,
+    context: Option<Extension<WebAppRequestContext>>,
+    Path((application_id, platform_target_id)): Path<(String, String)>,
+) -> Result<Response, WebApiError> {
+    let context = require_app_context(context)?;
+    ok_resource(
+        state
+            .api
+            .retrieve_platform_target(&context, &application_id, &platform_target_id)
+            .await,
+    )
+}
+

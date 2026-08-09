@@ -114,8 +114,11 @@ macro_rules! repository_engine {
             mod servers {
                 include!("servers.rs");
             }
-            mod sites {
-                include!("sites.rs");
+            mod applications {
+                include!("applications.rs");
+            }
+            mod platform_targets {
+                include!("platform_targets.rs");
             }
             mod source_versions {
                 include!("source_versions.rs");

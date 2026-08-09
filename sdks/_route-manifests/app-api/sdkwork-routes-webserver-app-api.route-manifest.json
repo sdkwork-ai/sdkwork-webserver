@@ -745,6 +745,84 @@
     },
     {
       "method": "GET",
+      "path": "/app/v3/api/applications/{applicationId}/platform_targets",
+      "operationId": "applications.platformTargets.list",
+      "tags": [
+        "application"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-web",
+        "apiAuthority": "sdkwork-web.app"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "app-api",
+      "permission": "web.applications.read",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "POST",
+      "path": "/app/v3/api/applications/{applicationId}/platform_targets",
+      "operationId": "applications.platformTargets.create",
+      "tags": [
+        "application"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-web",
+        "apiAuthority": "sdkwork-web.app"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "app-api",
+      "permission": "web.applications.write",
+      "idempotent": true,
+      "rateLimitTier": null
+    },
+    {
+      "method": "GET",
+      "path": "/app/v3/api/applications/{applicationId}/platform_targets/{platformTargetId}",
+      "operationId": "applications.platformTargets.retrieve",
+      "tags": [
+        "application"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-web",
+        "apiAuthority": "sdkwork-web.app"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "app-api",
+      "permission": "web.applications.read",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "GET",
       "path": "/app/v3/api/applications/{applicationId}/health_checks",
       "operationId": "applications.healthChecks.list",
       "tags": [

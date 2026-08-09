@@ -12,7 +12,7 @@ use sdkwork_webserver_contract::{
     CertificateOperationLease, CertificateOperationResponse, CertificatePage,
     ListAuditLogsQuery,
     CertificateResponse, IssueCertificateRequest,
-    CreateDeploymentRequest, CreateDomainRequest, CreateEnvVariableRequest,
+    CreateDeploymentRequest, CreateDomainRequest, CreateEnvVariableRequest, CreatePlatformTargetRequest,
     CreateHealthCheckRequest, CreateManagedDomainRequest, CreateNginxConfigRequest,
     CreateListenerCertificateBindingRequest, ListenerCertificateBindingPage,
     ListenerCertificateBindingResponse,
@@ -24,7 +24,8 @@ use sdkwork_webserver_contract::{
     ListRootDomainsQuery, ListApplicationsQuery, NginxConfigPage, NginxConfigResponse,
     NginxStatusResponse, RootDomainPage,
     RootDomainResponse, RuntimeAssignment, RuntimeAssignmentDelivery, RuntimeObservation,
-    ServerPage, ApplicationPage, ApplicationResponse, SourceVersionPage, SourceVersionResponse,
+    ServerPage, ApplicationPage, ApplicationResponse, PlatformTargetPage, PlatformTargetResponse,
+    SourceVersionPage, SourceVersionResponse,
     TlsCertificateAssignmentMaterial, UpdateDomainApplicationBindingRequest,
     UpdateNginxConfigRequest, UpdateApplicationRequest, RevokeCertificateRequest,
 };
@@ -105,6 +106,37 @@ impl WebRepositoryPort for WebRepository {
         application_id: &str,
     ) -> WebServiceResult<String> {
         self.resolve_site_id_repo(tenant_id, application_id).await
+    }
+
+    async fn create_platform_target(
+        &self,
+        tenant_id: i64,
+        application_id: &str,
+        request: &CreatePlatformTargetRequest,
+    ) -> WebServiceResult<PlatformTargetResponse> {
+        self.create_platform_target_repo(tenant_id, application_id, request)
+            .await
+    }
+
+    async fn list_platform_targets(
+        &self,
+        tenant_id: i64,
+        application_id: &str,
+        page: i32,
+        page_size: i32,
+    ) -> WebServiceResult<PlatformTargetPage> {
+        self.list_platform_targets_repo(tenant_id, application_id, page, page_size)
+            .await
+    }
+
+    async fn retrieve_platform_target(
+        &self,
+        tenant_id: i64,
+        application_id: &str,
+        platform_target_id: &str,
+    ) -> WebServiceResult<PlatformTargetResponse> {
+        self.retrieve_platform_target_repo(tenant_id, application_id, platform_target_id)
+            .await
     }
 
     async fn list_domains(

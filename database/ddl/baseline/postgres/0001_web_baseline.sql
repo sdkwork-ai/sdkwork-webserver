@@ -1479,7 +1479,7 @@ CREATE INDEX IF NOT EXISTS idx_web_listener_certificate_binding_site_sort
     ON web_listener_certificate_binding (site_binding_id, is_default, priority, id)
     WHERE deleted_at IS NULL;
 
--- folded migration: application resource model (web_application)
+-- folded migration: migrations/postgres/0005_web_application.up.sql
 -- sdkwork:migration
 -- version: 0005
 -- engine: postgres

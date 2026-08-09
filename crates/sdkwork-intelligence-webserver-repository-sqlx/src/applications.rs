@@ -16,7 +16,7 @@ use super::support::{
 /// site carrier row. The application owns the resource identity (name/slug);
 /// the site owns the technical runtime state (type, status, runtime config).
 const APPLICATION_SELECT: &str = "SELECT a.uuid AS application_id, a.name AS name, a.slug AS slug,
-                    a.description AS description,
+                    a.description AS description, a.application_kind AS app_kind,
                     s.uuid AS site_id, s.application_type, s.site_type, s.status,
                     CAST(s.runtime_config AS TEXT) AS runtime_config,
                     CAST(s.metadata AS TEXT) AS metadata,
@@ -126,6 +126,13 @@ impl WebRepository {
         if slug.is_empty() {
             return Err(WebServiceError::validation("slug cannot be empty"));
         }
+        // The app kind is the business type; the site carrier rows derive
+        // their technical type from it (AppKind::carrier_site_type /
+        // carrier_application_type).
+        let app_kind = sdkwork_webserver_contract::AppKind::parse(&request.app_kind)
+            .ok_or_else(|| WebServiceError::validation("appKind is not a supported app kind"))?;
+        let carrier_site_type = app_kind.carrier_site_type();
+        let carrier_application_type = app_kind.carrier_application_type();
         let now = now_rfc3339();
         let runtime_config = request
             .runtime_config
@@ -168,8 +175,8 @@ impl WebRepository {
             .bind(&request.name)
             .bind(&slug)
             .bind(&request.description)
-            .bind(&request.application_type)
-            .bind(request.site_type)
+            .bind(carrier_application_type)
+            .bind(carrier_site_type)
             .bind(runtime_config.to_string())
             .bind(metadata.to_string())
             .bind(&now)
@@ -177,15 +184,16 @@ impl WebRepository {
             .await
             .map_err(|error| store_error("insert web_site for application", error))?;
 
-        sqlx::query(audited_sql(
+        let application_now_expression = instant_write_expression("$12");
+        sqlx::query(audited_sql(&format!(
             "INSERT INTO web_application (
                 id, uuid, tenant_id, organization_id, data_scope, user_id, name, slug, description,
                 application_kind, status, site_id, default_environment, created_at, updated_at, version
              ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0, $11, 'production',
-                $12, $12, 0
-             )",
-        ))
+                {application_now_expression}, {application_now_expression}, 0
+             )"
+        )))
         .bind(application_id)
         .bind(&application_uuid)
         .bind(tenant_id)
@@ -195,7 +203,7 @@ impl WebRepository {
         .bind(&request.name)
         .bind(&slug)
         .bind(&request.description)
-        .bind(&request.application_type)
+        .bind(&request.app_kind)
         .bind(site_id)
         .bind(&now)
         .execute(&mut *tx)
@@ -569,7 +577,7 @@ fn map_application_row(row: &EngineRow) -> Result<ApplicationResponse, sqlx::Err
         name: row.try_get("name")?,
         slug: row.try_get("slug")?,
         description: row.try_get("description")?,
-        application_type: row.try_get("application_type")?,
+        app_kind: row.try_get("app_kind")?,
         site_type: row.try_get("site_type")?,
         status: row.try_get("status")?,
         runtime_config: json_from_row(row, "runtime_config")?,

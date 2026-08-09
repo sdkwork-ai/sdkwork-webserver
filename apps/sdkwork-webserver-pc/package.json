@@ -63,7 +63,11 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-router-dom": "^7.15.0",
-    "tailwindcss": "catalog:"
+    "tailwindcss": "catalog:",
+    "@sdkwork/webserver-pc-console-skills": "workspace:*",
+    "@sdkwork/webserver-pc-console-mcp": "workspace:*",
+    "@sdkwork/webserver-pc-admin-skills": "workspace:*",
+    "@sdkwork/webserver-pc-admin-mcp": "workspace:*"
   },
   "devDependencies": {
     "@testing-library/react": "catalog:",

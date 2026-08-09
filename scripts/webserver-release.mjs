@@ -156,6 +156,10 @@ const PACKAGE_ASSETS = [
     target: 'database/ddl/baseline/postgres/0001_web_baseline.sql',
   },
   {
+    source: 'database/migrations/postgres/0005_web_application.up.sql',
+    target: 'database/migrations/postgres/0005_web_application.up.sql',
+  },
+  {
     source: 'database/drift/policy.yaml',
     target: 'database/drift/policy.yaml',
   },

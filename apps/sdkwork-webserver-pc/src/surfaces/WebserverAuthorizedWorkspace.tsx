@@ -2,21 +2,25 @@ import { useSdkworkAuthControllerState } from "@sdkwork/auth-pc-react";
 import { webserverModule as auditModule } from "@sdkwork/webserver-pc-admin-audit";
 import { webserverModule as applicationsModule } from "@sdkwork/webserver-pc-admin-applications";
 import { webserverModule as diagnosticsModule } from "@sdkwork/webserver-pc-admin-diagnostics";
+import { webserverModule as mcpAdminModule, McpAdminSurface } from "@sdkwork/webserver-pc-admin-mcp";
 import { webserverModule as nginxModule } from "@sdkwork/webserver-pc-admin-nginx";
 import { webserverModule as serversModule } from "@sdkwork/webserver-pc-admin-servers";
+import { webserverModule as skillsAdminModule, SkillsAdminSurface } from "@sdkwork/webserver-pc-admin-skills";
 import { hasWebserverAdminAccess, type WebserverPcModuleDefinition } from "@sdkwork/webserver-pc-commons";
 import { createApplicationMediaStorage, createApplicationSourceStorage, createWebserverConsoleRegistry, WebserverConsoleSdkProvider } from "@sdkwork/webserver-pc-console-core";
 import { DeployDomainManagementSurface, webserverModule as deliveryModule } from "@sdkwork/webserver-pc-console-delivery";
 import { webserverModule as deploymentsModule } from "@sdkwork/webserver-pc-console-deployments";
+import { webserverModule as mcpModule, McpConsoleSurface } from "@sdkwork/webserver-pc-console-mcp";
 import { WebserverConsoleShell } from "@sdkwork/webserver-pc-console-shell";
 import { webserverModule as configurationModule } from "@sdkwork/webserver-pc-console-site-configuration";
 import { webserverModule as sitesModule } from "@sdkwork/webserver-pc-console-sites";
+import { webserverModule as skillsModule, SkillsConsoleSurface } from "@sdkwork/webserver-pc-console-skills";
 import { lazy, Suspense, use, useMemo } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import type { BootstrappedWebserverPcRuntime } from "../bootstrap/runtime.ts";
 
-const consoleModules = [sitesModule, configurationModule, deliveryModule, deploymentsModule] satisfies readonly WebserverPcModuleDefinition[];
-const adminModules = [applicationsModule, nginxModule, serversModule, diagnosticsModule, auditModule] satisfies readonly WebserverPcModuleDefinition[];
+const consoleModules = [sitesModule, configurationModule, deliveryModule, deploymentsModule, skillsModule, mcpModule] satisfies readonly WebserverPcModuleDefinition[];
+const adminModules = [applicationsModule, nginxModule, serversModule, diagnosticsModule, auditModule, skillsAdminModule, mcpAdminModule] satisfies readonly WebserverPcModuleDefinition[];
 const LazyAdminSurface = lazy(() => import("./WebserverAdminSurface.tsx").then((module) => ({ default: module.WebserverAdminSurface })));
 
 export function WebserverAuthorizedWorkspace({ runtime }: { runtime: BootstrappedWebserverPcRuntime }) {
@@ -46,6 +50,15 @@ export function WebserverAuthorizedWorkspace({ runtime }: { runtime: Bootstrappe
   const resourceRenderers = {
     domains: <DeployDomainManagementSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={runtime.config.driveAppApiBaseUrl} locale={runtime.locale} resource="domains" tokenManager={runtime.tokenManager} />,
     certificates: <DeployDomainManagementSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={runtime.config.driveAppApiBaseUrl} locale={runtime.locale} resource="certificates" tokenManager={runtime.tokenManager} />,
+    // Skill and MCP consoles are the canonical module self-service surfaces;
+    // menu entries stay in the host while the pages render with the shared
+    // IAM dual-token session through the injected token manager.
+    skills: <SkillsConsoleSurface appApiBaseUrl={runtime.config.appApiBaseUrl} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={runtime.config.driveAppApiBaseUrl} resource="skills" tokenManager={runtime.tokenManager} />,
+    mcp: <McpConsoleSurface appApiBaseUrl={runtime.config.appApiBaseUrl} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={runtime.config.driveAppApiBaseUrl} resource="mcp" tokenManager={runtime.tokenManager} />,
+  };
+  const adminResourceRenderers = {
+    skills: <SkillsAdminSurface appApiBaseUrl={runtime.config.appApiBaseUrl} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={runtime.config.driveAppApiBaseUrl} resource="skills" tokenManager={runtime.tokenManager} permissionScope={permissionScope} />,
+    mcp: <McpAdminSurface appApiBaseUrl={runtime.config.appApiBaseUrl} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={runtime.config.driveAppApiBaseUrl} resource="mcp" tokenManager={runtime.tokenManager} />,
   };
 
   return (
@@ -78,6 +91,7 @@ export function WebserverAuthorizedWorkspace({ runtime }: { runtime: Bootstrappe
                 modules={adminModules}
                 onSignOut={signOut}
                 permissionScope={permissionScope}
+                resourceRenderers={adminResourceRenderers}
                 sourceStorage={sourceStorage}
                 tokenManager={runtime.tokenManager}
                 userLabel={userLabel}

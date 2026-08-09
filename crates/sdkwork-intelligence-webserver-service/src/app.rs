@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use sdkwork_webserver_contract::{
-    ApplicationStoreListing, CreateApplicationRequest, CreateDeploymentRequest,
+    ApplicationStoreListing, CreatePlatformTargetRequest, CreateApplicationRequest, CreateDeploymentRequest,
     CreateDomainRequest, CreateEnvVariableRequest, CreateHealthCheckRequest,
     CreateListenerCertificateBindingRequest, CreateSourceVersionRequest,
     ImportGitSourceVersionRequest, IssueCertificateRequest, ListApplicationsQuery, MediaResource,
@@ -58,13 +58,73 @@ impl WebService {
         Ok((tenant_id, site_id))
     }
 
-    pub(crate) fn validate_application_type(value: &str) -> WebServiceResult<()> {
-        if matches!(value, "WEB" | "API") {
+    pub(crate) fn validate_app_kind(value: &str) -> WebServiceResult<()> {
+        if sdkwork_webserver_contract::AppKind::parse(value).is_some() {
             return Ok(());
         }
         Err(sdkwork_webserver_contract::WebServiceError::validation(
-            "applicationType must be WEB or API",
+            "appKind must be one of STATIC_WEB, SPA_WEB, API_SERVICE, WECHAT_MINIPROGRAM, DOUYIN_MINIPROGRAM, IOS_APP, ANDROID_APP, HARMONYOS_APP",
         ))
+    }
+
+    pub(crate) fn validate_platform_target_request(
+        request: &CreatePlatformTargetRequest,
+    ) -> WebServiceResult<()> {
+        use sdkwork_webserver_contract::{Platform, WebServiceError};
+        let platform = Platform::parse(&request.platform).ok_or_else(|| {
+            WebServiceError::validation(
+                "platform must be one of WEB, API, WECHAT, DOUYIN, IOS, ANDROID, HARMONYOS",
+            )
+        })?;
+        if request
+            .tech_stack
+            .as_deref()
+            .is_some_and(|stack| sdkwork_webserver_contract::TechStack::parse(stack).is_none())
+        {
+            return Err(WebServiceError::validation(
+                "techStack must be one of FLUTTER, NATIVE, UNI_APP, NODE, RUST, GO, JAVA, OTHER",
+            ));
+        }
+        if request.target_key.trim().is_empty() || request.target_key.len() > 120 {
+            return Err(WebServiceError::validation(
+                "targetKey must contain 1..120 characters",
+            ));
+        }
+        // Platform identity is mandatory per platform (mirrors the deploy
+        // module platform-target contract).
+        let identity_ok = match platform {
+            Platform::Ios => request
+                .bundle_id
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty()),
+            Platform::Android => request
+                .package_name
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty()),
+            Platform::Wechat | Platform::Douyin => request
+                .app_id
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty()),
+            Platform::Harmonyos => request
+                .bundle_name
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty()),
+            Platform::Web | Platform::Api => true,
+        };
+        if !identity_ok {
+            let field = match platform {
+                Platform::Ios => "bundleId",
+                Platform::Android => "packageName",
+                Platform::Wechat | Platform::Douyin => "appId",
+                Platform::Harmonyos => "bundleName",
+                Platform::Web | Platform::Api => "",
+            };
+            return Err(WebServiceError::validation(format!(
+                "{field} is required for platform {}",
+                platform.as_str()
+            )));
+        }
+        Ok(())
     }
 
     pub(crate) fn validate_store_listing(
@@ -830,7 +890,7 @@ impl WebAppApi for WebService {
     ) -> WebServiceResult<sdkwork_webserver_contract::ApplicationPage> {
         let tenant_id = Self::require_tenant(context)?;
         if let Some(application_type) = query.application_type.as_deref() {
-            Self::validate_application_type(application_type)?;
+            Self::validate_app_kind(application_type)?;
         }
         let owner_id = Self::owner_filter(context)?;
         self.repository
@@ -845,7 +905,7 @@ impl WebAppApi for WebService {
     ) -> WebServiceResult<sdkwork_webserver_contract::ApplicationResponse> {
         let tenant_id = Self::require_tenant(context)?;
         let owner_id = Self::owner_filter(context)?;
-        Self::validate_application_type(&request.application_type)?;
+        Self::validate_app_kind(&request.app_kind)?;
         Self::validate_store_listing(request.store_listing.as_ref(), false)?;
         let site = self
             .repository
@@ -1456,6 +1516,44 @@ impl WebAppApi for WebService {
             .await?;
         self.repository
             .create_health_check(tenant_id, &site_id, request)
+            .await
+    }
+
+    async fn create_platform_target(
+        &self,
+        context: &WebAppRequestContext,
+        application_id: &str,
+        request: &CreatePlatformTargetRequest,
+    ) -> WebServiceResult<sdkwork_webserver_contract::PlatformTargetResponse> {
+        let tenant_id = self.require_application_access(context, application_id).await?.0;
+        Self::validate_platform_target_request(request)?;
+        self.repository
+            .create_platform_target(tenant_id, application_id, request)
+            .await
+    }
+
+    async fn list_platform_targets(
+        &self,
+        context: &WebAppRequestContext,
+        application_id: &str,
+        page: i32,
+        page_size: i32,
+    ) -> WebServiceResult<sdkwork_webserver_contract::PlatformTargetPage> {
+        let tenant_id = self.require_application_access(context, application_id).await?.0;
+        self.repository
+            .list_platform_targets(tenant_id, application_id, page, page_size)
+            .await
+    }
+
+    async fn retrieve_platform_target(
+        &self,
+        context: &WebAppRequestContext,
+        application_id: &str,
+        platform_target_id: &str,
+    ) -> WebServiceResult<sdkwork_webserver_contract::PlatformTargetResponse> {
+        let tenant_id = self.require_application_access(context, application_id).await?.0;
+        self.repository
+            .retrieve_platform_target(tenant_id, application_id, platform_target_id)
             .await
     }
 }
