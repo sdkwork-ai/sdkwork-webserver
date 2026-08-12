@@ -50,7 +50,7 @@
       ],
       "bindEnv": "SDKWORK_WEBSERVER_APPLICATION_PUBLIC_INGRESS_BIND",
       "httpUrlEnv": "SDKWORK_WEBSERVER_APPLICATION_PUBLIC_HTTP_URL",
-      "healthAttempts": 300,
+      "healthAttempts": 600,
       "healthIntervalMs": 1000,
       "healthTimeoutMs": 2000
     },
