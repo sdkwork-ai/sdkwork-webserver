@@ -1,8 +1,8 @@
 name: sdkwork_web_app_sdk
 description: sdkwork-web-app-sdk Dart SDK
 version: 1.0.0
-homepage: https://github.com/Sdkwork-Cloud/sdkwork-sdk-generator
-repository: https://github.com/Sdkwork-Cloud/sdkwork-sdk-generator
+homepage: https://github.com/sdkwork-ai/sdkwork-sdk-generator
+repository: https://github.com/sdkwork-ai/sdkwork-sdk-generator
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
