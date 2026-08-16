@@ -42,6 +42,7 @@
       "sdkwork_api_webserver_assembly::assemble_api_router",
       "sdkwork_api_webserver_assembly::migrate_database_from_env",
       "sdkwork_api_webserver_assembly::ApiAssembly",
+      "sdkwork_api_webserver_assembly::ApiAssembly::into_contribution",
       "sdkwork_api_webserver_assembly::ApiAssemblyContext",
       "sdkwork_api_webserver_assembly::ApiAssemblyError"
     ],
@@ -51,7 +52,9 @@
     ],
     "requiredPorts": [
       {"name": "webServerRepositoryRuntime", "export": "crate-root", "provider": "sdkwork-intelligence-webserver-repository-sqlx"},
-      {"name": "webServerDatabaseLifecycle", "export": "crate-root", "provider": "sdkwork-webserver-database-host"}
+      {"name": "webServerDatabaseLifecycle", "export": "crate-root", "provider": "sdkwork-webserver-database-host"},
+      {"name": "skillsDatabaseLifecycle", "export": "sdkwork_api_skills_assembly::bootstrap_database_from_env", "provider": "sdkwork-api-skills-assembly"},
+      {"name": "mcpDatabaseLifecycle", "export": "sdkwork_api_mcp_assembly::bootstrap_database_from_env", "provider": "sdkwork-api-mcp-assembly"}
     ],
     "runtimeEntrypoints": [],
     "routeManifest": "assembly-manifest.json",

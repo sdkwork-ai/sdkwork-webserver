@@ -1,11 +1,7 @@
 use axum::Router;
 use sdkwork_database_sqlx::process_shared_database_pool;
 use sdkwork_iam_web_adapter::{iam_web_request_context_resolver_from_env, IamAuthorizationPolicy};
-use sdkwork_web_axum::with_web_request_context;
-use sdkwork_web_bootstrap::{
-    mount_openapi_json, service_router, CompositeReadinessCheck, OpenApiMount, ServiceRouterConfig,
-    WebFrameworkBuilder,
-};
+use sdkwork_web_bootstrap::{ComposedApiAssembly, CompositeReadinessCheck, WebFrameworkBuilder};
 use sdkwork_web_core::{
     HttpMetricsRegistry, IdempotencyStore, WebEnvironment, WebFrameworkOptionalFeatures,
     WebRequestContextProfile,
@@ -38,7 +34,7 @@ pub async fn build_router() -> Result<Router, String> {
     let iam_pool = process_shared_database_pool().ok_or_else(|| {
         "standalone gateway requires the process-shared database pool; bootstrap the database lifecycle first".to_string()
     })?;
-    sdkwork_iam_database_host::bootstrap_iam_database(iam_pool)
+    sdkwork_api_iam_assembly::bootstrap_database_with_pool(iam_pool)
         .await
         .map_err(|error| format!("IAM database bootstrap failed: {error}"))?;
     let metrics = HttpMetricsRegistry::new();
@@ -52,15 +48,16 @@ pub async fn build_router() -> Result<Router, String> {
         ..WebRequestContextProfile::default()
     };
     profile
+        .assembly
         .route_manifest
         .validate_route_auth_for_surfaces(&request_profile)
         .map_err(|error| format!("standalone route auth validation failed: {error}"))?;
     let readiness_check = match app_shell.as_ref() {
         Some(app_shell) => Arc::new(CompositeReadinessCheck::new(vec![
-            profile.readiness_check.clone(),
+            profile.assembly.readiness_check.clone(),
             app_shell.readiness_check(),
         ])) as Arc<dyn sdkwork_web_bootstrap::ReadinessCheck>,
-        None => profile.readiness_check.clone(),
+        None => profile.assembly.readiness_check.clone(),
     };
     // Durable idempotency: replace the process-local memory store with the
     // PostgreSQL-backed store so replay deduplication survives restarts and
@@ -91,40 +88,22 @@ pub async fn build_router() -> Result<Router, String> {
         .profile(request_profile)
         .security_policy(security_policy)
         .authorization_policy(Arc::new(IamAuthorizationPolicy::new(
-            profile.route_manifest.clone(),
+            profile.assembly.route_manifest.clone(),
         )))
         .tenant_isolation_policy(Arc::new(WebServerTenantIsolationPolicy))
-        .route_manifest(profile.route_manifest.clone())
         .metrics_registry(metrics.clone())
-        .readiness_check(readiness_check.clone())
         .audit_emitter(profile.audit_emitter.clone())
         .security_event_emitter(profile.security_event_emitter.clone());
-    for injector in profile.domain_context_injectors {
-        framework_builder = framework_builder.domain_injector(injector);
-    }
-    let framework = framework_builder.build();
-    let protected = with_web_request_context(
-        with_problem_correlation(profile.router),
-        framework.into_layer(),
-    );
-    let protected = mount_openapi_json(
-        protected,
-        &[OpenApiMount {
-            path: "/openapi.json",
-            document: Arc::new(profile.openapi),
-        }],
-    );
+    let mut assembly: ComposedApiAssembly = profile.assembly;
+    assembly.readiness_check = readiness_check;
+    assembly.router = with_problem_correlation(assembly.router);
+    let hosted = assembly.into_hosted(framework_builder);
     info!(
-        route_count = profile.route_manifest.routes().len(),
-        permission_count = profile.permission_catalog.len(),
+        route_count = hosted.route_manifest.routes().len(),
+        permission_count = hosted.permission_catalog.len(),
         "assembled Web Server standalone API profile"
     );
-    let router = service_router(
-        protected,
-        ServiceRouterConfig::default()
-            .with_readiness_check(readiness_check)
-            .with_metrics(metrics),
-    );
+    let router = hosted.router;
     Ok(match app_shell {
         Some(config) => config.mount(router),
         None => router,
@@ -141,7 +120,7 @@ pub async fn run_database_migrate_only() -> Result<(), String> {
     let iam_pool = process_shared_database_pool().ok_or_else(|| {
         "standalone gateway requires the process-shared database pool; bootstrap the database lifecycle first".to_string()
     })?;
-    sdkwork_iam_database_host::bootstrap_iam_database(iam_pool)
+    sdkwork_api_iam_assembly::bootstrap_database_with_pool(iam_pool)
         .await
         .map_err(|error| format!("IAM database bootstrap failed: {error}"))?;
     info!("IAM database migration completed");

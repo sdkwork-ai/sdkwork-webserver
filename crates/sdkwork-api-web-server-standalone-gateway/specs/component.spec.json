@@ -137,15 +137,27 @@
     "requiredPorts": [
       {
         "name": "webServerApiAssembly",
-        "export": "sdkwork_api_web_server_assembly::assemble_api_router"
+        "export": "sdkwork_api_webserver_assembly::assemble_api_router"
       },
       {
         "name": "iamAppApiContribution",
         "export": "sdkwork_api_iam_assembly::assemble_app_api_contribution_with_module_manifests"
       },
       {
+        "name": "iamDatabaseLifecycle",
+        "export": "sdkwork_api_iam_assembly::bootstrap_database_with_pool"
+      },
+      {
         "name": "driveAppApiContribution",
         "export": "sdkwork_api_drive_assembly::assemble_app_api_contribution"
+      },
+      {
+        "name": "skillsAppApiContribution",
+        "export": "sdkwork_api_skills_assembly::assemble_app_api_contribution"
+      },
+      {
+        "name": "mcpAppApiContribution",
+        "export": "sdkwork_api_mcp_assembly::assemble_app_api_contribution"
       },
       {
         "name": "webserverHttpHost",
@@ -287,6 +299,32 @@
         "sameOriginAllowed": true,
         "cargoDependency": "sdkwork-api-drive-assembly",
         "embeddedExecutableExport": "sdkwork_api_drive_assembly::assemble_app_api_contribution",
+        "profileCoverage": ["standalone"],
+        "coverageEvidence": ["src/profile.rs"]
+      },
+      {
+        "workspace": "sdkwork-skills",
+        "sdkFamily": "sdkwork-skills-app-sdk",
+        "apiAuthority": "sdkwork-skills-app-api",
+        "surface": "app-api",
+        "apiPrefix": "/app/v3/api/skills",
+        "runtimeMode": "same-origin",
+        "sameOriginAllowed": true,
+        "cargoDependency": "sdkwork-api-skills-assembly",
+        "embeddedExecutableExport": "sdkwork_api_skills_assembly::assemble_app_api_contribution",
+        "profileCoverage": ["standalone"],
+        "coverageEvidence": ["src/profile.rs"]
+      },
+      {
+        "workspace": "sdkwork-mcp",
+        "sdkFamily": "sdkwork-mcp-app-sdk",
+        "apiAuthority": "sdkwork-mcp-app-api",
+        "surface": "app-api",
+        "apiPrefix": "/app/v3/api/mcp",
+        "runtimeMode": "same-origin",
+        "sameOriginAllowed": true,
+        "cargoDependency": "sdkwork-api-mcp-assembly",
+        "embeddedExecutableExport": "sdkwork_api_mcp_assembly::assemble_app_api_contribution",
         "profileCoverage": ["standalone"],
         "coverageEvidence": ["src/profile.rs"]
       },

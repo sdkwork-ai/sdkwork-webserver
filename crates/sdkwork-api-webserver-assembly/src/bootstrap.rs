@@ -17,10 +17,8 @@ use sdkwork_routes_webserver_internal_api::{
     gateway_mount as mount_internal, gateway_route_manifest as internal_route_manifest,
     web_internal_domain_context_injectors, wrap_router_with_web_framework_from_env,
 };
-use sdkwork_web_bootstrap::{ReadinessCheck, ReadinessFuture};
-use sdkwork_web_core::{
-    AuditEmitter, DomainContextInjector, HttpRoute, HttpRouteManifest, SecurityEventEmitter,
-};
+use sdkwork_web_bootstrap::{ApiAssemblyContribution, ReadinessCheck, ReadinessFuture};
+use sdkwork_web_core::{AuditEmitter, HttpRoute, HttpRouteManifest, SecurityEventEmitter};
 use sdkwork_webserver_contract::MachineCredentialAuthenticator;
 use std::sync::Arc;
 
@@ -70,15 +68,18 @@ impl ApiAssemblyError {
 }
 
 pub struct ApiAssembly {
-    pub router: Router,
-    pub route_manifest: HttpRouteManifest,
-    pub openapi: serde_json::Value,
-    pub permission_catalog: Vec<&'static str>,
-    pub domain_context_injectors: Vec<Arc<dyn DomainContextInjector>>,
-    pub readiness_check: Arc<dyn ReadinessCheck>,
+    pub contribution: ApiAssemblyContribution,
     pub machine_credential_authenticator: Arc<dyn MachineCredentialAuthenticator>,
     pub audit_emitter: Arc<dyn AuditEmitter>,
     pub security_event_emitter: Arc<dyn SecurityEventEmitter>,
+}
+
+impl ApiAssembly {
+    /// Returns the complete host-neutral contribution consumed by both the
+    /// platform cloud gateway and the standalone host.
+    pub fn into_contribution(self) -> ApiAssemblyContribution {
+        self.contribution
+    }
 }
 
 struct CombinedReadinessCheck {
@@ -185,19 +186,25 @@ pub async fn assemble_business_routes(
         "SDKWork Web Server API",
         route_manifest.routes(),
     );
-    Ok(ApiAssembly {
-        router: router.layer(Extension(service.clone())),
+    let readiness_check: Arc<dyn ReadinessCheck> = if readiness_checks.len() == 1 {
+        readiness_checks.pop().expect("readiness checks non-empty")
+    } else {
+        Arc::new(CombinedReadinessCheck {
+            checks: readiness_checks,
+        })
+    };
+    let contribution = ApiAssemblyContribution::try_new(
+        "sdkwork-webserver",
+        router.layer(Extension(service.clone())),
         route_manifest,
         openapi,
         permission_catalog,
         domain_context_injectors,
-        readiness_check: if readiness_checks.len() == 1 {
-            readiness_checks.pop().expect("readiness checks non-empty")
-        } else {
-            Arc::new(CombinedReadinessCheck {
-                checks: readiness_checks,
-            })
-        },
+        readiness_check,
+    )
+    .map_err(|detail| ApiAssemblyError::Initialization { detail })?;
+    Ok(ApiAssembly {
+        contribution,
         machine_credential_authenticator: service,
         audit_emitter,
         security_event_emitter,
@@ -225,13 +232,11 @@ pub async fn migrate_database_from_env() -> Result<(), ApiAssemblyError> {
     sdkwork_api_deployments_assembly::migrate_database_from_env()
         .await
         .map_err(|detail| ApiAssemblyError::DatabaseMigration { detail })?;
-    sdkwork_skills_database_host::bootstrap_skills_database_from_env()
+    sdkwork_api_skills_assembly::bootstrap_database_from_env()
         .await
-        .map(|_| ())
         .map_err(|detail| ApiAssemblyError::DatabaseMigration { detail })?;
-    sdkwork_mcp_database_host::bootstrap_mcp_database_from_env()
+    sdkwork_api_mcp_assembly::bootstrap_database_from_env()
         .await
-        .map(|_| ())
         .map_err(|detail| ApiAssemblyError::DatabaseMigration { detail })?;
     Ok(())
 }
