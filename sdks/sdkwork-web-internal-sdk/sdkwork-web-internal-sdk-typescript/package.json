@@ -20,7 +20,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@sdkwork/sdk-common": "workspace:*"
+    "@sdkwork/sdk-common": "^1.0.5"
   },
   "devDependencies": {
     "rollup": "^4.0.0",
