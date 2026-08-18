@@ -76,16 +76,50 @@ fn is_exact_http_origin(origin: &str) -> bool {
         && origin == format!("{scheme}://{authority}")
 }
 
+/// Desktop shells and embedded WebViews may use registered custom URL schemes
+/// (for example `app://dsh`). Entries must be exact `scheme://authority` origins:
+/// no wildcard, path, query, fragment, or userinfo.
+fn is_exact_custom_runtime_origin(origin: &str) -> bool {
+    let Ok(uri) = origin.parse::<Uri>() else {
+        return false;
+    };
+    let Some(scheme) = uri.scheme_str() else {
+        return false;
+    };
+    if !matches!(scheme, "app" | "tauri") {
+        return false;
+    }
+    let Some(authority) = uri.authority() else {
+        return false;
+    };
+    let authority = authority.as_str();
+    if authority.is_empty() || authority.contains('@') || origin.contains('*') {
+        return false;
+    }
+    if uri.query().is_some() {
+        return false;
+    }
+    let path = uri.path();
+    if !path.is_empty() && path != "/" {
+        return false;
+    }
+    origin == format!("{scheme}://{authority}")
+}
+
+fn is_exact_allowed_origin(origin: &str) -> bool {
+    is_exact_http_origin(origin) || is_exact_custom_runtime_origin(origin)
+}
+
 fn web_security_policy(
     environment: &WebEnvironment,
     configured_origins: Vec<String>,
 ) -> Result<SecurityPolicy, String> {
     if let Some(origin) = configured_origins
         .iter()
-        .find(|origin| !is_exact_http_origin(origin))
+        .find(|origin| !is_exact_allowed_origin(origin))
     {
         return Err(format!(
-            "{SHARED_CORS_ALLOWED_ORIGINS_KEY} contains an invalid exact HTTP(S) origin: {origin}"
+            "{SHARED_CORS_ALLOWED_ORIGINS_KEY} contains an invalid exact origin: {origin}"
         ));
     }
     if matches!(environment, WebEnvironment::Prod) && configured_origins.is_empty() {
@@ -251,12 +285,43 @@ mod tests {
             vec!["https://*.sdkwork.com".to_owned()],
         )
         .expect_err("wildcard production origin")
-        .contains("invalid exact HTTP(S) origin"));
+        .contains("invalid exact origin"));
         assert!(web_security_policy(
             &WebEnvironment::Prod,
             vec!["https://web.sdkwork.com/path".to_owned()],
         )
         .expect_err("origin with a path")
-        .contains("invalid exact HTTP(S) origin"));
+        .contains("invalid exact origin"));
+    }
+
+    #[test]
+    fn development_policy_accepts_desktop_custom_scheme_origin() {
+        let policy = web_security_policy(&WebEnvironment::Dev, vec!["app://dsh".to_owned()])
+            .expect("dev desktop origin policy");
+        policy
+            .cors
+            .validate_origin_value("app://dsh")
+            .expect("configured desktop origin");
+        policy
+            .cors
+            .validate_origin_value("app://other")
+            .expect_err("unconfigured desktop origin");
+    }
+
+    #[test]
+    fn production_policy_accepts_configured_desktop_custom_scheme_origin() {
+        let policy = web_security_policy(
+            &WebEnvironment::Prod,
+            vec!["https://api.sdkwork.com".to_owned(), "app://dsh".to_owned()],
+        )
+        .expect("production desktop origin policy");
+        policy
+            .cors
+            .validate_origin_value("app://dsh")
+            .expect("configured desktop origin");
+        policy
+            .cors
+            .validate_origin_value("javascript:alert(1)")
+            .expect_err("unregistered custom scheme");
     }
 }
