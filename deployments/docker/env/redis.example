@@ -1,0 +1,11 @@
+# External Redis reference (ENVIRONMENT_SPEC Redis section).
+# Built-in mode uses the compose `redis` service with logical DB 0/1/2 per profile.
+# External mode: set WEBSERVER_REDIS_* in deployments/docker/.env.
+
+SDKWORK_WEBSERVER_REDIS_ENABLED=true
+SDKWORK_WEBSERVER_REDIS_HOST=host.docker.internal
+SDKWORK_WEBSERVER_REDIS_PORT=6379
+SDKWORK_WEBSERVER_REDIS_DATABASE=0
+SDKWORK_WEBSERVER_REDIS_TLS=false
+SDKWORK_WEBSERVER_REDIS_MAX_CONNECTIONS=10
+# SDKWORK_WEBSERVER_REDIS_PASSWORD_FILE=/etc/sdkwork/webserver/secrets/redis.secret

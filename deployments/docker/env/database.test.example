@@ -1,0 +1,13 @@
+# External PostgreSQL reference — test (ENVIRONMENT_SPEC §7.1).
+# See database.development.example for external-mode startup notes.
+
+SDKWORK_DATABASE_ENGINE=postgresql
+SDKWORK_DATABASE_HOST=host.docker.internal
+SDKWORK_DATABASE_PORT=5432
+SDKWORK_DATABASE_NAME=sdkwork_ai_test
+SDKWORK_DATABASE_SCHEMA=sdkwork_ai_test
+SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC=false
+SDKWORK_DATABASE_USERNAME=sdkwork_ai_test
+SDKWORK_DATABASE_PASSWORD=replace-me
+SDKWORK_DATABASE_SSL_MODE=disable
+SDKWORK_DATABASE_MAX_CONNECTIONS=10

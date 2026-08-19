@@ -1,0 +1,193 @@
+# SDKWork Web Server — WSL Ubuntu multi-environment standalone gateway stacks.
+#
+# Dependency modes (modeled on sdkwork-api-cloud-gateway):
+#
+#   ① Built-in PostgreSQL + Redis (default):
+#      bash scripts/docker/deploy-docker-environment.sh development
+#
+#   ② External PostgreSQL + Redis:
+#      bash scripts/docker/deploy-docker-environment.sh development --external
+#
+#   ③ All environments, shared built-in postgres/redis:
+#      bash scripts/docker/deploy-docker-environment.sh all --embedded-shared
+#
+# Per-environment env files: deployments/docker/env/<environment>.env
+# (copy from deployments/docker/env/<environment>.env.example)
+
+name: sdkwork-webserver
+
+x-webserver-common: &webserver-common
+  image: registry.sdkwork.com/apps/sdkwork-webserver-standalone:${SDKWORK_WEBSERVER_IMAGE_TAG:-0.1.0}
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  healthcheck:
+    test:
+      [
+        "CMD-SHELL",
+        "curl -fsS http://127.0.0.1:$${SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT:-3800}/healthz || exit 1",
+      ]
+    interval: 15s
+    timeout: 5s
+    retries: 8
+    start_period: 120s
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    profiles: [development, test, production]
+    restart: unless-stopped
+    command: ["postgres", "-c", "max_connections=${PG_MAX_CONNECTIONS:-200}"]
+    environment:
+      POSTGRES_USER: ${WEBSERVER_POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${WEBSERVER_POSTGRES_PASSWORD:?WEBSERVER_POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${WEBSERVER_POSTGRES_DB:-postgres}
+      WEBSERVER_POSTGRES_DEV_DB: ${WEBSERVER_POSTGRES_DEV_DB:-sdkwork_ai_dev}
+      WEBSERVER_POSTGRES_DEV_USER: ${WEBSERVER_POSTGRES_DEV_USER:-sdkwork_ai_dev}
+      WEBSERVER_POSTGRES_DEV_PASSWORD: ${WEBSERVER_POSTGRES_DEV_PASSWORD:-sdkworkdev123}
+      WEBSERVER_POSTGRES_TEST_DB: ${WEBSERVER_POSTGRES_TEST_DB:-sdkwork_ai_test}
+      WEBSERVER_POSTGRES_TEST_USER: ${WEBSERVER_POSTGRES_TEST_USER:-sdkwork_ai_test}
+      WEBSERVER_POSTGRES_TEST_PASSWORD: ${WEBSERVER_POSTGRES_TEST_PASSWORD:-sdkworktest123}
+      WEBSERVER_POSTGRES_PROD_DB: ${WEBSERVER_POSTGRES_PROD_DB:-sdkwork_ai_prod}
+      WEBSERVER_POSTGRES_PROD_USER: ${WEBSERVER_POSTGRES_PROD_USER:-sdkwork_ai_prod}
+      WEBSERVER_POSTGRES_PROD_PASSWORD: ${WEBSERVER_POSTGRES_PROD_PASSWORD:-sdkworkprod123}
+    volumes:
+      - webserver-postgres-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${WEBSERVER_POSTGRES_USER:-postgres} -d ${WEBSERVER_POSTGRES_DB:-postgres}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:8-alpine
+    profiles: [development, test, production]
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    volumes:
+      - webserver-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  webserver-development:
+    <<: *webserver-common
+    profiles: [development]
+    container_name: sdkwork-webserver-development
+    ports:
+      - "${SDKWORK_WEBSERVER_DEV_HOST_PORT:-13800}:3800"
+    env_file:
+      - path: env/development.env
+        required: false
+    environment:
+      SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT: "3800"
+      SDKWORK_WEBSERVER_ENVIRONMENT: development
+      SDKWORK_WEBSERVER_PROFILE_ID: standalone.development
+      SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_CORS_ALLOWED_ORIGINS:-http://server-dev.sdkwork.com}
+      SDKWORK_DATABASE_ENGINE: postgresql
+      SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-postgres}
+      SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
+      SDKWORK_DATABASE_NAME: ${WEBSERVER_POSTGRES_DEV_DB:-sdkwork_ai_dev}
+      SDKWORK_DATABASE_SCHEMA: ${WEBSERVER_POSTGRES_DEV_DB:-sdkwork_ai_dev}
+      SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC: "false"
+      SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_DEV_USER:-sdkwork_ai_dev}
+      SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_DEV_PASSWORD:-sdkworkdev123}
+      SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-disable}
+      SDKWORK_DATABASE_MAX_CONNECTIONS: "10"
+      SDKWORK_WEBSERVER_REDIS_ENABLED: "true"
+      SDKWORK_WEBSERVER_REDIS_HOST: ${WEBSERVER_REDIS_HOST:-redis}
+      SDKWORK_WEBSERVER_REDIS_PORT: ${WEBSERVER_REDIS_PORT:-6379}
+      SDKWORK_WEBSERVER_REDIS_DATABASE: "0"
+      SDKWORK_WEBSERVER_REDIS_TLS: ${WEBSERVER_REDIS_TLS:-false}
+      SDKWORK_WEBSERVER_REDIS_PASSWORD: ${WEBSERVER_REDIS_PASSWORD:-}
+    volumes:
+      - webserver-secrets-development:/etc/sdkwork/webserver/secrets
+      - webserver-data-development:/var/lib/sdkwork/webserver
+
+  webserver-test:
+    <<: *webserver-common
+    profiles: [test]
+    container_name: sdkwork-webserver-test
+    ports:
+      - "${SDKWORK_WEBSERVER_TEST_HOST_PORT:-18888}:8888"
+    env_file:
+      - path: env/test.env
+        required: false
+    environment:
+      SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT: "8888"
+      SDKWORK_WEBSERVER_ENVIRONMENT: test
+      SDKWORK_WEBSERVER_PROFILE_ID: standalone.test
+      SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_CORS_ALLOWED_ORIGINS:-http://server-test.sdkwork.com}
+      SDKWORK_DATABASE_ENGINE: postgresql
+      SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-postgres}
+      SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
+      SDKWORK_DATABASE_NAME: ${WEBSERVER_POSTGRES_TEST_DB:-sdkwork_ai_test}
+      SDKWORK_DATABASE_SCHEMA: ${WEBSERVER_POSTGRES_TEST_DB:-sdkwork_ai_test}
+      SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC: "false"
+      SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_TEST_USER:-sdkwork_ai_test}
+      SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_TEST_PASSWORD:-sdkworktest123}
+      SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-disable}
+      SDKWORK_DATABASE_MAX_CONNECTIONS: "10"
+      SDKWORK_WEBSERVER_REDIS_ENABLED: "true"
+      SDKWORK_WEBSERVER_REDIS_HOST: ${WEBSERVER_REDIS_HOST:-redis}
+      SDKWORK_WEBSERVER_REDIS_PORT: ${WEBSERVER_REDIS_PORT:-6379}
+      SDKWORK_WEBSERVER_REDIS_DATABASE: "1"
+      SDKWORK_WEBSERVER_REDIS_TLS: ${WEBSERVER_REDIS_TLS:-false}
+      SDKWORK_WEBSERVER_REDIS_PASSWORD: ${WEBSERVER_REDIS_PASSWORD:-}
+    volumes:
+      - webserver-secrets-test:/etc/sdkwork/webserver/secrets
+      - webserver-data-test:/var/lib/sdkwork/webserver
+
+  webserver-production:
+    <<: *webserver-common
+    profiles: [production]
+    container_name: sdkwork-webserver-production
+    ports:
+      - "${SDKWORK_WEBSERVER_PROD_HOST_PORT:-18080}:8080"
+    env_file:
+      - path: env/production.env
+        required: false
+    environment:
+      SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT: "8080"
+      SDKWORK_WEBSERVER_ENVIRONMENT: production
+      SDKWORK_WEBSERVER_PROFILE_ID: standalone.production
+      SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_CORS_ALLOWED_ORIGINS:-http://server.sdkwork.com}
+      SDKWORK_DATABASE_ENGINE: postgresql
+      SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-postgres}
+      SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
+      SDKWORK_DATABASE_NAME: ${WEBSERVER_POSTGRES_PROD_DB:-sdkwork_ai_prod}
+      SDKWORK_DATABASE_SCHEMA: ${WEBSERVER_POSTGRES_PROD_DB:-sdkwork_ai_prod}
+      SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC: "false"
+      SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_PROD_USER:-sdkwork_ai_prod}
+      SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_PROD_PASSWORD:-sdkworkprod123}
+      SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-disable}
+      SDKWORK_DATABASE_MAX_CONNECTIONS: "20"
+      SDKWORK_WEBSERVER_REDIS_ENABLED: "true"
+      SDKWORK_WEBSERVER_REDIS_HOST: ${WEBSERVER_REDIS_HOST:-redis}
+      SDKWORK_WEBSERVER_REDIS_PORT: ${WEBSERVER_REDIS_PORT:-6379}
+      SDKWORK_WEBSERVER_REDIS_DATABASE: "2"
+      SDKWORK_WEBSERVER_REDIS_TLS: ${WEBSERVER_REDIS_TLS:-false}
+      SDKWORK_WEBSERVER_REDIS_PASSWORD: ${WEBSERVER_REDIS_PASSWORD:-}
+    volumes:
+      - webserver-secrets-production:/etc/sdkwork/webserver/secrets
+      - webserver-data-production:/var/lib/sdkwork/webserver
+
+volumes:
+  webserver-postgres-data:
+  webserver-redis-data:
+  webserver-secrets-development:
+  webserver-secrets-test:
+  webserver-secrets-production:
+  webserver-data-development:
+  webserver-data-test:
+  webserver-data-production:

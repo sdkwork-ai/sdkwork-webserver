@@ -1,0 +1,16 @@
+# External PostgreSQL reference — development (ENVIRONMENT_SPEC §7.1).
+# Built-in mode injects SDKWORK_DATABASE_* from docker-compose.yml.
+# External mode: set WEBSERVER_POSTGRES_* in deployments/docker/.env and start with
+#   docker compose -f deployments/docker/docker-compose.yml \
+#     -f deployments/docker/docker-compose.external.yml --profile development up -d
+
+SDKWORK_DATABASE_ENGINE=postgresql
+SDKWORK_DATABASE_HOST=host.docker.internal
+SDKWORK_DATABASE_PORT=5432
+SDKWORK_DATABASE_NAME=sdkwork_ai_dev
+SDKWORK_DATABASE_SCHEMA=sdkwork_ai_dev
+SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC=false
+SDKWORK_DATABASE_USERNAME=sdkwork_ai_dev
+SDKWORK_DATABASE_PASSWORD=replace-me
+SDKWORK_DATABASE_SSL_MODE=disable
+SDKWORK_DATABASE_MAX_CONNECTIONS=10

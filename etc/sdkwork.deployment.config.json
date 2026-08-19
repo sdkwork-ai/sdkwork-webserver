@@ -7,15 +7,18 @@
   "environments": {
     "development": {
       "applicationOrigin": "http://127.0.0.1:3800",
-      "cloudApiBaseUrl": "https://api-dev.sdkwork.com"
+      "cloudApiBaseUrl": "https://api-dev.sdkwork.com",
+      "dockerApplicationOrigin": "http://server-dev.sdkwork.com"
     },
     "test": {
       "applicationOrigin": "http://testserver.sdkwork.com:8888",
-      "cloudApiBaseUrl": "https://api-test.sdkwork.com"
+      "cloudApiBaseUrl": "https://api-test.sdkwork.com",
+      "dockerApplicationOrigin": "http://server-test.sdkwork.com"
     },
     "production": {
       "applicationOrigin": "https://server.sdkwork.com",
-      "cloudApiBaseUrl": "https://api.sdkwork.com"
+      "cloudApiBaseUrl": "https://api.sdkwork.com",
+      "dockerApplicationOrigin": "http://server.sdkwork.com"
     }
   },
   "profiles": {

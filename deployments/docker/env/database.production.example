@@ -1,0 +1,13 @@
+# External PostgreSQL reference — production (ENVIRONMENT_SPEC §7.1).
+# External production should prefer password files over inline secrets.
+
+SDKWORK_DATABASE_ENGINE=postgresql
+SDKWORK_DATABASE_HOST=db.example.com
+SDKWORK_DATABASE_PORT=5432
+SDKWORK_DATABASE_NAME=sdkwork_ai_prod
+SDKWORK_DATABASE_SCHEMA=sdkwork_ai_prod
+SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC=false
+SDKWORK_DATABASE_USERNAME=sdkwork_ai_prod
+SDKWORK_DATABASE_PASSWORD_FILE=/etc/sdkwork/webserver/secrets/database.secret
+SDKWORK_DATABASE_SSL_MODE=require
+SDKWORK_DATABASE_MAX_CONNECTIONS=20

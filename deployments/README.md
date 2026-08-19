@@ -6,7 +6,7 @@ remains `sdkwork-web`; topology and deployment identity follow the repository na
 | Path | Purpose |
 | --- | --- |
 | `deploy.yaml` | Deploy v2 authority for cloud and standalone production profiles |
-| `docker/` | Minimal image assembled from a verified release bundle |
+| `docker/` | Standalone WSL multi-environment compose stacks and cloud website image contract |
 | `kubernetes/` | Digest-bound cloud workload, service, migration, and disruption contracts |
 
 `cloud.production` uses an immutable container image on Kubernetes and starts only the website

@@ -1,0 +1,3 @@
+# Local operator overrides — do not commit.
+*.env
+!*.example

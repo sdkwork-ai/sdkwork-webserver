@@ -1,35 +1,56 @@
-# SDKWork Web Server Container Image
+# SDKWork Web Server Container Images
 
-The image is built only from the verified `sdkwork-webserver/` directory extracted from an immutable release archive. The Docker build must not use the repository source tree as its context.
+Reference: `sdkwork-api-cloud-gateway` (`docker-compose.yml` + `docker-compose.external.yml`).
 
-The repository currently provides this validated build contract but does not enable a container
-workflow target or registry publication. The commands below are an operator procedure, not evidence
-that an image has been published.
+## Dependency Modes
 
-```powershell
-pnpm release:package:cloud
-pnpm release:validate:cloud
+| Mode | Command | PostgreSQL | Redis |
+| --- | --- | --- | --- |
+| ① Built-in | `bash scripts/docker/deploy-docker-environment.sh development` | compose `postgres:16-alpine` | compose `redis:8-alpine` |
+| ② External | `... development --external` | `WEBSERVER_POSTGRES_HOST` | `WEBSERVER_REDIS_HOST` |
+| ③ Shared built-in (all envs) | `... all --embedded-shared` | one postgres | one redis |
 
-$archive = Get-ChildItem dist/release/sdkwork-webserver-linux-*-cloud-server-*.tar.gz | Select-Object -First 1
-$context = ".sdkwork/runtime/container-context"
-New-Item -ItemType Directory -Force $context | Out-Null
-tar -xzf $archive.FullName -C $context
-docker build --pull --file deployments/docker/Dockerfile --tag registry.sdkwork.com/apps/sdkwork-webserver:0.1.0 "$context/sdkwork-webserver"
+Operator guide: [docs/guides/operator/WSL_DOCKER_DEPLOY.md](../../docs/guides/operator/WSL_DOCKER_DEPLOY.md)
+
+## File Layout
+
+| Path | Purpose |
+| --- | --- |
+| `docker-compose.yml` | Built-in postgres + redis + profiled gateway services |
+| `docker-compose.external.yml` | Disables built-in deps, requires external hosts |
+| `env/<environment>.env.example` | Per-environment deployment template |
+| `postgres/init/` | Built-in multi-identity bootstrap |
+| `postgres/external-schema.sql` | External postgres schema provisioning |
+| `nginx/*.conf` | WSL host `:80` domain routing |
+| `scripts/` | Container entrypoint |
+
+## Quick Start (WSL)
+
+```bash
+pnpm docker:build:standalone
+cp deployments/docker/env/development.env.example deployments/docker/env/development.env
+bash scripts/docker/deploy-docker-environment.sh development --validate
+sudo bash deployments/docker/scripts/install-wsl-nginx.sh
+sudo bash deployments/docker/scripts/install-wsl-hosts.sh
+curl http://server-dev.sdkwork.com/healthz
 ```
 
-The extracted bundle contains the runtime binaries, application manifest, configuration schema, examples, and database lifecycle authority. Runtime credentials are injected by the deployment platform; no secret or mutable database state is copied into the image.
+## Verification
 
-Before deployment, publish the image, resolve its registry `sha256` digest, verify provenance/signature/SBOM evidence, and render Kubernetes manifests with that digest. Mutable tags such as `latest` are not accepted as deployment identity.
+```bash
+pnpm check:container-deployment
+pnpm test:container-deployment
+node scripts/docker/validate-docker-deployment.mjs --matrix --compose
+```
 
-The cloud image starts `sdkwork-web-server-website-delivery-edge-runtime`, executes as uid/gid
-`10001`, and listens for website traffic on port `8080`. The image filesystem is immutable at
-runtime; Kubernetes supplies `/tmp`, a node-specific protected recovery volume, and secret-file
-credentials. The application standalone gateway remains a packaged standalone-profile binary and
-is not the cloud image entrypoint.
+## Port And Domain Matrix
 
-The packaged `/app/etc/data-plane/website.cloud.config.json` is a fail-closed base policy and trusts
-no forwarding headers. A container placed behind an external TLS terminator must mount a
-compiler-validated environment-specific config at `/etc/sdkwork/webserver/sdkwork.webserver.config.json`,
-set `SDKWORK_WEBSERVER_SERVER_CONFIG_FILE` to that path, and list only the terminator's direct peer CIDRs
-under `listeners[].trustedProxy.trustedCidrs`. The Kubernetes renderer performs this materialization;
-setting a universal trusted network is forbidden.
+| Environment | Host port | Domains | DB identity | Redis DB |
+| --- | --- | --- | --- | --- |
+| development | 13800 | `server-dev.*` | `sdkwork_ai_dev` | 0 |
+| test | 18888 | `server-test.*` | `sdkwork_ai_test` | 1 |
+| production | 18080 | `server.*` | `sdkwork_ai_prod` | 2 |
+
+## Cloud Website Image
+
+Unchanged — see previous section in git history / `Dockerfile` for Kubernetes website data-plane.

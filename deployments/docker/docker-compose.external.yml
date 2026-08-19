@@ -1,0 +1,87 @@
+# sdkwork-webserver external-dependency mode override.
+#
+# Modes (choose via deployments/docker/.env):
+#
+#   ② Remote managed services — PostgreSQL/Redis already exist outside compose:
+#        WEBSERVER_POSTGRES_HOST=db.internal.example.com
+#        WEBSERVER_REDIS_HOST=redis.internal.example.com
+#
+#   ③ Ubuntu host-native services — apt-installed postgresql/redis-server on the
+#      docker host, reached through host.docker.internal:
+#        WEBSERVER_POSTGRES_HOST=host.docker.internal
+#        WEBSERVER_REDIS_HOST=host.docker.internal
+#
+# Mode ① (built-in postgres/redis containers) is the default:
+#   docker compose -f deployments/docker/docker-compose.yml --profile development up -d
+#
+# External mode:
+#   docker compose -f deployments/docker/docker-compose.yml \
+#     -f deployments/docker/docker-compose.external.yml \
+#     --profile development up -d
+#
+# Provision external PostgreSQL with deployments/docker/postgres/external-schema.sql
+# per environment (`-v db=sdkwork_ai_dev|sdkwork_ai_test|sdkwork_ai_prod`).
+
+services:
+  postgres:
+    profiles: ["external-disabled"]
+
+  redis:
+    profiles: ["external-disabled"]
+
+  webserver-development:
+    depends_on: !reset []
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:?WEBSERVER_POSTGRES_HOST is required in external mode}
+      SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
+      SDKWORK_DATABASE_NAME: ${WEBSERVER_POSTGRES_DEV_DB:?WEBSERVER_POSTGRES_DEV_DB is required in external mode}
+      SDKWORK_DATABASE_SCHEMA: ${WEBSERVER_POSTGRES_DEV_DB:?WEBSERVER_POSTGRES_DEV_DB is required in external mode}
+      SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_DEV_USER:?WEBSERVER_POSTGRES_DEV_USER is required in external mode}
+      SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_DEV_PASSWORD:-}
+      SDKWORK_DATABASE_PASSWORD_FILE: ${WEBSERVER_POSTGRES_DEV_PASSWORD_FILE:-}
+      SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-disable}
+      SDKWORK_WEBSERVER_REDIS_HOST: ${WEBSERVER_REDIS_HOST:?WEBSERVER_REDIS_HOST is required in external mode}
+      SDKWORK_WEBSERVER_REDIS_PORT: ${WEBSERVER_REDIS_PORT:-6379}
+      SDKWORK_WEBSERVER_REDIS_PASSWORD: ${WEBSERVER_REDIS_PASSWORD:-}
+      SDKWORK_WEBSERVER_REDIS_PASSWORD_FILE: ${WEBSERVER_REDIS_PASSWORD_FILE:-}
+      SDKWORK_WEBSERVER_REDIS_TLS: ${WEBSERVER_REDIS_TLS:-false}
+
+  webserver-test:
+    depends_on: !reset []
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:?WEBSERVER_POSTGRES_HOST is required in external mode}
+      SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
+      SDKWORK_DATABASE_NAME: ${WEBSERVER_POSTGRES_TEST_DB:?WEBSERVER_POSTGRES_TEST_DB is required in external mode}
+      SDKWORK_DATABASE_SCHEMA: ${WEBSERVER_POSTGRES_TEST_DB:?WEBSERVER_POSTGRES_TEST_DB is required in external mode}
+      SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_TEST_USER:?WEBSERVER_POSTGRES_TEST_USER is required in external mode}
+      SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_TEST_PASSWORD:-}
+      SDKWORK_DATABASE_PASSWORD_FILE: ${WEBSERVER_POSTGRES_TEST_PASSWORD_FILE:-}
+      SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-disable}
+      SDKWORK_WEBSERVER_REDIS_HOST: ${WEBSERVER_REDIS_HOST:?WEBSERVER_REDIS_HOST is required in external mode}
+      SDKWORK_WEBSERVER_REDIS_PORT: ${WEBSERVER_REDIS_PORT:-6379}
+      SDKWORK_WEBSERVER_REDIS_PASSWORD: ${WEBSERVER_REDIS_PASSWORD:-}
+      SDKWORK_WEBSERVER_REDIS_PASSWORD_FILE: ${WEBSERVER_REDIS_PASSWORD_FILE:-}
+      SDKWORK_WEBSERVER_REDIS_TLS: ${WEBSERVER_REDIS_TLS:-false}
+
+  webserver-production:
+    depends_on: !reset []
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:?WEBSERVER_POSTGRES_HOST is required in external mode}
+      SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
+      SDKWORK_DATABASE_NAME: ${WEBSERVER_POSTGRES_PROD_DB:?WEBSERVER_POSTGRES_PROD_DB is required in external mode}
+      SDKWORK_DATABASE_SCHEMA: ${WEBSERVER_POSTGRES_PROD_DB:?WEBSERVER_POSTGRES_PROD_DB is required in external mode}
+      SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_PROD_USER:?WEBSERVER_POSTGRES_PROD_USER is required in external mode}
+      SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_PROD_PASSWORD:-}
+      SDKWORK_DATABASE_PASSWORD_FILE: ${WEBSERVER_POSTGRES_PROD_PASSWORD_FILE:-}
+      SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-require}
+      SDKWORK_WEBSERVER_REDIS_HOST: ${WEBSERVER_REDIS_HOST:?WEBSERVER_REDIS_HOST is required in external mode}
+      SDKWORK_WEBSERVER_REDIS_PORT: ${WEBSERVER_REDIS_PORT:-6379}
+      SDKWORK_WEBSERVER_REDIS_PASSWORD: ${WEBSERVER_REDIS_PASSWORD:-}
+      SDKWORK_WEBSERVER_REDIS_PASSWORD_FILE: ${WEBSERVER_REDIS_PASSWORD_FILE:-}
+      SDKWORK_WEBSERVER_REDIS_TLS: ${WEBSERVER_REDIS_TLS:-true}
