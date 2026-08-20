@@ -71,6 +71,32 @@ public class ApplicationApi {
         return client.convertValue(raw, new TypeReference<ApplicationsPauseResponse>() {});
     }
 
+    /** 获取应用平台目标列表 */
+    public ApplicationsPlatformTargetsListResponse applicationsPlatformTargetsList(String applicationId, Integer page, Integer pageSize) throws Exception {
+        String query = buildQueryString(List.of(
+            new QueryParameterSpec("page", page, "form", true, false, null),
+            new QueryParameterSpec("page_size", pageSize, "form", true, false, null)
+        ));
+        Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/platform_targets"), query));
+        return client.convertValue(raw, new TypeReference<ApplicationsPlatformTargetsListResponse>() {});
+    }
+
+    /** 创建应用平台目标 */
+    public ApplicationsPlatformTargetsCreateResponse201 applicationsPlatformTargetsCreate(String applicationId, CreatePlatformTargetRequest body, String idempotencyKey) throws Exception {
+        Map<String, String> requestHeaders = buildRequestHeaders(
+                Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
+                Map.of()
+        );
+        Object raw = client.post(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/platform_targets"), body, null, requestHeaders, "application/json");
+        return client.convertValue(raw, new TypeReference<ApplicationsPlatformTargetsCreateResponse201>() {});
+    }
+
+    /** 获取应用平台目标详情 */
+    public ApplicationsPlatformTargetsRetrieveResponse applicationsPlatformTargetsRetrieve(String applicationId, String platformTargetId) throws Exception {
+        Object raw = client.get(ApiPaths.appPath("/applications/" + serializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false)) + "/platform_targets/" + serializePathParameter(platformTargetId, new PathParameterSpec("platformTargetId", "simple", false)) + ""));
+        return client.convertValue(raw, new TypeReference<ApplicationsPlatformTargetsRetrieveResponse>() {});
+    }
+
     private record PathParameterSpec(String name, String style, boolean explode) {}
 
     private static String serializePathParameter(Object value, PathParameterSpec spec) {

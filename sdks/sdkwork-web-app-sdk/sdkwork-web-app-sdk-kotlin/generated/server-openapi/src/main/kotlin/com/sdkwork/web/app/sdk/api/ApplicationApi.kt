@@ -69,6 +69,34 @@ class ApplicationApi(private val client: HttpClient) {
         return client.convertValue(raw, object : TypeReference<ApplicationsPauseResponse>() {})
     }
 
+    /** 获取应用平台目标列表 */
+    suspend fun applicationsPlatformTargetsList(applicationId: String, page: Int? = null, pageSize: Int? = null): ApplicationsPlatformTargetsListResponse? {
+        val query = buildQueryString(listOf(
+            QueryParameterSpec("page", page, "form", true, false, null),
+            QueryParameterSpec("page_size", pageSize, "form", true, false, null)
+        ))
+        val raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/applications/${serializePathParameter(applicationId, PathParameterSpec("applicationId", "simple", false))}/platform_targets"), query))
+        return client.convertValue(raw, object : TypeReference<ApplicationsPlatformTargetsListResponse>() {})
+    }
+
+    /** 创建应用平台目标 */
+    suspend fun applicationsPlatformTargetsCreate(applicationId: String, body: CreatePlatformTargetRequest, idempotencyKey: String): ApplicationsPlatformTargetsCreateResponse201? {
+        val requestHeaders = buildRequestHeaders(
+            mapOf(
+                "Idempotency-Key" to HeaderParameterSpec(idempotencyKey, "simple", false, null),
+            ),
+            emptyMap()
+        )
+        val raw = client.post(ApiPaths.appPath("/applications/${serializePathParameter(applicationId, PathParameterSpec("applicationId", "simple", false))}/platform_targets"), body, null, requestHeaders, "application/json")
+        return client.convertValue(raw, object : TypeReference<ApplicationsPlatformTargetsCreateResponse201>() {})
+    }
+
+    /** 获取应用平台目标详情 */
+    suspend fun applicationsPlatformTargetsRetrieve(applicationId: String, platformTargetId: String): ApplicationsPlatformTargetsRetrieveResponse? {
+        val raw = client.get(ApiPaths.appPath("/applications/${serializePathParameter(applicationId, PathParameterSpec("applicationId", "simple", false))}/platform_targets/${serializePathParameter(platformTargetId, PathParameterSpec("platformTargetId", "simple", false))}"))
+        return client.convertValue(raw, object : TypeReference<ApplicationsPlatformTargetsRetrieveResponse>() {})
+    }
+
     private data class PathParameterSpec(val name: String, val style: String, val explode: Boolean)
 
     private fun serializePathParameter(value: Any?, spec: PathParameterSpec): String {

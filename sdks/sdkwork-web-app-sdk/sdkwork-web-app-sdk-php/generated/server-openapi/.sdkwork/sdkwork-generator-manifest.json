@@ -12,7 +12,7 @@
   "generatedFiles": [
     {
       "path": "bin/publish-core.mjs",
-      "sha256": "98ad0918a78bfbe22bf8f12fec709b0bed545b9e01edd40f5e4abf31a23378a5"
+      "sha256": "a47e95119bf3eafcbcb2102f7024c147f967924e4e3f343d1a29effb4b6765df"
     },
     {
       "path": "bin/publish.ps1",
@@ -44,7 +44,7 @@
     },
     {
       "path": "src/Api/Application.php",
-      "sha256": "6d8119a87972c62c5f5f5f5673fc7539cef166fba0d32c7f5c7ac7c2b5bc200c"
+      "sha256": "b27e6eda7e6d8c56e9a2474d011a863551cb8c38f8990f6adca199743ff5d04b"
     },
     {
       "path": "src/Api/BaseApi.php",
@@ -84,7 +84,7 @@
     },
     {
       "path": "src/Models/ApplicationResponse.php",
-      "sha256": "acff889bdf1be63c030b987bb087ab1c5a4eeff201729d8aaa40b1d36ac6cd9a"
+      "sha256": "c9fd9e566dd6faadddc527d5bf90a6203c5f2f75219f309e64354b79d8a12243"
     },
     {
       "path": "src/Models/ApplicationsActivateResponse.php",
@@ -163,6 +163,18 @@
       "sha256": "f23c6b45727231244110f49ab20fe496ef2c29e79648e754a4fd78bfb0693093"
     },
     {
+      "path": "src/Models/ApplicationsPlatformTargetsCreateResponse201.php",
+      "sha256": "a29e0a0361a84c07334916d34bfad5adc05d2a41a8c5e94b1e67acf80adec28a"
+    },
+    {
+      "path": "src/Models/ApplicationsPlatformTargetsListResponse.php",
+      "sha256": "830ebbb7e7f7e040a45bb149229f63a7cd563800a0d6c4dfec9aded1d476b1a3"
+    },
+    {
+      "path": "src/Models/ApplicationsPlatformTargetsRetrieveResponse.php",
+      "sha256": "3fe4a2a22c6ed111c53f18556b37c6dd8ffb2edc145892c45992049cbe2751a5"
+    },
+    {
       "path": "src/Models/ApplicationsRetrieveResponse.php",
       "sha256": "010bbd8ffc6c5cc5c0792a9af7153bd825a436d2700e25984ccb520290bced4f"
     },
@@ -196,7 +208,7 @@
     },
     {
       "path": "src/Models/CreateApplicationRequest.php",
-      "sha256": "835bfc03e8d11d50313de8383fb71114283f77d13653624f0bff63e63857c93b"
+      "sha256": "1a64975f553d07d9ec1f3ee7357b29a985f60ea4f772db7d27c8ff17b7caa35b"
     },
     {
       "path": "src/Models/CreateDeploymentRequest.php",
@@ -217,6 +229,10 @@
     {
       "path": "src/Models/CreateListenerCertificateBindingRequest.php",
       "sha256": "fb3872e949c6762c1931fb47ef6de4a35d9dfce5f23071c6f1176e7b55e17238"
+    },
+    {
+      "path": "src/Models/CreatePlatformTargetRequest.php",
+      "sha256": "a78ef924313fb9883bf125adcbc6bd39710a8fde2b672349f258e95c353da909"
     },
     {
       "path": "src/Models/CreateSourceVersionRequest.php",
@@ -289,6 +305,10 @@
     {
       "path": "src/Models/PageInfo.php",
       "sha256": "bf1eb8fbc57cb21a5290aff2298cfda5e64be5671b440d586304cbace1e81a75"
+    },
+    {
+      "path": "src/Models/PlatformTargetResponse.php",
+      "sha256": "0c866ccd805a6cfaa3cd379504a238033521d60326a902b1383d8d3f6a039755"
     },
     {
       "path": "src/Models/ProblemDetail.php",

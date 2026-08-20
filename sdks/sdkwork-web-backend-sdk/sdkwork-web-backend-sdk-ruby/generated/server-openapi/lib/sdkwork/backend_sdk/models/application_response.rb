@@ -2,7 +2,7 @@ module Sdkwork
   module BackendSdk
     module Models
       class ApplicationResponse
-              attr_accessor :id, :name, :slug, :description, :application_type, :site_type, :status, :runtime_config, :store_listing, :created_at, :updated_at
+              attr_accessor :id, :name, :slug, :description, :app_kind, :site_type, :status, :runtime_config, :store_listing, :created_at, :updated_at
 
               def initialize(attributes = {})
                 attributes = (attributes || {}).transform_keys(&:to_s)
@@ -10,7 +10,7 @@ module Sdkwork
                 @name = attributes['name']
                 @slug = attributes['slug']
                 @description = attributes['description']
-                @application_type = attributes['applicationType']
+                @app_kind = attributes['appKind']
                 @site_type = attributes['siteType']
                 @status = attributes['status']
                 @runtime_config = attributes['runtimeConfig'].is_a?(Hash) ? attributes['runtimeConfig'] : {}
@@ -31,7 +31,7 @@ module Sdkwork
                   'name' => @name,
                   'slug' => @slug,
                   'description' => @description,
-                  'applicationType' => @application_type,
+                  'appKind' => @app_kind,
                   'siteType' => @site_type,
                   'status' => @status,
                   'runtimeConfig' => @runtime_config,

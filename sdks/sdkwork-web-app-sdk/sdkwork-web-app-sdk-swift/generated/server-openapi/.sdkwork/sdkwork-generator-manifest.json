@@ -12,7 +12,7 @@
   "generatedFiles": [
     {
       "path": "bin/publish-core.mjs",
-      "sha256": "98ad0918a78bfbe22bf8f12fec709b0bed545b9e01edd40f5e4abf31a23378a5"
+      "sha256": "a47e95119bf3eafcbcb2102f7024c147f967924e4e3f343d1a29effb4b6765df"
     },
     {
       "path": "bin/publish.ps1",
@@ -52,7 +52,7 @@
     },
     {
       "path": "Sources/API/ApplicationApi.swift",
-      "sha256": "d2497b0dc6550cb2addcedd81989525695e2f0ab7bfc5f4bc9b3c18bbd682000"
+      "sha256": "907dd4c26006d1a1f4c44022e71329ccb2202878b55ee7d345782778efc9672f"
     },
     {
       "path": "Sources/API/CertificateApi.swift",
@@ -84,7 +84,7 @@
     },
     {
       "path": "Sources/Models.swift",
-      "sha256": "8f83ab8f38fa7c807082869ec70d20b90ae299a7734589ce49076d97941964ae"
+      "sha256": "b0e8d11a7325fa602902cd9be8bb326308177cd1e78af2e06b739398d4926333"
     },
     {
       "path": "Sources/SdkworkAppClient.swift",

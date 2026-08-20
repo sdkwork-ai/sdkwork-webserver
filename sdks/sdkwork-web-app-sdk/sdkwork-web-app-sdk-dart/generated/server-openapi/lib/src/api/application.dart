@@ -91,6 +91,44 @@ class ApplicationApi {
       return map == null ? null : ApplicationsPauseResponse.fromJson(map);
     })();
   }
+
+  /// 获取应用平台目标列表
+  Future<ApplicationsPlatformTargetsListResponse?> applicationsPlatformTargetsList(String applicationId, [int? page, int? pageSize]) async {
+    final query = buildQueryString([
+      QueryParameterSpec('page', page, 'form', true, false, null),
+      QueryParameterSpec('page_size', pageSize, 'form', true, false, null)
+    ]);
+    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/platform_targets'), query));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ApplicationsPlatformTargetsListResponse.fromJson(map);
+    })();
+  }
+
+  /// 创建应用平台目标
+  Future<ApplicationsPlatformTargetsCreateResponse201?> applicationsPlatformTargetsCreate(String applicationId, CreatePlatformTargetRequest body, String idempotencyKey) async {
+    final requestHeaders = buildRequestHeaders(
+      <String, HeaderParameterSpec>{
+        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
+      },
+      <String, HeaderParameterSpec>{},
+    );
+    final payload = body.toJson();
+    final response = await _client.post(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/platform_targets'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ApplicationsPlatformTargetsCreateResponse201.fromJson(map);
+    })();
+  }
+
+  /// 获取应用平台目标详情
+  Future<ApplicationsPlatformTargetsRetrieveResponse?> applicationsPlatformTargetsRetrieve(String applicationId, String platformTargetId) async {
+    final response = await _client.get(ApiPaths.appPath('/applications/${serializePathParameter(applicationId, const PathParameterSpec('applicationId', 'simple', false))}/platform_targets/${serializePathParameter(platformTargetId, const PathParameterSpec('platformTargetId', 'simple', false))}'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ApplicationsPlatformTargetsRetrieveResponse.fromJson(map);
+    })();
+  }
 }
 
 class PathParameterSpec {

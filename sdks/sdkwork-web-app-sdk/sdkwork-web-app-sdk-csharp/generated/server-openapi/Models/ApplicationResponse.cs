@@ -11,7 +11,7 @@ namespace SDKWork.Web.AppSdk.Models
         public string? Slug { get; set; }
         public string? Description { get; set; }
         public string? SiteId { get; set; }
-        public string? ApplicationType { get; set; }
+        public string? AppKind { get; set; }
         public int? SiteType { get; set; }
         public int? Status { get; set; }
         public Dictionary<string, object>? RuntimeConfig { get; set; }

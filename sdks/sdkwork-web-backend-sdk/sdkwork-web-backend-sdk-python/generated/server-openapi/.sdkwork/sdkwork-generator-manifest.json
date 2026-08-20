@@ -12,7 +12,7 @@
   "generatedFiles": [
     {
       "path": "bin/publish-core.mjs",
-      "sha256": "98ad0918a78bfbe22bf8f12fec709b0bed545b9e01edd40f5e4abf31a23378a5"
+      "sha256": "a47e95119bf3eafcbcb2102f7024c147f967924e4e3f343d1a29effb4b6765df"
     },
     {
       "path": "bin/publish.ps1",
@@ -108,7 +108,7 @@
     },
     {
       "path": "sdkwork_web_backend_sdk/models/__init__.py",
-      "sha256": "cd1981f7c3dbb73c849c84e66c5fa32991c7f01ac072fa2a5f1f53b25439aaff"
+      "sha256": "a35ca5786ea4ee071f1bcddb5947c737c266182a382f1d5a2832ca0394d8bdc5"
     },
     {
       "path": "sdkwork_web_backend_sdk/models/agent_certificate_bundle.py",
@@ -144,7 +144,7 @@
     },
     {
       "path": "sdkwork_web_backend_sdk/models/application_response.py",
-      "sha256": "692a9d66ce4f4e40c3082adfc08532e20c89fc5efc9c7708587fe49f66c46ae0"
+      "sha256": "bfd0f937ee9ce72d5780994c73667aae334b4cc45c6226b8ff98ed182bc2c0b8"
     },
     {
       "path": "sdkwork_web_backend_sdk/models/application_source_version_config_snapshot.py",
@@ -320,7 +320,7 @@
     },
     {
       "path": "sdkwork_web_backend_sdk/models/create_application_request.py",
-      "sha256": "5b01fa5c711c9d86d6c19d030873b4a44f6685188ffd5afa17af62e00af85a5d"
+      "sha256": "895707211b4524ccf356d20ebc3dc7e13701131b1a882a6d8f78b357973e6c5d"
     },
     {
       "path": "sdkwork_web_backend_sdk/models/create_application_source_version_request.py",
@@ -337,6 +337,10 @@
     {
       "path": "sdkwork_web_backend_sdk/models/create_nginx_config_request.py",
       "sha256": "12b1f48a1c81453110f8a12abe521b08416d16a5b516000150104fa3914d7745"
+    },
+    {
+      "path": "sdkwork_web_backend_sdk/models/create_platform_target_request.py",
+      "sha256": "66038c413acd556226dc5cd23592fd7e9930802ac7f5f138d4e19a134df8494c"
     },
     {
       "path": "sdkwork_web_backend_sdk/models/create_root_domain_hostname_request.py",
@@ -437,6 +441,10 @@
     {
       "path": "sdkwork_web_backend_sdk/models/page_info.py",
       "sha256": "0f81129ea8bcb4251c3d8bdd788be210051c6f1a3535fd18cf770bca14fdfd13"
+    },
+    {
+      "path": "sdkwork_web_backend_sdk/models/platform_target_response.py",
+      "sha256": "8df70ff854ed9bd618403a897a2583b15734cd5bf97e9a2a1da14028353fae72"
     },
     {
       "path": "sdkwork_web_backend_sdk/models/problem_detail.py",

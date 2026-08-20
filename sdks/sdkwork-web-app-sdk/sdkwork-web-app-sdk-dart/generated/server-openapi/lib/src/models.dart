@@ -183,6 +183,153 @@ class MediaResource {
   }
 }
 
+class PlatformTargetResponse {
+  final String? id;
+  final String? appId;
+  final String? targetKey;
+  final String? platform;
+  final String? techStack;
+  final List<String>? architectures;
+  final String? bundleId;
+  final String? packageName;
+  final String? appIdValue;
+  final String? bundleName;
+  final String? targetStatus;
+  final String? createdAt;
+  final String? updatedAt;
+
+  PlatformTargetResponse({
+    this.id,
+    this.appId,
+    this.targetKey,
+    this.platform,
+    this.techStack,
+    this.architectures,
+    this.bundleId,
+    this.packageName,
+    this.appIdValue,
+    this.bundleName,
+    this.targetStatus,
+    this.createdAt,
+    this.updatedAt
+  });
+
+  factory PlatformTargetResponse.fromJson(Map<String, dynamic> json) {
+    return PlatformTargetResponse(
+      id: json['id']?.toString(),
+      appId: json['appId']?.toString(),
+      targetKey: json['targetKey']?.toString(),
+      platform: json['platform']?.toString(),
+      techStack: json['techStack']?.toString(),
+      architectures: (() {
+        final list = _sdkworkAsList(json['architectures']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      bundleId: json['bundleId']?.toString(),
+      packageName: json['packageName']?.toString(),
+      appIdValue: json['appIdValue']?.toString(),
+      bundleName: json['bundleName']?.toString(),
+      targetStatus: json['targetStatus']?.toString(),
+      createdAt: json['createdAt']?.toString(),
+      updatedAt: json['updatedAt']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'appId': appId,
+      'targetKey': targetKey,
+      'platform': platform,
+      'techStack': techStack,
+      'architectures': architectures?.map((item) => item).toList(),
+      'bundleId': bundleId,
+      'packageName': packageName,
+      'appIdValue': appIdValue,
+      'bundleName': bundleName,
+      'targetStatus': targetStatus,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
+    };
+  }
+}
+
+class CreatePlatformTargetRequest {
+  final String? targetKey;
+  final String? platform;
+  final String? techStack;
+  final List<String>? architectures;
+  final String? bundleId;
+  final String? packageName;
+  final String? appId;
+  final String? bundleName;
+  final List<String>? allowedChannels;
+
+  CreatePlatformTargetRequest({
+    this.targetKey,
+    this.platform,
+    this.techStack,
+    this.architectures,
+    this.bundleId,
+    this.packageName,
+    this.appId,
+    this.bundleName,
+    this.allowedChannels
+  });
+
+  factory CreatePlatformTargetRequest.fromJson(Map<String, dynamic> json) {
+    return CreatePlatformTargetRequest(
+      targetKey: json['targetKey']?.toString(),
+      platform: json['platform']?.toString(),
+      techStack: json['techStack']?.toString(),
+      architectures: (() {
+        final list = _sdkworkAsList(json['architectures']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      bundleId: json['bundleId']?.toString(),
+      packageName: json['packageName']?.toString(),
+      appId: json['appId']?.toString(),
+      bundleName: json['bundleName']?.toString(),
+      allowedChannels: (() {
+        final list = _sdkworkAsList(json['allowedChannels']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'targetKey': targetKey,
+      'platform': platform,
+      'techStack': techStack,
+      'architectures': architectures?.map((item) => item).toList(),
+      'bundleId': bundleId,
+      'packageName': packageName,
+      'appId': appId,
+      'bundleName': bundleName,
+      'allowedChannels': allowedChannels?.map((item) => item).toList(),
+    };
+  }
+}
+
 class ApplicationStoreListing {
   final MediaResource? icon;
   final MediaResource? cover;
@@ -274,8 +421,7 @@ class CreateApplicationRequest {
   final String? name;
   final String? slug;
   final String? description;
-  final String? applicationType;
-  final int? siteType;
+  final String? appKind;
   final Map<String, dynamic>? runtimeConfig;
   final ApplicationStoreListing? storeListing;
 
@@ -283,8 +429,7 @@ class CreateApplicationRequest {
     this.name,
     this.slug,
     this.description,
-    this.applicationType,
-    this.siteType,
+    this.appKind,
     this.runtimeConfig,
     this.storeListing
   });
@@ -294,8 +439,7 @@ class CreateApplicationRequest {
       name: json['name']?.toString(),
       slug: json['slug']?.toString(),
       description: json['description']?.toString(),
-      applicationType: json['applicationType']?.toString(),
-      siteType: json['siteType'] is int ? json['siteType'] : null,
+      appKind: json['appKind']?.toString(),
       runtimeConfig: _sdkworkAsMap(json['runtimeConfig']),
       storeListing: (() {
         final map = _sdkworkAsMap(json['storeListing']);
@@ -309,8 +453,7 @@ class CreateApplicationRequest {
       'name': name,
       'slug': slug,
       'description': description,
-      'applicationType': applicationType,
-      'siteType': siteType,
+      'appKind': appKind,
       'runtimeConfig': runtimeConfig,
       'storeListing': storeListing?.toJson(),
     };
@@ -358,7 +501,7 @@ class ApplicationResponse {
   final String? slug;
   final String? description;
   final String? siteId;
-  final String? applicationType;
+  final String? appKind;
   final int? siteType;
   final int? status;
   final Map<String, dynamic>? runtimeConfig;
@@ -372,7 +515,7 @@ class ApplicationResponse {
     this.slug,
     this.description,
     this.siteId,
-    this.applicationType,
+    this.appKind,
     this.siteType,
     this.status,
     this.runtimeConfig,
@@ -388,7 +531,7 @@ class ApplicationResponse {
       slug: json['slug']?.toString(),
       description: json['description']?.toString(),
       siteId: json['siteId']?.toString(),
-      applicationType: json['applicationType']?.toString(),
+      appKind: json['appKind']?.toString(),
       siteType: json['siteType'] is int ? json['siteType'] : null,
       status: json['status'] is int ? json['status'] : null,
       runtimeConfig: _sdkworkAsMap(json['runtimeConfig']),
@@ -408,7 +551,7 @@ class ApplicationResponse {
       'slug': slug,
       'description': description,
       'siteId': siteId,
-      'applicationType': applicationType,
+      'appKind': appKind,
       'siteType': siteType,
       'status': status,
       'runtimeConfig': runtimeConfig,
@@ -2440,6 +2583,90 @@ class DomainsListResponse {
 
   factory DomainsListResponse.fromJson(Map<String, dynamic> json) {
     return DomainsListResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ApplicationsPlatformTargetsListResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  ApplicationsPlatformTargetsListResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory ApplicationsPlatformTargetsListResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsPlatformTargetsListResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ApplicationsPlatformTargetsCreateResponse201 {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  ApplicationsPlatformTargetsCreateResponse201({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory ApplicationsPlatformTargetsCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return ApplicationsPlatformTargetsCreateResponse201(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ApplicationsPlatformTargetsRetrieveResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  ApplicationsPlatformTargetsRetrieveResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory ApplicationsPlatformTargetsRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsPlatformTargetsRetrieveResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()

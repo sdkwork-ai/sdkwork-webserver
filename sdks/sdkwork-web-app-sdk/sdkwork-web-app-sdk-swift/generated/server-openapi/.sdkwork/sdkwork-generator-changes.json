@@ -9,37 +9,34 @@
     "protocol": "http",
     "packageName": "sdkwork-web-app-sdk"
   },
-  "changeFingerprint": "7e336d45a1a3201ae9948b1b0752f91625be80cf8c33e53c4c002500264d7ceb",
+  "changeFingerprint": "32abc481e6b335a4992e84698066183f110f891c1b4c7a087951cd3a59cc412e",
   "changes": {
-    "createdGeneratedFiles": [
-      "Sources/API/ApplicationApi.swift"
-    ],
+    "createdGeneratedFiles": [],
     "updatedGeneratedFiles": [
+      "bin/publish-core.mjs",
+      "Sources/API/ApplicationApi.swift",
+      "Sources/Models.swift"
+    ],
+    "unchangedGeneratedFiles": [
+      "bin/publish.ps1",
+      "bin/publish.sh",
+      "CHANGELOG.md",
+      "LICENSE",
+      "Package.swift",
       "README.md",
+      "sdkwork-sdk.json",
       "Sources/API/API.swift",
+      "Sources/API/ApiPaths.swift",
       "Sources/API/CertificateApi.swift",
       "Sources/API/DeploymentApi.swift",
       "Sources/API/DomainApi.swift",
       "Sources/API/EnvVariableApi.swift",
       "Sources/API/MonitorApi.swift",
       "Sources/API/SourceVersionApi.swift",
-      "Sources/Models.swift",
+      "Sources/HTTP/HttpClient.swift",
       "Sources/SdkworkAppClient.swift"
     ],
-    "unchangedGeneratedFiles": [
-      "bin/publish-core.mjs",
-      "bin/publish.ps1",
-      "bin/publish.sh",
-      "CHANGELOG.md",
-      "LICENSE",
-      "Package.swift",
-      "sdkwork-sdk.json",
-      "Sources/API/ApiPaths.swift",
-      "Sources/HTTP/HttpClient.swift"
-    ],
-    "deletedGeneratedFiles": [
-      "Sources/API/SiteApi.swift"
-    ],
+    "deletedGeneratedFiles": [],
     "scaffoldedFiles": [],
     "preservedScaffoldFiles": [
       "custom/README.md"
@@ -51,22 +48,13 @@
     "areas": [
       "api-surface",
       "models",
-      "documentation",
-      "unknown"
+      "publish-workflow"
     ],
     "details": [
       {
         "area": "api-surface",
         "paths": [
-          "Sources/API/API.swift",
-          "Sources/API/ApplicationApi.swift",
-          "Sources/API/CertificateApi.swift",
-          "Sources/API/DeploymentApi.swift",
-          "Sources/API/DomainApi.swift",
-          "Sources/API/EnvVariableApi.swift",
-          "Sources/API/MonitorApi.swift",
-          "Sources/API/SiteApi.swift",
-          "Sources/API/SourceVersionApi.swift"
+          "Sources/API/ApplicationApi.swift"
         ]
       },
       {
@@ -76,31 +64,25 @@
         ]
       },
       {
-        "area": "documentation",
+        "area": "publish-workflow",
         "paths": [
-          "README.md"
-        ]
-      },
-      {
-        "area": "unknown",
-        "paths": [
-          "Sources/SdkworkAppClient.swift"
+          "bin/publish-core.mjs"
         ]
       }
     ],
     "requiresVerification": true,
-    "summary": "Detected impact areas: api-surface, models, documentation, unknown. Verification is required."
+    "summary": "Detected impact areas: api-surface, models, publish-workflow. Verification is required."
   },
   "verificationPlan": {
     "shouldRun": true,
     "runPhase": "now",
-    "summary": "Detected impact areas: api-surface, models, documentation, unknown. Verification is required. Run the required verification commands now against the generated SDK output.",
+    "summary": "Detected impact areas: api-surface, models, publish-workflow. Verification is required. Run the required verification commands now against the generated SDK output.",
     "steps": [
       {
         "id": "check",
         "title": "Unified package check",
         "required": true,
-        "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, documentation, unknown.",
+        "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, publish-workflow.",
         "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-app-sdk\\sdkwork-web-app-sdk-swift\\generated\\server-openapi",
         "command": "node",
         "args": [
@@ -118,15 +100,12 @@
   },
   "executionDecision": {
     "schemaVersion": 1,
-    "riskLevel": "high",
+    "riskLevel": "medium",
     "nextAction": "verify",
     "requiresManualReview": false,
     "applyRequiresExpectedFingerprint": false,
     "summary": "Changes have been applied. Run the required verification plan now.",
     "reasons": [
-      "deleted-generated-files",
-      "manual-review-required",
-      "unknown-impact",
       "verification-required"
     ]
   },

@@ -12,7 +12,7 @@
   "generatedFiles": [
     {
       "path": "bin/publish-core.mjs",
-      "sha256": "98ad0918a78bfbe22bf8f12fec709b0bed545b9e01edd40f5e4abf31a23378a5"
+      "sha256": "a47e95119bf3eafcbcb2102f7024c147f967924e4e3f343d1a29effb4b6765df"
     },
     {
       "path": "bin/publish.ps1",
@@ -100,7 +100,7 @@
     },
     {
       "path": "Sources/Models.swift",
-      "sha256": "2875f6bebcb360f20f1f392bc2ed4a1a81bbc6742d1f099653dc8c253bc55ff0"
+      "sha256": "4699b4268a6890593146b2ad226e076d975d762a5091a9545507c6b52b7b39eb"
     },
     {
       "path": "Sources/SdkworkBackendClient.swift",

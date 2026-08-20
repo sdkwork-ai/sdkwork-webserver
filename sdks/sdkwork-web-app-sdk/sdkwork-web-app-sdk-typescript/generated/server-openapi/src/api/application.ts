@@ -1,8 +1,51 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { ApplicationResponse, CreateApplicationRequest, PageInfo, UpdateApplicationRequest } from '../types';
+import type { ApplicationResponse, CreateApplicationRequest, CreatePlatformTargetRequest, PageInfo, PlatformTargetResponse, UpdateApplicationRequest } from '../types';
 
+
+export interface ApplicationPlatformTargetsListParams {
+  page?: number;
+  pageSize?: number;
+}
+
+export interface ApplicationPlatformTargetsCreateParams {
+  idempotencyKey: string;
+}
+
+export class ApplicationPlatformTargetsApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** 获取应用平台目标列表 */
+  async list(applicationId: string | number, params?: ApplicationPlatformTargetsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: PlatformTargetResponse[]; pageInfo: PageInfo; }> {
+    const query = buildQueryString([
+      { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
+      { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+    ]);
+    return this.client.request<{ items: PlatformTargetResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/platform_targets`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+  }
+
+/** 创建应用平台目标 */
+  async create(applicationId: string | number, body: CreatePlatformTargetRequest, params: ApplicationPlatformTargetsCreateParams, requestOptions?: ApiRequestOptions): Promise<PlatformTargetResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<PlatformTargetResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/platform_targets`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+
+/** 获取应用平台目标详情 */
+  async retrieve(applicationId: string | number, platformTargetId: string | number, requestOptions?: ApiRequestOptions): Promise<PlatformTargetResponse> {
+    return this.client.request<PlatformTargetResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/platform_targets/${serializePathParameter(platformTargetId, { name: 'platformTargetId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  }
+}
 
 export interface ApplicationListParams {
   page?: number;
@@ -23,9 +66,11 @@ export interface ApplicationUpdateParams {
 
 export class ApplicationApi {
   private client: HttpClient;
+  public readonly platformTargets: ApplicationPlatformTargetsApi;
 
   constructor(client: HttpClient) {
     this.client = client;
+    this.platformTargets = new ApplicationPlatformTargetsApi(client);
   }
 
 
@@ -39,7 +84,7 @@ export class ApplicationApi {
       { name: 'site_type', value: params?.siteType, style: 'form', explode: true, allowReserved: false },
       { name: 'keyword', value: params?.keyword, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.request<{ items: ApplicationResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/applications`), query), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+    return this.client.request<{ items: ApplicationResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/applications`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
 /** 创建应用 */
@@ -50,12 +95,12 @@ export class ApplicationApi {
       },
       {}
     );
-    return this.client.request<ApplicationResponse>(appApiPath(`/applications`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+    return this.client.request<ApplicationResponse>(appApiPath(`/applications`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
 /** 获取应用详情 */
   async retrieve(applicationId: string | number, requestOptions?: ApiRequestOptions): Promise<ApplicationResponse> {
-    return this.client.request<ApplicationResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+    return this.client.request<ApplicationResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 
 /** 更新应用 */
@@ -66,22 +111,22 @@ export class ApplicationApi {
       },
       {}
     );
-    return this.client.request<ApplicationResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'PATCH' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+    return this.client.request<ApplicationResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PATCH' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
 /** 删除应用 */
   async delete(applicationId: string | number, requestOptions?: ApiRequestOptions): Promise<void> {
-    return this.client.request<void>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'DELETE' as any });
+    return this.client.request<void>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
   }
 
 /** 激活应用 */
   async activate(applicationId: string | number, requestOptions?: ApiRequestOptions): Promise<ApplicationResponse> {
-    return this.client.request<ApplicationResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/activate`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, sdkworkUnwrapKind: 'item' });
+    return this.client.request<ApplicationResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/activate`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, sdkworkUnwrapKind: 'item' });
   }
 
 /** 暂停应用 */
   async pause(applicationId: string | number, requestOptions?: ApiRequestOptions): Promise<ApplicationResponse> {
-    return this.client.request<ApplicationResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/pause`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, sdkworkUnwrapKind: 'item' });
+    return this.client.request<ApplicationResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/pause`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, sdkworkUnwrapKind: 'item' });
   }
 }
 

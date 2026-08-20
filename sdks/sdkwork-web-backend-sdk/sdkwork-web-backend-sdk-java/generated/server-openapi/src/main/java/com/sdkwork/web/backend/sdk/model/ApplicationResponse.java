@@ -7,7 +7,7 @@ public class ApplicationResponse {
     private String name;
     private String slug;
     private String description;
-    private String applicationType;
+    private String appKind;
     private Integer siteType;
     private Integer status;
     private Map<String, Object> runtimeConfig;
@@ -47,12 +47,12 @@ public class ApplicationResponse {
         this.description = description;
     }
 
-    public String getApplicationType() {
-        return this.applicationType;
+    public String getAppKind() {
+        return this.appKind;
     }
 
-    public void setApplicationType(String applicationType) {
-        this.applicationType = applicationType;
+    public void setAppKind(String appKind) {
+        this.appKind = appKind;
     }
 
     public Integer getSiteType() {

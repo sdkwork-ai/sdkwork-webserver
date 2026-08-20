@@ -16,9 +16,14 @@ import { fileURLToPath } from 'node:url';
 import { extract as extractTar } from 'tar';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const WORKSPACE_ROOT = path.resolve(REPO_ROOT, '..');
 const DOCKER_ROOT = path.join(REPO_ROOT, 'deployments', 'docker');
 const RELEASE_OUTPUT_ROOT = path.join(REPO_ROOT, 'dist', 'release');
 const STAGE_ROOT = path.join(REPO_ROOT, '.sdkwork', 'runtime', 'docker-standalone-context');
+const EMBEDDED_MODULE_DATABASES = [
+  { repo: 'sdkwork-skills', shareName: 'skills' },
+  { repo: 'sdkwork-mcp', shareName: 'mcp' },
+];
 
 function appVersion() {
   const manifest = JSON.parse(
@@ -153,6 +158,22 @@ async function stageContext(settings) {
     throw new Error(`release archive did not contain sdkwork-webserver/: ${archive}`);
   }
   copyTree(bundleRoot, STAGE_ROOT);
+  const repoDatabase = path.join(REPO_ROOT, 'database');
+  if (existsSync(repoDatabase)) {
+    copyTree(repoDatabase, path.join(STAGE_ROOT, 'database'));
+  }
+  for (const module of EMBEDDED_MODULE_DATABASES) {
+    const databaseSource = path.join(WORKSPACE_ROOT, module.repo, 'database');
+    if (!existsSync(databaseSource)) {
+      throw new Error(
+        `missing ${module.repo} database module at ${databaseSource}; clone sibling repo before building the standalone image`,
+      );
+    }
+    copyTree(
+      databaseSource,
+      path.join(STAGE_ROOT, 'share', 'sdkwork', module.shareName, 'database'),
+    );
+  }
   writeFileSync(
     path.join(STAGE_ROOT, 'entrypoint-standalone.sh'),
     readFileSync(path.join(DOCKER_ROOT, 'scripts', 'entrypoint-standalone.sh')),
@@ -189,7 +210,7 @@ async function main() {
     console.log(`docker ${buildArgs.join(' ')}`);
     return;
   }
-  run('docker', buildArgs);
+  run('docker', buildArgs.filter((arg) => arg !== '--pull'));
   console.log(`built ${plan.image}`);
 }
 

@@ -317,6 +317,165 @@ class MediaResource {
   }
 }
 
+class PlatformTargetResponse {
+  final String? id;
+  final String? appId;
+  final String? targetKey;
+  final String? platform;
+  final String? techStack;
+  final List<String>? architectures;
+  final String? bundleId;
+  final String? packageName;
+  final String? appIdValue;
+  final String? bundleName;
+  final String? targetStatus;
+  final String? createdAt;
+  final String? updatedAt;
+
+  PlatformTargetResponse({
+    this.id,
+    this.appId,
+    this.targetKey,
+    this.platform,
+    this.techStack,
+    this.architectures,
+    this.bundleId,
+    this.packageName,
+    this.appIdValue,
+    this.bundleName,
+    this.targetStatus,
+    this.createdAt,
+    this.updatedAt
+  });
+
+  factory PlatformTargetResponse.fromJson(Map<String, dynamic> json) {
+    return PlatformTargetResponse(
+      id: json['id']?.toString(),
+      appId: json['appId']?.toString(),
+      targetKey: json['targetKey']?.toString(),
+      platform: json['platform']?.toString(),
+      techStack: json['techStack']?.toString(),
+      architectures: (() {
+        final list = _sdkworkAsList(json['architectures']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      bundleId: json['bundleId']?.toString(),
+      packageName: json['packageName']?.toString(),
+      appIdValue: json['appIdValue']?.toString(),
+      bundleName: json['bundleName']?.toString(),
+      targetStatus: json['targetStatus']?.toString(),
+      createdAt: json['createdAt']?.toString(),
+      updatedAt: json['updatedAt']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'appId': appId,
+      'targetKey': targetKey,
+      'platform': platform,
+      'techStack': techStack,
+      'architectures': architectures?.map((item) => item).toList(),
+      'bundleId': bundleId,
+      'packageName': packageName,
+      'appIdValue': appIdValue,
+      'bundleName': bundleName,
+      'targetStatus': targetStatus,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
+    };
+  }
+}
+
+class CreatePlatformTargetRequest {
+  final String targetKey;
+  final String platform;
+  final String? techStack;
+  final List<String>? architectures;
+  final String? bundleId;
+  final String? packageName;
+  final String? appId;
+  final String? bundleName;
+  final List<String>? allowedChannels;
+
+  CreatePlatformTargetRequest({
+    required this.targetKey,
+    required this.platform,
+    this.techStack,
+    this.architectures,
+    this.bundleId,
+    this.packageName,
+    this.appId,
+    this.bundleName,
+    this.allowedChannels
+  });
+
+  factory CreatePlatformTargetRequest.fromJson(Map<String, dynamic> json) {
+    return CreatePlatformTargetRequest(
+      targetKey: (() {
+        final value = json['targetKey']?.toString();
+        if (value == null) {
+          throw FormatException('CreatePlatformTargetRequest.targetKey is required');
+        }
+        return value;
+      })(),
+      platform: (() {
+        final value = json['platform']?.toString();
+        if (value == null) {
+          throw FormatException('CreatePlatformTargetRequest.platform is required');
+        }
+        return value;
+      })(),
+      techStack: json['techStack']?.toString(),
+      architectures: (() {
+        final list = _sdkworkAsList(json['architectures']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      bundleId: json['bundleId']?.toString(),
+      packageName: json['packageName']?.toString(),
+      appId: json['appId']?.toString(),
+      bundleName: json['bundleName']?.toString(),
+      allowedChannels: (() {
+        final list = _sdkworkAsList(json['allowedChannels']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'targetKey': targetKey,
+      'platform': platform,
+      'techStack': techStack,
+      'architectures': architectures?.map((item) => item).toList(),
+      'bundleId': bundleId,
+      'packageName': packageName,
+      'appId': appId,
+      'bundleName': bundleName,
+      'allowedChannels': allowedChannels?.map((item) => item).toList(),
+    };
+  }
+}
+
 class ApplicationStoreListing {
   final MediaResource? icon;
   final MediaResource? cover;
@@ -408,8 +567,7 @@ class CreateApplicationRequest {
   final String name;
   final String? slug;
   final String? description;
-  final String applicationType;
-  final int siteType;
+  final String appKind;
   final Map<String, dynamic>? runtimeConfig;
   final ApplicationStoreListing? storeListing;
 
@@ -417,8 +575,7 @@ class CreateApplicationRequest {
     required this.name,
     this.slug,
     this.description,
-    required this.applicationType,
-    required this.siteType,
+    required this.appKind,
     this.runtimeConfig,
     this.storeListing
   });
@@ -434,17 +591,10 @@ class CreateApplicationRequest {
       })(),
       slug: json['slug']?.toString(),
       description: json['description']?.toString(),
-      applicationType: (() {
-        final value = json['applicationType']?.toString();
+      appKind: (() {
+        final value = json['appKind']?.toString();
         if (value == null) {
-          throw FormatException('CreateApplicationRequest.applicationType is required');
-        }
-        return value;
-      })(),
-      siteType: (() {
-        final value = json['siteType'];
-        if (value is! int) {
-          throw FormatException('CreateApplicationRequest.siteType is required');
+          throw FormatException('CreateApplicationRequest.appKind is required');
         }
         return value;
       })(),
@@ -461,8 +611,7 @@ class CreateApplicationRequest {
       'name': name,
       'slug': slug,
       'description': description,
-      'applicationType': applicationType,
-      'siteType': siteType,
+      'appKind': appKind,
       'runtimeConfig': runtimeConfig,
       'storeListing': storeListing?.toJson(),
     };
@@ -509,7 +658,7 @@ class ApplicationResponse {
   final String name;
   final String slug;
   final String? description;
-  final String applicationType;
+  final String? appKind;
   final int siteType;
   final int status;
   final Map<String, dynamic>? runtimeConfig;
@@ -522,7 +671,7 @@ class ApplicationResponse {
     required this.name,
     required this.slug,
     this.description,
-    required this.applicationType,
+    this.appKind,
     required this.siteType,
     required this.status,
     this.runtimeConfig,
@@ -555,13 +704,7 @@ class ApplicationResponse {
         return value;
       })(),
       description: json['description']?.toString(),
-      applicationType: (() {
-        final value = json['applicationType']?.toString();
-        if (value == null) {
-          throw FormatException('ApplicationResponse.applicationType is required');
-        }
-        return value;
-      })(),
+      appKind: json['appKind']?.toString(),
       siteType: (() {
         final value = json['siteType'];
         if (value is! int) {
@@ -604,7 +747,7 @@ class ApplicationResponse {
       'name': name,
       'slug': slug,
       'description': description,
-      'applicationType': applicationType,
+      'appKind': appKind,
       'siteType': siteType,
       'status': status,
       'runtimeConfig': runtimeConfig,

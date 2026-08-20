@@ -4,7 +4,7 @@ use crate::api::base::{RequestHeaders};
 use crate::api::paths::app_path;
 use crate::api::paths::append_query_string;
 use crate::http::{SdkworkError, SdkworkHttpClient};
-use crate::models::{ApplicationResponse, CreateApplicationRequest, UpdateApplicationRequest};
+use crate::models::{ApplicationResponse, CreateApplicationRequest, CreatePlatformTargetRequest, PlatformTargetResponse, UpdateApplicationRequest};
 
 #[derive(Clone)]
 pub struct ApplicationApi {
@@ -76,6 +76,34 @@ impl ApplicationApi {
     pub async fn applications_pause(&self, application_id: &str) -> Result<ApplicationResponse, SdkworkError> {
         let path = app_path(&format!("/applications/{}/pause", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false))));
         self.client.post(&path, Option::<&serde_json::Value>::None, None, None, None).await
+    }
+
+    /// 获取应用平台目标列表
+    pub async fn applications_platform_targets_list(&self, application_id: &str, page: Option<i64>, page_size: Option<i64>) -> Result<serde_json::Value, SdkworkError> {
+        let query = build_query_string(&[
+            QueryParameterSpec::new("page", page, "form", true, false, None),
+            QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
+        ]);
+        let path = append_query_string(app_path(&format!("/applications/{}/platform_targets", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false)))), &query);
+        self.client.get(&path, None, None).await
+    }
+
+    /// 创建应用平台目标
+    pub async fn applications_platform_targets_create(&self, application_id: &str, body: &CreatePlatformTargetRequest, idempotency_key: &str) -> Result<PlatformTargetResponse, SdkworkError> {
+        let path = app_path(&format!("/applications/{}/platform_targets", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false))));
+        let headers = build_request_headers(
+            &[
+                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
+            ],
+            &[],
+        );
+        self.client.post(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
+    }
+
+    /// 获取应用平台目标详情
+    pub async fn applications_platform_targets_retrieve(&self, application_id: &str, platform_target_id: &str) -> Result<PlatformTargetResponse, SdkworkError> {
+        let path = app_path(&format!("/applications/{}/platform_targets/{}", serialize_path_parameter(application_id, PathParameterSpec::new("applicationId", "simple", false)), serialize_path_parameter(platform_target_id, PathParameterSpec::new("platformTargetId", "simple", false))));
+        self.client.get(&path, None, None).await
     }
 
 }

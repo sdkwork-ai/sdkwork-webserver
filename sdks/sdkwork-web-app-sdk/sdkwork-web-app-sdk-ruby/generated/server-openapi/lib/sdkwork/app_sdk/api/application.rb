@@ -3,9 +3,13 @@ require_relative '../models/applications_activate_response'
 require_relative '../models/applications_create_response201'
 require_relative '../models/applications_list_response'
 require_relative '../models/applications_pause_response'
+require_relative '../models/applications_platform_targets_create_response201'
+require_relative '../models/applications_platform_targets_list_response'
+require_relative '../models/applications_platform_targets_retrieve_response'
 require_relative '../models/applications_retrieve_response'
 require_relative '../models/applications_update_response'
 require_relative '../models/create_application_request'
+require_relative '../models/create_platform_target_request'
 require_relative '../models/update_application_request'
 
 module Sdkwork
@@ -98,6 +102,46 @@ module Sdkwork
 
             result = @client.request('POST', path, **options)
             result.is_a?(Hash) ? Models::ApplicationsPauseResponse.from_hash(result) : nil
+          end
+
+          # 获取应用平台目标列表
+          def applications_platform_targets_list(application_id, page: nil, page_size: nil)
+            path = interpolate_path('/app/v3/api/applications/{applicationId}/platform_targets', applicationId: serialize_path_parameter(application_id, PathParameterSpec.new('applicationId', 'simple', false)))
+            query = build_query_string([
+              QueryParameterSpec.new('page', page, 'form', true, false, nil),
+              QueryParameterSpec.new('page_size', page_size, 'form', true, false, nil),
+            ])
+            path = append_query_string(path, query)
+            options = {}
+
+            result = @client.request('GET', path, **options)
+            result.is_a?(Hash) ? Models::ApplicationsPlatformTargetsListResponse.from_hash(result) : nil
+          end
+
+          # 创建应用平台目标
+          def applications_platform_targets_create(application_id, idempotency_key, body: nil)
+            path = interpolate_path('/app/v3/api/applications/{applicationId}/platform_targets', applicationId: serialize_path_parameter(application_id, PathParameterSpec.new('applicationId', 'simple', false)))
+            payload = body.respond_to?(:to_hash) ? body.to_hash : body
+            request_headers = build_request_headers(
+              {
+                'Idempotency-Key' => HeaderParameterSpec.new(idempotency_key, 'simple', false, nil),
+              },
+              {}
+            )
+            options = {}
+            options[:headers] = request_headers unless request_headers.empty?
+            options[:json] = payload unless payload.nil?
+            result = @client.request('POST', path, **options)
+            result.is_a?(Hash) ? Models::ApplicationsPlatformTargetsCreateResponse201.from_hash(result) : nil
+          end
+
+          # 获取应用平台目标详情
+          def applications_platform_targets_retrieve(application_id, platform_target_id)
+            path = interpolate_path('/app/v3/api/applications/{applicationId}/platform_targets/{platformTargetId}', applicationId: serialize_path_parameter(application_id, PathParameterSpec.new('applicationId', 'simple', false)), platformTargetId: serialize_path_parameter(platform_target_id, PathParameterSpec.new('platformTargetId', 'simple', false)))
+            options = {}
+
+            result = @client.request('GET', path, **options)
+            result.is_a?(Hash) ? Models::ApplicationsPlatformTargetsRetrieveResponse.from_hash(result) : nil
           end
 
         private

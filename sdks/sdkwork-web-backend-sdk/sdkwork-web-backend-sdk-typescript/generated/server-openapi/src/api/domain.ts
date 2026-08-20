@@ -28,7 +28,7 @@ export class DomainApplicationBindingApi {
       },
       {}
     );
-    return this.client.request<ApplicationDomainResponse>(backendApiPath(`/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/application_binding`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'PUT' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+    return this.client.request<ApplicationDomainResponse>(backendApiPath(`/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/application_binding`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PUT' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
 /** Unbind a tenant custom domain from its application */
@@ -39,7 +39,7 @@ export class DomainApplicationBindingApi {
       },
       {}
     );
-    return this.client.request<void>(backendApiPath(`/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/application_binding`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'DELETE' as any, headers: requestHeaders });
+    return this.client.request<void>(backendApiPath(`/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/application_binding`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}) });
   }
 }
 
@@ -66,7 +66,7 @@ export class DomainRootDomainsSubdomainsApi {
       { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.request<{ items: ApplicationDomainResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}/subdomains`), query), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+    return this.client.request<{ items: ApplicationDomainResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}/subdomains`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
 /** Add a publishable hostname to a root-domain Zone */
@@ -77,7 +77,7 @@ export class DomainRootDomainsSubdomainsApi {
       },
       {}
     );
-    return this.client.request<ApplicationDomainResponse>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}/subdomains`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+    return this.client.request<ApplicationDomainResponse>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}/subdomains`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 }
 
@@ -114,7 +114,7 @@ export class DomainRootDomainsApi {
       { name: 'status', value: params?.status, style: 'form', explode: true, allowReserved: false },
       { name: 'keyword', value: params?.keyword, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.request<{ items: RootDomainResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/root_domains`), query), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+    return this.client.request<{ items: RootDomainResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/root_domains`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
 /** Define a tenant root-domain Zone */
@@ -125,12 +125,12 @@ export class DomainRootDomainsApi {
       },
       {}
     );
-    return this.client.request<RootDomainResponse>(backendApiPath(`/root_domains`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+    return this.client.request<RootDomainResponse>(backendApiPath(`/root_domains`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
 /** Retrieve a tenant root-domain Zone */
   async retrieve(rootDomainId: string, requestOptions?: ApiRequestOptions): Promise<RootDomainResponse> {
-    return this.client.request<RootDomainResponse>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+    return this.client.request<RootDomainResponse>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 
 /** Delete an empty tenant root-domain Zone */
@@ -141,7 +141,7 @@ export class DomainRootDomainsApi {
       },
       {}
     );
-    return this.client.request<void>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'DELETE' as any, headers: requestHeaders });
+    return this.client.request<void>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}) });
   }
 }
 
@@ -180,7 +180,7 @@ export class DomainApi {
       { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.request<{ items: ApplicationDomainResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/domains`), query), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+    return this.client.request<{ items: ApplicationDomainResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/domains`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
 /** Register a tenant custom domain asset */
@@ -191,7 +191,7 @@ export class DomainApi {
       },
       {}
     );
-    return this.client.request<ApplicationDomainResponse>(backendApiPath(`/domains`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+    return this.client.request<ApplicationDomainResponse>(backendApiPath(`/domains`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
 /** Delete an unbound tenant custom domain asset */
@@ -202,7 +202,7 @@ export class DomainApi {
       },
       {}
     );
-    return this.client.request<void>(backendApiPath(`/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'DELETE' as any, headers: requestHeaders });
+    return this.client.request<void>(backendApiPath(`/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}) });
   }
 
 /** Create or check a tenant custom-domain ownership challenge */
@@ -213,7 +213,7 @@ export class DomainApi {
       },
       {}
     );
-    return this.client.request<DomainVerifyResponse>(backendApiPath(`/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/verify`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, headers: requestHeaders, sdkworkUnwrapKind: 'item' });
+    return this.client.request<DomainVerifyResponse>(backendApiPath(`/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/verify`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 }
 

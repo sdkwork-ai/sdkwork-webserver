@@ -62,6 +62,31 @@ public class ApplicationApi {
         return try await client.post(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/pause"), body: nil, responseType: ApplicationsPauseResponse.self)
     }
 
+    /// 获取应用平台目标列表
+    public func applicationsPlatformTargetsList(applicationId: String, page: Int? = nil, pageSize: Int? = nil) async throws -> ApplicationsPlatformTargetsListResponse? {
+        let query = buildQueryString([
+            QueryParameterSpec(name: "page", value: page, style: "form", explode: true, allowReserved: false, contentType: nil),
+            QueryParameterSpec(name: "page_size", value: pageSize, style: "form", explode: true, allowReserved: false, contentType: nil)
+        ])
+        return try await client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/platform_targets"), query), responseType: ApplicationsPlatformTargetsListResponse.self)
+    }
+
+    /// 创建应用平台目标
+    public func applicationsPlatformTargetsCreate(applicationId: String, body: CreatePlatformTargetRequest, idempotencyKey: String) async throws -> ApplicationsPlatformTargetsCreateResponse201? {
+        let requestHeaders = buildRequestHeaders(
+            [
+                "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
+            ],
+            [:]
+        )
+        return try await client.post(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/platform_targets"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: ApplicationsPlatformTargetsCreateResponse201.self)
+    }
+
+    /// 获取应用平台目标详情
+    public func applicationsPlatformTargetsRetrieve(applicationId: String, platformTargetId: String) async throws -> ApplicationsPlatformTargetsRetrieveResponse? {
+        return try await client.get(ApiPaths.appPath("/applications/\(serializePathParameter(applicationId, PathParameterSpec(name: "applicationId", style: "simple", explode: false)))/platform_targets/\(serializePathParameter(platformTargetId, PathParameterSpec(name: "platformTargetId", style: "simple", explode: false)))"), responseType: ApplicationsPlatformTargetsRetrieveResponse.self)
+    }
+
     private struct PathParameterSpec {
         let name: String
         let style: String

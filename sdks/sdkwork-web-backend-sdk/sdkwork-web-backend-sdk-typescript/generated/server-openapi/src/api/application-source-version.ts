@@ -24,7 +24,7 @@ export class ApplicationSourceVersionApplicationsSourceVersionsGitImportApi {
       },
       {}
     );
-    return this.client.request<ApplicationSourceVersionResponse>(backendApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/source_versions/git_import`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+    return this.client.request<ApplicationSourceVersionResponse>(backendApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/source_versions/git_import`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 }
 
@@ -53,7 +53,7 @@ export class ApplicationSourceVersionApplicationsSourceVersionsApi {
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.request<{ items: ApplicationSourceVersionResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/source_versions`), query), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+    return this.client.request<{ items: ApplicationSourceVersionResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/source_versions`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
 /** Register an immutable Drive-backed application source version */
@@ -64,32 +64,28 @@ export class ApplicationSourceVersionApplicationsSourceVersionsApi {
       },
       {}
     );
-    return this.client.request<ApplicationSourceVersionResponse>(backendApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/source_versions`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+    return this.client.request<ApplicationSourceVersionResponse>(backendApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/source_versions`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
 /** Retrieve an application source version */
   async retrieve(applicationId: string, sourceVersionId: string, requestOptions?: ApiRequestOptions): Promise<ApplicationSourceVersionResponse> {
-    return this.client.request<ApplicationSourceVersionResponse>(backendApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/source_versions/${serializePathParameter(sourceVersionId, { name: 'sourceVersionId', style: 'simple', explode: false })}`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+    return this.client.request<ApplicationSourceVersionResponse>(backendApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/source_versions/${serializePathParameter(sourceVersionId, { name: 'sourceVersionId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 }
 
 export class ApplicationSourceVersionApplicationsApi {
-  private client: HttpClient;
   public readonly sourceVersions: ApplicationSourceVersionApplicationsSourceVersionsApi;
 
   constructor(client: HttpClient) {
-    this.client = client;
     this.sourceVersions = new ApplicationSourceVersionApplicationsSourceVersionsApi(client);
   }
 
 }
 
 export class ApplicationSourceVersionApi {
-  private client: HttpClient;
   public readonly applications: ApplicationSourceVersionApplicationsApi;
 
   constructor(client: HttpClient) {
-    this.client = client;
     this.applications = new ApplicationSourceVersionApplicationsApi(client);
   }
 

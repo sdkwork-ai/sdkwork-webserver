@@ -21,7 +21,7 @@ export class AgentSyncApi {
     const query = buildQueryString([
       { name: 'if_sync_version', value: params?.ifSyncVersion, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.request<AgentSyncResponse>(appendQueryString(backendApiPath(`/agent/sync`), query), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+    return this.client.request<AgentSyncResponse>(appendQueryString(backendApiPath(`/agent/sync`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 }
 
@@ -35,17 +35,15 @@ export class AgentHeartbeatApi {
 
 /** Report an edge-agent heartbeat */
   async create(body: AgentHeartbeatRequest, requestOptions?: ApiRequestOptions): Promise<AgentHeartbeatResponse> {
-    return this.client.request<AgentHeartbeatResponse>(backendApiPath(`/agent/heartbeat`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+    return this.client.request<AgentHeartbeatResponse>(backendApiPath(`/agent/heartbeat`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
   }
 }
 
 export class AgentApi {
-  private client: HttpClient;
   public readonly heartbeat: AgentHeartbeatApi;
   public readonly sync: AgentSyncApi;
 
   constructor(client: HttpClient) {
-    this.client = client;
     this.heartbeat = new AgentHeartbeatApi(client);
     this.sync = new AgentSyncApi(client);
   }

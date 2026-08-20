@@ -103,6 +103,44 @@ func (a *ApplicationApi) ApplicationsPause(applicationId string) (sdktypes.Appli
     return decodeResult[sdktypes.ApplicationsPauseResponse](raw)
 }
 
+// 获取应用平台目标列表
+func (a *ApplicationApi) ApplicationsPlatformTargetsList(applicationId string, page *int, pageSize *int) (sdktypes.ApplicationsPlatformTargetsListResponse, error) {
+    query := BuildQueryString([]QueryParameterSpec{
+        {Name: "page", Value: func() interface{} { if page == nil { return nil }; return *page }(), Style: "form", Explode: true, AllowReserved: false},
+        {Name: "page_size", Value: func() interface{} { if pageSize == nil { return nil }; return *pageSize }(), Style: "form", Explode: true, AllowReserved: false},
+    })
+    raw, err := a.client.Get(AppendQueryString(AppApiPath(fmt.Sprintf("/applications/%s/platform_targets", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}))), query), nil, nil)
+    if err != nil {
+        var zero sdktypes.ApplicationsPlatformTargetsListResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.ApplicationsPlatformTargetsListResponse](raw)
+}
+
+// 创建应用平台目标
+func (a *ApplicationApi) ApplicationsPlatformTargetsCreate(applicationId string, body sdktypes.CreatePlatformTargetRequest, idempotencyKey string) (sdktypes.ApplicationsPlatformTargetsCreateResponse201, error) {
+    headers := BuildRequestHeaders(
+        map[string]ParameterSpec{"Idempotency-Key": ParameterSpec{Value: idempotencyKey, Style: "simple", Explode: false},},
+        map[string]ParameterSpec{},
+    )
+    raw, err := a.client.Post(AppApiPath(fmt.Sprintf("/applications/%s/platform_targets", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
+    if err != nil {
+        var zero sdktypes.ApplicationsPlatformTargetsCreateResponse201
+        return zero, err
+    }
+    return decodeResult[sdktypes.ApplicationsPlatformTargetsCreateResponse201](raw)
+}
+
+// 获取应用平台目标详情
+func (a *ApplicationApi) ApplicationsPlatformTargetsRetrieve(applicationId string, platformTargetId string) (sdktypes.ApplicationsPlatformTargetsRetrieveResponse, error) {
+    raw, err := a.client.Get(AppApiPath(fmt.Sprintf("/applications/%s/platform_targets/%s", SerializePathParameter(applicationId, PathParameterSpec{Name: "applicationId", Style: "simple", Explode: false}), SerializePathParameter(platformTargetId, PathParameterSpec{Name: "platformTargetId", Style: "simple", Explode: false}))), nil, nil)
+    if err != nil {
+        var zero sdktypes.ApplicationsPlatformTargetsRetrieveResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.ApplicationsPlatformTargetsRetrieveResponse](raw)
+}
+
 type PathParameterSpec struct {
     Name    string
     Style   string

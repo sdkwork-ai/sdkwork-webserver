@@ -31,7 +31,7 @@ export class CertificateApplicationsDomainsListenerCertificateBindingsApi {
       { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.request<{ items: ListenerCertificateBindingResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/listener_certificate_bindings`), query), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+    return this.client.request<{ items: ListenerCertificateBindingResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/listener_certificate_bindings`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
 /** Bind a certificate version to the domain listener */
@@ -42,7 +42,7 @@ export class CertificateApplicationsDomainsListenerCertificateBindingsApi {
       },
       {}
     );
-    return this.client.request<ListenerCertificateBindingResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/listener_certificate_bindings`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+    return this.client.request<ListenerCertificateBindingResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/listener_certificate_bindings`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
 /** Remove a certificate from the domain listener */
@@ -53,38 +53,32 @@ export class CertificateApplicationsDomainsListenerCertificateBindingsApi {
       },
       {}
     );
-    return this.client.request<void>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/listener_certificate_bindings/${serializePathParameter(bindingId, { name: 'bindingId', style: 'simple', explode: false })}`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'DELETE' as any, headers: requestHeaders });
+    return this.client.request<void>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/listener_certificate_bindings/${serializePathParameter(bindingId, { name: 'bindingId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}) });
   }
 }
 
 export class CertificateApplicationsDomainsApi {
-  private client: HttpClient;
   public readonly listenerCertificateBindings: CertificateApplicationsDomainsListenerCertificateBindingsApi;
 
   constructor(client: HttpClient) {
-    this.client = client;
     this.listenerCertificateBindings = new CertificateApplicationsDomainsListenerCertificateBindingsApi(client);
   }
 
 }
 
 export class CertificateApplicationsApi {
-  private client: HttpClient;
   public readonly domains: CertificateApplicationsDomainsApi;
 
   constructor(client: HttpClient) {
-    this.client = client;
     this.domains = new CertificateApplicationsDomainsApi(client);
   }
 
 }
 
 export class CertificateApi {
-  private client: HttpClient;
   public readonly applications: CertificateApplicationsApi;
 
   constructor(client: HttpClient) {
-    this.client = client;
     this.applications = new CertificateApplicationsApi(client);
   }
 

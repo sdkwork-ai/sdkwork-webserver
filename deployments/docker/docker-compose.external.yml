@@ -22,6 +22,11 @@
 # Provision external PostgreSQL with deployments/docker/postgres/external-schema.sql
 # per environment (`-v db=sdkwork_ai_dev|sdkwork_ai_test|sdkwork_ai_prod`).
 
+networks:
+  external-postgres:
+    external: true
+    name: ${WEBSERVER_EXTERNAL_NETWORK:-new-api_new-api-network}
+
 services:
   postgres:
     profiles: ["external-disabled"]
@@ -31,6 +36,9 @@ services:
 
   webserver-development:
     depends_on: !reset []
+    networks:
+      - default
+      - external-postgres
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -50,6 +58,9 @@ services:
 
   webserver-test:
     depends_on: !reset []
+    networks:
+      - default
+      - external-postgres
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -69,6 +80,9 @@ services:
 
   webserver-production:
     depends_on: !reset []
+    networks:
+      - default
+      - external-postgres
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -79,9 +93,9 @@ services:
       SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_PROD_USER:?WEBSERVER_POSTGRES_PROD_USER is required in external mode}
       SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_PROD_PASSWORD:-}
       SDKWORK_DATABASE_PASSWORD_FILE: ${WEBSERVER_POSTGRES_PROD_PASSWORD_FILE:-}
-      SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-require}
+      SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-disable}
       SDKWORK_WEBSERVER_REDIS_HOST: ${WEBSERVER_REDIS_HOST:?WEBSERVER_REDIS_HOST is required in external mode}
       SDKWORK_WEBSERVER_REDIS_PORT: ${WEBSERVER_REDIS_PORT:-6379}
       SDKWORK_WEBSERVER_REDIS_PASSWORD: ${WEBSERVER_REDIS_PASSWORD:-}
       SDKWORK_WEBSERVER_REDIS_PASSWORD_FILE: ${WEBSERVER_REDIS_PASSWORD_FILE:-}
-      SDKWORK_WEBSERVER_REDIS_TLS: ${WEBSERVER_REDIS_TLS:-true}
+      SDKWORK_WEBSERVER_REDIS_TLS: ${WEBSERVER_REDIS_TLS:-false}

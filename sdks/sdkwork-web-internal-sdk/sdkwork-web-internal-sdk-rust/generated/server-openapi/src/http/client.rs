@@ -161,7 +161,10 @@ impl SdkworkHttpClient {
 
     pub fn set_access_token(&self, token: impl Into<String>) {
         let mut headers = self.headers.write().expect("sdk headers poisoned");
-        if DEFAULT_API_KEY_HEADER != "Access-Token" {
+        // Dual-token mode keeps the 'Authorization' bearer set by
+        // set_auth_token; only a stale API key header (when the API key
+        // header is not 'Authorization') is cleared here.
+        if DEFAULT_API_KEY_HEADER != "Authorization" {
             headers.remove(DEFAULT_API_KEY_HEADER);
         }
         headers.insert("Access-Token".to_string(), token.into());

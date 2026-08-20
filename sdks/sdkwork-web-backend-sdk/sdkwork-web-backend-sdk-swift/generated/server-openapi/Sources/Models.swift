@@ -101,6 +101,64 @@ public struct MediaResource: Codable {
     }
 }
 
+public struct PlatformTargetResponse: Codable {
+    public let id: String?
+    public let appId: String?
+    public let targetKey: String?
+    public let platform: String?
+    public let techStack: String?
+    public let architectures: [String]?
+    public let bundleId: String?
+    public let packageName: String?
+    public let appIdValue: String?
+    public let bundleName: String?
+    public let targetStatus: String?
+    public let createdAt: String?
+    public let updatedAt: String?
+
+
+    public init(id: String? = nil, appId: String? = nil, targetKey: String? = nil, platform: String? = nil, techStack: String? = nil, architectures: [String]? = nil, bundleId: String? = nil, packageName: String? = nil, appIdValue: String? = nil, bundleName: String? = nil, targetStatus: String? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
+        self.id = id
+        self.appId = appId
+        self.targetKey = targetKey
+        self.platform = platform
+        self.techStack = techStack
+        self.architectures = architectures
+        self.bundleId = bundleId
+        self.packageName = packageName
+        self.appIdValue = appIdValue
+        self.bundleName = bundleName
+        self.targetStatus = targetStatus
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+public struct CreatePlatformTargetRequest: Codable {
+    public let targetKey: String?
+    public let platform: String?
+    public let techStack: String?
+    public let architectures: [String]?
+    public let bundleId: String?
+    public let packageName: String?
+    public let appId: String?
+    public let bundleName: String?
+    public let allowedChannels: [String]?
+
+
+    public init(targetKey: String? = nil, platform: String? = nil, techStack: String? = nil, architectures: [String]? = nil, bundleId: String? = nil, packageName: String? = nil, appId: String? = nil, bundleName: String? = nil, allowedChannels: [String]? = nil) {
+        self.targetKey = targetKey
+        self.platform = platform
+        self.techStack = techStack
+        self.architectures = architectures
+        self.bundleId = bundleId
+        self.packageName = packageName
+        self.appId = appId
+        self.bundleName = bundleName
+        self.allowedChannels = allowedChannels
+    }
+}
+
 public struct ApplicationStoreListing: Codable {
     public let icon: MediaResource?
     public let cover: MediaResource?
@@ -134,18 +192,16 @@ public struct CreateApplicationRequest: Codable {
     public let name: String?
     public let slug: String?
     public let description: String?
-    public let applicationType: String?
-    public let siteType: Int?
+    public let appKind: String?
     public let runtimeConfig: [String: Any]?
     public let storeListing: ApplicationStoreListing?
 
 
-    public init(name: String? = nil, slug: String? = nil, description: String? = nil, applicationType: String? = nil, siteType: Int? = nil, runtimeConfig: [String: Any]? = nil, storeListing: ApplicationStoreListing? = nil) {
+    public init(name: String? = nil, slug: String? = nil, description: String? = nil, appKind: String? = nil, runtimeConfig: [String: Any]? = nil, storeListing: ApplicationStoreListing? = nil) {
         self.name = name
         self.slug = slug
         self.description = description
-        self.applicationType = applicationType
-        self.siteType = siteType
+        self.appKind = appKind
         self.runtimeConfig = runtimeConfig
         self.storeListing = storeListing
     }
@@ -171,7 +227,7 @@ public struct ApplicationResponse: Codable {
     public let name: String?
     public let slug: String?
     public let description: String?
-    public let applicationType: String?
+    public let appKind: String?
     public let siteType: Int?
     public let status: Int?
     public let runtimeConfig: [String: Any]?
@@ -180,12 +236,12 @@ public struct ApplicationResponse: Codable {
     public let updatedAt: String?
 
 
-    public init(id: String? = nil, name: String? = nil, slug: String? = nil, description: String? = nil, applicationType: String? = nil, siteType: Int? = nil, status: Int? = nil, runtimeConfig: [String: Any]? = nil, storeListing: ApplicationStoreListing? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
+    public init(id: String? = nil, name: String? = nil, slug: String? = nil, description: String? = nil, appKind: String? = nil, siteType: Int? = nil, status: Int? = nil, runtimeConfig: [String: Any]? = nil, storeListing: ApplicationStoreListing? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
         self.id = id
         self.name = name
         self.slug = slug
         self.description = description
-        self.applicationType = applicationType
+        self.appKind = appKind
         self.siteType = siteType
         self.status = status
         self.runtimeConfig = runtimeConfig

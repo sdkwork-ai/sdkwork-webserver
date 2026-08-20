@@ -1,11 +1,11 @@
+import type { AppKind } from './app-kind';
 import type { ApplicationStoreListing } from './application-store-listing';
 
 export interface CreateApplicationRequest {
   name: string;
   slug?: string;
   description?: string;
-  applicationType: 'WEB' | 'API';
-  siteType: number;
+  appKind: AppKind;
   runtimeConfig?: Record<string, unknown>;
   storeListing?: ApplicationStoreListing;
 }

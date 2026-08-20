@@ -64,7 +64,7 @@
     },
     {
       "path": "bin/publish-core.mjs",
-      "sha256": "98ad0918a78bfbe22bf8f12fec709b0bed545b9e01edd40f5e4abf31a23378a5"
+      "sha256": "a47e95119bf3eafcbcb2102f7024c147f967924e4e3f343d1a29effb4b6765df"
     },
     {
       "path": "bin/publish.ps1",
@@ -120,7 +120,7 @@
     },
     {
       "path": "Models/ApplicationResponse.cs",
-      "sha256": "4fba71df8b017f067dceffdf1d1ce19636330b81c1bf3f8f8b5ed2a16d31260d"
+      "sha256": "f45b9cea1520cc4d762e8a618f76d56fe39726deec580a5d2c531532f87a1d51"
     },
     {
       "path": "Models/ApplicationsActivateResponse.cs",
@@ -296,7 +296,7 @@
     },
     {
       "path": "Models/CreateApplicationRequest.cs",
-      "sha256": "3ac065ccb12fc2bbf5d3e57ec6459a24736ee9f2637d4709ba8fa976e250a22f"
+      "sha256": "b390a4034fef50377d9af475c62a2ae06872ed21b66085ace4bb6aef6ee73a05"
     },
     {
       "path": "Models/CreateApplicationSourceVersionRequest.cs",
@@ -313,6 +313,10 @@
     {
       "path": "Models/CreateNginxConfigRequest.cs",
       "sha256": "dbd0b61cac2e6e621e04f78e781ac1f078c50b80ab589ab98fc03dd0e4f9890b"
+    },
+    {
+      "path": "Models/CreatePlatformTargetRequest.cs",
+      "sha256": "8b03fcef6431f0886aa1a9a08c615dbfe84a453976f4975bd8eb0d32b64eae52"
     },
     {
       "path": "Models/CreateRootDomainHostnameRequest.cs",
@@ -413,6 +417,10 @@
     {
       "path": "Models/PageInfo.cs",
       "sha256": "e46fe957685c0d2a4dee72c756c6291a655b4a33eb74eac5de23d833ea2dd4c6"
+    },
+    {
+      "path": "Models/PlatformTargetResponse.cs",
+      "sha256": "e6784d21d5fca6960e42bcca9b3155aa32a563a8c48b32564634670f2db3a5f9"
     },
     {
       "path": "Models/ProblemDetail.cs",

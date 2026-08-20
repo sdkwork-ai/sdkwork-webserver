@@ -1,3 +1,4 @@
+import type { AppKind } from './app-kind';
 import type { ApplicationStoreListing } from './application-store-listing';
 
 export interface ApplicationResponse {
@@ -5,7 +6,7 @@ export interface ApplicationResponse {
   name: string;
   slug: string;
   description?: string;
-  applicationType: 'WEB' | 'API';
+  appKind?: AppKind;
   siteType: number;
   status: number;
   runtimeConfig?: Record<string, unknown>;

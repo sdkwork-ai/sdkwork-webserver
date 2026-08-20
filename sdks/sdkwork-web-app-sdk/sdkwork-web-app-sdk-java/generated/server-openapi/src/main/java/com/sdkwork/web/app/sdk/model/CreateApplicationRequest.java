@@ -6,8 +6,7 @@ public class CreateApplicationRequest {
     private String name;
     private String slug;
     private String description;
-    private String applicationType;
-    private Integer siteType;
+    private String appKind;
     private Map<String, Object> runtimeConfig;
     private ApplicationStoreListing storeListing;
 
@@ -35,20 +34,12 @@ public class CreateApplicationRequest {
         this.description = description;
     }
 
-    public String getApplicationType() {
-        return this.applicationType;
+    public String getAppKind() {
+        return this.appKind;
     }
 
-    public void setApplicationType(String applicationType) {
-        this.applicationType = applicationType;
-    }
-
-    public Integer getSiteType() {
-        return this.siteType;
-    }
-
-    public void setSiteType(Integer siteType) {
-        this.siteType = siteType;
+    public void setAppKind(String appKind) {
+        this.appKind = appKind;
     }
 
     public Map<String, Object> getRuntimeConfig() {

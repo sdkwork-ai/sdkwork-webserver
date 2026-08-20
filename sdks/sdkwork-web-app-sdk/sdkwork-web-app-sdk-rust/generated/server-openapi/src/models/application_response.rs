@@ -21,10 +21,11 @@ pub struct ApplicationResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub site_id: Option<String>,
 
-    #[serde(rename = "applicationType")]
+    #[serde(rename = "appKind")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub application_type: Option<String>,
+    pub app_kind: Option<String>,
 
+    /// Internal carrier site type derived from the app kind
     #[serde(rename = "siteType")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub site_type: Option<i64>,

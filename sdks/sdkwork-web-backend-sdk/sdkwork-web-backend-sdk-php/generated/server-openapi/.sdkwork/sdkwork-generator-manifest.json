@@ -12,7 +12,7 @@
   "generatedFiles": [
     {
       "path": "bin/publish-core.mjs",
-      "sha256": "98ad0918a78bfbe22bf8f12fec709b0bed545b9e01edd40f5e4abf31a23378a5"
+      "sha256": "a47e95119bf3eafcbcb2102f7024c147f967924e4e3f343d1a29effb4b6765df"
     },
     {
       "path": "bin/publish.ps1",
@@ -128,7 +128,7 @@
     },
     {
       "path": "src/Models/ApplicationResponse.php",
-      "sha256": "883217c53cef95d909aaa7c8680eba32016dca787db2c7e987dc633466d3547e"
+      "sha256": "57bdde2bf2c49ffa2a489987f79bbe710b47e552e60e5f6d839e083391b02a92"
     },
     {
       "path": "src/Models/ApplicationsActivateResponse.php",
@@ -304,7 +304,7 @@
     },
     {
       "path": "src/Models/CreateApplicationRequest.php",
-      "sha256": "84edaf02d2cdead49a7d6ae532d4dacd38c071eb7e3608aa8da96d5b7e84ea8a"
+      "sha256": "ccd1f2054c7505e82a56c45479e48f2433f446ccbde40e8817b61ee7f7628bf4"
     },
     {
       "path": "src/Models/CreateApplicationSourceVersionRequest.php",
@@ -321,6 +321,10 @@
     {
       "path": "src/Models/CreateNginxConfigRequest.php",
       "sha256": "ea488edf740f212bcc18747e5d7cec49479ade7808b54aa99a33d691ba82c2e9"
+    },
+    {
+      "path": "src/Models/CreatePlatformTargetRequest.php",
+      "sha256": "fe45e6342426f5023cb9bdf55026b4d23eefd1559882378bc83265babbc234e2"
     },
     {
       "path": "src/Models/CreateRootDomainHostnameRequest.php",
@@ -421,6 +425,10 @@
     {
       "path": "src/Models/PageInfo.php",
       "sha256": "5b4400037f32e66bec63f79eb4dcbc0ed92f2e3c1d7d162ccdf858c23edf2451"
+    },
+    {
+      "path": "src/Models/PlatformTargetResponse.php",
+      "sha256": "ddd283e7e8551f4b834ce4b9b6955df6f9d890127dd9d0d5395e6c5d3a5261a0"
     },
     {
       "path": "src/Models/ProblemDetail.php",

@@ -10,7 +10,7 @@ namespace SDKWork.Web.BackendSdk.Models
         public string Name { get; set; }
         public string Slug { get; set; }
         public string? Description { get; set; }
-        public string ApplicationType { get; set; }
+        public string? AppKind { get; set; }
         public int SiteType { get; set; }
         public int Status { get; set; }
         public Dictionary<string, object>? RuntimeConfig { get; set; }

@@ -14,7 +14,7 @@ export class CertificateOperationsApi {
 
 /** Retrieve a certificate operation */
   async retrieve(operationId: string, requestOptions?: ApiRequestOptions): Promise<CertificateOperationResponse> {
-    return this.client.request<CertificateOperationResponse>(backendApiPath(`/certificates/operations/${serializePathParameter(operationId, { name: 'operationId', style: 'simple', explode: false })}`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+    return this.client.request<CertificateOperationResponse>(backendApiPath(`/certificates/operations/${serializePathParameter(operationId, { name: 'operationId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 }
 
@@ -45,7 +45,7 @@ export class CertificateApplicationsDomainsListenerCertificateBindingsApi {
       { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.request<{ items: ListenerCertificateBindingResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/listener_certificate_bindings`), query), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+    return this.client.request<{ items: ListenerCertificateBindingResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/listener_certificate_bindings`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
 /** Bind a certificate version to an application domain listener */
@@ -56,7 +56,7 @@ export class CertificateApplicationsDomainsListenerCertificateBindingsApi {
       },
       {}
     );
-    return this.client.request<ListenerCertificateBindingResponse>(backendApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/listener_certificate_bindings`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+    return this.client.request<ListenerCertificateBindingResponse>(backendApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/listener_certificate_bindings`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
 /** Remove a certificate from an application domain listener */
@@ -67,27 +67,23 @@ export class CertificateApplicationsDomainsListenerCertificateBindingsApi {
       },
       {}
     );
-    return this.client.request<void>(backendApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/listener_certificate_bindings/${serializePathParameter(bindingId, { name: 'bindingId', style: 'simple', explode: false })}`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'DELETE' as any, headers: requestHeaders });
+    return this.client.request<void>(backendApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/listener_certificate_bindings/${serializePathParameter(bindingId, { name: 'bindingId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}) });
   }
 }
 
 export class CertificateApplicationsDomainsApi {
-  private client: HttpClient;
   public readonly listenerCertificateBindings: CertificateApplicationsDomainsListenerCertificateBindingsApi;
 
   constructor(client: HttpClient) {
-    this.client = client;
     this.listenerCertificateBindings = new CertificateApplicationsDomainsListenerCertificateBindingsApi(client);
   }
 
 }
 
 export class CertificateApplicationsApi {
-  private client: HttpClient;
   public readonly domains: CertificateApplicationsDomainsApi;
 
   constructor(client: HttpClient) {
-    this.client = client;
     this.domains = new CertificateApplicationsDomainsApi(client);
   }
 
@@ -138,7 +134,7 @@ export class CertificateApi {
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
       { name: 'domain_id', value: params?.domainId, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.request<{ items: CertificateResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/certificates`), query), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+    return this.client.request<{ items: CertificateResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/certificates`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
 /** Issue a canonical certificate */
@@ -149,7 +145,7 @@ export class CertificateApi {
       },
       {}
     );
-    return this.client.request<SdkWorkAsyncData>(backendApiPath(`/certificates/issue`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'command' });
+    return this.client.request<SdkWorkAsyncData>(backendApiPath(`/certificates/issue`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'command' });
   }
 
 /** Update certificate automatic renewal policy */
@@ -160,7 +156,7 @@ export class CertificateApi {
       },
       {}
     );
-    return this.client.request<CertificateResponse>(backendApiPath(`/certificates/${serializePathParameter(certificateId, { name: 'certificateId', style: 'simple', explode: false })}`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'PUT' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+    return this.client.request<CertificateResponse>(backendApiPath(`/certificates/${serializePathParameter(certificateId, { name: 'certificateId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PUT' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
 /** Soft-delete a certificate and release its domain identifiers */
@@ -171,7 +167,7 @@ export class CertificateApi {
       },
       {}
     );
-    return this.client.request<void>(backendApiPath(`/certificates/${serializePathParameter(certificateId, { name: 'certificateId', style: 'simple', explode: false })}`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'DELETE' as any, headers: requestHeaders });
+    return this.client.request<void>(backendApiPath(`/certificates/${serializePathParameter(certificateId, { name: 'certificateId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}) });
   }
 
 /** Renew a canonical certificate now */
@@ -182,7 +178,7 @@ export class CertificateApi {
       },
       {}
     );
-    return this.client.request<SdkWorkAsyncData>(backendApiPath(`/certificates/${serializePathParameter(certificateId, { name: 'certificateId', style: 'simple', explode: false })}/renew`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, headers: requestHeaders, sdkworkUnwrapKind: 'command' });
+    return this.client.request<SdkWorkAsyncData>(backendApiPath(`/certificates/${serializePathParameter(certificateId, { name: 'certificateId', style: 'simple', explode: false })}/renew`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'command' });
   }
 
 /** Revoke a canonical certificate */
@@ -193,7 +189,7 @@ export class CertificateApi {
       },
       {}
     );
-    return this.client.request<CertificateResponse>(backendApiPath(`/certificates/${serializePathParameter(certificateId, { name: 'certificateId', style: 'simple', explode: false })}/revoke`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'data' });
+    return this.client.request<CertificateResponse>(backendApiPath(`/certificates/${serializePathParameter(certificateId, { name: 'certificateId', style: 'simple', explode: false })}/revoke`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'data' });
   }
 }
 

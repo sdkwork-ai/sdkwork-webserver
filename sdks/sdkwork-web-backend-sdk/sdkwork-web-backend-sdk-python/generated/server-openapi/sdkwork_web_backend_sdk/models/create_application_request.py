@@ -9,8 +9,7 @@ if TYPE_CHECKING:
 @dataclass
 class CreateApplicationRequest:
     name: str
-    application_type: str
-    site_type: int
+    app_kind: str
     slug: Optional[str] = None
     description: Optional[str] = None
     runtime_config: Optional[Dict[str, Any]] = None

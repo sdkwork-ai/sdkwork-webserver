@@ -9,12 +9,19 @@
     "protocol": "http",
     "packageName": "sdkwork-web-backend-sdk"
   },
-  "changeFingerprint": "5b995f8e24669bfe69253f5a6443b60a1962daa3f0ce4387cc829f5aa3e958a2",
+  "changeFingerprint": "743a67ec986c7031aee29be8766a39a9958b91ac93374a264bff55e97069cd55",
   "changes": {
-    "createdGeneratedFiles": [],
-    "updatedGeneratedFiles": [],
-    "unchangedGeneratedFiles": [
+    "createdGeneratedFiles": [
+      "sdkwork_web_backend_sdk/models/create_platform_target_request.py",
+      "sdkwork_web_backend_sdk/models/platform_target_response.py"
+    ],
+    "updatedGeneratedFiles": [
       "bin/publish-core.mjs",
+      "sdkwork_web_backend_sdk/models/__init__.py",
+      "sdkwork_web_backend_sdk/models/application_response.py",
+      "sdkwork_web_backend_sdk/models/create_application_request.py"
+    ],
+    "unchangedGeneratedFiles": [
       "bin/publish.ps1",
       "bin/publish.sh",
       "CHANGELOG.md",
@@ -38,7 +45,6 @@
       "sdkwork_web_backend_sdk/api/server.py",
       "sdkwork_web_backend_sdk/client.py",
       "sdkwork_web_backend_sdk/http_client.py",
-      "sdkwork_web_backend_sdk/models/__init__.py",
       "sdkwork_web_backend_sdk/models/agent_certificate_bundle.py",
       "sdkwork_web_backend_sdk/models/agent_certificate_observation.py",
       "sdkwork_web_backend_sdk/models/agent_heartbeat_request.py",
@@ -47,7 +53,6 @@
       "sdkwork_web_backend_sdk/models/agent_sync_response.py",
       "sdkwork_web_backend_sdk/models/application_deployment_response.py",
       "sdkwork_web_backend_sdk/models/application_domain_response.py",
-      "sdkwork_web_backend_sdk/models/application_response.py",
       "sdkwork_web_backend_sdk/models/application_source_version_config_snapshot.py",
       "sdkwork_web_backend_sdk/models/application_source_version_response.py",
       "sdkwork_web_backend_sdk/models/application_store_listing.py",
@@ -91,7 +96,6 @@
       "sdkwork_web_backend_sdk/models/configs_validate_response.py",
       "sdkwork_web_backend_sdk/models/create_application_deployment_request.py",
       "sdkwork_web_backend_sdk/models/create_application_domain_request.py",
-      "sdkwork_web_backend_sdk/models/create_application_request.py",
       "sdkwork_web_backend_sdk/models/create_application_source_version_request.py",
       "sdkwork_web_backend_sdk/models/create_listener_certificate_binding_request.py",
       "sdkwork_web_backend_sdk/models/create_managed_domain_request.py",
@@ -160,26 +164,72 @@
   },
   "impact": {
     "schemaVersion": 1,
-    "areas": [],
-    "details": [],
-    "requiresVerification": false,
-    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped."
+    "areas": [
+      "api-surface",
+      "models",
+      "publish-workflow"
+    ],
+    "details": [
+      {
+        "area": "api-surface",
+        "paths": [
+          "sdkwork_web_backend_sdk/models/__init__.py"
+        ]
+      },
+      {
+        "area": "models",
+        "paths": [
+          "sdkwork_web_backend_sdk/models/__init__.py",
+          "sdkwork_web_backend_sdk/models/application_response.py",
+          "sdkwork_web_backend_sdk/models/create_application_request.py",
+          "sdkwork_web_backend_sdk/models/create_platform_target_request.py",
+          "sdkwork_web_backend_sdk/models/platform_target_response.py"
+        ]
+      },
+      {
+        "area": "publish-workflow",
+        "paths": [
+          "bin/publish-core.mjs"
+        ]
+      }
+    ],
+    "requiresVerification": true,
+    "summary": "Detected impact areas: api-surface, models, publish-workflow. Verification is required."
   },
   "verificationPlan": {
-    "shouldRun": false,
-    "runPhase": "skip",
-    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped.",
-    "steps": []
+    "shouldRun": true,
+    "runPhase": "now",
+    "summary": "Detected impact areas: api-surface, models, publish-workflow. Verification is required. Run the required verification commands now against the generated SDK output.",
+    "steps": [
+      {
+        "id": "check",
+        "title": "Unified package check",
+        "required": true,
+        "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, publish-workflow.",
+        "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-backend-sdk\\sdkwork-web-backend-sdk-python\\generated\\server-openapi",
+        "command": "node",
+        "args": [
+          "./bin/publish-core.mjs",
+          "--language",
+          "python",
+          "--project-dir",
+          ".",
+          "--action",
+          "check"
+        ],
+        "displayCommand": "node ./bin/publish-core.mjs --language python --project-dir . --action check"
+      }
+    ]
   },
   "executionDecision": {
     "schemaVersion": 1,
-    "riskLevel": "low",
-    "nextAction": "skip",
+    "riskLevel": "medium",
+    "nextAction": "verify",
     "requiresManualReview": false,
     "applyRequiresExpectedFingerprint": false,
-    "summary": "No actionable changes were detected. No apply or verification step is required.",
+    "summary": "Changes have been applied. Run the required verification plan now.",
     "reasons": [
-      "no-actionable-changes"
+      "verification-required"
     ]
   },
   "preservedLegacyFiles": false

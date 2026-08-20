@@ -11,117 +11,52 @@
   "status": "ok",
   "mode": "apply",
   "hasChanges": true,
-  "hasDestructiveChanges": true,
-  "changeFingerprint": "4ab7bae2f1c75941673b85d9a2563f9b4fbd0ea5a7be57a7c7cf948bc1e70fb2",
+  "hasDestructiveChanges": false,
+  "changeFingerprint": "ba669d94bf209c52d42ad01adce3a38969913adac9d260435242cd109aa3e584",
   "changeImpact": {
     "schemaVersion": 1,
     "areas": [
       "api-surface",
       "models",
-      "documentation"
+      "publish-workflow"
     ],
     "details": [
       {
         "area": "api-surface",
         "paths": [
-          "Api/Api.cs",
-          "Api/ApplicationApi.cs",
-          "Api/CertificateApi.cs",
-          "Api/DeploymentApi.cs",
-          "Api/DomainApi.cs",
-          "Api/EnvVariableApi.cs",
-          "Api/MonitorApi.cs",
-          "Api/SiteApi.cs",
-          "Api/SourceVersionApi.cs",
-          "SdkworkAppClient.cs"
+          "Api/ApplicationApi.cs"
         ]
       },
       {
         "area": "models",
         "paths": [
-          "Models/ApplicationPage.cs",
           "Models/ApplicationResponse.cs",
-          "Models/ApplicationsActivateResponse.cs",
-          "Models/ApplicationsCreateResponse201.cs",
-          "Models/ApplicationsDeploymentsCreateResponse201.cs",
-          "Models/ApplicationsDeploymentsListResponse.cs",
-          "Models/ApplicationsDeploymentsRetrieveResponse.cs",
-          "Models/ApplicationsDeploymentsRollbackResponse.cs",
-          "Models/ApplicationsDomainsCreateResponse201.cs",
-          "Models/ApplicationsDomainsListenerCertificateBindingsCreateResponse201.cs",
-          "Models/ApplicationsDomainsListenerCertificateBindingsListResponse.cs",
-          "Models/ApplicationsDomainsListResponse.cs",
-          "Models/ApplicationsDomainsRetrieveResponse.cs",
-          "Models/ApplicationsDomainsVerifyResponse.cs",
-          "Models/ApplicationsEnvVariablesCreateResponse201.cs",
-          "Models/ApplicationsEnvVariablesListResponse.cs",
-          "Models/ApplicationsEnvVariablesUpdateResponse.cs",
-          "Models/ApplicationsHealthChecksCreateResponse201.cs",
-          "Models/ApplicationsHealthChecksListResponse.cs",
-          "Models/ApplicationsListResponse.cs",
-          "Models/ApplicationsPauseResponse.cs",
-          "Models/ApplicationsRetrieveResponse.cs",
-          "Models/ApplicationsSourceVersionsCreateResponse201.cs",
-          "Models/ApplicationsSourceVersionsGitImportCreateResponse201.cs",
-          "Models/ApplicationsSourceVersionsListResponse.cs",
-          "Models/ApplicationsSourceVersionsRetrieveResponse.cs",
-          "Models/ApplicationsUpdateResponse.cs",
+          "Models/ApplicationsPlatformTargetsCreateResponse201.cs",
+          "Models/ApplicationsPlatformTargetsListResponse.cs",
+          "Models/ApplicationsPlatformTargetsRetrieveResponse.cs",
           "Models/CreateApplicationRequest.cs",
-          "Models/CreateSiteRequest.cs",
-          "Models/DeploymentResponse.cs",
-          "Models/ListenerCertificateBindingResponse.cs",
-          "Models/SitePage.cs",
-          "Models/SiteResponse.cs",
-          "Models/SitesActivateResponse.cs",
-          "Models/SitesCreateResponse201.cs",
-          "Models/SitesDeploymentsCreateResponse201.cs",
-          "Models/SitesDeploymentsListResponse.cs",
-          "Models/SitesDeploymentsRetrieveResponse.cs",
-          "Models/SitesDeploymentsRollbackResponse.cs",
-          "Models/SitesDomainsCreateResponse201.cs",
-          "Models/SitesDomainsListenerCertificateBindingsCreateResponse201.cs",
-          "Models/SitesDomainsListenerCertificateBindingsListResponse.cs",
-          "Models/SitesDomainsListResponse.cs",
-          "Models/SitesDomainsRetrieveResponse.cs",
-          "Models/SitesDomainsVerifyResponse.cs",
-          "Models/SitesEnvVariablesCreateResponse201.cs",
-          "Models/SitesEnvVariablesListResponse.cs",
-          "Models/SitesEnvVariablesUpdateResponse.cs",
-          "Models/SitesHealthChecksCreateResponse201.cs",
-          "Models/SitesHealthChecksListResponse.cs",
-          "Models/SitesListResponse.cs",
-          "Models/SitesPauseResponse.cs",
-          "Models/SitesRetrieveResponse.cs",
-          "Models/SitesSourceVersionsCreateResponse201.cs",
-          "Models/SitesSourceVersionsGitImportCreateResponse201.cs",
-          "Models/SitesSourceVersionsListResponse.cs",
-          "Models/SitesSourceVersionsRetrieveResponse.cs",
-          "Models/SitesUpdateResponse.cs",
-          "Models/SourceVersionResponse.cs",
-          "Models/UpdateApplicationRequest.cs",
-          "Models/UpdateSiteRequest.cs"
+          "Models/CreatePlatformTargetRequest.cs",
+          "Models/PlatformTargetResponse.cs"
         ]
       },
       {
-        "area": "documentation",
+        "area": "publish-workflow",
         "paths": [
-          "README.md"
+          "bin/publish-core.mjs"
         ]
       }
     ],
     "requiresVerification": true,
-    "summary": "Detected impact areas: api-surface, models, documentation. Verification is required."
+    "summary": "Detected impact areas: api-surface, models, publish-workflow. Verification is required."
   },
   "executionDecision": {
     "schemaVersion": 1,
-    "riskLevel": "high",
+    "riskLevel": "medium",
     "nextAction": "verify",
     "requiresManualReview": false,
     "applyRequiresExpectedFingerprint": false,
     "summary": "Changes have been applied. Run the required verification plan now.",
     "reasons": [
-      "deleted-generated-files",
-      "manual-review-required",
       "verification-required"
     ]
   },
@@ -133,7 +68,7 @@
         "id": "verify-check",
         "title": "Unified package check",
         "required": true,
-        "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, documentation.",
+        "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, publish-workflow.",
         "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-app-sdk\\sdkwork-web-app-sdk-csharp\\generated\\server-openapi",
         "command": "node",
         "args": [
@@ -152,13 +87,13 @@
   "verificationPlan": {
     "shouldRun": true,
     "runPhase": "now",
-    "summary": "Detected impact areas: api-surface, models, documentation. Verification is required. Run the required verification commands now against the generated SDK output.",
+    "summary": "Detected impact areas: api-surface, models, publish-workflow. Verification is required. Run the required verification commands now against the generated SDK output.",
     "steps": [
       {
         "id": "check",
         "title": "Unified package check",
         "required": true,
-        "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, documentation.",
+        "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, publish-workflow.",
         "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-app-sdk\\sdkwork-web-app-sdk-csharp\\generated\\server-openapi",
         "command": "node",
         "args": [
@@ -188,8 +123,8 @@
     "localVersions": []
   },
   "stats": {
-    "totalFiles": 87,
-    "models": 67,
+    "totalFiles": 92,
+    "models": 72,
     "apis": 7,
     "types": 0
   },
@@ -197,17 +132,41 @@
   "syncSummary": {
     "dryRun": false,
     "controlPlaneEnabled": true,
-    "writtenFiles": 42,
+    "writtenFiles": 9,
     "skippedScaffoldFiles": 1,
-    "skippedUnchangedGeneratedFiles": 44,
-    "deletedGeneratedFiles": 30,
+    "skippedUnchangedGeneratedFiles": 82,
+    "deletedGeneratedFiles": 0,
     "changeSummaryPath": ".sdkwork/sdkwork-generator-changes.json",
-    "changeFingerprint": "4ab7bae2f1c75941673b85d9a2563f9b4fbd0ea5a7be57a7c7cf948bc1e70fb2",
+    "changeFingerprint": "ba669d94bf209c52d42ad01adce3a38969913adac9d260435242cd109aa3e584",
     "changes": {
       "createdGeneratedFiles": [
+        "Models/ApplicationsPlatformTargetsCreateResponse201.cs",
+        "Models/ApplicationsPlatformTargetsListResponse.cs",
+        "Models/ApplicationsPlatformTargetsRetrieveResponse.cs",
+        "Models/CreatePlatformTargetRequest.cs",
+        "Models/PlatformTargetResponse.cs"
+      ],
+      "updatedGeneratedFiles": [
         "Api/ApplicationApi.cs",
-        "Models/ApplicationPage.cs",
+        "bin/publish-core.mjs",
         "Models/ApplicationResponse.cs",
+        "Models/CreateApplicationRequest.cs"
+      ],
+      "unchangedGeneratedFiles": [
+        "Api/Api.cs",
+        "Api/ApiPaths.cs",
+        "Api/CertificateApi.cs",
+        "Api/DeploymentApi.cs",
+        "Api/DomainApi.cs",
+        "Api/EnvVariableApi.cs",
+        "Api/MonitorApi.cs",
+        "Api/SourceVersionApi.cs",
+        "bin/publish.ps1",
+        "bin/publish.sh",
+        "CHANGELOG.md",
+        "Http/HttpClient.cs",
+        "LICENSE",
+        "Models/ApplicationPage.cs",
         "Models/ApplicationsActivateResponse.cs",
         "Models/ApplicationsCreateResponse201.cs",
         "Models/ApplicationsDeploymentsCreateResponse201.cs",
@@ -232,33 +191,8 @@
         "Models/ApplicationsSourceVersionsGitImportCreateResponse201.cs",
         "Models/ApplicationsSourceVersionsListResponse.cs",
         "Models/ApplicationsSourceVersionsRetrieveResponse.cs",
-        "Models/ApplicationsUpdateResponse.cs",
-        "Models/CreateApplicationRequest.cs",
-        "Models/UpdateApplicationRequest.cs"
-      ],
-      "updatedGeneratedFiles": [
-        "Api/Api.cs",
-        "Api/CertificateApi.cs",
-        "Api/DeploymentApi.cs",
-        "Api/DomainApi.cs",
-        "Api/EnvVariableApi.cs",
-        "Api/MonitorApi.cs",
-        "Api/SourceVersionApi.cs",
-        "Models/DeploymentResponse.cs",
-        "Models/ListenerCertificateBindingResponse.cs",
-        "Models/SourceVersionResponse.cs",
-        "README.md",
-        "SdkworkAppClient.cs"
-      ],
-      "unchangedGeneratedFiles": [
-        "Api/ApiPaths.cs",
-        "bin/publish-core.mjs",
-        "bin/publish.ps1",
-        "bin/publish.sh",
-        "CHANGELOG.md",
-        "Http/HttpClient.cs",
-        "LICENSE",
         "Models/ApplicationStoreListing.cs",
+        "Models/ApplicationsUpdateResponse.cs",
         "Models/CertificateIdentifierResponse.cs",
         "Models/CreateDeploymentRequest.cs",
         "Models/CreateDomainRequest.cs",
@@ -267,6 +201,7 @@
         "Models/CreateListenerCertificateBindingRequest.cs",
         "Models/CreateSourceVersionRequest.cs",
         "Models/DeploymentPage.cs",
+        "Models/DeploymentResponse.cs",
         "Models/DomainPage.cs",
         "Models/DomainResponse.cs",
         "Models/DomainsListResponse.cs",
@@ -277,6 +212,7 @@
         "Models/HealthCheckPage.cs",
         "Models/HealthCheckResponse.cs",
         "Models/ImportGitSourceVersionRequest.cs",
+        "Models/ListenerCertificateBindingResponse.cs",
         "Models/ListenerCertificateSummaryResponse.cs",
         "Models/MediaChecksum.cs",
         "Models/MediaResource.cs",
@@ -292,42 +228,15 @@
         "Models/SdkWorkResourceResponse.cs",
         "Models/SourceVersionConfigSnapshot.cs",
         "Models/SourceVersionPage.cs",
+        "Models/SourceVersionResponse.cs",
+        "Models/UpdateApplicationRequest.cs",
         "Models/UpdateEnvVariableRequest.cs",
+        "README.md",
         "sdkwork-sdk.json",
-        "SDKWork.Web.AppSdk.csproj"
+        "SDKWork.Web.AppSdk.csproj",
+        "SdkworkAppClient.cs"
       ],
-      "deletedGeneratedFiles": [
-        "Api/SiteApi.cs",
-        "Models/CreateSiteRequest.cs",
-        "Models/SitePage.cs",
-        "Models/SiteResponse.cs",
-        "Models/SitesActivateResponse.cs",
-        "Models/SitesCreateResponse201.cs",
-        "Models/SitesDeploymentsCreateResponse201.cs",
-        "Models/SitesDeploymentsListResponse.cs",
-        "Models/SitesDeploymentsRetrieveResponse.cs",
-        "Models/SitesDeploymentsRollbackResponse.cs",
-        "Models/SitesDomainsCreateResponse201.cs",
-        "Models/SitesDomainsListenerCertificateBindingsCreateResponse201.cs",
-        "Models/SitesDomainsListenerCertificateBindingsListResponse.cs",
-        "Models/SitesDomainsListResponse.cs",
-        "Models/SitesDomainsRetrieveResponse.cs",
-        "Models/SitesDomainsVerifyResponse.cs",
-        "Models/SitesEnvVariablesCreateResponse201.cs",
-        "Models/SitesEnvVariablesListResponse.cs",
-        "Models/SitesEnvVariablesUpdateResponse.cs",
-        "Models/SitesHealthChecksCreateResponse201.cs",
-        "Models/SitesHealthChecksListResponse.cs",
-        "Models/SitesListResponse.cs",
-        "Models/SitesPauseResponse.cs",
-        "Models/SitesRetrieveResponse.cs",
-        "Models/SitesSourceVersionsCreateResponse201.cs",
-        "Models/SitesSourceVersionsGitImportCreateResponse201.cs",
-        "Models/SitesSourceVersionsListResponse.cs",
-        "Models/SitesSourceVersionsRetrieveResponse.cs",
-        "Models/SitesUpdateResponse.cs",
-        "Models/UpdateSiteRequest.cs"
-      ],
+      "deletedGeneratedFiles": [],
       "scaffoldedFiles": [],
       "preservedScaffoldFiles": [
         "custom/README.md"
@@ -339,110 +248,47 @@
       "areas": [
         "api-surface",
         "models",
-        "documentation"
+        "publish-workflow"
       ],
       "details": [
         {
           "area": "api-surface",
           "paths": [
-            "Api/Api.cs",
-            "Api/ApplicationApi.cs",
-            "Api/CertificateApi.cs",
-            "Api/DeploymentApi.cs",
-            "Api/DomainApi.cs",
-            "Api/EnvVariableApi.cs",
-            "Api/MonitorApi.cs",
-            "Api/SiteApi.cs",
-            "Api/SourceVersionApi.cs",
-            "SdkworkAppClient.cs"
+            "Api/ApplicationApi.cs"
           ]
         },
         {
           "area": "models",
           "paths": [
-            "Models/ApplicationPage.cs",
             "Models/ApplicationResponse.cs",
-            "Models/ApplicationsActivateResponse.cs",
-            "Models/ApplicationsCreateResponse201.cs",
-            "Models/ApplicationsDeploymentsCreateResponse201.cs",
-            "Models/ApplicationsDeploymentsListResponse.cs",
-            "Models/ApplicationsDeploymentsRetrieveResponse.cs",
-            "Models/ApplicationsDeploymentsRollbackResponse.cs",
-            "Models/ApplicationsDomainsCreateResponse201.cs",
-            "Models/ApplicationsDomainsListenerCertificateBindingsCreateResponse201.cs",
-            "Models/ApplicationsDomainsListenerCertificateBindingsListResponse.cs",
-            "Models/ApplicationsDomainsListResponse.cs",
-            "Models/ApplicationsDomainsRetrieveResponse.cs",
-            "Models/ApplicationsDomainsVerifyResponse.cs",
-            "Models/ApplicationsEnvVariablesCreateResponse201.cs",
-            "Models/ApplicationsEnvVariablesListResponse.cs",
-            "Models/ApplicationsEnvVariablesUpdateResponse.cs",
-            "Models/ApplicationsHealthChecksCreateResponse201.cs",
-            "Models/ApplicationsHealthChecksListResponse.cs",
-            "Models/ApplicationsListResponse.cs",
-            "Models/ApplicationsPauseResponse.cs",
-            "Models/ApplicationsRetrieveResponse.cs",
-            "Models/ApplicationsSourceVersionsCreateResponse201.cs",
-            "Models/ApplicationsSourceVersionsGitImportCreateResponse201.cs",
-            "Models/ApplicationsSourceVersionsListResponse.cs",
-            "Models/ApplicationsSourceVersionsRetrieveResponse.cs",
-            "Models/ApplicationsUpdateResponse.cs",
+            "Models/ApplicationsPlatformTargetsCreateResponse201.cs",
+            "Models/ApplicationsPlatformTargetsListResponse.cs",
+            "Models/ApplicationsPlatformTargetsRetrieveResponse.cs",
             "Models/CreateApplicationRequest.cs",
-            "Models/CreateSiteRequest.cs",
-            "Models/DeploymentResponse.cs",
-            "Models/ListenerCertificateBindingResponse.cs",
-            "Models/SitePage.cs",
-            "Models/SiteResponse.cs",
-            "Models/SitesActivateResponse.cs",
-            "Models/SitesCreateResponse201.cs",
-            "Models/SitesDeploymentsCreateResponse201.cs",
-            "Models/SitesDeploymentsListResponse.cs",
-            "Models/SitesDeploymentsRetrieveResponse.cs",
-            "Models/SitesDeploymentsRollbackResponse.cs",
-            "Models/SitesDomainsCreateResponse201.cs",
-            "Models/SitesDomainsListenerCertificateBindingsCreateResponse201.cs",
-            "Models/SitesDomainsListenerCertificateBindingsListResponse.cs",
-            "Models/SitesDomainsListResponse.cs",
-            "Models/SitesDomainsRetrieveResponse.cs",
-            "Models/SitesDomainsVerifyResponse.cs",
-            "Models/SitesEnvVariablesCreateResponse201.cs",
-            "Models/SitesEnvVariablesListResponse.cs",
-            "Models/SitesEnvVariablesUpdateResponse.cs",
-            "Models/SitesHealthChecksCreateResponse201.cs",
-            "Models/SitesHealthChecksListResponse.cs",
-            "Models/SitesListResponse.cs",
-            "Models/SitesPauseResponse.cs",
-            "Models/SitesRetrieveResponse.cs",
-            "Models/SitesSourceVersionsCreateResponse201.cs",
-            "Models/SitesSourceVersionsGitImportCreateResponse201.cs",
-            "Models/SitesSourceVersionsListResponse.cs",
-            "Models/SitesSourceVersionsRetrieveResponse.cs",
-            "Models/SitesUpdateResponse.cs",
-            "Models/SourceVersionResponse.cs",
-            "Models/UpdateApplicationRequest.cs",
-            "Models/UpdateSiteRequest.cs"
+            "Models/CreatePlatformTargetRequest.cs",
+            "Models/PlatformTargetResponse.cs"
           ]
         },
         {
-          "area": "documentation",
+          "area": "publish-workflow",
           "paths": [
-            "README.md"
+            "bin/publish-core.mjs"
           ]
         }
       ],
       "requiresVerification": true,
-      "summary": "Detected impact areas: api-surface, models, documentation. Verification is required."
+      "summary": "Detected impact areas: api-surface, models, publish-workflow. Verification is required."
     },
     "verificationPlan": {
       "shouldRun": true,
       "runPhase": "now",
-      "summary": "Detected impact areas: api-surface, models, documentation. Verification is required. Run the required verification commands now against the generated SDK output.",
+      "summary": "Detected impact areas: api-surface, models, publish-workflow. Verification is required. Run the required verification commands now against the generated SDK output.",
       "steps": [
         {
           "id": "check",
           "title": "Unified package check",
           "required": true,
-          "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, documentation.",
+          "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, publish-workflow.",
           "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-app-sdk\\sdkwork-web-app-sdk-csharp\\generated\\server-openapi",
           "command": "node",
           "args": [
@@ -460,14 +306,12 @@
     },
     "executionDecision": {
       "schemaVersion": 1,
-      "riskLevel": "high",
+      "riskLevel": "medium",
       "nextAction": "verify",
       "requiresManualReview": false,
       "applyRequiresExpectedFingerprint": false,
       "summary": "Changes have been applied. Run the required verification plan now.",
       "reasons": [
-        "deleted-generated-files",
-        "manual-review-required",
         "verification-required"
       ]
     },

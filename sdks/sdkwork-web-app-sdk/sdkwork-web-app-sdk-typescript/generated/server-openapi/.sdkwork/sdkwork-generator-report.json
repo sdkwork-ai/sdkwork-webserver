@@ -10,221 +10,37 @@
   },
   "status": "ok",
   "mode": "apply",
-  "hasChanges": true,
-  "hasDestructiveChanges": true,
-  "changeFingerprint": "d4a00f3ff906f679d04d1e02a1adca92af756b13cbfba484e5967864456ada9a",
+  "hasChanges": false,
+  "hasDestructiveChanges": false,
+  "changeFingerprint": "e95e8c993942c0716377be42302ff22b230c362ad74412f0205072ce74580773",
   "changeImpact": {
     "schemaVersion": 1,
-    "areas": [
-      "api-surface",
-      "models",
-      "runtime",
-      "build-metadata",
-      "documentation"
-    ],
-    "details": [
-      {
-        "area": "api-surface",
-        "paths": [
-          "src/api/application.ts",
-          "src/api/certificate.ts",
-          "src/api/deployment.ts",
-          "src/api/domain.ts",
-          "src/api/env-variable.ts",
-          "src/api/index.ts",
-          "src/api/monitor.ts",
-          "src/api/site.ts",
-          "src/api/source-version.ts",
-          "src/http/client.ts",
-          "src/sdk.ts"
-        ]
-      },
-      {
-        "area": "models",
-        "paths": [
-          "src/types/application-page.ts",
-          "src/types/application-response.ts",
-          "src/types/applications-activate-response.ts",
-          "src/types/applications-create-response201.ts",
-          "src/types/applications-deployments-create-response201.ts",
-          "src/types/applications-deployments-list-response.ts",
-          "src/types/applications-deployments-retrieve-response.ts",
-          "src/types/applications-deployments-rollback-response.ts",
-          "src/types/applications-domains-create-response201.ts",
-          "src/types/applications-domains-list-response.ts",
-          "src/types/applications-domains-listener-certificate-bindings-create-response201.ts",
-          "src/types/applications-domains-listener-certificate-bindings-list-response.ts",
-          "src/types/applications-domains-retrieve-response.ts",
-          "src/types/applications-domains-verify-response.ts",
-          "src/types/applications-env-variables-create-response201.ts",
-          "src/types/applications-env-variables-list-response.ts",
-          "src/types/applications-env-variables-update-response.ts",
-          "src/types/applications-health-checks-create-response201.ts",
-          "src/types/applications-health-checks-list-response.ts",
-          "src/types/applications-list-response.ts",
-          "src/types/applications-pause-response.ts",
-          "src/types/applications-retrieve-response.ts",
-          "src/types/applications-source-versions-create-response201.ts",
-          "src/types/applications-source-versions-git-import-create-response201.ts",
-          "src/types/applications-source-versions-list-response.ts",
-          "src/types/applications-source-versions-retrieve-response.ts",
-          "src/types/applications-update-response.ts",
-          "src/types/create-application-request.ts",
-          "src/types/create-site-request.ts",
-          "src/types/deployment-response.ts",
-          "src/types/index.ts",
-          "src/types/listener-certificate-binding-response.ts",
-          "src/types/site-page.ts",
-          "src/types/site-response.ts",
-          "src/types/sites-activate-response.ts",
-          "src/types/sites-create-response201.ts",
-          "src/types/sites-deployments-create-response201.ts",
-          "src/types/sites-deployments-list-response.ts",
-          "src/types/sites-deployments-retrieve-response.ts",
-          "src/types/sites-deployments-rollback-response.ts",
-          "src/types/sites-domains-create-response201.ts",
-          "src/types/sites-domains-list-response.ts",
-          "src/types/sites-domains-listener-certificate-bindings-create-response201.ts",
-          "src/types/sites-domains-listener-certificate-bindings-list-response.ts",
-          "src/types/sites-domains-retrieve-response.ts",
-          "src/types/sites-domains-verify-response.ts",
-          "src/types/sites-env-variables-create-response201.ts",
-          "src/types/sites-env-variables-list-response.ts",
-          "src/types/sites-env-variables-update-response.ts",
-          "src/types/sites-health-checks-create-response201.ts",
-          "src/types/sites-health-checks-list-response.ts",
-          "src/types/sites-list-response.ts",
-          "src/types/sites-pause-response.ts",
-          "src/types/sites-retrieve-response.ts",
-          "src/types/sites-source-versions-create-response201.ts",
-          "src/types/sites-source-versions-git-import-create-response201.ts",
-          "src/types/sites-source-versions-list-response.ts",
-          "src/types/sites-source-versions-retrieve-response.ts",
-          "src/types/sites-update-response.ts",
-          "src/types/source-version-response.ts",
-          "src/types/update-application-request.ts",
-          "src/types/update-site-request.ts"
-        ]
-      },
-      {
-        "area": "runtime",
-        "paths": [
-          "src/http/client.ts"
-        ]
-      },
-      {
-        "area": "build-metadata",
-        "paths": [
-          "package.json"
-        ]
-      },
-      {
-        "area": "documentation",
-        "paths": [
-          "README.md"
-        ]
-      }
-    ],
-    "requiresVerification": true,
-    "summary": "Detected impact areas: api-surface, models, runtime, build-metadata, documentation. Verification is required."
+    "areas": [],
+    "details": [],
+    "requiresVerification": false,
+    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped."
   },
   "executionDecision": {
     "schemaVersion": 1,
-    "riskLevel": "high",
-    "nextAction": "verify",
+    "riskLevel": "low",
+    "nextAction": "skip",
     "requiresManualReview": false,
     "applyRequiresExpectedFingerprint": false,
-    "summary": "Changes have been applied. Run the required verification plan now.",
+    "summary": "No actionable changes were detected. No apply or verification step is required.",
     "reasons": [
-      "deleted-generated-files",
-      "manual-review-required",
-      "verification-required"
+      "no-actionable-changes"
     ]
   },
   "executionHandoff": {
     "schemaVersion": 1,
-    "summary": "Run the required verification commands now.",
-    "steps": [
-      {
-        "id": "verify-check",
-        "title": "Unified package check",
-        "required": true,
-        "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, runtime, build-metadata, documentation.",
-        "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-app-sdk\\sdkwork-web-app-sdk-typescript\\generated\\server-openapi",
-        "command": "node",
-        "args": [
-          "./bin/publish-core.mjs",
-          "--language",
-          "typescript",
-          "--project-dir",
-          ".",
-          "--action",
-          "check"
-        ],
-        "displayCommand": "node ./bin/publish-core.mjs --language typescript --project-dir . --action check"
-      },
-      {
-        "id": "verify-build",
-        "title": "Unified package build",
-        "required": true,
-        "rationale": "Run the full package build because this language uses a lighter check path than the final build. Triggered by: api-surface, models, runtime, build-metadata, documentation.",
-        "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-app-sdk\\sdkwork-web-app-sdk-typescript\\generated\\server-openapi",
-        "command": "node",
-        "args": [
-          "./bin/publish-core.mjs",
-          "--language",
-          "typescript",
-          "--project-dir",
-          ".",
-          "--action",
-          "build"
-        ],
-        "displayCommand": "node ./bin/publish-core.mjs --language typescript --project-dir . --action build"
-      }
-    ]
+    "summary": "No further commands are required.",
+    "steps": []
   },
   "verificationPlan": {
-    "shouldRun": true,
-    "runPhase": "now",
-    "summary": "Detected impact areas: api-surface, models, runtime, build-metadata, documentation. Verification is required. Run the required verification commands now against the generated SDK output.",
-    "steps": [
-      {
-        "id": "check",
-        "title": "Unified package check",
-        "required": true,
-        "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, runtime, build-metadata, documentation.",
-        "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-app-sdk\\sdkwork-web-app-sdk-typescript\\generated\\server-openapi",
-        "command": "node",
-        "args": [
-          "./bin/publish-core.mjs",
-          "--language",
-          "typescript",
-          "--project-dir",
-          ".",
-          "--action",
-          "check"
-        ],
-        "displayCommand": "node ./bin/publish-core.mjs --language typescript --project-dir . --action check"
-      },
-      {
-        "id": "build",
-        "title": "Unified package build",
-        "required": true,
-        "rationale": "Run the full package build because this language uses a lighter check path than the final build. Triggered by: api-surface, models, runtime, build-metadata, documentation.",
-        "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-app-sdk\\sdkwork-web-app-sdk-typescript\\generated\\server-openapi",
-        "command": "node",
-        "args": [
-          "./bin/publish-core.mjs",
-          "--language",
-          "typescript",
-          "--project-dir",
-          ".",
-          "--action",
-          "build"
-        ],
-        "displayCommand": "node ./bin/publish-core.mjs --language typescript --project-dir . --action build"
-      }
-    ]
+    "shouldRun": false,
+    "runPhase": "skip",
+    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped.",
+    "steps": []
   },
   "sdk": {
     "name": "sdkwork-web-app-sdk",
@@ -240,26 +56,54 @@
     "localVersions": []
   },
   "stats": {
-    "totalFiles": 98,
-    "models": 68,
+    "totalFiles": 106,
+    "models": 76,
     "apis": 7,
-    "types": 70
+    "types": 78
   },
   "warnings": [],
   "syncSummary": {
     "dryRun": false,
     "controlPlaneEnabled": true,
-    "writtenFiles": 45,
+    "writtenFiles": 0,
     "skippedScaffoldFiles": 2,
-    "skippedUnchangedGeneratedFiles": 51,
-    "deletedGeneratedFiles": 30,
+    "skippedUnchangedGeneratedFiles": 104,
+    "deletedGeneratedFiles": 0,
     "changeSummaryPath": ".sdkwork/sdkwork-generator-changes.json",
-    "changeFingerprint": "d4a00f3ff906f679d04d1e02a1adca92af756b13cbfba484e5967864456ada9a",
+    "changeFingerprint": "e95e8c993942c0716377be42302ff22b230c362ad74412f0205072ce74580773",
     "changes": {
-      "createdGeneratedFiles": [
+      "createdGeneratedFiles": [],
+      "updatedGeneratedFiles": [],
+      "unchangedGeneratedFiles": [
+        "bin/publish-core.mjs",
+        "bin/publish.ps1",
+        "bin/publish.sh",
+        "bin/sdk-gen.bat",
+        "bin/sdk-gen.sh",
+        "CHANGELOG.md",
+        "LICENSE",
+        "package.json",
+        "README.md",
+        "sdkwork-sdk.json",
         "src/api/application.ts",
+        "src/api/base.ts",
+        "src/api/certificate.ts",
+        "src/api/deployment.ts",
+        "src/api/domain.ts",
+        "src/api/env-variable.ts",
+        "src/api/index.ts",
+        "src/api/monitor.ts",
+        "src/api/paths.ts",
+        "src/api/source-version.ts",
+        "src/auth/index.ts",
+        "src/http/client.ts",
+        "src/http/index.ts",
+        "src/index.ts",
+        "src/sdk.ts",
+        "src/types/app-kind.ts",
         "src/types/application-page.ts",
         "src/types/application-response.ts",
+        "src/types/application-store-listing.ts",
         "src/types/applications-activate-response.ts",
         "src/types/applications-create-response201.ts",
         "src/types/applications-deployments-create-response201.ts",
@@ -279,56 +123,27 @@
         "src/types/applications-health-checks-list-response.ts",
         "src/types/applications-list-response.ts",
         "src/types/applications-pause-response.ts",
+        "src/types/applications-platform-targets-create-response201.ts",
+        "src/types/applications-platform-targets-list-response.ts",
+        "src/types/applications-platform-targets-retrieve-response.ts",
         "src/types/applications-retrieve-response.ts",
         "src/types/applications-source-versions-create-response201.ts",
         "src/types/applications-source-versions-git-import-create-response201.ts",
         "src/types/applications-source-versions-list-response.ts",
         "src/types/applications-source-versions-retrieve-response.ts",
         "src/types/applications-update-response.ts",
-        "src/types/create-application-request.ts",
-        "src/types/update-application-request.ts"
-      ],
-      "updatedGeneratedFiles": [
-        "package.json",
-        "README.md",
-        "src/api/certificate.ts",
-        "src/api/deployment.ts",
-        "src/api/domain.ts",
-        "src/api/env-variable.ts",
-        "src/api/index.ts",
-        "src/api/monitor.ts",
-        "src/api/source-version.ts",
-        "src/http/client.ts",
-        "src/sdk.ts",
-        "src/types/deployment-response.ts",
-        "src/types/index.ts",
-        "src/types/listener-certificate-binding-response.ts",
-        "src/types/source-version-response.ts"
-      ],
-      "unchangedGeneratedFiles": [
-        "bin/publish-core.mjs",
-        "bin/publish.ps1",
-        "bin/publish.sh",
-        "bin/sdk-gen.bat",
-        "bin/sdk-gen.sh",
-        "CHANGELOG.md",
-        "LICENSE",
-        "sdkwork-sdk.json",
-        "src/api/base.ts",
-        "src/api/paths.ts",
-        "src/auth/index.ts",
-        "src/http/index.ts",
-        "src/index.ts",
-        "src/types/application-store-listing.ts",
         "src/types/certificate-identifier-response.ts",
         "src/types/common.ts",
+        "src/types/create-application-request.ts",
         "src/types/create-deployment-request.ts",
         "src/types/create-domain-request.ts",
         "src/types/create-env-variable-request.ts",
         "src/types/create-health-check-request.ts",
         "src/types/create-listener-certificate-binding-request.ts",
+        "src/types/create-platform-target-request.ts",
         "src/types/create-source-version-request.ts",
         "src/types/deployment-page.ts",
+        "src/types/deployment-response.ts",
         "src/types/domain-page.ts",
         "src/types/domain-response.ts",
         "src/types/domain-verify-response.ts",
@@ -339,10 +154,14 @@
         "src/types/health-check-page.ts",
         "src/types/health-check-response.ts",
         "src/types/import-git-source-version-request.ts",
+        "src/types/index.ts",
+        "src/types/listener-certificate-binding-response.ts",
         "src/types/listener-certificate-summary-response.ts",
         "src/types/media-checksum.ts",
         "src/types/media-resource.ts",
         "src/types/page-info.ts",
+        "src/types/platform-target-response.ts",
+        "src/types/platform.ts",
         "src/types/problem-detail.ts",
         "src/types/sdk-work-api-response.ts",
         "src/types/sdk-work-async-data.ts",
@@ -355,41 +174,13 @@
         "src/types/sdk-work-resource-response.ts",
         "src/types/source-version-config-snapshot.ts",
         "src/types/source-version-page.ts",
+        "src/types/source-version-response.ts",
+        "src/types/tech-stack.ts",
+        "src/types/update-application-request.ts",
         "src/types/update-env-variable-request.ts",
         "tsconfig.json"
       ],
-      "deletedGeneratedFiles": [
-        "src/api/site.ts",
-        "src/types/create-site-request.ts",
-        "src/types/site-page.ts",
-        "src/types/site-response.ts",
-        "src/types/sites-activate-response.ts",
-        "src/types/sites-create-response201.ts",
-        "src/types/sites-deployments-create-response201.ts",
-        "src/types/sites-deployments-list-response.ts",
-        "src/types/sites-deployments-retrieve-response.ts",
-        "src/types/sites-deployments-rollback-response.ts",
-        "src/types/sites-domains-create-response201.ts",
-        "src/types/sites-domains-list-response.ts",
-        "src/types/sites-domains-listener-certificate-bindings-create-response201.ts",
-        "src/types/sites-domains-listener-certificate-bindings-list-response.ts",
-        "src/types/sites-domains-retrieve-response.ts",
-        "src/types/sites-domains-verify-response.ts",
-        "src/types/sites-env-variables-create-response201.ts",
-        "src/types/sites-env-variables-list-response.ts",
-        "src/types/sites-env-variables-update-response.ts",
-        "src/types/sites-health-checks-create-response201.ts",
-        "src/types/sites-health-checks-list-response.ts",
-        "src/types/sites-list-response.ts",
-        "src/types/sites-pause-response.ts",
-        "src/types/sites-retrieve-response.ts",
-        "src/types/sites-source-versions-create-response201.ts",
-        "src/types/sites-source-versions-git-import-create-response201.ts",
-        "src/types/sites-source-versions-list-response.ts",
-        "src/types/sites-source-versions-retrieve-response.ts",
-        "src/types/sites-update-response.ts",
-        "src/types/update-site-request.ts"
-      ],
+      "deletedGeneratedFiles": [],
       "scaffoldedFiles": [],
       "preservedScaffoldFiles": [
         "custom/build-runtime.mjs",
@@ -399,173 +190,26 @@
     },
     "impact": {
       "schemaVersion": 1,
-      "areas": [
-        "api-surface",
-        "models",
-        "runtime",
-        "build-metadata",
-        "documentation"
-      ],
-      "details": [
-        {
-          "area": "api-surface",
-          "paths": [
-            "src/api/application.ts",
-            "src/api/certificate.ts",
-            "src/api/deployment.ts",
-            "src/api/domain.ts",
-            "src/api/env-variable.ts",
-            "src/api/index.ts",
-            "src/api/monitor.ts",
-            "src/api/site.ts",
-            "src/api/source-version.ts",
-            "src/http/client.ts",
-            "src/sdk.ts"
-          ]
-        },
-        {
-          "area": "models",
-          "paths": [
-            "src/types/application-page.ts",
-            "src/types/application-response.ts",
-            "src/types/applications-activate-response.ts",
-            "src/types/applications-create-response201.ts",
-            "src/types/applications-deployments-create-response201.ts",
-            "src/types/applications-deployments-list-response.ts",
-            "src/types/applications-deployments-retrieve-response.ts",
-            "src/types/applications-deployments-rollback-response.ts",
-            "src/types/applications-domains-create-response201.ts",
-            "src/types/applications-domains-list-response.ts",
-            "src/types/applications-domains-listener-certificate-bindings-create-response201.ts",
-            "src/types/applications-domains-listener-certificate-bindings-list-response.ts",
-            "src/types/applications-domains-retrieve-response.ts",
-            "src/types/applications-domains-verify-response.ts",
-            "src/types/applications-env-variables-create-response201.ts",
-            "src/types/applications-env-variables-list-response.ts",
-            "src/types/applications-env-variables-update-response.ts",
-            "src/types/applications-health-checks-create-response201.ts",
-            "src/types/applications-health-checks-list-response.ts",
-            "src/types/applications-list-response.ts",
-            "src/types/applications-pause-response.ts",
-            "src/types/applications-retrieve-response.ts",
-            "src/types/applications-source-versions-create-response201.ts",
-            "src/types/applications-source-versions-git-import-create-response201.ts",
-            "src/types/applications-source-versions-list-response.ts",
-            "src/types/applications-source-versions-retrieve-response.ts",
-            "src/types/applications-update-response.ts",
-            "src/types/create-application-request.ts",
-            "src/types/create-site-request.ts",
-            "src/types/deployment-response.ts",
-            "src/types/index.ts",
-            "src/types/listener-certificate-binding-response.ts",
-            "src/types/site-page.ts",
-            "src/types/site-response.ts",
-            "src/types/sites-activate-response.ts",
-            "src/types/sites-create-response201.ts",
-            "src/types/sites-deployments-create-response201.ts",
-            "src/types/sites-deployments-list-response.ts",
-            "src/types/sites-deployments-retrieve-response.ts",
-            "src/types/sites-deployments-rollback-response.ts",
-            "src/types/sites-domains-create-response201.ts",
-            "src/types/sites-domains-list-response.ts",
-            "src/types/sites-domains-listener-certificate-bindings-create-response201.ts",
-            "src/types/sites-domains-listener-certificate-bindings-list-response.ts",
-            "src/types/sites-domains-retrieve-response.ts",
-            "src/types/sites-domains-verify-response.ts",
-            "src/types/sites-env-variables-create-response201.ts",
-            "src/types/sites-env-variables-list-response.ts",
-            "src/types/sites-env-variables-update-response.ts",
-            "src/types/sites-health-checks-create-response201.ts",
-            "src/types/sites-health-checks-list-response.ts",
-            "src/types/sites-list-response.ts",
-            "src/types/sites-pause-response.ts",
-            "src/types/sites-retrieve-response.ts",
-            "src/types/sites-source-versions-create-response201.ts",
-            "src/types/sites-source-versions-git-import-create-response201.ts",
-            "src/types/sites-source-versions-list-response.ts",
-            "src/types/sites-source-versions-retrieve-response.ts",
-            "src/types/sites-update-response.ts",
-            "src/types/source-version-response.ts",
-            "src/types/update-application-request.ts",
-            "src/types/update-site-request.ts"
-          ]
-        },
-        {
-          "area": "runtime",
-          "paths": [
-            "src/http/client.ts"
-          ]
-        },
-        {
-          "area": "build-metadata",
-          "paths": [
-            "package.json"
-          ]
-        },
-        {
-          "area": "documentation",
-          "paths": [
-            "README.md"
-          ]
-        }
-      ],
-      "requiresVerification": true,
-      "summary": "Detected impact areas: api-surface, models, runtime, build-metadata, documentation. Verification is required."
+      "areas": [],
+      "details": [],
+      "requiresVerification": false,
+      "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped."
     },
     "verificationPlan": {
-      "shouldRun": true,
-      "runPhase": "now",
-      "summary": "Detected impact areas: api-surface, models, runtime, build-metadata, documentation. Verification is required. Run the required verification commands now against the generated SDK output.",
-      "steps": [
-        {
-          "id": "check",
-          "title": "Unified package check",
-          "required": true,
-          "rationale": "Validate the generated package with the unified publish helper. Triggered by: api-surface, models, runtime, build-metadata, documentation.",
-          "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-app-sdk\\sdkwork-web-app-sdk-typescript\\generated\\server-openapi",
-          "command": "node",
-          "args": [
-            "./bin/publish-core.mjs",
-            "--language",
-            "typescript",
-            "--project-dir",
-            ".",
-            "--action",
-            "check"
-          ],
-          "displayCommand": "node ./bin/publish-core.mjs --language typescript --project-dir . --action check"
-        },
-        {
-          "id": "build",
-          "title": "Unified package build",
-          "required": true,
-          "rationale": "Run the full package build because this language uses a lighter check path than the final build. Triggered by: api-surface, models, runtime, build-metadata, documentation.",
-          "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-app-sdk\\sdkwork-web-app-sdk-typescript\\generated\\server-openapi",
-          "command": "node",
-          "args": [
-            "./bin/publish-core.mjs",
-            "--language",
-            "typescript",
-            "--project-dir",
-            ".",
-            "--action",
-            "build"
-          ],
-          "displayCommand": "node ./bin/publish-core.mjs --language typescript --project-dir . --action build"
-        }
-      ]
+      "shouldRun": false,
+      "runPhase": "skip",
+      "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped.",
+      "steps": []
     },
     "executionDecision": {
       "schemaVersion": 1,
-      "riskLevel": "high",
-      "nextAction": "verify",
+      "riskLevel": "low",
+      "nextAction": "skip",
       "requiresManualReview": false,
       "applyRequiresExpectedFingerprint": false,
-      "summary": "Changes have been applied. Run the required verification plan now.",
+      "summary": "No actionable changes were detected. No apply or verification step is required.",
       "reasons": [
-        "deleted-generated-files",
-        "manual-review-required",
-        "verification-required"
+        "no-actionable-changes"
       ]
     },
     "backedUpFiles": [],

@@ -12,7 +12,7 @@
   "generatedFiles": [
     {
       "path": "bin/publish-core.mjs",
-      "sha256": "98ad0918a78bfbe22bf8f12fec709b0bed545b9e01edd40f5e4abf31a23378a5"
+      "sha256": "a47e95119bf3eafcbcb2102f7024c147f967924e4e3f343d1a29effb4b6765df"
     },
     {
       "path": "bin/publish.ps1",
@@ -148,7 +148,7 @@
     },
     {
       "path": "src/models/application_response.rs",
-      "sha256": "6040a7df51f6c9aa1a669e029c7a3a8d435061ec587f3ff8b04922eca378c822"
+      "sha256": "f464f52eb9a941487e87e3520331b9eb8b036008c23b085e78ccb127ab5525e5"
     },
     {
       "path": "src/models/application_source_version_config_snapshot.rs",
@@ -328,7 +328,7 @@
     },
     {
       "path": "src/models/create_application_request.rs",
-      "sha256": "ba1271f78973518144426d926e7b4a4a76852d81223b5beee20f0779c1992237"
+      "sha256": "f38db3b3434018933c24f06f7a24e48a0fc6fde37adac26ae7c4acb3cbee88a9"
     },
     {
       "path": "src/models/create_application_source_version_request.rs",
@@ -345,6 +345,10 @@
     {
       "path": "src/models/create_nginx_config_request.rs",
       "sha256": "74fa25a35cd54dc0a14bf71111c53a395e094ebadf4bc995f81139f8e27a1bc2"
+    },
+    {
+      "path": "src/models/create_platform_target_request.rs",
+      "sha256": "54df483ad9e58746299b5dba9c600930090ec892d9606dec1434638aa6751b99"
     },
     {
       "path": "src/models/create_root_domain_hostname_request.rs",
@@ -420,7 +424,7 @@
     },
     {
       "path": "src/models/mod.rs",
-      "sha256": "0ef3c591ec6450cf36c31b9a8ca0020320c13c712311cada4b1622d2cc34b1bc"
+      "sha256": "1d7cc4223d99c733a045dd9f58676a2b77087daa2e82b5a76a026f353444f948"
     },
     {
       "path": "src/models/nginx_config_page.rs",
@@ -449,6 +453,10 @@
     {
       "path": "src/models/page_info.rs",
       "sha256": "9736eb8cc4f3bc814e92f373c25e3de4f4bfa1007f8f2c4f988e03c8986afb95"
+    },
+    {
+      "path": "src/models/platform_target_response.rs",
+      "sha256": "9f187a138348bcf06cfc919ede32ac28401d1aef6b33a7e4314050f250a1eadf"
     },
     {
       "path": "src/models/problem_detail.rs",

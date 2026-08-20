@@ -86,11 +86,11 @@ deploy_one() {
 
   args=(compose --env-file "$env_file" -p "$project" "${compose_files[@]}" --profile "$env_name")
   if [ "$down" = true ]; then
-    docker "${args[@]}" down
+    docker "${args[@]}" down --remove-orphans
     echo "stopped $env_name ($project)"
     return 0
   fi
-  docker "${args[@]}" up -d
+  docker "${args[@]}" up -d --remove-orphans
 
   port_key="SDKWORK_WEBSERVER_${env_name^^}_HOST_PORT"
   port_key=${port_key/production/PROD}

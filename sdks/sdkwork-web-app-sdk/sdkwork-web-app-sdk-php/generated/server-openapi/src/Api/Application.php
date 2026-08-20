@@ -8,9 +8,13 @@ use SDKWork\Web\AppSdk\Models\ApplicationsActivateResponse;
 use SDKWork\Web\AppSdk\Models\ApplicationsCreateResponse201;
 use SDKWork\Web\AppSdk\Models\ApplicationsListResponse;
 use SDKWork\Web\AppSdk\Models\ApplicationsPauseResponse;
+use SDKWork\Web\AppSdk\Models\ApplicationsPlatformTargetsCreateResponse201;
+use SDKWork\Web\AppSdk\Models\ApplicationsPlatformTargetsListResponse;
+use SDKWork\Web\AppSdk\Models\ApplicationsPlatformTargetsRetrieveResponse;
 use SDKWork\Web\AppSdk\Models\ApplicationsRetrieveResponse;
 use SDKWork\Web\AppSdk\Models\ApplicationsUpdateResponse;
 use SDKWork\Web\AppSdk\Models\CreateApplicationRequest;
+use SDKWork\Web\AppSdk\Models\CreatePlatformTargetRequest;
 use SDKWork\Web\AppSdk\Models\UpdateApplicationRequest;
 
 final class ApplicationApi extends BaseApi
@@ -98,6 +102,45 @@ final class ApplicationApi extends BaseApi
         $path = $this->interpolatePath('/app/v3/api/applications/{applicationId}/pause', ['applicationId' => $this->serializePathParameter($applicationId, new PathParameterSpec('applicationId', 'simple', false))]);
         $result = $this->client->request('POST', $path, []);
         return is_array($result) ? ApplicationsPauseResponse::fromArray($result) : null;
+    }
+
+    /** 获取应用平台目标列表 */
+    public function applicationsPlatformTargetsList(string $applicationId, ?int $page = null, ?int $pageSize = null): ?ApplicationsPlatformTargetsListResponse
+    {
+        $path = $this->interpolatePath('/app/v3/api/applications/{applicationId}/platform_targets', ['applicationId' => $this->serializePathParameter($applicationId, new PathParameterSpec('applicationId', 'simple', false))]);
+        $query = $this->buildQueryString([
+            new QueryParameterSpec('page', $page, 'form', true, false, null),
+            new QueryParameterSpec('page_size', $pageSize, 'form', true, false, null),
+        ]);
+        $path = $this->appendQueryString($path, $query);
+        $result = $this->client->request('GET', $path, []);
+        return is_array($result) ? ApplicationsPlatformTargetsListResponse::fromArray($result) : null;
+    }
+
+    /** 创建应用平台目标 */
+    public function applicationsPlatformTargetsCreate(string $applicationId, array|CreatePlatformTargetRequest $body, string $idempotencyKey): ?ApplicationsPlatformTargetsCreateResponse201
+    {
+        $path = $this->interpolatePath('/app/v3/api/applications/{applicationId}/platform_targets', ['applicationId' => $this->serializePathParameter($applicationId, new PathParameterSpec('applicationId', 'simple', false))]);
+        $payload = $body instanceof CreatePlatformTargetRequest ? $body->toArray() : $body;
+        $requestHeaders = $this->buildRequestHeaders(
+            [
+                'Idempotency-Key' => new HeaderParameterSpec($idempotencyKey, 'simple', false, null),
+            ],
+            []
+        );
+        $result = $this->client->request('POST', $path, [
+            'headers' => $requestHeaders,
+            'json' => $payload,
+        ]);
+        return is_array($result) ? ApplicationsPlatformTargetsCreateResponse201::fromArray($result) : null;
+    }
+
+    /** 获取应用平台目标详情 */
+    public function applicationsPlatformTargetsRetrieve(string $applicationId, string $platformTargetId): ?ApplicationsPlatformTargetsRetrieveResponse
+    {
+        $path = $this->interpolatePath('/app/v3/api/applications/{applicationId}/platform_targets/{platformTargetId}', ['applicationId' => $this->serializePathParameter($applicationId, new PathParameterSpec('applicationId', 'simple', false)), 'platformTargetId' => $this->serializePathParameter($platformTargetId, new PathParameterSpec('platformTargetId', 'simple', false))]);
+        $result = $this->client->request('GET', $path, []);
+        return is_array($result) ? ApplicationsPlatformTargetsRetrieveResponse::fromArray($result) : null;
     }
 
     private function buildRequestHeaders(array $headers, array $cookies): array

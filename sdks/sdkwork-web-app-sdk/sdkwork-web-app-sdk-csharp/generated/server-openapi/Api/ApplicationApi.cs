@@ -94,6 +94,42 @@ namespace SDKWork.Web.AppSdk.Api
             return await _client.PostAsync<SDKWork.Web.AppSdk.Models.ApplicationsPauseResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/pause"), null);
         }
 
+        /// <summary>
+        /// 获取应用平台目标列表
+        /// </summary>
+        public async Task<SDKWork.Web.AppSdk.Models.ApplicationsPlatformTargetsListResponse?> ApplicationsPlatformTargetsListAsync(string applicationId, int? page = null, int? pageSize = null)
+        {
+            var queryString = BuildQueryString(new[]
+            {
+                new QueryParameterSpec("page", page, "form", true, false, null),
+                new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
+            });
+            return await _client.GetAsync<SDKWork.Web.AppSdk.Models.ApplicationsPlatformTargetsListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/platform_targets"), queryString));
+        }
+
+        /// <summary>
+        /// 创建应用平台目标
+        /// </summary>
+        public async Task<SDKWork.Web.AppSdk.Models.ApplicationsPlatformTargetsCreateResponse201?> ApplicationsPlatformTargetsCreateAsync(string applicationId, SDKWork.Web.AppSdk.Models.CreatePlatformTargetRequest body, string idempotencyKey)
+        {
+            var requestHeaders = BuildRequestHeaders(
+                new Dictionary<string, HeaderParameterSpec>
+                {
+                    ["Idempotency-Key"] = new HeaderParameterSpec(idempotencyKey, "simple", false, null),
+                },
+                new Dictionary<string, HeaderParameterSpec>()
+            );
+            return await _client.PostAsync<SDKWork.Web.AppSdk.Models.ApplicationsPlatformTargetsCreateResponse201>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/platform_targets"), body, null, requestHeaders, "application/json");
+        }
+
+        /// <summary>
+        /// 获取应用平台目标详情
+        /// </summary>
+        public async Task<SDKWork.Web.AppSdk.Models.ApplicationsPlatformTargetsRetrieveResponse?> ApplicationsPlatformTargetsRetrieveAsync(string applicationId, string platformTargetId)
+        {
+            return await _client.GetAsync<SDKWork.Web.AppSdk.Models.ApplicationsPlatformTargetsRetrieveResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/platform_targets/{SerializePathParameter(platformTargetId, new PathParameterSpec("platformTargetId", "simple", false))}"));
+        }
+
         private sealed record PathParameterSpec(string Name, string Style, bool Explode);
 
         private static string SerializePathParameter(object? value, PathParameterSpec spec)

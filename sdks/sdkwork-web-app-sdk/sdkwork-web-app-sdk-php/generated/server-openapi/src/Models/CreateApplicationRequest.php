@@ -14,9 +14,7 @@ final class CreateApplicationRequest
 
     public ?string $description = null;
 
-    public ?string $applicationType = null;
-
-    public ?int $siteType = null;
+    public ?string $appKind = null;
 
     public array $runtimeConfig = [];
 
@@ -33,11 +31,8 @@ final class CreateApplicationRequest
         $this->description = array_key_exists('description', $data)
             ? $data['description']
             : null;
-        $this->applicationType = array_key_exists('applicationType', $data)
-            ? $data['applicationType']
-            : null;
-        $this->siteType = array_key_exists('siteType', $data)
-            ? $data['siteType']
+        $this->appKind = array_key_exists('appKind', $data)
+            ? $data['appKind']
             : null;
         $this->runtimeConfig = array_key_exists('runtimeConfig', $data)
             ? is_array($data['runtimeConfig']) ? $data['runtimeConfig'] : []
@@ -58,8 +53,7 @@ final class CreateApplicationRequest
             'name' => $this->name,
             'slug' => $this->slug,
             'description' => $this->description,
-            'applicationType' => $this->applicationType,
-            'siteType' => $this->siteType,
+            'appKind' => $this->appKind,
             'runtimeConfig' => $this->runtimeConfig,
             'storeListing' => $this->storeListing instanceof ApplicationStoreListing ? $this->storeListing->toArray() : $this->storeListing,
         ];

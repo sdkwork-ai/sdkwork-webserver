@@ -237,6 +237,165 @@ class MediaResource {
   }
 }
 
+class PlatformTargetResponse {
+  final String? id;
+  final String? appId;
+  final String? targetKey;
+  final String? platform;
+  final String? techStack;
+  final List<String>? architectures;
+  final String? bundleId;
+  final String? packageName;
+  final String? appIdValue;
+  final String? bundleName;
+  final String? targetStatus;
+  final String? createdAt;
+  final String? updatedAt;
+
+  PlatformTargetResponse({
+    this.id,
+    this.appId,
+    this.targetKey,
+    this.platform,
+    this.techStack,
+    this.architectures,
+    this.bundleId,
+    this.packageName,
+    this.appIdValue,
+    this.bundleName,
+    this.targetStatus,
+    this.createdAt,
+    this.updatedAt
+  });
+
+  factory PlatformTargetResponse.fromJson(Map<String, dynamic> json) {
+    return PlatformTargetResponse(
+      id: json['id']?.toString(),
+      appId: json['appId']?.toString(),
+      targetKey: json['targetKey']?.toString(),
+      platform: json['platform']?.toString(),
+      techStack: json['techStack']?.toString(),
+      architectures: (() {
+        final list = _sdkworkAsList(json['architectures']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      bundleId: json['bundleId']?.toString(),
+      packageName: json['packageName']?.toString(),
+      appIdValue: json['appIdValue']?.toString(),
+      bundleName: json['bundleName']?.toString(),
+      targetStatus: json['targetStatus']?.toString(),
+      createdAt: json['createdAt']?.toString(),
+      updatedAt: json['updatedAt']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'appId': appId,
+      'targetKey': targetKey,
+      'platform': platform,
+      'techStack': techStack,
+      'architectures': architectures?.map((item) => item).toList(),
+      'bundleId': bundleId,
+      'packageName': packageName,
+      'appIdValue': appIdValue,
+      'bundleName': bundleName,
+      'targetStatus': targetStatus,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
+    };
+  }
+}
+
+class CreatePlatformTargetRequest {
+  final String targetKey;
+  final String platform;
+  final String? techStack;
+  final List<String>? architectures;
+  final String? bundleId;
+  final String? packageName;
+  final String? appId;
+  final String? bundleName;
+  final List<String>? allowedChannels;
+
+  CreatePlatformTargetRequest({
+    required this.targetKey,
+    required this.platform,
+    this.techStack,
+    this.architectures,
+    this.bundleId,
+    this.packageName,
+    this.appId,
+    this.bundleName,
+    this.allowedChannels
+  });
+
+  factory CreatePlatformTargetRequest.fromJson(Map<String, dynamic> json) {
+    return CreatePlatformTargetRequest(
+      targetKey: (() {
+        final value = json['targetKey']?.toString();
+        if (value == null) {
+          throw FormatException('CreatePlatformTargetRequest.targetKey is required');
+        }
+        return value;
+      })(),
+      platform: (() {
+        final value = json['platform']?.toString();
+        if (value == null) {
+          throw FormatException('CreatePlatformTargetRequest.platform is required');
+        }
+        return value;
+      })(),
+      techStack: json['techStack']?.toString(),
+      architectures: (() {
+        final list = _sdkworkAsList(json['architectures']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      bundleId: json['bundleId']?.toString(),
+      packageName: json['packageName']?.toString(),
+      appId: json['appId']?.toString(),
+      bundleName: json['bundleName']?.toString(),
+      allowedChannels: (() {
+        final list = _sdkworkAsList(json['allowedChannels']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'targetKey': targetKey,
+      'platform': platform,
+      'techStack': techStack,
+      'architectures': architectures?.map((item) => item).toList(),
+      'bundleId': bundleId,
+      'packageName': packageName,
+      'appId': appId,
+      'bundleName': bundleName,
+      'allowedChannels': allowedChannels?.map((item) => item).toList(),
+    };
+  }
+}
+
 class ApplicationStoreListing {
   final MediaResource? icon;
   final MediaResource? cover;
@@ -328,8 +487,7 @@ class CreateApplicationRequest {
   final String name;
   final String? slug;
   final String? description;
-  final String? applicationType;
-  final int siteType;
+  final String appKind;
   final Map<String, dynamic>? runtimeConfig;
   final ApplicationStoreListing? storeListing;
 
@@ -337,8 +495,7 @@ class CreateApplicationRequest {
     required this.name,
     this.slug,
     this.description,
-    this.applicationType,
-    required this.siteType,
+    required this.appKind,
     this.runtimeConfig,
     this.storeListing
   });
@@ -354,11 +511,10 @@ class CreateApplicationRequest {
       })(),
       slug: json['slug']?.toString(),
       description: json['description']?.toString(),
-      applicationType: json['applicationType']?.toString(),
-      siteType: (() {
-        final value = json['siteType'];
-        if (value is! int) {
-          throw FormatException('CreateApplicationRequest.siteType is required');
+      appKind: (() {
+        final value = json['appKind']?.toString();
+        if (value == null) {
+          throw FormatException('CreateApplicationRequest.appKind is required');
         }
         return value;
       })(),
@@ -375,8 +531,7 @@ class CreateApplicationRequest {
       'name': name,
       'slug': slug,
       'description': description,
-      'applicationType': applicationType,
-      'siteType': siteType,
+      'appKind': appKind,
       'runtimeConfig': runtimeConfig,
       'storeListing': storeListing?.toJson(),
     };
@@ -424,7 +579,7 @@ class ApplicationResponse {
   final String? slug;
   final String? description;
   final String? siteId;
-  final String? applicationType;
+  final String? appKind;
   final int? siteType;
   final int? status;
   final Map<String, dynamic>? runtimeConfig;
@@ -438,7 +593,7 @@ class ApplicationResponse {
     this.slug,
     this.description,
     this.siteId,
-    this.applicationType,
+    this.appKind,
     this.siteType,
     this.status,
     this.runtimeConfig,
@@ -454,7 +609,7 @@ class ApplicationResponse {
       slug: json['slug']?.toString(),
       description: json['description']?.toString(),
       siteId: json['siteId']?.toString(),
-      applicationType: json['applicationType']?.toString(),
+      appKind: json['appKind']?.toString(),
       siteType: json['siteType'] is int ? json['siteType'] : null,
       status: json['status'] is int ? json['status'] : null,
       runtimeConfig: _sdkworkAsMap(json['runtimeConfig']),
@@ -474,7 +629,7 @@ class ApplicationResponse {
       'slug': slug,
       'description': description,
       'siteId': siteId,
-      'applicationType': applicationType,
+      'appKind': appKind,
       'siteType': siteType,
       'status': status,
       'runtimeConfig': runtimeConfig,
@@ -3493,6 +3648,144 @@ class DomainsListResponse {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('DomainsListResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ApplicationsPlatformTargetsListResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ApplicationsPlatformTargetsListResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ApplicationsPlatformTargetsListResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsPlatformTargetsListResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ApplicationsPlatformTargetsListResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ApplicationsPlatformTargetsListResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ApplicationsPlatformTargetsListResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ApplicationsPlatformTargetsCreateResponse201 {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ApplicationsPlatformTargetsCreateResponse201({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ApplicationsPlatformTargetsCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return ApplicationsPlatformTargetsCreateResponse201(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ApplicationsPlatformTargetsCreateResponse201.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ApplicationsPlatformTargetsCreateResponse201.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ApplicationsPlatformTargetsCreateResponse201.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ApplicationsPlatformTargetsRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ApplicationsPlatformTargetsRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ApplicationsPlatformTargetsRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationsPlatformTargetsRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ApplicationsPlatformTargetsRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ApplicationsPlatformTargetsRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ApplicationsPlatformTargetsRetrieveResponse.traceId is required');
         }
         return value;
       })()

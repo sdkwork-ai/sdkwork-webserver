@@ -19,8 +19,9 @@ final class ApplicationResponse
     /** The application's backing site id (internal carrier) */
     public ?string $siteId = null;
 
-    public ?string $applicationType = null;
+    public ?string $appKind = null;
 
+    /** Internal carrier site type derived from the app kind */
     public ?int $siteType = null;
 
     public ?int $status = null;
@@ -50,8 +51,8 @@ final class ApplicationResponse
         $this->siteId = array_key_exists('siteId', $data)
             ? $data['siteId']
             : null;
-        $this->applicationType = array_key_exists('applicationType', $data)
-            ? $data['applicationType']
+        $this->appKind = array_key_exists('appKind', $data)
+            ? $data['appKind']
             : null;
         $this->siteType = array_key_exists('siteType', $data)
             ? $data['siteType']
@@ -86,7 +87,7 @@ final class ApplicationResponse
             'slug' => $this->slug,
             'description' => $this->description,
             'siteId' => $this->siteId,
-            'applicationType' => $this->applicationType,
+            'appKind' => $this->appKind,
             'siteType' => $this->siteType,
             'status' => $this->status,
             'runtimeConfig' => $this->runtimeConfig,

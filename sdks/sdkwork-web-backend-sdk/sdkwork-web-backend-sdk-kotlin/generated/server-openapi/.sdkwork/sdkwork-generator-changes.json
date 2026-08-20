@@ -9,12 +9,18 @@
     "protocol": "http",
     "packageName": "com.sdkwork:sdkwork-web-backend-sdk"
   },
-  "changeFingerprint": "674020d1e8a15a61e1081f00b9a07f8e7896925b323ccf025dd5a37e95814f3a",
+  "changeFingerprint": "dccc6c4f715a607c09064a7323bb0820950b5464db49837a522671deaeedeea0",
   "changes": {
-    "createdGeneratedFiles": [],
-    "updatedGeneratedFiles": [],
-    "unchangedGeneratedFiles": [
+    "createdGeneratedFiles": [
+      "src/main/kotlin/com/sdkwork/web/backend/sdk/CreatePlatformTargetRequest.kt",
+      "src/main/kotlin/com/sdkwork/web/backend/sdk/PlatformTargetResponse.kt"
+    ],
+    "updatedGeneratedFiles": [
       "bin/publish-core.mjs",
+      "src/main/kotlin/com/sdkwork/web/backend/sdk/ApplicationResponse.kt",
+      "src/main/kotlin/com/sdkwork/web/backend/sdk/CreateApplicationRequest.kt"
+    ],
+    "unchangedGeneratedFiles": [
       "bin/publish.ps1",
       "bin/publish.sh",
       "build.gradle.kts",
@@ -44,7 +50,6 @@
       "src/main/kotlin/com/sdkwork/web/backend/sdk/api/ServerApi.kt",
       "src/main/kotlin/com/sdkwork/web/backend/sdk/ApplicationDeploymentResponse.kt",
       "src/main/kotlin/com/sdkwork/web/backend/sdk/ApplicationDomainResponse.kt",
-      "src/main/kotlin/com/sdkwork/web/backend/sdk/ApplicationResponse.kt",
       "src/main/kotlin/com/sdkwork/web/backend/sdk/ApplicationsActivateResponse.kt",
       "src/main/kotlin/com/sdkwork/web/backend/sdk/ApplicationsCreateResponse201.kt",
       "src/main/kotlin/com/sdkwork/web/backend/sdk/ApplicationsDeploymentsCreateResponse201.kt",
@@ -88,7 +93,6 @@
       "src/main/kotlin/com/sdkwork/web/backend/sdk/ConfigsValidateResponse.kt",
       "src/main/kotlin/com/sdkwork/web/backend/sdk/CreateApplicationDeploymentRequest.kt",
       "src/main/kotlin/com/sdkwork/web/backend/sdk/CreateApplicationDomainRequest.kt",
-      "src/main/kotlin/com/sdkwork/web/backend/sdk/CreateApplicationRequest.kt",
       "src/main/kotlin/com/sdkwork/web/backend/sdk/CreateApplicationSourceVersionRequest.kt",
       "src/main/kotlin/com/sdkwork/web/backend/sdk/CreateListenerCertificateBindingRequest.kt",
       "src/main/kotlin/com/sdkwork/web/backend/sdk/CreateManagedDomainRequest.kt",
@@ -157,26 +161,66 @@
   },
   "impact": {
     "schemaVersion": 1,
-    "areas": [],
-    "details": [],
-    "requiresVerification": false,
-    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped."
+    "areas": [
+      "publish-workflow",
+      "unknown"
+    ],
+    "details": [
+      {
+        "area": "publish-workflow",
+        "paths": [
+          "bin/publish-core.mjs"
+        ]
+      },
+      {
+        "area": "unknown",
+        "paths": [
+          "src/main/kotlin/com/sdkwork/web/backend/sdk/ApplicationResponse.kt",
+          "src/main/kotlin/com/sdkwork/web/backend/sdk/CreateApplicationRequest.kt",
+          "src/main/kotlin/com/sdkwork/web/backend/sdk/CreatePlatformTargetRequest.kt",
+          "src/main/kotlin/com/sdkwork/web/backend/sdk/PlatformTargetResponse.kt"
+        ]
+      }
+    ],
+    "requiresVerification": true,
+    "summary": "Detected impact areas: publish-workflow, unknown. Verification is required."
   },
   "verificationPlan": {
-    "shouldRun": false,
-    "runPhase": "skip",
-    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped.",
-    "steps": []
+    "shouldRun": true,
+    "runPhase": "now",
+    "summary": "Detected impact areas: publish-workflow, unknown. Verification is required. Run the required verification commands now against the generated SDK output.",
+    "steps": [
+      {
+        "id": "check",
+        "title": "Unified package check",
+        "required": true,
+        "rationale": "Validate the generated package with the unified publish helper. Triggered by: publish-workflow, unknown.",
+        "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-backend-sdk\\sdkwork-web-backend-sdk-kotlin\\generated\\server-openapi",
+        "command": "node",
+        "args": [
+          "./bin/publish-core.mjs",
+          "--language",
+          "kotlin",
+          "--project-dir",
+          ".",
+          "--action",
+          "check"
+        ],
+        "displayCommand": "node ./bin/publish-core.mjs --language kotlin --project-dir . --action check"
+      }
+    ]
   },
   "executionDecision": {
     "schemaVersion": 1,
-    "riskLevel": "low",
-    "nextAction": "skip",
+    "riskLevel": "high",
+    "nextAction": "verify",
     "requiresManualReview": false,
     "applyRequiresExpectedFingerprint": false,
-    "summary": "No actionable changes were detected. No apply or verification step is required.",
+    "summary": "Changes have been applied. Run the required verification plan now.",
     "reasons": [
-      "no-actionable-changes"
+      "manual-review-required",
+      "unknown-impact",
+      "verification-required"
     ]
   },
   "preservedLegacyFiles": false

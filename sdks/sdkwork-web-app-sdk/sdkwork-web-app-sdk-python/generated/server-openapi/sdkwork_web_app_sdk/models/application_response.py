@@ -13,7 +13,7 @@ class ApplicationResponse:
     slug: Optional[str] = None
     description: Optional[str] = None
     site_id: Optional[str] = None
-    application_type: Optional[str] = None
+    app_kind: Optional[str] = None
     site_type: Optional[int] = None
     status: Optional[int] = None
     runtime_config: Optional[Dict[str, Any]] = None

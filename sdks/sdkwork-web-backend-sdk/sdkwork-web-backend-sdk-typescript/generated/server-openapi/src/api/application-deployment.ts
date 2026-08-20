@@ -33,7 +33,7 @@ export class ApplicationDeploymentApplicationsDeploymentsApi {
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'status', value: params?.status, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.request<{ items: ApplicationDeploymentResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/deployments`), query), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+    return this.client.request<{ items: ApplicationDeploymentResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/deployments`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
 /** Deploy an application */
@@ -44,7 +44,7 @@ export class ApplicationDeploymentApplicationsDeploymentsApi {
       },
       {}
     );
-    return this.client.request<ApplicationDeploymentResponse>(backendApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/deployments`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+    return this.client.request<ApplicationDeploymentResponse>(backendApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/deployments`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
 /** Restore a managed application from an immutable successful version */
@@ -55,27 +55,23 @@ export class ApplicationDeploymentApplicationsDeploymentsApi {
       },
       {}
     );
-    return this.client.request<ApplicationDeploymentResponse>(backendApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/deployments/${serializePathParameter(deploymentId, { name: 'deploymentId', style: 'simple', explode: false })}/rollback`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, headers: requestHeaders, sdkworkUnwrapKind: 'item' });
+    return this.client.request<ApplicationDeploymentResponse>(backendApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/deployments/${serializePathParameter(deploymentId, { name: 'deploymentId', style: 'simple', explode: false })}/rollback`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 }
 
 export class ApplicationDeploymentApplicationsApi {
-  private client: HttpClient;
   public readonly deployments: ApplicationDeploymentApplicationsDeploymentsApi;
 
   constructor(client: HttpClient) {
-    this.client = client;
     this.deployments = new ApplicationDeploymentApplicationsDeploymentsApi(client);
   }
 
 }
 
 export class ApplicationDeploymentApi {
-  private client: HttpClient;
   public readonly applications: ApplicationDeploymentApplicationsApi;
 
   constructor(client: HttpClient) {
-    this.client = client;
     this.applications = new ApplicationDeploymentApplicationsApi(client);
   }
 

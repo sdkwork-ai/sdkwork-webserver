@@ -9,10 +9,17 @@
     "protocol": "http",
     "packageName": "SDKWork.Web.BackendSdk"
   },
-  "changeFingerprint": "a71a080834680202d721aa7dc975035ba6f9c74f03430888223cbd0e7b48c7d1",
+  "changeFingerprint": "71a530bcd5429ac84092b31180814e217baf740c27452c7d1c28fa63d5b53249",
   "changes": {
-    "createdGeneratedFiles": [],
-    "updatedGeneratedFiles": [],
+    "createdGeneratedFiles": [
+      "Models/CreatePlatformTargetRequest.cs",
+      "Models/PlatformTargetResponse.cs"
+    ],
+    "updatedGeneratedFiles": [
+      "bin/publish-core.mjs",
+      "Models/ApplicationResponse.cs",
+      "Models/CreateApplicationRequest.cs"
+    ],
     "unchangedGeneratedFiles": [
       "Api/AgentApi.cs",
       "Api/Api.cs",
@@ -27,7 +34,6 @@
       "Api/DomainApi.cs",
       "Api/NginxApi.cs",
       "Api/ServerApi.cs",
-      "bin/publish-core.mjs",
       "bin/publish.ps1",
       "bin/publish.sh",
       "CHANGELOG.md",
@@ -41,7 +47,6 @@
       "Models/AgentSyncResponse.cs",
       "Models/ApplicationDeploymentResponse.cs",
       "Models/ApplicationDomainResponse.cs",
-      "Models/ApplicationResponse.cs",
       "Models/ApplicationsActivateResponse.cs",
       "Models/ApplicationsCreateResponse201.cs",
       "Models/ApplicationsDeploymentsCreateResponse201.cs",
@@ -85,7 +90,6 @@
       "Models/ConfigsValidateResponse.cs",
       "Models/CreateApplicationDeploymentRequest.cs",
       "Models/CreateApplicationDomainRequest.cs",
-      "Models/CreateApplicationRequest.cs",
       "Models/CreateApplicationSourceVersionRequest.cs",
       "Models/CreateListenerCertificateBindingRequest.cs",
       "Models/CreateManagedDomainRequest.cs",
@@ -156,26 +160,64 @@
   },
   "impact": {
     "schemaVersion": 1,
-    "areas": [],
-    "details": [],
-    "requiresVerification": false,
-    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped."
+    "areas": [
+      "models",
+      "publish-workflow"
+    ],
+    "details": [
+      {
+        "area": "models",
+        "paths": [
+          "Models/ApplicationResponse.cs",
+          "Models/CreateApplicationRequest.cs",
+          "Models/CreatePlatformTargetRequest.cs",
+          "Models/PlatformTargetResponse.cs"
+        ]
+      },
+      {
+        "area": "publish-workflow",
+        "paths": [
+          "bin/publish-core.mjs"
+        ]
+      }
+    ],
+    "requiresVerification": true,
+    "summary": "Detected impact areas: models, publish-workflow. Verification is required."
   },
   "verificationPlan": {
-    "shouldRun": false,
-    "runPhase": "skip",
-    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped.",
-    "steps": []
+    "shouldRun": true,
+    "runPhase": "now",
+    "summary": "Detected impact areas: models, publish-workflow. Verification is required. Run the required verification commands now against the generated SDK output.",
+    "steps": [
+      {
+        "id": "check",
+        "title": "Unified package check",
+        "required": true,
+        "rationale": "Validate the generated package with the unified publish helper. Triggered by: models, publish-workflow.",
+        "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-backend-sdk\\sdkwork-web-backend-sdk-csharp\\generated\\server-openapi",
+        "command": "node",
+        "args": [
+          "./bin/publish-core.mjs",
+          "--language",
+          "csharp",
+          "--project-dir",
+          ".",
+          "--action",
+          "check"
+        ],
+        "displayCommand": "node ./bin/publish-core.mjs --language csharp --project-dir . --action check"
+      }
+    ]
   },
   "executionDecision": {
     "schemaVersion": 1,
-    "riskLevel": "low",
-    "nextAction": "skip",
+    "riskLevel": "medium",
+    "nextAction": "verify",
     "requiresManualReview": false,
     "applyRequiresExpectedFingerprint": false,
-    "summary": "No actionable changes were detected. No apply or verification step is required.",
+    "summary": "Changes have been applied. Run the required verification plan now.",
     "reasons": [
-      "no-actionable-changes"
+      "verification-required"
     ]
   },
   "preservedLegacyFiles": false

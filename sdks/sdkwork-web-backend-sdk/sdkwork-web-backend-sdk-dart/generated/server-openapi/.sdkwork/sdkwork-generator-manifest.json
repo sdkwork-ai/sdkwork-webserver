@@ -16,7 +16,7 @@
     },
     {
       "path": "bin/publish-core.mjs",
-      "sha256": "98ad0918a78bfbe22bf8f12fec709b0bed545b9e01edd40f5e4abf31a23378a5"
+      "sha256": "a47e95119bf3eafcbcb2102f7024c147f967924e4e3f343d1a29effb4b6765df"
     },
     {
       "path": "bin/publish.ps1",
@@ -104,7 +104,7 @@
     },
     {
       "path": "lib/src/models.dart",
-      "sha256": "fd45dec118058ee6297794d6146cea1a477964ceba92281e2f9f361e0b3e05cb"
+      "sha256": "e2f146790f61c7ef942f6f6ab77597e9c5fe99c36b45541803e967e1b913af8e"
     },
     {
       "path": "LICENSE",
@@ -112,7 +112,7 @@
     },
     {
       "path": "pubspec.yaml",
-      "sha256": "8793d4feac78e1e6c5cd2c0ac22d3f0de2b7d1d327fa8900358531a2c56f0dd6"
+      "sha256": "862e199d3e62708d29ef50086cd64e7f8618c2dc46a097b73283ca2a3295a684"
     },
     {
       "path": "README.md",

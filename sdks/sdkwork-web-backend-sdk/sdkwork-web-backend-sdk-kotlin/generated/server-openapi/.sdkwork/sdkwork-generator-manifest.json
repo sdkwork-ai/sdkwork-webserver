@@ -12,7 +12,7 @@
   "generatedFiles": [
     {
       "path": "bin/publish-core.mjs",
-      "sha256": "98ad0918a78bfbe22bf8f12fec709b0bed545b9e01edd40f5e4abf31a23378a5"
+      "sha256": "a47e95119bf3eafcbcb2102f7024c147f967924e4e3f343d1a29effb4b6765df"
     },
     {
       "path": "bin/publish.ps1",
@@ -132,7 +132,7 @@
     },
     {
       "path": "src/main/kotlin/com/sdkwork/web/backend/sdk/ApplicationResponse.kt",
-      "sha256": "f77149b77c34227271bad1e0fc75d47c94596483db6b60e4cada583a611d3722"
+      "sha256": "90143ac6edb8e03fd60c016fbcc95d8a0020a083aec7c1edec05310b23c1c67e"
     },
     {
       "path": "src/main/kotlin/com/sdkwork/web/backend/sdk/ApplicationsActivateResponse.kt",
@@ -308,7 +308,7 @@
     },
     {
       "path": "src/main/kotlin/com/sdkwork/web/backend/sdk/CreateApplicationRequest.kt",
-      "sha256": "a7e8b9aa4fd7358a2ae9f5d9f6ebe86a31d5a70bfe81a75c3ea5f7a5eaf1b2f8"
+      "sha256": "ed415a4418dd9904415525fc38bfb6a9270801da39cc5d2ff37d0cc28a92c1fc"
     },
     {
       "path": "src/main/kotlin/com/sdkwork/web/backend/sdk/CreateApplicationSourceVersionRequest.kt",
@@ -325,6 +325,10 @@
     {
       "path": "src/main/kotlin/com/sdkwork/web/backend/sdk/CreateNginxConfigRequest.kt",
       "sha256": "504313f3cc5497c4b357c1d11b3ee8c8e8bfd4d16b077b7d1ee5b144c77f9d74"
+    },
+    {
+      "path": "src/main/kotlin/com/sdkwork/web/backend/sdk/CreatePlatformTargetRequest.kt",
+      "sha256": "46783abaafde47522034bffbac0d33633ec047c4e116a1bec2f772179d91a98c"
     },
     {
       "path": "src/main/kotlin/com/sdkwork/web/backend/sdk/CreateRootDomainHostnameRequest.kt",
@@ -429,6 +433,10 @@
     {
       "path": "src/main/kotlin/com/sdkwork/web/backend/sdk/PageInfo.kt",
       "sha256": "df79f2fb8d7d694e69c6cbec79442e6a957d56a155d9b94759b60e9a9043a95b"
+    },
+    {
+      "path": "src/main/kotlin/com/sdkwork/web/backend/sdk/PlatformTargetResponse.kt",
+      "sha256": "fc6fd307dab0fe02bb115fcefc89bebce0a9691a8abe92cf5124eaf75927572b"
     },
     {
       "path": "src/main/kotlin/com/sdkwork/web/backend/sdk/ProblemDetail.kt",

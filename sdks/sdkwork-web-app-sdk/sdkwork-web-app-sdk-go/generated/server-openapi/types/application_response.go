@@ -7,7 +7,7 @@ type ApplicationResponse struct {
 	Slug string `json:"slug"`
 	Description string `json:"description"`
 	SiteId string `json:"siteId"`
-	ApplicationType string `json:"applicationType"`
+	AppKind AppKind `json:"appKind"`
 	SiteType int `json:"siteType"`
 	Status int `json:"status"`
 	RuntimeConfig map[string]interface{} `json:"runtimeConfig"`

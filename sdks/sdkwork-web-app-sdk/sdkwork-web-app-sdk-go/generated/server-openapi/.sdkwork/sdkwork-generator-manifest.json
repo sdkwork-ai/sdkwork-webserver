@@ -12,7 +12,7 @@
   "generatedFiles": [
     {
       "path": "api/application.go",
-      "sha256": "93bb882747d774a139b59e3d19126d9afe6df7675134e43ecc19e3e87030d1e9"
+      "sha256": "3f479789496578df043e44879907a3a7a8cb484268010a2dadd2e9680cc66cbe"
     },
     {
       "path": "api/base.go",
@@ -52,7 +52,7 @@
     },
     {
       "path": "bin/publish-core.mjs",
-      "sha256": "98ad0918a78bfbe22bf8f12fec709b0bed545b9e01edd40f5e4abf31a23378a5"
+      "sha256": "a47e95119bf3eafcbcb2102f7024c147f967924e4e3f343d1a29effb4b6765df"
     },
     {
       "path": "bin/publish.ps1",
@@ -99,12 +99,16 @@
       "sha256": "6447833851e63bd297dbd46869a9d041657719ee7722249e8daea0b7c48576fa"
     },
     {
+      "path": "types/app_kind.go",
+      "sha256": "5ac8f4abf6933079944e88661c2627aff8a36e66faa5047440101157d3c97fba"
+    },
+    {
       "path": "types/application_page.go",
       "sha256": "8ca22517d67d02af8755635bf7090e02a54b0c4a99f764844a421cfdb89ebfb5"
     },
     {
       "path": "types/application_response.go",
-      "sha256": "150e24e0d848ad69ae47986eb46e160f24e4cbf8390da7fed5dadacc8b3fd9bc"
+      "sha256": "79c90fd014d9009a1534a831ad9a3ee73fe73feef85d044be822e0194702da78"
     },
     {
       "path": "types/application_store_listing.go",
@@ -187,6 +191,18 @@
       "sha256": "bf67846a25f9d49ae110672b6a16a1d7bbd9eb5615ac8bc9970c5c063b79e9c3"
     },
     {
+      "path": "types/applications_platform_targets_create_response201.go",
+      "sha256": "df736237492386f0e2bc7ac7b48c405bfb21742bcf0fd3fc745b8ab5e486c7e7"
+    },
+    {
+      "path": "types/applications_platform_targets_list_response.go",
+      "sha256": "ade7049716e36e8f97336f0f0588afedeb6c4996cebc2e9d82d38c5539860936"
+    },
+    {
+      "path": "types/applications_platform_targets_retrieve_response.go",
+      "sha256": "18a469b2c799cf7bcccbd5e0765d1b5c8346cdcf0a6400856a8200923fcd5dbf"
+    },
+    {
       "path": "types/applications_retrieve_response.go",
       "sha256": "aa0c80dcc8fc6adda641dd6e5ae482b675c7d1f01310eef0faa308bf4b92ecc5"
     },
@@ -220,7 +236,7 @@
     },
     {
       "path": "types/create_application_request.go",
-      "sha256": "7b464d2e50c0e1123b091c4a5f2d25f4911bfe724d9aae760cfe58b9088633e1"
+      "sha256": "ed8f912a87b8e4e066b89c06f44c0f7767b5248d4577149a19821e660613104f"
     },
     {
       "path": "types/create_deployment_request.go",
@@ -241,6 +257,10 @@
     {
       "path": "types/create_listener_certificate_binding_request.go",
       "sha256": "d58adf426ef6e4405af4a39a80b0f00eec3fcce0fb4c9b681d1e4a00a1f3b79e"
+    },
+    {
+      "path": "types/create_platform_target_request.go",
+      "sha256": "018b31b6f933f62fff935fd746a2b0ab7ac8c825d5766824766a94ac49612de5"
     },
     {
       "path": "types/create_source_version_request.go",
@@ -319,6 +339,14 @@
       "sha256": "e3ed0f4d7f04c05a38a7b1c3932d98eeaaa25143954e65d843a19a69a3777af0"
     },
     {
+      "path": "types/platform_target_response.go",
+      "sha256": "502feb165b56aae16a658b828e4dbc45e52705867a27ea759b392d2eb563bddb"
+    },
+    {
+      "path": "types/platform.go",
+      "sha256": "8541c8080b8b5c67f3cf2f8cc4d5af2c8cdffde8fd00ff3abedddbc92e6cefd5"
+    },
+    {
       "path": "types/problem_detail.go",
       "sha256": "cbec1aee3ada4dd415105d10f12f5211ad5c709beb43903f14e0e0f7c945e561"
     },
@@ -369,6 +397,10 @@
     {
       "path": "types/source_version_response.go",
       "sha256": "73e56a962be445e31b2467fc211a1139d6b813c8e217e91fcd44a07e1cef1302"
+    },
+    {
+      "path": "types/tech_stack.go",
+      "sha256": "8ef90541111986d243c57a1c8ebea87b1299e0eb4926d7d876adce54d1bc8f7b"
     },
     {
       "path": "types/update_application_request.go",

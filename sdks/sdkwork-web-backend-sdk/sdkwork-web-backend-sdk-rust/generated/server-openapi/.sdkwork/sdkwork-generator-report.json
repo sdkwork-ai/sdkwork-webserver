@@ -12,30 +12,33 @@
   "mode": "apply",
   "hasChanges": true,
   "hasDestructiveChanges": false,
-  "changeFingerprint": "d655eb9a5b6d1d6ceb11d309bcad5e7658c06f01eccaca8c521eea809aa2cf6c",
+  "changeFingerprint": "9f9c14b38f2d3474cdc34ba9f5b8f95b0117a2754d37c11e2229e0d6190c4371",
   "changeImpact": {
     "schemaVersion": 1,
     "areas": [
-      "runtime",
-      "build-metadata"
+      "models",
+      "publish-workflow"
     ],
     "details": [
       {
-        "area": "runtime",
+        "area": "models",
         "paths": [
-          "src/http/client.rs",
-          "src/http/mod.rs"
+          "src/models/application_response.rs",
+          "src/models/create_application_request.rs",
+          "src/models/create_platform_target_request.rs",
+          "src/models/mod.rs",
+          "src/models/platform_target_response.rs"
         ]
       },
       {
-        "area": "build-metadata",
+        "area": "publish-workflow",
         "paths": [
-          "Cargo.toml"
+          "bin/publish-core.mjs"
         ]
       }
     ],
     "requiresVerification": true,
-    "summary": "Detected impact areas: runtime, build-metadata. Verification is required."
+    "summary": "Detected impact areas: models, publish-workflow. Verification is required."
   },
   "executionDecision": {
     "schemaVersion": 1,
@@ -56,7 +59,7 @@
         "id": "verify-check",
         "title": "Unified package check",
         "required": true,
-        "rationale": "Validate the generated package with the unified publish helper. Triggered by: runtime, build-metadata.",
+        "rationale": "Validate the generated package with the unified publish helper. Triggered by: models, publish-workflow.",
         "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-backend-sdk\\sdkwork-web-backend-sdk-rust\\generated\\server-openapi",
         "command": "node",
         "args": [
@@ -74,7 +77,7 @@
         "id": "verify-build",
         "title": "Unified package build",
         "required": true,
-        "rationale": "Run the full package build because this language uses a lighter check path than the final build. Triggered by: runtime, build-metadata.",
+        "rationale": "Run the full package build because this language uses a lighter check path than the final build. Triggered by: models, publish-workflow.",
         "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-backend-sdk\\sdkwork-web-backend-sdk-rust\\generated\\server-openapi",
         "command": "node",
         "args": [
@@ -93,13 +96,13 @@
   "verificationPlan": {
     "shouldRun": true,
     "runPhase": "now",
-    "summary": "Detected impact areas: runtime, build-metadata. Verification is required. Run the required verification commands now against the generated SDK output.",
+    "summary": "Detected impact areas: models, publish-workflow. Verification is required. Run the required verification commands now against the generated SDK output.",
     "steps": [
       {
         "id": "check",
         "title": "Unified package check",
         "required": true,
-        "rationale": "Validate the generated package with the unified publish helper. Triggered by: runtime, build-metadata.",
+        "rationale": "Validate the generated package with the unified publish helper. Triggered by: models, publish-workflow.",
         "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-backend-sdk\\sdkwork-web-backend-sdk-rust\\generated\\server-openapi",
         "command": "node",
         "args": [
@@ -117,7 +120,7 @@
         "id": "build",
         "title": "Unified package build",
         "required": true,
-        "rationale": "Run the full package build because this language uses a lighter check path than the final build. Triggered by: runtime, build-metadata.",
+        "rationale": "Run the full package build because this language uses a lighter check path than the final build. Triggered by: models, publish-workflow.",
         "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-backend-sdk\\sdkwork-web-backend-sdk-rust\\generated\\server-openapi",
         "command": "node",
         "args": [
@@ -147,32 +150,36 @@
     "localVersions": []
   },
   "stats": {
-    "totalFiles": 138,
-    "models": 109,
+    "totalFiles": 140,
+    "models": 111,
     "apis": 11,
-    "types": 111
+    "types": 113
   },
   "warnings": [],
   "syncSummary": {
     "dryRun": false,
     "controlPlaneEnabled": true,
-    "writtenFiles": 3,
+    "writtenFiles": 6,
     "skippedScaffoldFiles": 1,
-    "skippedUnchangedGeneratedFiles": 134,
+    "skippedUnchangedGeneratedFiles": 133,
     "deletedGeneratedFiles": 0,
     "changeSummaryPath": ".sdkwork/sdkwork-generator-changes.json",
-    "changeFingerprint": "d655eb9a5b6d1d6ceb11d309bcad5e7658c06f01eccaca8c521eea809aa2cf6c",
+    "changeFingerprint": "9f9c14b38f2d3474cdc34ba9f5b8f95b0117a2754d37c11e2229e0d6190c4371",
     "changes": {
-      "createdGeneratedFiles": [],
+      "createdGeneratedFiles": [
+        "src/models/create_platform_target_request.rs",
+        "src/models/platform_target_response.rs"
+      ],
       "updatedGeneratedFiles": [
-        "Cargo.toml",
-        "src/http/client.rs",
-        "src/http/mod.rs"
+        "bin/publish-core.mjs",
+        "src/models/application_response.rs",
+        "src/models/create_application_request.rs",
+        "src/models/mod.rs"
       ],
       "unchangedGeneratedFiles": [
-        "bin/publish-core.mjs",
         "bin/publish.ps1",
         "bin/publish.sh",
+        "Cargo.toml",
         "CHANGELOG.md",
         "LICENSE",
         "README.md",
@@ -192,6 +199,8 @@
         "src/api/paths.rs",
         "src/api/server.rs",
         "src/client.rs",
+        "src/http/client.rs",
+        "src/http/mod.rs",
         "src/lib.rs",
         "src/models/agent_certificate_bundle.rs",
         "src/models/agent_certificate_observation.rs",
@@ -201,7 +210,6 @@
         "src/models/agent_sync_response.rs",
         "src/models/application_deployment_response.rs",
         "src/models/application_domain_response.rs",
-        "src/models/application_response.rs",
         "src/models/application_source_version_config_snapshot.rs",
         "src/models/application_source_version_response.rs",
         "src/models/application_store_listing.rs",
@@ -246,7 +254,6 @@
         "src/models/configs_validate_response.rs",
         "src/models/create_application_deployment_request.rs",
         "src/models/create_application_domain_request.rs",
-        "src/models/create_application_request.rs",
         "src/models/create_application_source_version_request.rs",
         "src/models/create_listener_certificate_binding_request.rs",
         "src/models/create_managed_domain_request.rs",
@@ -269,7 +276,6 @@
         "src/models/listener_certificate_summary_response.rs",
         "src/models/media_checksum.rs",
         "src/models/media_resource.rs",
-        "src/models/mod.rs",
         "src/models/nginx_config_page.rs",
         "src/models/nginx_config_response.rs",
         "src/models/nginx_deploy_response.rs",
@@ -315,37 +321,40 @@
     "impact": {
       "schemaVersion": 1,
       "areas": [
-        "runtime",
-        "build-metadata"
+        "models",
+        "publish-workflow"
       ],
       "details": [
         {
-          "area": "runtime",
+          "area": "models",
           "paths": [
-            "src/http/client.rs",
-            "src/http/mod.rs"
+            "src/models/application_response.rs",
+            "src/models/create_application_request.rs",
+            "src/models/create_platform_target_request.rs",
+            "src/models/mod.rs",
+            "src/models/platform_target_response.rs"
           ]
         },
         {
-          "area": "build-metadata",
+          "area": "publish-workflow",
           "paths": [
-            "Cargo.toml"
+            "bin/publish-core.mjs"
           ]
         }
       ],
       "requiresVerification": true,
-      "summary": "Detected impact areas: runtime, build-metadata. Verification is required."
+      "summary": "Detected impact areas: models, publish-workflow. Verification is required."
     },
     "verificationPlan": {
       "shouldRun": true,
       "runPhase": "now",
-      "summary": "Detected impact areas: runtime, build-metadata. Verification is required. Run the required verification commands now against the generated SDK output.",
+      "summary": "Detected impact areas: models, publish-workflow. Verification is required. Run the required verification commands now against the generated SDK output.",
       "steps": [
         {
           "id": "check",
           "title": "Unified package check",
           "required": true,
-          "rationale": "Validate the generated package with the unified publish helper. Triggered by: runtime, build-metadata.",
+          "rationale": "Validate the generated package with the unified publish helper. Triggered by: models, publish-workflow.",
           "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-backend-sdk\\sdkwork-web-backend-sdk-rust\\generated\\server-openapi",
           "command": "node",
           "args": [
@@ -363,7 +372,7 @@
           "id": "build",
           "title": "Unified package build",
           "required": true,
-          "rationale": "Run the full package build because this language uses a lighter check path than the final build. Triggered by: runtime, build-metadata.",
+          "rationale": "Run the full package build because this language uses a lighter check path than the final build. Triggered by: models, publish-workflow.",
           "workingDirectory": "E:\\sdkwork-space\\sdkwork-webserver\\sdks\\sdkwork-web-backend-sdk\\sdkwork-web-backend-sdk-rust\\generated\\server-openapi",
           "command": "node",
           "args": [

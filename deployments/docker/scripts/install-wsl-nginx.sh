@@ -3,7 +3,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# Script lives at deployments/docker/scripts/, so repo root is 3 levels up.
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 NGINX_ROOT="${REPO_ROOT}/deployments/docker/nginx"
 SITES_AVAILABLE="/etc/nginx/sites-available"
 SITES_ENABLED="/etc/nginx/sites-enabled"

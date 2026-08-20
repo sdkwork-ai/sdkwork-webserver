@@ -66,35 +66,30 @@ render_runtime_config() {
   local data_plane_bind="${SDKWORK_WEBSERVER_DATA_PLANE_OPERATIONS_BIND:-127.0.0.1:3901}"
   local ingress_port="${bind##*:}"
   local internal_api_url="http://127.0.0.1:${ingress_port}"
+
+  # [database] config only supports password_file (not password).
+  # If compose provided SDKWORK_DATABASE_PASSWORD, ensure_database_secret()
+  # will write it to /etc/sdkwork/webserver/secrets/database.secret, so we
+  # always point TOML at password_file.
   local db_password_field='password_file = "/etc/sdkwork/webserver/secrets/database.secret"'
   if [ -n "${SDKWORK_DATABASE_PASSWORD_FILE:-}" ]; then
     db_password_field="password_file = \"${SDKWORK_DATABASE_PASSWORD_FILE}\""
-  elif [ -n "${SDKWORK_DATABASE_PASSWORD:-}" ]; then
-    db_password_field="password = \"${SDKWORK_DATABASE_PASSWORD}\""
   fi
-  local redis_enabled="${SDKWORK_WEBSERVER_REDIS_ENABLED:-false}"
-  local redis_block=""
-  if [ "${redis_enabled}" = "true" ]; then
-    local redis_password_field='password_file = "/etc/sdkwork/webserver/secrets/redis.secret"'
-    if [ -n "${SDKWORK_WEBSERVER_REDIS_PASSWORD:-}" ]; then
-      redis_password_field="password = \"${SDKWORK_WEBSERVER_REDIS_PASSWORD}\""
-    elif [ -n "${SDKWORK_WEBSERVER_REDIS_PASSWORD_FILE:-}" ]; then
-      redis_password_field="password_file = \"${SDKWORK_WEBSERVER_REDIS_PASSWORD_FILE}\""
-    fi
-    redis_block="[redis]
-enabled = true
-host = \"${SDKWORK_WEBSERVER_REDIS_HOST:-127.0.0.1}\"
-port = ${SDKWORK_WEBSERVER_REDIS_PORT:-6379}
-database = ${SDKWORK_WEBSERVER_REDIS_DATABASE:-0}
-tls = ${SDKWORK_WEBSERVER_REDIS_TLS:-false}
-${redis_password_field}
-max_connections = ${SDKWORK_WEBSERVER_REDIS_MAX_CONNECTIONS:-10}
-"
-  else
-    redis_block="[redis]
-enabled = false
-"
-  fi
+
+  # Build cors_allowed_origins TOML array from comma-separated env var.
+  # "http://a.com, http://b.com" -> ["http://a.com", "http://b.com"]
+  local cors_origins="${SDKWORK_CORS_ALLOWED_ORIGINS:-${public_url}}"
+  local cors_toml_array
+  cors_toml_array=$(printf '%s' "${cors_origins}" | tr ',' '\n' \
+    | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//' \
+    | awk 'NF{printf "\"%s\", ", $0}' | sed 's/, $//')
+  cors_toml_array="[${cors_toml_array}]"
+
+  # NOTE: The RuntimeTomlConfig struct uses #[serde(deny_unknown_fields)].
+  # Supported top-level sections: profile, ingress, app_roots, deploy, database,
+  # secrets, acme, tls, node, region. Redis is NOT a TOML section — it is
+  # configured exclusively via SDKWORK_WEBSERVER_REDIS_* environment variables
+  # injected directly by Docker Compose.
 
   ensure_directory "${CONFIG_ROOT}"
   cat > "${RUNTIME_CONFIG_FILE}" <<EOF
@@ -112,7 +107,7 @@ data_plane_operations_bind = "${data_plane_bind}"
 public_http_url = "${public_url}"
 app_http_url = "${public_url}"
 backend_http_url = "${public_url}"
-cors_allowed_origins = ["${public_url}"]
+cors_allowed_origins = ${cors_toml_array}
 
 [app_roots]
 app_root = "/app"
@@ -150,7 +145,6 @@ ssl_mode = "${SDKWORK_DATABASE_SSL_MODE:-disable}"
 max_connections = ${SDKWORK_DATABASE_MAX_CONNECTIONS:-10}
 auto_migrate = true
 
-${redis_block}
 [secrets]
 encryption_key_file = "${SECRETS_ROOT}/encryption-key"
 deploy_encryption_key_file = "${SECRETS_ROOT}/deploy-encryption-key"
@@ -182,7 +176,48 @@ EOF
   chmod 0640 "${RUNTIME_CONFIG_FILE}"
 }
 
+ensure_pc_static_root() {
+  local static_root="${SDKWORK_WEBSERVER_PC_STATIC_ROOT:-/app/share/sdkwork/webserver/web/pc}"
+  local environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
+
+  ensure_directory "${static_root}"
+
+  cat > "${static_root}/index.html" <<'EOF'
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>SDKWork Web Server</title></head>
+<body><p>SDKWork Web Server standalone gateway</p></body>
+</html>
+EOF
+
+  cat > "${static_root}/runtime-env.json" <<EOF
+{
+  "environment": "${environment}",
+  "deploymentProfile": "standalone",
+  "profileId": "standalone.${environment}",
+  "runtimeTarget": "browser",
+  "browserOriginMode": "same-origin",
+  "appApiBaseUrl": "/",
+  "backendApiBaseUrl": "/",
+  "driveAppApiBaseUrl": "/",
+  "appbaseAppApiBaseUrl": "/"
+}
+EOF
+
+  chown -R "${SERVICE_USER}:${SERVICE_USER}" "${static_root}"
+  chmod 0755 "${static_root}"
+  chmod 0644 "${static_root}/index.html" "${static_root}/runtime-env.json"
+}
+
 run_as_service_user() {
+  if [ "$(id -u)" -eq 0 ]; then
+    runuser -u "${SERVICE_USER}" -- "$@"
+    return $?
+  fi
+  "$@"
+}
+
+exec_as_service_user() {
   if [ "$(id -u)" -eq 0 ]; then
     exec runuser -u "${SERVICE_USER}" -- "$@"
   fi
@@ -197,32 +232,27 @@ main() {
 
   apply_primary_domain
   ensure_database_secret
-  for secret_name in encryption-key deploy-encryption-key redis.secret \
+  for secret_name in encryption-key deploy-encryption-key \
     drive-internal-api-ingress-token knowledgebase-internal-api-ingress-token \
     web-internal-api-ingress-token; do
     ensure_secret_file "${secret_name}"
   done
-  if [ -n "${SDKWORK_WEBSERVER_REDIS_PASSWORD:-}" ]; then
-    ensure_secret_file "redis.secret"
-    printf '%s' "${SDKWORK_WEBSERVER_REDIS_PASSWORD}" > "${SECRETS_ROOT}/redis.secret"
-    chown "${SERVICE_USER}:${SERVICE_USER}" "${SECRETS_ROOT}/redis.secret"
-    chmod 0600 "${SECRETS_ROOT}/redis.secret"
-  fi
 
   render_runtime_config
+  ensure_pc_static_root
 
   case "${1:-serve-management}" in
     serve-management)
       log "running database migration"
       run_as_service_user "${GATEWAY_BINARY}" db-migrate
       log "starting management listener on ${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_INGRESS_BIND:-127.0.0.1:3800}"
-      run_as_service_user "${GATEWAY_BINARY}" serve-management
+      exec_as_service_user "${GATEWAY_BINARY}" serve-management
       ;;
     db-migrate)
-      run_as_service_user "${GATEWAY_BINARY}" db-migrate
+      exec_as_service_user "${GATEWAY_BINARY}" db-migrate
       ;;
     *)
-      run_as_service_user "${GATEWAY_BINARY}" "$@"
+      exec_as_service_user "${GATEWAY_BINARY}" "$@"
       ;;
   esac
 }

@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 from ..http_client import HttpClient
-from ..models import ApplicationsActivateResponse, ApplicationsCreateResponse201, ApplicationsListResponse, ApplicationsPauseResponse, ApplicationsRetrieveResponse, ApplicationsUpdateResponse, CreateApplicationRequest, UpdateApplicationRequest
+from ..models import ApplicationsActivateResponse, ApplicationsCreateResponse201, ApplicationsListResponse, ApplicationsPauseResponse, ApplicationsPlatformTargetsCreateResponse201, ApplicationsPlatformTargetsListResponse, ApplicationsPlatformTargetsRetrieveResponse, ApplicationsRetrieveResponse, ApplicationsUpdateResponse, CreateApplicationRequest, CreatePlatformTargetRequest, UpdateApplicationRequest
 
 def _append_query_string(path: str, raw_query_string: str) -> str:
     query = raw_query_string.lstrip('?')
@@ -242,6 +242,7 @@ class ApplicationApi:
 
     def __init__(self, client: HttpClient):
         self._client = client
+        self.platform_targets = ApplicationPlatformTargetsApi(client)
 
 
     def list(self, page: Optional[int] = None, page_size: Optional[int] = None, status: Optional[int] = None, application_type: Optional[str] = None, site_type: Optional[int] = None, keyword: Optional[str] = None) -> ApplicationsListResponse:
@@ -291,3 +292,32 @@ class ApplicationApi:
     def pause(self, application_id: str) -> ApplicationsPauseResponse:
         """暂停应用"""
         return self._client.post(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/pause")
+
+class ApplicationPlatformTargetsApi:
+    """application applications.platform_targets API client."""
+
+    def __init__(self, client: HttpClient):
+        self._client = client
+
+
+    def list(self, application_id: str, page: Optional[int] = None, page_size: Optional[int] = None) -> ApplicationsPlatformTargetsListResponse:
+        """获取应用平台目标列表"""
+        query = build_query_string([
+            {'name': 'page', 'value': page, 'style': 'form', 'explode': True, 'allow_reserved': False},
+            {'name': 'page_size', 'value': page_size, 'style': 'form', 'explode': True, 'allow_reserved': False},
+        ])
+        return self._client.get(_append_query_string(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/platform_targets", query))
+
+    def create(self, application_id: str, body: CreatePlatformTargetRequest, idempotency_key: str) -> ApplicationsPlatformTargetsCreateResponse201:
+        """创建应用平台目标"""
+        request_headers = build_request_headers(
+            {
+                'Idempotency-Key': {'value': idempotency_key, 'style': 'simple', 'explode': False},
+            },
+            {}
+        )
+        return self._client.post(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/platform_targets", json=body, headers=request_headers)
+
+    def retrieve(self, application_id: str, platform_target_id: str) -> ApplicationsPlatformTargetsRetrieveResponse:
+        """获取应用平台目标详情"""
+        return self._client.get(f"/app/v3/api/applications/{serialize_path_parameter(application_id, {'name': 'applicationId', 'style': 'simple', 'explode': False})}/platform_targets/{serialize_path_parameter(platform_target_id, {'name': 'platformTargetId', 'style': 'simple', 'explode': False})}")

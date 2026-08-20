@@ -18,7 +18,7 @@ export class MonitorApplicationsHealthChecksApi {
 
 /** 获取健康检查配置 */
   async list(applicationId: string | number, requestOptions?: ApiRequestOptions): Promise<{ items: HealthCheckResponse[]; pageInfo: PageInfo; }> {
-    return this.client.request<{ items: HealthCheckResponse[]; pageInfo: PageInfo; }>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/health_checks`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+    return this.client.request<{ items: HealthCheckResponse[]; pageInfo: PageInfo; }>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/health_checks`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
 /** 创建健康检查 */
@@ -29,27 +29,23 @@ export class MonitorApplicationsHealthChecksApi {
       },
       {}
     );
-    return this.client.request<HealthCheckResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/health_checks`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+    return this.client.request<HealthCheckResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/health_checks`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 }
 
 export class MonitorApplicationsApi {
-  private client: HttpClient;
   public readonly healthChecks: MonitorApplicationsHealthChecksApi;
 
   constructor(client: HttpClient) {
-    this.client = client;
     this.healthChecks = new MonitorApplicationsHealthChecksApi(client);
   }
 
 }
 
 export class MonitorApi {
-  private client: HttpClient;
   public readonly applications: MonitorApplicationsApi;
 
   constructor(client: HttpClient) {
-    this.client = client;
     this.applications = new MonitorApplicationsApi(client);
   }
 
@@ -59,13 +55,7 @@ export function createMonitorApi(client: HttpClient): MonitorApi {
   return new MonitorApi(client);
 }
 
-function appendQueryString(path: string, rawQueryString: string): string {
-  const query = rawQueryString.replace(/^\?+/, '');
-  if (!query) {
-    return path;
-  }
-  return path.includes('?') ? `${path}&${query}` : `${path}?${query}`;
-}
+
 
 interface PathParameterSpec {
   name: string;

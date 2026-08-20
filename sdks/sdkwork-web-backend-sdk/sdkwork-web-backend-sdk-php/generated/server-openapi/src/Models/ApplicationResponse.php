@@ -16,7 +16,7 @@ final class ApplicationResponse
 
     public ?string $description = null;
 
-    public ?string $applicationType = null;
+    public ?string $appKind = null;
 
     public ?int $siteType = null;
 
@@ -44,8 +44,8 @@ final class ApplicationResponse
         $this->description = array_key_exists('description', $data)
             ? $data['description']
             : null;
-        $this->applicationType = array_key_exists('applicationType', $data)
-            ? $data['applicationType']
+        $this->appKind = array_key_exists('appKind', $data)
+            ? $data['appKind']
             : null;
         $this->siteType = array_key_exists('siteType', $data)
             ? $data['siteType']
@@ -79,7 +79,7 @@ final class ApplicationResponse
             'name' => $this->name,
             'slug' => $this->slug,
             'description' => $this->description,
-            'applicationType' => $this->applicationType,
+            'appKind' => $this->appKind,
             'siteType' => $this->siteType,
             'status' => $this->status,
             'runtimeConfig' => $this->runtimeConfig,

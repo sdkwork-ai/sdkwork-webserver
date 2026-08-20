@@ -1,3 +1,4 @@
+import type { AppKind } from './app-kind';
 import type { ApplicationStoreListing } from './application-store-listing';
 
 export interface ApplicationResponse {
@@ -7,7 +8,8 @@ export interface ApplicationResponse {
   description?: string;
   /** The application's backing site id (internal carrier) */
   siteId?: string;
-  applicationType?: 'WEB' | 'API';
+  appKind?: AppKind;
+  /** Internal carrier site type derived from the app kind */
   siteType?: number;
   status?: number;
   runtimeConfig?: Record<string, unknown>;

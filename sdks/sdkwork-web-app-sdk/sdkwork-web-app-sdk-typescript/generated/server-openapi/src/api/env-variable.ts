@@ -33,7 +33,7 @@ export class EnvVariableApplicationsEnvVariablesApi {
     const query = buildQueryString([
       { name: 'environment', value: params?.environment, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.request<{ items: EnvVariableResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/env_variables`), query), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+    return this.client.request<{ items: EnvVariableResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/env_variables`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
 /** 创建环境变量 */
@@ -44,7 +44,7 @@ export class EnvVariableApplicationsEnvVariablesApi {
       },
       {}
     );
-    return this.client.request<EnvVariableResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/env_variables`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'POST' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+    return this.client.request<EnvVariableResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/env_variables`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
 /** 轮换环境变量值 */
@@ -55,7 +55,7 @@ export class EnvVariableApplicationsEnvVariablesApi {
       },
       {}
     );
-    return this.client.request<EnvVariableResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/env_variables/${serializePathParameter(variableId, { name: 'variableId', style: 'simple', explode: false })}`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'PATCH' as any, body, headers: requestHeaders, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+    return this.client.request<EnvVariableResponse>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/env_variables/${serializePathParameter(variableId, { name: 'variableId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PATCH' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
 /** 删除环境变量 */
@@ -66,27 +66,23 @@ export class EnvVariableApplicationsEnvVariablesApi {
       },
       {}
     );
-    return this.client.request<void>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/env_variables/${serializePathParameter(variableId, { name: 'variableId', style: 'simple', explode: false })}`), { signal: requestOptions?.signal, timeout: requestOptions?.timeout, method: 'DELETE' as any, headers: requestHeaders });
+    return this.client.request<void>(appApiPath(`/applications/${serializePathParameter(applicationId, { name: 'applicationId', style: 'simple', explode: false })}/env_variables/${serializePathParameter(variableId, { name: 'variableId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}) });
   }
 }
 
 export class EnvVariableApplicationsApi {
-  private client: HttpClient;
   public readonly envVariables: EnvVariableApplicationsEnvVariablesApi;
 
   constructor(client: HttpClient) {
-    this.client = client;
     this.envVariables = new EnvVariableApplicationsEnvVariablesApi(client);
   }
 
 }
 
 export class EnvVariableApi {
-  private client: HttpClient;
   public readonly applications: EnvVariableApplicationsApi;
 
   constructor(client: HttpClient) {
-    this.client = client;
     this.applications = new EnvVariableApplicationsApi(client);
   }
 

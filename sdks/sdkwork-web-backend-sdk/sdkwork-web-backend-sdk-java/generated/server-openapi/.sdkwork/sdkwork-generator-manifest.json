@@ -12,7 +12,7 @@
   "generatedFiles": [
     {
       "path": "bin/publish-core.mjs",
-      "sha256": "98ad0918a78bfbe22bf8f12fec709b0bed545b9e01edd40f5e4abf31a23378a5"
+      "sha256": "a47e95119bf3eafcbcb2102f7024c147f967924e4e3f343d1a29effb4b6765df"
     },
     {
       "path": "bin/publish.ps1",
@@ -132,7 +132,7 @@
     },
     {
       "path": "src/main/java/com/sdkwork/web/backend/sdk/model/ApplicationResponse.java",
-      "sha256": "62e1e246c6d4153091337b5c7b0edfd2177f2b9b9fd65c5f51354586e837894c"
+      "sha256": "6fabc765b330294b3fed4047b1a12c5649bfe602e7c3be86257a85accbb3dc9d"
     },
     {
       "path": "src/main/java/com/sdkwork/web/backend/sdk/model/ApplicationsActivateResponse.java",
@@ -308,7 +308,7 @@
     },
     {
       "path": "src/main/java/com/sdkwork/web/backend/sdk/model/CreateApplicationRequest.java",
-      "sha256": "55dedfba40f2edb7fb150243844d03d351f91248b9b8982236755ce64faca598"
+      "sha256": "a42c83b48b7e0b86f19eae992e7265925d8a93efb4703b5790b603c59736416c"
     },
     {
       "path": "src/main/java/com/sdkwork/web/backend/sdk/model/CreateApplicationSourceVersionRequest.java",
@@ -325,6 +325,10 @@
     {
       "path": "src/main/java/com/sdkwork/web/backend/sdk/model/CreateNginxConfigRequest.java",
       "sha256": "3b7c1b0566a0c8490551151fcefcea8c5f6d884a7cdfcd21d91edaa981cc6478"
+    },
+    {
+      "path": "src/main/java/com/sdkwork/web/backend/sdk/model/CreatePlatformTargetRequest.java",
+      "sha256": "3d50e0f21854596d9960b8b56008fe58a0426c39c783c30bc5fba9b25061cd27"
     },
     {
       "path": "src/main/java/com/sdkwork/web/backend/sdk/model/CreateRootDomainHostnameRequest.java",
@@ -425,6 +429,10 @@
     {
       "path": "src/main/java/com/sdkwork/web/backend/sdk/model/PageInfo.java",
       "sha256": "9751b523dfd972e16b72a2b1d110a434f3e32befda50b237b091dee502d72c30"
+    },
+    {
+      "path": "src/main/java/com/sdkwork/web/backend/sdk/model/PlatformTargetResponse.java",
+      "sha256": "b58a9f01418630ef799ba79dda9749efba7088066668bdf5905e0b11ab8733c7"
     },
     {
       "path": "src/main/java/com/sdkwork/web/backend/sdk/model/ProblemDetail.java",
