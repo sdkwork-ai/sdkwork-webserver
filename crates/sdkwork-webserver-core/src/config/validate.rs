@@ -497,8 +497,14 @@ impl SemanticValidator {
                         );
                     }
                 }
-                ResourceConfig::Proxy { upstream_ref, .. } => {
-                    if !upstreams.contains_key(upstream_ref.as_str()) {
+                ResourceConfig::Proxy {
+                    upstream_ref,
+                    dynamic_target,
+                    ..
+                } => {
+                    // Variable `proxy_pass` resolves its target per request
+                    // and does not reference a declared upstream.
+                    if dynamic_target.is_none() && !upstreams.contains_key(upstream_ref.as_str()) {
                         self.push(
                             format!("{path}/upstreamRef"),
                             format!("unknown upstream {upstream_ref}"),
@@ -1459,7 +1465,10 @@ impl SemanticValidator {
                 }
             }
             match &stream.tls {
-                Some(crate::config::model::StreamTlsMode::Terminate { certificate_ref }) => {
+                Some(crate::config::model::StreamTlsMode::Terminate {
+                    certificate_ref,
+                    ..
+                }) => {
                     if certificate_ref.is_empty() {
                         self.push(
                             format!("{path}/tls/certificateRef"),

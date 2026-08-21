@@ -14,9 +14,10 @@ use axum::{
 use futures_util::StreamExt;
 use sdkwork_webserver_core::{
     apply_rewrites, evaluate_access, evaluate_auth_basic, normalize_authority_host,
+    verify_secure_link,
     website_runtime::{ProviderResourceReference, WebsiteProviderType},
     AccessDecision, AuthBasicDecision, ResourceConfig, RewriteOutcome, RoutePathType,
-    SecurityHeadersConfig, XFrameOptions, MAX_REWRITE_INTERNAL_REDIRECTS,
+    SecureLinkFailure, SecurityHeadersConfig, XFrameOptions, MAX_REWRITE_INTERNAL_REDIRECTS,
 };
 use sdkwork_webserver_delivery_runtime::{
     AppConfigProviderPolicy, AppConfigResourceHandler, AppConfigResourceRoute,
@@ -26,6 +27,7 @@ use sdkwork_webserver_knowledgebase_provider::KNOWLEDGEBASE_WIKI_PROVIDER_CONTRA
 
 use super::{
     forwarded_scheme::resolve_request_scheme,
+    limit_conn::LimitConnDecision,
     limit_req::LimitReqDecision,
     metrics::RequestRejection,
     proxy::{proxy_request, request_body_timeout_response, text_response},
@@ -330,6 +332,60 @@ async fn route_admitted_request(
             return limit_req_rejected_response(request.version());
         }
     }
+    let limit_conn_lease = match state
+        .runtime
+        .limit_conn
+        .load()
+        .admit(client_ip, &selected.route.limit_conn)
+    {
+        Ok(lease) => lease,
+        Err(LimitConnDecision::Reject) => {
+            if let Some(response) = classify_request(&state, admitted, false, request.version()) {
+                return response;
+            }
+            state
+                .runtime
+                .metrics
+                .record_request_rejection(RequestRejection::ConnectionLimited);
+            return limit_conn_rejected_response(request.version());
+        }
+        Err(LimitConnDecision::Allow) => {
+            unreachable!("limit_conn admission only errors with Reject")
+        }
+    };
+    if let Some(secure_link) = selected.route.secure_link.clone() {
+        let prefix = selected.route.route_match.path.as_str();
+        let query = request.uri().query();
+        let now_unix_seconds = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_secs())
+            .unwrap_or(0);
+        match verify_secure_link(
+            &path,
+            &client_ip.to_string(),
+            query,
+            &secure_link,
+            prefix,
+            now_unix_seconds,
+        ) {
+            Ok(Some(serving_uri)) => {
+                // secure_link_secret: serve the rewritten URI (`/prefix/<rest>`).
+                path = serving_uri;
+            }
+            Ok(None) => {}
+            Err(SecureLinkFailure) => {
+                if let Some(response) = classify_request(&state, admitted, false, request.version())
+                {
+                    return response;
+                }
+                state
+                    .runtime
+                    .metrics
+                    .record_request_rejection(RequestRejection::LinkInvalid);
+                return secure_link_rejected_response(request.version());
+            }
+        }
+    }
     let operations_reserved = is_operations_candidate(&request)
         && selected.route.route_match.path_type == RoutePathType::Exact
         && is_operations_path(&selected.route.route_match.path)
@@ -425,6 +481,8 @@ async fn route_admitted_request(
             upstream_ref,
             strip_prefix,
             request_set_headers,
+            dynamic_target,
+            proxy_pass_request_headers,
             ..
         } => {
             super::proxy::proxy_request_cached(
@@ -433,6 +491,8 @@ async fn route_admitted_request(
                     upstream_ref,
                     strip_prefix: *strip_prefix,
                     request_set_headers,
+                    dynamic_target: dynamic_target.as_deref(),
+                    proxy_pass_request_headers: *proxy_pass_request_headers,
                     route: selected.route,
                     client_ip,
                     external_scheme: scheme.as_str(),
@@ -542,11 +602,26 @@ async fn route_admitted_request(
             "request served"
         );
     }
-    apply_security_headers(
+    let mut response = apply_security_headers(
         response,
         selected.virtual_host.security_headers.as_ref(),
         scheme.as_str(),
-    )
+    );
+    // Route-level `sub_filter` rides on the response so the substitution
+    // layer can apply it without re-selecting the route.
+    if let Some(sub_filter) = selected.route.sub_filter.clone() {
+        response
+            .extensions_mut()
+            .insert(super::sub_filter::SubFilterExtension(sub_filter));
+    }
+    // Keep the limit_conn slot held for the whole response lifetime: the
+    // lease drops when the response body completes or is abandoned.
+    response.map(|body| {
+        Body::new(super::limit_conn::LeaseBody {
+            inner: body,
+            lease: limit_conn_lease,
+        })
+    })
 }
 
 /// Applies the selected virtual host's security response headers. HSTS is
@@ -693,6 +768,24 @@ fn resource_pressure_response(version: Version) -> Response<Body> {
         response
             .headers_mut()
             .insert(CONNECTION, HeaderValue::from_static("close"));
+    }
+    response
+}
+
+fn secure_link_rejected_response(version: Version) -> Response<Body> {
+    let mut response =
+        fixed_response(403, "text/plain; charset=utf-8", "forbidden", false);
+    if version == Version::HTTP_09 {
+        response.headers_mut().remove(CONTENT_TYPE);
+    }
+    response
+}
+
+fn limit_conn_rejected_response(version: Version) -> Response<Body> {
+    let mut response = fixed_response(503, "text/plain; charset=utf-8", "too many connections", false);
+    *response.status_mut() = StatusCode::SERVICE_UNAVAILABLE;
+    if version == Version::HTTP_09 {
+        response.headers_mut().remove(CONTENT_TYPE);
     }
     response
 }

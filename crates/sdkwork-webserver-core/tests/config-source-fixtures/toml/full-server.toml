@@ -1,0 +1,157 @@
+# Regression fixture: single-file TOML parity counterpart of
+# ../nginx/full-nginx.conf — the same http-core-v1 surface plus the
+# extended directives (subFilter, limitConn, secureLink, dynamic proxyPass,
+# UDP stream).
+specVersion = 1
+kind = "sdkwork.webserver.server"
+id = "full-parity"
+profile = "standalone"
+
+[main]
+workerProcesses = "auto"
+errorLog = "/var/log/nginx/error.log warn"
+
+[main.events]
+workerConnections = 1024
+
+[http]
+sendfile = true
+keepaliveTimeout = "65s"
+gzip = true
+gzipTypes = ["text/plain", "text/css", "application/json"]
+gzipMinLength = 256
+limitReqZone = ["$binary_remote_addr zone=api:10m rate=5r/s"]
+limitConnZone = ["$binary_remote_addr zone=perip:10m"]
+
+[[http.upstream]]
+name = "backend"
+keepalive = 16
+
+[[http.upstream.target]]
+address = "127.0.0.1:8080"
+weight = 2
+maxFails = 3
+failTimeout = "10s"
+
+[[http.upstream.target]]
+address = "127.0.0.1:8081"
+backup = true
+
+[[http.upstream]]
+name = "hash_backend"
+loadBalancing = "hash"
+hashKey = "$request_uri consistent"
+
+[[http.upstream.target]]
+address = "127.0.0.1:8090"
+
+[[http.upstream.target]]
+address = "127.0.0.1:8091"
+down = true
+
+[[http.server]]
+listen = ["80", "[::]:80"]
+serverName = ["www.example.com", "example.com"]
+root = "/srv/www/example"
+index = ["index.html"]
+proxySetHeader = ["X-Server-Level inherited"]
+
+[[http.server.location]]
+match = "/api/"
+proxyPass = "http://backend"
+proxySetHeader = ["Host $host", "X-Forwarded-For $proxy_add_x_forwarded_for"]
+limitReq = ["api burst=10 nodelay"]
+limitConn = ["perip 5"]
+allow = ["127.0.0.1"]
+deny = ["all"]
+
+[[http.server.location]]
+match = "= /healthz"
+returnStatus = 200
+returnBody = "ok"
+
+[[http.server.location]]
+match = "/docs/"
+alias = "/srv/www/docs/"
+subFilter = ["Draft Final"]
+subFilterOnce = false
+subFilterTypes = ["text/html", "text/plain"]
+
+[[http.server.location]]
+match = "/files/"
+root = "/srv/www/files"
+secureLinkSecret = "s3cret"
+
+[[http.server.location]]
+match = "/links/"
+root = "/srv/www/links"
+secureLink = "st"
+secureLinkMd5 = "$secure_link_expires$uri$remote_addr key"
+secureLinkExpires = "e"
+
+[[http.server.location]]
+match = "/dynamic/"
+proxyPass = "http://$host:$server_port"
+proxyPassRequestHeaders = false
+
+[[http.server.location]]
+match = "/"
+tryFiles = ["$uri", "$uri/", "/index.html"]
+rewrite = ["^/old/(.*)$ /new/$1 permanent"]
+
+[[http.server]]
+listen = ["443 ssl http2"]
+serverName = ["secure.example.com"]
+
+[http.server.tls]
+certFile = "/etc/nginx/ssl/example.crt"
+certKeyFile = "/etc/nginx/ssl/example.key"
+clientCertificate = "optional"
+clientCertificateCA = "/etc/nginx/ssl/client-ca.pem"
+
+[[http.server.location]]
+match = "/"
+proxyPass = "http://127.0.0.1:8443"
+
+[[http.server.location]]
+match = "/old/"
+returnStatus = 301
+returnLocation = "https://$host$request_uri"
+
+[[http.server.location]]
+match = "/listing/"
+root = "/srv/www/listing"
+
+[proxyCache]
+enabled = true
+defaultTtlSeconds = 3600
+staleTtlSeconds = 3600
+
+# Stream upstreams reuse the http.upstream table (TOML layout v2).
+[[http.upstream]]
+name = "tcp_backend"
+
+[[http.upstream.target]]
+address = "127.0.0.1:3306"
+
+[stream]
+[[stream.server]]
+listen = ["3307"]
+proxyPass = "tcp_backend"
+proxyTimeout = "1h"
+
+[[stream.server]]
+listen = ["53"]
+protocol = "udp"
+proxyPass = "127.0.0.1:5353"
+
+[[stream.server]]
+listen = ["3443 ssl"]
+certificate = "stream"
+clientCertificate = "on"
+clientCertificateCA = "/etc/nginx/ssl/stream-ca.pem"
+proxyPass = "127.0.0.1:3444"
+
+[http.certificates.stream]
+certFile = "/etc/nginx/ssl/stream.crt"
+certKeyFile = "/etc/nginx/ssl/stream.key"

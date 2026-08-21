@@ -92,11 +92,17 @@ impl HttpResponseCache {
 
     /// Look up a fresh entry. Returns `None` when the entry is missing,
     /// expired, or not cacheable. Synchronous: the operation never awaits.
+    ///
+    /// Expired entries within the stale window are kept so `lookup_stale`
+    /// can serve them when the upstream fails (nginx `proxy_cache_use_stale`);
+    /// only entries beyond the stale window are evicted here.
     pub(crate) fn lookup(&self, key: &CacheKey) -> Option<CachedResponse> {
         tracing::debug!(?key, "proxy cache lookup");
         let entry = self.store.get(key)?;
         if entry.expired() {
-            self.store.remove(key);
+            if !entry.stale_available() {
+                self.store.remove(key);
+            }
             self.metrics.record_proxy_cache_miss();
             return None;
         }

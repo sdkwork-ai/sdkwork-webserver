@@ -60,22 +60,17 @@ pub enum WebServerConfigError {
     Validation { diagnostics: Vec<ConfigDiagnostic> },
 
     /// A stock nginx directive could not be materialized (fail closed).
-    /// `diagnostics` mirrors `path`/`line`/`message` so the shared
-    /// `diagnostics()` surface stays uniform across all source formats.
-    #[error("{path}:{line}: {message}")]
-    Nginx {
-        path: PathBuf,
-        line: usize,
-        message: String,
-        diagnostics: Vec<ConfigDiagnostic>,
-    },
+    /// The diagnostic's `path` is `file:line` and it is surfaced through
+    /// `diagnostics()` like every other source format.
+    #[error("{diagnostic}")]
+    Nginx { diagnostic: ConfigDiagnostic },
 }
 
 impl WebServerConfigError {
     pub fn diagnostics(&self) -> &[ConfigDiagnostic] {
         match self {
             Self::Validation { diagnostics } => diagnostics,
-            Self::Nginx { diagnostics, .. } => diagnostics,
+            Self::Nginx { diagnostic } => std::slice::from_ref(diagnostic),
             _ => &[],
         }
     }

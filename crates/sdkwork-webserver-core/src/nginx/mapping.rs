@@ -30,36 +30,45 @@ use serde_json::{json, Value};
 use thiserror::Error;
 
 use crate::config::{
-    format_proxy_set_header_entry, merge_proxy_set_headers, parse_htpasswd, parse_limit_req,
-    parse_limit_req_zone, ConfigDiagnostic, StreamTargetConfig, StreamTlsMode, WebServerAppConfig,
-    WebServerConfigError,
+    format_proxy_set_header_entry, merge_proxy_set_headers, parse_htpasswd, parse_limit_conn,
+    parse_limit_conn_zone, parse_limit_req, parse_limit_req_zone, ConfigDiagnostic,
+    StreamTargetConfig, StreamTlsMode, WebServerAppConfig, WebServerConfigError,
 };
 
 use super::parser::NginxDirective;
 
 const ACCEPTED_IGNORED: &[&str] = &[
     // process / http tuning (gzip / limit_req_zone / proxy_cache* are handled explicitly)
-    "user", "worker_processes", "worker_connections", "pid", "error_log", "access_log",
-    "sendfile", "tcp_nopush", "tcp_nodelay", "keepalive_timeout", "server_tokens",
+    "user", "worker_processes", "worker_rlimit_nofile", "worker_connections", "pid",
+    "error_log", "access_log", "sendfile", "tcp_nopush", "tcp_nodelay",
+    "keepalive_timeout", "keepalive_requests", "server_tokens",
     "map", "log_format", "types", "default_type", "charset", "events", "so_keepalive",
-    "resolver", "client_body_timeout", "client_header_timeout", "client_header_buffer_size",
+    "resolver", "resolver_timeout", "client_body_timeout", "client_header_timeout",
+    "client_header_buffer_size",
     "large_client_header_buffers", "reset_timedout_connection", "server_names_hash_max_size",
-    "proxy_http_version", "proxy_buffering", "proxy_request_buffering",
+    "proxy_http_version", "proxy_buffering", "proxy_request_buffering", "proxy_method",
     "proxy_intercept_errors", "proxy_next_upstream", "proxy_hide_header", "proxy_redirect",
     "proxy_connect_timeout", "proxy_read_timeout", "proxy_send_timeout", "proxy_buffer_size",
     "proxy_buffers", "ssl_protocols", "ssl_prefer_server_ciphers", "ssl_session_cache",
     "ssl_session_timeout", "ssl_session_tickets", "ssl_stapling", "ssl_stapling_verify",
-    "ssl_trusted_certificate", "ssl_ciphers", "http2", "keepalive",
-    "client_body_buffer_size", "send_timeout", "fastcgi_read_timeout", "merge_slashes",
+    "ssl_trusted_certificate", "ssl_ciphers", "ssl_verify_depth", "ssl_dhparam",
+    "ssl_ecdh_curve", "http2", "keepalive",
+    "client_body_buffer_size", "send_timeout", "sendfile_max_chunk", "fastcgi_read_timeout",
+    "merge_slashes",
     "gzip_comp_level", "gzip_vary", "gzip_proxied", "gzip_disable", "gzip_static",
     "open_file_cache", "open_file_cache_valid", "open_file_cache_min_uses",
+    "limit_conn_status", "limit_conn_log_level", "log_not_found",
     "underscores_in_headers", "ignore_invalid_headers", "absolute_redirect",
     "port_in_redirect", "server_name_in_redirect",
+    // Response-behavior knobs the runtime owns via its own defaults (error
+    // page mapping, directory autoindex, cache/entity headers). Accepted and
+    // ignored like the safe tuning directives above.
+    "error_page", "autoindex", "expires", "etag", "if_modified_since",
+    // events / OS tuning
+    "use", "accept_mutex", "multi_accept", "disable_symlinks",
 ];
 
-const UNSUPPORTED_SECURITY: &[&str] = &[
-    "sub_filter", "limit_conn", "secure_link", "proxy_pass_request_headers",
-];
+const UNSUPPORTED_SECURITY: &[&str] = &[];
 
 #[derive(Debug, Error)]
 pub enum NginxConfigError {
@@ -94,13 +103,7 @@ impl From<NginxConfigError> for WebServerConfigError {
                 line,
                 message,
             } => WebServerConfigError::Nginx {
-                diagnostics: vec![ConfigDiagnostic::new(
-                    format!("{}:{line}", path.display()),
-                    message.clone(),
-                )],
-                path,
-                line,
-                message,
+                diagnostic: ConfigDiagnostic::new(format!("{}:{line}", path.display()), message),
             },
             NginxConfigError::Config(error) => error,
             NginxConfigError::ValidationFailed(message) => {
@@ -126,6 +129,7 @@ pub fn materialize_nginx_app(
             "upstream" => mapper.materialize_upstream(directive)?,
             "server" => mapper.materialize_server(directive, server_index)?,
             "limit_req_zone" => mapper.materialize_limit_req_zone(directive)?,
+            "limit_conn_zone" => mapper.materialize_limit_conn_zone(directive)?,
             "gzip" => mapper.materialize_gzip(directive)?,
             "gzip_types" => mapper.materialize_gzip_types(directive)?,
             "gzip_min_length" => mapper.materialize_gzip_min_length(directive)?,
@@ -182,6 +186,24 @@ fn extract_http_context(
             "multiple `http` blocks are not supported",
         ));
     }
+    // Fail closed on top-level directives outside `http {}` that the
+    // runtime does not consume (mail, load_module, ...): silently dropping
+    // them would hide configuration that is not executed.
+    for directive in directives {
+        if directive.name == "http" || directive.name == "stream" {
+            continue;
+        }
+        if ACCEPTED_IGNORED.contains(&directive.name.as_str()) {
+            continue;
+        }
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "top-level directive `{}` outside `http {{}}` is not supported",
+                directive.name
+            ),
+        ));
+    }
     Ok(http_blocks[0].children.clone())
 }
 
@@ -212,7 +234,10 @@ struct LocationExtras {
     rewrite: Vec<Value>,
     access: Vec<Value>,
     limit_req: Vec<Value>,
+    limit_conn: Vec<Value>,
     auth_basic: Option<Value>,
+    sub_filter: Option<Value>,
+    secure_link: Option<Value>,
 }
 
 struct Mapper<'a> {
@@ -237,6 +262,8 @@ struct Mapper<'a> {
     streams: Vec<Value>,
     limit_req_zones: Vec<Value>,
     limit_req_zone_names: Vec<String>,
+    limit_conn_zones: Vec<Value>,
+    limit_conn_zone_names: Vec<String>,
 }
 
 impl<'a> Mapper<'a> {
@@ -263,6 +290,8 @@ impl<'a> Mapper<'a> {
             streams: Vec::new(),
             limit_req_zones: Vec::new(),
             limit_req_zone_names: Vec::new(),
+            limit_conn_zones: Vec::new(),
+            limit_conn_zone_names: Vec::new(),
         }
     }
 
@@ -300,25 +329,44 @@ impl<'a> Mapper<'a> {
                     };
                     let mut weight = Value::Null;
                     let mut backup = false;
+                    let mut down = false;
+                    let mut max_conns: Option<u64> = None;
+                    let mut slow_start_ms: Option<u64> = None;
                     for argument in child.args.iter().skip(1) {
                         if let Some(value) = argument.strip_prefix("weight=") {
                             weight = parse_u64(value).map_or(Value::Null, Value::from);
                         } else if argument == "backup" {
                             backup = true;
+                        } else if argument == "down" {
+                            // nginx `down`: declared but never selected. The
+                            // runtime model filters the target out, matching
+                            // server.toml `down = true`.
+                            down = true;
                         } else if argument.starts_with("max_fails=")
                             || argument.starts_with("fail_timeout=")
                         {
                             // Accepted for nginx compatibility; the runtime
                             // owns its own failure/ejection policy.
-                        } else if argument == "down"
-                            || argument.starts_with("max_conns=")
-                            || argument.starts_with("slow_start=")
-                        {
-                            return Err(NginxConfigError::unsupported(
-                                child,
-                                format!("upstream server flag `{argument}` is not supported"),
-                            ));
+                        } else if let Some(value) = argument.strip_prefix("max_conns=") {
+                            if parse_u64(value).is_none() {
+                                return Err(NginxConfigError::unsupported(
+                                    child,
+                                    format!("invalid max_conns value `{value}`"),
+                                ));
+                            }
+                            max_conns = parse_u64(value);
+                        } else if let Some(value) = argument.strip_prefix("slow_start=") {
+                            let Some(seconds) = parse_nginx_time_seconds(value) else {
+                                return Err(NginxConfigError::unsupported(
+                                    child,
+                                    format!("invalid slow_start duration `{value}`"),
+                                ));
+                            };
+                            slow_start_ms = Some(seconds.saturating_mul(1_000));
                         }
+                    }
+                    if down {
+                        continue;
                     }
                     // Normalize hostnames like `server.sdkwork.com` to explicit
                     // targets; a bare port (`server 8080;`) is invalid in nginx.
@@ -335,6 +383,12 @@ impl<'a> Mapper<'a> {
                     if backup {
                         entry["backup"] = Value::Bool(true);
                     }
+                    if let Some(max_conns) = max_conns {
+                        entry["maxConnections"] = Value::from(max_conns);
+                    }
+                    if let Some(slow_start_ms) = slow_start_ms {
+                        entry["slowStartMs"] = Value::from(slow_start_ms);
+                    }
                     targets.push(entry);
                 }
                 "ip_hash" => {
@@ -343,6 +397,21 @@ impl<'a> Mapper<'a> {
                 }
                 "least_conn" => {
                     load_balancing = "least-connections".to_owned();
+                    hash_config = None;
+                }
+                "random" => {
+                    // nginx `random [two least_conn]`; `two least_time` is a
+                    // Plus-only variant and fails closed.
+                    let unsupported = child.args.iter().any(|argument| {
+                        argument != "two" && argument != "least_conn"
+                    });
+                    if unsupported {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "random accepts only `two least_conn`",
+                        ));
+                    }
+                    load_balancing = "random".to_owned();
                     hash_config = None;
                 }
                 "hash" => {
@@ -439,6 +508,8 @@ impl<'a> Mapper<'a> {
         let mut inherited_auth_file: Option<String> = None;
         let mut inherited_auth_off = false;
         let mut inherited_proxy_set_headers: Vec<String> = Vec::new();
+        let mut ssl_verify_client: Option<&str> = None;
+        let mut ssl_client_certificate: Option<String> = None;
 
         for child in &directive.children {
             match child.name.as_str() {
@@ -462,6 +533,34 @@ impl<'a> Mapper<'a> {
                 }
                 "ssl_certificate_key" => {
                     certificate_key = Some(self.resolve_path(child)?);
+                }
+                "ssl_verify_client" => {
+                    let Some(value) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "ssl_verify_client requires on|optional|off",
+                        ));
+                    };
+                    ssl_verify_client = match value.as_str() {
+                        "on" => Some("required"),
+                        "optional" => Some("optional"),
+                        "off" => None,
+                        other => {
+                            return Err(NginxConfigError::unsupported(
+                                child,
+                                format!("ssl_verify_client accepts on|optional|off, found `{other}`"),
+                            ))
+                        }
+                    };
+                }
+                "ssl_client_certificate" => {
+                    let Some(path) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "ssl_client_certificate requires a CA file",
+                        ));
+                    };
+                    ssl_client_certificate = Some(self.resolve_path(child)?);
                 }
                 "location" => locations.push(child),
                 // Server-level `root`/`try_files` are the defaults for every
@@ -573,13 +672,31 @@ impl<'a> Mapper<'a> {
                     "privateKeyFile": certificate_key,
                 },
             }));
-            self.tls_policies.push(json!({
+            let mut tls_policy = json!({
                 "id": format!("tls-{certificate_name}"),
                 "certificateRefs": [certificate_name],
                 "minimumVersion": "tls1.2",
                 "maximumVersion": "tls1.3",
                 "alpn": ["h2", "http/1.1"],
-            }));
+            });
+            if let Some(mode) = ssl_verify_client {
+                let Some(ca_file) = ssl_client_certificate.as_deref() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "ssl_verify_client requires ssl_client_certificate",
+                    ));
+                };
+                tls_policy["clientAuth"] = json!({
+                    "mode": mode,
+                    "caCertificateFiles": [ca_file],
+                });
+            } else if ssl_client_certificate.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "ssl_client_certificate requires ssl_verify_client",
+                ));
+            }
+            self.tls_policies.push(tls_policy);
         }
 
         let mut listener_refs = Vec::new();
@@ -718,15 +835,22 @@ impl<'a> Mapper<'a> {
             if !location_extras[index].limit_req.is_empty() {
                 route["limitReq"] = Value::Array(location_extras[index].limit_req.clone());
             }
+            if !location_extras[index].limit_conn.is_empty() {
+                route["limitConn"] = Value::Array(location_extras[index].limit_conn.clone());
+            }
             if let Some(auth_basic) = &location_extras[index].auth_basic {
                 route["authBasic"] = auth_basic.clone();
+            }
+            if let Some(sub_filter) = &location_extras[index].sub_filter {
+                route["subFilter"] = sub_filter.clone();
+            }
+            if let Some(secure_link) = &location_extras[index].secure_link {
+                route["secureLink"] = secure_link.clone();
             }
             route_entries.push(route);
         }
         virtual_host["routes"] = Value::Array(route_entries);
-        if let Some(bytes) = client_max_body_size {
-            let _ = bytes;
-        }
+        check_client_max_body_size(directive, client_max_body_size)?;
         self.virtual_hosts.push(virtual_host);
         Ok(())
     }
@@ -750,6 +874,8 @@ impl<'a> Mapper<'a> {
         let (path_type, _path) = parse_location_match(location)?;
         let resource_id = format!("loc-{server_index}-{index}");
         let mut proxy_pass = None;
+        let mut dynamic_target = None;
+        let mut proxy_pass_request_headers = true;
         let mut return_directive = None;
         let mut root = None;
         let mut alias = None;
@@ -772,7 +898,32 @@ impl<'a> Mapper<'a> {
                             "proxy_pass requires a target",
                         ));
                     };
-                    proxy_pass = Some(target.clone());
+                    if target.contains('$') {
+                        crate::config::validate_proxy_pass_template(target).map_err(|message| {
+                            NginxConfigError::unsupported(child, message)
+                        })?;
+                        dynamic_target = Some(target.clone());
+                    } else {
+                        proxy_pass = Some(target.clone());
+                    }
+                }
+                "proxy_pass_request_headers" => {
+                    let Some(value) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "proxy_pass_request_headers requires on|off",
+                        ));
+                    };
+                    match value.as_str() {
+                        "on" => proxy_pass_request_headers = true,
+                        "off" => proxy_pass_request_headers = false,
+                        other => {
+                            return Err(NginxConfigError::unsupported(
+                                child,
+                                format!("proxy_pass_request_headers accepts on|off, found `{other}`"),
+                            ))
+                        }
+                    }
                 }
                 "return" => {
                     return_directive = Some(child.args.clone());
@@ -810,6 +961,9 @@ impl<'a> Mapper<'a> {
                 "limit_req" => {
                     location_limit_req.push(self.parse_limit_req_rule(child)?);
                 }
+                "limit_conn" => {
+                    extras.limit_conn.push(self.parse_limit_conn_rule(child)?);
+                }
                 "auth_basic" => {
                     let realm = child.args.first().cloned().unwrap_or_default();
                     if realm.eq_ignore_ascii_case("off") {
@@ -834,6 +988,175 @@ impl<'a> Mapper<'a> {
                         NginxConfigError::unsupported(child, message)
                     })?;
                     location_proxy_set_headers.push(entry);
+                }
+                "sub_filter" => {
+                    let Some(from) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "sub_filter requires a pattern to replace",
+                        ));
+                    };
+                    if from.is_empty() {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "sub_filter pattern must not be empty",
+                        ));
+                    }
+                    let to = child.args.get(1).cloned().unwrap_or_default();
+                    let entry = extras.sub_filter.get_or_insert_with(|| {
+                        json!({ "rules": [], "once": true, "types": ["text/html"], "lastModified": false })
+                    });
+                    entry["rules"]
+                        .as_array_mut()
+                        .expect("rules array")
+                        .push(json!({ "from": from, "to": to }));
+                }
+                "sub_filter_once" => {
+                    let Some(value) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "sub_filter_once requires on|off",
+                        ));
+                    };
+                    let enabled = match value.as_str() {
+                        "on" => true,
+                        "off" => false,
+                        other => {
+                            return Err(NginxConfigError::unsupported(
+                                child,
+                                format!("sub_filter_once accepts on|off, found `{other}`"),
+                            ))
+                        }
+                    };
+                    extras.sub_filter.get_or_insert_with(|| {
+                        json!({ "rules": [], "once": true, "types": ["text/html"], "lastModified": false })
+                    })["once"] = Value::Bool(enabled);
+                }
+                "sub_filter_types" => {
+                    if child.args.is_empty() {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "sub_filter_types requires at least one MIME type",
+                        ));
+                    }
+                    let types: Vec<Value> = child.args.iter().cloned().map(Value::String).collect();
+                    extras.sub_filter.get_or_insert_with(|| {
+                        json!({ "rules": [], "once": true, "types": ["text/html"], "lastModified": false })
+                    })["types"] = Value::Array(types);
+                }
+                "secure_link_secret" => {
+                    let Some(secret) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "secure_link_secret requires a secret word",
+                        ));
+                    };
+                    if extras.secure_link.is_some() {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "secure_link_secret conflicts with secure_link/secure_link_md5",
+                        ));
+                    }
+                    extras.secure_link = Some(json!({
+                        "mode": "secret",
+                        "secret": secret,
+                    }));
+                }
+                "secure_link" => {
+                    let Some(argument) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "secure_link requires a variable argument like $arg_st",
+                        ));
+                    };
+                    let Some(name) = argument.strip_prefix("$arg_") else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            format!("secure_link argument `{argument}` must be `$arg_<name>`"),
+                        ));
+                    };
+                    if name.is_empty() {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "secure_link argument name must not be empty",
+                        ));
+                    }
+                    let entry = extras.secure_link.get_or_insert_with(|| {
+                        json!({ "mode": "md5", "argument": "st", "template": "", "expiresArgument": null })
+                    });
+                    if entry["mode"] != "md5" {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "secure_link conflicts with secure_link_secret",
+                        ));
+                    }
+                    entry["argument"] = Value::String(name.to_owned());
+                }
+                "secure_link_md5" => {
+                    let Some(template) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "secure_link_md5 requires a template",
+                        ));
+                    };
+                    crate::config::validate_md5_template(template).map_err(|message| {
+                        NginxConfigError::unsupported(child, message)
+                    })?;
+                    let entry = extras.secure_link.get_or_insert_with(|| {
+                        json!({ "mode": "md5", "argument": "st", "template": "", "expiresArgument": null })
+                    });
+                    if entry["mode"] != "md5" {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "secure_link_md5 conflicts with secure_link_secret",
+                        ));
+                    }
+                    entry["template"] = Value::String(template.clone());
+                }
+                "secure_link_expires" => {
+                    let Some(argument) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "secure_link_expires requires a variable argument like $arg_e",
+                        ));
+                    };
+                    let Some(name) = argument.strip_prefix("$arg_") else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            format!("secure_link_expires argument `{argument}` must be `$arg_<name>`"),
+                        ));
+                    };
+                    let entry = extras.secure_link.get_or_insert_with(|| {
+                        json!({ "mode": "md5", "argument": "st", "template": "", "expiresArgument": null })
+                    });
+                    if entry["mode"] != "md5" {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "secure_link_expires conflicts with secure_link_secret",
+                        ));
+                    }
+                    entry["expiresArgument"] = Value::String(name.to_owned());
+                }
+                "sub_filter_last_modified" => {
+                    let Some(value) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "sub_filter_last_modified requires on|off",
+                        ));
+                    };
+                    let enabled = match value.as_str() {
+                        "on" => true,
+                        "off" => false,
+                        other => {
+                            return Err(NginxConfigError::unsupported(
+                                child,
+                                format!("sub_filter_last_modified accepts on|off, found `{other}`"),
+                            ))
+                        }
+                    };
+                    extras.sub_filter.get_or_insert_with(|| {
+                        json!({ "rules": [], "once": true, "types": ["text/html"], "lastModified": false })
+                    })["lastModified"] = Value::Bool(enabled);
                 }
                 "proxy_http_version" | "proxy_buffering"
                 | "proxy_read_timeout" | "proxy_send_timeout" | "proxy_connect_timeout"
@@ -891,7 +1214,7 @@ impl<'a> Mapper<'a> {
             None
         };
         let serving = [
-            proxy_pass.is_some(),
+            proxy_pass.is_some() || dynamic_target.is_some(),
             return_directive.is_some(),
             root.is_some(),
             alias.is_some(),
@@ -908,9 +1231,32 @@ impl<'a> Mapper<'a> {
                 "a location must declare exactly one of proxy_pass | return | root | alias (or inherit the server root with try_files)",
             ));
         }
-        let _ = (server_name, client_max_body_size);
+        check_client_max_body_size(location, client_max_body_size)?;
+        let _ = server_name;
 
-        if let Some(target) = proxy_pass {
+        if let Some(target) = dynamic_target {
+            // Variable proxy_pass: the URL is evaluated per request; the
+            // materialized model carries the template.
+            let request_set_headers =
+                merge_proxy_set_headers(inherited_proxy_set_headers, &location_proxy_set_headers);
+            let mut proxy_resource = json!({
+                "id": resource_id,
+                "type": "proxy",
+                "stripPrefix": false,
+                "upstreamRef": "",
+                "dynamicTarget": target,
+                "proxyPassRequestHeaders": proxy_pass_request_headers,
+            });
+            if !request_set_headers.is_empty() {
+                proxy_resource["requestSetHeaders"] = Value::Array(
+                    request_set_headers
+                        .into_iter()
+                        .map(Value::String)
+                        .collect(),
+                );
+            }
+            self.resources.push(proxy_resource);
+        } else if let Some(target) = proxy_pass {
             let upstream_ref = if let Some(rest) = target
                 .strip_prefix("http://")
                 .or_else(|| target.strip_prefix("https://"))
@@ -928,6 +1274,7 @@ impl<'a> Mapper<'a> {
                 "id": resource_id,
                 "type": "proxy",
                 "stripPrefix": false,
+                "proxyPassRequestHeaders": proxy_pass_request_headers,
             });
             if !request_set_headers.is_empty() {
                 proxy_resource["requestSetHeaders"] = Value::Array(
@@ -1276,6 +1623,49 @@ impl<'a> Mapper<'a> {
         }))
     }
 
+    fn materialize_limit_conn_zone(
+        &mut self,
+        directive: &NginxDirective,
+    ) -> Result<(), NginxConfigError> {
+        let entry = directive.args.join(" ");
+        let zone = parse_limit_conn_zone(&entry).map_err(|error| {
+            NginxConfigError::unsupported(directive, format!("invalid limit_conn_zone: {error}"))
+        })?;
+        if self.limit_conn_zone_names.contains(&zone.name) {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("duplicate limit_conn_zone `{}`", zone.name),
+            ));
+        }
+        self.limit_conn_zone_names.push(zone.name.clone());
+        self.limit_conn_zones.push(json!({
+            "name": zone.name,
+            "key": zone.key,
+            "maxKeys": zone.max_keys,
+        }));
+        Ok(())
+    }
+
+    fn parse_limit_conn_rule(
+        &self,
+        directive: &NginxDirective,
+    ) -> Result<Value, NginxConfigError> {
+        let entry = directive.args.join(" ");
+        let rule = parse_limit_conn(&entry).map_err(|error| {
+            NginxConfigError::unsupported(directive, format!("invalid limit_conn: {error}"))
+        })?;
+        if !self.limit_conn_zone_names.contains(&rule.zone) {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("limit_conn references undefined zone `{}`", rule.zone),
+            ));
+        }
+        Ok(json!({
+            "zone": rule.zone,
+            "maxConnections": rule.max_connections,
+        }))
+    }
+
     fn load_auth_basic(
         &self,
         realm: &str,
@@ -1345,8 +1735,11 @@ impl<'a> Mapper<'a> {
         let mut proxy_protocol = false;
         let mut ssl = false;
         let mut ssl_preread = false;
+        let mut udp = false;
         let mut certificate_file = None;
         let mut certificate_key = None;
+        let mut ssl_verify_client: Option<&str> = None;
+        let mut ssl_client_certificate: Option<String> = None;
         for child in &directive.children {
             match child.name.as_str() {
                 "listen" => {
@@ -1358,6 +1751,9 @@ impl<'a> Mapper<'a> {
                     };
                     listen_spec = Some(spec.clone());
                     ssl = child.args.iter().any(|argument| argument == "ssl");
+                    if child.args.iter().any(|argument| argument == "udp") {
+                        udp = true;
+                    }
                 }
                 "proxy_pass" => {
                     let Some(target) = child.args.first() else {
@@ -1396,6 +1792,34 @@ impl<'a> Mapper<'a> {
                 }
                 "ssl_certificate_key" => {
                     certificate_key = Some(self.resolve_path(child)?);
+                }
+                "ssl_verify_client" => {
+                    let Some(value) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "ssl_verify_client requires on|optional|off",
+                        ));
+                    };
+                    ssl_verify_client = match value.as_str() {
+                        "on" => Some("required"),
+                        "optional" => Some("optional"),
+                        "off" => None,
+                        other => {
+                            return Err(NginxConfigError::unsupported(
+                                child,
+                                format!("ssl_verify_client accepts on|optional|off, found `{other}`"),
+                            ))
+                        }
+                    };
+                }
+                "ssl_client_certificate" => {
+                    let Some(path) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "ssl_client_certificate requires a CA file",
+                        ));
+                    };
+                    ssl_client_certificate = Some(self.resolve_path(child)?);
                 }
                 "ssl_protocols" | "ssl_ciphers" | "ssl_prefer_server_ciphers"
                 | "proxy_connect_timeout" | "proxy_socket_keepalive" | "so_keepalive"
@@ -1441,10 +1865,17 @@ impl<'a> Mapper<'a> {
                 ),
             ));
         };
+        if udp && (ssl || ssl_preread || proxy_protocol) {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                "UDP stream listeners cannot combine `udp` with `ssl`, `ssl_preread`, or `proxy_protocol`",
+            ));
+        }
         let mut stream = json!({
             "id": format!("stream-{index}-{port}"),
             "bind": bind,
             "port": port,
+            "protocol": if udp { "udp" } else { "tcp" },
             "target": target,
             "proxyTimeoutMs": proxy_timeout_ms,
             "proxyProtocol": proxy_protocol,
@@ -1474,10 +1905,28 @@ impl<'a> Mapper<'a> {
                     "privateKeyFile": certificate_key,
                 },
             }));
-            stream["tls"] = json!({
+            let mut tls_entry = json!({
                 "mode": "terminate",
                 "certificateRef": certificate_name,
             });
+            if let Some(mode) = ssl_verify_client {
+                let Some(ca_file) = ssl_client_certificate.as_deref() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "ssl_verify_client requires ssl_client_certificate",
+                    ));
+                };
+                tls_entry["clientAuth"] = json!({
+                    "mode": mode,
+                    "caCertificateFiles": [ca_file],
+                });
+            } else if ssl_client_certificate.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "ssl_client_certificate requires ssl_verify_client",
+                ));
+            }
+            stream["tls"] = tls_entry;
         }
         // Type-check against the runtime model early for clearer diagnostics.
         let _: StreamTargetConfig = serde_json::from_value(target.clone()).map_err(|error| {
@@ -1524,6 +1973,7 @@ impl<'a> Mapper<'a> {
                 "minLength": self.gzip_min_length,
             },
             "limitReqZones": self.limit_req_zones,
+            "limitConnZones": self.limit_conn_zones,
             "listeners": self.listeners,
             "certificates": self.certificates,
             "tlsPolicies": self.tls_policies,
@@ -1602,8 +2052,8 @@ fn parse_location_match(
 }
 
 /// Only the variable combinations the redirect data plane expands are
-/// accepted in `return` URLs.
-fn redirect_variables_ok(url: &str) -> bool {
+/// accepted in `return` URLs and TOML `returnLocation` values.
+pub(crate) fn redirect_variables_ok(url: &str) -> bool {
     let mut remainder = url;
     while let Some(index) = remainder.find('$') {
         let rest = &remainder[index..];
@@ -1623,6 +2073,28 @@ fn redirect_variables_ok(url: &str) -> bool {
 
 fn parse_u64(value: &str) -> Option<u64> {
     value.parse::<u64>().ok()
+}
+
+/// nginx `client_max_body_size` is per-server/per-location while the
+/// runtime enforces one global request body limit. Declarations matching
+/// the nginx default (1m) are accepted; anything else fails closed so a
+/// body limit that cannot be executed is never silently ignored.
+fn check_client_max_body_size(
+    directive: &NginxDirective,
+    value: Option<u64>,
+) -> Result<(), NginxConfigError> {
+    const NGINX_DEFAULT_BODY_LIMIT: u64 = 1024 * 1024;
+    if let Some(bytes) = value {
+        if bytes != NGINX_DEFAULT_BODY_LIMIT {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!(
+                    "client_max_body_size {bytes} cannot be enforced per location; the runtime enforces one global request body limit (configure it via the app limits)"
+                ),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn parse_size_bytes(value: &str) -> Option<u64> {

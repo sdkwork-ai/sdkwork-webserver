@@ -54,6 +54,7 @@ use super::{
     proxy_protocol::{resolve_connection_info, DownstreamConnectionInfo},
     runtime::RuntimeGeneration,
     stream_proxy::{prepare_stream_listener, serve_stream_listener},
+    udp_stream_proxy::{prepare_udp_stream_listener, serve_udp_stream_listener},
     tls::build_tls_config,
     tls_runtime::FileTlsRuntimeController,
     DataPlaneError, DataPlaneRuntime, ListenerState,
@@ -217,8 +218,16 @@ where
         prepared.push(prepare_listener(&initial, listener, tls_runtime.as_deref()).await?);
     }
     let mut prepared_streams = Vec::with_capacity(initial.app.streams().len());
+    let mut prepared_udp_streams = Vec::with_capacity(initial.app.streams().len());
     for stream in initial.app.streams() {
-        prepared_streams.push(prepare_stream_listener(stream).await?);
+        match stream.protocol {
+            sdkwork_webserver_core::StreamProtocol::Tcp => {
+                prepared_streams.push(prepare_stream_listener(stream).await?);
+            }
+            sdkwork_webserver_core::StreamProtocol::Udp => {
+                prepared_udp_streams.push(prepare_udp_stream_listener(stream).await?);
+            }
+        }
     }
     let prepared_operations = match operations.as_ref() {
         Some(config) => Some(prepare_operations_listener(config).await?),
@@ -280,6 +289,16 @@ where
         let stream_id = stream.id.clone();
         tasks.spawn(async move {
             let result = serve_stream_listener(runtime, stream, shutdown_rx).await;
+            (stream_id, result)
+        });
+    }
+    for stream in prepared_udp_streams {
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        shutdown_senders.push(shutdown_tx);
+        let runtime = runtime.clone();
+        let stream_id = stream.id.clone();
+        tasks.spawn(async move {
+            let result = serve_udp_stream_listener(runtime, stream, shutdown_rx).await;
             (stream_id, result)
         });
     }
@@ -471,6 +490,11 @@ async fn serve_listener(
         .layer(middleware::from_fn_with_state(
             runtime.metrics.clone(),
             observe_data_plane_request,
+        ))
+        // Inside compression: nginx filter order substitutes the response
+        // body before gzip compresses it.
+        .layer(middleware::from_fn(
+            super::sub_filter::apply_sub_filters_middleware,
         ))
         // Outermost: compress eligible responses per http gzip / gzipTypes /
         // gzipMinLength (nginx.enabled profile http-core-v1).

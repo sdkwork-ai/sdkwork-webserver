@@ -28,30 +28,26 @@ pub(crate) struct LoadedCertifiedKey {
 struct SniCertificateResolver {
     exact: HashMap<String, Arc<CertifiedKey>>,
     wildcards: Vec<(String, Arc<CertifiedKey>)>,
-    /// nginx `default_server` equivalent: used when SNI is missing or does
-    /// not match a configured certificate, so the handshake still completes.
-    default: Option<Arc<CertifiedKey>>,
 }
 
 impl ResolvesServerCert for SniCertificateResolver {
     fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
+        // Fail closed: a missing or unknown SNI gets no certificate, so the
+        // handshake is rejected instead of serving a default certificate to
+        // a host the operator never authorized.
         let Some(raw_name) = client_hello.server_name() else {
-            return self.default.clone();
+            return None;
         };
         let Some(server_name) = normalize_server_name(raw_name) else {
-            return self.default.clone();
+            return None;
         };
         if let Some(certified_key) = self.exact.get(&server_name) {
             return Some(certified_key.clone());
         }
-        if let Some((_, certified_key)) = self
-            .wildcards
+        self.wildcards
             .iter()
             .find(|(suffix, _)| wildcard_matches(suffix, &server_name))
-        {
-            return Some(certified_key.clone());
-        }
-        self.default.clone()
+            .map(|(_, certified_key)| certified_key.clone())
     }
 }
 
@@ -89,18 +85,9 @@ pub(crate) fn build_sni_server_config(
             .cmp(&left.0.len())
             .then_with(|| left.0.cmp(&right.0))
     });
-    let default = exact
-        .values()
-        .next()
-        .cloned()
-        .or_else(|| wildcards.first().map(|(_, key)| key.clone()));
     let protocol_versions = tls_protocol_versions(minimum_version, maximum_version);
     let builder = ServerConfig::builder_with_protocol_versions(&protocol_versions);
-    let resolver = Arc::new(SniCertificateResolver {
-        exact,
-        wildcards,
-        default,
-    });
+    let resolver = Arc::new(SniCertificateResolver { exact, wildcards });
     let mut server_config = match client_auth {
         Some(auth) if auth.mode != ClientAuthMode::Off => {
             let verifier = build_client_cert_verifier(auth)?;

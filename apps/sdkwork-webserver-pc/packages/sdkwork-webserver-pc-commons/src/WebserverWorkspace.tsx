@@ -2744,8 +2744,18 @@ function resourceText(
   t: (key: WebserverMessageKey) => string,
   resource: WebserverResourceKey,
   field: "label" | "description",
+  fallback?: string,
 ): string {
-  return t(`resource.${resource}.${field}` as WebserverMessageKey);
+  const key = `resource.${resource}.${field}` as WebserverMessageKey;
+  const translated = t(key);
+  if (translated && translated !== key) {
+    return translated;
+  }
+  const trimmed = fallback?.trim();
+  if (trimmed) {
+    return trimmed;
+  }
+  return field === "label" ? resource : "";
 }
 
 function actionText(

@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     net::IpAddr,
     sync::{
         atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering},
@@ -330,6 +330,10 @@ pub(super) struct ProxyRequestContext<'a> {
     pub upstream_ref: &'a str,
     pub strip_prefix: bool,
     pub request_set_headers: &'a [String],
+    /// Variable `proxy_pass` template evaluated per request.
+    pub dynamic_target: Option<&'a str>,
+    /// nginx `proxy_pass_request_headers`; `false` strips client headers.
+    pub proxy_pass_request_headers: bool,
     pub route: &'a RouteConfig,
     pub client_ip: IpAddr,
     pub external_scheme: &'a str,
@@ -363,6 +367,10 @@ pub(super) async fn proxy_request_cached(
     context: ProxyRequestContext<'_>,
     request: Request<Body>,
 ) -> Response<Body> {
+    if context.dynamic_target.is_some() {
+        // Dynamic targets vary per request; caching would mix hosts.
+        return proxy_request(context, request).await;
+    }
     let Some(cache) = context.cache.clone() else {
         tracing::debug!("proxy cache disabled for {}", context.external_authority);
         return proxy_request(context, request).await;
@@ -573,6 +581,9 @@ pub(super) async fn proxy_request(
             guard.activate();
         }
     }
+    if let Some(template) = context.dynamic_target {
+        return proxy_request_dynamic(context, request, upgrade, template).await;
+    }
     let Some(upstream) = context.generation.upstreams.get(context.upstream_ref) else {
         context
             .metrics
@@ -669,6 +680,206 @@ pub(super) async fn proxy_request(
     .await
 }
 
+/// Variable `proxy_pass`: evaluate the template per request, cache a
+/// single-target upstream per resolved authority, and reuse the regular
+/// proxy pipeline (no retries or health checks, matching nginx's dynamic
+/// `proxy_pass` semantics).
+async fn proxy_request_dynamic(
+    context: ProxyRequestContext<'_>,
+    request: Request<Body>,
+    upgrade: UpgradeDisposition,
+    template: &str,
+) -> Response<Body> {
+    let request_path = request.uri().path();
+    let request_query = request.uri().query();
+    let request_uri = match request_query {
+        Some(query) => format!("{request_path}?{query}"),
+        None => request_path.to_owned(),
+    };
+    let (host, server_port) = split_authority(context.external_authority);
+    let headers = request
+        .headers()
+        .iter()
+        .map(|(name, value)| {
+            (
+                name.as_str().to_ascii_lowercase(),
+                value.to_str().unwrap_or_default().to_owned(),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    let evaluated =
+        match sdkwork_webserver_core::expand_proxy_pass_template(
+            template,
+            &host,
+            server_port,
+            request_path,
+            &request_uri,
+            &headers,
+        ) {
+            Ok(url) => url,
+            Err(()) => {
+                return upgrade_failure_response(
+                    upgrade,
+                    text_response(StatusCode::BAD_GATEWAY, "invalid proxy_pass target
+"),
+                );
+            }
+        };
+    // A template without `$uri`/`$request_uri` forwards the full request URI
+    // (nginx `proxy_pass http://host;` semantics).
+    let has_uri_variable = template.contains("$uri") || template.contains("$request_uri");
+    let target_url = if has_uri_variable {
+        evaluated
+    } else {
+        format!("{evaluated}{request_uri}")
+    };
+    let authority = match target_url.parse::<Url>() {
+        Ok(url) => match url.host_str() {
+            Some(host) => format!(
+                "{host}:{}",
+                url.port_or_known_default().unwrap_or(80)
+            ),
+            None => {
+                return upgrade_failure_response(
+                    upgrade,
+                    text_response(StatusCode::BAD_GATEWAY, "invalid proxy_pass target
+"),
+                );
+            }
+        },
+        Err(_) => {
+            eprintln!("[dynamic-proxy] url parse failed");
+            return upgrade_failure_response(
+                upgrade,
+                text_response(StatusCode::BAD_GATEWAY, "invalid proxy_pass target
+"),
+            );
+        }
+    };
+    let upstream = {
+        let mut cache = context
+            .generation
+            .dynamic_upstreams
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(upstream) = cache.get(&authority) {
+            upstream.clone()
+        } else {
+            let synthetic = synthetic_dynamic_upstream_config(&target_url);
+            let upstream = match ProxyUpstream::build(
+                &context.generation.app,
+                &synthetic,
+                context.generation.resolver.clone(),
+                context.metrics.clone(),
+            ) {
+                Ok(upstream) => Arc::new(upstream),
+                Err(_) => {
+                    return upgrade_failure_response(
+                        upgrade,
+                        text_response(
+                            StatusCode::BAD_GATEWAY,
+                            "upstream is unavailable
+",
+                        ),
+                    );
+                }
+            };
+            cache.insert(authority.clone(), upstream.clone());
+            upstream
+        }
+    };
+    let upstream_permit = match upstream.try_admit() {
+        Ok(permit) => permit,
+        Err(()) => {
+            return upgrade_failure_response(
+                upgrade,
+                upstream_unavailable_response("upstream is saturated
+"),
+            );
+        }
+    };
+    let hash_key = String::new();
+    let Some(selected) =
+        upstream.select_target_observed(context.client_ip, &hash_key, Some(context.metrics))
+    else {
+        return upgrade_failure_response(
+            upgrade,
+            upstream_unavailable_response("all upstream targets are unavailable
+"),
+        );
+    };
+    let target_activity = upstream.claim_target_activity(selected.index);
+    let target_url = match Url::parse(&target_url) {
+        Ok(url) => url,
+        Err(_) => {
+            upstream.abandon_probe(selected);
+            return upgrade_failure_response(
+                upgrade,
+                text_response(StatusCode::BAD_GATEWAY, "invalid upstream target
+"),
+            );
+        }
+    };
+    if upgrade == UpgradeDisposition::WebSocket {
+        return proxy_websocket_request(
+            &context,
+            &upstream,
+            selected,
+            target_activity,
+            upstream_permit,
+            target_url,
+            request,
+        )
+        .await;
+    }
+    proxy_http_request(
+        &context,
+        &upstream,
+        selected,
+        target_activity,
+        target_url,
+        upstream_permit,
+        &hash_key,
+        request,
+    )
+    .await
+}
+
+fn synthetic_dynamic_upstream_config(target_url: &str) -> sdkwork_webserver_core::UpstreamConfig {
+    // The `proxy_pass` template is the operator's authorization for
+    // per-request hosts: authorize the standard restricted networks while
+    // the hard-forbidden ranges (cloud metadata, documentation, multicast)
+    // stay blocked by the SSRF guard.
+    serde_json::from_value(serde_json::json!({
+        "id": "dynamic",
+        "targets": [{ "url": target_url }],
+        "addressPolicy": {
+            "allowedCidrs": [
+                "10.0.0.0/8",
+                "100.64.0.0/10",
+                "127.0.0.0/8",
+                "169.254.0.0/16",
+                "172.16.0.0/12",
+                "192.168.0.0/16",
+                "::1/128",
+                "fc00::/7",
+                "fe80::/10",
+            ]
+        },
+    }))
+    .expect("synthetic upstream config is valid")
+}
+
+/// Split an external authority into host and port with safe defaults.
+fn split_authority(authority: &str) -> (String, u16) {
+    if let Some((host, port)) = authority.rsplit_once(':') {
+        if let Ok(port) = port.parse::<u16>() {
+            return (host.to_owned(), port);
+        }
+    }
+    (authority.to_owned(), 80)
+}
+
 async fn proxy_http_request(
     context: &ProxyRequestContext<'_>,
     upstream: &ProxyUpstream,
@@ -704,6 +915,7 @@ async fn proxy_http_request(
             context.external_authority,
             maximum_trailer_bytes,
             maximum_trailers,
+            context.proxy_pass_request_headers,
         ) {
             Ok(result) => result,
             Err(()) => {
@@ -1033,6 +1245,7 @@ async fn proxy_websocket_request(
         context.external_authority,
         maximum_trailer_bytes,
         maximum_trailers,
+        context.proxy_pass_request_headers,
     ) {
         Ok(headers) => headers,
         Err(()) => {
@@ -1359,14 +1572,20 @@ fn forwarded_request_headers(
     external_authority: &str,
     maximum_trailer_bytes: usize,
     maximum_trailers: usize,
+    proxy_pass_request_headers: bool,
 ) -> Result<(HeaderMap, HashSet<HeaderName>, HashSet<HeaderName>), ()> {
     let hop_by_hop = hop_by_hop_headers(source);
     let declared_trailers =
         validate_trailer_declaration(source, maximum_trailer_bytes, maximum_trailers, &hop_by_hop)?;
     let mut target = HeaderMap::new();
-    for (name, value) in source {
-        if name != HOST && name != CONTENT_LENGTH && name != EXPECT && !hop_by_hop.contains(name) {
-            target.append(name.clone(), value.clone());
+    // nginx `proxy_pass_request_headers off`: the client's request header
+    // fields are not forwarded; only the fixed safe defaults below are set.
+    if proxy_pass_request_headers {
+        for (name, value) in source {
+            if name != HOST && name != CONTENT_LENGTH && name != EXPECT && !hop_by_hop.contains(name)
+            {
+                target.append(name.clone(), value.clone());
+            }
         }
     }
     if let Ok(value) = HeaderValue::from_str(&client_ip.to_string()) {

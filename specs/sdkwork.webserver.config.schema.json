@@ -148,6 +148,13 @@
       "items": {
         "$ref": "#/$defs/streamServer"
       }
+    },
+    "limitConnZones": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/limitConnZone"
+      }
     }
   },
   "$defs": {
@@ -877,6 +884,9 @@
             "h2",
             "http/1.1"
           ]
+        },
+        "clientAuth": {
+          "$ref": "#/$defs/clientAuth"
         }
       }
     },
@@ -970,8 +980,7 @@
       "additionalProperties": false,
       "required": [
         "id",
-        "type",
-        "upstreamRef"
+        "type"
       ],
       "properties": {
         "id": {
@@ -997,8 +1006,28 @@
             "maxLength": 1024
           },
           "default": []
+        },
+        "dynamicTarget": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "proxyPassRequestHeaders": {
+          "type": "boolean"
         }
-      }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "upstreamRef"
+          ]
+        },
+        {
+          "required": [
+            "dynamicTarget"
+          ]
+        }
+      ]
     },
     "redirectResource": {
       "type": "object",
@@ -1703,6 +1732,19 @@
         },
         "authBasic": {
           "$ref": "#/$defs/authBasic"
+        },
+        "subFilter": {
+          "$ref": "#/$defs/subFilter"
+        },
+        "limitConn": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/limitConnRule"
+          }
+        },
+        "secureLink": {
+          "$ref": "#/$defs/secureLink"
         }
       }
     },
@@ -2115,6 +2157,9 @@
                 "certificateRef": {
                   "type": "string",
                   "minLength": 1
+                },
+                "clientAuth": {
+                  "$ref": "#/$defs/clientAuth"
                 }
               }
             },
@@ -2131,6 +2176,202 @@
               }
             }
           ]
+        },
+        "protocol": {
+          "type": "string",
+          "enum": [
+            "tcp",
+            "udp"
+          ]
+        }
+      }
+    },
+    "subFilter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rules"
+      ],
+      "properties": {
+        "rules": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from",
+              "to"
+            ],
+            "properties": {
+              "from": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "to": {
+                "type": "string",
+                "maxLength": 8192
+              }
+            }
+          }
+        },
+        "once": {
+          "type": "boolean"
+        },
+        "types": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "lastModified": {
+          "type": "boolean"
+        }
+      }
+    },
+    "limitConnZone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "key",
+        "maxKeys"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "key": {
+          "type": "string",
+          "enum": [
+            "$binary_remote_addr",
+            "$remote_addr"
+          ]
+        },
+        "maxKeys": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        }
+      }
+    },
+    "limitConnRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zone",
+        "maxConnections"
+      ],
+      "properties": {
+        "zone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "maxConnections": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        }
+      }
+    },
+    "secureLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "secret",
+            "md5"
+          ]
+        },
+        "secret": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "argument": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "template": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "expiresArgument": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "secret"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "secret"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "md5"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "argument",
+              "template"
+            ]
+          }
+        }
+      ]
+    },
+    "clientAuth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "caCertificateFiles"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "off",
+            "optional",
+            "required"
+          ]
+        },
+        "caCertificateFiles": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          }
         }
       }
     }

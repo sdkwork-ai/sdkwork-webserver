@@ -26,6 +26,11 @@ pub struct CompiledWebServerApp {
     static_roots: HashMap<String, PathBuf>,
     certificate_paths: HashMap<String, (PathBuf, PathBuf)>,
     upstream_tls_paths: HashMap<String, CompiledUpstreamTlsPaths>,
+    /// Resolved `clientAuth.caCertificateFiles` per TLS policy (relative
+    /// paths chrooted to the configuration directory).
+    client_auth_ca_paths: HashMap<String, Vec<PathBuf>>,
+    /// Resolved stream TLS terminate `clientAuth` CA files per stream id.
+    stream_client_auth_ca_paths: HashMap<String, Vec<PathBuf>>,
     acme_webroots: HashMap<String, PathBuf>,
 }
 
@@ -176,6 +181,48 @@ impl CompiledWebServerApp {
             );
         }
 
+        let mut client_auth_ca_paths = HashMap::new();
+        for (index, policy) in config.tls_policies.iter().enumerate() {
+            let Some(auth) = &policy.client_auth else {
+                continue;
+            };
+            let resolved = auth
+                .ca_certificate_files
+                .iter()
+                .enumerate()
+                .map(|(file_index, configured)| {
+                    resolve_protected_relative_file(
+                        &base_directory,
+                        configured,
+                        &format!("/tlsPolicies/{index}/clientAuth/caCertificateFiles/{file_index}"),
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            client_auth_ca_paths.insert(policy.id.clone(), resolved);
+        }
+        let mut stream_client_auth_ca_paths = HashMap::new();
+        for (index, stream) in config.streams.iter().enumerate() {
+            let Some(crate::config::model::StreamTlsMode::Terminate {
+                client_auth: Some(auth),
+                ..
+            }) = &stream.tls
+            else {
+                continue;
+            };
+            let resolved = auth
+                .ca_certificate_files
+                .iter()
+                .enumerate()
+                .map(|(file_index, configured)| {
+                    resolve_protected_relative_file(
+                        &base_directory,
+                        configured,
+                        &format!("/streams/{index}/tls/clientAuth/caCertificateFiles/{file_index}"),
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            stream_client_auth_ca_paths.insert(stream.id.clone(), resolved);
+        }
         let mut acme_webroots = HashMap::new();
         for (index, listener) in config.listeners.iter().enumerate() {
             let Some(acme) = &listener.acme_http_01 else {
@@ -266,6 +313,8 @@ impl CompiledWebServerApp {
             static_roots,
             certificate_paths,
             upstream_tls_paths,
+            client_auth_ca_paths,
+            stream_client_auth_ca_paths,
             acme_webroots,
         })
     }
@@ -336,6 +385,18 @@ impl CompiledWebServerApp {
             .resources
             .iter()
             .filter(|resource| resource.provider_type().is_some())
+    }
+
+    /// Resolved `clientAuth.caCertificateFiles` for a TLS policy.
+    pub fn client_auth_ca_paths(&self, policy_id: &str) -> Option<&[PathBuf]> {
+        self.client_auth_ca_paths.get(policy_id).map(Vec::as_slice)
+    }
+
+    /// Resolved stream TLS terminate `clientAuth` CA files for a stream.
+    pub fn stream_client_auth_ca_paths(&self, stream_id: &str) -> Option<&[PathBuf]> {
+        self.stream_client_auth_ca_paths
+            .get(stream_id)
+            .map(Vec::as_slice)
     }
 
     pub fn certificate_paths(&self, certificate_id: &str) -> Option<(&Path, &Path)> {

@@ -12,6 +12,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_proxy_pass_request_headers() -> bool {
+    true
+}
+
 fn default_unknown_directive_policy() -> String {
     "error".to_owned()
 }
@@ -434,6 +438,10 @@ pub struct WebServerAppConfig {
     /// Shared `limit_req_zone` definitions materialized from `[http] limitReqZone`.
     #[serde(default)]
     pub limit_req_zones: Vec<LimitReqZoneConfig>,
+    /// Shared `limit_conn_zone` definitions materialized from
+    /// `[http] limitConnZone` (nginx `limit_conn_zone`).
+    #[serde(default)]
+    pub limit_conn_zones: Vec<LimitConnZoneConfig>,
     #[serde(default)]
     pub limits: WebServerLimits,
     pub listeners: Vec<ListenerConfig>,
@@ -485,6 +493,26 @@ pub struct LimitReqConfig {
     pub burst: u32,
     #[serde(default)]
     pub nodelay: bool,
+}
+
+/// nginx `limit_conn_zone` shared zone: per-key connection budget with an
+/// approximate tracked-key capacity derived from the zone size argument.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LimitConnZoneConfig {
+    pub name: String,
+    /// Only `$binary_remote_addr` / `$remote_addr` are executable today.
+    pub key: String,
+    pub max_keys: u32,
+}
+
+/// One `limit_conn` directive on a location (nginx `limit_conn <zone> <n>`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LimitConnConfig {
+    pub zone: String,
+    /// Concurrent connections permitted per key.
+    pub max_connections: u32,
 }
 
 /// Ordered access-module rule (`allow` / `deny`).
@@ -918,6 +946,7 @@ pub enum ResourceConfig {
     },
     Proxy {
         id: String,
+        #[serde(default)]
         upstream_ref: String,
         #[serde(default)]
         strip_prefix: bool,
@@ -927,6 +956,15 @@ pub enum ResourceConfig {
         /// `$server_port`.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         request_set_headers: Vec<String>,
+        /// Variable `proxy_pass` template (`http://$host` …). When present,
+        /// the target URL is evaluated per request instead of using
+        /// `upstream_ref` (nginx dynamic `proxy_pass`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        dynamic_target: Option<String>,
+        /// nginx `proxy_pass_request_headers off`: do not forward the client
+        /// request headers to the upstream (fixed safe defaults still apply).
+        #[serde(default = "default_proxy_pass_request_headers")]
+        proxy_pass_request_headers: bool,
     },
     Redirect {
         id: String,
@@ -1131,6 +1169,9 @@ pub struct StreamServerConfig {
     pub id: String,
     pub bind: String,
     pub port: u16,
+    /// `tcp` (default) or `udp` (nginx `listen … udp`).
+    #[serde(default)]
+    pub protocol: StreamProtocol,
     pub target: StreamTargetConfig,
     /// Idle timeout on both directions of the proxied connection
     /// (`proxyTimeout`; nginx `proxy_timeout`).
@@ -1155,7 +1196,13 @@ pub struct StreamServerConfig {
 )]
 pub enum StreamTlsMode {
     /// Terminate TLS with a named certificate from `certificates[]`.
-    Terminate { certificate_ref: String },
+    Terminate {
+        certificate_ref: String,
+        /// Downstream client certificate verification (nginx stream
+        /// `ssl_verify_client` + `ssl_client_certificate`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        client_auth: Option<ClientAuthConfig>,
+    },
     /// Peek ClientHello then pass encrypted bytes to the upstream.
     Preread,
 }
@@ -1171,6 +1218,15 @@ fn default_stream_proxy_timeout_ms() -> u64 {
 pub enum StreamTargetConfig {
     Upstream { name: String },
     Literal { host: String, port: u16 },
+}
+
+/// Stream transport protocol (nginx `listen … udp` flag).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StreamProtocol {
+    #[default]
+    Tcp,
+    Udp,
 }
 
 impl StreamServerConfig {
@@ -1410,12 +1466,87 @@ pub struct RouteConfig {
     /// Location `limitReq` entries referencing `limit_req_zones`.
     #[serde(default)]
     pub limit_req: Vec<LimitReqConfig>,
+    /// Location `limitConn` entries referencing `limit_conn_zones`.
+    #[serde(default)]
+    pub limit_conn: Vec<LimitConnConfig>,
     /// Location `rewrite` directives (ordered; see `RewriteFlag`).
     #[serde(default)]
     pub rewrite: Vec<RewriteRuleConfig>,
     /// Location `auth_basic` + loaded `auth_basic_user_file` entries.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auth_basic: Option<AuthBasicConfig>,
+    /// Location `sub_filter` family (nginx response body substitution).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sub_filter: Option<SubFilterConfig>,
+    /// Location `secure_link` family (nginx http secure link module).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secure_link: Option<SecureLinkMode>,
+}
+
+/// nginx `secure_link` module modes (ngx_http_secure_link_module).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields,
+    tag = "mode"
+)]
+pub enum SecureLinkMode {
+    /// `secure_link_secret <word>`: URIs are `/prefix/<md5(secret+rest)>/<rest>`;
+    /// on success the data plane serves `/prefix/<rest>`.
+    Secret {
+        /// The secret word appended to the URI in `md5(secret + rest)`.
+        secret: String,
+    },
+    /// `secure_link $arg_<argument>` + `secure_link_md5 "<template>"` with
+    /// optional `secure_link_expires $arg_<expiresArgument>`.
+    Md5 {
+        /// Query argument carrying the MD5 digest (`secure_link $arg_…`).
+        argument: String,
+        /// MD5 template; supported variables: `$uri`, `$remote_addr`,
+        /// `$secure_link_expires`.
+        template: String,
+        /// Optional query argument with the link expiry unix timestamp.
+        expires_argument: Option<String>,
+    },
+}
+
+
+
+/// Location response body substitution (`sub_filter` family). The rules
+/// apply in declaration order; `once` (nginx `sub_filter_once`, default on)
+/// replaces only the first occurrence of each rule.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SubFilterConfig {
+    #[serde(default)]
+    pub rules: Vec<SubFilterRule>,
+    #[serde(default = "default_sub_filter_once")]
+    pub once: bool,
+    /// MIME types eligible for substitution (nginx `sub_filter_types`;
+    /// default `text/html`). The comparison ignores parameters such as
+    /// `; charset=utf-8` and is case-insensitive.
+    #[serde(default = "default_sub_filter_types")]
+    pub types: Vec<String>,
+    /// nginx `sub_filter_last_modified`; when `false` (default) the
+    /// `Last-Modified` header is dropped from substituted responses.
+    #[serde(default)]
+    pub last_modified: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SubFilterRule {
+    pub from: String,
+    pub to: String,
+}
+
+fn default_sub_filter_once() -> bool {
+    true
+}
+
+fn default_sub_filter_types() -> Vec<String> {
+    vec!["text/html".to_owned()]
 }
 
 /// One nginx `rewrite` directive on a location.

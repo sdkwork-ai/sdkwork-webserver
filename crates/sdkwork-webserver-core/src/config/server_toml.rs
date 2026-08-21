@@ -16,6 +16,7 @@ use serde_json::{json, Map, Value};
 use super::{
     error::WebServerConfigError,
     model::WebServerAppConfig,
+    proxy_headers::merge_proxy_set_headers,
     validate_webserver_config,
 };
 
@@ -226,12 +227,18 @@ const ACCEPTED_IGNORED: &[&str] = &[
     "clientHeaderTimeout", "clientBodyBufferSize", "clientHeaderBufferSize",
     "largeClientHeaderBuffers", "resetTimedoutConnection", "sendTimeout",
     "serverNamesHashMaxSize", "serverTokens", "defaultType", "logFormat", "accessLog",
-    "map",
+    "map", "keepalive",
     // proxy knobs accepted at non-location contexts; location `proxySetHeader`
     // and websocket/buffering flags are listed in location supported keys and execute
     "proxyHttpVersion", "proxyBuffering", "proxyWebsocketUpgrade",
     "proxyInterceptErrors", "proxyNextUpstream", "proxyHideHeader",
     "proxyRequestBuffering", "proxyMethod",
+    // upstream server flags the runtime owns via its own failure/ejection
+    // policy (nginx `max_fails=` / `fail_timeout=` are accepted no-ops)
+    "maxFails", "failTimeout",
+    // `resolve` marks DNS-named targets for deploy-time cluster resolution;
+    // the runtime always resolves hostnames at connection time.
+    "resolve",
     // static file details
     "autoindex", "expires", "etag", "disableSymlinks", "logNotFound", "sendfileMaxChunk",
     "charset", "errorPage",
@@ -295,12 +302,29 @@ fn check_supported_keys(
 }
 
 /// Parse a listen entry like `"443 ssl"`, `"80"`, or `"127.0.0.1:8088"`.
-fn parse_listen(entry: &str, path: &str) -> Result<(String, u16, bool), WebServerConfigError> {
+fn parse_listen(entry: &str, path: &str) -> Result<(String, u16, bool, bool), WebServerConfigError> {
     let mut parts = entry.split_whitespace();
     let address = parts
         .next()
         .ok_or_else(|| materialize_error(path, "empty listen entry"))?;
-    let ssl = parts.any(|flag| flag == "ssl");
+    let mut ssl = false;
+    let mut http2 = false;
+    for flag in parts {
+        match flag {
+            "ssl" => ssl = true,
+            "http2" => http2 = true,
+            // OS/selection tuning owned by the runtime: `default_server`
+            // (the runtime's default-host selection covers it) and
+            // `reuseport` (socket tuning) are accepted and ignored.
+            "default_server" | "reuseport" => {}
+            other => {
+                return Err(materialize_error(
+                    path,
+                    format!("unsupported listen flag `{other}` in `{entry}`"),
+                ))
+            }
+        }
+    }
     let (bind, port) = if let Some((host, port_text)) = address.rsplit_once(':') {
         let port: u16 = port_text
             .parse()
@@ -316,7 +340,7 @@ fn parse_listen(entry: &str, path: &str) -> Result<(String, u16, bool), WebServe
             .map_err(|_| materialize_error(path, format!("invalid listen value `{entry}`")))?;
         ("0.0.0.0".to_owned(), port)
     };
-    Ok((bind, port, ssl))
+    Ok((bind, port, ssl, http2))
 }
 
 fn listener_id(bind: &str, port: u16) -> String {
@@ -605,6 +629,40 @@ fn materialize_access_rules(
     Ok(rules)
 }
 
+
+fn materialize_limit_conn_rules(
+    location: &Map<String, Value>,
+    path: &str,
+    zone_names: &[String],
+) -> Result<Vec<Value>, WebServerConfigError> {
+    let Some(entries) = location.get("limitConn").and_then(Value::as_array) else {
+        return Ok(Vec::new());
+    };
+    let mut rules = Vec::new();
+    for (index, entry) in entries.iter().enumerate() {
+        let entry_path = format!("{path}.limitConn[{index}]");
+        let text = entry
+            .as_str()
+            .ok_or_else(|| materialize_error(&entry_path, "limitConn entries must be strings"))?;
+        let rule = crate::config::parse_limit_conn(text)
+            .map_err(|error| materialize_error(&entry_path, error.to_string()))?;
+        if !zone_names.contains(&rule.zone) {
+            return Err(materialize_error(
+                &entry_path,
+                format!(
+                    "limitConn zone `{}` is not declared in http.limitConnZone",
+                    rule.zone
+                ),
+            ));
+        }
+        rules.push(json!({
+            "zone": rule.zone,
+            "maxConnections": rule.max_connections,
+        }));
+    }
+    Ok(rules)
+}
+
 fn materialize_limit_req_rules(
     location: &Map<String, Value>,
     path: &str,
@@ -637,6 +695,145 @@ fn materialize_limit_req_rules(
         }));
     }
     Ok(rules)
+}
+
+/// Materialize the location `secureLink*` family (the TOML mirror of
+/// nginx `secure_link_secret` / `secure_link` + `secure_link_md5` +
+/// `secure_link_expires`).
+fn materialize_secure_link(
+    location: &Map<String, Value>,
+    path: &str,
+) -> Result<Option<Value>, WebServerConfigError> {
+    let secret = location.get("secureLinkSecret").and_then(Value::as_str);
+    let argument = location.get("secureLink").and_then(Value::as_str);
+    let template = location.get("secureLinkMd5").and_then(Value::as_str);
+    let expires = location.get("secureLinkExpires").and_then(Value::as_str);
+    match (secret, argument, template, expires) {
+        (Some(secret), None, None, None) => {
+            if secret.is_empty() {
+                return Err(materialize_error(
+                    &format!("{path}.secureLinkSecret"),
+                    "`secureLinkSecret` must not be empty",
+                ));
+            }
+            Ok(Some(json!({ "mode": "secret", "secret": secret })))
+        }
+        (None, argument, template, expires) => {
+            let Some(template) = template else {
+                if argument.is_some() || expires.is_some() {
+                    return Err(materialize_error(
+                        path,
+                        "`secureLink`/`secureLinkExpires` require `secureLinkMd5`",
+                    ));
+                }
+                return Ok(None);
+            };
+            crate::config::validate_md5_template(template).map_err(|message| {
+                materialize_error(&format!("{path}.secureLinkMd5"), message)
+            })?;
+            for (key, value) in [
+                ("secureLink", argument),
+                ("secureLinkExpires", expires),
+            ] {
+                if let Some(value) = value {
+                    if value.starts_with("$arg_") {
+                        return Err(materialize_error(
+                            &format!("{path}.{key}"),
+                            format!("`{key}` takes the bare query argument name (nginx writes `$arg_<name>`; write `{value}` without the `$arg_` prefix)"),
+                        ));
+                    }
+                    if value.trim().is_empty() {
+                        return Err(materialize_error(
+                            &format!("{path}.{key}"),
+                            format!("`{key}` must not be empty"),
+                        ));
+                    }
+                }
+            }
+            let mut mode = json!({
+                "mode": "md5",
+                "argument": argument.unwrap_or("st"),
+                "template": template,
+            });
+            if let Some(expires) = expires {
+                mode["expiresArgument"] = Value::String(expires.to_owned());
+            }
+            Ok(Some(mode))
+        }
+        (Some(_), _, _, _) => Err(materialize_error(
+            path,
+            "`secureLinkSecret` conflicts with `secureLink`/`secureLinkMd5`/`secureLinkExpires`",
+        )),
+    }
+}
+
+/// Materialize the location `subFilter` family into the model shape
+/// (`subFilter` rule entries `"from to"`, `subFilterOnce`, `subFilterTypes`,
+/// `subFilterLastModified` — the TOML mirror of nginx `sub_filter*`).
+fn materialize_sub_filter(
+    location: &Map<String, Value>,
+    path: &str,
+) -> Result<Option<Value>, WebServerConfigError> {
+    let Some(entries) = location.get("subFilter").and_then(Value::as_array) else {
+        if location.contains_key("subFilterOnce")
+            || location.contains_key("subFilterTypes")
+            || location.contains_key("subFilterLastModified")
+        {
+            return Err(materialize_error(
+                path,
+                "`subFilterOnce`/`subFilterTypes`/`subFilterLastModified` require `subFilter`",
+            ));
+        }
+        return Ok(None);
+    };
+    let mut rules = Vec::new();
+    for (index, entry) in entries.iter().enumerate() {
+        let entry = entry.as_str().ok_or_else(|| {
+            materialize_error(
+                &format!("{path}.subFilter[{index}]"),
+                "subFilter entries must be strings `\"from to\"`",
+            )
+        })?;
+        let (from, to) = entry
+            .split_once(char::is_whitespace)
+            .map(|(from, to)| (from.to_owned(), to.to_owned()))
+            .ok_or_else(|| {
+                materialize_error(
+                    &format!("{path}.subFilter[{index}]"),
+                    "subFilter entry must be `\"from to\"` with a non-empty pattern",
+                )
+            })?;
+        if from.is_empty() {
+            return Err(materialize_error(
+                &format!("{path}.subFilter[{index}]"),
+                "subFilter pattern must not be empty",
+            ));
+        }
+        rules.push(json!({ "from": from, "to": to }));
+    }
+    let types = location
+        .get("subFilterTypes")
+        .and_then(Value::as_array)
+        .map(|entries| {
+            entries
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|| vec!["text/html".to_owned()]);
+    if types.is_empty() {
+        return Err(materialize_error(
+            &format!("{path}.subFilterTypes"),
+            "`subFilterTypes` must not be empty",
+        ));
+    }
+    Ok(Some(json!({
+        "rules": rules,
+        "once": location.get("subFilterOnce").and_then(Value::as_bool).unwrap_or(true),
+        "types": types,
+        "lastModified": location.get("subFilterLastModified").and_then(Value::as_bool).unwrap_or(false),
+    })))
 }
 
 fn materialize_auth_basic(
@@ -719,6 +916,8 @@ struct Materializer<'a> {
     streams: Vec<Value>,
     limit_req_zones: Vec<Value>,
     limit_req_zone_names: Vec<String>,
+    limit_conn_zones: Vec<Value>,
+    limit_conn_zone_names: Vec<String>,
 }
 
 impl<'a> Materializer<'a> {
@@ -737,6 +936,8 @@ impl<'a> Materializer<'a> {
             streams: Vec::new(),
             limit_req_zones: Vec::new(),
             limit_req_zone_names: Vec::new(),
+            limit_conn_zones: Vec::new(),
+            limit_conn_zone_names: Vec::new(),
         }
     }
 
@@ -876,6 +1077,9 @@ impl<'a> Materializer<'a> {
     }
 
     fn ensure_upstream(&mut self, upstream: &Map<String, Value>, path: &str) -> Result<String, WebServerConfigError> {
+        check_supported_keys(upstream, path, &[
+            "name", "target", "loadBalancing", "hashKey",
+        ])?;
         let name = as_str(upstream, path, "name")?.to_owned();
         if self.upstream_names.contains(&name) {
             return Ok(name);
@@ -891,6 +1095,10 @@ impl<'a> Materializer<'a> {
             let target = target
                 .as_object()
                 .ok_or_else(|| materialize_error(&target_path, "target entries must be tables"))?;
+            check_supported_keys(target, &target_path, &[
+                "address", "weight", "backup", "down", "maxConnections",
+                "slowStartMs",
+            ])?;
             let address = as_str(target, &target_path, "address")?;
             let down = target.get("down").and_then(Value::as_bool).unwrap_or(false);
             if down {
@@ -909,6 +1117,12 @@ impl<'a> Materializer<'a> {
             }
             if let Some(backup) = target.get("backup").and_then(Value::as_bool) {
                 entry["backup"] = Value::Bool(backup);
+            }
+            if let Some(max_connections) = target.get("maxConnections").and_then(Value::as_u64) {
+                entry["maxConnections"] = Value::from(max_connections);
+            }
+            if let Some(slow_start_ms) = target.get("slowStartMs").and_then(Value::as_u64) {
+                entry["slowStartMs"] = Value::from(slow_start_ms);
             }
             target_values.push(entry);
             // Literal IP targets are operator-declared in server.toml; the
@@ -996,14 +1210,19 @@ impl<'a> Materializer<'a> {
         location_index: usize,
         location: &Map<String, Value>,
         server_name: &str,
+        inherited_proxy_set_headers: &[String],
+        inherited_root: Option<&str>,
     ) -> Result<String, WebServerConfigError> {
         let path = format!("http.server[{server_index}].location[{location_index}]");
         check_supported_keys(location, &path, &[
             "match", "proxyPass", "root", "alias", "index", "tryFiles", "returnStatus",
-            "returnBody", "proxyConnectTimeout", "proxyReadTimeout", "proxySendTimeout",
-            "proxyBufferSize", "proxyRedirect", "proxySetHeader", "proxyWebsocketUpgrade",
-            "proxyHttpVersion", "proxyBuffering", "allow", "deny", "limitReq", "rewrite",
-            "authBasic", "authBasicUserFile",
+            "returnBody", "returnLocation", "proxyConnectTimeout", "proxyReadTimeout",
+            "proxySendTimeout", "proxyBufferSize", "proxyRedirect", "proxySetHeader",
+            "proxyWebsocketUpgrade", "proxyHttpVersion", "proxyBuffering", "proxyPassRequestHeaders",
+            "allow", "deny",
+            "limitReq", "limitConn", "rewrite", "authBasic", "authBasicUserFile", "subFilter",
+            "subFilterOnce", "subFilterTypes", "subFilterLastModified", "secureLinkSecret",
+            "secureLink", "secureLinkMd5", "secureLinkExpires",
         ])?;
         let match_value = as_str(location, &path, "match")?;
         // Validate match syntax early so serving-behavior errors stay attributed
@@ -1019,24 +1238,83 @@ impl<'a> Materializer<'a> {
         .iter()
         .filter(|present| **present)
         .count();
-        if serving != 1 {
+        // A location with only `tryFiles` inherits the server-level root
+        // (nginx SPA layout), which counts as static serving.
+        let inherits_static = serving == 0
+            && location.contains_key("tryFiles")
+            && inherited_root.is_some();
+        if serving > 1 || (serving == 0 && !inherits_static) {
             return Err(materialize_error(
                 &path,
-                "a location must declare exactly one serving behavior (proxyPass | root | alias | returnStatus)",
+                "a location must declare exactly one serving behavior (proxyPass | root | alias | returnStatus, or tryFiles with a server-level root)",
+            ));
+        }
+        if location.contains_key("returnLocation") && !location.contains_key("returnStatus") {
+            return Err(materialize_error(
+                &path,
+                "`returnLocation` requires `returnStatus` (a 3xx redirect status)",
             ));
         }
 
         if let Some(proxy_pass) = location.get("proxyPass").and_then(Value::as_str) {
+            let proxy_pass_request_headers = location
+                .get("proxyPassRequestHeaders")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            if proxy_pass.contains('$') {
+                crate::config::validate_proxy_pass_template(proxy_pass).map_err(|message| {
+                    materialize_error(&path, message)
+                })?;
+                let request_set_headers = location
+                    .get("proxySetHeader")
+                    .and_then(Value::as_array)
+                    .map(|entries| {
+                        entries
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .map(str::trim)
+                            .filter(|entry| !entry.is_empty())
+                            .map(str::to_owned)
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                for entry in request_set_headers.iter().chain(inherited_proxy_set_headers) {
+                    validate_proxy_set_header_entry(&path, entry)?;
+                }
+                let merged_headers =
+                    merge_proxy_set_headers(inherited_proxy_set_headers, &request_set_headers);
+                self.resources.push(json!({
+                    "id": resource_id,
+                    "type": "proxy",
+                    "stripPrefix": false,
+                    "requestSetHeaders": merged_headers,
+                    "upstreamRef": "",
+                    "dynamicTarget": proxy_pass,
+                    "proxyPassRequestHeaders": proxy_pass_request_headers,
+                }));
+            } else {
             let upstream_ref = if let Some(rest) = proxy_pass.strip_prefix("http://").or_else(|| proxy_pass.strip_prefix("https://")) {
                 if rest.contains(':') {
                     // Literal host:port target: synthesize a dedicated upstream.
-                    let literal_id = format!("literal-{}", rest.replace([':', '/'], "-"));
+                    let literal_id = format!("literal-{}", rest.replace([':', '/', '.'], "-"));
                     if !self.upstream_names.contains(&literal_id) {
-                        self.upstreams.push(json!({
+                        let host = rest.rsplit_once(':').map_or("", |(host, _)| host);
+                        let address_policy = host.parse::<std::net::IpAddr>().ok().map(|ip| {
+                            match ip {
+                                std::net::IpAddr::V4(ip) => format!("{ip}/32"),
+                                std::net::IpAddr::V6(ip) => format!("{ip}/128"),
+                            }
+                        });
+                        let mut literal_upstream = json!({
                             "id": literal_id,
                             "targets": [{ "url": proxy_pass }],
                             "loadBalancing": "round-robin",
-                        }));
+                        });
+                        if let Some(cidr) = address_policy {
+                            literal_upstream["addressPolicy"] =
+                                json!({ "allowedCidrs": [cidr] });
+                        }
+                        self.upstreams.push(literal_upstream);
                         self.upstream_names.push(literal_id.clone());
                     }
                     literal_id
@@ -1062,17 +1340,26 @@ impl<'a> Materializer<'a> {
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
-            for entry in &request_set_headers {
+            for entry in request_set_headers.iter().chain(inherited_proxy_set_headers) {
                 validate_proxy_set_header_entry(&path, entry)?;
             }
+            let merged_headers = merge_proxy_set_headers(inherited_proxy_set_headers, &request_set_headers);
             self.resources.push(json!({
                 "id": resource_id,
                 "type": "proxy",
                 "upstreamRef": upstream_ref,
                 "stripPrefix": false,
-                "requestSetHeaders": request_set_headers,
+                "requestSetHeaders": merged_headers,
+                "proxyPassRequestHeaders": proxy_pass_request_headers,
             }));
-        } else if let Some(root) = location.get("root").and_then(Value::as_str) {
+            }
+        } else if let Some(root) = if location.contains_key("root") {
+            location.get("root").and_then(Value::as_str)
+        } else if inherits_static {
+            inherited_root
+        } else {
+            None
+        } {
             self.resources.push(materialize_static_resource(
                 &resource_id,
                 root,
@@ -1099,16 +1386,43 @@ impl<'a> Materializer<'a> {
                 location,
             ));
         } else if let Some(status) = location.get("returnStatus").and_then(Value::as_u64) {
-            let mut resource = json!({
-                "id": resource_id,
-                "type": "respond",
-                "status": status,
-                "contentType": "text/plain; charset=utf-8",
-            });
-            if let Some(body) = location.get("returnBody").and_then(Value::as_str) {
-                resource["body"] = Value::String(body.to_owned());
+            let status: u16 = u16::try_from(status)
+                .map_err(|_| materialize_error(&path, format!("invalid returnStatus `{status}`")))?;
+            if let Some(return_location) = location.get("returnLocation").and_then(Value::as_str) {
+                // nginx `return <3xx> <url>`: the redirect data plane expands
+                // `$host` / `$request_uri` / `$scheme` (same subset as nginx.conf).
+                if !matches!(status, 301 | 302 | 303 | 307 | 308) {
+                    return Err(materialize_error(
+                        &path,
+                        format!("`returnLocation` requires a redirect status (301|302|303|307|308), found {status}"),
+                    ));
+                }
+                if return_location.contains('$')
+                    && !crate::nginx::redirect_variables_ok(return_location)
+                {
+                    return Err(materialize_error(
+                        &path,
+                        format!("returnLocation `{return_location}` uses unsupported variables; supported: $host $request_uri $scheme"),
+                    ));
+                }
+                self.resources.push(json!({
+                    "id": resource_id,
+                    "type": "redirect",
+                    "status": status,
+                    "location": return_location,
+                }));
+            } else {
+                let mut resource = json!({
+                    "id": resource_id,
+                    "type": "respond",
+                    "status": status,
+                    "contentType": "text/plain; charset=utf-8",
+                });
+                if let Some(body) = location.get("returnBody").and_then(Value::as_str) {
+                    resource["body"] = Value::String(body.to_owned());
+                }
+                self.resources.push(resource);
             }
-            self.resources.push(resource);
         } else {
             return Err(materialize_error(
                 &path,
@@ -1127,9 +1441,29 @@ impl<'a> Materializer<'a> {
     ) -> Result<(), WebServerConfigError> {
         let path = format!("http.server[{server_index}]");
         check_supported_keys(server, &path, &[
-            "listen", "serverName", "http2", "root", "index", "tryFiles", "returnStatus",
-            "returnBody", "gzip", "tls", "location",
+            "listen", "serverName", "http2", "root", "index", "tryFiles",
+            "tls", "proxySetHeader", "addHeader", "location",
         ])?;
+        // Server-level `proxySetHeader` entries are inherited by every proxy
+        // location (nginx `proxy_set_header` inheritance semantics); the
+        // merge lets location-level entries override by header name.
+        let server_root = server.get("root").and_then(Value::as_str);
+        let server_proxy_set_headers: Vec<String> = server
+            .get("proxySetHeader")
+            .and_then(Value::as_array)
+            .map(|entries| {
+                entries
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::trim)
+                    .filter(|entry| !entry.is_empty())
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        for entry in &server_proxy_set_headers {
+            validate_proxy_set_header_entry(&path, entry)?;
+        }
         let listen = as_array(server, &path, "listen")?;
         let server_names = as_array(server, &path, "serverName")?;
         let primary_name = server_names
@@ -1192,7 +1526,8 @@ impl<'a> Materializer<'a> {
             let entry = entry
                 .as_str()
                 .ok_or_else(|| materialize_error(&path, "listen entries must be strings"))?;
-            let (bind, port, ssl) = parse_listen(entry, &path)?;
+            let (bind, port, ssl, listen_http2) = parse_listen(entry, &path)?;
+            let http2 = http2 || listen_http2;
             if ssl {
                 let Some(certificate) = certificate_name.as_deref() else {
                     return Err(materialize_error(&path, format!("listen `{entry}` requires [http.server.tls] with a certificate")));
@@ -1230,7 +1565,14 @@ impl<'a> Materializer<'a> {
             let location = location
                 .as_object()
                 .ok_or_else(|| materialize_error(&path, "location entries must be tables"))?;
-            let resource_id = self.materialize_location(server_index, location_index, location, &primary_name)?;
+            let resource_id = self.materialize_location(
+                server_index,
+                location_index,
+                location,
+                &primary_name,
+                &server_proxy_set_headers,
+                server_root,
+            )?;
             routes.push(resource_id);
         }
 
@@ -1273,10 +1615,17 @@ impl<'a> Materializer<'a> {
                 "resourceRef": format!("loc-{server_index}-{location_index}"),
                 "access": materialize_access_rules(location, &path)?,
                 "limitReq": materialize_limit_req_rules(location, &path, &self.limit_req_zone_names)?,
+                "limitConn": materialize_limit_conn_rules(location, &path, &self.limit_conn_zone_names)?,
                 "rewrite": materialize_rewrite_rules(location, &path)?,
             });
             if let Some(auth_basic) = materialize_auth_basic(location, &path)? {
                 route["authBasic"] = auth_basic;
+            }
+            if let Some(sub_filter) = materialize_sub_filter(location, &path)? {
+                route["subFilter"] = sub_filter;
+            }
+            if let Some(secure_link) = materialize_secure_link(location, &path)? {
+                route["secureLink"] = secure_link;
             }
             route_entries.push(route);
         }
@@ -1324,14 +1673,15 @@ impl<'a> Materializer<'a> {
                 .ok_or_else(|| materialize_error(&path, "stream server entries must be tables"))?;
             check_supported_keys(server, &path, &[
                 "listen", "proxyPass", "proxyTimeout", "proxyProtocol",
-                "sslPreread", "certificate",
+                "sslPreread", "certificate", "protocol", "clientCertificate",
+                "clientCertificateCA",
             ])?;
             let listen = as_array(server, &path, "listen")?;
             let first = listen
                 .first()
                 .and_then(Value::as_str)
                 .ok_or_else(|| materialize_error(&path, "listen must be a non-empty array of bindings"))?;
-            let (bind, port, ssl) = parse_listen(first, &path)?;
+            let (bind, port, ssl, _) = parse_listen(first, &path)?;
             let ssl_preread = server
                 .get("sslPreread")
                 .and_then(Value::as_bool)
@@ -1340,6 +1690,22 @@ impl<'a> Materializer<'a> {
                 return Err(materialize_error(
                     &path,
                     "listen … ssl (TLS terminate) and sslPreread are mutually exclusive",
+                ));
+            }
+            let udp = match server.get("protocol").and_then(Value::as_str) {
+                None | Some("tcp") => false,
+                Some("udp") => true,
+                Some(other) => {
+                    return Err(materialize_error(
+                        &format!("{path}.protocol"),
+                        format!("`protocol` accepts tcp|udp, found `{other}`"),
+                    ))
+                }
+            };
+            if udp && (ssl || ssl_preread) {
+                return Err(materialize_error(
+                    &path,
+                    "UDP stream listeners cannot combine `protocol = \"udp\"` with ssl/sslPreread",
                 ));
             }
             let tls = if ssl {
@@ -1352,8 +1718,14 @@ impl<'a> Materializer<'a> {
                         ),
                     ));
                 }
+                let client_auth = parse_client_auth(server, &path)?;
+                let client_auth = client_auth.map(|value| {
+                    serde_json::from_value(value)
+                        .expect("client auth materialization is type-checked")
+                });
                 Some(crate::config::model::StreamTlsMode::Terminate {
                     certificate_ref: certificate_ref.to_owned(),
+                    client_auth,
                 })
             } else if ssl_preread {
                 Some(crate::config::model::StreamTlsMode::Preread)
@@ -1411,6 +1783,11 @@ impl<'a> Materializer<'a> {
                 id: format!("stream-{index}"),
                 bind: bind.to_owned(),
                 port,
+                protocol: if udp {
+                    crate::config::model::StreamProtocol::Udp
+                } else {
+                    crate::config::model::StreamProtocol::Tcp
+                },
                 target,
                 proxy_timeout_ms,
                 proxy_protocol,
@@ -1441,6 +1818,7 @@ impl<'a> Materializer<'a> {
             "nginx": nginx,
             "gzip": gzip,
             "limitReqZones": self.limit_req_zones,
+            "limitConnZones": self.limit_conn_zones,
             "limits": limits,
             "listeners": self.listeners,
             "certificates": self.certificates,
@@ -1457,6 +1835,38 @@ impl<'a> Materializer<'a> {
         })?;
         validate_webserver_config(&config)?;
         Ok(config)
+    }
+
+
+    fn materialize_limit_conn_zones(
+        &mut self,
+        http: &Map<String, Value>,
+    ) -> Result<(), WebServerConfigError> {
+        let Some(entries) = http.get("limitConnZone").and_then(Value::as_array) else {
+            return Ok(());
+        };
+        for (index, entry) in entries.iter().enumerate() {
+            let path = format!("http.limitConnZone[{index}]");
+            let text = entry
+                .as_str()
+                .ok_or_else(|| materialize_error(&path, "limitConnZone entries must be strings"))?;
+            let zone = crate::config::parse_limit_conn_zone(text).map_err(|error| {
+                materialize_error(&path, error.to_string())
+            })?;
+            if self.limit_conn_zone_names.contains(&zone.name) {
+                return Err(materialize_error(
+                    &path,
+                    format!("duplicate limitConnZone name `{}`", zone.name),
+                ));
+            }
+            self.limit_conn_zone_names.push(zone.name.clone());
+            self.limit_conn_zones.push(json!({
+                "name": zone.name,
+                "key": zone.key,
+                "maxKeys": zone.max_keys,
+            }));
+        }
+        Ok(())
     }
 
     fn materialize_limit_req_zones(
@@ -1594,6 +2004,10 @@ pub fn materialize_app(
                     RETIRED_NGINX_PROFILE,
                 ));
             }
+            check_supported_keys(nginx, "server.toml.nginx", &[
+                "enabled", "profile", "unknownDirectivePolicy", "exceptionRef",
+                "strict", "confFile",
+            ])?;
             json!({
                 "enabled": nginx.get("enabled").and_then(Value::as_bool).unwrap_or(true),
                 "profile": nginx.get("profile").and_then(Value::as_str).unwrap_or("http-core-v1"),
@@ -1660,12 +2074,32 @@ pub fn materialize_app(
             proxy_cache["diskPath"] = Value::String(disk_path.to_owned());
         }
     }
+    if let Some(main) = root.get("main").and_then(Value::as_object) {
+        check_supported_keys(main, "server.toml.main", &["events"])?;
+        if let Some(events) = main.get("events").and_then(Value::as_object) {
+            check_supported_keys(events, "server.toml.main.events", &["workerConnections"])?;
+        }
+    }
+    if let Some(stream) = root.get("stream").and_then(Value::as_object) {
+        check_supported_keys(stream, "server.toml.stream", &["server"])?;
+    }
+    if let Some(cache) = root.get("proxyCache").and_then(Value::as_object) {
+        check_supported_keys(cache, "server.toml.proxyCache", &[
+            "enabled", "maxEntries", "maxObjectBytes", "defaultTtlSeconds",
+            "staleTtlSeconds", "diskPath",
+        ])?;
+    }
     let mut materializer = Materializer::new(app_key);
     let http = root
         .get("http")
         .and_then(Value::as_object)
         .ok_or_else(|| materialize_error("server.toml", "http table is required for an enabled configuration"))?;
+    check_supported_keys(http, "server.toml.http", &[
+        "certificates", "clientMaxBodySize", "gzip", "gzipTypes", "gzipMinLength",
+        "keepaliveTimeout", "limitConnZone", "limitReqZone", "server", "upstream",
+    ])?;
     materializer.materialize_limit_req_zones(http)?;
+    materializer.materialize_limit_conn_zones(http)?;
     materializer.materialize_certificates(http)?;
     materializer.materialize_upstreams(http)?;
     if let Some(servers) = http.get("server").and_then(Value::as_array) {
@@ -2072,6 +2506,7 @@ proxyPass = "127.0.0.1:9443"
             config.streams[0].tls,
             Some(super::super::model::StreamTlsMode::Terminate {
                 certificate_ref: "site".to_owned(),
+                client_auth: None,
             })
         );
 

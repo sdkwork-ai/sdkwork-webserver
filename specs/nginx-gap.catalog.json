@@ -12,7 +12,8 @@
     "It is not a claim of full nginx OSS behavioral parity. Grades follow PRD-nginx-compatibility.md §2.",
     "Toggle: deployments/webserver/server.*.toml [nginx].enabled (nginx.enabled)",
     "Deploy-only keys nginx.strict / nginx.confFile are enforced by the TOML validator (W16); they are not required on the Rust NginxConfig runtime model.",
-    "REQ-linked Nginx 1.26.2 differential fixtures are indexed by specs/nginx-behavioral-corpus.manifest.json under tests/nginx/."
+    "REQ-linked Nginx 1.26.2 differential fixtures are indexed by specs/nginx-behavioral-corpus.manifest.json under tests/nginx/.",
+    "Executed surface expansion (2026-08): sub_filter, limit_conn, secure_link, variable proxy_pass, proxy_pass_request_headers, and UDP stream are now runtime-executable; the unified config loader (config.source-unified-loader) is the parsing component for all three authored formats."
   ],
   "capabilities": [
     {
@@ -150,8 +151,8 @@
     {
       "id": "tls.downstream-mtls",
       "group": "tls",
-      "status": "missing",
-      "summary": "Client certificate authentication to listeners"
+      "status": "implemented",
+      "summary": "Downstream client certificate verification on app-config listeners (static TLS + stream TLS terminate, ssl_verify_client/ssl_client_certificate); the snapshot-driven website TLS controller carries no client-auth contract"
     },
     {
       "id": "tls.ocsp-stapling",
@@ -186,8 +187,8 @@
     {
       "id": "stream.udp",
       "group": "stream",
-      "status": "missing",
-      "summary": "UDP stream (also excluded from http-core-v1 V1 product scope)"
+      "status": "implemented",
+      "summary": "UDP stream proxying (listen … udp): NAT-style datagram forwarding with proxy_timeout idle sessions"
     },
     {
       "id": "ops.reload.same-topology",
@@ -206,6 +207,42 @@
       "group": "operations",
       "status": "implemented",
       "summary": "Indexed REQ-linked Nginx 1.26.2 differential slices under tests/nginx/ via specs/nginx-behavioral-corpus.manifest.json (pnpm check:nginx-corpus); full OSS parity remains out of profile"
+    },
+    {
+      "id": "config.source-unified-loader",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "Strategy-pattern config sources (nginx conf / TOML / JSON) behind one ConfigSource trait + WebServerConfigLoader with auto-detection and --format override; single-file TOML mode; parity regression corpus (tests/config_sources.rs)"
+    },
+    {
+      "id": "http.sub-filter",
+      "group": "response",
+      "status": "implemented",
+      "summary": "sub_filter / sub_filter_once / sub_filter_types / sub_filter_last_modified response body substitution, ordered before gzip like nginx filters"
+    },
+    {
+      "id": "http.limit-conn",
+      "group": "response",
+      "status": "implemented",
+      "summary": "limit_conn_zone / limit_conn per-key concurrent connection limiting with request-lifetime leases (503 on exceed)"
+    },
+    {
+      "id": "http.secure-link",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "secure_link_secret URI rewrites and secure_link/secure_link_md5/secure_link_expires query digests (403 on invalid/expired)"
+    },
+    {
+      "id": "http.proxy-pass-dynamic",
+      "group": "proxying",
+      "status": "implemented",
+      "summary": "Variable proxy_pass templates (http://$host, $server_port, $uri, $request_uri, $http_<name>) evaluated per request; SSRF guard authorizes restricted networks with hard-forbidden ranges blocked"
+    },
+    {
+      "id": "http.proxy-pass-request-headers",
+      "group": "proxying",
+      "status": "implemented",
+      "summary": "proxy_pass_request_headers off strips client request headers upstream (fixed safe defaults still applied)"
     }
   ]
 }

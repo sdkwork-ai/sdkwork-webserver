@@ -50,12 +50,30 @@ pub(crate) fn build_tls_config(
         )?;
         certificates.push((certificate.server_names.clone(), loaded.certified_key));
     }
+    // Relative `clientAuth.caCertificateFiles` are chrooted to the config
+    // directory by the compiler; substitute the resolved paths.
+    let client_auth = policy.client_auth.as_ref().map(|auth| {
+        let resolved = generation
+            .app
+            .client_auth_ca_paths(&policy.id)
+            .map(|paths| {
+                paths
+                    .iter()
+                    .map(|path| path.to_string_lossy().into_owned())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_else(|| auth.ca_certificate_files.clone());
+        sdkwork_webserver_core::ClientAuthConfig {
+            mode: auth.mode,
+            ca_certificate_files: resolved,
+        }
+    });
     let server_config = build_sni_server_config(
         certificates,
         policy.minimum_version,
         policy.maximum_version,
         &policy.alpn,
-        policy.client_auth.as_ref(),
+        client_auth.as_ref(),
     )
     .map_err(|server_name| DataPlaneError::AmbiguousTlsServerName {
         policy_id: policy.id.clone(),

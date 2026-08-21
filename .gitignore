@@ -86,3 +86,6 @@ Thumbs.db
 /.sdkwork/*.sh
 /.sdkwork/*.py
 /.sdkwork/*.conf
+
+# Added during safe-commit pass: exclude runtime hot-reload env scratch
+.sdkwork/runtime-env*.json

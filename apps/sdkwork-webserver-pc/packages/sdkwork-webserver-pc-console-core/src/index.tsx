@@ -429,11 +429,12 @@ async function createApplicationWithInitialVersion(
   mediaStorage: ApplicationMediaStorage,
   context: WebserverResourceActionContext,
 ): Promise<unknown> {
+  const resolvedApplicationType = applicationType(context.body.applicationType);
+  const resolvedSiteType = siteType(context.body.siteType);
   const siteRequest = {
     name: requiredText(context.body.name, "Application name"),
     description: optionalText(context.body.description),
-    applicationType: applicationType(context.body.applicationType),
-    siteType: siteType(context.body.siteType),
+    appKind: appKindFromCarrier(resolvedApplicationType, resolvedSiteType),
     runtimeConfig: deploymentConfiguration(context.body),
   };
   const idempotency = idempotencyParams(context);
@@ -702,6 +703,16 @@ function siteType(value: unknown): 1 | 2 | 3 | 4 | 5 | 6 {
   const parsed = Number(value);
   if ([1, 2, 3, 4, 5, 6].includes(parsed)) return parsed as 1 | 2 | 3 | 4 | 5 | 6;
   throw new Error("Runtime type is invalid");
+}
+
+/** Map legacy console carrier fields onto CreateApplicationRequest.appKind. */
+function appKindFromCarrier(
+  applicationTypeValue: "WEB" | "API",
+  siteTypeValue: 1 | 2 | 3 | 4 | 5 | 6,
+): "STATIC_WEB" | "SPA_WEB" | "API_SERVICE" {
+  if (applicationTypeValue === "API") return "API_SERVICE";
+  if (siteTypeValue === 1) return "STATIC_WEB";
+  return "SPA_WEB";
 }
 
 function requiredText(value: unknown, label: string): string {

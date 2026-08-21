@@ -5,6 +5,12 @@ export const webserverModule = {
   label: "mcp",
   surface: "app-console",
   entries: [
-    { resource: "mcp", label: "My MCP Servers", description: "MCP servers registered by the authenticated user", permission: "mcp.marketplace.read", order: 1 }
+    {
+      resource: "mcp",
+      label: "My MCP",
+      description: "Register and manage MCP servers you own",
+      permission: "mcp.marketplace.read",
+      order: 1,
+    },
   ],
 } as const satisfies WebserverPcModuleDefinition;

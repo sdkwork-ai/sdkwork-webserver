@@ -311,11 +311,12 @@ async function createApplicationWithInitialVersion(
   mediaStorage: ApplicationMediaStorage,
   context: WebserverResourceActionContext,
 ): Promise<unknown> {
+  const resolvedApplicationType = applicationType(context.body.applicationType);
+  const resolvedSiteType = siteType(context.body.siteType);
   const applicationRequest = {
     name: requiredText(context.body.name, "Application name"),
     description: optionalText(context.body.description),
-    applicationType: applicationType(context.body.applicationType),
-    siteType: siteType(context.body.siteType),
+    appKind: appKindFromCarrier(resolvedApplicationType, resolvedSiteType),
     runtimeConfig: deploymentConfiguration(context.body),
   };
   const idempotency = idempotencyParams(context);

@@ -198,9 +198,33 @@ async fn serve_stream_connection(
             }
             Ok(())
         }
-        Some(StreamTlsMode::Terminate { certificate_ref }) => {
+        Some(StreamTlsMode::Terminate {
+            certificate_ref,
+            client_auth,
+        }) => {
             let local = downstream.local_addr().unwrap_or(peer);
-            let acceptor = match build_stream_tls_acceptor(&generation, certificate_ref) {
+            let resolved_client_auth = client_auth.as_ref().map(|auth| {
+                let resolved = generation
+                    .app
+                    .stream_client_auth_ca_paths(stream_id)
+                    .map(|paths| {
+                        paths
+                            .iter()
+                            .map(|path| path.to_string_lossy().into_owned())
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_else(|| auth.ca_certificate_files.clone());
+                sdkwork_webserver_core::ClientAuthConfig {
+                    mode: auth.mode,
+                    ca_certificate_files: resolved,
+                }
+            });
+            let acceptor = match build_stream_tls_acceptor(
+                &generation,
+                certificate_ref,
+                resolved_client_auth.as_ref(),
+                stream_id,
+            ) {
                 Ok(acceptor) => acceptor,
                 Err(error) => {
                     tracing::warn!(stream_id, peer = %peer, error = %error, "stream TLS acceptor failed");
@@ -362,7 +386,10 @@ fn resolve_target(
 fn build_stream_tls_acceptor(
     generation: &Arc<super::runtime::RuntimeGeneration>,
     certificate_ref: &str,
+    client_auth: Option<&sdkwork_webserver_core::ClientAuthConfig>,
+    stream_id: &str,
 ) -> Result<TlsAcceptor, String> {
+    eprintln!("[stream-tls] client_auth={client_auth:?} stream={stream_id}");
     install_crypto_provider().map_err(|error| error.to_string())?;
     let provider = rustls::crypto::CryptoProvider::get_default()
         .ok_or_else(|| "rustls crypto provider is not installed".to_owned())?;
@@ -391,7 +418,7 @@ fn build_stream_tls_acceptor(
         TlsVersion::Tls12,
         TlsVersion::Tls13,
         &[],
-        None,
+        client_auth,
     )?;
     Ok(TlsAcceptor::from(server_config))
 }

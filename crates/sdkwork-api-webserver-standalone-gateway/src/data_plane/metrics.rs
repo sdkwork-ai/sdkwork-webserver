@@ -23,12 +23,14 @@ use super::{fixed_histogram::FixedHistogram, runtime::DataPlaneRuntime};
 
 const STATUS_CLASSES: [&str; 6] = ["1xx", "2xx", "3xx", "4xx", "5xx", "other"];
 const CONNECTION_REJECTION_REASONS: [&str; 3] = ["capacity", "resource_pressure", "proxy_protocol"];
-const REQUEST_REJECTION_REASONS: [&str; 5] = [
+const REQUEST_REJECTION_REASONS: [&str; 7] = [
     "capacity",
     "resource_pressure",
     "access_denied",
     "rate_limited",
     "auth_required",
+    "connection_limited",
+    "link_invalid",
 ];
 const UPSTREAM_RESULTS: [&str; 5] = [
     "response",
@@ -147,6 +149,8 @@ pub(super) enum RequestRejection {
     AccessDenied = 2,
     RateLimited = 3,
     AuthRequired = 4,
+    ConnectionLimited = 5,
+    LinkInvalid = 6,
 }
 
 #[derive(Clone, Copy)]
@@ -1324,7 +1328,7 @@ mod tests {
         metrics.record_request_rejection(RequestRejection::Capacity);
         metrics.record_upstream_rejection(UpstreamRejection::NoEligibleTarget);
         assert_eq!(metrics.requests_total.len(), 6);
-        assert_eq!(metrics.request_rejections_total.len(), 5);
+        assert_eq!(metrics.request_rejections_total.len(), 7);
         assert_eq!(metrics.upstream_rejections_total.len(), 4);
     }
 

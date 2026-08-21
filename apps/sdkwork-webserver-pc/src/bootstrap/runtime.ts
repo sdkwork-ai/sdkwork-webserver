@@ -33,6 +33,7 @@ export async function bootstrapWebserverPcRuntime() {
   const sessionAuth = createSdkworkSessionAuthUnauthorizedIntegration({
     clearSession: () => { void auth.runtime.clearSession(); },
   });
+  const attachSdkClientBoundaries = sessionAuth.attachSdkClientBoundaries;
   let consoleClientsPromise: Promise<WebserverConsoleSdkClients> | undefined;
   const loadConsoleClients = () => {
     if (!consoleClientsPromise) {
@@ -42,7 +43,7 @@ export async function bootstrapWebserverPcRuntime() {
             driveAppApiBaseUrl: config.driveAppApiBaseUrl,
             webAppApiBaseUrl: config.appApiBaseUrl,
           }, tokenManager);
-          sessionAuth.attachSdkClientBoundaries([clients.web, clients.drive]);
+          attachSdkClientBoundaries([clients.web, clients.drive]);
           return clients;
         })
         .catch((cause: unknown) => {
@@ -56,7 +57,16 @@ export async function bootstrapWebserverPcRuntime() {
   const getAuthRuntime = () => auth.getRuntime() as unknown as SdkworkIamRuntimeAuthRuntimeLike;
   const authController = createSdkworkIamRuntimeAuthController({ getRuntime: getAuthRuntime });
   const loadAuthRuntimeConfig = createWebserverAuthRuntimeConfigLoader(auth.appbaseApp);
-  return { auth, authController, config, loadAuthRuntimeConfig, loadConsoleClients, locale, tokenManager } as const;
+  return {
+    attachSdkClientBoundaries,
+    auth,
+    authController,
+    config,
+    loadAuthRuntimeConfig,
+    loadConsoleClients,
+    locale,
+    tokenManager,
+  } as const;
 }
 
 export type BootstrappedWebserverPcRuntime = Awaited<ReturnType<typeof bootstrapWebserverPcRuntime>>;

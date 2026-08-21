@@ -416,8 +416,11 @@ mod tests {
             resource_ref: "docs-drive".to_owned(),
             access: Vec::new(),
             limit_req: Vec::new(),
+            limit_conn: Vec::new(),
             rewrite: Vec::new(),
             auth_basic: None,
+            sub_filter: None,
+            secure_link: None,
         }
     }
 

@@ -178,10 +178,14 @@ function resourceText(
 ): string {
   const key = `resource.${resource}.label` as WebserverMessageKey;
   const translated = t(key);
+  const fallback = fallbackLabel?.trim();
   // Prefer i18n; fall back to module entry label when a key is missing so new
   // console modules (skills/mcp) never render as blank sidebar text.
   if (translated && translated !== key) {
     return translated;
   }
-  return fallbackLabel?.trim() || translated || resource;
+  if (fallback) {
+    return fallback;
+  }
+  return resource;
 }

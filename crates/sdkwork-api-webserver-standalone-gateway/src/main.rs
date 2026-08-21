@@ -258,16 +258,11 @@ fn validate_config(path: PathBuf, format_override: Option<ConfigFormat>) -> Main
     let loader = config_loader();
     let options = load_options(format_override);
     let revision = loader.load(&path, &options).inspect_err(|error| {
-        for diagnostic in error.diagnostics() {
-            tracing::error!(
-                config_path = %diagnostic.path,
-                message = %diagnostic.message,
-                "Web Server config diagnostic"
-            );
-        }
+        log_config_diagnostics(error);
     })?;
     let compiled = loader
         .load_and_compile(&path, &options)
+        .inspect_err(|error| log_config_diagnostics(error))
         .map_err(|error| io::Error::other(format!("config compile failed: {error}")))?;
     let route_count = compiled
         .config()
@@ -371,6 +366,16 @@ fn validate_module_imports_command() -> MainResult<()> {
         );
     }
     Ok(())
+}
+
+fn log_config_diagnostics(error: &sdkwork_webserver_core::WebServerConfigError) {
+    for diagnostic in error.diagnostics() {
+        tracing::error!(
+            config_path = %diagnostic.path,
+            message = %diagnostic.message,
+            "Web Server config diagnostic"
+        );
+    }
 }
 
 fn config_path(argument: Option<String>) -> MainResult<PathBuf> {

@@ -28,3 +28,5 @@ pub use load::{load_nginx_compat, NginxLoadReport};
 pub use mapping::{materialize_nginx_app, NginxConfigError};
 pub use merge::merge_nginx_apps;
 pub use parser::{expand_includes, parse_nginx_config, NginxDirective, NginxParseError};
+
+pub(crate) use mapping::redirect_variables_ok;

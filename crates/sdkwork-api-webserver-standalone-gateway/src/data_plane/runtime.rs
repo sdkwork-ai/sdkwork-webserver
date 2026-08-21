@@ -21,6 +21,7 @@ use crate::metric_dimensions::CanonicalMetricDimensions;
 use super::{
     active_health::ActiveHealthSupervisor,
     dns::BoundedSystemResolver,
+    limit_conn::LimitConnRuntime,
     limit_req::LimitReqRuntime,
     metrics::{DataPlaneMetrics, ReloadResult},
     proxy::ProxyUpstream,
@@ -39,6 +40,10 @@ pub(crate) struct RuntimeGeneration {
     pub upstreams: HashMap<String, Arc<ProxyUpstream>>,
     /// Shared HTTP response cache for proxied surfaces, when enabled.
     pub proxy_cache: Option<Arc<super::cache::HttpResponseCache>>,
+    /// System resolver for dynamic `proxy_pass` targets.
+    pub resolver: Arc<BoundedSystemResolver>,
+    /// Per-generation cache of synthesized dynamic `proxy_pass` upstreams.
+    pub dynamic_upstreams: std::sync::Mutex<HashMap<String, Arc<ProxyUpstream>>>,
 }
 
 impl RuntimeGeneration {
@@ -50,6 +55,7 @@ impl RuntimeGeneration {
     ) -> Result<Arc<Self>, DataPlaneError> {
         let app = Arc::new(app);
         let implicit_resolver = BoundedSystemResolver::implicit();
+        let resolver = implicit_resolver.clone();
         let resolvers = app
             .config()
             .resolvers
@@ -91,6 +97,8 @@ impl RuntimeGeneration {
             app,
             upstreams,
             proxy_cache,
+            resolver,
+            dynamic_upstreams: std::sync::Mutex::new(HashMap::new()),
         }))
     }
 
@@ -151,6 +159,7 @@ pub(crate) struct DataPlaneRuntime {
     pub request_gate: RequestAdmissionGate,
     pub resource_pressure: Arc<ResourcePressureController>,
     pub limit_req: ArcSwap<LimitReqRuntime>,
+    pub limit_conn: ArcSwap<LimitConnRuntime>,
     pub tunnel_supervisor: Arc<TunnelSupervisor>,
     pub metrics: Arc<DataPlaneMetrics>,
 }
@@ -213,6 +222,9 @@ impl DataPlaneRuntime {
         let limit_req = ArcSwap::from_pointee(LimitReqRuntime::from_zones(
             &initial.app.config().limit_req_zones,
         ));
+        let limit_conn = ArcSwap::from_pointee(LimitConnRuntime::from_zones(
+            &initial.app.config().limit_conn_zones,
+        ));
         Ok(Arc::new(Self {
             current: ArcSwap::from(initial),
             topology,
@@ -228,6 +240,7 @@ impl DataPlaneRuntime {
             ),
             resource_pressure,
             limit_req,
+            limit_conn,
             tunnel_supervisor,
             metrics,
         }))
@@ -382,6 +395,9 @@ impl DataPlaneRuntime {
             self.current.store(candidate.clone());
             self.limit_req.store(Arc::new(LimitReqRuntime::from_zones(
                 &candidate.app.config().limit_req_zones,
+            )));
+            self.limit_conn.store(Arc::new(LimitConnRuntime::from_zones(
+                &candidate.app.config().limit_conn_zones,
             )));
             std::mem::replace(&mut active_health.supervisor, next_supervisor)
         };
