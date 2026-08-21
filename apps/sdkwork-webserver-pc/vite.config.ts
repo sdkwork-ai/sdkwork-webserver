@@ -51,8 +51,12 @@ export default defineConfig(({ command, mode }) => {
         { find: /^react-dom$/, replacement: PACKAGE_REQUIRE.resolve("react-dom") },
         { find: /^react-router-dom$/, replacement: PACKAGE_REQUIRE.resolve("react-router-dom") },
         { find: /^lucide-react$/, replacement: PACKAGE_REQUIRE.resolve("lucide-react") },
+        {
+          find: /^@sdkwork\/utils$/,
+          replacement: path.resolve(APP_ROOT, "node_modules/@sdkwork/utils"),
+        },
       ],
-      dedupe: ["react", "react-dom", "react-router", "react-router-dom"],
+      dedupe: ["react", "react-dom", "react-router", "react-router-dom", "@sdkwork/utils"],
     },
     server: developmentServer ? {
       host: developmentServer.host,

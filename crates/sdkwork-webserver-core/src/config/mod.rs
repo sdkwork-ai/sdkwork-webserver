@@ -10,6 +10,7 @@ mod network;
 mod proxy_headers;
 mod rewrite;
 mod server_toml;
+mod source;
 mod uri;
 mod validate;
 
@@ -37,7 +38,14 @@ pub use rewrite::{
     apply_rewrites, parse_rewrite, RewriteApplyError, RewriteOutcome, RewriteParseError,
     MAX_REWRITE_INTERNAL_REDIRECTS,
 };
-pub use server_toml::{load_server_toml_app, materialize_app, merge_common_profile};
+pub use server_toml::{
+    load_server_toml_app, load_server_toml_file, materialize_app, merge_common_profile,
+};
+pub use source::{
+    ConfigFormat, ConfigLoadOptions, ConfigSource, JsonConfigSource, LoadedWebServerConfig,
+    NginxConfConfigSource, TomlConfigSource, WebServerConfigLoader, DEFAULT_APP_KEY,
+    DEFAULT_TOML_PROFILE,
+};
 pub use model::{
     AccessAction, AccessRuleConfig, AcmeHttp01Config, AuthBasicConfig, AuthBasicUserConfig,
     CertificateConfig, CertificateSource, ClientAuthConfig, ClientAuthMode, GzipConfig,

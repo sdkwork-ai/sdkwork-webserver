@@ -1492,6 +1492,41 @@ impl<'a> Materializer<'a> {
     }
 }
 
+/// Load and materialize a single `server.toml` file as a complete app
+/// configuration (the TOML equivalent of a standalone `nginx.conf`).
+///
+/// The document uses the same typed surface as the layout v2 effective
+/// configuration (`[main]`, `[http]`, `[[http.server]]`, `[[http.upstream]]`,
+/// `[[stream.server]]`, `[http.certificates.*]`, `[nginx]`, `proxyCache`).
+/// A root `profile` key is layout-merge metadata and is ignored here.
+pub fn load_server_toml_file(
+    path: impl AsRef<Path>,
+    app_key: &str,
+) -> Result<WebServerAppConfig, WebServerConfigError> {
+    let path = path.as_ref();
+    let bytes = super::loader::read_bounded_config(path)?;
+    let text = std::str::from_utf8(&bytes).map_err(|source| {
+        WebServerConfigError::Materialize(format!(
+            "server.toml file {} is not valid UTF-8: {source}",
+            path.display()
+        ))
+    })?;
+    let value: toml::Value = toml::from_str(text).map_err(|source| WebServerConfigError::Toml {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    let mut effective: Value = serde_json::to_value(&value).map_err(|source| {
+        WebServerConfigError::Materialize(format!(
+            "cannot convert TOML from {}: {source}",
+            path.display()
+        ))
+    })?;
+    if let Some(root) = effective.as_object_mut() {
+        root.remove("profile");
+    }
+    materialize_app(&effective, app_key)
+}
+
 /// Load and materialize a layout v2 `server.toml` directory for one profile.
 ///
 /// `dir` must contain `server.common.toml` and `server.<profile>.toml`;

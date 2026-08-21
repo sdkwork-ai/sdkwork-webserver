@@ -4,7 +4,11 @@ import {
   createSkillsBackendClients,
   SkillsClientsProvider,
 } from "@sdkwork/skills-pc-core";
-import { CreateSkillPage, MySkillsPage } from "@sdkwork/skills-pc-console-skills";
+import {
+  CreateSkillPage,
+  EditSkillPage,
+  MySkillsPage,
+} from "@sdkwork/skills-pc-console-skills";
 import { useMemo } from "react";
 import { Route, Routes } from "react-router-dom";
 
@@ -43,6 +47,7 @@ export function SkillsConsoleSurface({
           <Route path="" element={<MySkillsPage />} />
           <Route path="mine" element={<MySkillsPage />} />
           <Route path="create" element={<CreateSkillPage />} />
+          <Route path="edit/:packageId" element={<EditSkillPage />} />
         </Routes>
       </SkillsClientsProvider>
     </div>

@@ -1,6 +1,10 @@
 import type { AuthTokenManager } from "@sdkwork/sdk-common";
 import { createMCPClients, MCPClientsProvider } from "@sdkwork/mcp-pc-core";
-import { MyMcpServersPage, RegisterMcpServerPage } from "@sdkwork/mcp-pc-console-mcp";
+import {
+  EditMcpServerPage,
+  MyMcpServersPage,
+  RegisterMcpServerPage,
+} from "@sdkwork/mcp-pc-console-mcp";
 import { useMemo } from "react";
 import { Route, Routes } from "react-router-dom";
 
@@ -36,6 +40,7 @@ export function McpConsoleSurface({
           <Route path="" element={<MyMcpServersPage />} />
           <Route path="mine" element={<MyMcpServersPage />} />
           <Route path="register" element={<RegisterMcpServerPage />} />
+          <Route path="edit/:serverKey" element={<EditMcpServerPage />} />
         </Routes>
       </MCPClientsProvider>
     </div>

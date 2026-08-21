@@ -6,8 +6,8 @@ use sdkwork_api_webserver_standalone_gateway::{
     run_database_migrate_only, validate_adaptive_app_shell_from_env, DataPlaneOperationsConfig,
 };
 use sdkwork_webserver_core::{
-    load_and_compile_webserver_config_revision, resolve_webserver_config_path,
-    validate_configured_module_imports,
+    resolve_webserver_config_path, validate_configured_module_imports, ConfigFormat,
+    ConfigLoadOptions, WebServerConfigLoader,
 };
 use tokio::signal;
 
@@ -37,9 +37,11 @@ async fn run() -> MainResult<()> {
         io::Error::other(format!("runtime TOML configuration is invalid: {error}"))
     })?;
     validate_imported_module_webserver_configs()?;
-    let mut arguments = std::env::args().skip(1);
+    let raw_arguments = std::env::args().skip(1).collect::<Vec<_>>();
+    let (format_override, arguments) = extract_format_override(&raw_arguments)?;
+    let mut arguments = arguments.into_iter();
     let nginx_compat_command = {
-        let mut peek = std::env::args().skip(1);
+        let mut peek = arguments.clone();
         matches!(
             peek.next().as_deref(),
             Some("serve-nginx") | Some("validate-nginx")
@@ -57,7 +59,7 @@ async fn run() -> MainResult<()> {
         Some("db-migrate") => run_database_migrate_only()
             .await
             .map_err(|error| io::Error::other(format!("database migration failed: {error}")))?,
-        Some("validate") => validate_config(config_path(arguments.next())?)?,
+        Some("validate") => validate_config(config_path(arguments.next())?, format_override)?,
         Some("validate-module-imports") => validate_module_imports_command()?,
         Some("validate-app-shell") => {
             validate_adaptive_app_shell_from_env().map_err(|error| {
@@ -72,17 +74,20 @@ async fn run() -> MainResult<()> {
                     format!("data-plane operations config is invalid: {error}"),
                 )
             })?;
-            run_data_plane_from_config_with_operations_until(
+            run_data_plane_command(
                 config_path(arguments.next())?,
+                format_override,
                 operations,
                 shutdown_signal(),
             )
             .await?;
         }
         Some("serve-nginx") => {
+            reject_format_for_nginx(format_override)?;
             run_nginx_compat_until(arguments.next(), shutdown_signal()).await?;
         }
         Some("validate-nginx") => {
+            reject_format_for_nginx(format_override)?;
             validate_nginx_compat(arguments.next())?;
         }
         Some("help" | "--help" | "-h") => print_help(),
@@ -97,6 +102,73 @@ async fn run() -> MainResult<()> {
     Ok(())
 }
 
+/// Extract `--format <json|toml|nginx>` (or `--format=…`) tokens from the
+/// argument list, leaving the positional arguments in order.
+fn extract_format_override(
+    arguments: &[String],
+) -> MainResult<(Option<ConfigFormat>, Vec<String>)> {
+    let mut format = None;
+    let mut positional = Vec::new();
+    let mut index = 0;
+    while index < arguments.len() {
+        let token = &arguments[index];
+        if token == "--format" {
+            index += 1;
+            let value = arguments.get(index).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "--format requires a value: json|toml|nginx",
+                )
+            })?;
+            format = Some(parse_config_format(value)?);
+        } else if let Some(value) = token.strip_prefix("--format=") {
+            format = Some(parse_config_format(value)?);
+        } else {
+            positional.push(token.clone());
+        }
+        index += 1;
+    }
+    Ok((format, positional))
+}
+
+fn parse_config_format(value: &str) -> MainResult<ConfigFormat> {
+    match value {
+        "json" => Ok(ConfigFormat::Json),
+        "toml" => Ok(ConfigFormat::Toml),
+        "nginx" => Ok(ConfigFormat::NginxConf),
+        other => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("unknown config format `{other}`; expected json|toml|nginx"),
+        )
+        .into()),
+    }
+}
+
+fn reject_format_for_nginx(format: Option<ConfigFormat>) -> MainResult<()> {
+    if let Some(format) = format {
+        if format != ConfigFormat::NginxConf {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "serve-nginx / validate-nginx always load nginx configuration; remove --format",
+            )
+            .into());
+        }
+    }
+    Ok(())
+}
+
+/// The unified config loader for all supported formats.
+fn config_loader() -> WebServerConfigLoader {
+    WebServerConfigLoader::new()
+}
+
+fn load_options(format: Option<ConfigFormat>) -> ConfigLoadOptions {
+    ConfigLoadOptions {
+        format,
+        ..ConfigLoadOptions::default()
+    }
+}
+
 /// nginx configuration compatibility mode: load a stock nginx config file
 /// (`nginx.conf`) or a directory of `sites-enabled`-style `*.conf` files,
 /// materialize it into the runtime model, and serve it with the data plane.
@@ -107,19 +179,24 @@ async fn run_nginx_compat_until(
     shutdown: impl std::future::Future<Output = ()> + Send,
 ) -> MainResult<()> {
     let path = config_path(configured)?;
-    let (app, skipped) = load_nginx_compat_app(&path)?;
-    for (file, error) in &skipped {
+    let loader = config_loader();
+    let options = load_options(Some(ConfigFormat::NginxConf));
+    let loaded = loader
+        .load(&path, &options)
+        .map_err(|error| io::Error::other(format!("nginx materialization failed: {error}")))?;
+    for (file, error) in &loaded.skipped {
         tracing::warn!(file = %file.display(), error = %error, "nginx site skipped (unsupported directives)");
     }
     tracing::info!(
         path = %path.display(),
-        virtual_hosts = app.virtual_hosts.len(),
-        upstreams = app.upstreams.len(),
-        streams = app.streams.len(),
-        skipped = skipped.len(),
+        virtual_hosts = loaded.app.virtual_hosts.len(),
+        upstreams = loaded.app.upstreams.len(),
+        streams = loaded.app.streams.len(),
+        skipped = loaded.skipped.len(),
         "nginx compatibility configuration materialized"
     );
-    let compiled = sdkwork_webserver_core::load_and_compile_webserver_config_json(&app)
+    let compiled = loader
+        .load_and_compile(&path, &options)
         .map_err(|error| io::Error::other(format!("nginx materialization failed: {error}")))?;
     run_data_plane_with_operations_until(compiled, None, shutdown).await?;
     Ok(())
@@ -129,59 +206,95 @@ async fn run_nginx_compat_until(
 /// surface without starting listeners.
 fn validate_nginx_compat(configured: Option<String>) -> MainResult<()> {
     let path = config_path(configured)?;
-    let (app, skipped) = load_nginx_compat_app(&path)?;
-    for (file, error) in &skipped {
+    let loader = config_loader();
+    let options = load_options(Some(ConfigFormat::NginxConf));
+    let loaded = loader
+        .load(&path, &options)
+        .map_err(|error| io::Error::other(format!("nginx materialization failed: {error}")))?;
+    for (file, error) in &loaded.skipped {
         tracing::warn!(file = %file.display(), error = %error, "nginx site skipped");
     }
     println!(
         "validated nginx compatibility: appKey={} virtualHosts={} listeners={} resources={} upstreams={} streams={} skipped={}",
-        app.app_key,
-        app.virtual_hosts.len(),
-        app.listeners.len(),
-        app.resources.len(),
-        app.upstreams.len(),
-        app.streams.len(),
-        skipped.len(),
+        loaded.app.app_key,
+        loaded.app.virtual_hosts.len(),
+        loaded.app.listeners.len(),
+        loaded.app.resources.len(),
+        loaded.app.upstreams.len(),
+        loaded.app.streams.len(),
+        loaded.skipped.len(),
     );
     Ok(())
 }
 
-/// Load a stock nginx config (file or directory) into the runtime app model.
-/// Returns the app and the files that were skipped with their reasons.
-fn load_nginx_compat_app(
-    path: &std::path::Path,
-) -> MainResult<(
-    sdkwork_webserver_core::WebServerAppConfig,
-    Vec<(std::path::PathBuf, String)>,
-)> {
-    let report = sdkwork_webserver_core::nginx::load_nginx_compat(path, "nginx-compat")
-        .map_err(|error| {
-            let diagnostics = error_diagnostics(&error);
-            io::Error::other(format!("nginx materialization failed: {error}{diagnostics}"))
-        })?;
-    Ok((report.app, report.skipped))
+/// `data-plane` with the unified config loader. JSON configurations keep
+/// their revision-based watch reload; TOML and nginx configurations are
+/// loaded once (their multi-file nature has no single-file revision).
+async fn run_data_plane_command(
+    path: PathBuf,
+    format_override: Option<ConfigFormat>,
+    operations: Option<DataPlaneOperationsConfig>,
+    shutdown: impl std::future::Future<Output = ()> + Send,
+) -> MainResult<()> {
+    let loader = config_loader();
+    let options = load_options(format_override);
+    let format = loader.format_of(&path, &options).map_err(|error| {
+        io::Error::new(io::ErrorKind::InvalidInput, format!("{error}"))
+    })?;
+    if format == ConfigFormat::Json {
+        run_data_plane_from_config_with_operations_until(path, operations, shutdown).await?;
+        return Ok(());
+    }
+    let compiled = loader
+        .load_and_compile(&path, &options)
+        .map_err(|error| io::Error::other(format!("config materialization failed: {error}")))?;
+    run_data_plane_with_operations_until(compiled, operations, shutdown).await?;
+    Ok(())
 }
 
-/// Render validation diagnostics from a materialization error, when present.
-fn error_diagnostics(error: &(dyn std::error::Error + 'static)) -> String {
-    fn diagnostics_of(error: &(dyn std::error::Error + 'static)) -> Option<Vec<String>> {
-        if let Some(config) = error.downcast_ref::<sdkwork_webserver_core::WebServerConfigError>() {
-            return Some(
-                config
-                    .diagnostics()
-                    .iter()
-                    .map(|diagnostic| format!("{}: {}", diagnostic.path, diagnostic.message))
-                    .collect(),
+/// Load a configuration of any supported format and print the effective
+/// surface without starting listeners.
+fn validate_config(path: PathBuf, format_override: Option<ConfigFormat>) -> MainResult<()> {
+    let loader = config_loader();
+    let options = load_options(format_override);
+    let revision = loader.load(&path, &options).inspect_err(|error| {
+        for diagnostic in error.diagnostics() {
+            tracing::error!(
+                config_path = %diagnostic.path,
+                message = %diagnostic.message,
+                "Web Server config diagnostic"
             );
         }
-        error.source().and_then(diagnostics_of)
-    }
-    match diagnostics_of(error) {
-        Some(diagnostics) if !diagnostics.is_empty() => {
-            format!(" ({})", diagnostics.join("; "))
-        }
-        _ => String::new(),
-    }
+    })?;
+    let compiled = loader
+        .load_and_compile(&path, &options)
+        .map_err(|error| io::Error::other(format!("config compile failed: {error}")))?;
+    let route_count = compiled
+        .config()
+        .virtual_hosts
+        .iter()
+        .map(|virtual_host| virtual_host.routes.len())
+        .sum::<usize>();
+    let revision_text = revision
+        .revision
+        .as_ref()
+        .map(|value| value.sha256().to_owned())
+        .unwrap_or_else(|| "-".to_owned());
+    println!(
+        "validated format={} appKey={} revision={} bytes={} listeners={} virtualHosts={} routes={} resources={} upstreams={} tlsPolicies={} skipped={}",
+        revision.format.as_str(),
+        compiled.config().app_key,
+        revision_text,
+        revision.revision.as_ref().map(|value| value.size_bytes()).unwrap_or(0),
+        compiled.config().listeners.len(),
+        compiled.config().virtual_hosts.len(),
+        route_count,
+        compiled.config().resources.len(),
+        compiled.config().upstreams.len(),
+        compiled.config().tls_policies.len(),
+        revision.skipped.len(),
+    );
+    Ok(())
 }
 
 async fn run_management_plane() -> MainResult<()> {
@@ -260,38 +373,6 @@ fn validate_module_imports_command() -> MainResult<()> {
     Ok(())
 }
 
-fn validate_config(path: PathBuf) -> MainResult<()> {
-    let revision = load_and_compile_webserver_config_revision(&path).inspect_err(|error| {
-        for diagnostic in error.diagnostics() {
-            tracing::error!(
-                config_path = %diagnostic.path,
-                message = %diagnostic.message,
-                "Web Server config diagnostic"
-            );
-        }
-    })?;
-    let compiled = revision.app();
-    let route_count = compiled
-        .config()
-        .virtual_hosts
-        .iter()
-        .map(|virtual_host| virtual_host.routes.len())
-        .sum::<usize>();
-    println!(
-        "validated appKey={} revision={} bytes={} listeners={} virtualHosts={} routes={} resources={} upstreams={} tlsPolicies={}",
-        compiled.config().app_key,
-        revision.sha256(),
-        revision.size_bytes(),
-        compiled.config().listeners.len(),
-        compiled.config().virtual_hosts.len(),
-        route_count,
-        compiled.config().resources.len(),
-        compiled.config().upstreams.len(),
-        compiled.config().tls_policies.len(),
-    );
-    Ok(())
-}
-
 fn config_path(argument: Option<String>) -> MainResult<PathBuf> {
     resolve_webserver_config_path(argument)
         .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message).into())
@@ -304,13 +385,17 @@ fn print_help() {
          Operations:\n\
            serve-management       Start the existing management API (default).\n\
            db-migrate             Run database migration and exit.\n\
-           validate <config>      Validate and compile Web Server app config.\n\
+           validate <config>      Validate and compile Web Server app config (JSON, TOML, or nginx conf; format auto-detected).\n\
            validate-module-imports  Validate imported sibling-module deployments/webserver/ configs.\n\
            validate-app-shell     Validate the configured standalone PC app shell.\n\
            data-plane <config>    Start HTTP/HTTPS application listeners without a database.\n\
                                   Set SDKWORK_WEBSERVER_DATA_PLANE_OPERATIONS_BIND to an explicit loopback socket for host health and metrics.\n\
            serve-nginx <path>     Serve stock nginx.conf or a sites-enabled directory (loads companion stream-conf.d).\n\
            validate-nginx <path>  Materialize and validate nginx compatibility without starting listeners.\n\
+         \n\
+         Format selection: validate and data-plane auto-detect the config\n\
+         format by extension, directory layout, or content. Pass\n\
+         --format json|toml|nginx (or --format=<format>) to force one.\n\
          \n\
          Config resolution: explicit <config> argument, then\n\
          SDKWORK_WEBSERVER_SERVER_CONFIG_FILE, then the canonical OS config\n\

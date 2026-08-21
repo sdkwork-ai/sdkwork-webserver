@@ -10,5 +10,6 @@ const catalogs: Record<WebserverLocale, Record<WebserverMessageKey, string>> = {
 };
 
 export function translateWebserver(locale: WebserverLocale, key: WebserverMessageKey, values: Record<string, string | number> = {}): string {
-  return Object.entries(values).reduce((message, [name, value]) => message.replaceAll(`{${name}}`, String(value)), catalogs[locale][key]);
+  const template = catalogs[locale][key] ?? catalogs["en-US"][key] ?? String(key);
+  return Object.entries(values).reduce((message, [name, value]) => message.replaceAll(`{${name}}`, String(value)), template);
 }

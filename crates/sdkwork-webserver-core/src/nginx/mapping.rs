@@ -31,7 +31,7 @@ use thiserror::Error;
 
 use crate::config::{
     format_proxy_set_header_entry, merge_proxy_set_headers, parse_htpasswd, parse_limit_req,
-    parse_limit_req_zone, StreamTargetConfig, StreamTlsMode, WebServerAppConfig,
+    parse_limit_req_zone, ConfigDiagnostic, StreamTargetConfig, StreamTlsMode, WebServerAppConfig,
     WebServerConfigError,
 };
 
@@ -82,6 +82,30 @@ impl NginxConfigError {
             path: directive.source.clone(),
             line: directive.line,
             message: message.to_string(),
+        }
+    }
+}
+
+impl From<NginxConfigError> for WebServerConfigError {
+    fn from(error: NginxConfigError) -> Self {
+        match error {
+            NginxConfigError::Unsupported {
+                path,
+                line,
+                message,
+            } => WebServerConfigError::Nginx {
+                diagnostics: vec![ConfigDiagnostic::new(
+                    format!("{}:{line}", path.display()),
+                    message.clone(),
+                )],
+                path,
+                line,
+                message,
+            },
+            NginxConfigError::Config(error) => error,
+            NginxConfigError::ValidationFailed(message) => {
+                WebServerConfigError::Materialize(message)
+            }
         }
     }
 }

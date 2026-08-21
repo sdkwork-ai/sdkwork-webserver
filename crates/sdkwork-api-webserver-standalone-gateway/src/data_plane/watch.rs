@@ -262,6 +262,7 @@ fn config_error_class(error: &WebServerConfigError) -> &'static str {
         WebServerConfigError::Materialize(_) => "materialize-failed",
         WebServerConfigError::InvalidSchema(_) => "invalid-embedded-schema",
         WebServerConfigError::Validation { .. } => "validation-failed",
+        WebServerConfigError::Nginx { .. } => "nginx-materialize-failed",
     }
 }
 

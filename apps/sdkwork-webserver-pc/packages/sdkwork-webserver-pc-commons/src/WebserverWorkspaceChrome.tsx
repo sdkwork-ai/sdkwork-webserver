@@ -7,12 +7,14 @@ import {
   House,
   Layers3,
   LogOut,
+  Plug,
   Rocket,
   ScrollText,
   Server,
   ServerCog,
   Settings2,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
@@ -36,7 +38,7 @@ interface WorkspaceHeaderProps {
 
 interface WorkspaceSidebarProps {
   basePath: string;
-  entries: readonly { resource: WebserverResourceKey }[];
+  entries: readonly { label?: string; resource: WebserverResourceKey }[];
   t: WorkspaceTranslator;
 }
 
@@ -114,17 +116,20 @@ export function WorkspaceSidebar({ basePath, entries, t }: WorkspaceSidebarProps
     <aside className="sidebar">
       <span className="sidebar-label">{t("nav.workspace")}</span>
       <nav aria-label={t("nav.primary")}>
-        {entries.map((entry) => (
-          <NavLink
-            aria-label={resourceText(t, entry.resource)}
-            key={entry.resource}
-            title={resourceText(t, entry.resource)}
-            to={`${basePath}/${entry.resource}`}
-          >
-            <ResourceIcon resource={entry.resource} />
-            <span>{resourceText(t, entry.resource)}</span>
-          </NavLink>
-        ))}
+        {entries.map((entry) => {
+          const label = resourceText(t, entry.resource, entry.label);
+          return (
+            <NavLink
+              aria-label={label}
+              key={entry.resource}
+              title={label}
+              to={`${basePath}/${entry.resource}`}
+            >
+              <ResourceIcon resource={entry.resource} />
+              <span>{label}</span>
+            </NavLink>
+          );
+        })}
       </nav>
     </aside>
   );
@@ -134,8 +139,9 @@ function ResourceIcon({ resource }: { resource: WebserverResourceKey }): ReactNo
   const iconProps = { "aria-hidden": true, size: 17 } as const;
   switch (resource) {
     case "applications":
-    case "applications":
       return <AppWindow {...iconProps} />;
+    case "sites":
+      return <Globe2 {...iconProps} />;
     case "configuration":
       return <Settings2 {...iconProps} />;
     case "domains":
@@ -148,6 +154,10 @@ function ResourceIcon({ resource }: { resource: WebserverResourceKey }): ReactNo
     case "source-versions":
     case "application-source-versions":
       return <Layers3 {...iconProps} />;
+    case "skills":
+      return <Sparkles {...iconProps} />;
+    case "mcp":
+      return <Plug {...iconProps} />;
     case "nginx":
       return <ServerCog {...iconProps} />;
     case "servers":
@@ -161,6 +171,17 @@ function ResourceIcon({ resource }: { resource: WebserverResourceKey }): ReactNo
   }
 }
 
-function resourceText(t: WorkspaceTranslator, resource: WebserverResourceKey): string {
-  return t(`resource.${resource}.label` as WebserverMessageKey);
+function resourceText(
+  t: WorkspaceTranslator,
+  resource: WebserverResourceKey,
+  fallbackLabel?: string,
+): string {
+  const key = `resource.${resource}.label` as WebserverMessageKey;
+  const translated = t(key);
+  // Prefer i18n; fall back to module entry label when a key is missing so new
+  // console modules (skills/mcp) never render as blank sidebar text.
+  if (translated && translated !== key) {
+    return translated;
+  }
+  return fallbackLabel?.trim() || translated || resource;
 }

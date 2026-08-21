@@ -1,4 +1,4 @@
-use std::{io, path::PathBuf};
+use std::{fmt, io, path::PathBuf};
 
 use thiserror::Error;
 
@@ -14,6 +14,12 @@ impl ConfigDiagnostic {
             path: path.into(),
             message: message.into(),
         }
+    }
+}
+
+impl fmt::Display for ConfigDiagnostic {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}: {}", self.path, self.message)
     }
 }
 
@@ -52,12 +58,24 @@ pub enum WebServerConfigError {
 
     #[error("Web Server config failed validation")]
     Validation { diagnostics: Vec<ConfigDiagnostic> },
+
+    /// A stock nginx directive could not be materialized (fail closed).
+    /// `diagnostics` mirrors `path`/`line`/`message` so the shared
+    /// `diagnostics()` surface stays uniform across all source formats.
+    #[error("{path}:{line}: {message}")]
+    Nginx {
+        path: PathBuf,
+        line: usize,
+        message: String,
+        diagnostics: Vec<ConfigDiagnostic>,
+    },
 }
 
 impl WebServerConfigError {
     pub fn diagnostics(&self) -> &[ConfigDiagnostic] {
         match self {
             Self::Validation { diagnostics } => diagnostics,
+            Self::Nginx { diagnostics, .. } => diagnostics,
             _ => &[],
         }
     }

@@ -30,6 +30,13 @@ pub struct WebServerConfigFileRevision {
 }
 
 impl WebServerConfigFileRevision {
+    pub(crate) fn new(sha256: String, size_bytes: u64) -> Self {
+        Self {
+            sha256,
+            size_bytes,
+        }
+    }
+
     pub fn sha256(&self) -> &str {
         &self.sha256
     }
@@ -82,7 +89,7 @@ pub fn inspect_webserver_config_revision(
     })
 }
 
-fn read_bounded_config(path: &Path) -> Result<Vec<u8>, WebServerConfigError> {
+pub(crate) fn read_bounded_config(path: &Path) -> Result<Vec<u8>, WebServerConfigError> {
     let metadata = fs::metadata(path).map_err(|source| WebServerConfigError::Inspect {
         path: path.to_path_buf(),
         source,
@@ -122,8 +129,35 @@ fn compile_webserver_config_revision(
     bytes: Vec<u8>,
     sha256: String,
 ) -> Result<CompiledWebServerRevision, WebServerConfigError> {
+    let (config, _revision) = deserialize_json_app(path, &bytes, &sha256)?;
+    let base_directory = path.parent().unwrap_or_else(|| Path::new("."));
+    let app = CompiledWebServerApp::compile(config, base_directory)?;
+    Ok(CompiledWebServerRevision {
+        app,
+        sha256,
+        size_bytes: bytes.len() as u64,
+    })
+}
+
+/// Load a JSON app config from disk and return the validated model plus its
+/// content revision. Shared by the JSON strategy of the unified config
+/// loader (`config::source`) and the revision-based entry points above.
+pub(crate) fn load_json_app_config(
+    path: &Path,
+) -> Result<(WebServerAppConfig, WebServerConfigFileRevision), WebServerConfigError> {
+    let bytes = read_bounded_config(path)?;
+    let sha256 = sha256_hash(&bytes);
+    let (config, revision) = deserialize_json_app(path, &bytes, &sha256)?;
+    Ok((config, revision))
+}
+
+fn deserialize_json_app(
+    path: &Path,
+    bytes: &[u8],
+    sha256: &str,
+) -> Result<(WebServerAppConfig, WebServerConfigFileRevision), WebServerConfigError> {
     let instance: Value =
-        serde_json::from_slice(&bytes).map_err(|source| WebServerConfigError::Json {
+        serde_json::from_slice(bytes).map_err(|source| WebServerConfigError::Json {
             path: path.to_path_buf(),
             source,
         })?;
@@ -135,14 +169,10 @@ fn compile_webserver_config_revision(
             source,
         })?;
     validate_webserver_config(&config)?;
-
-    let base_directory = path.parent().unwrap_or_else(|| Path::new("."));
-    let app = CompiledWebServerApp::compile(config, base_directory)?;
-    Ok(CompiledWebServerRevision {
-        app,
-        sha256,
-        size_bytes: bytes.len() as u64,
-    })
+    Ok((
+        config,
+        WebServerConfigFileRevision::new(sha256.to_owned(), bytes.len() as u64),
+    ))
 }
 
 /// Compile an already-materialized app model (for example the nginx

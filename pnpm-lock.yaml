@@ -1007,6 +1007,9 @@ importers:
       '@sdkwork/ui-pc-react':
         specifier: workspace:*
         version: link:../../../sdkwork-ui/sdkwork-ui-pc-react
+      '@sdkwork/utils':
+        specifier: workspace:*
+        version: link:../../../sdkwork-utils/packages/sdkwork-utils-typescript
       '@sdkwork/web-app-sdk':
         specifier: workspace:*
         version: link:../../sdks/sdkwork-web-app-sdk/sdkwork-web-app-sdk-typescript

@@ -153,7 +153,7 @@ impl CompiledWebServerApp {
                 .as_deref()
                 .zip(tls.client_private_key_file.as_deref())
                 .map(|(certificate, private_key)| {
-                    Ok((
+                    Ok::<_, WebServerConfigError>((
                         resolve_protected_relative_file(
                             &base_directory,
                             certificate,

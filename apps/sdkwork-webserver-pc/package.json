@@ -37,6 +37,7 @@
     "@sdkwork/iam-runtime": "workspace:*",
     "@sdkwork/i18n-pc-react": "workspace:*",
     "@sdkwork/sdk-common": "workspace:*",
+    "@sdkwork/utils": "workspace:*",
     "@sdkwork/ui-pc-react": "workspace:*",
     "@sdkwork/web-app-sdk": "workspace:*",
     "@sdkwork/web-backend-sdk": "workspace:*",
