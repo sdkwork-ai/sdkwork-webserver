@@ -6,7 +6,7 @@
     "displayName": "SDKWork Web Server Edge Runtime",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "sdkwork-web-server/crates/sdkwork-webserver-edge-runtime",
+    "root": "sdkwork-webserver/crates/sdkwork-webserver-edge-runtime",
     "domain": "platform",
     "capability": "webserver-edge-materialization",
     "surface": "host-native",

@@ -22,15 +22,28 @@
     "appKey": {
       "$ref": "#/$defs/id"
     },
-    "compatibility": {
-      "$ref": "#/$defs/compatibility"
+    "nginx": {
+      "$ref": "#/$defs/nginx"
+    },
+    "gzip": {
+      "$ref": "#/$defs/gzip"
+    },
+    "proxyCache": {
+      "$ref": "#/$defs/proxyCache"
+    },
+    "limitReqZones": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/limitReqZone"
+      }
     },
     "limits": {
       "$ref": "#/$defs/limits"
     },
     "listeners": {
       "type": "array",
-      "minItems": 1,
+      "minItems": 0,
       "maxItems": 256,
       "items": {
         "$ref": "#/$defs/listener"
@@ -59,7 +72,7 @@
     },
     "resources": {
       "type": "array",
-      "minItems": 1,
+      "minItems": 0,
       "maxItems": 20000,
       "items": {
         "oneOf": [
@@ -93,7 +106,7 @@
     },
     "virtualHosts": {
       "type": "array",
-      "minItems": 1,
+      "minItems": 0,
       "maxItems": 10000,
       "items": {
         "$ref": "#/$defs/virtualHost"
@@ -128,6 +141,13 @@
           }
         ]
       }
+    },
+    "streams": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "$ref": "#/$defs/streamServer"
+      }
     }
   },
   "$defs": {
@@ -137,15 +157,119 @@
       "maxLength": 128,
       "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
     },
-    "compatibility": {
+    "nginx": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "nginxProfile": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "nginx.enabled master switch from deployments/webserver TOML."
+        },
+        "profile": {
           "const": "http-core-v1"
         },
         "unknownDirectivePolicy": {
           "const": "error"
+        }
+      }
+    },
+    "gzip": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Response gzip policy from http.gzip / gzipTypes / gzipMinLength.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "types": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": []
+        },
+        "minLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 104857600,
+          "default": 20
+        }
+      }
+    },
+    "proxyCache": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Shared HTTP response cache (nginx proxy_cache / proxy_cache_path).",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "maxEntries": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576,
+          "default": 4096
+        },
+        "maxObjectBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 67108864,
+          "default": 1048576
+        },
+        "defaultTtlSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 604800,
+          "default": 60
+        },
+        "staleTtlSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 604800,
+          "default": 60
+        },
+        "diskPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        }
+      }
+    },
+    "limitReqZone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "key",
+        "maxKeys",
+        "ratePerSecond"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_.-]+$"
+        },
+        "key": {
+          "enum": [
+            "$binary_remote_addr",
+            "$remote_addr"
+          ]
+        },
+        "maxKeys": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000000
+        },
+        "ratePerSecond": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000000
         }
       }
     },
@@ -451,7 +575,12 @@
     "listener": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "bind", "port", "protocols"],
+      "required": [
+        "id",
+        "bind",
+        "port",
+        "protocols"
+      ],
       "properties": {
         "id": {
           "$ref": "#/$defs/id"
@@ -472,14 +601,19 @@
           "maxItems": 2,
           "uniqueItems": true,
           "items": {
-            "enum": ["http1", "http2"]
+            "enum": [
+              "http1",
+              "http2"
+            ]
           }
         },
         "tlsPolicyRef": {
           "$ref": "#/$defs/id"
         },
         "tlsRuntime": {
-          "enum": ["assignment"]
+          "enum": [
+            "assignment"
+          ]
         },
         "defaultVirtualHostRef": {
           "$ref": "#/$defs/id"
@@ -498,7 +632,9 @@
         "acmeHttp01": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["webroot"],
+          "required": [
+            "webroot"
+          ],
           "properties": {
             "webroot": {
               "type": "string",
@@ -517,7 +653,9 @@
     "trustedProxy": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["trustedCidrs"],
+      "required": [
+        "trustedCidrs"
+      ],
       "properties": {
         "trustedCidrs": {
           "type": "array",
@@ -533,7 +671,9 @@
         },
         "header": {
           "type": "string",
-          "enum": ["x-forwarded-for"],
+          "enum": [
+            "x-forwarded-for"
+          ],
           "default": "x-forwarded-for"
         },
         "recursive": {
@@ -558,14 +698,20 @@
     "proxyProtocol": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["trustedSourceCidrs"],
+      "required": [
+        "trustedSourceCidrs"
+      ],
       "properties": {
         "trustedSourceCidrs": {
           "type": "array",
           "minItems": 1,
           "maxItems": 64,
           "uniqueItems": true,
-          "items": {"type": "string", "minLength": 3, "maxLength": 64},
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 64
+          },
           "description": "Immediate TCP peer networks authorized to send a mandatory PROXY protocol header."
         },
         "versions": {
@@ -573,8 +719,16 @@
           "minItems": 1,
           "maxItems": 2,
           "uniqueItems": true,
-          "items": {"enum": ["v1", "v2"]},
-          "default": ["v1", "v2"]
+          "items": {
+            "enum": [
+              "v1",
+              "v2"
+            ]
+          },
+          "default": [
+            "v1",
+            "v2"
+          ]
         },
         "timeoutMs": {
           "type": "integer",
@@ -590,7 +744,11 @@
         },
         "crc32cPolicy": {
           "type": "string",
-          "enum": ["ignore", "validate-if-present", "required"],
+          "enum": [
+            "ignore",
+            "validate-if-present",
+            "required"
+          ],
           "default": "ignore",
           "description": "PROXY v2 CRC32C handling. validate-if-present and required need v2 in versions; CRC is integrity detection, not peer authentication."
         }
@@ -599,7 +757,11 @@
     "certificate": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "serverNames", "source"],
+      "required": [
+        "id",
+        "serverNames",
+        "source"
+      ],
       "properties": {
         "id": {
           "$ref": "#/$defs/id"
@@ -621,7 +783,11 @@
     "protectedFileCertificateSource": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "certificateFile", "privateKeyFile"],
+      "required": [
+        "type",
+        "certificateFile",
+        "privateKeyFile"
+      ],
       "properties": {
         "type": {
           "const": "protected-file"
@@ -641,18 +807,28 @@
     "tlsPolicy": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id"],
+      "required": [
+        "id"
+      ],
       "oneOf": [
         {
-          "required": ["certificateRef"],
+          "required": [
+            "certificateRef"
+          ],
           "not": {
-            "required": ["certificateRefs"]
+            "required": [
+              "certificateRefs"
+            ]
           }
         },
         {
-          "required": ["certificateRefs"],
+          "required": [
+            "certificateRefs"
+          ],
           "not": {
-            "required": ["certificateRef"]
+            "required": [
+              "certificateRef"
+            ]
           }
         }
       ],
@@ -673,11 +849,17 @@
           }
         },
         "minimumVersion": {
-          "enum": ["tls1.2", "tls1.3"],
+          "enum": [
+            "tls1.2",
+            "tls1.3"
+          ],
           "default": "tls1.2"
         },
         "maximumVersion": {
-          "enum": ["tls1.2", "tls1.3"],
+          "enum": [
+            "tls1.2",
+            "tls1.3"
+          ],
           "default": "tls1.3"
         },
         "alpn": {
@@ -686,16 +868,24 @@
           "maxItems": 2,
           "uniqueItems": true,
           "items": {
-            "enum": ["h2", "http/1.1"]
+            "enum": [
+              "h2",
+              "http/1.1"
+            ]
           },
-          "default": ["h2", "http/1.1"]
+          "default": [
+            "h2",
+            "http/1.1"
+          ]
         }
       }
     },
     "resolver": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id"],
+      "required": [
+        "id"
+      ],
       "properties": {
         "id": {
           "$ref": "#/$defs/id"
@@ -734,7 +924,11 @@
     "staticResource": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "type", "root"],
+      "required": [
+        "id",
+        "type",
+        "root"
+      ],
       "properties": {
         "id": {
           "$ref": "#/$defs/id"
@@ -756,7 +950,9 @@
             "minLength": 1,
             "maxLength": 255
           },
-          "default": ["index.html"]
+          "default": [
+            "index.html"
+          ]
         },
         "spaFallback": {
           "type": "string",
@@ -772,7 +968,11 @@
     "proxyResource": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "type", "upstreamRef"],
+      "required": [
+        "id",
+        "type",
+        "upstreamRef"
+      ],
       "properties": {
         "id": {
           "$ref": "#/$defs/id"
@@ -786,13 +986,29 @@
         "stripPrefix": {
           "type": "boolean",
           "default": false
+        },
+        "requestSetHeaders": {
+          "type": "array",
+          "maxItems": 64,
+          "description": "nginx proxy_set_header entries as \"Name value\" strings.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "default": []
         }
       }
     },
     "redirectResource": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "type", "status", "location"],
+      "required": [
+        "id",
+        "type",
+        "status",
+        "location"
+      ],
       "properties": {
         "id": {
           "$ref": "#/$defs/id"
@@ -801,7 +1017,12 @@
           "const": "redirect"
         },
         "status": {
-          "enum": [301, 302, 307, 308]
+          "enum": [
+            301,
+            302,
+            307,
+            308
+          ]
         },
         "location": {
           "type": "string",
@@ -813,7 +1034,11 @@
     "respondResource": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "type", "status"],
+      "required": [
+        "id",
+        "type",
+        "status"
+      ],
       "properties": {
         "id": {
           "$ref": "#/$defs/id"
@@ -872,7 +1097,11 @@
     "driveResource": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "type", "providerResourceUuid"],
+      "required": [
+        "id",
+        "type",
+        "providerResourceUuid"
+      ],
       "properties": {
         "id": {
           "$ref": "#/$defs/id"
@@ -899,7 +1128,9 @@
             "minLength": 1,
             "maxLength": 255
           },
-          "default": ["index.html"]
+          "default": [
+            "index.html"
+          ]
         },
         "spaFallback": {
           "type": "string",
@@ -914,7 +1145,11 @@
     "knowledgebaseResource": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "type", "providerResourceUuid"],
+      "required": [
+        "id",
+        "type",
+        "providerResourceUuid"
+      ],
       "properties": {
         "id": {
           "$ref": "#/$defs/id"
@@ -940,7 +1175,10 @@
     "upstream": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "targets"],
+      "required": [
+        "id",
+        "targets"
+      ],
       "properties": {
         "id": {
           "$ref": "#/$defs/id"
@@ -955,9 +1193,18 @@
         },
         "loadBalancing": {
           "type": "string",
-          "enum": ["round-robin", "least-connections", "random-two-least-connections", "ip-hash"],
+          "enum": [
+            "round-robin",
+            "least-connections",
+            "random-two-least-connections",
+            "ip-hash",
+            "hash"
+          ],
           "default": "round-robin",
-          "description": "Business-request selection strategy. Least-connections minimizes active request or HTTP/2 Stream load divided by target weight. Random-two-least-connections samples two distinct eligible targets by effective weight and compares the same weighted load. Ip-hash uses the listener-resolved effective client IP, which defaults to the direct peer, and cannot be combined with target slowStartMs."
+          "description": "Business-request selection strategy. Hash uses nginx-compatible CRC32 / ketama consistent hashing with hash.key."
+        },
+        "hash": {
+          "$ref": "#/$defs/upstreamHash"
         },
         "resolverRef": {
           "$ref": "#/$defs/id"
@@ -1032,6 +1279,28 @@
         }
       }
     },
+    "upstreamHash": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "enum": [
+            "$request_uri",
+            "$uri",
+            "$remote_addr",
+            "$host"
+          ]
+        },
+        "consistent": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
     "upstreamAddressPolicy": {
       "type": "object",
       "additionalProperties": false,
@@ -1055,7 +1324,11 @@
       "additionalProperties": false,
       "properties": {
         "trustMode": {
-          "enum": ["system", "custom", "system-and-custom"],
+          "enum": [
+            "system",
+            "custom",
+            "system-and-custom"
+          ],
           "default": "system"
         },
         "caCertificateFiles": {
@@ -1080,11 +1353,17 @@
           "maxLength": 4096
         },
         "minimumVersion": {
-          "enum": ["tls1.2", "tls1.3"],
+          "enum": [
+            "tls1.2",
+            "tls1.3"
+          ],
           "default": "tls1.2"
         },
         "maximumVersion": {
-          "enum": ["tls1.2", "tls1.3"],
+          "enum": [
+            "tls1.2",
+            "tls1.3"
+          ],
           "default": "tls1.3"
         }
       }
@@ -1115,7 +1394,11 @@
             "minimum": 500,
             "maximum": 599
           },
-          "default": [502, 503, 504]
+          "default": [
+            502,
+            503,
+            504
+          ]
         }
       }
     },
@@ -1143,9 +1426,18 @@
           "maxItems": 5,
           "uniqueItems": true,
           "items": {
-            "enum": ["error", "timeout", "http_502", "http_503", "http_504"]
+            "enum": [
+              "error",
+              "timeout",
+              "http_502",
+              "http_503",
+              "http_504"
+            ]
           },
-          "default": ["error", "timeout"]
+          "default": [
+            "error",
+            "timeout"
+          ]
         }
       }
     },
@@ -1154,7 +1446,10 @@
       "additionalProperties": false,
       "properties": {
         "method": {
-          "enum": ["GET", "HEAD"],
+          "enum": [
+            "GET",
+            "HEAD"
+          ],
           "default": "GET"
         },
         "uri": {
@@ -1211,7 +1506,9 @@
     "upstreamTarget": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["url"],
+      "required": [
+        "url"
+      ],
       "properties": {
         "url": {
           "type": "string",
@@ -1247,7 +1544,12 @@
     "virtualHost": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "listenerRefs", "serverNames", "routes"],
+      "required": [
+        "id",
+        "listenerRefs",
+        "serverNames",
+        "routes"
+      ],
       "properties": {
         "id": {
           "$ref": "#/$defs/id"
@@ -1308,7 +1610,10 @@
           }
         },
         "xFrameOptions": {
-          "enum": ["DENY", "SAMEORIGIN"]
+          "enum": [
+            "DENY",
+            "SAMEORIGIN"
+          ]
         },
         "contentSecurityPolicy": {
           "type": "string",
@@ -1330,7 +1635,10 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["name", "value"],
+            "required": [
+              "name",
+              "value"
+            ],
             "properties": {
               "name": {
                 "type": "string",
@@ -1357,7 +1665,11 @@
     "route": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "match", "resourceRef"],
+      "required": [
+        "id",
+        "match",
+        "resourceRef"
+      ],
       "properties": {
         "id": {
           "$ref": "#/$defs/id"
@@ -1367,22 +1679,170 @@
         },
         "resourceRef": {
           "$ref": "#/$defs/id"
+        },
+        "access": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/accessRule"
+          }
+        },
+        "limitReq": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/limitReqRule"
+          }
+        },
+        "rewrite": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/rewriteRule"
+          }
+        },
+        "authBasic": {
+          "$ref": "#/$defs/authBasic"
+        }
+      }
+    },
+    "authBasic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "realm",
+        "users"
+      ],
+      "properties": {
+        "realm": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "users": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/authBasicUser"
+          }
+        }
+      }
+    },
+    "authBasicUser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "username",
+        "passwordHash"
+      ],
+      "properties": {
+        "username": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "passwordHash": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      }
+    },
+    "accessRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "network"
+      ],
+      "properties": {
+        "action": {
+          "enum": [
+            "allow",
+            "deny"
+          ]
+        },
+        "network": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "limitReqRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zone"
+      ],
+      "properties": {
+        "zone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "burst": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "nodelay": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "rewriteRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pattern",
+        "replacement",
+        "flag"
+      ],
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "replacement": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "flag": {
+          "enum": [
+            "last",
+            "break",
+            "redirect",
+            "permanent"
+          ]
         }
       }
     },
     "routeMatch": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["pathType", "path"],
+      "required": [
+        "pathType",
+        "path"
+      ],
       "properties": {
         "pathType": {
-          "enum": ["exact", "prefix"]
+          "enum": [
+            "exact",
+            "prefix",
+            "prefix-exclusive",
+            "regex",
+            "regex-ignore-case"
+          ]
         },
         "path": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 8192,
-          "pattern": "^/"
+          "maxLength": 8192
         },
         "methods": {
           "type": "array",
@@ -1394,7 +1854,32 @@
             "pattern": "^[A-Z!#$%&'*+.^_`|~-]{1,32}$"
           }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "pathType": {
+                "enum": [
+                  "exact",
+                  "prefix",
+                  "prefix-exclusive"
+                ]
+              }
+            },
+            "required": [
+              "pathType"
+            ]
+          },
+          "then": {
+            "properties": {
+              "path": {
+                "pattern": "^/"
+              }
+            }
+          }
+        }
+      ]
     },
     "observability": {
       "type": "object",
@@ -1512,7 +1997,10 @@
           "default": 16
         },
         "sampleFailurePolicy": {
-          "enum": ["fail-open", "fail-closed"],
+          "enum": [
+            "fail-open",
+            "fail-closed"
+          ],
           "default": "fail-closed"
         }
       }
@@ -1522,7 +2010,10 @@
       "additionalProperties": false,
       "properties": {
         "mode": {
-          "enum": ["disabled", "watch"],
+          "enum": [
+            "disabled",
+            "watch"
+          ],
           "default": "disabled"
         },
         "pollIntervalMs": {
@@ -1530,6 +2021,116 @@
           "minimum": 100,
           "maximum": 60000,
           "default": 1000
+        }
+      }
+    },
+    "streamServer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "bind",
+        "port",
+        "target"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "bind": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "target": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "name"
+              ],
+              "properties": {
+                "type": {
+                  "const": "upstream"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "host",
+                "port"
+              ],
+              "properties": {
+                "type": {
+                  "const": "literal"
+                },
+                "host": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                }
+              }
+            }
+          ]
+        },
+        "proxyTimeoutMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 3600000
+        },
+        "proxyProtocol": {
+          "type": "boolean"
+        },
+        "tls": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "certificateRef"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "terminate"
+                },
+                "certificateRef": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preread"
+                }
+              }
+            }
+          ]
         }
       }
     }

@@ -122,7 +122,7 @@ Implemented foundation as of 2026-07-23:
 - immutable delivery executor for STATIC, explicit SPA fallback, and WIKI with complete compiled
   scope propagation, canonical route reverse mapping, exact Range response evidence,
   consumer-owned provider/chunk deadlines, and force-HTTPS redirects;
-- dedicated `sdkwork-web-server-website-delivery-edge-runtime` bootstrap and process entrypoint with production cloud assignment pull through
+- dedicated `sdkwork-webserver-website-delivery-edge-runtime` bootstrap and process entrypoint with production cloud assignment pull through
   the generated Web Internal Rust SDK, protected Web Node credential injection, conditional
   generation/hash retrieval, strict node/environment/hash checks, resumable phased observations,
   and a local bounded file source limited to standalone/development; both sources retain monotonic

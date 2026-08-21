@@ -1,0 +1,45 @@
+{
+  "name": "@sdkwork/webserver-h5",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "pnpm dev:standalone",
+    "dev:standalone": "pnpm exec sdkwork-app dev --root ../.. --deployment-profile standalone",
+    "dev:cloud": "pnpm exec sdkwork-app dev --root ../.. --deployment-profile cloud",
+    "dev:browser": "pnpm dev:browser:postgres:standalone",
+    "dev:browser:postgres:standalone": "pnpm exec sdkwork-app dev --root ../.. --runtime-target browser --deployment-profile standalone",
+    "dev:browser:cloud": "pnpm exec sdkwork-app dev --root ../.. --runtime-target browser --deployment-profile cloud",
+    "stop": "pnpm exec sdkwork-app stop --root ../..",
+    "build": "pnpm build:standalone",
+    "build:standalone": "node scripts/verify-build-sources.mjs && node scripts/materialize-runtime-env.mjs --deployment-profile standalone --environment production && tsc -p tsconfig.json --noEmit && vite build --mode standalone.production",
+    "build:cloud": "node scripts/verify-build-sources.mjs && node scripts/materialize-runtime-env.mjs --deployment-profile cloud --environment production && tsc -p tsconfig.json --noEmit && vite build --mode cloud.production",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "check:source-config": "node ../../../sdkwork-specs/tools/check-source-config-standard.mjs --root .",
+    "check:pnpm-script-standard": "node ../../../sdkwork-specs/tools/check-pnpm-script-standard.mjs --root . --product-prefix webserver",
+    "check": "pnpm typecheck && pnpm test && pnpm build && pnpm check:source-config && pnpm check:pnpm-script-standard",
+    "verify": "pnpm check",
+    "preview": "vite preview --host 127.0.0.1",
+    "start": "pnpm preview",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "_sdkwork:dev:standalone": "node scripts/verify-build-sources.mjs && node scripts/materialize-runtime-env.mjs --deployment-profile standalone --environment development && vite --mode standalone.development",
+    "_sdkwork:dev:cloud": "node scripts/verify-build-sources.mjs && node scripts/materialize-runtime-env.mjs --deployment-profile cloud --environment development && vite --mode cloud.development"
+  },
+  "dependencies": {
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-router-dom": "^7.15.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "jsdom": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  }
+}

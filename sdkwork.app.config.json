@@ -20,7 +20,7 @@
     "primaryLanguage": "rust",
     "framework": "axum",
     "appId": "sdkwork-web",
-    "serviceId": "sdkwork-api-web-server-standalone-gateway",
+    "serviceId": "sdkwork-api-webserver-standalone-gateway",
     "profileKey": "backend-root-admin",
     "ownerMode": "tenant",
     "grantMode": "current",
@@ -173,10 +173,10 @@
           "metadata": {
             "distribution": "ubuntu",
             "environment": "test",
-            "domain": "testserver.sdkwork.com"
+            "domain": "server-test.sdkwork.com"
           },
           "checksumAlgorithm": "sha256",
-          "checksum": "68ff65ec3211879f6b8aae8a08fdc5cf210eea230de133b537f5fcb3ab7dba96"
+          "checksum": "dcb3bbbd2795c9b488f44ba9eaaba46ca6cfb9cf46456574280f10c99e7c2b0a"
         },
         {
           "id": "linux-rhel-x64-standalone-server-rpm",
@@ -213,7 +213,7 @@
           "metadata": {
             "distribution": "rhel",
             "environment": "test",
-            "domain": "testserver.sdkwork.com"
+            "domain": "server-test.sdkwork.com"
           },
           "checksumAlgorithm": "sha256",
           "checksum": "bcb27d89a982e51d52556387af5ec1cd85b29098d850c8a3afe595c0151736ef"

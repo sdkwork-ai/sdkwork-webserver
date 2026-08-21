@@ -24,7 +24,7 @@ static-site/Wiki delivery data plane.
 
 Installs the standalone gateway on __INGRESS_BIND__ bound to __DOMAIN__ with an
 auto-initialized PostgreSQL database, typed TOML runtime configuration
-(/etc/sdkwork/webserver/sdkwork-webserver.toml), systemd service, and runtime
+(/etc/sdkwork/webserver/config.toml), systemd service, and runtime
 directories per RUNTIME_DIRECTORY_SPEC section 4.1.
 
 %prep
@@ -36,9 +36,9 @@ directories per RUNTIME_DIRECTORY_SPEC section 4.1.
 %install
 rm -rf %{buildroot}
 install -d -m 0755 %{buildroot}/usr/lib/sdkwork/webserver/bin
-install -m 0755 bin/sdkwork-api-web-server-standalone-gateway \
+install -m 0755 bin/sdkwork-api-webserver-standalone-gateway \
   %{buildroot}/usr/lib/sdkwork/webserver/bin/
-install -m 0755 bin/sdkwork-web-server-website-delivery-edge-runtime \
+install -m 0755 bin/sdkwork-webserver-website-delivery-edge-runtime \
   %{buildroot}/usr/lib/sdkwork/webserver/bin/
 install -m 0755 bin/sdkwork-web-node-daemon \
   %{buildroot}/usr/lib/sdkwork/webserver/bin/
@@ -58,8 +58,20 @@ cp -a share/sdkwork/iam %{buildroot}/var/lib/sdkwork/webserver/iam
 cp -a share/sdkwork/drive %{buildroot}/var/lib/sdkwork/webserver/drive
 cp -a share/sdkwork/deploy %{buildroot}/var/lib/sdkwork/webserver/deploy
 cp -a share/sdkwork/webstore %{buildroot}/var/lib/sdkwork/webserver/webstore
+if [ -d share/sdkwork/skills ]; then
+  cp -a share/sdkwork/skills %{buildroot}/var/lib/sdkwork/webserver/skills
+else
+  install -d -m 0755 %{buildroot}/var/lib/sdkwork/webserver/skills
+fi
+if [ -d share/sdkwork/mcp ]; then
+  cp -a share/sdkwork/mcp %{buildroot}/var/lib/sdkwork/webserver/mcp
+else
+  install -d -m 0755 %{buildroot}/var/lib/sdkwork/webserver/mcp
+fi
 install -d -m 0755 %{buildroot}/usr/share/sdkwork/webserver/web
 cp -a share/sdkwork/webserver-pc %{buildroot}/usr/share/sdkwork/webserver/web/pc
+cp -a share/sdkwork/webserver-h5 %{buildroot}/usr/share/sdkwork/webserver/web/h5
+cp -a share/sdkwork/webserver-static %{buildroot}/usr/share/sdkwork/webserver/web/static
 install -d -m 0755 %{buildroot}/usr/share/doc/sdkwork/webserver
 cp -a etc/examples %{buildroot}/usr/share/doc/sdkwork/webserver/examples
 install -d -m 0755 %{buildroot}/usr/lib/systemd/system
@@ -75,6 +87,8 @@ __PC_RUNTIME_ENV_OVERRIDE__
 /var/lib/sdkwork/webserver/drive
 /var/lib/sdkwork/webserver/deploy
 /var/lib/sdkwork/webserver/webstore
+/var/lib/sdkwork/webserver/skills
+/var/lib/sdkwork/webserver/mcp
 /usr/share/sdkwork/webserver
 /usr/share/doc/sdkwork/webserver
 /usr/lib/systemd/system/__SERVICE_NAME__.service
@@ -93,7 +107,7 @@ DB_NAME="__DB_NAME__"
 DB_USER="__DB_USER__"
 SERVICE_NAME="__SERVICE_NAME__"
 VERSION="__VERSION__"
-GATEWAY_BINARY="sdkwork-api-web-server-standalone-gateway"
+GATEWAY_BINARY="sdkwork-api-webserver-standalone-gateway"
 
 INSTALL_ROOT=/usr/lib/sdkwork/webserver
 CONFIG_ROOT=/etc/sdkwork/webserver
@@ -102,7 +116,7 @@ LOG_ROOT=/var/log/sdkwork/webserver
 CACHE_ROOT=/var/cache/sdkwork/webserver
 RUN_ROOT=/run/sdkwork/webserver
 DB_SECRET_FILE="${CONFIG_ROOT}/secrets/database.secret"
-RUNTIME_CONFIG_FILE="${CONFIG_ROOT}/sdkwork-webserver.toml"
+RUNTIME_CONFIG_FILE="${CONFIG_ROOT}/config.toml"
 
 log() { echo "[sdkwork-webserver-%post] $*"; }
 
@@ -118,7 +132,9 @@ install -d -o sdkwork -g sdkwork -m 0750 \
   "${DATA_ROOT}" "${LOG_ROOT}" "${CACHE_ROOT}" "${RUN_ROOT}"
 install -d -o sdkwork -g sdkwork -m 0750 \
   "${DATA_ROOT}/acme-webroot" "${DATA_ROOT}/acme-accounts" "${DATA_ROOT}/tls-materials"
-chown -R sdkwork:sdkwork "${DATA_ROOT}/iam" "${DATA_ROOT}/drive" "${DATA_ROOT}/deploy" "${DATA_ROOT}/webstore" 2>/dev/null || true
+chown -R sdkwork:sdkwork \
+  "${DATA_ROOT}/iam" "${DATA_ROOT}/drive" "${DATA_ROOT}/deploy" \
+  "${DATA_ROOT}/webstore" "${DATA_ROOT}/skills" "${DATA_ROOT}/mcp" 2>/dev/null || true
 
 # 3. Start PostgreSQL and wait for readiness (RHEL: systemd-managed cluster).
 #    The Web Server database contract requires PostgreSQL 16+ (RHEL default
@@ -220,6 +236,11 @@ drive_app_root = "${DATA_ROOT}/drive"
 deploy_app_root = "${DATA_ROOT}/deploy"
 web_store_app_root = "${DATA_ROOT}/webstore"
 pc_static_root = "/usr/share/sdkwork/webserver/web/pc"
+h5_static_root = "/usr/share/sdkwork/webserver/web/h5"
+static_fallback_root = "/usr/share/sdkwork/webserver/web/static"
+tablet_surface = "pc"
+# skills/mcp: SDKWORK_SKILLS_APP_ROOT / SDKWORK_MCP_APP_ROOT (ENV), or TOML
+# skills_app_root / mcp_app_root when the packaged gateway binary accepts them.
 
 [deploy]
 deployment_profile = "standalone"

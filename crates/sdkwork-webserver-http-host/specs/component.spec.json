@@ -6,7 +6,7 @@
     "displayName": "SDKWork Web Server HTTP Host",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "sdkwork-web-server/crates/sdkwork-webserver-http-host",
+    "root": "sdkwork-webserver/crates/sdkwork-webserver-http-host",
     "domain": "platform",
     "capability": "webserver-http-host",
     "surface": "runtime-composition",

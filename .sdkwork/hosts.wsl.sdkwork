@@ -1,0 +1,14 @@
+127.0.0.1 localhost
+127.0.1.1 BrainX
+
+::1     ip6-localhost ip6-loopback
+fe00::0 ip6-localnet
+ff00::0 ip6-mcastprefix
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+
+# SDKWork Web Server operator hosts
+127.0.0.1 server.sdkwork.com server-dev.sdkwork.com server-test.sdkwork.com
+127.0.0.1 server-app.sdkwork.com server-app-dev.sdkwork.com server-app-test.sdkwork.com
+127.0.0.1 server-admin.sdkwork.com server-admin-dev.sdkwork.com server-admin-test.sdkwork.com
+127.0.0.1 api.sdkwork.com api-dev.sdkwork.com api-test.sdkwork.com api-staging.sdkwork.com

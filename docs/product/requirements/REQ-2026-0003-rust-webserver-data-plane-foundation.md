@@ -53,10 +53,10 @@ trace:
   components:
     - specs/sdkwork.webserver.config.schema.json
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
   - cargo test -p sdkwork-webserver-core
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo test --workspace
   - cargo clippy --workspace --all-targets -- -D warnings
   - cargo fmt -- --check

@@ -81,3 +81,8 @@ Thumbs.db
 
 # ZCode CLI local session metadata (never committed)
 .zcode/
+
+# SDKWork local ops/debug scripts (scratch, not for commit)
+/.sdkwork/*.sh
+/.sdkwork/*.py
+/.sdkwork/*.conf

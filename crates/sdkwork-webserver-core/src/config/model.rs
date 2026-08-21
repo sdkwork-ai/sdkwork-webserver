@@ -4,12 +4,21 @@ use ipnet::IpNet;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-fn default_nginx_profile() -> String {
+fn default_profile() -> String {
     "http-core-v1".to_owned()
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_unknown_directive_policy() -> String {
     "error".to_owned()
+}
+
+fn default_gzip_min_length() -> u64 {
+    // nginx default for gzip_min_length
+    20
 }
 
 fn default_provider_timeout_ms() -> u64 {
@@ -417,7 +426,14 @@ pub struct WebServerAppConfig {
     pub kind: String,
     pub app_key: String,
     #[serde(default)]
-    pub compatibility: CompatibilityConfig,
+    pub nginx: NginxConfig,
+    /// Response gzip settings materialized from `[http] gzip` / `gzipTypes` /
+    /// `gzipMinLength` (SDKWORK_WEBSERVER_SPEC.md §6).
+    #[serde(default)]
+    pub gzip: GzipConfig,
+    /// Shared `limit_req_zone` definitions materialized from `[http] limitReqZone`.
+    #[serde(default)]
+    pub limit_req_zones: Vec<LimitReqZoneConfig>,
     #[serde(default)]
     pub limits: WebServerLimits,
     pub listeners: Vec<ListenerConfig>,
@@ -431,6 +447,14 @@ pub struct WebServerAppConfig {
     #[serde(default)]
     pub upstreams: Vec<UpstreamConfig>,
     pub virtual_hosts: Vec<VirtualHostConfig>,
+    /// Raw TCP proxying (`nginx stream` equivalent, SDKWORK_WEBSERVER_SPEC
+    /// section 12): one listener per entry that forwards bytes to a literal
+    /// `host:port` or a declared upstream.
+    #[serde(default)]
+    pub streams: Vec<StreamServerConfig>,
+    /// Shared HTTP response cache for proxied surfaces.
+    #[serde(default)]
+    pub proxy_cache: ProxyCacheConfig,
     #[serde(default)]
     pub observability: ObservabilityConfig,
     #[serde(default)]
@@ -439,19 +463,103 @@ pub struct WebServerAppConfig {
     pub metadata: BTreeMap<String, Value>,
 }
 
+/// nginx `limit_req_zone` shared zone (SDKWORK_WEBSERVER_SPEC.md §6).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LimitReqZoneConfig {
+    pub name: String,
+    /// Only `$binary_remote_addr` / `$remote_addr` are executable today.
+    pub key: String,
+    /// Approximate key capacity derived from the zone size argument.
+    pub max_keys: u32,
+    /// Sustained rate as requests per second (e.g. `10r/m` → `10/60`).
+    pub rate_per_second: f64,
+}
+
+/// One `limit_req` directive on a location (SDKWORK_WEBSERVER_SPEC.md §11.1).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LimitReqConfig {
+    pub zone: String,
+    #[serde(default)]
+    pub burst: u32,
+    #[serde(default)]
+    pub nodelay: bool,
+}
+
+/// Ordered access-module rule (`allow` / `deny`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AccessRuleConfig {
+    pub action: AccessAction,
+    /// `"all"` or an IP / CIDR string.
+    pub network: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AccessAction {
+    Allow,
+    Deny,
+}
+
+/// One htpasswd user entry materialized from `auth_basic_user_file`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AuthBasicUserConfig {
+    pub username: String,
+    pub password_hash: String,
+}
+
+/// Location `auth_basic` challenge after the user file is loaded at materialize.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AuthBasicConfig {
+    pub realm: String,
+    pub users: Vec<AuthBasicUserConfig>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct CompatibilityConfig {
-    #[serde(default = "default_nginx_profile")]
-    pub nginx_profile: String,
+pub struct NginxConfig {
+    /// Deploy-TOML `nginx.enabled` master switch; default true.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_profile")]
+    pub profile: String,
     #[serde(default = "default_unknown_directive_policy")]
     pub unknown_directive_policy: String,
 }
 
-impl Default for CompatibilityConfig {
+/// HTTP response gzip policy (`gzip`, `gzip_types`, `gzip_min_length`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GzipConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    /// MIME types eligible for gzip. `text/html` is always included when
+    /// `enabled` (nginx semantics).
+    #[serde(default)]
+    pub types: Vec<String>,
+    #[serde(default = "default_gzip_min_length")]
+    pub min_length: u64,
+}
+
+impl Default for GzipConfig {
     fn default() -> Self {
         Self {
-            nginx_profile: default_nginx_profile(),
+            enabled: false,
+            types: Vec::new(),
+            min_length: default_gzip_min_length(),
+        }
+    }
+}
+
+impl Default for NginxConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            profile: default_profile(),
             unknown_directive_policy: default_unknown_directive_policy(),
         }
     }
@@ -735,6 +843,29 @@ pub struct TlsPolicyConfig {
     pub maximum_version: TlsVersion,
     #[serde(default = "default_alpn")]
     pub alpn: Vec<String>,
+    /// Downstream client certificate policy (`ssl_verify_client`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_auth: Option<ClientAuthConfig>,
+}
+
+/// Listener/server TLS client authentication (`ssl_verify_client`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ClientAuthConfig {
+    pub mode: ClientAuthMode,
+    /// Absolute paths to PEM trust anchors (`ssl_client_certificate`).
+    pub ca_certificate_files: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ClientAuthMode {
+    /// `ssl_verify_client off`
+    Off,
+    /// `ssl_verify_client optional`
+    Optional,
+    /// `ssl_verify_client on`
+    Required,
 }
 
 impl TlsPolicyConfig {
@@ -790,6 +921,12 @@ pub enum ResourceConfig {
         upstream_ref: String,
         #[serde(default)]
         strip_prefix: bool,
+        /// nginx `proxy_set_header` entries as `"Name value"` strings.
+        /// Supported value tokens: literals plus `$host`, `$scheme`,
+        /// `$remote_addr`, `$proxy_add_x_forwarded_for`, `$http_upgrade`,
+        /// `$server_port`.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        request_set_headers: Vec<String>,
     },
     Redirect {
         id: String,
@@ -832,6 +969,27 @@ impl ResourceConfig {
             | Self::Respond { id, .. }
             | Self::Drive { id, .. }
             | Self::Knowledgebase { id, .. } => id,
+        }
+    }
+
+    pub fn set_id(&mut self, id: String) {
+        match self {
+            Self::Static { id: current, .. }
+            | Self::Proxy { id: current, .. }
+            | Self::Redirect { id: current, .. }
+            | Self::Respond { id: current, .. }
+            | Self::Drive { id: current, .. }
+            | Self::Knowledgebase { id: current, .. } => *current = id,
+        }
+    }
+
+    pub fn set_proxy_upstream_ref(&mut self, upstream_ref: String) {
+        if let Self::Proxy {
+            upstream_ref: current,
+            ..
+        } = self
+        {
+            *current = upstream_ref;
         }
     }
 
@@ -936,6 +1094,9 @@ pub struct UpstreamConfig {
     pub targets: Vec<UpstreamTargetConfig>,
     #[serde(default)]
     pub load_balancing: UpstreamLoadBalancingStrategy,
+    /// Present when `load_balancing` is `Hash`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hash: Option<UpstreamHashConfig>,
     pub resolver_ref: Option<String>,
     #[serde(default)]
     pub address_policy: UpstreamAddressPolicyConfig,
@@ -962,6 +1123,62 @@ pub struct UpstreamConfig {
     pub active_health: Option<UpstreamActiveHealthConfig>,
 }
 
+/// One raw TCP proxy listener (`[[stream.server]]`,
+/// SDKWORK_WEBSERVER_SPEC section 12).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StreamServerConfig {
+    pub id: String,
+    pub bind: String,
+    pub port: u16,
+    pub target: StreamTargetConfig,
+    /// Idle timeout on both directions of the proxied connection
+    /// (`proxyTimeout`; nginx `proxy_timeout`).
+    #[serde(default = "default_stream_proxy_timeout_ms")]
+    pub proxy_timeout_ms: u64,
+    /// Send a PROXY protocol v1 header to the upstream
+    /// (`proxyProtocol`; nginx `proxy_protocol`).
+    #[serde(default)]
+    pub proxy_protocol: bool,
+    /// Optional stream TLS mode (`listen … ssl` terminate or `sslPreread`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls: Option<StreamTlsMode>,
+}
+
+/// Stream TLS execution mode (SDKWORK_WEBSERVER_SPEC §12).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "mode",
+    deny_unknown_fields
+)]
+pub enum StreamTlsMode {
+    /// Terminate TLS with a named certificate from `certificates[]`.
+    Terminate { certificate_ref: String },
+    /// Peek ClientHello then pass encrypted bytes to the upstream.
+    Preread,
+}
+
+fn default_stream_proxy_timeout_ms() -> u64 {
+    60 * 1000
+}
+
+/// Stream proxy destination: a declared upstream (load-balanced, resolves its
+/// targets like HTTP proxy) or a literal `host:port`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields, tag = "type")]
+pub enum StreamTargetConfig {
+    Upstream { name: String },
+    Literal { host: String, port: u16 },
+}
+
+impl StreamServerConfig {
+    pub fn socket_key(&self) -> String {
+        format!("{}:{}", self.bind.to_ascii_lowercase(), self.port)
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum UpstreamLoadBalancingStrategy {
@@ -970,6 +1187,31 @@ pub enum UpstreamLoadBalancingStrategy {
     LeastConnections,
     RandomTwoLeastConnections,
     IpHash,
+    /// nginx `hash <key> [consistent]`.
+    Hash,
+}
+
+/// Executable hash-key variable subset for `loadBalancing = "hash"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UpstreamHashKeyVar {
+    #[serde(rename = "$request_uri")]
+    RequestUri,
+    #[serde(rename = "$uri")]
+    Uri,
+    #[serde(rename = "$remote_addr")]
+    RemoteAddr,
+    #[serde(rename = "$host")]
+    Host,
+}
+
+/// nginx `hash` / `hash … consistent` policy materialized onto an upstream.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UpstreamHashConfig {
+    pub key: UpstreamHashKeyVar,
+    #[serde(default)]
+    pub consistent: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1154,10 +1396,6 @@ fn default_hsts_max_age_seconds() -> u32 {
     31_536_000
 }
 
-fn default_true() -> bool {
-    true
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RouteConfig {
@@ -1165,6 +1403,42 @@ pub struct RouteConfig {
     #[serde(rename = "match")]
     pub route_match: RouteMatchConfig,
     pub resource_ref: String,
+    /// Location `allow` then `deny` entries in that order (common
+    /// `allow …; deny all;` pattern). Empty means no access-module check.
+    #[serde(default)]
+    pub access: Vec<AccessRuleConfig>,
+    /// Location `limitReq` entries referencing `limit_req_zones`.
+    #[serde(default)]
+    pub limit_req: Vec<LimitReqConfig>,
+    /// Location `rewrite` directives (ordered; see `RewriteFlag`).
+    #[serde(default)]
+    pub rewrite: Vec<RewriteRuleConfig>,
+    /// Location `auth_basic` + loaded `auth_basic_user_file` entries.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_basic: Option<AuthBasicConfig>,
+}
+
+/// One nginx `rewrite` directive on a location.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RewriteRuleConfig {
+    pub pattern: String,
+    pub replacement: String,
+    pub flag: RewriteFlag,
+}
+
+/// nginx rewrite flag subset executed by the Rust data plane.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RewriteFlag {
+    /// Re-run location selection with the rewritten URI.
+    Last,
+    /// Stop rewrite processing; continue with the current location.
+    Break,
+    /// External 302 redirect.
+    Redirect,
+    /// External 301 redirect.
+    Permanent,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1176,10 +1450,16 @@ pub struct RouteMatchConfig {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 pub enum RoutePathType {
     Exact,
     Prefix,
+    /// nginx `^~` — longest exclusive prefix wins and suppresses regex locations.
+    PrefixExclusive,
+    /// nginx `~` (case-sensitive regex).
+    Regex,
+    /// nginx `~*` (case-insensitive regex).
+    RegexIgnoreCase,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1187,6 +1467,63 @@ pub enum RoutePathType {
 pub struct ObservabilityConfig {
     #[serde(default = "default_access_log")]
     pub access_log: bool,
+}
+
+/// Shared HTTP response cache policy for proxied surfaces (nginx
+/// `proxy_cache` / `proxy_cache_path` equivalent). Memory is always the L1
+/// index; an optional `diskPath` enables durable object spill (component
+/// boundary: `CacheBackend`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProxyCacheConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    /// Maximum cached object count (LRU eviction).
+    #[serde(default = "default_proxy_cache_max_entries")]
+    pub max_entries: usize,
+    /// Maximum cached response body bytes per entry.
+    #[serde(default = "default_proxy_cache_max_object_bytes")]
+    pub max_object_bytes: u64,
+    /// Freshness used when the response declares no Cache-Control/Expires.
+    #[serde(default = "default_proxy_cache_ttl_seconds")]
+    pub default_ttl_seconds: u64,
+    /// How long a stale entry may be served on upstream 5xx
+    /// (`proxy_cache_use_stale` window). Zero disables stale serving.
+    #[serde(default = "default_proxy_cache_stale_ttl_seconds")]
+    pub stale_ttl_seconds: u64,
+    /// Optional on-disk cache directory (`proxy_cache_path`). When set, the
+    /// memory store remains the hot index and object bodies spill to disk.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disk_path: Option<String>,
+}
+
+impl Default for ProxyCacheConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            max_entries: default_proxy_cache_max_entries(),
+            max_object_bytes: default_proxy_cache_max_object_bytes(),
+            default_ttl_seconds: default_proxy_cache_ttl_seconds(),
+            stale_ttl_seconds: default_proxy_cache_stale_ttl_seconds(),
+            disk_path: None,
+        }
+    }
+}
+
+fn default_proxy_cache_max_entries() -> usize {
+    4_096
+}
+
+fn default_proxy_cache_max_object_bytes() -> u64 {
+    1 * 1024 * 1024
+}
+
+fn default_proxy_cache_ttl_seconds() -> u64 {
+    60
+}
+
+fn default_proxy_cache_stale_ttl_seconds() -> u64 {
+    60
 }
 
 impl Default for ObservabilityConfig {

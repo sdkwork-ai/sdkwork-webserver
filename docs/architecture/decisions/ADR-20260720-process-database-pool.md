@@ -1,7 +1,7 @@
 # ADR-20260720 Process Database Pool Ownership
 
 Status: accepted
-Owner: sdkwork-web-server
+Owner: sdkwork-webserver
 Date: 2026-07-20
 Updated: 2026-07-31
 Requirement: REQ-2026-0004

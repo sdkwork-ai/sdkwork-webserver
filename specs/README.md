@@ -1,6 +1,6 @@
 # Web Server component specs
 
-Local contracts for `sdkwork-web-server`.
+Local contracts for `sdkwork-webserver`.
 
 - `component.spec.json`: component identity and verification entrypoints
 - `topology.spec.json`: runtime topology profile vocabulary and env bindings

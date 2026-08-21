@@ -8,8 +8,8 @@
   },
   "processes": [
     {
-      "id": "sdkwork-api-web-server-standalone-gateway",
-      "entrypoint": "crates/sdkwork-api-web-server-standalone-gateway/src/main.rs",
+      "id": "sdkwork-api-webserver-standalone-gateway",
+      "entrypoint": "crates/sdkwork-api-webserver-standalone-gateway/src/main.rs",
       "poolOwner": "crates/sdkwork-webserver-database-host/src/lib.rs",
       "driver": "sdkwork_database_sqlx::DatabasePool",
       "poolCount": 1,
@@ -17,7 +17,7 @@
       "schemaEnv": "SDKWORK_DATABASE_SCHEMA",
       "maxConnectionsEnv": "SDKWORK_DATABASE_MAX_CONNECTIONS",
       "productionSourceRoots": [
-        "crates/sdkwork-api-web-server-standalone-gateway/src",
+        "crates/sdkwork-api-webserver-standalone-gateway/src",
         "crates/sdkwork-api-webserver-assembly/src",
         "crates/sdkwork-intelligence-webserver-repository-sqlx/src",
         "crates/sdkwork-webserver-database-host/src"
@@ -81,7 +81,7 @@
   ],
   "verification": [
     "node ../sdkwork-specs/tools/check-process-shared-database-pool.mjs --root .",
-    "node --test scripts/dev/sdkwork-web-server-iam-application-bootstrap-standard.test.mjs",
+    "node --test scripts/dev/sdkwork-webserver-iam-application-bootstrap-standard.test.mjs",
     "cargo test -p sdkwork-webserver-database-host",
     "cargo test -p sdkwork-intelligence-webserver-repository-sqlx"
   ]

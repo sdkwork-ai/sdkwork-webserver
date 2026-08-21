@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0054
 title: Bound legacy v3 node sync materialization before HTTP serialization
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: control-plane-oom-and-node-integrity
 problem: The Node Daemon bounded an HTTP sync response at 16 MiB, but the control plane first used fetch_all to collect every active tenant configuration and certificate, performed per-row domain queries, retained encrypted keys, decrypted the complete result, and only then serialized it. A large or corrupt tenant could therefore exhaust control-plane memory before the receiving node enforced its limit.

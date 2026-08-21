@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 import { parseDotEnv } from '../../../sdkwork-specs/tools/postgres/postgres-config.mjs';
 
-const BASE_DOMAINS = ['sdkwork.com', 'birdcoder.com', 'dtupay.com'];
+const BASE_DOMAINS = ['sdkwork.com'];
 const ENVIRONMENTS = ['development', 'test', 'production'];
 const DEPENDENCY_MODES = ['embedded', 'external'];
 const DATABASE_IDENTITIES = {
@@ -42,7 +42,7 @@ const POSTGRES_KEYS = {
 
 function expectedHosts(environment) {
   const suffix = ENVIRONMENT_SUFFIX[environment];
-  const role = suffix ? `server-${suffix}` : 'server';
+  const role = suffix ? `web-${suffix}` : 'web';
   return BASE_DOMAINS.map((domain) => `${role}.${domain}`);
 }
 

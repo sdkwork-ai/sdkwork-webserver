@@ -6,7 +6,7 @@ info:
   contact:
     name: SDKWork Team
 servers:
-  - url: https://api.web.sdkwork.com
+  - url: https://api.server.sdkwork.com
     description: Production
   - url: http://localhost:3800
     description: Local Development
@@ -29,6 +29,7 @@ paths:
       x-sdkwork-auth-mode: dual-token
       x-sdkwork-permission: web.applications.read
       x-sdkwork-owner: sdkwork-web
+      x-sdkwork-pagination-mode: offset
       parameters:
         - $ref: "#/components/parameters/PageParam"
         - $ref: "#/components/parameters/PageSizeParam"
@@ -58,7 +59,6 @@ paths:
               - 3
               - 4
               - 5
-              - 6
               - 6
         - name: keyword
           in: query
@@ -349,6 +349,7 @@ paths:
       x-sdkwork-auth-mode: dual-token
       x-sdkwork-permission: web.applications.write
       x-sdkwork-owner: sdkwork-web
+      x-sdkwork-pagination-mode: offset
       parameters:
         - $ref: "#/components/parameters/PageParam"
         - $ref: "#/components/parameters/PageSizeParam"
@@ -548,6 +549,7 @@ paths:
       x-sdkwork-auth-mode: dual-token
       x-sdkwork-permission: web.certificates.read
       x-sdkwork-owner: sdkwork-web
+      x-sdkwork-pagination-mode: offset
       parameters:
         - $ref: "#/components/parameters/PageParam"
         - $ref: "#/components/parameters/PageSizeParam"
@@ -1031,6 +1033,7 @@ paths:
       x-sdkwork-auth-mode: dual-token
       x-sdkwork-permission: web.applications.write
       x-sdkwork-owner: sdkwork-web
+      x-sdkwork-pagination-mode: offset
       parameters:
         - name: environment
           in: query
@@ -1197,6 +1200,7 @@ paths:
       x-sdkwork-auth-mode: dual-token
       x-sdkwork-permission: false
       x-sdkwork-owner: sdkwork-web
+      x-sdkwork-pagination-mode: offset
       parameters:
         - $ref: "#/components/parameters/PageParam"
         - $ref: "#/components/parameters/PageSizeParam"
@@ -1242,6 +1246,7 @@ paths:
       x-sdkwork-auth-mode: dual-token
       x-sdkwork-permission: web.applications.read
       x-sdkwork-owner: sdkwork-web
+      x-sdkwork-pagination-mode: offset
       parameters:
         - $ref: "#/components/parameters/PageParam"
         - $ref: "#/components/parameters/PageSizeParam"
@@ -1380,6 +1385,7 @@ paths:
       x-sdkwork-auth-mode: dual-token
       x-sdkwork-permission: web.applications.write
       x-sdkwork-owner: sdkwork-web
+      x-sdkwork-pagination-mode: offset
       responses:
         "200":
           description: 成功
@@ -1631,7 +1637,7 @@ components:
           maxLength: 256
         sizeBytes:
           type: string
-          pattern: ^[0-9]+$
+          pattern: ^-?[0-9]+$
         checksum:
           $ref: '#/components/schemas/MediaChecksum'
         width:
@@ -1901,7 +1907,7 @@ components:
         total:
           type: string
           format: int64
-          pattern: ^[0-9]+$
+          pattern: ^-?[0-9]+$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
           description: Total item count as a string to avoid JavaScript precision loss.
@@ -1958,7 +1964,7 @@ components:
         certificateCount:
           type: string
           format: int64
-          pattern: ^[0-9]+$
+          pattern: ^-?[0-9]+$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
         isPrimary:
@@ -1981,7 +1987,7 @@ components:
         total:
           type: string
           format: int64
-          pattern: ^[0-9]+$
+          pattern: ^-?[0-9]+$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
           description: Total item count as a string to avoid JavaScript precision loss.
@@ -2172,7 +2178,7 @@ components:
         total:
           type: string
           format: int64
-          pattern: ^[0-9]+$
+          pattern: ^-?[0-9]+$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
     CreateDeploymentRequest:
@@ -2284,7 +2290,7 @@ components:
         durationMs:
           type: string
           format: int64
-          pattern: ^[0-9]+$
+          pattern: ^-?[0-9]+$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
           description: Deployment duration in milliseconds as a string to avoid JavaScript
@@ -2299,7 +2305,7 @@ components:
         total:
           type: string
           format: int64
-          pattern: ^[0-9]+$
+          pattern: ^-?[0-9]+$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
           description: Total item count as a string to avoid JavaScript precision loss.
@@ -2363,7 +2369,7 @@ components:
         total:
           type: string
           format: int64
-          pattern: ^[0-9]+$
+          pattern: ^-?[0-9]+$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
           description: Total item count as a string to avoid JavaScript precision loss.
@@ -2565,7 +2571,7 @@ components:
         total:
           type: string
           format: int64
-          pattern: ^[0-9]+$
+          pattern: ^-?[0-9]+$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
           description: Total item count as a string to avoid JavaScript precision loss.
@@ -2665,7 +2671,7 @@ components:
           maximum: 200
         totalItems:
           type: string
-          pattern: ^[0-9]+$
+          pattern: ^-?[0-9]+$
         totalPages:
           type: integer
           minimum: 0

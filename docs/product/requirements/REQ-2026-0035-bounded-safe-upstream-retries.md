@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0035
 title: Add explicit bounded upstream retries without unsafe request replay
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: nginx-proxy-next-upstream-commercial-readiness
 problem: The proxy has bounded admission and passive/active target health but always performs one upstream attempt. Transient connect, timeout, or selected gateway-status failures cannot fail over to another healthy target, while naive retry would duplicate non-idempotent or streaming requests and violate OOM/concurrency guarantees.
@@ -51,12 +51,12 @@ trace:
     - TEST_SPEC.md
   components:
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
   - cargo test -p sdkwork-webserver-core --test webserver_config
-  - cargo test -p sdkwork-api-web-server-standalone-gateway data_plane::proxy
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test upstream_safe_retries
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway data_plane::proxy
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test upstream_safe_retries
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check
@@ -74,7 +74,7 @@ Retry is disabled unless `upstream.retry` is present. The initial profile intent
 - Replay eligibility fails closed to Body-end-of-stream GET, HEAD, OPTIONS, TRACE, PUT, and DELETE. POST, PATCH, Body-bearing GET, pending Body/Trailer Frames, WebSocket upgrades, request Body failures, and local connection saturation remain terminal. Omitted policy uses the original single-attempt client timeout path.
 - A stack-owned probe lease releases half-open ownership on every branch and future cancellation. A separate completed-Body control state prevents replay-safe empty requests from being misclassified as early upstream responses and preserves downstream HTTP/1 Keep-Alive reuse.
 - Real dual-origin tests prove configured 503 failover, transport-close failover, per-attempt timeout failover while total budget remains, final 503 Body forwarding on exhaustion, omitted-policy single-attempt behavior, POST and Body-bearing GET refusal, and total-deadline exhaustion without contacting the second target. The complete standalone gateway suite passes 161 tests, including the HTTP/1 Keep-Alive regression.
-- `cargo clippy -p sdkwork-api-web-server-standalone-gateway --all-targets -- -D warnings`, `cargo clippy --workspace --all-targets -- -D warnings`, `pnpm.cmd verify`, `cargo fmt --all -- --check`, and `git diff --check` pass.
+- `cargo clippy -p sdkwork-api-webserver-standalone-gateway --all-targets -- -D warnings`, `cargo clippy --workspace --all-targets -- -D warnings`, `pnpm.cmd verify`, `cargo fmt --all -- --check`, and `git diff --check` pass.
 - SDKWork pagination, API operation-pattern, response-envelope, app-SDK consumer-import, application-layering, Rust backend-composition, route-collision, and database-framework validators passed. PostgreSQL lifecycle was not executed or claimed by this requirement; REQ-2026-0004/0049 own that evidence.
 
 ## Accepted Boundary

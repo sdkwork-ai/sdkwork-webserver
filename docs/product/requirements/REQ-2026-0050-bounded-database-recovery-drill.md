@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0050
 title: Prove bounded real PostgreSQL backup restoration
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: database-commercial-readiness
 problem: Database lifecycle and repository tests do not prove that an independent PostgreSQL database can restore a consistent schema and tenant-scoped business row from a real backup artifact.

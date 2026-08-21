@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0057
 title: Freeze the release dependency graph and verify immutable server archives with bounded memory
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 priority: P0
 source: release-integrity-and-bounded-verification

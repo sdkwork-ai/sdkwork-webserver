@@ -45,9 +45,13 @@ export function WebserverAuthGate({
         }
       })
       .catch((error: unknown) => {
+        // Soft-fail like the public portal: treat bootstrap failure as
+        // unauthenticated so the user reaches /auth/login (or shell) instead of
+        // a dead "identity unavailable" wall. IAM metadata still needs the
+        // credential-entry bootstrap token on the login page.
         console.error("Failed to bootstrap the IAM session.", error);
         if (active) {
-          setBootstrapStatus("unavailable");
+          setBootstrapStatus("ready");
         }
       });
     return () => {

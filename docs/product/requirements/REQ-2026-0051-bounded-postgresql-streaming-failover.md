@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0051
 title: Prove bounded PostgreSQL physical replication and standby promotion
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: database-high-availability-readiness
 problem: PostgreSQL lifecycle, Repository parity, and backup restoration pass, but there is no executable evidence that an acknowledged control-plane write can reach a physical standby, survive primary shutdown, and remain writable after standby promotion.

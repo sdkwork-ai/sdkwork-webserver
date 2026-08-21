@@ -7,10 +7,10 @@ Wants=network-online.target
 Type=simple
 User=sdkwork
 Group=sdkwork
-# The typed runtime configuration (/etc/sdkwork/webserver/sdkwork-webserver.toml)
+# The typed runtime configuration (/etc/sdkwork/webserver/config.toml)
 # is loaded by the binary at startup; secret material is referenced by file
 # path inside the TOML, never injected through EnvironmentFile.
-ExecStart=/usr/lib/sdkwork/webserver/bin/sdkwork-api-web-server-standalone-gateway serve-management
+ExecStart=/usr/lib/sdkwork/webserver/bin/sdkwork-api-webserver-standalone-gateway serve-management
 Restart=on-failure
 RestartSec=5s
 LimitNOFILE=65536

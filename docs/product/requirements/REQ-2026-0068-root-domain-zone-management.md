@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0068
 title: Manage root-domain Zones and their hostname operations on dedicated pages
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: in-progress
 source: user
 problem: Operators need to define a root domain first, open a stable detail page, and operate its apex and subdomains together with routing, verification, certificates, and deployment visibility.

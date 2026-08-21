@@ -1,6 +1,6 @@
 # SDKWork Standards Alignment
 
-Application: `sdkwork-web-server`
+Application: `sdkwork-webserver`
 
 Updated: 2026-08-03
 

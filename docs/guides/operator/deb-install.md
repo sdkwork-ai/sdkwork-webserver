@@ -16,11 +16,11 @@ TOML runtime configuration, and the environment/database model.
 | Package | Environment | Domain | Ingress | Database |
 | --- | --- | --- | --- | --- |
 | `sdkwork-webserver_<version>_amd64.deb` / `sdkwork-webserver-<version>-1.x86_64.rpm` | production | `server.sdkwork.com` (nginx HTTPS) | `0.0.0.0:8080` | `sdkwork_ai_prod` (auto-initialized) |
-| `sdkwork-webserver-test_<version>_amd64.deb` / `sdkwork-webserver-test-<version>-1.x86_64.rpm` | test | `testserver.sdkwork.com` (hosts-bound) | `0.0.0.0:8888` | `sdkwork_ai_test` (auto-initialized) |
+| `sdkwork-webserver-test_<version>_amd64.deb` / `sdkwork-webserver-test-<version>-1.x86_64.rpm` | test | `server-test.sdkwork.com` (hosts-bound) | `0.0.0.0:8888` | `sdkwork_ai_test` (auto-initialized) |
 
 The environment differs in the ingress port (test `8888`, production `8080`)
 and in how traffic reaches the gateway: the test package binds the host name
-to `127.0.0.1` through `/etc/hosts` so `http://testserver.sdkwork.com:8888`
+to `127.0.0.1` through `/etc/hosts` so `http://server-test.sdkwork.com:8888`
 works immediately, while the production package expects
 `server.sdkwork.com` DNS to point at the host and serves HTTPS through nginx
 (`:443` → `127.0.0.1:8080`), configuring ACME certificate issuance (see
@@ -62,7 +62,7 @@ The `postinst` script performs, in order:
    section 7.3 single-application host exception); the shared
    `/etc/sdkwork/database/` directory is only used on multi-application hosts.
 4. Generates the typed runtime configuration
-   `/etc/sdkwork/webserver/sdkwork-webserver.toml` (`0640`) with the profile,
+   `/etc/sdkwork/webserver/config.toml` (`0640`) with the profile,
    ingress (test `0.0.0.0:8888`, production `0.0.0.0:8080`), runtime roots,
    database settings, and secret file references (`RUNTIME_DIRECTORY_SPEC.md`
    section 4.1 runtime config file). The gateway, `db-migrate`, and the
@@ -71,18 +71,19 @@ The `postinst` script performs, in order:
 5. Runs the one-time database migration as `sdkwork`.
 6. Registers and starts the `sdkwork-webserver` (or `sdkwork-webserver-test`)
    systemd service.
-7. Test package: appends `testserver.sdkwork.com → 127.0.0.1` to
+7. Test package: appends `server-test.sdkwork.com → 127.0.0.1` to
    `/etc/hosts`. Production package: generates the nginx site for ACME
    `http-01` and HTTPS (section 6).
 
 ## 4. Installed Layout
 
-Per `RUNTIME_DIRECTORY_SPEC.md` section 4.1 (application code `webserver`):
+Per `APPLICATION_DEPLOY_LAYOUT_SPEC.md` and `RUNTIME_DIRECTORY_SPEC.md` section 4.1 (application code `webserver`).
+See [`CONFIG_PATHS.md`](CONFIG_PATHS.md) for this application's paths.
 
 | Purpose | Path | Ownership |
 | --- | --- | --- |
 | Private immutable runtime assets (binaries, database contract, specs, install manifest) | `/usr/lib/sdkwork/webserver` | `root:root` |
-| Shared read-only assets (PC shell) | `/usr/share/sdkwork/webserver` | `root:root` |
+| Shared read-only assets (Adaptive Web PC/H5/static + deps) | `/usr/share/sdkwork/webserver` | `root:root` |
 | Documentation / examples | `/usr/share/doc/sdkwork/webserver` | `root:root` |
 | Runtime config (typed TOML) | `/etc/sdkwork/webserver` | `root:sdkwork` |
 | Durable mutable data (ACME, TLS materials) | `/var/lib/sdkwork/webserver` | `sdkwork:sdkwork` |
@@ -97,14 +98,14 @@ Per `RUNTIME_DIRECTORY_SPEC.md` section 4.1 (application code `webserver`):
 ## 4.1 Runtime Configuration (TOML)
 
 The authoritative runtime configuration is the typed TOML file
-`/etc/sdkwork/webserver/sdkwork-webserver.toml` (loaded by every binary at
+`/etc/sdkwork/webserver/config.toml` (loaded by every binary at
 startup; no `EnvironmentFile` is used). Sections:
 
 | Section | Purpose |
 | --- | --- |
 | `[profile]` | deployment profile, environment, profile id, snowflake node id |
 | `[ingress]` | public ingress bind (test `0.0.0.0:8888`, production `0.0.0.0:8080`), expose authorization, URL trio, CORS origins |
-| `[app_roots]` | `/usr/lib/sdkwork/webserver`, IAM/Drive roots, PC static root |
+| `[app_roots]` | `/usr/lib/sdkwork/webserver`, IAM/Drive roots, Adaptive Web PC/H5/static roots |
 | `[deploy]` | Deployments domain profile, Drive facade, internal API URLs + ingress token files |
 | `[database]` | workspace PostgreSQL identity (`sdkwork_ai_test`/`sdkwork_ai_prod`), `password_file` reference, auto-migrate |
 | `[secrets]` | encryption key file references (production-like environments) |
@@ -143,7 +144,7 @@ injects it into the served `index.html` as an inline script.
 ```bash
 systemctl status sdkwork-webserver-test          # test package
 curl -fsS http://127.0.0.1:8888/readyz           # test ingress port
-curl -fsS http://testserver.sdkwork.com:8888/    # test package (hosts-bound)
+curl -fsS http://server-test.sdkwork.com:8888/      # test package (hosts-bound)
 sudo -u sdkwork psql -h 127.0.0.1 -U sdkwork_ai_test -d sdkwork_ai_test -c '\dt'
 ```
 
@@ -152,7 +153,7 @@ Production package (ingress port `8080`, HTTPS through nginx):
 ```bash
 systemctl status sdkwork-webserver sdkwork-webserver-certificate-worker nginx
 curl -fsS http://127.0.0.1:8080/readyz
-curl -fsSk https://server.sdkwork.com/readyz     # nginx :443 -> 127.0.0.1:8080
+curl -fsSk https://server.sdkwork.com/readyz        # nginx :443 -> 127.0.0.1:8080
 sudo -u sdkwork psql -h 127.0.0.1 -U sdkwork_ai_prod -d sdkwork_ai_prod -c '\dt'
 ```
 
@@ -160,13 +161,16 @@ The two packages conflict with each other; installing the other environment
 removes the running one. On hosts with a shell `http_proxy`, add
 `--noproxy '*'` to curl when probing the host-bound test domain.
 
-Config changes go to `/etc/sdkwork/webserver/sdkwork-webserver.toml`; then
+Config changes go to `/etc/sdkwork/webserver/config.toml`; then
 `sudo systemctl restart sdkwork-webserver-test`. Validate before restarting
-with `sudo -u sdkwork /usr/lib/sdkwork/webserver/bin/sdkwork-api-web-server-standalone-gateway validate`.
+with `sudo -u sdkwork /usr/lib/sdkwork/webserver/bin/sdkwork-api-webserver-standalone-gateway validate`.
 
 ## 6. Production HTTPS And ACME
 
 The production package configures nginx:
+
+Declarative Web configuration sources are maintained under `deployments/webserver/`;
+installed nginx sites are written to `/etc/nginx/sites-enabled/sdkwork/<domain>.conf`.
 
 - `:80` serves the ACME `http-01` webroot
   (`/var/lib/sdkwork/webserver/acme-webroot`) and redirects to HTTPS.

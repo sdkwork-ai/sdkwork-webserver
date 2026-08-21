@@ -41,8 +41,8 @@ entries:
     path: docs/architecture/decisions/ADR-20260728-embedded-standalone-dependency-assemblies.md
     kind: adr
     status: accepted
-  - id: REVIEW-20260723-web-server-production-readiness
-    path: docs/engineering/reviews/REVIEW-20260723-web-server-production-readiness.md
+  - id: REVIEW-20260723-webserver-production-readiness
+    path: docs/engineering/reviews/REVIEW-20260723-webserver-production-readiness.md
     kind: review
     status: changes-requested
   - id: REQ-2026-0060

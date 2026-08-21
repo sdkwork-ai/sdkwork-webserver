@@ -6,7 +6,7 @@
     "displayName": "SDKWork Web Server Database Host",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "sdkwork-web-server/crates/sdkwork-webserver-database-host",
+    "root": "sdkwork-webserver/crates/sdkwork-webserver-database-host",
     "domain": "platform",
     "capability": "webserver-database-lifecycle",
     "surface": "backend-service",

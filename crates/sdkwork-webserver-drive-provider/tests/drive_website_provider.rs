@@ -344,6 +344,7 @@ async fn serves_ranges_and_falls_back_to_full_content_for_if_range_mismatch() {
             Some(WebsiteByteRange {
                 start: 2,
                 end_inclusive: Some(5),
+                suffix_bytes: None,
             }),
             WebsiteRequestConditions::default(),
         ))
@@ -369,6 +370,7 @@ async fn serves_ranges_and_falls_back_to_full_content_for_if_range_mismatch() {
             Some(WebsiteByteRange {
                 start: 2,
                 end_inclusive: Some(5),
+                suffix_bytes: None,
             }),
             WebsiteRequestConditions {
                 if_range: Some("\"different\"".to_string()),
@@ -386,6 +388,7 @@ async fn serves_ranges_and_falls_back_to_full_content_for_if_range_mismatch() {
             Some(WebsiteByteRange {
                 start: 10,
                 end_inclusive: None,
+                suffix_bytes: None,
             }),
             WebsiteRequestConditions::default(),
         ))
@@ -404,6 +407,7 @@ async fn serves_ranges_and_falls_back_to_full_content_for_if_range_mismatch() {
             Some(WebsiteByteRange {
                 start: 2,
                 end_inclusive: Some(5),
+                suffix_bytes: None,
             }),
             WebsiteRequestConditions::default(),
         ))

@@ -89,7 +89,7 @@ A missing canonical default fails closed with the expected path.
 ## 5. Validate Before Starting
 
 ```bash
-sudo -u sdkwork /opt/sdkwork/webserver/bin/sdkwork-api-web-server-standalone-gateway validate
+sudo -u sdkwork /opt/sdkwork/webserver/bin/sdkwork-api-webserver-standalone-gateway validate
 ```
 
 Expected output: `validated appKey=... revision=... bytes=... listeners=... virtualHosts=...`.
@@ -107,7 +107,7 @@ Wants=network-online.target
 Type=simple
 User=sdkwork
 Group=sdkwork
-ExecStart=/opt/sdkwork/webserver/bin/sdkwork-api-web-server-standalone-gateway data-plane
+ExecStart=/opt/sdkwork/webserver/bin/sdkwork-api-webserver-standalone-gateway data-plane
 Environment=SDKWORK_WEBSERVER_ENVIRONMENT=production
 Environment=SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE=standalone
 Environment=SDKWORK_WEBSERVER_RUNTIME_TARGET=server
@@ -143,7 +143,7 @@ journalctl -u sdkwork-webserver -f
 Run migrations once before first start:
 
 ```bash
-sudo -u sdkwork /opt/sdkwork/webserver/bin/sdkwork-api-web-server-standalone-gateway db-migrate
+sudo -u sdkwork /opt/sdkwork/webserver/bin/sdkwork-api-webserver-standalone-gateway db-migrate
 ```
 
 ## 8. Lifecycle
@@ -161,12 +161,14 @@ sudo -u sdkwork /opt/sdkwork/webserver/bin/sdkwork-api-web-server-standalone-gat
 
 ## 9. Other Platforms
 
-- **macOS service**: config at `/Library/Application Support/sdkwork/webserver/`, data under
-  the same tree's `Data`, launchd instead of systemd (`PRD-production-operations.md`).
-- **Windows service**: config at `%ProgramData%\sdkwork\webserver\`, Windows Service Control
-  integration.
-- **Container**: use `deployments/docker/` and `deployments/kubernetes/`; images carry
-  examples only and receive config through mounted volumes (`etc/README.md`).
+| OS | Config | Adaptive Web share roots |
+| --- | --- | --- |
+| macOS service | `/Library/Application Support/sdkwork/webserver/` | `.../web/{pc,h5,static}/` |
+| Windows service | `%ProgramData%\sdkwork\webserver\` | `%ProgramFiles%\sdkwork\webserver\web\{pc,h5,static}\` |
+| Container | `deployments/docker/`, `deployments/kubernetes/` | `/app/share/sdkwork/webserver/web/{pc,h5,static}` |
+
+Authority: `RUNTIME_DIRECTORY_SPEC.md` §4.1.1. Runtime TOML `[app_roots]` must
+point at these paths (or env overrides). See `etc/README.md` for mounts.
 
 ## 10. Verification Checklist
 

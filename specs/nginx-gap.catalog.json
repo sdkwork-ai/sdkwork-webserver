@@ -1,0 +1,211 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.webserver.nginx-gap.catalog",
+  "profile": "http-core-v1",
+  "authority": [
+    "docs/product/prd/PRD-nginx-compatibility.md",
+    "../sdkwork-specs/SDKWORK_WEBSERVER_SPEC.md",
+    "docs/architecture/tech/TECH-runtime-data-plane.md"
+  ],
+  "notes": [
+    "This catalog tracks Rust data-plane and import/render progress toward the declared http-core-v1 profile.",
+    "It is not a claim of full nginx OSS behavioral parity. Grades follow PRD-nginx-compatibility.md §2.",
+    "Toggle: deployments/webserver/server.*.toml [nginx].enabled (nginx.enabled)",
+    "Deploy-only keys nginx.strict / nginx.confFile are enforced by the TOML validator (W16); they are not required on the Rust NginxConfig runtime model.",
+    "REQ-linked Nginx 1.26.2 differential fixtures are indexed by specs/nginx-behavioral-corpus.manifest.json under tests/nginx/."
+  ],
+  "capabilities": [
+    {
+      "id": "nginx.toggle",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "[nginx].enabled (nginx.enabled) master switch for sidecar W16 and nginx.conf import activation"
+    },
+    {
+      "id": "nginx.sidecar-render",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "TOML→nginx.<profile>.conf render + W16 equivalence when nginx.enabled"
+    },
+    {
+      "id": "nginx.conf-import",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "Classify + draft IR + review TOML emit (--write-toml) with optional --validate; does not auto-overwrite deployments/webserver; include stays preserve-only"
+    },
+    {
+      "id": "http.reverse-proxy.streaming",
+      "group": "proxying",
+      "status": "implemented",
+      "summary": "Streaming reverse proxy with bounded timeouts and safe retries"
+    },
+    {
+      "id": "http.websocket.h1",
+      "group": "proxying",
+      "status": "implemented",
+      "summary": "Classic HTTP/1.1 WebSocket tunnels"
+    },
+    {
+      "id": "http.websocket.rfc8441",
+      "group": "proxying",
+      "status": "missing",
+      "summary": "RFC 8441 extended CONNECT over HTTP/2"
+    },
+    {
+      "id": "http.proxy-set-header.execute",
+      "group": "proxying",
+      "status": "implemented",
+      "summary": "proxySetHeader executes with $host/$scheme/$remote_addr/$proxy_add_x_forwarded_for/$http_upgrade/$server_port; unsupported $vars fail closed at materialize (nginx.conf + TOML)"
+    },
+    {
+      "id": "http.gzip",
+      "group": "response",
+      "status": "implemented",
+      "summary": "Response gzip via CompressionLayer (gzipTypes + gzipMinLength + text/html); brotli remains out of this capability id"
+    },
+    {
+      "id": "http.proxy-cache",
+      "group": "response",
+      "status": "implemented",
+      "summary": "proxy_cache subset: GET/HEAD memory+disk L1/L2, Cache-Control freshness, Vary keys, single-flight, stale-on-5xx window (proxy_cache_use_stale)"
+    },
+    {
+      "id": "http.rate-limit",
+      "group": "response",
+      "status": "implemented",
+      "summary": "limit_req_zone + limit_req (burst/nodelay; delay queue not scheduled) for $binary_remote_addr/$remote_addr"
+    },
+    {
+      "id": "http.access-allow-deny",
+      "group": "response",
+      "status": "implemented",
+      "summary": "Location allow then deny ACL; unmatched with rules present denies (nginx access module)"
+    },
+    {
+      "id": "http.auth-basic",
+      "group": "response",
+      "status": "implemented",
+      "summary": "auth_basic + auth_basic_user_file (htpasswd $apr1$/{SHA}/bcrypt); 401 WWW-Authenticate challenge"
+    },
+    {
+      "id": "routing.exact-prefix",
+      "group": "routing",
+      "status": "implemented",
+      "summary": "Exact (=) and prefix (/ and ^~) location matching; ^~ materializes as prefix-exclusive (suppresses regex)"
+    },
+    {
+      "id": "routing.regex-location",
+      "group": "routing",
+      "status": "implemented",
+      "summary": "PCRE-like ~ / ~* locations via Rust regex crate; nginx selection order with ^~ prefix-exclusive"
+    },
+    {
+      "id": "routing.rewrite",
+      "group": "routing",
+      "status": "implemented",
+      "summary": "rewrite subset last/break/redirect/permanent with $1..$n captures and bounded internal redirects"
+    },
+    {
+      "id": "routing.alias-try-files",
+      "group": "routing",
+      "status": "implemented",
+      "summary": "alias path substitution + try_files SPA fallback on static locations; autoindex/precompress remain out of this capability id"
+    },
+    {
+      "id": "upstream.lb.weighted-rr",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "Smooth weighted round-robin"
+    },
+    {
+      "id": "upstream.lb.least-conn",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "Weighted least-connections + random-two"
+    },
+    {
+      "id": "upstream.lb.ip-hash",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "IP-hash affinity"
+    },
+    {
+      "id": "upstream.lb.hash-consistent",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "hash $request_uri|$uri|$remote_addr|$host [consistent] (nginx CRC32 / ketama ring)"
+    },
+    {
+      "id": "upstream.health.active-passive",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "Active + passive health with backup/slow-start"
+    },
+    {
+      "id": "tls.terminate.sni",
+      "group": "tls",
+      "status": "implemented",
+      "summary": "TLS 1.2/1.3 termination with multi-cert SNI"
+    },
+    {
+      "id": "tls.downstream-mtls",
+      "group": "tls",
+      "status": "missing",
+      "summary": "Client certificate authentication to listeners"
+    },
+    {
+      "id": "tls.ocsp-stapling",
+      "group": "tls",
+      "status": "missing",
+      "summary": "OCSP stapling"
+    },
+    {
+      "id": "tls.upstream-verify-mtls",
+      "group": "tls",
+      "status": "implemented",
+      "summary": "Upstream TLS verify + upstream client identity"
+    },
+    {
+      "id": "stream.tcp.plaintext",
+      "group": "stream",
+      "status": "implemented",
+      "summary": "Plaintext TCP stream proxy + outbound PROXY v1"
+    },
+    {
+      "id": "stream.tcp.ssl-terminate",
+      "group": "stream",
+      "status": "implemented",
+      "summary": "Stream SSL terminate (tests/stream_proxy.rs terminates_stream_tls_and_forwards_plaintext_to_upstream)"
+    },
+    {
+      "id": "stream.tcp.ssl-preread",
+      "group": "stream",
+      "status": "implemented",
+      "summary": "ssl_preread passthrough (tests/stream_proxy.rs ssl_preread_forwards_client_hello_preface_to_upstream)"
+    },
+    {
+      "id": "stream.udp",
+      "group": "stream",
+      "status": "missing",
+      "summary": "UDP stream (also excluded from http-core-v1 V1 product scope)"
+    },
+    {
+      "id": "ops.reload.same-topology",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "Watch reload for same listener topology"
+    },
+    {
+      "id": "ops.reload.listener-handoff",
+      "group": "operations",
+      "status": "missing",
+      "summary": "Zero-downtime listener bind handoff / executable upgrade"
+    },
+    {
+      "id": "nginx.behavioral-corpus",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "Indexed REQ-linked Nginx 1.26.2 differential slices under tests/nginx/ via specs/nginx-behavioral-corpus.manifest.json (pnpm check:nginx-corpus); full OSS parity remains out of profile"
+    }
+  ]
+}

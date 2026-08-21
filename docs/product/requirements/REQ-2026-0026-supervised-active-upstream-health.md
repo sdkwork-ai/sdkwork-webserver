@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0026
 title: Detect and recover unhealthy upstream targets without unbounded background work
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: reliability
 problem: Passive health reacts only after user traffic fails. Operators need proactive dependency detection, but detached per-target tasks, overlapping probes, unbounded response reads, or reload leaks would create availability and OOM risks of their own.
@@ -56,11 +56,11 @@ trace:
     - TEST_SPEC.md
   components:
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
     - specs/sdkwork.webserver.config.schema.json
 verification:
   - cargo test -p sdkwork-webserver-core
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check

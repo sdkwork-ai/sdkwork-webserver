@@ -6,7 +6,7 @@
     "displayName": "SDKWork Web Server Backend API Routes",
     "version": "0.1.0",
     "type": "rust-route-crate",
-    "root": "sdkwork-web-server/crates/sdkwork-routes-webserver-backend-api",
+    "root": "sdkwork-webserver/crates/sdkwork-routes-webserver-backend-api",
     "domain": "platform",
     "capability": "webserver",
     "surface": "backend-api",

@@ -6,7 +6,7 @@
     "displayName": "SDKWork Web Server Delivery Runtime",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "sdkwork-web-server/crates/sdkwork-webserver-delivery-runtime",
+    "root": "sdkwork-webserver/crates/sdkwork-webserver-delivery-runtime",
     "domain": "platform",
     "capability": "website-delivery-runtime",
     "surface": "runtime-composition",

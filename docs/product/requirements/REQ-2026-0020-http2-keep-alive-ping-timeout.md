@@ -48,12 +48,12 @@ trace:
     - TEST_SPEC.md
   components:
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
     - tests/nginx/http2-keepalive/nginx.conf
     - tests/nginx/http2-keepalive/probe.py
 verification:
   - cargo test -p sdkwork-webserver-core
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm verify
 ```

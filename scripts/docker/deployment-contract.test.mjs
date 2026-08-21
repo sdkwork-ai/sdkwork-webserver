@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -12,15 +12,15 @@ import {
 
 const appRoot = path.resolve('.');
 const environments = ['development', 'test', 'production'];
-const baseDomains = ['sdkwork.com', 'birdcoder.com', 'dtupay.com'];
+const baseDomains = ['sdkwork.com'];
 const suffixes = { development: 'dev', test: 'test', production: '' };
 
 function expectedHosts(environment) {
-  const role = suffixes[environment] ? `server-${suffixes[environment]}` : 'server';
+  const role = suffixes[environment] ? `web-${suffixes[environment]}` : 'web';
   return baseDomains.map((domain) => `${role}.${domain}`);
 }
 
-test('docker env examples bind the registered server host family', () => {
+test('docker env examples bind the registered web host family', () => {
   for (const environment of environments) {
     const file = path.join(appRoot, 'deployments', 'docker', 'env', `${environment}.env.example`);
     const env = parseDotEnv(readFileSync(file, 'utf8'));
@@ -56,4 +56,15 @@ test('built-in compose provisions postgres and redis services', () => {
   assert.match(compose, /redis:/u);
   assert.match(compose, /WEBSERVER_POSTGRES_DEV_DB/u);
   assert.match(compose, /SDKWORK_WEBSERVER_REDIS_ENABLED: "true"/u);
+});
+
+test('docker nginx dual-authority confs are retired', () => {
+  for (const name of ['development.conf', 'test.conf', 'production.conf']) {
+    const retired = path.join(appRoot, 'deployments', 'docker', 'nginx', name);
+    assert.equal(existsSync(retired), false, `${name} must not exist`);
+  }
+  assert.match(
+    readFileSync(path.join(appRoot, 'deployments', 'docker', 'nginx', 'README.md'), 'utf8'),
+    /deployments\/webserver\//u,
+  );
 });

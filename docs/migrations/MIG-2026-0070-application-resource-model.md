@@ -2,7 +2,7 @@
 
 ```yaml
 id: MIG-2026-0070
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: active
 requirement: REQ-2026-0070
 type: breaking

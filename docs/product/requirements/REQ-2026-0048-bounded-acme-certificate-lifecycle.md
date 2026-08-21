@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0048
 title: Make ACME issuance and certificate activation bounded, truthful, and fail-closed
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: acme-certificate-commercial-readiness
 problem: The ACME adapter reads process environment directly on the active bootstrap path, leaves HTTP-01 challenges in memory and on disk, has no whole-operation deadline, reports certificate metadata that can differ from the actual leaf certificate, fingerprints PEM text instead of leaf DER, and writes the certificate and private key independently. These behaviors can leak resources, accept unsafe paths, report false evidence, or expose a mismatched live bundle after partial failure.

@@ -6,7 +6,7 @@
     "displayName": "SDKWork Web Server Route Common",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "sdkwork-web-server/crates/sdkwork-routes-webserver-common",
+    "root": "sdkwork-webserver/crates/sdkwork-routes-webserver-common",
     "domain": "platform",
     "capability": "webserver-http-adapters",
     "surface": "backend-service",

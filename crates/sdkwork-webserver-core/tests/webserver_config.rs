@@ -504,10 +504,10 @@ fn resource_pressure_rejects_unknown_fields_and_failure_policies() {
 }
 
 #[test]
-fn schema_rejects_unsupported_route_modes_and_unbounded_limits() {
+fn schema_rejects_unknown_path_type_and_unbounded_limits() {
     let directory = TempDir::new().expect("create temp directory");
     let mut config = base_config();
-    config["virtualHosts"][0]["routes"][0]["match"]["pathType"] = json!("regex");
+    config["virtualHosts"][0]["routes"][0]["match"]["pathType"] = json!("glob");
     config["limits"] = json!({"maxConnections": 1_000_001});
     let path = write_config(directory.path(), &config);
 
@@ -522,6 +522,85 @@ fn schema_rejects_unsupported_route_modes_and_unbounded_limits() {
         .diagnostics()
         .iter()
         .any(|diagnostic| diagnostic.path.contains("maxConnections")));
+}
+
+#[test]
+fn schema_accepts_limit_req_zones_and_regex_routes() {
+    let directory = TempDir::new().expect("create temp directory");
+    let mut config = base_config();
+    config["limitReqZones"] = json!([{
+        "name": "one",
+        "key": "$binary_remote_addr",
+        "maxKeys": 160000,
+        "ratePerSecond": 1.0
+    }]);
+    config["virtualHosts"][0]["routes"] = json!([
+        {
+            "id": "limited",
+            "match": { "pathType": "regex-ignore-case", "path": "\\.HTML$" },
+            "resourceRef": "exact-response",
+            "limitReq": [{ "zone": "one", "burst": 5, "nodelay": true }],
+            "rewrite": [{
+                "pattern": "^/old$",
+                "replacement": "/new",
+                "flag": "permanent"
+            }]
+        },
+        {
+            "id": "root",
+            "match": { "pathType": "prefix", "path": "/" },
+            "resourceRef": "prefix-response"
+        }
+    ]);
+    let path = write_config(directory.path(), &config);
+    let compiled = load_and_compile_webserver_config(path).expect("limitReqZones + regex must compile");
+    assert_eq!(compiled.config().limit_req_zones.len(), 1);
+    assert_eq!(compiled.config().limit_req_zones[0].name, "one");
+    let selected = compiled
+        .select_route("http", "example.com", "/index.HTML", "GET")
+        .expect("case-insensitive regex route");
+    assert_eq!(selected.route.id, "limited");
+    assert_eq!(selected.route.rewrite[0].flag, sdkwork_webserver_core::RewriteFlag::Permanent);
+}
+
+#[test]
+fn regex_and_prefix_exclusive_routes_follow_nginx_selection() {
+    let directory = TempDir::new().expect("create temp directory");
+    let mut config = base_config();
+    config["virtualHosts"][0]["routes"] = json!([
+        {
+            "id": "exclusive",
+            "match": { "pathType": "prefix-exclusive", "path": "/assets/" },
+            "resourceRef": "exact-response"
+        },
+        {
+            "id": "regex-php",
+            "match": { "pathType": "regex", "path": "\\.php$" },
+            "resourceRef": "prefix-response"
+        },
+        {
+            "id": "prefix",
+            "match": { "pathType": "prefix", "path": "/" },
+            "resourceRef": "wildcard-response"
+        }
+    ]);
+    let path = write_config(directory.path(), &config);
+    let compiled = load_and_compile_webserver_config(path).expect("compile config");
+
+    let exclusive = compiled
+        .select_route("http", "example.com", "/assets/app.php", "GET")
+        .expect("exclusive prefix suppresses regex");
+    assert_eq!(exclusive.route.id, "exclusive");
+
+    let regex = compiled
+        .select_route("http", "example.com", "/page.php", "GET")
+        .expect("regex wins over plain prefix");
+    assert_eq!(regex.route.id, "regex-php");
+
+    let prefix = compiled
+        .select_route("http", "example.com", "/other", "GET")
+        .expect("prefix fallback");
+    assert_eq!(prefix.route.id, "prefix");
 }
 
 #[test]

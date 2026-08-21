@@ -59,9 +59,9 @@ const ENVIRONMENTS = Object.freeze({
   test: {
     packageName: 'sdkwork-webserver-test',
     serviceName: 'sdkwork-webserver-test',
-    domain: 'testserver.sdkwork.com',
+    domain: 'server-test.sdkwork.com',
     ingressPort: 8888,
-    publicUrl: 'http://testserver.sdkwork.com:8888',
+    publicUrl: 'http://server-test.sdkwork.com:8888',
     databaseName: 'sdkwork_ai_test',
     databaseUser: 'sdkwork_ai_test',
     acmeProfile: 'staging',
@@ -420,9 +420,11 @@ function validateRpm(settings) {
   }
   const contents = runRpm(['-qpl', wslOrNative(rpmPath)]).stdout;
   const requiredPaths = [
-    '/usr/lib/sdkwork/webserver/bin/sdkwork-api-web-server-standalone-gateway',
+    '/usr/lib/sdkwork/webserver/bin/sdkwork-api-webserver-standalone-gateway',
     `/usr/lib/systemd/system/${environment.serviceName}.service`,
     '/usr/share/sdkwork/webserver/web/pc/index.html',
+    '/usr/share/sdkwork/webserver/web/h5/index.html',
+    '/usr/share/sdkwork/webserver/web/static/index.html',
     '/var/lib/sdkwork/webserver/iam',
   ];
   for (const required of requiredPaths) {

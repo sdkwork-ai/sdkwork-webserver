@@ -145,6 +145,18 @@ fn compile_webserver_config_revision(
     })
 }
 
+/// Compile an already-materialized app model (for example the nginx
+/// compatibility mapper output) with semantic and path validation. The JSON
+/// Schema check is intentionally skipped: in-memory models are assembled by
+/// typed constructors (server.toml / nginx mapping), and the schema's
+/// file-oriented `null`/id constraints do not apply to their serialization.
+pub fn load_and_compile_webserver_config_json(
+    config: &WebServerAppConfig,
+) -> Result<CompiledWebServerApp, WebServerConfigError> {
+    validate_webserver_config(config)?;
+    CompiledWebServerApp::compile(config.clone(), Path::new("/"))
+}
+
 fn validate_schema(instance: &Value) -> Result<(), WebServerConfigError> {
     let schema: Value = serde_json::from_str(SCHEMA)
         .map_err(|error| WebServerConfigError::InvalidSchema(error.to_string()))?;

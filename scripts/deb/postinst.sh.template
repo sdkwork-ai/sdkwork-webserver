@@ -4,7 +4,7 @@
 # RUNTIME_DIRECTORY_SPEC.md section 4.1. This script only configures the
 # runtime layout and service registration; it never embeds credentials into
 # config templates or unit files. The typed runtime configuration is written
-# to /etc/sdkwork/webserver/sdkwork-webserver.toml and loaded by the
+# to /etc/sdkwork/webserver/config.toml and loaded by the
 # binaries at startup; secret material is referenced by file path only.
 
 set -euo pipefail
@@ -15,7 +15,7 @@ DB_NAME="__DB_NAME__"
 DB_USER="__DB_USER__"
 SERVICE_NAME="__SERVICE_NAME__"
 VERSION="__VERSION__"
-GATEWAY_BINARY="sdkwork-api-web-server-standalone-gateway"
+GATEWAY_BINARY="sdkwork-api-webserver-standalone-gateway"
 CERT_WORKER_BINARY="sdkwork-webserver-certificate-worker"
 
 INSTALL_ROOT=/usr/lib/sdkwork/webserver
@@ -25,7 +25,7 @@ LOG_ROOT=/var/log/sdkwork/webserver
 CACHE_ROOT=/var/cache/sdkwork/webserver
 RUN_ROOT=/run/sdkwork/webserver
 DB_SECRET_FILE="${CONFIG_ROOT}/secrets/database.secret"
-RUNTIME_CONFIG_FILE="${CONFIG_ROOT}/sdkwork-webserver.toml"
+RUNTIME_CONFIG_FILE="${CONFIG_ROOT}/config.toml"
 
 log() { echo "[sdkwork-webserver-postinst] $*"; }
 
@@ -169,6 +169,14 @@ drive_app_root = "${DATA_ROOT}/drive"
 deploy_app_root = "${DATA_ROOT}/deploy"
 web_store_app_root = "${DATA_ROOT}/webstore"
 pc_static_root = "/usr/share/sdkwork/webserver/web/pc"
+h5_static_root = "/usr/share/sdkwork/webserver/web/h5"
+static_fallback_root = "/usr/share/sdkwork/webserver/web/static"
+tablet_surface = "pc"
+# Installed packages bake one environment into web/{pc,h5}/; source checkouts
+# use [app_roots.*_by_environment] → dist/{dev,test,staging,prod} instead
+# (see deployments/webserver/app-roots.example.toml).
+# skills/mcp roots: set SDKWORK_SKILLS_APP_ROOT / SDKWORK_MCP_APP_ROOT (or
+# skills_app_root / mcp_app_root once the packaged gateway binary accepts them).
 
 [deploy]
 deployment_profile = "standalone"

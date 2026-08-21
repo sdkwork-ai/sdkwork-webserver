@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0041
 title: Add bounded weighted random-two least-connections selection
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: nginx-random-two-least-conn-commercial-readiness
 problem: Full least-connections scans every configured target for every request. Nginx also provides weighted `random two least_conn`, which samples two different servers and chooses the lower weighted active load, reducing selection work while retaining the power-of-two-choices behavior.
@@ -47,13 +47,13 @@ trace:
     - TEST_SPEC.md
   components:
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
   - cargo test -p sdkwork-webserver-core --test webserver_config
-  - cargo test -p sdkwork-api-web-server-standalone-gateway data_plane::proxy
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test upstream_least_connections
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test upstream_safe_retries
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway data_plane::proxy
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test upstream_least_connections
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test upstream_safe_retries
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check

@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0025
 title: Bound upstream request lifetimes and eject repeatedly failing targets
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: reliability
 problem: Reverse-proxy upstreams currently admit every process-admitted request and select targets with unconditional round-robin. A slow or failing dependency can consume the process request budget, grow connection attempts and streaming state, and continue receiving traffic without a bounded per-upstream gate or passive failure isolation.
@@ -53,11 +53,11 @@ trace:
     - TEST_SPEC.md
   components:
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
     - specs/sdkwork.webserver.config.schema.json
 verification:
   - cargo test -p sdkwork-webserver-core
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check

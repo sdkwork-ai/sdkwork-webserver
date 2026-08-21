@@ -2,7 +2,7 @@
 
 Status: accepted
 Requirement: REQ-2026-0067
-Owner: sdkwork-web-server
+Owner: sdkwork-webserver
 Date: 2026-07-30
 Updated: 2026-07-31
 Specs: DATABASE_SPEC.md, API_SPEC.md, PAGINATION_SPEC.md, WEB_BACKEND_SPEC.md, SDK_SPEC.md, BACKEND_UI_SPEC.md, DEPLOYMENT_SPEC.md, NGINX_SPEC.md, SECURITY_SPEC.md

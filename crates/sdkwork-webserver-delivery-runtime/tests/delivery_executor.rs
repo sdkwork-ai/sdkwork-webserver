@@ -545,6 +545,7 @@ async fn rejects_unsupported_ranges_and_streams_that_violate_declared_length() {
     range_request.range = Some(WebsiteByteRange {
         start: 0,
         end_inclusive: Some(1),
+        suffix_bytes: None,
     });
     assert!(matches!(
         executor.execute(range_request).await,
@@ -585,6 +586,7 @@ async fn preserves_valid_static_range_evidence_and_bounded_bytes() {
     request.range = Some(WebsiteByteRange {
         start: 2,
         end_inclusive: Some(5),
+        suffix_bytes: None,
     });
 
     let outcome = executor.execute(request).await.unwrap();
@@ -622,6 +624,7 @@ async fn accepts_full_static_content_when_if_range_does_not_match() {
     request.range = Some(WebsiteByteRange {
         start: 2,
         end_inclusive: Some(5),
+        suffix_bytes: None,
     });
     request.conditions.if_range = Some("\"mismatch\"".to_owned());
 

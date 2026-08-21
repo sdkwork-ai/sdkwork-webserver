@@ -42,7 +42,7 @@ test('deployment index owns all supported Web Server profiles', () => {
     'standalone.production',
   ]);
   assert.equal(deployment.environments.development.cloudApiBaseUrl, 'https://api-dev.sdkwork.com');
-  assert.equal(deployment.environments.production.applicationOrigin, 'https://web.sdkwork.com');
+  assert.equal(deployment.environments.production.applicationOrigin, 'https://server.sdkwork.com');
 });
 
 test('standalone development supplies an explicit single-node Snowflake id', () => {

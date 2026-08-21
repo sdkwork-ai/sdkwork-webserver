@@ -26,22 +26,18 @@ describe("WebserverAuthGate", () => {
     expect(screen.getByText("auth routes")).toBeTruthy();
   });
 
-  it("shows an unavailable state and retries a failed bootstrap", async () => {
+  it("treats a failed bootstrap as anonymous and redirects to login", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const getCurrentSession = vi.fn()
-      .mockRejectedValueOnce(new Error("offline"))
-      .mockResolvedValueOnce(null);
+    const getCurrentSession = vi.fn().mockRejectedValue(new Error("offline"));
     const controller = createSdkworkAuthController({ service: { getCurrentSession } });
 
     renderGate(controller, "/console");
 
-    expect(await screen.findByText("暂时无法验证登录状态。")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "返回 Portal 首页" }).getAttribute("href")).toBe("/");
-    fireEvent.click(screen.getByRole("button", { name: "重试" }));
     await waitFor(() => expect(screen.getByTestId("location").textContent).toBe(
       "/auth/login?redirect=%2Fconsole",
     ));
-    expect(getCurrentSession).toHaveBeenCalledTimes(2);
+    expect(getCurrentSession).toHaveBeenCalledOnce();
+    expect(screen.getByText("auth routes")).toBeTruthy();
   });
 
   it("redirects an authenticated user away from an auth route", async () => {

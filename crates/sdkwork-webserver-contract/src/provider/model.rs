@@ -68,6 +68,12 @@ pub struct WebsiteByteRange {
     pub start: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub end_inclusive: Option<u64>,
+    /// Suffix length from `bytes=-N` (RFC 9110 §14.1.2): the last N bytes of
+    /// the representation. The delivery executor resolves it to an explicit
+    /// `start`/`end_inclusive` range once the content length is known;
+    /// providers only ever receive explicit ranges.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suffix_bytes: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

@@ -8,11 +8,11 @@ requirement: REQ-2026-0004
 type: prelaunch-database-baseline
 scope:
   producers:
-    - sdkwork-web-server
+    - sdkwork-webserver
     - database/database.manifest.json
   consumers:
     - sdkwork-webserver-database-host
-    - sdkwork-api-web-server-standalone-gateway
+    - sdkwork-api-webserver-standalone-gateway
     - sdkwork-webserver-certificate-worker
 strategy: prelaunch-consolidation
 postgresql_target:

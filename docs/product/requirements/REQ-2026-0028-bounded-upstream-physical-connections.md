@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0028
 title: Bound connecting, active, multiplexed, and idle upstream sockets by real connection lifetime
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: reliability
 problem: maxInFlightRequests bounds request cardinality and maxIdleConnections bounds only retained idle sockets. Reqwest exposes no hard active physical-connection ceiling, so HTTP/1 concurrency, target churn, health probes, and idle pools can still create more TCP/TLS connections than the operator's descriptor and memory budget permits.
@@ -58,10 +58,10 @@ trace:
   components:
     - specs/sdkwork.webserver.config.schema.json
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
   - cargo test -p sdkwork-webserver-core
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check

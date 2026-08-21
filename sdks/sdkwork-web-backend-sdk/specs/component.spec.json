@@ -95,7 +95,7 @@
     "displayName": "SDKWork Web Backend SDK",
     "version": "0.1.0",
     "type": "sdk-family",
-    "root": "sdkwork-web-server/sdks/sdkwork-web-backend-sdk",
+    "root": "sdkwork-webserver/sdks/sdkwork-web-backend-sdk",
     "domain": "web",
     "capability": "web-backend-sdk",
     "languages": [

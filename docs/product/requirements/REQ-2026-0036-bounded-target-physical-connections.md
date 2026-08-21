@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0036
 title: Add bounded per-target authority physical connection limits
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: nginx-upstream-server-max-conns-commercial-readiness
 problem: The runtime enforces one aggregate physical connection ceiling per upstream, but one selected target can consume that entire budget. Nginx operators expect a `server max_conns`-style peer boundary, while an inaccurate request counter or pool-blind limit would miscount HTTP/2 and idle sockets.
@@ -50,12 +50,12 @@ trace:
     - TEST_SPEC.md
   components:
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
   - cargo test -p sdkwork-webserver-core --test webserver_config
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test upstream_physical_connections
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test data_plane_metrics
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test upstream_physical_connections
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test data_plane_metrics
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check
@@ -71,9 +71,9 @@ verification:
 - The authored Rust model, root JSON Schema, compiler validation, checked-in example, and configuration documentation define optional `targets[].maxConnections` with range 1..100,000. Semantic validation rejects target ceilings above the enclosing upstream maximum and rejects duplicate normalized scheme/host/effective-port authorities whenever any target ceiling is present. Omitted target ceilings preserve existing origin-pool behavior. `cargo test -p sdkwork-webserver-core --test webserver_config` passes 52 tests.
 - Each immutable upstream generation builds at most one fixed capacity entry per configured target. A new connector call performs one bounded authority scan, then obtains the aggregate upstream and applicable target Semaphore permits with non-queuing `try_acquire_owned` before DNS/TCP/TLS. Both permits live in the same `PermitStream` as the real socket, so connection failure, TLS failure, cancellation, H1/H2 close, idle expiry, Watch retirement, and shutdown release ownership through RAII.
 - Target saturation maps to the existing local `503 Service Unavailable` plus `Retry-After: 1`, is classified as local connection capacity, does not poll the client Body, does not retry, and does not update target health. Distinct target authorities own independent Semaphores while the enclosing upstream cap remains authoritative.
-- Real socket tests prove target saturation while aggregate capacity remains, recovery and pool reuse, independent dual-target capacity, one target's saturation without another target's socket growth, HTTPS/H2 concurrent Stream multiplexing through one target permit, idle ownership, active-health saturation isolation, Watch replacement of idle pools, retained old-generation streaming ownership, and shutdown release. `cargo test -p sdkwork-api-web-server-standalone-gateway --test upstream_physical_connections` passes 7 tests; the complete standalone gateway suite passes 163 tests.
+- Real socket tests prove target saturation while aggregate capacity remains, recovery and pool reuse, independent dual-target capacity, one target's saturation without another target's socket growth, HTTPS/H2 concurrent Stream multiplexing through one target permit, idle ownership, active-health saturation isolation, Watch replacement of idle pools, retained old-generation streaming ownership, and shutdown release. `cargo test -p sdkwork-api-webserver-standalone-gateway --test upstream_physical_connections` passes 7 tests; the complete standalone gateway suite passes 163 tests.
 - The operations listener exposes `sdkwork_web_data_plane_upstream_target_connection_capacity{state="configured|in_use|available"}` as one fixed aggregate family without authority, target, URL, address, upstream, route, tenant, user, request, or trace labels. The real streaming metrics test proves configured/in-use/available values while a target socket is active.
-- `cargo clippy -p sdkwork-api-web-server-standalone-gateway --all-targets -- -D warnings`, `cargo clippy --workspace --all-targets -- -D warnings`, `pnpm.cmd verify`, `cargo fmt --all -- --check`, and `git diff --check` pass.
+- `cargo clippy -p sdkwork-api-webserver-standalone-gateway --all-targets -- -D warnings`, `cargo clippy --workspace --all-targets -- -D warnings`, `pnpm.cmd verify`, `cargo fmt --all -- --check`, and `git diff --check` pass.
 - SDKWork pagination, API operation-pattern, response-envelope, app-SDK consumer-import, application-layering, Rust backend-composition, route-collision, and database-framework validators passed. PostgreSQL lifecycle was not executed or claimed by this requirement; REQ-2026-0004/0049 own that evidence.
 
 ## Accepted Boundary

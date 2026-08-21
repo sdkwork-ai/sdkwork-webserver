@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0067
 title: Manage domain assets, multi-SAN certificates, and listener bindings independently
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: in-progress
 source: user
 problem: Domain, application, certificate, and deployment lifecycles require professional many-to-many relationships and state-aware operations instead of direct storage identifiers or destructive rebinding.

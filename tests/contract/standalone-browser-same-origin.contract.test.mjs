@@ -119,7 +119,7 @@ test('standalone package and gateway resolve PC and dependency assets from one p
   assert.match(release, /cloud package must not contain standalone dependency runtime assets/u);
 
   const gatewayMain = read(
-    'crates/sdkwork-api-web-server-standalone-gateway/src/main.rs',
+    'crates/sdkwork-api-webserver-standalone-gateway/src/main.rs',
   );
   assert.match(gatewayMain, /configure_packaged_runtime_roots_from_env\(\)/u);
 });

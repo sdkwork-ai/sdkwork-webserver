@@ -6,7 +6,7 @@
     "displayName": "SDKWork Webserver PC skills",
     "version": "0.1.0",
     "type": "node-package",
-    "root": "sdkwork-web-server/apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-console-skills",
+    "root": "sdkwork-webserver/apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-console-skills",
     "domain": "infrastructure",
     "capability": "skills",
     "surface": "app-console",

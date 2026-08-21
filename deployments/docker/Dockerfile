@@ -16,10 +16,9 @@ ENV SDKWORK_WEBSERVER_APP_ROOT=/app \
     SDKWORK_WEBSERVER_CONFIG_PROFILE=production \
     SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE=cloud \
     SDKWORK_WEBSERVER_RUNTIME_TARGET=container \
-    SDKWORK_WEBSERVER_SERVICE_LAYOUT=website-data-plane \
     SDKWORK_WEBSERVER_SERVER_CONFIG_FILE=/app/etc/data-plane/website.cloud.config.json
 
 USER 10001:10001
 EXPOSE 8080
 
-ENTRYPOINT ["/app/bin/sdkwork-web-server-website-delivery-edge-runtime"]
+ENTRYPOINT ["/app/bin/sdkwork-webserver-website-delivery-edge-runtime"]

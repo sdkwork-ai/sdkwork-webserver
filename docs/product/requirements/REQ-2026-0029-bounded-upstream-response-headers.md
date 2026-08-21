@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0029
 title: Bound upstream HTTP/1 response parsing and HTTP/2 Header Lists before proxy forwarding
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: security-reliability
 problem: Client request headers are bounded before allocation, but upstream response headers currently rely on Hyper defaults. A malicious or faulty origin can therefore consume substantially more per-connection memory than the Web Server configuration declares, and HTTP/1 and HTTP/2 do not share one explicit application contract.
@@ -55,10 +55,10 @@ trace:
   components:
     - specs/sdkwork.webserver.config.schema.json
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
   - cargo test -p sdkwork-webserver-core
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check

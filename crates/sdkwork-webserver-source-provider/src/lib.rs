@@ -85,7 +85,7 @@ impl GitDriveSourceImporter {
         let operator_id = request
             .actor_id
             .map(|value| value.to_string())
-            .unwrap_or_else(|| "sdkwork-web-server".to_string());
+            .unwrap_or_else(|| "sdkwork-webserver".to_string());
         let actor = request.actor_id.map_or_else(
             || UploaderActor::System {
                 operator_id: operator_id.clone(),

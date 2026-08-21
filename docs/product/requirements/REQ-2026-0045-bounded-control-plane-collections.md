@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0045
 title: Bound every control-plane collection and replace tenant-wide agent bundles with delta sync
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: draft
 source: reliability
 problem: Environment-variable and health-check list operations currently read every matching row, while agent synchronization constructs complete tenant-wide Nginx and certificate vectors. Large tenants can therefore cause unbounded database reads and process memory growth even though the HTTP data plane is bounded.

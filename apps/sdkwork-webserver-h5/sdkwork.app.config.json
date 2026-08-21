@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 3,
+  "kind": "sdkwork.app",
+  "app": {
+    "key": "sdkwork-webserver-h5",
+    "name": "SDKWork Webserver H5",
+    "displayName": "SDKWork Web Server",
+    "description": "Mobile browser console for enterprise application publishing, managed cloud and private delivery, and secure customer ingress.",
+    "vendor": "SDKWork",
+    "officialWebsiteUrl": "https://sdkwork.com/apps/sdkwork-webserver-h5",
+    "supportUrl": "https://sdkwork.com/support",
+    "privacyPolicyUrl": "https://sdkwork.com/privacy",
+    "termsOfServiceUrl": "https://sdkwork.com/terms",
+    "appType": "APP_REACT",
+    "versionSource": "package.json",
+    "identifiers": { "packageName": null, "bundleId": null, "desktopAppId": null, "containerImage": null }
+  },
+  "backend": {
+    "profileKey": "backend-root-admin",
+    "ownerMode": "tenant",
+    "grantMode": "current",
+    "platform": "H5",
+    "appId": "sdkwork-webserver-h5",
+    "tenantId": "100001",
+    "organizationId": "0",
+    "accessTokenPermissionScope": ["web.applications.read", "web.servers.read", "web.auditLogs.read"]
+  },
+  "runtime": {
+    "family": "mobile",
+    "framework": "react-h5",
+    "runtimes": ["H5", "BROWSER"],
+    "deliveryModes": ["WEB_URL"],
+    "defaultPlatform": "H5",
+    "defaultArchitecture": "universal",
+    "supportedDeploymentProfiles": ["standalone", "cloud"],
+    "defaultDeploymentProfile": "standalone"
+  },
+  "publish": {
+    "status": "DRAFT",
+    "platforms": ["H5"],
+    "installPlatforms": ["H5"],
+    "config": {
+      "workspaceRoot": "apps/sdkwork-webserver-h5",
+      "framework": "react-h5",
+      "managedBy": "sdkwork-webserver"
+    }
+  },
+  "release": { "currentVersion": "0.1.0", "defaultChannel": "DEV", "latest": { "DEV": "0.1.0" } },
+  "security": { "checksumRequired": true, "signatureRequired": true, "sbomRequired": true },
+  "metadata": {
+    "standardOwner": "sdkwork-platform",
+    "component": "sdkwork-webserver-h5",
+    "surface": "h5",
+    "deploymentConfig": "etc/sdkwork.deployment.config.json"
+  }
+}

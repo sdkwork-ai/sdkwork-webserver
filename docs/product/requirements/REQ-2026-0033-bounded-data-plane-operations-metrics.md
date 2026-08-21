@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0033
 title: Expose real bounded data-plane runtime metrics on an isolated operations listener
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: production-observability-correctness
 problem: The Rust request data plane has no scrapeable runtime-owned telemetry. Management HTTP metrics cannot report accepted or rejected sockets, streaming request lifetime, proxy saturation, target health, resource pressure, reload outcomes, or WebSocket tunnel lifecycle, and mounting these diagnostics on tenant virtual hosts would violate the operations-plane boundary.
@@ -51,10 +51,10 @@ trace:
     - RUST_CODE_SPEC.md
     - TEST_SPEC.md
   components:
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
-  - cargo test -p sdkwork-api-web-server-standalone-gateway data_plane::metrics
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test data_plane_metrics
+  - cargo test -p sdkwork-api-webserver-standalone-gateway data_plane::metrics
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test data_plane_metrics
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check

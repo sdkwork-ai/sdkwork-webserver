@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0063
 title: Operate the complete tenant Web Server control plane with explicit super-administrator boundaries
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: in-progress
 source: user
 problem: The backend-admin shell can list tenant resources, but application lifecycle, domain removal, rollback, audit filtering, accurate Nginx and server registration inputs, and one-time Node credential handling are incomplete. Partial operators and super administrators are not visibly distinguished, and accepted deployment commands can be mistaken for completed traffic publication.

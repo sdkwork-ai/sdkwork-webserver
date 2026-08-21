@@ -7,7 +7,7 @@ title: Replace fake Nginx validation and reload success with bounded fail-closed
 # (sdkwork-webserver-edge-runtime). The certificate lifecycle main path is the
 # self-hosted data plane TLS runtime (versioned material root + tls-runtime
 # snapshot) and does not involve Nginx.
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: nginx-edge-commercial-readiness
 problem: The edge adapter runs nginx -t against the default main config instead of the candidate site content, accepts any non-empty candidate after validation failure, and converts reload failure into success. The control plane can therefore report valid, deployed, or reloaded while Nginx rejected the configuration or never reloaded.

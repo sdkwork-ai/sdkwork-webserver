@@ -1,7 +1,7 @@
 # SDKWork Web Server Documentation
 
 This directory contains the current product, architecture, operations, and decision authority for
-`sdkwork-web-server`. Global standards remain in `../sdkwork-specs`; repository documents link to
+`sdkwork-webserver`. Global standards remain in `../sdkwork-specs`; repository documents link to
 those standards instead of copying normative text.
 
 | Document | Purpose |
@@ -12,7 +12,7 @@ those standards instead of copying normative text.
 | [architecture/tech/TECH-cloud-site-delivery-data-plane.md](architecture/tech/TECH-cloud-site-delivery-data-plane.md) | Compiled descriptor and provider data-plane design |
 | [standards-alignment.md](standards-alignment.md) | Current SDKWork integration and verification evidence |
 | [engineering/reviews/REVIEW-20260731-domain-certificate-deployment-data-model.md](engineering/reviews/REVIEW-20260731-domain-certificate-deployment-data-model.md) | Current Web/Deploy/IAM domain, certificate, deployment, and database ownership review |
-| [engineering/reviews/REVIEW-20260723-web-server-production-readiness.md](engineering/reviews/REVIEW-20260723-web-server-production-readiness.md) | Consolidated implementation, configuration, deployment coverage, verification, and production gate review |
+| [engineering/reviews/REVIEW-20260723-webserver-production-readiness.md](engineering/reviews/REVIEW-20260723-webserver-production-readiness.md) | Consolidated implementation, configuration, deployment coverage, verification, and production gate review |
 | [architecture/decisions/](architecture/decisions/) | Accepted and proposed architecture decisions |
 | [product/requirements/](product/requirements/) | Requirement contracts and their verification evidence |
 

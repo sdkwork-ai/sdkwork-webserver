@@ -6,7 +6,7 @@
     "displayName": "SDKWork Web Server SQLx Repository",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "sdkwork-web-server/crates/sdkwork-intelligence-webserver-repository-sqlx",
+    "root": "sdkwork-webserver/crates/sdkwork-intelligence-webserver-repository-sqlx",
     "domain": "platform",
     "capability": "webserver-persistence",
     "surface": "backend-service",

@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0024
 title: Verify HTTPS upstream identity with bounded trust and client credentials
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: security
 problem: HTTPS proxy targets currently rely only on Reqwest defaults. Operators cannot select a private trust anchor, require a client identity, constrain TLS versions, or prove that invalid TLS material prevents a configuration generation from becoming active.
@@ -52,11 +52,11 @@ trace:
     - TEST_SPEC.md
   components:
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
     - specs/sdkwork.webserver.config.schema.json
 verification:
   - cargo test -p sdkwork-webserver-core
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check

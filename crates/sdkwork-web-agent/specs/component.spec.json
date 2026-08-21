@@ -6,7 +6,7 @@
     "displayName": "SDKWork Web Node Daemon",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "sdkwork-web-server/crates/sdkwork-web-agent",
+    "root": "sdkwork-webserver/crates/sdkwork-web-agent",
     "domain": "platform",
     "capability": "webserver-node-daemon",
     "surface": "host-native",

@@ -6,7 +6,7 @@
     "displayName": "SDKWork Webserver PC mcp",
     "version": "0.1.0",
     "type": "node-package",
-    "root": "sdkwork-web-server/apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-console-mcp",
+    "root": "sdkwork-webserver/apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-console-mcp",
     "domain": "infrastructure",
     "capability": "mcp",
     "surface": "app-console",

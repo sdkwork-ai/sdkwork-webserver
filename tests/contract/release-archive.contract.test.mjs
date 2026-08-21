@@ -22,9 +22,9 @@ import { parse as parseYaml, parseAllDocuments } from 'yaml';
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const OUTPUT_ROOT = path.join(REPO_ROOT, 'dist', 'release');
 const PACKAGE_FILES = new Map([
-  ['bin/sdkwork-api-web-server-standalone-gateway', 'gateway fixture\n'],
+  ['bin/sdkwork-api-webserver-standalone-gateway', 'gateway fixture\n'],
   [
-    'bin/sdkwork-web-server-website-delivery-edge-runtime',
+    'bin/sdkwork-webserver-website-delivery-edge-runtime',
     'website delivery edge runtime fixture\n',
   ],
   ['bin/sdkwork-web-node-daemon', 'canonical node daemon fixture\n'],
@@ -247,7 +247,7 @@ test('Kubernetes renderer binds one tenant fleet and Node identity without cross
     );
     const container = statefulSet.spec.template.spec.containers[0];
     assert.deepEqual(container.command, [
-      '/app/bin/sdkwork-web-server-website-delivery-edge-runtime',
+      '/app/bin/sdkwork-webserver-website-delivery-edge-runtime',
     ]);
     assert.equal(container.ports[0].containerPort, 8080);
     assert.equal(container.resources.requests['ephemeral-storage'], '128Mi');
@@ -276,7 +276,7 @@ test('Kubernetes renderer binds one tenant fleet and Node identity without cross
     assert.ok(container.volumeMounts.some((mount) => mount.name === 'host-config'));
     assert.equal(
       container.readinessProbe.exec.command[0],
-      '/app/bin/sdkwork-web-server-website-delivery-edge-runtime',
+      '/app/bin/sdkwork-webserver-website-delivery-edge-runtime',
     );
     assert.equal(container.readinessProbe.exec.command[2], '/readyz');
     assert.ok(container.volumeMounts.some((mount) => mount.name === 'recovery'));
@@ -329,7 +329,7 @@ test('Kubernetes renderer binds one tenant fleet and Node identity without cross
     );
     assert.ok(relay);
     assert.deepEqual(relay.command, [
-      '/app/bin/sdkwork-web-server-website-delivery-edge-runtime',
+      '/app/bin/sdkwork-webserver-website-delivery-edge-runtime',
       'relay-provider-events',
     ]);
     assert.equal(relay.ports[0].containerPort, 3811);
@@ -728,7 +728,7 @@ test('Linux release smoke validates, extracts, serves HTTP and HTTPS, and cleans
   assert.match(source, /extractTar/u);
   assert.match(source, /preservePaths: false/u);
   assert.match(source, /openssl/u);
-  assert.match(source, /sdkwork-web-server-website-delivery-edge-runtime/u);
+  assert.match(source, /sdkwork-webserver-website-delivery-edge-runtime/u);
   assert.match(source, /run\(websiteEdgeRuntime, \['--help'\]/u);
   assert.match(source, /run\(websiteEdgeRuntime, \['validate', packagedWebsiteHostConfig\]/u);
   assert.match(source, /share', 'sdkwork', 'webserver-pc'/u);
@@ -892,8 +892,8 @@ test('CycloneDX SBOM binds the archive and locked Cargo closure and rejects sema
     assert.ok(sbom.components.length > 0 && sbom.components.length <= 20_000);
     for (const packageName of [
       'sdkwork-web-agent',
-      'sdkwork-api-web-server-standalone-gateway',
-      'sdkwork-web-server-website-delivery-edge-runtime',
+      'sdkwork-api-webserver-standalone-gateway',
+      'sdkwork-webserver-website-delivery-edge-runtime',
       'sdkwork-webserver-certificate-worker',
     ]) {
       assert.ok(sbom.components.some((component) => component.name === packageName));

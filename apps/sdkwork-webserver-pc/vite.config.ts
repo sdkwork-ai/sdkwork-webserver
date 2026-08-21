@@ -9,6 +9,7 @@ import { defineConfig } from "vitest/config";
 import {
   createCanonicalApiProxyConfig,
   resolveBrowserDevelopmentServer,
+  resolveBrowserDistOutDir,
   resolveViteRuntimeProfile,
 } from "./scripts/browser-topology.mjs";
 
@@ -62,6 +63,8 @@ export default defineConfig(({ command, mode }) => {
       strictPort: true,
     } : undefined,
     build: {
+      outDir: resolveBrowserDistOutDir(runtimeProfile.environment),
+      emptyOutDir: true,
       sourcemap: true,
       target: "es2022",
     },

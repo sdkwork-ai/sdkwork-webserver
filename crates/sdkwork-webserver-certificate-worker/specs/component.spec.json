@@ -6,7 +6,7 @@
     "displayName": "SDKWork Web Server Certificate Worker",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "sdkwork-web-server/crates/sdkwork-webserver-certificate-worker",
+    "root": "sdkwork-webserver/crates/sdkwork-webserver-certificate-worker",
     "domain": "platform",
     "capability": "webserver-certificate-renewal",
     "surface": "backend-service",

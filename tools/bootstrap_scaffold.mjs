@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * One-time bootstrap for sdkwork-web-server standards-aligned scaffold.
+ * One-time bootstrap for sdkwork-webserver standards-aligned scaffold.
  * Run: node tools/bootstrap_scaffold.mjs
  */
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';

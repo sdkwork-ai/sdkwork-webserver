@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0055
 title: Prevent concurrent Node Daemons from mutating one node state directory
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: node-activation-single-writer-safety
 problem: Multiple sdkwork-web-agent compatibility processes can start with the same durable state directory and concurrently update desired/observed generations, certificate bundles, Nginx site files, and reload operations. Atomic file replacement protects one write but does not establish one process as the node activation writer.

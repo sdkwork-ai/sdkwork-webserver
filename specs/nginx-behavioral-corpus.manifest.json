@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.webserver.nginx-behavioral-corpus.manifest",
+  "pinnedNginx": "1.26.2",
+  "root": "tests/nginx",
+  "scope": "REQ-linked differential slices for accepted http-core-v1 hardening and protocol boundaries; not full OSS nginx behavioral parity",
+  "outOfScope": [
+    "Complete nginx OSS request/response differential suite",
+    "Fuzz / load / soak corpora",
+    "Commercial runtime-core Behavioral grade claim"
+  ],
+  "slices": [
+    {
+      "id": "uri-normalization",
+      "req": "REQ-2026-0018",
+      "dir": "uri-normalization",
+      "nginxConf": "nginx.conf",
+      "probe": "probe.py",
+      "listenPort": 19876,
+      "notes": "Canonical URI vs raw request_uri comparison matrix recorded in the REQ"
+    },
+    {
+      "id": "http1-pipeline-depth",
+      "req": "REQ-2026-0019",
+      "dir": "http1-pipeline-depth",
+      "nginxConf": "nginx.conf",
+      "probe": "probe.py",
+      "listenPort": 19877,
+      "notes": "Nginx accepts deep pipelines; SDKWork http1MaxPipelineDepth is intentional hardening"
+    },
+    {
+      "id": "http2-keepalive",
+      "req": "REQ-2026-0020",
+      "dir": "http2-keepalive",
+      "nginxConf": "nginx.conf",
+      "probe": "probe.py",
+      "listenPort": 19878,
+      "notes": "Pinned probe records nginx idle frames without proactive PING"
+    },
+    {
+      "id": "proxy-early-response",
+      "req": "REQ-2026-0021",
+      "dir": "proxy-early-response",
+      "nginxConf": "nginx.conf",
+      "probe": "probe.py",
+      "listenPort": null,
+      "notes": "Early upstream response + request lifecycle differential"
+    },
+    {
+      "id": "connection-maximum-age",
+      "req": "REQ-2026-0022",
+      "dir": "connection-maximum-age",
+      "nginxConf": "nginx.conf",
+      "probe": "probe.py",
+      "listenPort": 19880,
+      "notes": "keepalive_time vs SDKWork proactive connectionMaximumAge retirement"
+    }
+  ]
+}

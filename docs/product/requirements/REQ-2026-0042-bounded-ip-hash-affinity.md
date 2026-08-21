@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0042
 title: Add bounded Nginx-compatible IP hash affinity
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: nginx-ip-hash-commercial-readiness
 problem: The runtime lacks a stable client-address affinity strategy. Applications that keep short-lived in-memory session or cache locality cannot request the common Nginx `ip_hash` behavior without an external proxy.
@@ -48,13 +48,13 @@ trace:
     - TEST_SPEC.md
   components:
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
   - cargo test -p sdkwork-webserver-core --test webserver_config
-  - cargo test -p sdkwork-api-web-server-standalone-gateway data_plane::proxy
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test upstream_ip_hash
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test upstream_safe_retries
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway data_plane::proxy
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test upstream_ip_hash
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test upstream_safe_retries
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check

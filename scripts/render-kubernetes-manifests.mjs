@@ -225,7 +225,7 @@ function validateWebsiteHostConfig(configPath) {
       '--quiet',
       '--offline',
       '-p',
-      'sdkwork-web-server-website-delivery-edge-runtime',
+      'sdkwork-webserver-website-delivery-edge-runtime',
       '--',
       'validate',
       configPath,

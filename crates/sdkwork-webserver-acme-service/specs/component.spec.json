@@ -6,7 +6,7 @@
     "displayName": "SDKWork Web Server ACME Service",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "sdkwork-web-server/crates/sdkwork-webserver-acme-service",
+    "root": "sdkwork-webserver/crates/sdkwork-webserver-acme-service",
     "domain": "platform",
     "capability": "webserver-certificate-issuance",
     "surface": "backend-service",

@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0061
 title: Manage application deployment, public domains, and convergent certificate distribution from backend admin
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: in-progress
 source: operator
 problem: The tenant console exposes site, domain, deployment, and certificate workflows, but the backend-admin surface has no application deployment or certificate modules. The existing siteType field describes the runtime technology and cannot represent the operator-facing WEB/API application category. Certificate renewal and Web Node synchronization exist, but operators cannot manage the canonical certificate lifecycle or observe fleet convergence from the admin surface.

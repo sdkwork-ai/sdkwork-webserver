@@ -1,0 +1,11 @@
+[package]
+name = "sdkwork-webserver-website-delivery-edge-runtime"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+sdkwork-api-webserver-standalone-gateway.workspace = true
+sdkwork-webserver-core.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }

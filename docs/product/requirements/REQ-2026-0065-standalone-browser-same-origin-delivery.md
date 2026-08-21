@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0065
 title: Deliver the standalone PC shell and composed APIs from one browser-visible origin
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: user
 problem: The standalone Rust gateway correctly embeds Web, IAM, and Drive APIs on port 3800, but the development PC page is served from Vite on port 5182 and its public runtime config points SDK clients directly to port 3800. This still creates a cross-origin browser deployment, requires CORS, exposes an internal listener in browser config, and leaves the production standalone package without the PC build output or a static application-shell mount.
@@ -53,14 +53,14 @@ trace:
     - TEST_SPEC.md
   components:
     - apps/sdkwork-webserver-pc
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
     - specs/topology.spec.json
     - scripts/webserver-release.mjs
 verification:
   - pnpm --dir apps/sdkwork-webserver-pc typecheck
   - pnpm --dir apps/sdkwork-webserver-pc test
   - pnpm --dir apps/sdkwork-webserver-pc build:standalone
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - node ../sdkwork-specs/tools/check-topology-deployment-profiles.mjs --root .
   - node ../sdkwork-specs/tools/resolve-app-runtime-plan.mjs --root . --deployment-profile standalone --environment development --runtime-target browser --client-architecture pc-web --json
   - node ../sdkwork-specs/tools/resolve-app-runtime-plan.mjs --root . --deployment-profile standalone --environment production --runtime-target browser --client-architecture pc-web --json

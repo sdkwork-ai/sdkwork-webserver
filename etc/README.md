@@ -8,13 +8,46 @@ tracked environment files:
 | --- | --- |
 | `standalone.development` | `topology/standalone.development.env` |
 | `standalone.test` | `topology/standalone.test.env` |
-| `cloud.development` | `topology/cloud.development.env` |
+| `standalone.staging` | `topology/standalone.staging.env` |
 | `standalone.production` | `topology/standalone.production.env` |
+| `cloud.development` | `topology/cloud.development.env` |
+| `cloud.test` | `topology/cloud.test.env` |
+| `cloud.staging` | `topology/cloud.staging.env` |
 | `cloud.production` | `topology/cloud.production.env` |
 
 `sdkwork.app.config.json` owns application identity and release declarations only. Concrete binds,
 origins, API surface URLs, database selection, upstream targets, and deployment profile values are
 owned by `etc/` and `specs/topology.spec.json`.
+
+## Adaptive Web (process-owned)
+
+Edge nginx for this product uses `deploy.yaml` `expose.mode: api` and reverse-proxies all public
+paths to the gateway. Console PC/H5 selection lives in the process (`AdaptiveAppShell`):
+
+| Root | Env / TOML |
+| --- | --- |
+| PC SPA | `SDKWORK_WEBSERVER_PC_STATIC_ROOT` / `[app_roots].pc_static_root` or `pc_static_by_environment` |
+| H5 SPA | `SDKWORK_WEBSERVER_H5_STATIC_ROOT` / `[app_roots].h5_static_root` or `h5_static_by_environment` |
+| Ordinary static | `SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT` / `[app_roots].static_fallback_root` or by-environment map |
+| Tablet preference | `SDKWORK_WEBSERVER_TABLET_SURFACE` / `[app_roots].tablet_surface` (`pc` default, or `h5`) |
+
+Source builds land in `apps/sdkwork-webserver-{pc,h5}/dist/{dev,test,staging,prod}/`.
+Install layout: `/usr/share/sdkwork/webserver/web/{pc,h5,static}/`. See
+`etc/examples/config.toml.example` for the full per-environment catalog.
+
+### Development Adaptive Web (one browser origin)
+
+Development mirrors nginx Adaptive Web: **one** browser-visible origin selects PC/H5 by
+device class (`APP_RUNTIME_TOPOLOGY_SPEC.md` §8.2):
+
+| Role | Env | Example |
+| --- | --- | --- |
+| Browser-visible ingress | `SDKWORK_WEBSERVER_WEB_DEV_INGRESS_BIND` | `127.0.0.1:5182` |
+| Private PC Vite renderer | `SDKWORK_WEBSERVER_PC_INTERNAL_DEV_PORT` | `5184` |
+| Private H5 Vite renderer | `SDKWORK_WEBSERVER_H5_INTERNAL_DEV_PORT` | `5185` |
+
+Open only `http://127.0.0.1:5182` in the browser. Do **not** use separate PC/H5 public ports
+(`SDKWORK_WEBSERVER_PC_DEV_BIND` / `H5_DEV_BIND` are retired for adaptive profiles).
 
 ## Development Profiles
 
@@ -22,9 +55,9 @@ owned by `etc/` and `specs/topology.spec.json`.
 The plan starts the application-owned standalone gateway on `127.0.0.1:3800`.
 
 `standalone.test` is the test-environment installer profile: the gateway public ingress binds
-`0.0.0.0:8888` and the host is bound to `testserver.sdkwork.com` (the test `.deb` package writes
+`0.0.0.0:8888` and the host is bound to `server-test.sdkwork.com` (the test `.deb` package writes
 `/etc/hosts`; see `docs/guides/operator/deb-install.md`). It uses the Let's Encrypt staging
-directory and the `sdkwork_ai_test` database. `standalone.production` binds `0.0.0.0:8888` and
+directory and the `sdkwork_ai_test` database. `standalone.production` binds `0.0.0.0:8080` and
 `server.sdkwork.com` with ACME production issuance and the `sdkwork_ai_prod` database.
 
 `pnpm dev:cloud` selects `cloud.development` with runtime target `server`. The plan starts only the
@@ -45,7 +78,11 @@ not cancel persisted server work.
 
 ## Runtime And Secrets
 
-The Web Server config file is discovered in this order: an explicit config argument, then
+Authority: [`sdkwork-specs/APPLICATION_DEPLOY_LAYOUT_SPEC.md`](../../sdkwork-specs/APPLICATION_DEPLOY_LAYOUT_SPEC.md).
+
+Installed Linux default: `/etc/sdkwork/webserver/config.toml` + `sdkwork.webserver.config.json` + `secrets/`.
+
+The data-plane JSON file is discovered in this order: an explicit config argument, then
 `SDKWORK_WEBSERVER_SERVER_CONFIG_FILE`, then the canonical OS system-scope directory for
 application code `webserver` joined with `sdkwork.webserver.config.json`: Linux
 `/etc/sdkwork/webserver`, macOS `/Library/Application Support/sdkwork/webserver`, Windows
@@ -152,7 +189,7 @@ provider fails bootstrap when this event-ingress configuration is absent.
 The website data plane starts with:
 
 ```powershell
-cargo run -p sdkwork-web-server-website-delivery-edge-runtime
+cargo run -p sdkwork-webserver-website-delivery-edge-runtime
 ```
 
 The dedicated edge runtime loads `SDKWORK_WEBSERVER_SERVER_CONFIG_FILE` for listener/TLS limits and the assignment
@@ -181,9 +218,34 @@ cannot be downgraded by forwarding metadata.
 node ..\sdkwork-specs\tools\check-source-config-standard.mjs --root .
 pnpm topology:validate
 pnpm exec sdkwork-app doctor
-cargo run -p sdkwork-api-web-server-standalone-gateway -- validate etc/examples/sdkwork.webserver.config.json
+cargo run -p sdkwork-api-webserver-standalone-gateway -- validate etc/examples/sdkwork.webserver.config.json
 ```
 
 Use `pnpm release:package:standalone` or `pnpm release:package:cloud` only on a Linux runner whose
 architecture matches `SDKWORK_PACKAGE_ARCHITECTURE`. Release declarations remain disabled in the
 application manifest until release evidence and publication authority are approved.
+
+<!-- SDKWORK-DEPLOY-LAYOUT: v1 -->
+## Installed Runtime Paths
+
+Authority: `APPLICATION_DEPLOY_LAYOUT_SPEC.md` (`../sdkwork-specs/`).
+
+| Item | Value |
+| --- | --- |
+| `appId` | `sdkwork-webserver` |
+| `runtimeCode` | `webserver` |
+| Config root | `/etc/sdkwork/webserver/` |
+| Runtime TOML | `/etc/sdkwork/webserver/config.toml` |
+| Secrets | `/etc/sdkwork/webserver/secrets/` |
+| Override | `SDKWORK_WEBSERVER_CONFIG_FILE` |
+
+Source profiles live under `etc/` (`sdkwork.deployment.config.json` index). Deploy manifest: `deployments/deploy.yaml`. Web data-plane source: `deployments/webserver/` (`SDKWORK_WEBSERVER_SPEC.md` layout v2).
+
+```bash
+node ../sdkwork-specs/tools/check-source-config-standard.mjs --root .
+node ../sdkwork-specs/tools/check-application-deploy-layout.mjs --root .
+node ../sdkwork-specs/tools/check-webserver-toml-standard.mjs --root deployments/webserver
+```
+<!-- /SDKWORK-DEPLOY-LAYOUT -->
+
+

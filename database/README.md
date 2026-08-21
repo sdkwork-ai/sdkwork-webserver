@@ -1,6 +1,6 @@
 # WEB Database Module
 
-Canonical lifecycle assets for the `sdkwork-web-server` PostgreSQL control-plane authority.
+Canonical lifecycle assets for the `sdkwork-webserver` PostgreSQL control-plane authority.
 
 - moduleId: `web`
 - serviceCode: `WEB`

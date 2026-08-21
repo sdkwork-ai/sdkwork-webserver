@@ -6,7 +6,7 @@
     "displayName": "SDKWork Web Server Knowledgebase Provider",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "sdkwork-web-server/crates/sdkwork-webserver-knowledgebase-provider",
+    "root": "sdkwork-webserver/crates/sdkwork-webserver-knowledgebase-provider",
     "domain": "platform",
     "capability": "knowledgebase-wiki-website-provider",
     "surface": "backend-provider",

@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0052
 title: Persist bounded desired and observed edge-agent sync generations
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: cluster-activation-convergence-readiness
 problem: The edge agent persisted only lastSyncVersion through an unbounded, non-atomic, best-effort JSON file in a temporary directory. Corruption silently reset state, and a process crash could not distinguish a received manifest from a completely materialized and reloaded generation.

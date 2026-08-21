@@ -6,7 +6,7 @@
     "displayName": "SDKWork Web Server Drive Provider",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "sdkwork-web-server/crates/sdkwork-webserver-drive-provider",
+    "root": "sdkwork-webserver/crates/sdkwork-webserver-drive-provider",
     "domain": "platform",
     "capability": "drive-website-provider",
     "surface": "backend-provider",

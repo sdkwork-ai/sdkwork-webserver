@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0023
 title: Resolve upstream hostnames asynchronously and reject DNS rebinding destinations
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: security
 problem: Reverse-proxy clients use Reqwest's default resolver without an application-owned answer bound, concurrency limit, timeout, or post-resolution address policy. A configured public hostname can therefore resolve or rebind to loopback, private, link-local, ULA, cloud metadata, multicast, documentation, or reserved destinations without a fail-closed SDKWork check.
@@ -50,11 +50,11 @@ trace:
     - TEST_SPEC.md
   components:
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
     - specs/sdkwork.webserver.config.schema.json
 verification:
   - cargo test -p sdkwork-webserver-core
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check

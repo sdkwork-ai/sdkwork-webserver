@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0032
 title: Make management HTTP metrics real and bound metric series memory
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: production-observability-correctness
 problem: The management process mounted /metrics with a new default registry while app-api and backend-api WebFrameworkLayer instances had no reference to it, so business requests were not counted. The shared registry also retained labeled request and pipeline-stage HashMap entries without a series ceiling, allowing unknown textual paths or extension-supplied labels to grow process memory.
@@ -51,7 +51,7 @@ trace:
     - ../sdkwork-web-framework/crates/sdkwork-web-core
     - crates/sdkwork-routes-webserver-app-api
     - crates/sdkwork-routes-webserver-backend-api
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
   - cargo test -p sdkwork-web-core metrics::tests
   - cargo test -p sdkwork-routes-webserver-app-api --test app_web_framework_routes

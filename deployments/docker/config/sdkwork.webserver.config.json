@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.webserver.app",
+  "appKey": "sdkwork-webserver-standalone",
+  "nginx": {
+    "profile": "http-core-v1",
+    "unknownDirectivePolicy": "error"
+  },
+  "limits": {
+    "maxRequestBodyBytes": 10485760,
+    "requestTimeoutMs": 30000,
+    "requestBodyStartTimeoutMs": 30000,
+    "requestBodyIdleTimeoutMs": 30000,
+    "responseBodyIdleTimeoutMs": 30000,
+    "connectionWriteTimeoutMs": 30000,
+    "http1KeepAliveIdleTimeoutMs": 75000,
+    "http1MaxPipelineDepth": 16,
+    "drainTimeoutMs": 30000,
+    "maxConnections": 10000,
+    "maxConcurrentRequests": 4096,
+    "maxConcurrentHealthChecks": 64,
+    "maxRequestHeaderBytes": 65536,
+    "maxRequestLineBytes": 8192,
+    "maxRequestTargetBytes": 8192,
+    "maxUriPathBytes": 8192,
+    "maxDecodedPathBytes": 8192,
+    "maxPathSegments": 256,
+    "maxQueryStringBytes": 4096,
+    "maxQueryParameters": 256,
+    "maxQueryComponentBytes": 1024,
+    "maxHeaderNameBytes": 256,
+    "maxHeaderValueBytes": 8192,
+    "maxRequestHeaders": 100,
+    "requestHeaderTimeoutMs": 10000,
+    "maxChunkLineBytes": 1024,
+    "maxTrailerBytes": 8192,
+    "maxTrailers": 32,
+    "http2MaxConcurrentStreams": 100,
+    "maxConnectionAgeMs": 3600000,
+    "http2KeepAliveIntervalMs": 60000,
+    "http2KeepAliveTimeoutMs": 20000,
+    "http2MaxPendingAcceptResetStreams": 20,
+    "http2MaxLocalErrorResetStreams": 128,
+    "http2MaxSendBufferBytes": 65536,
+    "http2MaxHeaderListBytes": 65536,
+    "http2MaxFrameBytes": 16384,
+    "http2AbuseWindowMs": 1000,
+    "http2MaxFramesPerWindow": 10000,
+    "http2MaxNewStreamsPerWindow": 1000,
+    "http2MaxResetFramesPerWindow": 100,
+    "http2MaxContinuationFrames": 16,
+    "http2MaxEncodedHeaderBlockBytes": 65536
+  },
+  "listeners": [
+    {
+      "id": "public-http",
+      "bind": "0.0.0.0",
+      "port": 3800,
+      "protocols": ["http1"],
+      "defaultVirtualHostRef": "webserver-operations"
+    }
+  ],
+  "certificates": [],
+  "tlsPolicies": [],
+  "resolvers": [],
+  "resources": [
+    {
+      "id": "health-response",
+      "type": "respond",
+      "status": 200,
+      "contentType": "application/json",
+      "body": "{\"status\":\"ok\"}\n"
+    }
+  ],
+  "upstreams": [],
+  "virtualHosts": [
+    {
+      "id": "webserver-operations",
+      "listenerRefs": ["public-http"],
+      "serverNames": ["*"],
+      "routes": [
+        {
+          "id": "health",
+          "match": {
+            "pathType": "exact",
+            "path": "/healthz",
+            "methods": ["GET", "HEAD"]
+          },
+          "resourceRef": "health-response"
+        }
+      ]
+    }
+  ],
+  "observability": {
+    "accessLog": true
+  },
+  "deployment": {
+    "drainTimeoutMs": 30000,
+    "reload": {
+      "mode": "watch",
+      "pollIntervalMs": 1000
+    },
+    "resourcePressure": {
+      "sampleIntervalMs": 250,
+      "maximumProcessMemoryBytes": 1073741824,
+      "memoryReserveBytes": 67108864,
+      "memoryAdmissionPercent": 90,
+      "memoryRecoveryPercent": 80,
+      "maximumOpenHandles": 16384,
+      "openHandleReserve": 128,
+      "openHandleAdmissionPercent": 90,
+      "openHandleRecoveryPercent": 80,
+      "eventLoopLagAdmissionMs": 250,
+      "eventLoopLagRecoveryMs": 50,
+      "consecutivePressureSamples": 2,
+      "consecutiveRecoverySamples": 4,
+      "operationsReserveRequests": 16,
+      "sampleFailurePolicy": "fail-closed"
+    }
+  },
+  "metadata": {
+    "owner": "sdkwork",
+    "purpose": "standalone-data-plane-seed-operations-only",
+    "adaptiveWeb": "Console PC/H5/static-fallback is owned by AdaptiveAppShell via config.toml [app_roots] and SDKWORK_WEBSERVER_{PC,H5,STATIC_FALLBACK}_STATIC_ROOT — not by this data-plane JSON."
+  }
+}

@@ -9,9 +9,10 @@ use url::Url;
 
 use super::{
     is_supported_upstream_allowed_cidr, upstream_ip_is_allowed, CertificateSource,
-    ConfigDiagnostic, ListenerProtocol, ResourceConfig, RouteConfig, SecurityHeadersConfig,
-    TlsVersion, UpstreamLoadBalancingStrategy, UpstreamTlsTrustMode, WebServerAppConfig,
-    WebServerConfigError, WebServerLimits,
+    ConfigDiagnostic, ListenerProtocol, ResourceConfig, RouteConfig, RoutePathType,
+    SecurityHeadersConfig, StreamTargetConfig, TlsVersion, UpstreamConfig,
+    UpstreamLoadBalancingStrategy, UpstreamTlsTrustMode, WebServerAppConfig, WebServerConfigError,
+    WebServerLimits,
 };
 
 const MAX_DIAGNOSTICS: usize = 128;
@@ -40,21 +41,36 @@ impl SemanticValidator {
         if config.kind != "sdkwork.webserver.app" {
             self.push("/kind", "kind must be sdkwork.webserver.app");
         }
-        if config.compatibility.nginx_profile != "http-core-v1" {
+        if config.listeners.is_empty() && config.streams.is_empty() {
             self.push(
-                "/compatibility/nginxProfile",
+                "",
+                "at least one HTTP listener or one stream server is required",
+            );
+        }
+        if !config.listeners.is_empty()
+            && (config.resources.is_empty() || config.virtual_hosts.is_empty())
+        {
+            self.push(
+                "",
+                "HTTP listeners require at least one resource and one virtual host",
+            );
+        }
+        if config.nginx.profile != "http-core-v1" {
+            self.push(
+                "/nginx/profile",
                 "only the http-core-v1 compatibility profile is supported",
             );
         }
-        if config.compatibility.unknown_directive_policy != "error" {
+        if config.nginx.unknown_directive_policy != "error" {
             self.push(
-                "/compatibility/unknownDirectivePolicy",
+                "/nginx/unknownDirectivePolicy",
                 "Rust activation requires unknownDirectivePolicy=error",
             );
         }
 
         self.validate_limits(config);
         self.validate_resource_pressure(config);
+        self.validate_limit_req_zones(config);
         self.register_ids(config);
 
         let listeners = config
@@ -103,8 +119,20 @@ impl SemanticValidator {
                 );
             }
             let socket_key = format!("{}:{}", listener.bind.to_ascii_lowercase(), listener.port);
-            if !sockets.insert(socket_key) {
+            if !sockets.insert(socket_key.clone()) {
                 self.push(&path, "another listener already owns this bind and port");
+            }
+            // Raw TCP stream listeners share the same bind:port namespace and
+            // must not collide with HTTP listeners (SDKWORK_WEBSERVER_SPEC §12).
+            if config
+                .streams
+                .iter()
+                .any(|stream| stream.socket_key() == socket_key)
+            {
+                self.push(
+                    &path,
+                    "an http stream server already owns this bind and port",
+                );
             }
             if listener.protocols.contains(&ListenerProtocol::Http2)
                 && listener.tls_policy_ref.is_none()
@@ -316,6 +344,8 @@ impl SemanticValidator {
             }
         }
 
+        self.validate_streams(config, &upstreams);
+
         for (index, certificate) in config.certificates.iter().enumerate() {
             let path = format!("/certificates/{index}");
             let mut normalized_names = HashSet::new();
@@ -438,7 +468,11 @@ impl SemanticValidator {
                     follow_symlinks,
                     ..
                 } => {
-                    validate_relative_path(self, &format!("{path}/root"), root, true);
+                    // Absolute roots (nginx `root` compatibility) are used
+                    // directly; relative roots stay chrooted.
+                    if !root.starts_with('/') {
+                        validate_relative_path(self, &format!("{path}/root"), root, true);
+                    }
                     for (file_index, file) in index_files.iter().enumerate() {
                         validate_relative_path(
                             self,
@@ -815,6 +849,7 @@ impl SemanticValidator {
                 &virtual_host.routes,
                 &resources,
                 &config.limits,
+                &config.limit_req_zones,
             );
             validate_security_headers(self, &path, virtual_host.security_headers.as_ref());
         }
@@ -879,6 +914,33 @@ impl SemanticValidator {
                         );
                     }
                 }
+            }
+        }
+    }
+
+    fn validate_limit_req_zones(&mut self, config: &WebServerAppConfig) {
+        let mut names = HashSet::new();
+        for (index, zone) in config.limit_req_zones.iter().enumerate() {
+            let path = format!("/limitReqZones/{index}");
+            if zone.name.is_empty() {
+                self.push(format!("{path}/name"), "limitReqZone name must not be empty");
+            } else if !names.insert(zone.name.as_str()) {
+                self.push(format!("{path}/name"), format!("duplicate limitReqZone name {}", zone.name));
+            }
+            if zone.key != "$binary_remote_addr" && zone.key != "$remote_addr" {
+                self.push(
+                    format!("{path}/key"),
+                    "only $binary_remote_addr and $remote_addr are executable",
+                );
+            }
+            if zone.max_keys == 0 {
+                self.push(format!("{path}/maxKeys"), "maxKeys must be at least 1");
+            }
+            if !(zone.rate_per_second.is_finite() && zone.rate_per_second > 0.0) {
+                self.push(
+                    format!("{path}/ratePerSecond"),
+                    "ratePerSecond must be a positive finite number",
+                );
             }
         }
     }
@@ -1356,6 +1418,75 @@ impl SemanticValidator {
         }
     }
 
+    fn validate_streams(
+        &mut self,
+        config: &WebServerAppConfig,
+        upstreams: &HashMap<&str, &UpstreamConfig>,
+    ) {
+        let mut sockets = HashSet::new();
+        for (index, stream) in config.streams.iter().enumerate() {
+            let path = format!("/streams/{index}");
+            if stream.bind.parse::<IpAddr>().is_err() {
+                self.push(format!("{path}/bind"), "bind must be an explicit IPv4 or IPv6 address");
+            }
+            let socket_key = stream.socket_key();
+            if !sockets.insert(socket_key.clone()) {
+                self.push(&path, "another stream server already owns this bind and port");
+            }
+            if config
+                .listeners
+                .iter()
+                .any(|listener| format!("{}:{}", listener.bind.to_ascii_lowercase(), listener.port) == socket_key)
+            {
+                self.push(&path, "an http listener already owns this bind and port");
+            }
+            match &stream.target {
+                StreamTargetConfig::Upstream { name } => {
+                    if !upstreams.contains_key(name.as_str()) {
+                        self.push(
+                            format!("{path}/target"),
+                            format!("unknown upstream {name}"),
+                        );
+                    }
+                }
+                StreamTargetConfig::Literal { host, port } => {
+                    if host.is_empty() || *port == 0 {
+                        self.push(
+                            format!("{path}/target"),
+                            "literal target must be a non-empty host and port",
+                        );
+                    }
+                }
+            }
+            match &stream.tls {
+                Some(crate::config::model::StreamTlsMode::Terminate { certificate_ref }) => {
+                    if certificate_ref.is_empty() {
+                        self.push(
+                            format!("{path}/tls/certificateRef"),
+                            "stream TLS terminate requires a non-empty certificateRef",
+                        );
+                    } else if !config
+                        .certificates
+                        .iter()
+                        .any(|certificate| certificate.id == *certificate_ref)
+                    {
+                        self.push(
+                            format!("{path}/tls/certificateRef"),
+                            format!("unknown certificate {certificate_ref}"),
+                        );
+                    }
+                }
+                Some(crate::config::model::StreamTlsMode::Preread) | None => {}
+            }
+            if !(1_000..=3_600_000).contains(&stream.proxy_timeout_ms) {
+                self.push(
+                    format!("{path}/proxyTimeoutMs"),
+                    "proxyTimeoutMs must be between 1000 and 3,600,000 milliseconds",
+                );
+            }
+        }
+    }
+
     fn register_ids(&mut self, config: &WebServerAppConfig) {
         for (index, listener) in config.listeners.iter().enumerate() {
             self.register_id(&listener.id, format!("/listeners/{index}/id"));
@@ -1383,6 +1514,9 @@ impl SemanticValidator {
                     format!("/virtualHosts/{host_index}/routes/{route_index}/id"),
                 );
             }
+        }
+        for (index, stream) in config.streams.iter().enumerate() {
+            self.register_id(&stream.id, format!("/streams/{index}/id"));
         }
     }
 
@@ -1455,11 +1589,32 @@ fn validate_routes(
     routes: &[RouteConfig],
     resources: &HashMap<&str, &ResourceConfig>,
     limits: &WebServerLimits,
+    limit_req_zones: &[crate::config::LimitReqZoneConfig],
 ) {
+    let zone_names = limit_req_zones
+        .iter()
+        .map(|zone| zone.name.as_str())
+        .collect::<HashSet<_>>();
     for (index, route) in routes.iter().enumerate() {
         let path = format!("{host_path}/routes/{index}");
         let configured_path = &route.route_match.path;
-        if let Err(error) = super::uri::validate_canonical_uri_path(
+        let is_regex = matches!(
+            route.route_match.path_type,
+            RoutePathType::Regex | RoutePathType::RegexIgnoreCase
+        );
+        if is_regex {
+            let pattern = if matches!(route.route_match.path_type, RoutePathType::RegexIgnoreCase) {
+                format!("(?i){configured_path}")
+            } else {
+                configured_path.clone()
+            };
+            if let Err(error) = regex::Regex::new(&pattern) {
+                validator.push(
+                    format!("{path}/match/path"),
+                    format!("invalid regex location pattern: {error}"),
+                );
+            }
+        } else if let Err(error) = super::uri::validate_canonical_uri_path(
             configured_path,
             limits.max_decoded_path_bytes,
             limits.max_path_segments,
@@ -1486,11 +1641,47 @@ fn validate_routes(
                 ),
             }
         }
+        for (rule_index, rule) in route.rewrite.iter().enumerate() {
+            let pattern = &rule.pattern;
+            if let Err(error) = regex::Regex::new(pattern) {
+                validator.push(
+                    format!("{path}/rewrite/{rule_index}/pattern"),
+                    format!("invalid rewrite pattern: {error}"),
+                );
+            }
+            if rule.replacement.is_empty() {
+                validator.push(
+                    format!("{path}/rewrite/{rule_index}/replacement"),
+                    "rewrite replacement must not be empty",
+                );
+            }
+        }
         if !resources.contains_key(route.resource_ref.as_str()) {
             validator.push(
                 format!("{path}/resourceRef"),
                 format!("unknown resource {}", route.resource_ref),
             );
+        }
+        for (rule_index, rule) in route.limit_req.iter().enumerate() {
+            if !zone_names.contains(rule.zone.as_str()) {
+                validator.push(
+                    format!("{path}/limitReq/{rule_index}/zone"),
+                    format!("unknown limitReq zone {}", rule.zone),
+                );
+            }
+        }
+        for (rule_index, rule) in route.access.iter().enumerate() {
+            let network = rule.network.trim();
+            if network.is_empty()
+                || (!network.eq_ignore_ascii_case("all")
+                    && network.parse::<IpAddr>().is_err()
+                    && network.parse::<IpNet>().is_err())
+            {
+                validator.push(
+                    format!("{path}/access/{rule_index}/network"),
+                    "access network must be `all`, an IP, or a CIDR",
+                );
+            }
         }
 
         for (other_index, other) in routes.iter().take(index).enumerate() {
@@ -1552,6 +1743,11 @@ fn validate_redirect_location(validator: &mut SemanticValidator, path: &str, loc
     {
         return;
     }
+    // nginx-compatible `return` templates expand at request time
+    // (`$host`/`$request_uri`/`$scheme`).
+    if redirect_template_is_well_formed(location) {
+        return;
+    }
     match Url::parse(location) {
         Ok(url)
             if matches!(url.scheme(), "http" | "https")
@@ -1563,6 +1759,31 @@ fn validate_redirect_location(validator: &mut SemanticValidator, path: &str, loc
             "redirect location must be a safe absolute path or http/https URL without credentials",
         ),
     }
+}
+
+/// Accepts nginx `return` URL templates built from the supported variable
+/// subset, optionally prefixed by a literal scheme/host.
+fn redirect_template_is_well_formed(location: &str) -> bool {
+    let mut remainder = location;
+    let mut saw_variable = false;
+    while let Some(index) = remainder.find('$') {
+        saw_variable = true;
+        let rest = &remainder[index..];
+        let variable = if rest.starts_with("$request_uri") {
+            "$request_uri"
+        } else if rest.starts_with("$host") {
+            "$host"
+        } else if rest.starts_with("$scheme") {
+            "$scheme"
+        } else {
+            return false;
+        };
+        remainder = &rest[variable.len()..];
+    }
+    saw_variable
+        && remainder
+            .bytes()
+            .all(|byte| (0x21..=0x7e).contains(&byte))
 }
 
 fn validate_security_headers(

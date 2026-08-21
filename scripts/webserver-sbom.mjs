@@ -24,8 +24,8 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const OUTPUT_ROOT = path.join(REPO_ROOT, 'dist', 'release');
 const ROOT_PACKAGES = [
   'sdkwork-web-agent',
-  'sdkwork-api-web-server-standalone-gateway',
-  'sdkwork-web-server-website-delivery-edge-runtime',
+  'sdkwork-api-webserver-standalone-gateway',
+  'sdkwork-webserver-website-delivery-edge-runtime',
   'sdkwork-webserver-certificate-worker',
 ];
 const SUPPORTED_ARCHITECTURES = new Set(['x64', 'arm64']);

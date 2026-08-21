@@ -2,7 +2,7 @@
 
 Status: accepted
 Requirement: REQ-2026-0061
-Owner: sdkwork-web-server
+Owner: sdkwork-webserver
 Date: 2026-07-26
 Specs: REQUIREMENTS_SPEC.md, ARCHITECTURE_DECISION_SPEC.md, API_SPEC.md, DATABASE_SPEC.md, SDK_SPEC.md, BACKEND_UI_SPEC.md, SECURITY_SPEC.md, DEPLOYMENT_SPEC.md
 

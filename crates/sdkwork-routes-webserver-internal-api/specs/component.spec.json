@@ -6,7 +6,7 @@
     "displayName": "SDKWork Web Server Internal API Routes",
     "version": "0.1.0",
     "type": "rust-route-crate",
-    "root": "sdkwork-web-server/crates/sdkwork-routes-webserver-internal-api",
+    "root": "sdkwork-webserver/crates/sdkwork-routes-webserver-internal-api",
     "domain": "platform",
     "capability": "webserver-runtime-distribution",
     "surface": "internal-api",

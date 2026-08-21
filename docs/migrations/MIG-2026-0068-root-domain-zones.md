@@ -2,7 +2,7 @@
 
 ```yaml
 id: MIG-2026-0068
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: active
 requirement: REQ-2026-0068
 type: mixed

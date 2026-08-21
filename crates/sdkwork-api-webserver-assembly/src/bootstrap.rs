@@ -1,4 +1,4 @@
-//! Business-only gateway bootstrap for sdkwork-web-server.
+//! Business-only gateway bootstrap for sdkwork-webserver.
 
 use axum::{Extension, Router};
 use sdkwork_api_deployments_assembly::assemble_domain_certificate_blocks;

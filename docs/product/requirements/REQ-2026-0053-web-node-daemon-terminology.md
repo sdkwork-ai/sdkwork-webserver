@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0053
 title: Replace the ambiguous edge Agent product term with Web Node Daemon terminology
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: product-language-and-operational-clarity
 problem: The host process that synchronizes Web Server configuration is named Agent across product text, runtime configuration, APIs, SDKs, and code. In the SDKWork product family, Agent also denotes AI agents, so operational conversations, alerts, permissions, and generated SDK methods are ambiguous.

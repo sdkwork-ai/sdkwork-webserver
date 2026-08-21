@@ -301,6 +301,7 @@ async fn opens_revalidated_bounded_content_and_rejects_range_or_oversize() {
             Some(WebsiteByteRange {
                 start: 0,
                 end_inclusive: Some(2),
+                suffix_bytes: None,
             }),
             1024,
         ))

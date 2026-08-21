@@ -56,10 +56,10 @@ trace:
   components:
     - specs/sdkwork.webserver.config.schema.json
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
   - cargo test -p sdkwork-webserver-core --test webserver_config
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - cargo fmt -- --check
   - pnpm verify
@@ -96,7 +96,7 @@ Graceful shutdown delegates to Hyper's connection grace API, waits for already a
 Accepted on 2026-07-16 with the following evidence:
 
 - `cargo test -p sdkwork-webserver-core --test webserver_config` passed 19 tests, including finite HTTP/2 field ranges and the Frame/new-Stream/reset plus 64 MiB encoded-header cross-field constraints.
-- `cargo test -p sdkwork-api-web-server-standalone-gateway` passed 14 unit tests, 21 real data-plane integration tests, and 3 raw HTTP/1 connection tests. HTTP/2 evidence uses real Rustls TLS and ALPN, not an in-process Handler substitute.
+- `cargo test -p sdkwork-api-webserver-standalone-gateway` passed 14 unit tests, 21 real data-plane integration tests, and 3 raw HTTP/1 connection tests. HTTP/2 evidence uses real Rustls TLS and ALPN, not an in-process Handler substitute.
 - The HTTP/2 parser unit corpus proves fragmented Preface/Frame/Header Block input, fixed-window Frame/new-Stream/reset limits, Continuation count, invalid Preface, interleaving, and cross-stream Continuation rejection.
 - Real TLS/H2 tests prove configured concurrent-Stream, maximum-Frame, and decoded Header List SETTINGS; PING Frame flood, new-Stream churn, `RST_STREAM` churn, oversized encoded Header Blocks, and H2-generated local-error reset exhaustion; each abusive connection is isolated and a fresh H2 connection remains healthy.
 - The H2 local-error test sends malformed `content-length: 1` plus immediate `END_STREAM` requests. This exercises H2's documented protocol-error reset path and observes `ENHANCE_YOUR_CALM` GOAWAY after the configured threshold; oversized Header Lists are correctly tested separately as `431` behavior.

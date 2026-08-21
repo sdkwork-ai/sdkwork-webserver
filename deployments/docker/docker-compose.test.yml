@@ -1,0 +1,73 @@
+# sdkwork-webserver — test environment (external dependencies).
+#
+# Standalone compose file for the test environment. Uses external
+# PostgreSQL and Redis (WSL host-native or remote managed services).
+#
+# Port mapping: host 18888 -> container 8888
+# Domain: server-test.sdkwork.com
+#
+# Usage:
+#   docker compose -f deployments/docker/docker-compose.test.yml \
+#     --env-file deployments/docker/env/test.env up -d
+#
+#   docker compose -f deployments/docker/docker-compose.test.yml down
+
+name: sdkwork-webserver-test
+
+services:
+  webserver:
+    image: registry.sdkwork.com/apps/sdkwork-webserver-standalone:${SDKWORK_WEBSERVER_IMAGE_TAG:-0.1.0}
+    container_name: sdkwork-webserver-test
+    restart: unless-stopped
+    ports:
+      - "${SDKWORK_WEBSERVER_TEST_HOST_PORT:-18888}:8888"
+    env_file:
+      - path: env/test.env
+        required: false
+    environment:
+      SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT: "8888"
+      SDKWORK_WEBSERVER_ENVIRONMENT: test
+      SDKWORK_WEBSERVER_PROFILE_ID: standalone.test
+      SDKWORK_DEPLOY_APP_ROOT: /app/share/sdkwork/deploy
+      SDKWORK_SKILLS_APP_ROOT: /app/share/sdkwork/skills
+      SDKWORK_MCP_APP_ROOT: /app/share/sdkwork/mcp
+      SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_CORS_ALLOWED_ORIGINS:-http://server-test.sdkwork.com,http://localhost:18888,http://127.0.0.1:18888}
+      SDKWORK_DATABASE_ENGINE: postgresql
+      SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-host.docker.internal}
+      SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
+      SDKWORK_DATABASE_NAME: ${WEBSERVER_POSTGRES_TEST_DB:-sdkwork_ai_test}
+      SDKWORK_DATABASE_SCHEMA: ${WEBSERVER_POSTGRES_TEST_DB:-sdkwork_ai_test}
+      SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC: "false"
+      SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_TEST_USER:-sdkwork_ai_test}
+      SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_TEST_PASSWORD:-}
+      SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-disable}
+      SDKWORK_DATABASE_MAX_CONNECTIONS: "10"
+      SDKWORK_WEBSERVER_REDIS_ENABLED: "true"
+      SDKWORK_WEBSERVER_REDIS_HOST: ${WEBSERVER_REDIS_HOST:-host.docker.internal}
+      SDKWORK_WEBSERVER_REDIS_PORT: ${WEBSERVER_REDIS_PORT:-6379}
+      SDKWORK_WEBSERVER_REDIS_DATABASE: "1"
+      SDKWORK_WEBSERVER_REDIS_TLS: ${WEBSERVER_REDIS_TLS:-false}
+      SDKWORK_WEBSERVER_REDIS_PASSWORD: ${WEBSERVER_REDIS_PASSWORD:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://127.0.0.1:$${SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT:-8888}/healthz || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 120s
+    volumes:
+      - webserver-secrets-test:/etc/sdkwork/webserver/secrets
+      - webserver-data-test:/var/lib/sdkwork/webserver
+      - ./scripts/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
+      - ../../../sdkwork-skills/database:/app/share/sdkwork/skills/database:ro
+      - ../../../sdkwork-mcp/database:/app/share/sdkwork/mcp/database:ro
+      - ../../../sdkwork-deployments/database:/app/share/sdkwork/deploy/database:ro
+
+volumes:
+  webserver-secrets-test:
+  webserver-data-test:

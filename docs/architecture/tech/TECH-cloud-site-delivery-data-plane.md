@@ -335,7 +335,7 @@ or WIKI port with per-resource deadlines and bounded concurrency. Reused resourc
 per Site/port, invalid Provider identities/capabilities/generation tokens fail closed, and a declared
 object limit above the concrete Provider's buffering capability rejects the candidate.
 
-The responsibility-specific `sdkwork-web-server-website-delivery-edge-runtime` process owns the
+The responsibility-specific `sdkwork-webserver-website-delivery-edge-runtime` process owns the
 website data plane. It consumes the standalone gateway crate with its management feature disabled,
 so API assembly, management routes, business services, and the Web database host do not enter the
 website process dependency boundary. Bootstrap selects a
@@ -579,7 +579,7 @@ health probes, graceful drain, and region-specific capacity. Public load balance
 validated Host/SNI/client information under trusted proxy policy.
 
 The cloud container and Kubernetes topology start only
-`sdkwork-web-server-website-delivery-edge-runtime`. The current deployable model is
+`sdkwork-webserver-website-delivery-edge-runtime`. The current deployable model is
 `single-tenant` with `dedicated` isolation. One opaque, non-sensitive tenant fleet name identifies
 the orchestration partition. It is a random `tf-` plus 15-symbol lowercase Base32 identifier and
 must not contain or derive from tenant identity, tenant scope hash, customer data, or a domain. One

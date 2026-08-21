@@ -92,7 +92,7 @@ function componentSpec(definition) {
       displayName: `SDKWork Webserver PC ${definition.capability}`,
       version: "0.1.0",
       type: "node-package",
-      root: `sdkwork-web-server/apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-${definition.id}`,
+      root: `sdkwork-webserver/apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-${definition.id}`,
       domain: "infrastructure",
       capability: definition.capability,
       surface: definition.surface,

@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0058
 title: Build, install, and smoke-test the Linux x64 Web Server release archive
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 priority: P0
 source: release-runtime-evidence
@@ -52,7 +52,7 @@ trace:
   components:
     - scripts/webserver-release.mjs
     - tests/contract/release-archive.contract.test.mjs
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
     - etc/examples/sdkwork.webserver.config.json
 verification:
   - node --test tests/contract/release-archive.contract.test.mjs tests/contract/deployment-profile-commands.contract.test.mjs

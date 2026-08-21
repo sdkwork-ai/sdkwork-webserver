@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0038
 title: Add bounded weighted least-connections upstream selection
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: nginx-upstream-least-conn-commercial-readiness
 problem: The runtime can distribute traffic by relative target weight, but it cannot prefer the currently least-loaded eligible target. Long-lived streaming, HTTP/2, or WebSocket requests can therefore accumulate behind a target even when another target has lower active request load.
@@ -49,16 +49,16 @@ trace:
     - TEST_SPEC.md
   components:
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
   - cargo test -p sdkwork-webserver-core --test webserver_config
-  - cargo test -p sdkwork-api-web-server-standalone-gateway data_plane::proxy
-  - cargo test -p sdkwork-api-web-server-standalone-gateway data_plane::upstream_admission
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test upstream_weighted_selection
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test upstream_safe_retries
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test upstream_physical_connections
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test websocket_proxy
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway data_plane::proxy
+  - cargo test -p sdkwork-api-webserver-standalone-gateway data_plane::upstream_admission
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test upstream_weighted_selection
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test upstream_safe_retries
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test upstream_physical_connections
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test websocket_proxy
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check

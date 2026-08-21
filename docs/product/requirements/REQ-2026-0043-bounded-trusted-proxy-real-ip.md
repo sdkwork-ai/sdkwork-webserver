@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0043
 title: Add bounded Nginx-compatible trusted-proxy real-IP resolution
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: nginx-realip-commercial-readiness
 problem: Direct TCP peer identity is safe but loses the original client address behind an explicitly trusted load balancer or ingress. Blindly trusting forwarding Headers would let clients control affinity and downstream identity.
@@ -47,12 +47,12 @@ trace:
     - TEST_SPEC.md
   components:
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
   - cargo test -p sdkwork-webserver-core --test webserver_config
-  - cargo test -p sdkwork-api-web-server-standalone-gateway data_plane::real_ip
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test trusted_proxy_real_ip
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway data_plane::real_ip
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test trusted_proxy_real_ip
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check

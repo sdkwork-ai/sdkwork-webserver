@@ -262,12 +262,12 @@ mod tests {
     fn production_policy_accepts_only_configured_exact_origins() {
         let policy = web_security_policy(
             &WebEnvironment::Prod,
-            vec!["https://web.sdkwork.com".to_owned()],
+            vec!["https://server.sdkwork.com".to_owned()],
         )
         .expect("production policy");
         policy
             .cors
-            .validate_origin_value("https://web.sdkwork.com")
+            .validate_origin_value("https://server.sdkwork.com")
             .expect("configured production origin");
         policy
             .cors
@@ -288,7 +288,7 @@ mod tests {
         .contains("invalid exact origin"));
         assert!(web_security_policy(
             &WebEnvironment::Prod,
-            vec!["https://web.sdkwork.com/path".to_owned()],
+            vec!["https://server.sdkwork.com/path".to_owned()],
         )
         .expect_err("origin with a path")
         .contains("invalid exact origin"));

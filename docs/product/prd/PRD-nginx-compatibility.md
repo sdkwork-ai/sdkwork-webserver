@@ -11,6 +11,13 @@ Specs: NGINX_SPEC.md, REQUIREMENTS_SPEC.md, SECURITY_SPEC.md, PERFORMANCE_SPEC.m
 
 Define the supported Nginx OSS HTTP compatibility contract for the SDKWork Rust data plane and its configuration tools. Compatibility is an explicit, versioned product profile with conformance evidence. It is not a claim that arbitrary Nginx configuration, modules, or implementation details can execute unchanged.
 
+Operators enable or disable the compatibility surface with
+`[nginx].enabled` (`nginx.enabled`) in `deployments/webserver/server.common.toml`
+(default `true`). When disabled, the module is Rust-native TOML only: sidecar
+W16 checks are skipped and `tools/import-nginx-conf.mjs` refuses activation.
+Living capability status for `http-core-v1` is tracked in
+`specs/nginx-gap.catalog.json`.
+
 The Rust engine is the primary runtime. Nginx import and rendering are migration and interoperability capabilities. A configuration may activate on the Rust engine only when every behavior-affecting directive is mapped to the normalized intermediate representation or rejected with a blocking diagnostic.
 
 ## 2. Compatibility Profile And Grades

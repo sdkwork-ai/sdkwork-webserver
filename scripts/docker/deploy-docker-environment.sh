@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
-# Deploy sdkwork-webserver standalone gateway stacks in Docker (WSL/Ubuntu).
+# Deploy sdkwebwork-webserver standalone gateway stacks in Docker (WSL/Ubuntu).
 #
 # Modeled on sdkwork-api-cloud-gateway/scripts/deploy-docker-environment.sh.
 #
+# Each environment runs as an isolated compose project with a distinct host port
+# and sdkwork-specs database identity (sdkwork_ai_dev/test/prod). External
+# PostgreSQL and Redis must already be reachable from the container (typically
+# host.docker.internal on WSL).
+#
 # Usage:
 #   bash scripts/docker/deploy-docker-environment.sh development
-#   bash scripts/docker/deploy-docker-environment.sh test --external
-#   bash scripts/docker/deploy-docker-environment.sh all --embedded-shared
+#   bash scripts/docker/deploy-docker-environment.sh test
+#   bash scripts/docker/deploy-docker-environment.sh production
+#   bash scripts/docker/deploy-docker-environment.sh all
+#   bash scripts/docker/deploy-docker-environment.sh all --down
 set -eu
 
 usage() {
@@ -16,30 +23,26 @@ Usage: deploy-docker-environment.sh <environment|all> [options]
 Environments: development, test, production, all
 
 Options:
-  --embedded          use built-in postgres/redis containers (default)
-  --embedded-shared   deploy all environments in one compose project (shared postgres)
-  --external          use external PostgreSQL/Redis (docker-compose.external.yml)
-  --validate          validate env file before compose up
-  --down              stop the selected stack
-  -h, --help          show this help
+  --down          stop the selected stack(s) instead of starting
+  --validate      validate env file before compose up
+  --pull          docker compose pull before up
+  -h, --help      show this help
 EOF
 }
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 docker_root="$repo_root/deployments/docker"
-mode=embedded
 down=false
 validate=false
+pull=false
 target=${1:-}
 
 shift || true
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --embedded) mode=embedded; shift ;;
-    --embedded-shared) mode=embedded-shared; shift ;;
-    --external) mode=external; shift ;;
-    --validate) validate=true; shift ;;
     --down) down=true; shift ;;
+    --validate) validate=true; shift ;;
+    --pull) pull=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unsupported option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -50,108 +53,87 @@ if [ -z "$target" ]; then
   exit 2
 fi
 
+# Map environment name to its standalone compose file and default host port.
+compose_file_for() {
+  case "$1" in
+    development) echo "$docker_root/docker-compose.development.yml" ;;
+    test) echo "$docker_root/docker-compose.test.yml" ;;
+    production) echo "$docker_root/docker-compose.production.yml" ;;
+    *) return 1 ;;
+  esac
+}
+
+port_for() {
+  case "$1" in
+    development) echo 13800 ;;
+    test) echo 18888 ;;
+    production) echo 18080 ;;
+    *) echo "?" ;;
+  esac
+}
+
+env_file_for() {
+  case "$1" in
+    development) echo "$docker_root/env/development.env" ;;
+    test) echo "$docker_root/env/test.env" ;;
+    production) echo "$docker_root/env/production.env" ;;
+    *) return 1 ;;
+  esac
+}
+
 ensure_env_file() {
   env_name=$1
-  env_file="$docker_root/env/$env_name.env"
+  env_file=$(env_file_for "$env_name")
   if [ ! -f "$env_file" ]; then
-    if [ ! -f "$docker_root/env/$env_name.env.example" ]; then
-      echo "missing env template: $docker_root/env/$env_name.env.example" >&2
-      exit 1
-    fi
-    cp "$docker_root/env/$env_name.env.example" "$env_file"
-    echo "created $env_file from example; fill secrets before production use" >&2
+    echo "missing env file: $env_file" >&2
+    echo "copy docker/env/$env_name.env.example and fill secrets first" >&2
+    exit 1
   fi
   printf '%s' "$env_file"
 }
 
-compose_files=(-f "$docker_root/docker-compose.yml")
-if [ "$mode" = external ]; then
-  compose_files+=(-f "$docker_root/docker-compose.external.yml")
-fi
-
 deploy_one() {
   env_name=$1
-  project=$2
+  compose_file=$(compose_file_for "$env_name")
   env_file=$(ensure_env_file "$env_name")
+  project="sdkwork-webserver-$env_name"
+  port=$(port_for "$env_name")
 
   if [ "$validate" = true ] && [ "$down" = false ]; then
-    node_args=(--env-file "$env_file")
-    if [ "$mode" = external ]; then
-      node_args+=(--mode external)
-    else
-      node_args+=(--mode embedded)
-    fi
-    (cd "$repo_root" && node scripts/docker/validate-docker-deployment.mjs "${node_args[@]}")
+    (cd "$repo_root" && node scripts/docker/validate-docker-deployment.mjs --env-file "$env_file" --mode external)
   fi
 
-  args=(compose --env-file "$env_file" -p "$project" "${compose_files[@]}" --profile "$env_name")
+  compose_args=(
+    --env-file "$env_file"
+    -p "$project"
+    -f "$compose_file"
+  )
+
   if [ "$down" = true ]; then
-    docker "${args[@]}" down --remove-orphans
+    docker compose "${compose_args[@]}" down --remove-orphans
     echo "stopped $env_name ($project)"
     return 0
   fi
-  docker "${args[@]}" up -d --remove-orphans
 
-  port_key="SDKWORK_WEBSERVER_${env_name^^}_HOST_PORT"
-  port_key=${port_key/production/PROD}
-  port_key=${port_key/development/DEV}
-  port_key=${port_key/test/TEST}
-  case "$env_name" in
-    development) port=13800 ;;
-    test) port=18888 ;;
-    production) port=18080 ;;
-    *) port='?' ;;
-  esac
-  if grep -E '^SDKWORK_WEBSERVER_.*_HOST_PORT=' "$env_file" >/dev/null 2>&1; then
-    case "$env_name" in
-      development) port=$(grep -E '^SDKWORK_WEBSERVER_DEV_HOST_PORT=' "$env_file" | cut -d= -f2-) ;;
-      test) port=$(grep -E '^SDKWORK_WEBSERVER_TEST_HOST_PORT=' "$env_file" | cut -d= -f2-) ;;
-      production) port=$(grep -E '^SDKWORK_WEBSERVER_PROD_HOST_PORT=' "$env_file" | cut -d= -f2-) ;;
-    esac
+  if [ "$pull" = true ]; then
+    docker compose "${compose_args[@]}" pull
   fi
-  echo "deployed $env_name ($project, mode=$mode) -> http://127.0.0.1:${port}/healthz"
-}
 
-deploy_shared_all() {
-  env_file=$(ensure_env_file development)
-  project=sdkwork-webserver-shared
-  if [ "$validate" = true ] && [ "$down" = false ]; then
-    for env_name in development test production; do
-      ef=$(ensure_env_file "$env_name")
-      (cd "$repo_root" && node scripts/docker/validate-docker-deployment.mjs --env-file "$ef" --mode embedded)
-    done
-  fi
-  args=(compose --env-file "$env_file" -p "$project" "${compose_files[@]}" \
-    --profile development --profile test --profile production)
-  if [ "$down" = true ]; then
-    docker "${args[@]}" down
-    echo "stopped shared stack ($project)"
-    return 0
-  fi
-  docker "${args[@]}" up -d
-  echo "deployed shared embedded stack ($project)"
+  docker compose "${compose_args[@]}" up -d --remove-orphans
+  echo "deployed $env_name ($project) -> http://127.0.0.1:${port}/healthz"
 }
 
 case "$target" in
   development|test|production)
-    if [ "$mode" = embedded-shared ]; then
-      echo "--embedded-shared requires target all" >&2
-      exit 2
-    fi
-    deploy_one "$target" "sdkwork-webserver-$target"
+    deploy_one "$target"
     ;;
   all)
-    if [ "$mode" = embedded-shared ]; then
-      deploy_shared_all
-    else
-      for env_name in development test production; do
-        deploy_one "$env_name" "sdkwork-webserver-$env_name"
-      done
-    fi
+    for env_name in development test production; do
+      deploy_one "$env_name"
+    done
     ;;
   *)
     echo "unsupported environment: $target" >&2
     usage >&2
-    exit 2
-    ;;
+    exit 2 ;;
 esac

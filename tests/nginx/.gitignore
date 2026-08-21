@@ -1,0 +1,11 @@
+# Nginx fixture runtime artifacts (never commit)
+*.pid
+*.log
+error.log
+access.log
+cert.pem
+key.pem
+**/logs/*
+!**/logs/.gitkeep
+**/temp/**/*
+!**/temp/**/.gitkeep

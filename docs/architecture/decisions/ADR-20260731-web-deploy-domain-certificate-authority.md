@@ -2,7 +2,7 @@
 
 Status: proposed
 Requirement: REQ-2026-0067, REQ-2026-0068
-Owner: sdkwork-web-server, sdkwork-deployments, sdkwork-iam
+Owner: sdkwork-webserver, sdkwork-deployments, sdkwork-iam
 Date: 2026-07-31
 Specs: ARCHITECTURE_DECISION_SPEC.md, DATABASE_SPEC.md, SUBJECT_ID_SPEC.md, API_SPEC.md, SDK_SPEC.md, EVENT_SPEC.md, DEPLOYMENT_SPEC.md, SECURITY_SPEC.md
 

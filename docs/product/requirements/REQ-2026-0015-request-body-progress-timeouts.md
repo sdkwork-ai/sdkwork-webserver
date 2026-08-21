@@ -51,10 +51,10 @@ trace:
   components:
     - specs/sdkwork.webserver.config.schema.json
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
   - cargo test -p sdkwork-webserver-core --test webserver_config
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - cargo fmt -- --check
   - pnpm verify
@@ -79,10 +79,10 @@ The gateway uses one zero-copy `RequestBodyTimeout` wrapper for every selected r
 Executed acceptance evidence:
 
 - `cargo test -p sdkwork-webserver-core --test webserver_config`: 22 passed.
-- `cargo test -p sdkwork-api-web-server-standalone-gateway`: 24 unit, 30 data-plane integration, and 3 raw HTTP/1 tests passed.
-- `cargo clippy -p sdkwork-api-web-server-standalone-gateway -p sdkwork-webserver-core --all-targets -- -D warnings`: passed.
+- `cargo test -p sdkwork-api-webserver-standalone-gateway`: 24 unit, 30 data-plane integration, and 3 raw HTTP/1 tests passed.
+- `cargo clippy -p sdkwork-api-webserver-standalone-gateway -p sdkwork-webserver-core --all-targets -- -D warnings`: passed.
 - `cargo fmt -- --check`: passed.
-- `cargo run -p sdkwork-api-web-server-standalone-gateway -- validate etc/examples/sdkwork.webserver.config.json`: passed.
+- `cargo run -p sdkwork-api-webserver-standalone-gateway -- validate etc/examples/sdkwork.webserver.config.json`: passed.
 - Full-workspace Clippy, `pnpm verify`, the pagination/API-envelope/SDK-consumer checks applicable to this config/runtime change, documentation validation, and diff hygiene passed in the same acceptance run.
 
 This acceptance closes only request Body start/progress deadlines. HTTP/1 Keep-Alive idle reaping was subsequently delivered by accepted [REQ-2026-0016](REQ-2026-0016-http1-keep-alive-idle-timeout.md); the other listed non-goals remain separate commercial release gates.

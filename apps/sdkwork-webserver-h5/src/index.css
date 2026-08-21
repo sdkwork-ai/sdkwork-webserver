@@ -1,0 +1,60 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+  line-height: 1.5;
+  color: #0f172a;
+  background: linear-gradient(160deg, #f8fafc 0%, #e2e8f0 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+.shell {
+  min-height: 100vh;
+  padding: 2.5rem 1.25rem 3rem;
+  max-width: 40rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #475569;
+}
+
+h1 {
+  margin: 0 0 0.75rem;
+  font-size: 1.75rem;
+  font-weight: 650;
+}
+
+.lede {
+  margin: 0 0 1.5rem;
+  color: #334155;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+}
+
+.actions a {
+  color: #0f766e;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.actions a:hover,
+.actions a:focus-visible {
+  text-decoration: underline;
+}

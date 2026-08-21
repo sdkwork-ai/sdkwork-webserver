@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0066
 title: Enforce typed replay-safe idempotency from API authority through application consumers
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: user
 problem: Web Server routes required Idempotency-Key at runtime, while 28 matching OpenAPI operations exposed only x-sdkwork-idempotent metadata. Generated SDKs therefore could not accept the required Header and PC actions failed only after network dispatch with 40001.
@@ -56,7 +56,7 @@ trace:
     - sdks/sdkwork-web-backend-sdk
     - sdks/sdkwork-web-internal-sdk
     - apps/sdkwork-webserver-pc
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
     - crates/sdkwork-webserver-contract
     - crates/sdkwork-intelligence-webserver-service
     - crates/sdkwork-intelligence-webserver-repository-sqlx
@@ -68,7 +68,7 @@ verification:
   - pnpm test:contracts
   - pnpm --dir apps/sdkwork-webserver-pc typecheck
   - pnpm --dir apps/sdkwork-webserver-pc test
-  - cargo test -p sdkwork-api-web-server-standalone-gateway generated_internal_sdk_preserves_runtime_assignment_wire_contract
+  - cargo test -p sdkwork-api-webserver-standalone-gateway generated_internal_sdk_preserves_runtime_assignment_wire_contract
   - cargo test -p sdkwork-intelligence-webserver-repository-sqlx --test repository_parity postgres_repository_transactions_tenants_idempotency_and_pagination_are_bounded -- --ignored --exact
   - cargo test -p sdkwork-web-core
 ```

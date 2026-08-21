@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0022
 title: Gracefully retire HTTP connections after a finite maximum age
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: reliability
 problem: Healthy HTTP/1 keep-alive and HTTP/2 connections can remain attached to one process generation indefinitely. HTTP/2 PING proves peer liveness but does not rotate responsive connections, so old connection-scoped state can survive certificate, deployment, and load-balancing changes without a finite retirement boundary.
@@ -52,11 +52,11 @@ trace:
     - NGINX_SPEC.md
   components:
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
     - specs/sdkwork.webserver.config.schema.json
 verification:
   - cargo test -p sdkwork-webserver-core
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check

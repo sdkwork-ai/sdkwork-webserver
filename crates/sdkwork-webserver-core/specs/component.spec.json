@@ -6,7 +6,7 @@
     "displayName": "SDKWork Web Server Core",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "sdkwork-web-server/crates/sdkwork-webserver-core",
+    "root": "sdkwork-webserver/crates/sdkwork-webserver-core",
     "domain": "platform",
     "capability": "webserver-config",
     "surface": "backend-service",

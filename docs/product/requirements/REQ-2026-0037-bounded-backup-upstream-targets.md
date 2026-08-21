@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0037
 title: Add health-aware bounded backup upstream targets
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: nginx-upstream-server-backup-commercial-readiness
 problem: All currently eligible targets participate in normal weighted rotation. Operators cannot reserve a disaster-recovery peer that receives no routine traffic and activates only after the primary tier is unavailable.
@@ -46,13 +46,13 @@ trace:
     - TEST_SPEC.md
   components:
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
   - cargo test -p sdkwork-webserver-core --test webserver_config
-  - cargo test -p sdkwork-api-web-server-standalone-gateway data_plane::proxy
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test upstream_weighted_selection
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test upstream_safe_retries
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway data_plane::proxy
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test upstream_weighted_selection
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test upstream_safe_retries
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check
@@ -68,8 +68,8 @@ The field implements a two-tier primary/backup selection policy compatible with 
 - The Rust model, root JSON Schema, semantic compiler, checked-in example, and configuration documentation define target `backup` as a strict boolean defaulting to false. Every upstream must contain at least one non-backup primary. `cargo test -p sdkwork-webserver-core --test webserver_config` passes 53 tests, including default, typed, valid tier, non-boolean, and all-backup rejection cases.
 - The runtime keeps one immutable role bit in each existing fixed target entry. Selection first checks for an unattempted active/passively eligible primary, then applies the existing bounded cumulative-weight ticket and race fallback only inside that tier. If none remains, it applies the same algorithm to backups. No tier vector, queue, schedule, request-level Set, target-state copy, or additional I/O lock is created.
 - The existing fixed retry bitmap composes with tier selection: distinct eligible primaries are exhausted before a distinct backup, and no target can be reused. DNS/SSRF, TLS/mTLS, aggregate/target physical connection limits, response Header bounds, passive/active health, request admission, replay eligibility, total deadline, and fixed metrics remain unchanged for both tiers.
-- Unit tests prove primary exhaustion ordering, backup fallback, expired primary half-open precedence, and primary recovery. Real dual-origin tests prove zero routine backup traffic, passive primary failover, continued backup service, half-open primary restoration, primary-to-backup safe retry, Watch role replacement, and all-backup candidate retention. `cargo test -p sdkwork-api-web-server-standalone-gateway --test upstream_weighted_selection` passes 4 tests and `--test upstream_safe_retries` passes 2 tests.
-- The complete standalone gateway suite passes 166 tests. `cargo clippy -p sdkwork-api-web-server-standalone-gateway --all-targets -- -D warnings`, `cargo clippy --workspace --all-targets -- -D warnings`, `pnpm.cmd verify`, `cargo fmt --all -- --check`, and `git diff --check` pass.
+- Unit tests prove primary exhaustion ordering, backup fallback, expired primary half-open precedence, and primary recovery. Real dual-origin tests prove zero routine backup traffic, passive primary failover, continued backup service, half-open primary restoration, primary-to-backup safe retry, Watch role replacement, and all-backup candidate retention. `cargo test -p sdkwork-api-webserver-standalone-gateway --test upstream_weighted_selection` passes 4 tests and `--test upstream_safe_retries` passes 2 tests.
+- The complete standalone gateway suite passes 166 tests. `cargo clippy -p sdkwork-api-webserver-standalone-gateway --all-targets -- -D warnings`, `cargo clippy --workspace --all-targets -- -D warnings`, `pnpm.cmd verify`, `cargo fmt --all -- --check`, and `git diff --check` pass.
 - SDKWork pagination, API operation-pattern, response-envelope, app-SDK consumer-import, application-layering, Rust backend-composition, route-collision, and database-framework validators passed. PostgreSQL lifecycle was not executed or claimed by this requirement; REQ-2026-0004/0049 own that evidence.
 
 ## Accepted Boundary

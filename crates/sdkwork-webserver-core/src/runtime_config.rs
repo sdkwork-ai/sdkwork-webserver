@@ -1,33 +1,28 @@
 //! Installed runtime configuration loaded from a typed TOML file.
 //!
 //! The native installers write the authoritative runtime configuration to
-//! `/etc/sdkwork/webserver/sdkwork-webserver.toml` (RUNTIME_DIRECTORY_SPEC
-//! section 4.1: the `<application-code>.toml` runtime config file). Every
-//! process binary (gateway, db-migrate, certificate worker) loads this file
-//! at startup and materializes it into the process environment variables the
-//! runtime components read (`SDKWORK_*`), so downstream crates keep their
-//! env-based contract. Secret material is referenced by file path only and is
-//! injected in-process, never written to env files.
+//! `/etc/sdkwork/webserver/config.toml` (`RUNTIME_DIRECTORY_SPEC.md`
+//! section 4.1). Every process binary (gateway, db-migrate, certificate worker)
+//! loads this file at startup and materializes it into the process environment
+//! variables the runtime components read (`SDKWORK_*`), so downstream crates
+//! keep their env-based contract. Secret material is referenced by file path
+//! only and is injected in-process, never written to env files.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use crate::config::canonical_webserver_config_directory;
-
-pub const RUNTIME_CONFIG_FILE_ENV: &str = "SDKWORK_WEBSERVER_RUNTIME_CONFIG_FILE";
-pub const RUNTIME_CONFIG_FILE_NAME: &str = "sdkwork-webserver.toml";
+use crate::config_paths::{
+    canonical_runtime_config_path, runtime_config_override_from_env, RUNTIME_CONFIG_FILE_ENV,
+};
+use crate::module_imports::{merge_import_specs, validate_imports, WebserverImportEntry};
 
 /// Resolves the runtime TOML path: explicit override, then the canonical
 /// system config directory. `None` when the canonical file does not exist
 /// (development/dev-runner environments keep env-based configuration).
 pub fn resolve_runtime_config_path() -> Result<Option<PathBuf>, String> {
-    if let Some(explicit) = std::env::var(RUNTIME_CONFIG_FILE_ENV)
-        .ok()
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
-    {
-        let path = PathBuf::from(explicit);
+    if let Some(path) = runtime_config_override_from_env()? {
         if !path.is_file() {
             return Err(format!(
                 "{RUNTIME_CONFIG_FILE_ENV} points to a missing file: {}",
@@ -36,7 +31,7 @@ pub fn resolve_runtime_config_path() -> Result<Option<PathBuf>, String> {
         }
         return Ok(Some(path));
     }
-    let canonical = canonical_webserver_config_directory()?.join(RUNTIME_CONFIG_FILE_NAME);
+    let canonical = canonical_runtime_config_path()?;
     if canonical.is_file() {
         Ok(Some(canonical))
     } else {
@@ -111,13 +106,16 @@ pub struct RuntimeTomlConfig {
     pub node: NodeSection,
     #[serde(default)]
     pub region: RegionSection,
+    #[serde(default)]
+    pub webserver: WebserverSection,
 }
 
 impl RuntimeTomlConfig {
     pub fn apply_to_env(&self) -> Result<(), String> {
         self.profile.apply_to_env();
         self.ingress.apply_to_env();
-        self.app_roots.apply_to_env();
+        self.app_roots
+            .apply_to_env(self.profile.environment.as_deref());
         self.deploy.apply_to_env();
         self.database.apply_to_env()?;
         self.secrets.apply_to_env()?;
@@ -127,6 +125,52 @@ impl RuntimeTomlConfig {
         self.region.apply_to_env();
         Ok(())
     }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WebserverSection {
+    #[serde(default)]
+    pub imports: Vec<WebserverImportEntry>,
+}
+
+/// Validate imported sibling-module `deployments/webserver/` directories
+/// declared in the runtime TOML and/or `SDKWORK_WEBSERVER_MODULE_IMPORTS`.
+///
+/// Base directory for resolving relative import paths.
+pub fn module_import_resolution_base() -> PathBuf {
+    if let Ok(Some(path)) = resolve_runtime_config_path() {
+        if let Some(parent) = path.parent() {
+            return parent.to_path_buf();
+        }
+    }
+    for key in ["SDKWORK_APP_ROOT", "SDKWORK_WEBSERVER_APP_ROOT"] {
+        if let Ok(value) = std::env::var(key) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return PathBuf::from(trimmed);
+            }
+        }
+    }
+    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+}
+
+/// Validate imports from runtime TOML `[[webserver.imports]]` and/or
+/// `SDKWORK_WEBSERVER_MODULE_IMPORTS`. When no runtime file exists, env-only
+/// imports are still validated.
+pub fn validate_configured_module_imports(
+) -> Result<Vec<crate::module_imports::ModuleImportValidation>, String> {
+    let base = module_import_resolution_base();
+    let from_runtime = if let Ok(Some(path)) = resolve_runtime_config_path() {
+        parse_runtime_toml_config(&path)?.webserver.imports
+    } else {
+        Vec::new()
+    };
+    let imports = merge_import_specs(&base, &from_runtime).map_err(|error| error.to_string())?;
+    if imports.is_empty() {
+        return Ok(Vec::new());
+    }
+    validate_imports(&imports).map_err(|error| error.to_string())
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -207,11 +251,31 @@ pub struct AppRootsSection {
     pub drive_app_root: Option<String>,
     pub deploy_app_root: Option<String>,
     pub web_store_app_root: Option<String>,
+    /// Skills module app root (`SDKWORK_SKILLS_APP_ROOT`).
+    pub skills_app_root: Option<String>,
+    /// MCP module app root (`SDKWORK_MCP_APP_ROOT`).
+    pub mcp_app_root: Option<String>,
+    /// Explicit PC SPA root for the active process (wins over by-environment).
     pub pc_static_root: Option<String>,
+    /// Explicit H5 SPA root for the active process (wins over by-environment).
+    pub h5_static_root: Option<String>,
+    /// Ordinary static when neither SPA is available (wins over by-environment).
+    pub static_fallback_root: Option<String>,
+    /// Optional Adaptive Web tablet preference: `pc` (default) or `h5`.
+    pub tablet_surface: Option<String>,
+    /// Lifecycle-environment catalog for PC SPA roots (`development`…`production`).
+    #[serde(default)]
+    pub pc_static_by_environment: HashMap<String, String>,
+    /// Lifecycle-environment catalog for H5 SPA roots.
+    #[serde(default)]
+    pub h5_static_by_environment: HashMap<String, String>,
+    /// Lifecycle-environment catalog for ordinary static fallback.
+    #[serde(default)]
+    pub static_fallback_by_environment: HashMap<String, String>,
 }
 
 impl AppRootsSection {
-    fn apply_to_env(&self) {
+    fn apply_to_env(&self, environment: Option<&str>) {
         if let Some(value) = &self.app_root {
             set_env("SDKWORK_APP_ROOT", value);
             set_env("SDKWORK_WEBSERVER_APP_ROOT", value);
@@ -229,10 +293,55 @@ impl AppRootsSection {
         if let Some(value) = &self.web_store_app_root {
             set_env("SDKWORK_WEB_STORE_APP_ROOT", value);
         }
-        if let Some(value) = &self.pc_static_root {
-            set_env("SDKWORK_WEBSERVER_PC_STATIC_ROOT", value);
+        if let Some(value) = &self.skills_app_root {
+            set_env("SDKWORK_SKILLS_APP_ROOT", value);
+        }
+        if let Some(value) = &self.mcp_app_root {
+            set_env("SDKWORK_MCP_APP_ROOT", value);
+        }
+        if let Some(value) =
+            resolve_static_root_value(&self.pc_static_root, &self.pc_static_by_environment, environment)
+        {
+            set_env("SDKWORK_WEBSERVER_PC_STATIC_ROOT", &value);
+        }
+        if let Some(value) =
+            resolve_static_root_value(&self.h5_static_root, &self.h5_static_by_environment, environment)
+        {
+            set_env("SDKWORK_WEBSERVER_H5_STATIC_ROOT", &value);
+        }
+        if let Some(value) = resolve_static_root_value(
+            &self.static_fallback_root,
+            &self.static_fallback_by_environment,
+            environment,
+        ) {
+            set_env("SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT", &value);
+        }
+        if let Some(value) = &self.tablet_surface {
+            set_env("SDKWORK_WEBSERVER_TABLET_SURFACE", value);
         }
     }
+}
+
+fn resolve_static_root_value(
+    explicit: &Option<String>,
+    by_environment: &HashMap<String, String>,
+    environment: Option<&str>,
+) -> Option<String> {
+    if let Some(value) = explicit {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_owned());
+        }
+    }
+    let environment = environment?.trim();
+    if environment.is_empty() {
+        return None;
+    }
+    by_environment
+        .get(environment)
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -532,15 +641,35 @@ impl RegionSection {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config_paths::RUNTIME_CONFIG_FILE_ENV_LEGACY;
     use crate::runtime_env::env_test_lock;
+
+    #[test]
+    fn retired_runtime_config_env_alias_fails_closed() {
+        let _guard = env_test_lock();
+        let path = std::env::temp_dir().join("sdkwork-webserver-legacy-env-test.toml");
+        std::fs::write(&path, "[profile]\nenvironment = \"test\"\n").unwrap();
+        std::env::set_var(RUNTIME_CONFIG_FILE_ENV_LEGACY, &path);
+        let error = resolve_runtime_config_path().expect_err("legacy env must fail closed");
+        assert!(
+            error.contains(RUNTIME_CONFIG_FILE_ENV_LEGACY) && error.contains(RUNTIME_CONFIG_FILE_ENV),
+            "unexpected diagnostic: {error}"
+        );
+        std::env::remove_var(RUNTIME_CONFIG_FILE_ENV_LEGACY);
+        let _ = std::fs::remove_file(&path);
+    }
 
     #[test]
     fn parses_and_applies_typed_config() {
         let _guard = env_test_lock();
         let path = std::env::temp_dir().join("sdkwork-webserver-runtime-config-test.toml");
+        let secret_path = std::env::temp_dir().join("sdkwork-webserver-runtime-config-test.secret");
+        std::fs::write(&secret_path, "test-db-password\n").unwrap();
+        let secret_path_text = secret_path.to_string_lossy().replace('\\', "/");
         std::fs::write(
             &path,
-            r#"
+            format!(
+                r#"
 [profile]
 deployment_profile = "standalone"
 environment = "test"
@@ -551,14 +680,16 @@ node_id = 0
 bind = "0.0.0.0:8888"
 management_expose_allowed = true
 data_plane_operations_bind = "127.0.0.1:3901"
-public_http_url = "http://testserver.sdkwork.com:8888"
-cors_allowed_origins = ["http://testserver.sdkwork.com:8888"]
+public_http_url = "http://server-test.sdkwork.com:8888"
+cors_allowed_origins = ["http://server-test.sdkwork.com:8888"]
 
 [app_roots]
 app_root = "/usr/lib/sdkwork/webserver"
 iam_app_root = "/var/lib/sdkwork/webserver/iam"
 drive_app_root = "/var/lib/sdkwork/webserver/drive"
 pc_static_root = "/usr/share/sdkwork/webserver/web/pc"
+h5_static_root = "/usr/share/sdkwork/webserver/web/h5"
+static_fallback_root = "/usr/share/sdkwork/webserver/web/static"
 
 [deploy]
 deployment_profile = "standalone"
@@ -566,8 +697,8 @@ environment = "test"
 profile_id = "standalone.test"
 use_memory_drive = false
 use_memory_content_provider = false
-drive_facade_url = "http://testserver.sdkwork.com:8888"
-web_internal_api_url = "http://testserver.sdkwork.com:8888"
+drive_facade_url = "http://server-test.sdkwork.com:8888"
+web_internal_api_url = "http://server-test.sdkwork.com:8888"
 runtime_assignment_worker_id = "deploy-worker-0"
 
 [database]
@@ -578,7 +709,7 @@ name = "sdkwork_ai_test"
 schema = "sdkwork_ai_test"
 schema_fallback_public = false
 username = "sdkwork_ai_test"
-password_file = "/etc/sdkwork/webserver/secrets/database.secret"
+password_file = "{secret_path_text}"
 ssl_mode = "disable"
 max_connections = 10
 auto_migrate = true
@@ -602,13 +733,12 @@ uuid = "standalone-test-node"
 [region]
 region_code = "cn"
 seed_locale = "zh-CN"
-"#,
+"#
+            ),
         )
         .unwrap();
         let config = parse_runtime_toml_config(&path).expect("config must parse");
-        std::env::set_var("SDKWORK_WEBSERVER_RUNTIME_CONFIG_FILE", &path);
-        load_runtime_toml_config().expect("config must apply");
-        std::env::remove_var("SDKWORK_WEBSERVER_RUNTIME_CONFIG_FILE");
+        config.apply_to_env().expect("config must apply");
         assert_eq!(
             std::env::var("SDKWORK_WEBSERVER_APPLICATION_PUBLIC_INGRESS_BIND").unwrap(),
             "0.0.0.0:8888"
@@ -619,11 +749,104 @@ seed_locale = "zh-CN"
         );
         assert_eq!(
             std::env::var("SDKWORK_CORS_ALLOWED_ORIGINS").unwrap(),
-            "http://testserver.sdkwork.com:8888"
+            "http://server-test.sdkwork.com:8888"
         );
         assert_eq!(
             std::env::var("SDKWORK_DEPLOY_USE_MEMORY_DRIVE").unwrap(),
             "false"
+        );
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(&secret_path);
+    }
+
+    #[test]
+    fn selects_static_roots_from_environment_catalog() {
+        let _guard = env_test_lock();
+        for key in [
+            "SDKWORK_WEBSERVER_PC_STATIC_ROOT",
+            "SDKWORK_WEBSERVER_H5_STATIC_ROOT",
+            "SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT",
+        ] {
+            std::env::remove_var(key);
+        }
+        let path = std::env::temp_dir().join("sdkwork-webserver-runtime-config-by-env.toml");
+        std::fs::write(
+            &path,
+            r#"
+[profile]
+environment = "development"
+
+[app_roots]
+tablet_surface = "pc"
+
+[app_roots.pc_static_by_environment]
+development = "apps/sdkwork-webserver-pc/dist/dev"
+test = "apps/sdkwork-webserver-pc/dist/test"
+staging = "apps/sdkwork-webserver-pc/dist/staging"
+production = "apps/sdkwork-webserver-pc/dist/prod"
+
+[app_roots.h5_static_by_environment]
+development = "apps/sdkwork-webserver-h5/dist/dev"
+test = "apps/sdkwork-webserver-h5/dist/test"
+staging = "apps/sdkwork-webserver-h5/dist/staging"
+production = "apps/sdkwork-webserver-h5/dist/prod"
+
+[app_roots.static_fallback_by_environment]
+development = "deployments/webserver/static"
+test = "deployments/webserver/static"
+staging = "deployments/webserver/static"
+production = "deployments/webserver/static"
+"#,
+        )
+        .unwrap();
+        let config = parse_runtime_toml_config(&path).expect("config must parse");
+        config.apply_to_env().expect("config must apply");
+        assert_eq!(
+            std::env::var("SDKWORK_WEBSERVER_PC_STATIC_ROOT").unwrap(),
+            "apps/sdkwork-webserver-pc/dist/dev"
+        );
+        assert_eq!(
+            std::env::var("SDKWORK_WEBSERVER_H5_STATIC_ROOT").unwrap(),
+            "apps/sdkwork-webserver-h5/dist/dev"
+        );
+        assert_eq!(
+            std::env::var("SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT").unwrap(),
+            "deployments/webserver/static"
+        );
+        // Every lifecycle environment resolves its own roots from the catalog;
+        // the active environment is the config's `[profile] environment` and
+        // dist directories use the standard aliases (dev/test/staging/prod).
+        for environment in ["development", "test", "staging", "production"] {
+            let dist_alias = match environment {
+                "development" => "dev",
+                "production" => "prod",
+                other => other,
+            };
+            assert_eq!(
+                resolve_static_root_value(
+                    &None,
+                    &config.app_roots.pc_static_by_environment,
+                    Some(environment),
+                ),
+                Some(format!("apps/sdkwork-webserver-pc/dist/{dist_alias}"))
+            );
+            assert_eq!(
+                resolve_static_root_value(
+                    &None,
+                    &config.app_roots.h5_static_by_environment,
+                    Some(environment),
+                ),
+                Some(format!("apps/sdkwork-webserver-h5/dist/{dist_alias}"))
+            );
+        }
+        // An explicit root wins over the environment catalog.
+        assert_eq!(
+            resolve_static_root_value(
+                &Some("/usr/share/sdkwork/webserver/web/pc".to_owned()),
+                &config.app_roots.pc_static_by_environment,
+                Some("production"),
+            ),
+            Some("/usr/share/sdkwork/webserver/web/pc".to_owned())
         );
         let _ = std::fs::remove_file(&path);
     }

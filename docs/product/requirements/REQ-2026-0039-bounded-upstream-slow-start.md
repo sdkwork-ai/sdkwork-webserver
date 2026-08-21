@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0039
 title: Add bounded health-aware upstream slow start
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: nginx-upstream-server-slow-start-commercial-readiness
 problem: A target that recovers from active or passive health isolation immediately regains its full configured weight. A cold or only partially recovered instance can therefore receive a sudden traffic surge and fail again.
@@ -48,13 +48,13 @@ trace:
     - TEST_SPEC.md
   components:
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
   - cargo test -p sdkwork-webserver-core --test webserver_config
-  - cargo test -p sdkwork-api-web-server-standalone-gateway data_plane::proxy
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test upstream_weighted_selection
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test upstream_least_connections
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway data_plane::proxy
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test upstream_weighted_selection
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test upstream_least_connections
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check

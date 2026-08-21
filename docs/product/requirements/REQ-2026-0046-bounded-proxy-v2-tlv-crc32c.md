@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0046
 title: Add bounded HAProxy PROXY v2 TLV framing and CRC32C policy
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: nginx-proxy-protocol-commercial-readiness
 problem: A trusted L4 peer can currently send structurally truncated PROXY v2 TLVs or an invalid CRC32C TLV and still reach TLS/HTTP because the bounded parser discards all bytes after the address block without validating their framing or integrity.
@@ -50,13 +50,13 @@ trace:
     - TEST_SPEC.md
   components:
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
   - cargo test -p sdkwork-webserver-core --test webserver_config
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test proxy_protocol
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test proxy_protocol
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy -p sdkwork-webserver-core --all-targets -- -D warnings
-  - cargo clippy -p sdkwork-api-web-server-standalone-gateway --all-targets -- -D warnings
+  - cargo clippy -p sdkwork-api-webserver-standalone-gateway --all-targets -- -D warnings
   - cargo fmt --all -- --check
   - git diff --check
   - pnpm.cmd verify
@@ -86,9 +86,9 @@ CRC32C is integrity checking, not authentication. The immediate TCP peer CIDR re
 ## Verification Evidence
 
 - `cargo test -p sdkwork-webserver-core --test webserver_config` passes 60/60 configuration tests, including the compatibility default, strict token rejection, and the v2 semantic dependency.
-- `cargo test -p sdkwork-api-web-server-standalone-gateway --test proxy_protocol` passes 3/3 real-socket integrations. The matrix covers default-ignore mismatch compatibility, valid/missing/wrong/duplicate/malformed CRC, truncated metadata/value, unknown TLVs, fragmented HTTP, TLS ALPN H2, PROXY/LOCAL, required policy, and retained active policy after a Watch candidate.
+- `cargo test -p sdkwork-api-webserver-standalone-gateway --test proxy_protocol` passes 3/3 real-socket integrations. The matrix covers default-ignore mismatch compatibility, valid/missing/wrong/duplicate/malformed CRC, truncated metadata/value, unknown TLVs, fragmented HTTP, TLS ALPN H2, PROXY/LOCAL, required policy, and retained active policy after a Watch candidate.
 - The complete standalone gateway suite passes 204 tests: 99 library tests and 105 integration tests across the broader HTTP/HTTPS/H2, WebSocket, DNS/TLS, health, capacity, retry, reload, and shutdown surfaces.
-- Strict Clippy passes independently for `sdkwork-webserver-core` and `sdkwork-api-web-server-standalone-gateway` with all targets and `-D warnings`. `cargo fmt --all -- --check` and `git diff --check` pass.
+- Strict Clippy passes independently for `sdkwork-webserver-core` and `sdkwork-api-webserver-standalone-gateway` with all targets and `-D warnings`. `cargo fmt --all -- --check` and `git diff --check` pass.
 - Isolated-target, environment-independent `pnpm.cmd verify` checks passed workspace Rust tests, contract tests, API materialization consistency, repository standards, topology, database-framework, and cloud-gateway validation. PostgreSQL lifecycle was not executed or claimed by this transport requirement; REQ-2026-0004/0049 own that evidence.
 
 ## Remaining Boundary

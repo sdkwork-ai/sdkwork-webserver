@@ -4,7 +4,7 @@ info:
   description: SDKWork Web Server management and control-plane API.
   version: 1.0.0
 servers:
-- url: https://api.web.sdkwork.com
+- url: https://api.server.sdkwork.com
   description: Production
 - url: http://localhost:3800
   description: Local Development
@@ -16,6 +16,7 @@ paths:
     get:
       operationId: applications.list
       summary: List managed applications
+      x-sdkwork-pagination-mode: offset
       tags: [application]
       security:
       - AuthToken: []
@@ -287,6 +288,7 @@ paths:
     get:
       operationId: applications.domains.list
       summary: List application domains
+      x-sdkwork-pagination-mode: offset
       tags: [applicationDomain]
       security:
       - AuthToken: []
@@ -428,6 +430,7 @@ paths:
       operationId: applications.domains.listenerCertificateBindings.list
       summary: List certificates active on an application domain listener
       description: Returns an offset-paginated P1 list ordered by default status, priority, and stable binding id.
+      x-sdkwork-pagination-mode: offset
       tags: [certificate]
       security:
       - AuthToken: []
@@ -543,6 +546,7 @@ paths:
     get:
       operationId: rootDomains.list
       summary: List tenant root-domain Zones
+      x-sdkwork-pagination-mode: offset
       tags: [domain]
       security:
       - AuthToken: []
@@ -693,6 +697,7 @@ paths:
     get:
       operationId: rootDomains.subdomains.list
       summary: List publishable hostnames in a root-domain Zone
+      x-sdkwork-pagination-mode: offset
       tags: [domain]
       security:
       - AuthToken: []
@@ -776,6 +781,7 @@ paths:
     get:
       operationId: domains.list
       summary: List tenant custom domain assets
+      x-sdkwork-pagination-mode: offset
       tags: [domain]
       security:
       - AuthToken: []
@@ -1278,6 +1284,7 @@ paths:
     get:
       operationId: certificates.list
       summary: List canonical certificates
+      x-sdkwork-pagination-mode: offset
       tags: [certificate]
       security:
       - AuthToken: []
@@ -1546,6 +1553,7 @@ paths:
     get:
       operationId: certificates.distribution.list
       summary: List certificate manifest convergence by server
+      x-sdkwork-pagination-mode: offset
       tags: [certificateDistribution]
       security:
       - AuthToken: []
@@ -1583,6 +1591,7 @@ paths:
     get:
       operationId: configs.list
       summary: List Nginx configurations
+      x-sdkwork-pagination-mode: offset
       tags:
       - nginx
       security:
@@ -2134,7 +2143,7 @@ paths:
         schema:
           type: string
           format: int64
-          pattern: ^[0-9]+$
+          pattern: ^-?[0-9]+$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
       - name: start_date
@@ -3366,7 +3375,7 @@ components:
         total:
           type: string
           format: int64
-          pattern: ^[0-9]+$
+          pattern: ^-?[0-9]+$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
           description: Total item count as a string to avoid JavaScript precision
@@ -3518,7 +3527,7 @@ components:
         activeConfigs:
           type: string
           format: int64
-          pattern: ^[0-9]+$
+          pattern: ^-?[0-9]+$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
           description: Number of active nginx configs reported by the agent as a string.
@@ -3612,7 +3621,7 @@ components:
         version:
           type: string
           format: int64
-          pattern: ^[0-9]+$
+          pattern: ^-?[0-9]+$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
           description: Config revision number as a string to avoid JavaScript precision
@@ -3656,7 +3665,7 @@ components:
         total:
           type: string
           format: int64
-          pattern: ^[0-9]+$
+          pattern: ^-?[0-9]+$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
           description: Total item count as a string to avoid JavaScript precision
@@ -3670,7 +3679,7 @@ components:
         operatorId:
           type: string
           format: int64
-          pattern: ^[0-9]+$
+          pattern: ^-?[0-9]+$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
           description: Operator user id as a string to avoid JavaScript precision
@@ -3682,17 +3691,23 @@ components:
         targetType:
           type: string
         targetId:
-          type: string
+          type:
+            - string
+            - 'null'
           format: int64
-          pattern: ^[0-9]+$
+          pattern: ^-?[0-9]+$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
           description: Target snowflake id as a string to avoid JavaScript precision
-            loss.
+            loss. Null when the audit action has no specific numeric target.
         targetUuid:
-          type: string
+          type:
+            - string
+            - 'null'
         ipAddress:
-          type: string
+          type:
+            - string
+            - 'null'
         changes:
           type: object
         createdAt:
@@ -3708,7 +3723,7 @@ components:
         total:
           type: string
           format: int64
-          pattern: ^[0-9]+$
+          pattern: ^-?[0-9]+$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
           description: Total item count as a string to avoid JavaScript precision
@@ -3809,7 +3824,7 @@ components:
           maximum: 200
         totalItems:
           type: string
-          pattern: ^[0-9]+$
+          pattern: ^-?[0-9]+$
         totalPages:
           type: integer
           minimum: 0

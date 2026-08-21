@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0030
 title: Make configured upstream target weights affect real traffic selection
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: correctness-compatibility
 problem: upstreams[].targets[].weight exists in the authored Schema and model, but semantic compilation deliberately rejects every value except 1 because runtime weighting was not implemented. The system therefore avoids a silent stub but cannot yet deliver the common relative-weight behavior operators expect from an Nginx-class upstream.
@@ -50,10 +50,10 @@ trace:
   components:
     - specs/sdkwork.webserver.config.schema.json
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
   - cargo test -p sdkwork-webserver-core
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check

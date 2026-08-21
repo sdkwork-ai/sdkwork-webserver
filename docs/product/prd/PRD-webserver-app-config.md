@@ -49,7 +49,7 @@ Required manifest reference:
   "schemaVersion": 1,
   "kind": "sdkwork.webserver.app",
   "appKey": "sdkwork-example-pc",
-  "compatibility": {},
+  "nginx": {},
   "profiles": {},
   "listeners": [],
   "certificates": [],
@@ -76,17 +76,25 @@ Rules:
 
 This app-owned contract is not the server process configuration. Process binds, service account, worker/runtime sizing, runtime directories, administrative listener, global emergency reserve, and platform secret providers belong to the typed server runtime configuration governed by `CONFIG_SPEC.md` and `RUNTIME_DIRECTORY_SPEC.md`. The compiler combines app contracts, deployment overlays, resolved resources, and host runtime policy into one immutable node snapshot without allowing an application to weaken host-level limits.
 
-## 4. Compatibility
+## 4. Nginx Profile
 
-`compatibility` declares the intended Nginx compatibility behavior:
+`nginx` declares the intended Nginx profile behavior (deploy TOML `[nginx]` /
+`nginx.enabled`). Deploy-time keys:
 
 | Field | Requirement |
 | --- | --- |
-| `nginxProfile` | Supported profile such as `http-core-v1`. |
-| `unknownDirectivePolicy` | Must be `error` for Rust activation; `preserve` may be used only by an Nginx round-trip tool. |
-| `regexEngine` | `pcre2` when Nginx-compatible regex behavior is required. |
-| `variableProfile` | Declared subset of supported Nginx variables. |
-| `renderTarget` | Optional Nginx target version/profile used for generated configuration. |
+| `enabled` | Master switch for nginx profile activation; default `true`. |
+| `profile` | Supported profile such as `http-core-v1`. |
+| `unknownDirectivePolicy` | `error` (default), `warn`, or `allow` (requires `exceptionRef`). |
+| `strict` | When `true`, present per-profile sidecars must match the TOML render (W16). |
+| `confFile` | Sidecar base name; default `nginx.conf` → `nginx.<profile>.conf`. |
+| `exceptionRef` | Required for `unknownDirectivePolicy = "allow"` or `strict = false`. |
+
+The Rust runtime app model carries `enabled` / `profile` / `unknownDirectivePolicy`
+only. `strict` and `confFile` are deploy-validator concerns.
+
+Validators fail closed on the retired table `[compatibility]` and key
+`nginxProfile` with a migration diagnostic. Dual-read is forbidden.
 
 ## 5. Default Profiles
 

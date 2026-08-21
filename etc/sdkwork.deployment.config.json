@@ -11,9 +11,14 @@
       "dockerApplicationOrigin": "http://server-dev.sdkwork.com"
     },
     "test": {
-      "applicationOrigin": "http://testserver.sdkwork.com:8888",
+      "applicationOrigin": "http://server-test.sdkwork.com:8888",
       "cloudApiBaseUrl": "https://api-test.sdkwork.com",
       "dockerApplicationOrigin": "http://server-test.sdkwork.com"
+    },
+    "staging": {
+      "applicationOrigin": "https://server-staging.sdkwork.com",
+      "cloudApiBaseUrl": "https://api-staging.sdkwork.com",
+      "dockerApplicationOrigin": "http://server-staging.sdkwork.com"
     },
     "production": {
       "applicationOrigin": "https://server.sdkwork.com",
@@ -36,6 +41,15 @@
     },
     "cloud.production": {
       "config": "topology/cloud.production.env"
+    },
+    "standalone.staging": {
+      "config": "topology/standalone.staging.env"
+    },
+    "cloud.test": {
+      "config": "topology/cloud.test.env"
+    },
+    "cloud.staging": {
+      "config": "topology/cloud.staging.env"
     }
   }
 }

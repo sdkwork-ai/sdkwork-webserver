@@ -6,7 +6,7 @@
     "displayName": "SDKWork Web Server Business Service",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "sdkwork-web-server/crates/sdkwork-intelligence-webserver-service",
+    "root": "sdkwork-webserver/crates/sdkwork-intelligence-webserver-service",
     "domain": "platform",
     "capability": "webserver-business-operations",
     "surface": "backend-service",

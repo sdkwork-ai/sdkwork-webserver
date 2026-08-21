@@ -4,10 +4,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use regex::Regex;
+
 use super::{
     validate::normalize_server_name, CertificateConfig, CertificateSource, ConfigDiagnostic,
-    ListenerConfig, ResourceConfig, RouteConfig, RoutePathType, TlsPolicyConfig, UpstreamConfig,
-    VirtualHostConfig, WebServerAppConfig, WebServerConfigError,
+    ListenerConfig, ResourceConfig, RouteConfig, RoutePathType, StreamServerConfig,
+    TlsPolicyConfig, UpstreamConfig, VirtualHostConfig, WebServerAppConfig, WebServerConfigError,
 };
 
 #[derive(Debug)]
@@ -50,6 +52,8 @@ struct CompiledVirtualHost {
     config_index: usize,
     exact_routes: HashMap<String, Vec<usize>>,
     prefix_routes: PrefixMatcher,
+    /// nginx regex locations in declaration order (`~` / `~*`).
+    regex_routes: Vec<(Regex, usize)>,
 }
 
 #[derive(Debug, Default)]
@@ -85,16 +89,25 @@ impl CompiledWebServerApp {
         let mut static_roots = HashMap::new();
         for (index, resource) in config.resources.iter().enumerate() {
             if let ResourceConfig::Static { id, root, .. } = resource {
-                let resolved = canonical_directory(
-                    &base_directory.join(root),
-                    &format!("/resources/{index}/root"),
-                )?;
-                if !resolved.starts_with(&base_directory) {
-                    return Err(validation_error(
-                        format!("/resources/{index}/root"),
-                        "static root escapes the configuration directory",
-                    ));
-                }
+                // Absolute roots (nginx `root` compatibility) are used
+                // directly; relative roots stay chrooted to the
+                // configuration directory (server.toml semantics).
+                let root_path = Path::new(root);
+                let resolved = if root_path.is_absolute() {
+                    canonical_directory(root_path, &format!("/resources/{index}/root"))?
+                } else {
+                    let resolved = canonical_directory(
+                        &base_directory.join(root),
+                        &format!("/resources/{index}/root"),
+                    )?;
+                    if !resolved.starts_with(&base_directory) {
+                        return Err(validation_error(
+                            format!("/resources/{index}/root"),
+                            "static root escapes the configuration directory",
+                        ));
+                    }
+                    resolved
+                };
                 static_roots.insert(id.clone(), resolved);
             }
         }
@@ -269,6 +282,10 @@ impl CompiledWebServerApp {
         self.config.listeners.iter()
     }
 
+    pub fn streams(&self) -> &[StreamServerConfig] {
+        &self.config.streams
+    }
+
     pub fn listener(&self, id: &str) -> Option<&ListenerConfig> {
         self.listeners
             .get(id)
@@ -381,14 +398,30 @@ impl CompiledVirtualHost {
     fn compile(config_index: usize, virtual_host: &VirtualHostConfig) -> Self {
         let mut exact_routes: HashMap<String, Vec<usize>> = HashMap::new();
         let mut prefix_routes = PrefixMatcher::new();
+        let mut regex_routes = Vec::new();
         for (route_index, route) in virtual_host.routes.iter().enumerate() {
             match route.route_match.path_type {
                 RoutePathType::Exact => exact_routes
                     .entry(route.route_match.path.clone())
                     .or_default()
                     .push(route_index),
-                RoutePathType::Prefix => {
+                RoutePathType::Prefix | RoutePathType::PrefixExclusive => {
                     prefix_routes.insert(route.route_match.path.as_bytes(), route_index)
+                }
+                RoutePathType::Regex | RoutePathType::RegexIgnoreCase => {
+                    let pattern = if matches!(
+                        route.route_match.path_type,
+                        RoutePathType::RegexIgnoreCase
+                    ) {
+                        format!("(?i){}", route.route_match.path)
+                    } else {
+                        route.route_match.path.clone()
+                    };
+                    // Patterns are validated before compile; panic is not used —
+                    // invalid patterns are skipped only if validation was bypassed.
+                    if let Ok(regex) = Regex::new(&pattern) {
+                        regex_routes.push((regex, route_index));
+                    }
                 }
             }
         }
@@ -396,6 +429,7 @@ impl CompiledVirtualHost {
             config_index,
             exact_routes,
             prefix_routes,
+            regex_routes,
         }
     }
 
@@ -405,19 +439,35 @@ impl CompiledVirtualHost {
         path: &str,
         method: &str,
     ) -> Option<usize> {
-        self.exact_routes
-            .get(path)
-            .and_then(|routes| {
-                routes
-                    .iter()
-                    .copied()
-                    .find(|index| route_matches_method(&virtual_host.routes[*index], method))
-            })
-            .or_else(|| {
-                self.prefix_routes.select(path.as_bytes(), |index| {
-                    route_matches_method(&virtual_host.routes[index], method)
-                })
-            })
+        if let Some(route) = self.exact_routes.get(path).and_then(|routes| {
+            routes
+                .iter()
+                .copied()
+                .find(|index| route_matches_method(&virtual_host.routes[*index], method))
+        }) {
+            return Some(route);
+        }
+
+        let prefix = self.prefix_routes.select(path.as_bytes(), |index| {
+            route_matches_method(&virtual_host.routes[index], method)
+        });
+        if let Some(index) = prefix {
+            if matches!(
+                virtual_host.routes[index].route_match.path_type,
+                RoutePathType::PrefixExclusive
+            ) {
+                // nginx `^~`: longest exclusive prefix suppresses regex.
+                return Some(index);
+            }
+        }
+
+        for (regex, index) in &self.regex_routes {
+            if regex.is_match(path) && route_matches_method(&virtual_host.routes[*index], method) {
+                return Some(*index);
+            }
+        }
+
+        prefix
     }
 }
 

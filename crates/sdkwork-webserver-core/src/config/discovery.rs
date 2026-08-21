@@ -1,35 +1,29 @@
 //! Canonical Web Server config file discovery.
 //!
 //! Resolution order (per `ENVIRONMENT_SPEC.md` section 8 and
-//! `RUNTIME_DIRECTORY_SPEC.md` section 3):
+//! `RUNTIME_DIRECTORY_SPEC.md` section 4):
 //!
 //! 1. Explicit command-line argument.
 //! 2. `SDKWORK_WEBSERVER_SERVER_CONFIG_FILE` environment variable.
 //! 3. Canonical OS system-scope directory for application code `webserver`
 //!    plus `sdkwork.webserver.config.json`: Linux `/etc/sdkwork/webserver`,
-//!    macOS `/Library/Application Support/sdkwork/webserver`,
-//!    Windows `%ProgramData%\sdkwork\webserver`.
-//!
-//! When no explicit source is given the canonical default must exist; a
-//! missing default fails closed with the expected path in the error so
-//! production service managers cannot silently start without configuration.
+//!    macOS `/Library/Application Support/sdkwork/webserver`, Windows
+//!    `%ProgramData%\sdkwork\webserver`.
 
 use std::{
     env, fs, io,
     path::{Path, PathBuf},
 };
 
-/// Canonical Web Server config file name inside the application config
-/// directory (`specs/sdkwork.webserver.config.schema.json` is the schema
+use crate::config_paths::{DATA_PLANE_CONFIG_FILE_ENV, DATA_PLANE_CONFIG_FILE_NAME};
+
+/// Canonical Web Server data-plane config file name inside the application
+/// config directory (`specs/sdkwork.webserver.config.schema.json` is the schema
 /// authority for this format).
-pub const WEBSERVER_CONFIG_FILE_NAME: &str = "sdkwork.webserver.config.json";
+pub const WEBSERVER_CONFIG_FILE_NAME: &str = DATA_PLANE_CONFIG_FILE_NAME;
 
-/// Canonical config override variable, `SDKWORK_<APPLICATION_CODE>_SERVER_CONFIG_FILE`
-/// with application code `webserver`.
-pub const WEBSERVER_CONFIG_FILE_ENV: &str = "SDKWORK_WEBSERVER_SERVER_CONFIG_FILE";
-
-/// Runtime directory application code declared by `specs/topology.spec.json`.
-const APPLICATION_CODE_DIRECTORY: &str = "webserver";
+/// Canonical data-plane config override variable.
+pub const WEBSERVER_CONFIG_FILE_ENV: &str = DATA_PLANE_CONFIG_FILE_ENV;
 
 /// Resolve the Web Server config file path for an entry point.
 ///
@@ -78,33 +72,7 @@ fn resolve_webserver_config_path_with_default(
 
 /// Canonical OS system-scope config directory for the Web Server application
 /// code, following the host operating system.
-pub fn canonical_webserver_config_directory() -> Result<PathBuf, String> {
-    Ok(canonical_os_system_scope_base()?.join(APPLICATION_CODE_DIRECTORY))
-}
-
-/// Canonical OS system-scope SDKWork base directory (`sdkwork/<application-code>`
-/// pattern per `RUNTIME_DIRECTORY_SPEC.md` section 4).
-fn canonical_os_system_scope_base() -> Result<PathBuf, String> {
-    #[cfg(target_os = "linux")]
-    {
-        Ok(PathBuf::from("/etc/sdkwork"))
-    }
-    #[cfg(target_os = "macos")]
-    {
-        Ok(PathBuf::from("/Library/Application Support/sdkwork"))
-    }
-    #[cfg(target_os = "windows")]
-    {
-        let program_data = env::var("ProgramData").unwrap_or_else(|_| "C:\\ProgramData".to_owned());
-        Ok(PathBuf::from(program_data).join("sdkwork"))
-    }
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-    {
-        Err(format!(
-            "Web Server config discovery is not supported on this operating system; pass a config path or set {WEBSERVER_CONFIG_FILE_ENV}"
-        ))
-    }
-}
+pub use crate::config_paths::canonical_webserver_config_directory;
 
 #[cfg(test)]
 mod tests {

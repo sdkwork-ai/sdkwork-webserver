@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0044
 title: Add bounded trusted-source HAProxy PROXY Protocol v1/v2
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: nginx-proxy-protocol-commercial-readiness
 problem: A Web Server behind a TCP load balancer must recover the original client address before TLS or HTTP parsing, but accepting an untrusted or auto-detected PROXY header would let a direct client forge transport identity and influence forwarding, affinity, and retries.
@@ -51,11 +51,11 @@ trace:
     - TEST_SPEC.md
   components:
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
   - cargo test -p sdkwork-webserver-core --test webserver_config
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test proxy_protocol
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test proxy_protocol
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check
@@ -77,10 +77,10 @@ The wire parser follows HAProxy PROXY protocol v1/v2 framing and the common Ngin
 ## Verification Evidence
 
 - `cargo test -p sdkwork-webserver-core --test webserver_config` passes 60 configuration tests, including strict PROXY defaults, bounds, unknown-field rejection, CIDR/version validation, and `trustedProxy` mutual exclusion.
-- `cargo test -p sdkwork-api-web-server-standalone-gateway --test proxy_protocol` passes all current real-socket integrations. The matrix covers fragmented v1, strict CRLF, canonical ports, v1/v2 IPv4 and IPv6, v1 `UNKNOWN`, v2 `LOCAL`, bounded TLV processing, all CRC32C modes, HTTP/1, TLS ALPN H2, missing/partial timeout, malformed/oversized/unsupported input, untrusted peers, disabled versions, and retained active policy after a Restart-only Watch candidate.
+- `cargo test -p sdkwork-api-webserver-standalone-gateway --test proxy_protocol` passes all current real-socket integrations. The matrix covers fragmented v1, strict CRLF, canonical ports, v1/v2 IPv4 and IPv6, v1 `UNKNOWN`, v2 `LOCAL`, bounded TLV processing, all CRC32C modes, HTTP/1, TLS ALPN H2, missing/partial timeout, malformed/oversized/unsupported input, untrusted peers, disabled versions, and retained active policy after a Restart-only Watch candidate.
 - The complete current standalone gateway library and integration suites pass across HTTP/HTTPS/H2, WebSocket, DNS/TLS, health, capacity, retry, forwarding identity, PROXY protocol, reload, and shutdown behavior. The separately isolated HTTP/1 semantics suite also passes.
 - `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all -- --check`, and isolated-target `pnpm.cmd verify` pass. The latter covers all workspace Rust tests, contract tests, API materialization, repository checks, topology, database lifecycle, and cloud gateway validation without additional generated diff.
-- Source-config, agent/workflow, repository docs, apps index, pagination, API operation/envelope, application layering, Rust backend composition, strict component-port, route-collision, SDK consumer import, identity naming, database framework, and `verify-repo` validators pass. Production gateway CORS now fails closed with exact `https://web.sdkwork.com`, derived from the canonical cloud public-host topology.
+- Source-config, agent/workflow, repository docs, apps index, pagination, API operation/envelope, application layering, Rust backend composition, strict component-port, route-collision, SDK consumer import, identity naming, database framework, and `verify-repo` validators pass. Production gateway CORS now fails closed with exact `https://server.sdkwork.com`, derived from the canonical cloud public-host topology.
 - The standalone CLI validates `etc/examples/sdkwork.webserver.config.json` as revision `3c599aba9a77de1120a92146293181c1a4d07a2c214b9063ad72b9ba29f18486`, with one listener, one virtual host, three routes, three resources, and one upstream.
 - This transport requirement does not claim database lifecycle evidence; PostgreSQL verification and release gating are owned by REQ-2026-0004 and REQ-2026-0049.
 

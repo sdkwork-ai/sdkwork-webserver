@@ -1,9 +1,9 @@
 # REVIEW-20260731 Domain, Certificate, And Deployment Data Model
 
 Status: changes-requested
-Owner: sdkwork-web-server
+Owner: sdkwork-webserver
 Date: 2026-07-31
-Scope: sdkwork-web-server, sdkwork-deployments, sdkwork-iam
+Scope: sdkwork-webserver, sdkwork-deployments, sdkwork-iam
 Specs: SUBJECT_ID_SPEC.md, DATABASE_SPEC.md, DATABASE_FRAMEWORK_SPEC.md, API_SPEC.md, PAGINATION_SPEC.md, SDK_SPEC.md, SECURITY_SPEC.md, DEPLOYMENT_SPEC.md, REQUIREMENTS_SPEC.md, ARCHITECTURE_DECISION_SPEC.md
 
 ## 1. Executive Result

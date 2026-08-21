@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0062
 title: Publish owner-scoped, Drive-backed application source versions with domains and certificates
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: in-progress
 source: user
 problem: Authenticated app users can enter the Web Server Console, but a page-level IAM denial blocks normal workflows and the existing deployment form does not upload an immutable package. Certificate workflows must expose verified owned domains through a bounded selector without hiding later pages or leaking another user's resources. Administrators and normal users need separate product surfaces without hiding the shared Console shell or sign-out command.

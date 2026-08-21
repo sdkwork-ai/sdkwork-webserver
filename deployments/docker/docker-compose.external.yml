@@ -1,6 +1,6 @@
 # sdkwork-webserver external-dependency mode override.
 #
-# Modes (choose via deployments/docker/.env):
+# Modes:
 #
 #   ② Remote managed services — PostgreSQL/Redis already exist outside compose:
 #        WEBSERVER_POSTGRES_HOST=db.internal.example.com
@@ -21,11 +21,11 @@
 #
 # Provision external PostgreSQL with deployments/docker/postgres/external-schema.sql
 # per environment (`-v db=sdkwork_ai_dev|sdkwork_ai_test|sdkwork_ai_prod`).
-
-networks:
-  external-postgres:
-    external: true
-    name: ${WEBSERVER_EXTERNAL_NETWORK:-new-api_new-api-network}
+#
+# Canonical identities (ENVIRONMENT_SPEC §7.1):
+#   development -> sdkwork_ai_dev / sdkwork_ai_dev / sdkworkdev123
+#   test        -> sdkwork_ai_test / sdkwork_ai_test
+#   production  -> sdkwork_ai_prod / sdkwork_ai_prod
 
 services:
   postgres:
@@ -36,9 +36,6 @@ services:
 
   webserver-development:
     depends_on: !reset []
-    networks:
-      - default
-      - external-postgres
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -58,9 +55,6 @@ services:
 
   webserver-test:
     depends_on: !reset []
-    networks:
-      - default
-      - external-postgres
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -80,9 +74,6 @@ services:
 
   webserver-production:
     depends_on: !reset []
-    networks:
-      - default
-      - external-postgres
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:

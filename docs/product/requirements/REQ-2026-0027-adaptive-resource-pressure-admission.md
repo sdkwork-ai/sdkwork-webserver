@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0027
 title: Shed new business work before memory, handle, or event-loop exhaustion
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: reliability
 problem: Fixed connection and request counts bound cardinality but cannot detect that the process or container is already near its memory or open-handle ceiling, or that the asynchronous runtime cannot make timely progress. Continuing to accept and dispatch ordinary traffic until the OS, allocator, or cgroup terminates the process is not commercially safe.
@@ -64,10 +64,10 @@ trace:
   components:
     - specs/sdkwork.webserver.config.schema.json
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
   - cargo test -p sdkwork-webserver-core
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check

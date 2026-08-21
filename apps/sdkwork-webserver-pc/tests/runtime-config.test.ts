@@ -83,9 +83,9 @@ describe("webserver runtime config", () => {
   it("accepts explicit cross-origin cloud SDK roots", () => {
     const config = parseWebserverPcRuntimeConfig({
       ...locales,
-      appApiBaseUrl: "https://web-app-dev.sdkwork.com",
+      appApiBaseUrl: "https://server-app-dev.sdkwork.com",
       appbaseAppApiBaseUrl: "https://api-dev.sdkwork.com",
-      backendApiBaseUrl: "https://web-admin-dev.sdkwork.com",
+      backendApiBaseUrl: "https://server-admin-dev.sdkwork.com",
       browserOriginMode: "cross-origin",
       deployAppApiBaseUrl: "https://deploy-app-dev.sdkwork.com",
       deploymentProfile: "cloud",
@@ -105,7 +105,7 @@ describe("webserver runtime config", () => {
       ...locales,
       appApiBaseUrl: "http://127.0.0.1:8080",
       appbaseAppApiBaseUrl: "https://api.sdkwork.com",
-      backendApiBaseUrl: "https://web.sdkwork.com",
+      backendApiBaseUrl: "https://server.sdkwork.com",
       browserOriginMode: "cross-origin",
       deployAppApiBaseUrl: "https://deploy-app.sdkwork.com",
       deploymentProfile: "cloud",
@@ -120,9 +120,9 @@ describe("webserver runtime config", () => {
   it("rejects a production notification center loopback URL", () => {
     expect(() => parseWebserverPcRuntimeConfig({
       ...locales,
-      appApiBaseUrl: "https://web.sdkwork.com",
+      appApiBaseUrl: "https://server.sdkwork.com",
       appbaseAppApiBaseUrl: "https://api.sdkwork.com",
-      backendApiBaseUrl: "https://web.sdkwork.com",
+      backendApiBaseUrl: "https://server.sdkwork.com",
       browserOriginMode: "cross-origin",
       deployAppApiBaseUrl: "https://deploy-app.sdkwork.com",
       deploymentProfile: "cloud",

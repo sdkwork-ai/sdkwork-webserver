@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0031
 title: Proxy classic WebSocket upgrades with bounded lifetime and supervised shutdown
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: runtime-correctness-compatibility
 problem: The data plane rejects every protocol upgrade. Forwarding a 101 response alone would also be incomplete because Hyper transfers each upgraded socket out of the HTTP connection future, so the existing connection drain and maximum-age supervision would no longer own the long-lived traffic.
@@ -54,10 +54,10 @@ trace:
     - PERFORMANCE_SPEC.md
     - TEST_SPEC.md
   components:
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test websocket_proxy
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test websocket_proxy
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check

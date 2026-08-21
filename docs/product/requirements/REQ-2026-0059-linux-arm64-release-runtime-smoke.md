@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0059
 title: Build, identify, and smoke-test Linux arm64 Web Server release archives
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 priority: P0
 source: multi-architecture-commercial-release

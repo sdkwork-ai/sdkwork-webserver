@@ -38,6 +38,15 @@ pub enum WebServerConfigError {
         source: serde_json::Error,
     },
 
+    #[error("Web Server TOML config {path} is not valid TOML: {source}")]
+    Toml {
+        path: PathBuf,
+        source: toml::de::Error,
+    },
+
+    #[error("Web Server TOML config cannot be materialized: {0}")]
+    Materialize(String),
+
     #[error("embedded Web Server JSON Schema is invalid: {0}")]
     InvalidSchema(String),
 

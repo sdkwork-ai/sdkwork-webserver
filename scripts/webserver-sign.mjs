@@ -21,7 +21,7 @@ const OUTPUT_ROOT = path.join(REPO_ROOT, 'dist', 'release');
 const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
 const MAX_BUNDLE_BYTES = 2 * 1024 * 1024;
 const OFFICIAL_WORKFLOW_IDENTITY =
-  '^https://github\\.com/sdkwork-ai/sdkwork-web-server/\\.github/workflows/package\\.yml@refs/(?:heads|tags|pull)/.+$';
+  '^https://github\\.com/sdkwork-ai/sdkwork-webserver/\\.github/workflows/package\\.yml@refs/(?:heads|tags|pull)/.+$';
 const GITHUB_OIDC_ISSUER = 'https://token.actions.githubusercontent.com';
 
 function parseArgs(argv) {

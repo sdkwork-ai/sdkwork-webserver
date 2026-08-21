@@ -50,13 +50,41 @@ const CARGO_BUILD_TIMEOUT_MS = 30 * 60 * 1000;
 const PC_BUILD_TIMEOUT_MS = 15 * 60 * 1000;
 const SBOM_TIMEOUT_MS = 3 * 60 * 1000;
 const SUPPORTED_ARCHITECTURES = new Set(['x64', 'arm64']);
+
+/** Lifecycle environment of the packaged frontend (test -> dist/test). */
+function resolvedEnvironment(env = process.env) {
+  const value = env.SDKWORK_WEBSERVER_ENVIRONMENT ?? env.SDKWORK_ENVIRONMENT ?? 'production';
+  return ['development', 'test', 'staging', 'production'].includes(value) ? value : 'production';
+}
+
+function browserDistAlias(environment) {
+  return environment === 'production' ? 'prod' : environment;
+}
 const PC_APP_RELATIVE_ROOT = 'apps/sdkwork-webserver-pc';
 const PC_APP_ROOT = path.join(REPO_ROOT, 'apps', 'sdkwork-webserver-pc');
-const PC_BUILD_OUTPUT = path.join(PC_APP_ROOT, 'dist');
+const PC_BUILD_OUTPUT = path.join(
+  PC_APP_ROOT,
+  'dist',
+  browserDistAlias(resolvedEnvironment(process.env)),
+);
 const PC_PACKAGE_PREFIX = 'share/sdkwork/webserver-pc';
 const PC_PACKAGE_INDEX = `${PC_PACKAGE_PREFIX}/index.html`;
 const PC_PACKAGE_RUNTIME_ENV = `${PC_PACKAGE_PREFIX}/runtime-env.json`;
 const PC_PACKAGE_ASSETS_PREFIX = `${PC_PACKAGE_PREFIX}/assets/`;
+const H5_APP_RELATIVE_ROOT = 'apps/sdkwork-webserver-h5';
+const H5_APP_ROOT = path.join(REPO_ROOT, 'apps', 'sdkwork-webserver-h5');
+const H5_BUILD_OUTPUT = path.join(
+  H5_APP_ROOT,
+  'dist',
+  browserDistAlias(resolvedEnvironment(process.env)),
+);
+const H5_PACKAGE_PREFIX = 'share/sdkwork/webserver-h5';
+const H5_PACKAGE_INDEX = `${H5_PACKAGE_PREFIX}/index.html`;
+const H5_PACKAGE_RUNTIME_ENV = `${H5_PACKAGE_PREFIX}/runtime-env.json`;
+const H5_PACKAGE_ASSETS_PREFIX = `${H5_PACKAGE_PREFIX}/assets/`;
+const STATIC_FALLBACK_SOURCE = path.join(REPO_ROOT, 'deployments', 'webserver', 'static');
+const STATIC_FALLBACK_PACKAGE_PREFIX = 'share/sdkwork/webserver-static';
+const STATIC_FALLBACK_PACKAGE_INDEX = `${STATIC_FALLBACK_PACKAGE_PREFIX}/index.html`;
 const DEPENDENCY_RUNTIME_ASSETS = Object.freeze([
   {
     id: 'iam',
@@ -75,6 +103,20 @@ const DEPENDENCY_RUNTIME_ASSETS = Object.freeze([
     sourceRoot: path.resolve(REPO_ROOT, '..', 'sdkwork-drive'),
     sourceDirectories: ['database'],
     packagePrefix: 'share/sdkwork/drive',
+    requiredPaths: ['database/database.manifest.json'],
+  },
+  {
+    id: 'skills',
+    sourceRoot: path.resolve(REPO_ROOT, '..', 'sdkwork-skills'),
+    sourceDirectories: ['database', 'skills'],
+    packagePrefix: 'share/sdkwork/skills',
+    requiredPaths: ['database/database.manifest.json'],
+  },
+  {
+    id: 'mcp',
+    sourceRoot: path.resolve(REPO_ROOT, '..', 'sdkwork-mcp'),
+    sourceDirectories: ['database'],
+    packagePrefix: 'share/sdkwork/mcp',
     requiredPaths: ['database/database.manifest.json'],
   },
   {
@@ -102,8 +144,8 @@ const SDK_BASE_URL_FIELDS = [
   'appbaseAppApiBaseUrl',
 ];
 const BINARIES = [
-  'sdkwork-api-web-server-standalone-gateway',
-  'sdkwork-web-server-website-delivery-edge-runtime',
+  'sdkwork-api-webserver-standalone-gateway',
+  'sdkwork-webserver-website-delivery-edge-runtime',
   'sdkwork-web-node-daemon',
   'sdkwork-web-agent',
   'sdkwork-webserver-certificate-worker',
@@ -160,6 +202,10 @@ const PACKAGE_ASSETS = [
     target: 'database/migrations/postgres/0005_web_application.up.sql',
   },
   {
+    source: 'database/migrations/postgres/0006_organization_id_not_null.up.sql',
+    target: 'database/migrations/postgres/0006_organization_id_not_null.up.sql',
+  },
+  {
     source: 'database/drift/policy.yaml',
     target: 'database/drift/policy.yaml',
   },
@@ -194,15 +240,21 @@ function parseArgs(argv) {
   const settings = {
     operation: argv[0],
     deploymentProfile: process.env.SDKWORK_DEPLOYMENT_PROFILE,
+    environment: process.env.SDKWORK_WEBSERVER_ENVIRONMENT ?? process.env.SDKWORK_ENVIRONMENT ?? 'production',
     architecture: process.env.SDKWORK_PACKAGE_ARCHITECTURE,
     version: undefined,
     dryRun: false,
     skipPcBuild: false,
+    skipH5Build: false,
   };
   for (let index = 1; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === '--deployment-profile') {
       settings.deploymentProfile = argv[++index];
+    } else if (argument === '--environment') {
+      settings.environment = argv[++index];
+      process.env.SDKWORK_WEBSERVER_ENVIRONMENT = settings.environment;
+      process.env.SDKWORK_ENVIRONMENT = settings.environment;
     } else if (argument === '--architecture') {
       settings.architecture = argv[++index];
     } else if (argument === '--version') {
@@ -210,11 +262,14 @@ function parseArgs(argv) {
     } else if (argument === '--dry-run') {
       settings.dryRun = true;
     } else if (argument === '--skip-pc-build') {
-      // Reuse an existing PC static build (apps/sdkwork-webserver-pc/dist)
+      // Reuse an existing PC static build (apps/sdkwork-webserver-pc/dist/prod)
       // instead of rebuilding it on this runner. The dist output is
       // platform-independent; used when the runner has no matching Node
       // toolchain (for example a WSL packaging runner).
       settings.skipPcBuild = true;
+    } else if (argument === '--skip-h5-build') {
+      // Reuse an existing H5 static build (apps/sdkwork-webserver-h5/dist/prod).
+      settings.skipH5Build = true;
     } else if (argument === '--help' || argument === '-h') {
       settings.help = true;
     } else {
@@ -435,10 +490,12 @@ function validateStandaloneRuntimeEnv(value, label) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`${label} must contain a JSON object`);
   }
+  const environment = resolvedEnvironment(process.env);
+  const profileId = `standalone.${environment}`;
   for (const [field, expected] of [
-    ['environment', 'production'],
+    ['environment', environment],
     ['deploymentProfile', 'standalone'],
-    ['profileId', 'standalone.production'],
+    ['profileId', profileId],
     ['runtimeTarget', 'browser'],
     ['browserOriginMode', 'same-origin'],
   ]) {
@@ -545,6 +602,120 @@ function inspectPcBuildOutput() {
     throw new Error('PC standalone build must contain at least one assets/ file');
   }
   return files;
+}
+
+
+function inspectSpaBuildOutput({ buildOutput, packagePrefix, label, maxFiles = MAX_PC_STATIC_FILES }) {
+  const rootMetadata = lstatSync(buildOutput);
+  if (rootMetadata.isSymbolicLink() || !rootMetadata.isDirectory()) {
+    throw new Error(`${label} standalone build output must be a non-symlink directory`);
+  }
+  const files = [];
+  let inspectedEntries = 0;
+  const walk = (directory, relativeDirectory) => {
+    const entries = readdirSync(directory, { withFileTypes: true }).sort((left, right) =>
+      left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
+    );
+    for (const entry of entries) {
+      inspectedEntries += 1;
+      if (inspectedEntries > MAX_PACKAGE_ENTRIES) {
+        throw new Error(`${label} build contains more than ${MAX_PACKAGE_ENTRIES} filesystem entries`);
+      }
+      const source = path.join(directory, entry.name);
+      assertSafeOwnedPath(source, buildOutput, `${label} build entry ${entry.name}`);
+      const metadata = lstatSync(source);
+      if (metadata.isSymbolicLink()) {
+        throw new Error(`${label} build entry ${source} must not be a symbolic link`);
+      }
+      const relative = relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name;
+      normalizePackageContentPath(relative, `${label} build path ${relative}`);
+      if (metadata.isDirectory()) {
+        walk(source, relative);
+      } else if (metadata.isFile()) {
+        inspectRegularFile(source, `${label} build file ${relative}`);
+        files.push({
+          source,
+          target: `${packagePrefix}/${relative}`,
+          relative,
+        });
+        if (files.length > maxFiles) {
+          throw new Error(`${label} build contains more than ${maxFiles} files`);
+        }
+      } else {
+        throw new Error(`${label} build entry ${source} must be a regular file or directory`);
+      }
+    }
+  };
+  walk(buildOutput, '');
+
+  const index = files.find((file) => file.relative === 'index.html');
+  const runtimeEnv = files.find((file) => file.relative === 'runtime-env.json');
+  validatePcBootstrapFiles(
+    index ? readFileSync(index.source) : undefined,
+    runtimeEnv ? readFileSync(runtimeEnv.source) : undefined,
+    `${label} standalone build`,
+  );
+  if (!files.some((file) => file.relative.startsWith('assets/'))) {
+    throw new Error(`${label} standalone build must contain at least one assets/ file`);
+  }
+  return files;
+}
+
+function inspectH5BuildOutput() {
+  return inspectSpaBuildOutput({
+    buildOutput: H5_BUILD_OUTPUT,
+    packagePrefix: H5_PACKAGE_PREFIX,
+    label: 'H5',
+  });
+}
+
+function inspectStaticFallbackAssets() {
+  const rootMetadata = lstatSync(STATIC_FALLBACK_SOURCE);
+  if (rootMetadata.isSymbolicLink() || !rootMetadata.isDirectory()) {
+    throw new Error('static-fallback source must be a non-symlink directory');
+  }
+  const files = [];
+  const walk = (directory, relativeDirectory) => {
+    const entries = readdirSync(directory, { withFileTypes: true }).sort((left, right) =>
+      left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
+    );
+    for (const entry of entries) {
+      if (entry.name === 'README.md') continue;
+      const source = path.join(directory, entry.name);
+      assertSafeOwnedPath(source, STATIC_FALLBACK_SOURCE, `static-fallback entry ${entry.name}`);
+      const metadata = lstatSync(source);
+      if (metadata.isSymbolicLink()) {
+        throw new Error(`static-fallback entry ${source} must not be a symbolic link`);
+      }
+      const relative = relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name;
+      if (metadata.isDirectory()) {
+        walk(source, relative);
+      } else if (metadata.isFile()) {
+        inspectRegularFile(source, `static-fallback file ${relative}`);
+        files.push({
+          source,
+          target: `${STATIC_FALLBACK_PACKAGE_PREFIX}/${relative}`,
+          relative,
+        });
+      } else {
+        throw new Error(`static-fallback entry ${source} must be a regular file or directory`);
+      }
+    }
+  };
+  walk(STATIC_FALLBACK_SOURCE, '');
+  if (!files.some((file) => file.relative === 'index.html')) {
+    throw new Error('static-fallback source must contain index.html');
+  }
+  return files;
+}
+
+function copyPackagedStaticFile(file, stageRoot, label) {
+  const target = path.join(stageRoot, ...file.target.split('/'));
+  assertSafeOwnedPath(target, stageRoot, `${label} package target ${file.target}`);
+  mkdirSync(path.dirname(target), { recursive: true, mode: 0o755 });
+  copyFileSync(file.source, target);
+  chmodSync(target, 0o644);
+  return target;
 }
 
 function copyPcStaticFile(file, stageRoot) {
@@ -738,7 +909,7 @@ async function inspectArchiveEntries(archive) {
         let actualBytes = 0;
         const captureLimit = entryPath === 'sdkwork-webserver/package.manifest.json'
           ? MAX_MANIFEST_BYTES
-          : [PC_PACKAGE_INDEX, PC_PACKAGE_RUNTIME_ENV]
+          : [PC_PACKAGE_INDEX, PC_PACKAGE_RUNTIME_ENV, H5_PACKAGE_INDEX, H5_PACKAGE_RUNTIME_ENV]
               .map((item) => `sdkwork-webserver/${item}`)
               .includes(entryPath)
             ? MAX_PC_BOOTSTRAP_FILE_BYTES
@@ -871,6 +1042,10 @@ function validatePackageManifest(manifestBuffer, records, order, capturedBuffers
   }
   const fixedPaths = new Set(EXPECTED_FIXED_CONTENT_PATHS);
   const pcPaths = manifestPaths.filter((item) => item.startsWith(`${PC_PACKAGE_PREFIX}/`));
+  const h5Paths = manifestPaths.filter((item) => item.startsWith(`${H5_PACKAGE_PREFIX}/`));
+  const staticFallbackPaths = manifestPaths.filter((item) => (
+    item.startsWith(`${STATIC_FALLBACK_PACKAGE_PREFIX}/`)
+  ));
   const dependencyPaths = manifestPaths.filter((item) => (
     DEPENDENCY_PACKAGE_PREFIXES.some((prefix) => item.startsWith(prefix))
   ));
@@ -878,6 +1053,8 @@ function validatePackageManifest(manifestBuffer, records, order, capturedBuffers
     (item) => (
       !fixedPaths.has(item)
         && !item.startsWith(`${PC_PACKAGE_PREFIX}/`)
+        && !item.startsWith(`${H5_PACKAGE_PREFIX}/`)
+        && !item.startsWith(`${STATIC_FALLBACK_PACKAGE_PREFIX}/`)
         && !DEPENDENCY_PACKAGE_PREFIXES.some((prefix) => item.startsWith(prefix))
     ),
   );
@@ -886,6 +1063,12 @@ function validatePackageManifest(manifestBuffer, records, order, capturedBuffers
   }
   if (expected.deploymentProfile === 'cloud' && pcPaths.length > 0) {
     throw new Error('cloud package must not contain PC standalone static assets');
+  }
+  if (expected.deploymentProfile === 'cloud' && h5Paths.length > 0) {
+    throw new Error('cloud package must not contain H5 standalone static assets');
+  }
+  if (expected.deploymentProfile === 'cloud' && staticFallbackPaths.length > 0) {
+    throw new Error('cloud package must not contain static-fallback assets');
   }
   if (expected.deploymentProfile === 'cloud' && dependencyPaths.length > 0) {
     throw new Error('cloud package must not contain standalone dependency runtime assets');
@@ -903,8 +1086,28 @@ function validatePackageManifest(manifestBuffer, records, order, capturedBuffers
     validatePcBootstrapFiles(
       capturedBuffers.get(`sdkwork-webserver/${PC_PACKAGE_INDEX}`),
       capturedBuffers.get(`sdkwork-webserver/${PC_PACKAGE_RUNTIME_ENV}`),
-      'standalone package',
+      'standalone package PC',
     );
+    if (h5Paths.length === 0 || h5Paths.length > MAX_PC_STATIC_FILES) {
+      throw new Error(`standalone package must contain 1..=${MAX_PC_STATIC_FILES} H5 files`);
+    }
+    if (!h5Paths.includes(H5_PACKAGE_INDEX) || !h5Paths.includes(H5_PACKAGE_RUNTIME_ENV)) {
+      throw new Error('standalone package must contain H5 index.html and runtime-env.json');
+    }
+    if (!h5Paths.some((item) => item.startsWith(H5_PACKAGE_ASSETS_PREFIX))) {
+      throw new Error('standalone package must contain at least one H5 assets/ file');
+    }
+    validatePcBootstrapFiles(
+      capturedBuffers.get(`sdkwork-webserver/${H5_PACKAGE_INDEX}`),
+      capturedBuffers.get(`sdkwork-webserver/${H5_PACKAGE_RUNTIME_ENV}`),
+      'standalone package H5',
+    );
+    if (staticFallbackPaths.length === 0) {
+      throw new Error('standalone package must contain static-fallback assets');
+    }
+    if (!staticFallbackPaths.includes(STATIC_FALLBACK_PACKAGE_INDEX)) {
+      throw new Error('standalone package must contain static-fallback index.html');
+    }
     if (
       dependencyPaths.length === 0
       || dependencyPaths.length > MAX_DEPENDENCY_RUNTIME_FILES
@@ -943,6 +1146,8 @@ function validatePackageManifest(manifestBuffer, records, order, capturedBuffers
   const expectedContentPaths = [
     ...EXPECTED_FIXED_CONTENT_PATHS,
     ...(expected.deploymentProfile === 'standalone' ? pcPaths : []),
+    ...(expected.deploymentProfile === 'standalone' ? h5Paths : []),
+    ...(expected.deploymentProfile === 'standalone' ? staticFallbackPaths : []),
     ...(expected.deploymentProfile === 'standalone' ? dependencyPaths : []),
   ].sort();
   if (JSON.stringify(manifestPaths) !== JSON.stringify(expectedContentPaths)) {
@@ -1047,6 +1252,8 @@ async function packageArchive(settings) {
   ensureCriticalSources();
   run('cargo', ['build', '--workspace', '--release'], { timeoutMs: CARGO_BUILD_TIMEOUT_MS });
   let pcStaticFiles = [];
+  let h5StaticFiles = [];
+  let staticFallbackFiles = [];
   let dependencyRuntimeFiles = [];
   if (settings.deploymentProfile === 'standalone') {
     if (!settings.skipPcBuild) {
@@ -1054,7 +1261,14 @@ async function packageArchive(settings) {
         timeoutMs: PC_BUILD_TIMEOUT_MS,
       });
     }
+    if (!settings.skipH5Build) {
+      run('pnpm', ['--dir', H5_APP_RELATIVE_ROOT, 'run', 'build:standalone'], {
+        timeoutMs: PC_BUILD_TIMEOUT_MS,
+      });
+    }
     pcStaticFiles = inspectPcBuildOutput();
+    h5StaticFiles = inspectH5BuildOutput();
+    staticFallbackFiles = inspectStaticFallbackAssets();
     dependencyRuntimeFiles = inspectDependencyRuntimeAssets();
   }
   const cargoTargetRoot = resolveCargoTargetRoot();
@@ -1084,6 +1298,16 @@ async function packageArchive(settings) {
     }
     for (const file of pcStaticFiles) {
       const target = copyPcStaticFile(file, stageRoot);
+      packageContentBytes += statSync(target).size;
+      packagedFiles.push(target);
+    }
+    for (const file of h5StaticFiles) {
+      const target = copyPackagedStaticFile(file, stageRoot, 'H5');
+      packageContentBytes += statSync(target).size;
+      packagedFiles.push(target);
+    }
+    for (const file of staticFallbackFiles) {
+      const target = copyPackagedStaticFile(file, stageRoot, 'static-fallback');
       packageContentBytes += statSync(target).size;
       packagedFiles.push(target);
     }
@@ -1192,7 +1416,7 @@ async function main() {
   const settings = parseArgs(process.argv.slice(2));
   if (settings.help) {
     console.log(
-      'Usage: node scripts/webserver-release.mjs <package|validate> --deployment-profile <standalone|cloud> [--architecture <x64|arm64>] [--version <semver>] [--skip-pc-build] [--dry-run]',
+      'Usage: node scripts/webserver-release.mjs <package|validate> --deployment-profile <standalone|cloud> [--architecture <x64|arm64>] [--version <semver>] [--skip-pc-build] [--skip-h5-build] [--dry-run]',
     );
     return;
   }

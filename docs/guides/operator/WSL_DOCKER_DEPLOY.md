@@ -7,11 +7,11 @@
 
 | 环境 | Docker 域名前缀 | nginx `:80` 路由 |
 | --- | --- | --- |
-| development | `server-dev.*` | `127.0.0.1:13800` |
-| test | `server-test.*` | `127.0.0.1:18888` |
-| production | `server.*` | `127.0.0.1:18080` |
+| development | `server-dev.sdkwork.com` | `127.0.0.1:13800` |
+| test | `server-test.sdkwork.com` | `127.0.0.1:18888` |
+| production | `server.sdkwork.com` | `127.0.0.1:18080` |
 
-支持后缀：`sdkwork.com`、`birdcoder.com`、`dtupay.com`
+支持后缀：仅 `sdkwork.com`
 
 ## 依赖模式
 
@@ -32,7 +32,9 @@
 ### 1. 准备环境文件
 
 ```bash
-cd /mnt/e/sdkwork-space/sdkwork-webserver
+# In WSL Ubuntu (repo root; adjust drive letter if the workspace is not on E:)
+cd /mnt/<drive>/sdkwork-space/sdkwork-webserver
+# example: cd /mnt/e/sdkwork-space/sdkwork-webserver
 cp deployments/docker/env/development.env.example deployments/docker/env/development.env
 # 编辑 WEBSERVER_POSTGRES_PASSWORD、WEBSERVER_POSTGRES_DEV_PASSWORD 等
 ```
@@ -86,6 +88,9 @@ curl http://server-dev.sdkwork.com/healthz
 curl http://server-test.sdkwork.com/healthz
 curl http://server.sdkwork.com/healthz
 ```
+
+声明式 Web 配置位于 `deployments/webserver/`；`install-wsl-nginx.sh` 会将 nginx
+站点安装到 `/etc/nginx/sites-enabled/sdkwork/<domain>.conf`。
 
 Windows 浏览器访问时，还需在 `C:\Windows\System32\drivers\etc\hosts` 追加相同域名。
 

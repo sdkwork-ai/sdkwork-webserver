@@ -1,0 +1,33 @@
+# Process Adaptive Web roots (not nginx layout-v2).
+# Authority: SDKWORK_WEBSERVER_SPEC.md §13.6, APP_CLIENT §2.1.
+# Copy [app_roots] into /etc/sdkwork/webserver/config.toml — not into server.*.toml.
+
+[profile]
+deployment_profile = "standalone"
+environment = "development"
+profile_id = "standalone.development"
+
+[app_roots]
+tablet_surface = "pc"
+# Explicit roots win over by-environment maps.
+# pc_static_root = "/usr/share/sdkwork/webserver/web/pc"
+# h5_static_root = "/usr/share/sdkwork/webserver/web/h5"
+# static_fallback_root = "/usr/share/sdkwork/webserver/web/static"
+
+[app_roots.pc_static_by_environment]
+development = "apps/sdkwork-webserver-pc/dist/dev"
+test = "apps/sdkwork-webserver-pc/dist/test"
+staging = "apps/sdkwork-webserver-pc/dist/staging"
+production = "apps/sdkwork-webserver-pc/dist/prod"
+
+[app_roots.h5_static_by_environment]
+development = "apps/sdkwork-webserver-h5/dist/dev"
+test = "apps/sdkwork-webserver-h5/dist/test"
+staging = "apps/sdkwork-webserver-h5/dist/staging"
+production = "apps/sdkwork-webserver-h5/dist/prod"
+
+[app_roots.static_fallback_by_environment]
+development = "deployments/webserver/static"
+test = "deployments/webserver/static"
+staging = "deployments/webserver/static"
+production = "deployments/webserver/static"

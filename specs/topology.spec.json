@@ -17,6 +17,7 @@
       "allowed": [
         "development",
         "test",
+        "staging",
         "production"
       ]
     }
@@ -32,7 +33,10 @@
     "cloud.production": "etc/topology/cloud.production.env",
     "standalone.development": "etc/topology/standalone.development.env",
     "standalone.test": "etc/topology/standalone.test.env",
-    "standalone.production": "etc/topology/standalone.production.env"
+    "standalone.production": "etc/topology/standalone.production.env",
+    "standalone.staging": "etc/topology/standalone.staging.env",
+    "cloud.test": "etc/topology/cloud.test.env",
+    "cloud.staging": "etc/topology/cloud.staging.env"
   },
   "envKeys": {
     "deploymentProfile": "SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE",
@@ -100,28 +104,74 @@
       "profileCoverage": [
         "standalone.development",
         "standalone.test",
+        "standalone.staging",
         "standalone.production"
       ]
     }
   },
   "cloudPublicHosts": {
     "application.public-ingress": {
-      "httpHost": "web.sdkwork.com"
+      "httpHost": "server.sdkwork.com",
+      "note": "Explicit role host server (applicationCode remains webserver)",
+      "environments": {
+        "development": {
+          "httpHost": "server-dev.sdkwork.com"
+        },
+        "test": {
+          "httpHost": "server-test.sdkwork.com"
+        },
+        "staging": {
+          "httpHost": "server-staging.sdkwork.com"
+        }
+      }
     },
     "application.app-http": {
-      "httpHost": "web-app.sdkwork.com"
+      "httpHost": "server-app.sdkwork.com",
+      "environments": {
+        "development": {
+          "httpHost": "server-app-dev.sdkwork.com"
+        },
+        "test": {
+          "httpHost": "server-app-test.sdkwork.com"
+        },
+        "staging": {
+          "httpHost": "server-app-staging.sdkwork.com"
+        }
+      }
     },
     "application.backend-http": {
-      "httpHost": "web-admin.sdkwork.com"
+      "httpHost": "server-admin.sdkwork.com",
+      "environments": {
+        "development": {
+          "httpHost": "server-admin-dev.sdkwork.com"
+        },
+        "test": {
+          "httpHost": "server-admin-test.sdkwork.com"
+        },
+        "staging": {
+          "httpHost": "server-admin-staging.sdkwork.com"
+        }
+      }
     },
     "platform.api-gateway": {
-      "httpHost": "api.sdkwork.com"
+      "httpHost": "api.sdkwork.com",
+      "environments": {
+        "development": {
+          "httpHost": "api-dev.sdkwork.com"
+        },
+        "test": {
+          "httpHost": "api-test.sdkwork.com"
+        },
+        "staging": {
+          "httpHost": "api-staging.sdkwork.com"
+        }
+      }
     }
   },
   "components": {
     "appApiRouter": {
-      "crate": "sdkwork-api-web-server-standalone-gateway",
-      "binary": "sdkwork-api-web-server-standalone-gateway"
+      "crate": "sdkwork-api-webserver-standalone-gateway",
+      "binary": "sdkwork-api-webserver-standalone-gateway"
     }
   },
   "orchestration": {
@@ -130,39 +180,55 @@
         "processes": [
           {
             "id": "application.public-ingress",
-            "crate": "sdkwork-api-web-server-standalone-gateway",
-            "binary": "sdkwork-api-web-server-standalone-gateway",
+            "crate": "sdkwork-api-webserver-standalone-gateway",
+            "binary": "sdkwork-api-webserver-standalone-gateway",
             "script": "_sdkwork:gateway:standalone",
             "required": true,
             "role": "api-standalone-gateway"
           },
           {
-            "id": "webserver-pc-browser",
+            "id": "webserver-browser",
             "role": "client",
-            "script": "_sdkwork:client:browser:standalone",
             "applicationRoot": "apps/sdkwork-webserver-pc",
-            "bindEnv": "SDKWORK_WEBSERVER_PC_DEV_BIND",
+            "bindEnv": "SDKWORK_WEBSERVER_WEB_DEV_INGRESS_BIND",
             "runtimeTargets": [
               "browser"
             ],
             "clientArchitectures": [
-              "pc-web"
+              "pc-web",
+              "h5"
             ],
             "required": true
           }
         ],
         "browserDeliveries": [
           {
-            "id": "webserver-pc-browser",
+            "id": "webserver-adaptive-web",
             "applicationRoot": "apps/sdkwork-webserver-pc",
             "clientArchitectures": [
-              "pc-web"
+              "pc-web",
+              "h5"
             ],
             "originMode": "same-origin",
             "deliveryMode": "dev-server-proxy",
             "apiSurfaceId": "application.public-ingress",
-            "clientProcessId": "webserver-pc-browser",
-            "preserveCanonicalPaths": true
+            "clientProcessId": "webserver-browser",
+            "preserveCanonicalPaths": true,
+            "tabletArchitecture": "pc-web",
+            "renderers": {
+              "pc-web": {
+                "applicationRoot": "apps/sdkwork-webserver-pc",
+                "script": "_sdkwork:dev:standalone",
+                "defaultPort": 5184,
+                "portEnv": "SDKWORK_WEBSERVER_PC_INTERNAL_DEV_PORT"
+              },
+              "h5": {
+                "applicationRoot": "apps/sdkwork-webserver-h5",
+                "script": "_sdkwork:dev:standalone",
+                "defaultPort": 5185,
+                "portEnv": "SDKWORK_WEBSERVER_H5_INTERNAL_DEV_PORT"
+              }
+            }
           }
         ],
         "healthSurfaces": [
@@ -179,18 +245,48 @@
             "role": "client"
           },
           {
-            "id": "webserver-pc-browser",
+            "id": "webserver-browser",
             "role": "client",
-            "script": "_sdkwork:client:browser:cloud",
             "applicationRoot": "apps/sdkwork-webserver-pc",
-            "bindEnv": "SDKWORK_WEBSERVER_PC_DEV_BIND",
+            "bindEnv": "SDKWORK_WEBSERVER_WEB_DEV_INGRESS_BIND",
             "runtimeTargets": [
               "browser"
             ],
             "clientArchitectures": [
-              "pc-web"
+              "pc-web",
+              "h5"
             ],
             "required": true
+          }
+        ],
+        "browserDeliveries": [
+          {
+            "id": "webserver-adaptive-web",
+            "applicationRoot": "apps/sdkwork-webserver-pc",
+            "clientArchitectures": [
+              "pc-web",
+              "h5"
+            ],
+            "originMode": "same-origin",
+            "deliveryMode": "dev-server-proxy",
+            "apiSurfaceId": "application.public-ingress",
+            "clientProcessId": "webserver-browser",
+            "preserveCanonicalPaths": true,
+            "tabletArchitecture": "pc-web",
+            "renderers": {
+              "pc-web": {
+                "applicationRoot": "apps/sdkwork-webserver-pc",
+                "script": "_sdkwork:dev:cloud",
+                "defaultPort": 5184,
+                "portEnv": "SDKWORK_WEBSERVER_PC_INTERNAL_DEV_PORT"
+              },
+              "h5": {
+                "applicationRoot": "apps/sdkwork-webserver-h5",
+                "script": "_sdkwork:dev:cloud",
+                "defaultPort": 5185,
+                "portEnv": "SDKWORK_WEBSERVER_H5_INTERNAL_DEV_PORT"
+              }
+            }
           }
         ],
         "healthSurfaces": [
@@ -202,8 +298,8 @@
         "processes": [
           {
             "id": "edge.website-delivery",
-            "crate": "sdkwork-web-server-website-delivery-edge-runtime",
-            "binary": "sdkwork-web-server-website-delivery-edge-runtime",
+            "crate": "sdkwork-webserver-website-delivery-edge-runtime",
+            "binary": "sdkwork-webserver-website-delivery-edge-runtime",
             "required": true,
             "role": "edge-runtime",
             "script": "_sdkwork:runtime:website-data-plane",
@@ -219,15 +315,15 @@
         "processes": [
           {
             "id": "application.public-ingress",
-            "crate": "sdkwork-api-web-server-standalone-gateway",
-            "binary": "sdkwork-api-web-server-standalone-gateway",
+            "crate": "sdkwork-api-webserver-standalone-gateway",
+            "binary": "sdkwork-api-webserver-standalone-gateway",
             "required": true,
             "role": "api-standalone-gateway"
           }
         ],
         "browserDeliveries": [
           {
-            "id": "webserver-pc-browser",
+            "id": "webserver-pc",
             "applicationRoot": "apps/sdkwork-webserver-pc",
             "clientArchitectures": [
               "pc-web"
@@ -238,6 +334,21 @@
             "hostProcessId": "application.public-ingress",
             "buildOutput": "apps/sdkwork-webserver-pc/dist",
             "runtimeRootEnv": "SDKWORK_WEBSERVER_PC_STATIC_ROOT",
+            "mountPath": "/",
+            "spaFallback": "/index.html"
+          },
+          {
+            "id": "webserver-h5",
+            "applicationRoot": "apps/sdkwork-webserver-h5",
+            "clientArchitectures": [
+              "h5"
+            ],
+            "originMode": "same-origin",
+            "deliveryMode": "gateway-static",
+            "apiSurfaceId": "application.public-ingress",
+            "hostProcessId": "application.public-ingress",
+            "buildOutput": "apps/sdkwork-webserver-h5/dist",
+            "runtimeRootEnv": "SDKWORK_WEBSERVER_H5_STATIC_ROOT",
             "mountPath": "/",
             "spaFallback": "/index.html"
           }
@@ -250,15 +361,15 @@
         "processes": [
           {
             "id": "application.public-ingress",
-            "crate": "sdkwork-api-web-server-standalone-gateway",
-            "binary": "sdkwork-api-web-server-standalone-gateway",
+            "crate": "sdkwork-api-webserver-standalone-gateway",
+            "binary": "sdkwork-api-webserver-standalone-gateway",
             "required": true,
             "role": "api-standalone-gateway"
           }
         ],
         "browserDeliveries": [
           {
-            "id": "webserver-pc-browser",
+            "id": "webserver-pc",
             "applicationRoot": "apps/sdkwork-webserver-pc",
             "clientArchitectures": [
               "pc-web"
@@ -271,10 +382,147 @@
             "runtimeRootEnv": "SDKWORK_WEBSERVER_PC_STATIC_ROOT",
             "mountPath": "/",
             "spaFallback": "/index.html"
+          },
+          {
+            "id": "webserver-h5",
+            "applicationRoot": "apps/sdkwork-webserver-h5",
+            "clientArchitectures": [
+              "h5"
+            ],
+            "originMode": "same-origin",
+            "deliveryMode": "gateway-static",
+            "apiSurfaceId": "application.public-ingress",
+            "hostProcessId": "application.public-ingress",
+            "buildOutput": "apps/sdkwork-webserver-h5/dist",
+            "runtimeRootEnv": "SDKWORK_WEBSERVER_H5_STATIC_ROOT",
+            "mountPath": "/",
+            "spaFallback": "/index.html"
           }
         ],
         "healthSurfaces": [
           "application.public-ingress"
+        ]
+      },
+      "standalone.staging": {
+        "processes": [
+          {
+            "id": "application.public-ingress",
+            "crate": "sdkwork-api-webserver-standalone-gateway",
+            "binary": "sdkwork-api-webserver-standalone-gateway",
+            "required": true,
+            "role": "api-standalone-gateway"
+          }
+        ],
+        "browserDeliveries": [
+          {
+            "id": "webserver-pc",
+            "applicationRoot": "apps/sdkwork-webserver-pc",
+            "clientArchitectures": [
+              "pc-web"
+            ],
+            "originMode": "same-origin",
+            "deliveryMode": "gateway-static",
+            "apiSurfaceId": "application.public-ingress",
+            "hostProcessId": "application.public-ingress",
+            "buildOutput": "apps/sdkwork-webserver-pc/dist",
+            "runtimeRootEnv": "SDKWORK_WEBSERVER_PC_STATIC_ROOT",
+            "mountPath": "/",
+            "spaFallback": "/index.html"
+          },
+          {
+            "id": "webserver-h5",
+            "applicationRoot": "apps/sdkwork-webserver-h5",
+            "clientArchitectures": [
+              "h5"
+            ],
+            "originMode": "same-origin",
+            "deliveryMode": "gateway-static",
+            "apiSurfaceId": "application.public-ingress",
+            "hostProcessId": "application.public-ingress",
+            "buildOutput": "apps/sdkwork-webserver-h5/dist",
+            "runtimeRootEnv": "SDKWORK_WEBSERVER_H5_STATIC_ROOT",
+            "mountPath": "/",
+            "spaFallback": "/index.html"
+          }
+        ],
+        "healthSurfaces": [
+          "application.public-ingress"
+        ]
+      },
+      "cloud.test": {
+        "processes": [
+          {
+            "id": "application.node-daemon",
+            "crate": "sdkwork-web-agent",
+            "binary": "sdkwork-web-node-daemon",
+            "required": true,
+            "role": "client"
+          },
+          {
+            "id": "webserver-browser",
+            "role": "client",
+            "applicationRoot": "apps/sdkwork-webserver-pc",
+            "bindEnv": "SDKWORK_WEBSERVER_WEB_DEV_INGRESS_BIND",
+            "runtimeTargets": [
+              "browser"
+            ],
+            "clientArchitectures": [
+              "pc-web",
+              "h5"
+            ],
+            "required": true
+          }
+        ],
+        "browserDeliveries": [
+          {
+            "id": "webserver-adaptive-web",
+            "applicationRoot": "apps/sdkwork-webserver-pc",
+            "clientArchitectures": [
+              "pc-web",
+              "h5"
+            ],
+            "originMode": "same-origin",
+            "deliveryMode": "dev-server-proxy",
+            "apiSurfaceId": "application.public-ingress",
+            "clientProcessId": "webserver-browser",
+            "preserveCanonicalPaths": true,
+            "tabletArchitecture": "pc-web",
+            "renderers": {
+              "pc-web": {
+                "applicationRoot": "apps/sdkwork-webserver-pc",
+                "script": "_sdkwork:dev:cloud",
+                "defaultPort": 5184,
+                "portEnv": "SDKWORK_WEBSERVER_PC_INTERNAL_DEV_PORT"
+              },
+              "h5": {
+                "applicationRoot": "apps/sdkwork-webserver-h5",
+                "script": "_sdkwork:dev:cloud",
+                "defaultPort": 5185,
+                "portEnv": "SDKWORK_WEBSERVER_H5_INTERNAL_DEV_PORT"
+              }
+            }
+          }
+        ],
+        "healthSurfaces": [
+          "application.public-ingress",
+          "platform.api-gateway"
+        ]
+      },
+      "cloud.staging": {
+        "processes": [
+          {
+            "id": "edge.website-delivery",
+            "crate": "sdkwork-webserver-website-delivery-edge-runtime",
+            "binary": "sdkwork-webserver-website-delivery-edge-runtime",
+            "required": true,
+            "role": "edge-runtime",
+            "script": "_sdkwork:runtime:website-data-plane",
+            "decisionRef": "docs/architecture/decisions/ADR-20260721-compiled-website-runtime-descriptor.md"
+          }
+        ],
+        "healthSurfaces": [
+          "edge.website-delivery",
+          "platform.api-gateway"
         ]
       }
     }

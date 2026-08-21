@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0049
 title: Make PostgreSQL lifecycle and Repository parity mandatory in merge and release verification
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: database-commercial-readiness
 problem: The default workspace verify command intentionally ignores tests that require an explicitly disposable PostgreSQL database. PostgreSQL behavior has local evidence, but a change can merge or package while PostgreSQL lifecycle, drift, transaction, tenant-isolation, idempotency, or pagination parity is broken.

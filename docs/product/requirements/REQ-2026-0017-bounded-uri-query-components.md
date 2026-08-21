@@ -48,10 +48,10 @@ trace:
   components:
     - specs/sdkwork.webserver.config.schema.json
     - crates/sdkwork-webserver-core
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
   - cargo test -p sdkwork-webserver-core --test webserver_config
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - cargo fmt -- --check
   - pnpm verify
@@ -74,10 +74,10 @@ The scanner performs one allocation-free O(n) pass with constant state. Unit tes
 Executed acceptance evidence:
 
 - `cargo test -p sdkwork-webserver-core --test webserver_config`: 24 passed.
-- `cargo test -p sdkwork-api-web-server-standalone-gateway`: 28 unit, 36 data-plane integration, and 3 raw HTTP/1 tests passed.
+- `cargo test -p sdkwork-api-webserver-standalone-gateway`: 28 unit, 36 data-plane integration, and 3 raw HTTP/1 tests passed.
 - `cargo clippy --workspace --all-targets -- -D warnings`: passed.
 - `cargo fmt -- --check`: passed.
-- `cargo run -p sdkwork-api-web-server-standalone-gateway -- validate etc/examples/sdkwork.webserver.config.json`: passed.
+- `cargo run -p sdkwork-api-webserver-standalone-gateway -- validate etc/examples/sdkwork.webserver.config.json`: passed.
 - `pnpm verify`: passed, including full-workspace tests, database lifecycle, contract materialization, repository/docs/topology/database checks, and cloud gateway validation.
 
 This acceptance does not claim canonical Nginx URI normalization, rewrite ordering, filesystem canonical identity, cache-key normalization, or `proxy_pass` original-versus-normalized URI parity. Those semantics require a separate ADR and differential corpus. PostgreSQL execution remained ignored because no disposable URL was configured. The pre-existing `GET /backend/v3/api/agent/sync` operation-pattern violation remains subject to human review.

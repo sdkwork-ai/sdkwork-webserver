@@ -1,0 +1,105 @@
+[package]
+name = "sdkwork-api-webserver-standalone-gateway"
+version.workspace = true
+edition.workspace = true
+
+[features]
+default = ["management"]
+management = [
+  "dep:sdkwork-api-webserver-assembly",
+  "dep:sdkwork-api-iam-assembly",
+  "dep:sdkwork-api-drive-assembly",
+  "dep:sdkwork-api-skills-assembly",
+  "dep:sdkwork-api-mcp-assembly",
+  "dep:sdkwork-database-sqlx",
+  "dep:sdkwork-web-axum",
+  "dep:sdkwork-web-contract",
+  "dep:sdkwork-web-store-sqlx",
+  "dep:sdkwork-webserver-http-host",
+]
+
+[lib]
+name = "sdkwork_api_webserver_standalone_gateway"
+path = "src/lib.rs"
+
+
+[[bin]]
+name = "sdkwork-api-webserver-standalone-gateway"
+path = "src/main.rs"
+required-features = ["management"]
+
+[dependencies]
+sdkwork-api-webserver-assembly = { workspace = true, optional = true }
+sdkwork-api-iam-assembly = { workspace = true, optional = true }
+sdkwork-api-drive-assembly = { workspace = true, optional = true }
+sdkwork-api-skills-assembly = { workspace = true, optional = true }
+sdkwork-api-mcp-assembly = { workspace = true, optional = true }
+atomic-waker.workspace = true
+arc-swap.workspace = true
+axum.workspace = true
+axum-server.workspace = true
+bytes.workspace = true
+cap-fs-ext.workspace = true
+cap-std.workspace = true
+crc.workspace = true
+futures-util.workspace = true
+http.workspace = true
+http-body.workspace = true
+http-body-util.workspace = true
+http-range-header.workspace = true
+httpdate.workspace = true
+hyper.workspace = true
+hyper-rustls.workspace = true
+hyper-util.workspace = true
+ipnet.workspace = true
+mime_guess.workspace = true
+percent-encoding.workspace = true
+rustls.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+socket2.workspace = true
+sha2.workspace = true
+sync_wrapper.workspace = true
+thiserror.workspace = true
+time.workspace = true
+tokio.workspace = true
+tokio-rustls.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+url.workspace = true
+webpki-roots.workspace = true
+x509-parser.workspace = true
+windows-sys.workspace = true
+woothee.workspace = true
+zeroize.workspace = true
+sdkwork-database-sqlx = { workspace = true, optional = true }
+sdkwork-webserver-http-host = { workspace = true, optional = true }
+sdkwork-webserver-core.workspace = true
+sdkwork-webserver-contract.workspace = true
+sdkwork-webserver-delivery-runtime.workspace = true
+sdkwork-webserver-drive-provider.workspace = true
+sdkwork-webserver-knowledgebase-provider.workspace = true
+sdkwork-drive-contract.workspace = true
+sdkwork-drive-internal-sdk.workspace = true
+sdkwork-knowledgebase-internal-sdk.workspace = true
+sdkwork-web-internal-sdk.workspace = true
+sdkwork-web-bootstrap.workspace = true
+sdkwork-web-axum = { workspace = true, optional = true }
+sdkwork-web-contract = { workspace = true, optional = true }
+sdkwork-web-store-sqlx = { workspace = true, optional = true }
+sdkwork-utils-rust.workspace = true
+sdkwork-web-core.workspace = true
+sdkwork-iam-web-adapter.workspace = true
+
+[dev-dependencies]
+async-trait.workspace = true
+base64.workspace = true
+flate2.workspace = true
+h2.workspace = true
+http-body-util = { workspace = true, features = ["channel"] }
+jsonschema.workspace = true
+rcgen.workspace = true
+reqwest.workspace = true
+tempfile.workspace = true

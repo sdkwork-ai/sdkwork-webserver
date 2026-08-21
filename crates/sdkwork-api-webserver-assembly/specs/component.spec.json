@@ -3,7 +3,7 @@
   "kind": "sdkwork.component.spec",
   "component": {
     "name": "sdkwork-api-webserver-assembly",
-    "displayName": "SDKWork web-server Gateway Assembly",
+    "displayName": "SDKWork webserver Gateway Assembly",
     "version": "0.1.0",
     "type": "rust-api-assembly",
     "root": "crates/sdkwork-api-webserver-assembly",

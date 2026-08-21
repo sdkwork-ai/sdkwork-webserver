@@ -136,6 +136,7 @@ impl WebsiteStaticContentProvider for FakeStaticProvider {
             Some(WebsiteByteRange {
                 start,
                 end_inclusive,
+                ..
             }) => {
                 let end = end_inclusive.unwrap_or(file.bytes.len() as u64 - 1);
                 (start, end)
@@ -488,6 +489,7 @@ async fn serve_static_range_returns_partial_content() {
     req.range = Some(WebsiteByteRange {
         start: 2,
         end_inclusive: Some(5),
+        suffix_bytes: None,
     });
 
     let outcome = executor

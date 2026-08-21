@@ -6,7 +6,7 @@
     "displayName": "SDKWork Web Server App API Routes",
     "version": "0.1.0",
     "type": "rust-route-crate",
-    "root": "sdkwork-web-server/crates/sdkwork-routes-webserver-app-api",
+    "root": "sdkwork-webserver/crates/sdkwork-routes-webserver-app-api",
     "domain": "platform",
     "capability": "webserver",
     "surface": "app-api",

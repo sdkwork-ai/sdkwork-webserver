@@ -4,7 +4,7 @@
   "app": {
     "id": "sdkwork-web",
     "name": "SDKWork Web Server",
-    "repository": "sdkwork-ai/sdkwork-web-server",
+    "repository": "sdkwork-ai/sdkwork-webserver",
     "sourcePath": ".",
     "configPath": "sdkwork.app.config.json"
   },

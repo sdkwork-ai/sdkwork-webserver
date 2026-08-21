@@ -63,7 +63,7 @@ spec:
           image: registry.sdkwork.com/apps/sdkwork-webserver@sha256:__SDKWORK_IMAGE_DIGEST__
           imagePullPolicy: IfNotPresent
           command:
-            - /app/bin/sdkwork-web-server-website-delivery-edge-runtime
+            - /app/bin/sdkwork-webserver-website-delivery-edge-runtime
           ports:
             - name: website-http
               containerPort: 8080
@@ -81,14 +81,12 @@ spec:
               value: cloud.production
             - name: SDKWORK_WEBSERVER_RUNTIME_TARGET
               value: container
-            - name: SDKWORK_WEBSERVER_SERVICE_LAYOUT
-              value: website-data-plane
             - name: SDKWORK_WEBSERVER_SERVER_CONFIG_FILE
               value: /etc/sdkwork/webserver/sdkwork.webserver.config.json
             - name: SDKWORK_WEBSERVER_RUNTIME_ASSIGNMENT_SOURCE
               value: cloud
             - name: SDKWORK_WEBSERVER_INTERNAL_API_BASE_URL
-              value: https://web.sdkwork.com
+              value: https://server.sdkwork.com
             - name: SDKWORK_WEBSERVER_NODE_UUID
               valueFrom:
                 secretKeyRef:
@@ -128,7 +126,7 @@ spec:
           startupProbe:
             exec:
               command:
-                - /app/bin/sdkwork-web-server-website-delivery-edge-runtime
+                - /app/bin/sdkwork-webserver-website-delivery-edge-runtime
                 - probe
                 - /healthz
             failureThreshold: 60
@@ -137,7 +135,7 @@ spec:
           readinessProbe:
             exec:
               command:
-                - /app/bin/sdkwork-web-server-website-delivery-edge-runtime
+                - /app/bin/sdkwork-webserver-website-delivery-edge-runtime
                 - probe
                 - /readyz
             failureThreshold: 3
@@ -146,7 +144,7 @@ spec:
           livenessProbe:
             exec:
               command:
-                - /app/bin/sdkwork-web-server-website-delivery-edge-runtime
+                - /app/bin/sdkwork-webserver-website-delivery-edge-runtime
                 - probe
                 - /livez
             failureThreshold: 3
@@ -182,7 +180,7 @@ spec:
           image: registry.sdkwork.com/apps/sdkwork-webserver@sha256:__SDKWORK_IMAGE_DIGEST__
           imagePullPolicy: IfNotPresent
           command:
-            - /app/bin/sdkwork-web-server-website-delivery-edge-runtime
+            - /app/bin/sdkwork-webserver-website-delivery-edge-runtime
             - relay-provider-events
           ports:
             - name: provider-events

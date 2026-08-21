@@ -2,8 +2,9 @@
   "schemaVersion": 1,
   "kind": "sdkwork.webserver.app",
   "appKey": "sdkwork-example-web",
-  "compatibility": {
-    "nginxProfile": "http-core-v1",
+  "nginx": {
+    "enabled": true,
+    "profile": "http-core-v1",
     "unknownDirectivePolicy": "error"
   },
   "limits": {

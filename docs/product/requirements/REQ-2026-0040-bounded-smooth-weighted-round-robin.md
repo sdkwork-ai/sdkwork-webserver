@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0040
 title: Replace burst-slot rotation with bounded smooth weighted round robin
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: nginx-default-smooth-weighted-round-robin-commercial-readiness
 problem: The previous default `round-robin` strategy mapped an atomic ticket into contiguous cumulative weight slots. It preserved long-run ratios but emitted bursts such as A,A,A,B for weights 3:1 instead of the smoother Nginx-style A,A,B,A sequence. Bursts could concentrate short requests and cold-cache work on one target.
@@ -49,14 +49,14 @@ trace:
     - RUST_CODE_SPEC.md
     - TEST_SPEC.md
   components:
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
-  - cargo test -p sdkwork-api-web-server-standalone-gateway data_plane::smooth_weighted
-  - cargo test -p sdkwork-api-web-server-standalone-gateway data_plane::proxy
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test upstream_weighted_selection
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test upstream_safe_retries
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test data_plane_metrics
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway data_plane::smooth_weighted
+  - cargo test -p sdkwork-api-webserver-standalone-gateway data_plane::proxy
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test upstream_weighted_selection
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test upstream_safe_retries
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test data_plane_metrics
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - pnpm.cmd verify
   - cargo fmt --all -- --check

@@ -45,7 +45,7 @@ Read `sdkwork.app.config.json` for Web Server identity, registration, SDK/API in
 - `.sdkwork/`: repository/application AI workspace metadata.
 - `specs/`: local application/component contracts.
 - `apis/`: Web Server-owned API contract sources.
-- `apps/`: reserved for future client application roots.
+- `apps/`: browser application roots (`sdkwork-webserver-pc`, `sdkwork-webserver-h5`) served by the webserver process Adaptive Web console; edge nginx reverse-proxies only.
 - `crates/`: Rust service, repository, route, and API server crates.
 - `sdks/`: SDK families and generated SDK artifacts.
 - `database/`: database contract, baseline DDL, migrations, seeds, drift policy.
@@ -84,7 +84,7 @@ Use dynamic progressive loading:
 - Rust code: `../sdkwork-specs/RUST_CODE_SPEC.md`.
 - API/SDK changes: `../sdkwork-specs/API_SPEC.md`, `../sdkwork-specs/WEB_FRAMEWORK_SPEC.md`, `../sdkwork-specs/WEB_BACKEND_SPEC.md`, `../sdkwork-specs/SDK_SPEC.md`, `../sdkwork-specs/TEST_SPEC.md`.
 - Database changes: `../sdkwork-specs/DATABASE_SPEC.md`, `../sdkwork-specs/DATABASE_FRAMEWORK_SPEC.md`, `../sdkwork-specs/TEST_SPEC.md`.
-- Runtime/deployment/release changes: `../sdkwork-specs/CONFIG_SPEC.md`, `../sdkwork-specs/ENVIRONMENT_SPEC.md`, `../sdkwork-specs/DEPLOYMENT_SPEC.md`, `../sdkwork-specs/GITHUB_WORKFLOW_SPEC.md`.
+- Runtime/deployment/release changes: `../sdkwork-specs/CONFIG_SPEC.md`, `../sdkwork-specs/ENVIRONMENT_SPEC.md`, `../sdkwork-specs/APPLICATION_DEPLOY_LAYOUT_SPEC.md`, `../sdkwork-specs/DEPLOYMENT_SPEC.md`, `../sdkwork-specs/GITHUB_WORKFLOW_SPEC.md`.
 - Security/auth changes: `../sdkwork-specs/IAM_SPEC.md`, `../sdkwork-specs/SECURITY_SPEC.md`.
 
 ## Int64 Wire Contract (API_SPEC §13.6)

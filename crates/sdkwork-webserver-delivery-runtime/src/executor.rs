@@ -245,14 +245,23 @@ impl WebsiteDeliveryExecutor {
                     route.maximum_object_bytes,
                     request.range,
                 )?;
+                let range = normalize_request_range(request.range, content.metadata.content_length)?;
                 let opened = self
-                    .open_wiki_body(provider, &route, &request, context, &deadline, &content)
+                    .open_wiki_body(
+                        provider,
+                        &route,
+                        &request,
+                        context,
+                        &deadline,
+                        &content,
+                        range,
+                    )
                     .await?;
                 let canonical_route = route.public_route(&content.canonical_route)?;
                 let opened = opened_body_fields(
                     opened,
                     &content.metadata,
-                    request.range,
+                    range,
                     request.conditions.if_range.is_some(),
                     route.maximum_object_bytes,
                     route.provider_timeout_ms,
@@ -285,6 +294,7 @@ impl WebsiteDeliveryExecutor {
         mut context: WebsiteProviderRuntimeContext,
         deadline: &ProviderDeadline,
         content: &ResolvedWebsiteWikiContent,
+        range: Option<WebsiteByteRange>,
     ) -> Result<Option<OpenedWebsiteContent>, WebsiteDeliveryError> {
         if request.method == WebsiteDeliveryMethod::Head {
             return Ok(None);
@@ -297,7 +307,7 @@ impl WebsiteDeliveryExecutor {
             provider: route.identity.provider.clone(),
             provider_relative_path: route.identity.provider_relative_path.clone(),
             content_handle: content.content_handle.clone(),
-            range: request.range,
+            range,
             conditions: request.conditions.clone(),
             maximum_bytes: route.maximum_object_bytes,
         };
@@ -307,7 +317,7 @@ impl WebsiteDeliveryExecutor {
         // `content_length == 0` means the provider could not declare a length
         // (for example a streaming response without Content-Length); the byte
         // ceiling is still enforced while the stream is consumed.
-        if request.range.is_none()
+        if range.is_none()
             && opened.content_length != 0
             && opened.content_length != expected_bytes
         {
@@ -369,9 +379,10 @@ impl WebsiteDeliveryExecutor {
                 Err(error) => return Err(error.into()),
             };
             enforce_content_policy(&content.metadata, route.maximum_object_bytes, request.range)?;
+            let range = normalize_request_range(request.range, content.metadata.content_length)?;
             route.identity.provider_relative_path = candidate;
             return self
-                .open_static_content(provider, route, request, context, &deadline, content)
+                .open_static_content(provider, route, request, context, &deadline, content, range)
                 .await;
         }
         Ok(WebsiteDeliveryOutcome::NotFound)
@@ -385,6 +396,7 @@ impl WebsiteDeliveryExecutor {
         mut context: WebsiteProviderRuntimeContext,
         deadline: &ProviderDeadline,
         content: ResolvedWebsiteContent,
+        range: Option<WebsiteByteRange>,
     ) -> Result<WebsiteDeliveryOutcome, WebsiteDeliveryError> {
         let expected_bytes = content.metadata.content_length;
         let if_range_present = request.conditions.if_range.is_some();
@@ -398,14 +410,14 @@ impl WebsiteDeliveryExecutor {
                 provider: route.identity.provider.clone(),
                 provider_relative_path: route.identity.provider_relative_path.clone(),
                 content_handle: content.content_handle,
-                range: request.range,
+                range,
                 conditions: request.conditions,
                 maximum_bytes: route.maximum_object_bytes,
             };
             let mut opened = deadline
                 .call(provider.open_static_content(&open_request))
                 .await?;
-            if request.range.is_none() && opened.content_length != expected_bytes {
+            if range.is_none() && opened.content_length != expected_bytes {
                 return Err(provider_contract_mismatch());
             }
             opened.stream = Box::new(AdmittedProviderContentStream::new(opened.stream, permit));
@@ -414,7 +426,7 @@ impl WebsiteDeliveryExecutor {
         let opened = opened_body_fields(
             opened,
             &content.metadata,
-            request.range,
+            range,
             if_range_present,
             route.maximum_object_bytes,
             route.provider_timeout_ms,
@@ -630,6 +642,30 @@ pub(crate) fn enforce_content_policy(
         return Err(WebsiteDeliveryError::RangeNotSupported);
     }
     Ok(())
+}
+
+/// Resolves a `bytes=-N` suffix range (RFC 9110 §14.1.2) to an explicit
+/// range now that the representation length is known. Explicit ranges pass
+/// through unchanged; providers only ever receive explicit ranges.
+pub(crate) fn normalize_request_range(
+    range: Option<WebsiteByteRange>,
+    content_length: u64,
+) -> Result<Option<WebsiteByteRange>, WebsiteDeliveryError> {
+    let Some(range) = range else {
+        return Ok(None);
+    };
+    let Some(suffix_bytes) = range.suffix_bytes else {
+        return Ok(Some(range));
+    };
+    if content_length == 0 {
+        return Err(WebsiteDeliveryError::RangeNotSupported);
+    }
+    let start = content_length.saturating_sub(suffix_bytes);
+    Ok(Some(WebsiteByteRange {
+        start,
+        end_inclusive: Some(content_length - 1),
+        suffix_bytes: None,
+    }))
 }
 
 pub(crate) fn opened_body_fields(

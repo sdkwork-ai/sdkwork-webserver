@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0056
 title: Pair standalone and cloud development and immutable server package commands
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: sdkwork-profile-command-and-release-alignment
 problem: The root development command did not expose explicit standalone and cloud profiles, while the release workflow declared a tar.gz target without a profile-paired archive producer. A cloud command could therefore accidentally bootstrap local infrastructure, and a release could publish a raw binary glob or use a version different from the workflow matrix.

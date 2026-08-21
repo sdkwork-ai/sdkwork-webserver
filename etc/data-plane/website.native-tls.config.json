@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "kind": "sdkwork.webserver.app",
   "appKey": "sdkwork-website-delivery-native-tls",
-  "compatibility": {
-    "nginxProfile": "http-core-v1",
+  "nginx": {
+    "profile": "http-core-v1",
     "unknownDirectivePolicy": "error"
   },
   "listeners": [

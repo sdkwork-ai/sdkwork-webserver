@@ -44,8 +44,8 @@
   "contracts": {
     "layerRole": "runtime-gateway",
     "publicExports": [
-      "crates/sdkwork-api-web-server-standalone-gateway",
-      "crates/sdkwork-web-server-website-delivery-edge-runtime",
+      "crates/sdkwork-api-webserver-standalone-gateway",
+      "crates/sdkwork-webserver-website-delivery-edge-runtime",
       "crates/sdkwork-routes-webserver-app-api",
       "crates/sdkwork-routes-webserver-backend-api",
       "crates/sdkwork-routes-webserver-internal-api",
@@ -68,7 +68,7 @@
       },
       {
         "name": "websiteDataPlane",
-        "export": "crates/sdkwork-web-server-website-delivery-edge-runtime"
+        "export": "crates/sdkwork-webserver-website-delivery-edge-runtime"
       }
     ],
     "requiredPorts": [
@@ -84,7 +84,7 @@
       },
       {
         "name": "webRuntimeAssignmentInternalSdk",
-        "export": "crates/sdkwork-web-server-website-delivery-edge-runtime",
+        "export": "crates/sdkwork-webserver-website-delivery-edge-runtime",
         "provider": "sdkwork-web-internal-sdk"
       }
     ],
@@ -178,7 +178,7 @@
         "authMode": "ingress-token",
         "clientBaseUrlSource": "website delivery edge-runtime bootstrap-created generated SDK client",
         "coverage": "generated-sdk-loopback-contract-tested",
-        "evidence": "crates/sdkwork-api-web-server-standalone-gateway/src/website_runtime_cloud.rs"
+        "evidence": "crates/sdkwork-api-webserver-standalone-gateway/src/website_runtime_cloud.rs"
       },
       {
         "workspace": "sdkwork-knowledgebase-internal-sdk",
@@ -193,7 +193,7 @@
         "authMode": "ingress-token",
         "clientBaseUrlSource": "website delivery edge-runtime bootstrap-created generated SDK client",
         "coverage": "adapter-and-gateway-contract-tested",
-        "evidence": "crates/sdkwork-api-web-server-standalone-gateway/src/data_plane/website_delivery.rs"
+        "evidence": "crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/website_delivery.rs"
       },
       {
         "workspace": "sdkwork-drive-internal-sdk",
@@ -208,7 +208,7 @@
         "authMode": "ingress-token",
         "clientBaseUrlSource": "website delivery edge-runtime bootstrap-created generated SDK client",
         "coverage": "adapter-and-gateway-contract-tested",
-        "evidence": "crates/sdkwork-api-web-server-standalone-gateway/src/data_plane/website_delivery.rs"
+        "evidence": "crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/website_delivery.rs"
       }
     ],
     "events": [
@@ -231,6 +231,9 @@
       "SDKWORK_WEBSERVER_APP_ROOT",
       "SDKWORK_WEBSERVER_SERVER_APP_ROOT",
       "SDKWORK_WEBSERVER_PC_STATIC_ROOT",
+      "SDKWORK_WEBSERVER_H5_STATIC_ROOT",
+      "SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT",
+      "SDKWORK_WEBSERVER_TABLET_SURFACE",
       "SDKWORK_IAM_APP_ROOT",
       "SDKWORK_DRIVE_APP_ROOT",
       "SDKWORK_WEBSERVER_RUNTIME_ASSIGNMENT_SOURCE",
@@ -255,13 +258,13 @@
     "runtimeEntrypoints": [
       {
         "id": "standalone-gateway",
-        "crate": "sdkwork-api-web-server-standalone-gateway",
-        "binary": "sdkwork-api-web-server-standalone-gateway"
+        "crate": "sdkwork-api-webserver-standalone-gateway",
+        "binary": "sdkwork-api-webserver-standalone-gateway"
       },
       {
         "id": "website-data-plane",
-        "crate": "sdkwork-web-server-website-delivery-edge-runtime",
-        "binary": "sdkwork-web-server-website-delivery-edge-runtime"
+        "crate": "sdkwork-webserver-website-delivery-edge-runtime",
+        "binary": "sdkwork-webserver-website-delivery-edge-runtime"
       }
     ]
   }

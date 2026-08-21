@@ -6,7 +6,7 @@
     "displayName": "SDKWork Web Server Source Provider",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "sdkwork-web-server/crates/sdkwork-webserver-source-provider",
+    "root": "sdkwork-webserver/crates/sdkwork-webserver-source-provider",
     "domain": "platform",
     "capability": "webserver-application-source",
     "surface": "backend-service",

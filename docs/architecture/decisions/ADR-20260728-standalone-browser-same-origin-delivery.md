@@ -2,7 +2,7 @@
 
 Status: accepted
 Requirement: REQ-2026-0065
-Owner: sdkwork-web-server
+Owner: sdkwork-webserver
 Date: 2026-07-28
 Specs: APPLICATION_GATEWAY_SPEC.md, APP_RUNTIME_TOPOLOGY_SPEC.md, CONFIG_SPEC.md, ENVIRONMENT_SPEC.md, DEPLOYMENT_SPEC.md, APP_PC_ARCHITECTURE_SPEC.md, TEST_SPEC.md
 

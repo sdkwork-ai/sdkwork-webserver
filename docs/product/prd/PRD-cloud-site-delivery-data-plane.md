@@ -324,7 +324,7 @@ The first executable boundary is implemented in `sdkwork-webserver-core::website
   persisted into the recovery slot, and cannot replace the live last-known-good registry. STATIC
   and SPA Variants require a resolvable entrypoint; WIKI probes its publication root. Focused
   executor, provider-validation, activation-probe, and last-known-good retention suites pass.
-- the dedicated `sdkwork-web-server-website-delivery-edge-runtime` process loads and watches a bounded, hash-verified
+- the dedicated `sdkwork-webserver-website-delivery-edge-runtime` process loads and watches a bounded, hash-verified
   runtime-set, binds the process and both generated Provider clients to one configured tenant scope,
   loads Drive and Knowledgebase ingress tokens from secret files, registers both adapters, validates
   every candidate before atomic activation, and calls the executor directly from the existing

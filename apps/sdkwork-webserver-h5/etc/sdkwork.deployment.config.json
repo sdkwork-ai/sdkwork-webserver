@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component-deployment",
+  "application": "sdkwork-webserver-h5",
+  "parentDeploymentConfig": "../../../etc/sdkwork.deployment.config.json",
+  "parentTopologySpec": "../../../specs/topology.spec.json",
+  "runtimeTarget": "browser",
+  "profiles": {
+    "standalone.development": { "source": "browser/runtime-env.development.json" },
+    "standalone.test": { "source": "browser/runtime-env.test.json" },
+    "standalone.production": { "source": "browser/runtime-env.standalone.production.json" },
+    "cloud.development": { "source": "browser/runtime-env.cloud.development.json" },
+    "cloud.staging": { "source": "browser/runtime-env.staging.json" },
+    "cloud.production": { "source": "browser/runtime-env.production.json" }
+  },
+  "materialization": {
+    "authority": "../../../etc/sdkwork.deployment.config.json",
+    "command": "node scripts/materialize-runtime-env.mjs",
+    "format": "json",
+    "output": "../public/runtime-env.json",
+    "checkMode": "--check"
+  }
+}

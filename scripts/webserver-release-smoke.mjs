@@ -34,6 +34,8 @@ const START_TIMEOUT_MS = 15 * 1000;
 const STOP_TIMEOUT_MS = 10 * 1000;
 const SUPPORTED_ARCHITECTURES = new Set(['x64', 'arm64']);
 const STANDALONE_PC_ROOT = 'share/sdkwork/webserver-pc';
+const STANDALONE_H5_ROOT = 'share/sdkwork/webserver-h5';
+const STANDALONE_STATIC_FALLBACK_ROOT = 'share/sdkwork/webserver-static';
 const STANDALONE_IAM_ROOT = 'share/sdkwork/iam';
 const STANDALONE_DRIVE_ROOT = 'share/sdkwork/drive';
 const STANDALONE_SAME_ORIGIN_PATHS = Object.freeze({
@@ -47,8 +49,8 @@ const STANDALONE_SAME_ORIGIN_PATHS = Object.freeze({
   missingApi: '/app/v3/api/__sdkwork_release_smoke_missing__',
 });
 const EXPECTED_BINARIES = [
-  'sdkwork-api-web-server-standalone-gateway',
-  'sdkwork-web-server-website-delivery-edge-runtime',
+  'sdkwork-api-webserver-standalone-gateway',
+  'sdkwork-webserver-website-delivery-edge-runtime',
   'sdkwork-web-node-daemon',
   'sdkwork-web-agent',
   'sdkwork-webserver-certificate-worker',
@@ -356,6 +358,8 @@ function standaloneManagementEnv(packageRoot, port) {
     SDKWORK_WEBSERVER_APPLICATION_APP_HTTP_URL: `http://127.0.0.1:${port}`,
     SDKWORK_WEBSERVER_APPLICATION_BACKEND_HTTP_URL: `http://127.0.0.1:${port}`,
     SDKWORK_WEBSERVER_PC_STATIC_ROOT: STANDALONE_PC_ROOT,
+    SDKWORK_WEBSERVER_H5_STATIC_ROOT: STANDALONE_H5_ROOT,
+    SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT: STANDALONE_STATIC_FALLBACK_ROOT,
     SDKWORK_DATABASE_AUTO_MIGRATE: 'true',
     SDKWORK_WEBSERVER_SECRET_ENCRYPTION_KEY:
       'sdkwork-release-smoke-web-secret-encryption-key-2026',
@@ -386,6 +390,20 @@ async function verifyStandaloneSameOriginIngress({ gateway, packageRoot, tempora
     });
     assertStatus(shell, 200, 'standalone shell');
     assertContentType(shell, 'text/html', 'standalone shell');
+
+    const mobileShell = await requestHttp(port, STANDALONE_SAME_ORIGIN_PATHS.shell, {
+      accept: 'text/html',
+      'sec-ch-ua-mobile': '?1',
+      'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
+    });
+    assertStatus(mobileShell, 200, 'standalone adaptive H5 shell');
+    assertContentType(mobileShell, 'text/html', 'standalone adaptive H5 shell');
+    const vary = String(mobileShell.headers.vary ?? '').toLowerCase();
+    if (!vary.includes('user-agent') && !vary.includes('sec-ch-ua-mobile')) {
+      throw new Error(
+        `standalone Adaptive Web response missing Vary for device selection: vary=${mobileShell.headers.vary ?? ''}`,
+      );
+    }
 
     const runtimeEnv = await requestHttp(port, STANDALONE_SAME_ORIGIN_PATHS.runtimeEnv);
     assertStatus(runtimeEnv, 200, 'standalone runtime config');
@@ -613,10 +631,10 @@ async function smoke(settings) {
       }
     }
 
-    const gateway = path.join(binRoot, 'sdkwork-api-web-server-standalone-gateway');
+    const gateway = path.join(binRoot, 'sdkwork-api-webserver-standalone-gateway');
     const websiteEdgeRuntime = path.join(
       binRoot,
-      'sdkwork-web-server-website-delivery-edge-runtime',
+      'sdkwork-webserver-website-delivery-edge-runtime',
     );
     const packagedExample = path.join(packageRoot, 'etc', 'examples', 'sdkwork.webserver.config.json');
     const packagedWebsiteHostConfig = path.join(
@@ -630,13 +648,24 @@ async function smoke(settings) {
     run(gateway, ['validate', packagedExample], { cwd: packageRoot });
     run(websiteEdgeRuntime, ['validate', packagedWebsiteHostConfig], { cwd: packageRoot });
     const pcStaticRoot = path.join(packageRoot, 'share', 'sdkwork', 'webserver-pc');
+    const h5StaticRoot = path.join(packageRoot, 'share', 'sdkwork', 'webserver-h5');
+    const staticFallbackRoot = path.join(packageRoot, 'share', 'sdkwork', 'webserver-static');
     let sameOriginPort;
     if (settings.deploymentProfile === 'standalone') {
-      for (const bootstrapFile of ['index.html', 'runtime-env.json']) {
-        const metadata = statSync(path.join(pcStaticRoot, bootstrapFile));
-        if (!metadata.isFile() || metadata.size === 0) {
-          throw new Error(`packaged PC ${bootstrapFile} is not a non-empty regular file`);
+      for (const [label, root] of [
+        ['PC', pcStaticRoot],
+        ['H5', h5StaticRoot],
+      ]) {
+        for (const bootstrapFile of ['index.html', 'runtime-env.json']) {
+          const metadata = statSync(path.join(root, bootstrapFile));
+          if (!metadata.isFile() || metadata.size === 0) {
+            throw new Error(`packaged ${label} ${bootstrapFile} is not a non-empty regular file`);
+          }
         }
+      }
+      const staticIndex = statSync(path.join(staticFallbackRoot, 'index.html'));
+      if (!staticIndex.isFile() || staticIndex.size === 0) {
+        throw new Error('packaged static-fallback index.html is not a non-empty regular file');
       }
       const assets = readdirSync(path.join(pcStaticRoot, 'assets'), { withFileTypes: true });
       if (!assets.some((entry) => entry.isFile())) {
@@ -649,7 +678,9 @@ async function smoke(settings) {
           SDKWORK_DEPLOYMENT_PROFILE: 'standalone',
           SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE: 'standalone',
           SDKWORK_WEBSERVER_ENVIRONMENT: 'production',
-          SDKWORK_WEBSERVER_PC_STATIC_ROOT: 'share/sdkwork/webserver-pc',
+          SDKWORK_WEBSERVER_PC_STATIC_ROOT: STANDALONE_PC_ROOT,
+          SDKWORK_WEBSERVER_H5_STATIC_ROOT: STANDALONE_H5_ROOT,
+          SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT: STANDALONE_STATIC_FALLBACK_ROOT,
         },
       });
       sameOriginPort = await verifyStandaloneSameOriginIngress({

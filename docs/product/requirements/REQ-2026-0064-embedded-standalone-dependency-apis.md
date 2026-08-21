@@ -3,7 +3,7 @@
 ```yaml
 id: REQ-2026-0064
 title: Serve IAM and Drive dependency APIs from the Web Server standalone gateway process
-owner: sdkwork-web-server
+owner: sdkwork-webserver
 status: accepted
 source: user
 problem: The standalone PC runtime resolved IAM and Drive App SDKs to port 3900 even though the application uses API assembly composition. The Web Server gateway initialized IAM support but did not mount the IAM owner routes, so the browser depended on an independently started dependency gateway and failed with connection refused when that process was absent.
@@ -19,7 +19,7 @@ non_goals:
   - Combining internal service/data-plane listeners with the browser application ingress.
   - Removing explicit platform gateway URLs from cloud profiles.
 acceptance_criteria:
-  - sdkwork-api-web-server-standalone-gateway directly depends on sdkwork-api-iam-assembly and sdkwork-api-drive-assembly and calls their App API contribution exports.
+  - sdkwork-api-webserver-standalone-gateway directly depends on sdkwork-api-iam-assembly and sdkwork-api-drive-assembly and calls their App API contribution exports.
   - The composed standalone router validates every owner route manifest against owner OpenAPI, rejects route collisions, combines permission catalogs and readiness checks, and installs one process-wide Web Framework layer.
   - The standalone API target resolves to application.public-ingress, currently http://127.0.0.1:3800 in development; browser-visible SDK URLs follow REQ-2026-0065 and remain relative to the page origin.
   - Standalone topology env files contain no platform.api-gateway server or browser URL.
@@ -47,14 +47,14 @@ trace:
     - IAM_SPEC.md
     - TEST_SPEC.md
   components:
-    - crates/sdkwork-api-web-server-assembly
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-assembly
+    - crates/sdkwork-api-webserver-standalone-gateway
     - apps/sdkwork-webserver-pc
     - ../sdkwork-iam/crates/sdkwork-api-iam-assembly
     - ../sdkwork-drive/crates/sdkwork-api-drive-assembly
 verification:
-  - cargo check -p sdkwork-api-web-server-assembly
-  - cargo check -p sdkwork-api-web-server-standalone-gateway
+  - cargo check -p sdkwork-api-webserver-assembly
+  - cargo check -p sdkwork-api-webserver-standalone-gateway
   - pnpm --dir apps/sdkwork-webserver-pc test
   - pnpm --dir apps/sdkwork-webserver-pc typecheck
   - node ../sdkwork-specs/tools/check-topology-deployment-profiles.mjs --root .

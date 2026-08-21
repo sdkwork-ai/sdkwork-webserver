@@ -9,7 +9,7 @@ Specs: ARCHITECTURE_DECISION_SPEC.md, SECURITY_SPEC.md, SUPPLY_CHAIN_SECURITY_SP
 
 ## Context
 
-SDKWork Web Server 需要在控制面内嵌 **免费 TLS 证书自动签发与续期**，并支持向自建数据面节点分发。产品要求快速落地、少运维依赖、与现有 Rust/Tokio 栈一致，证书由自建服务器（`sdkwork-api-web-server-standalone-gateway` 数据面 TLS 运行时）直接消费，不依赖外部 Nginx 边沿。
+SDKWork Web Server 需要在控制面内嵌 **免费 TLS 证书自动签发与续期**，并支持向自建数据面节点分发。产品要求快速落地、少运维依赖、与现有 Rust/Tokio 栈一致，证书由自建服务器（`sdkwork-api-webserver-standalone-gateway` 数据面 TLS 运行时）直接消费，不依赖外部 Nginx 边沿。
 
 候选方案：
 

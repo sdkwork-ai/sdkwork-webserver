@@ -11,7 +11,7 @@ Specs: ARCHITECTURE_DECISION_SPEC.md, DOCUMENTATION_SPEC.md, RUST_CODE_SPEC.md, 
   descriptor v1 ingestion and immutable domain/path/Variant/Mount indexes are implemented, while
   generated-SDK Drive/Knowledgebase provider adapters, activation-time Provider validation, and the
   transport-neutral runtime-set delivery executor run through the dedicated
-  `sdkwork-web-server-website-delivery-edge-runtime`. Authenticated assignment publication,
+  `sdkwork-webserver-website-delivery-edge-runtime`. Authenticated assignment publication,
   conditional cloud pull, latest-observation reads, immutable Deploy evidence, and strict
   all-frozen-target `ACTIVE` quorum now run through the generated Web Internal SDK. Web performs an
   isolated node-local Binding/Variant `HEAD` probe before staging and activation; this does not
@@ -110,7 +110,7 @@ and production monitoring evidence.
 ## 3. System Boundaries
 
 ```text
-sdkwork-api-web-server-standalone-gateway
+sdkwork-api-webserver-standalone-gateway
   |-- one Web Framework + IAM authorization + readiness/metrics/OpenAPI boundary
   |-- Web Server owner assembly -> app/backend/internal route crates -> service -> repository -> database
   |-- IAM owner App API assembly contribution (same process, same application ingress)
@@ -118,7 +118,7 @@ sdkwork-api-web-server-standalone-gateway
   |-- data-plane bootstrap -> compiled Web Server config -> HTTP/HTTPS/static/proxy/Drive/Knowledgebase
   `-- host operations -> config, signals, readiness, drain, runtime paths
 
-sdkwork-web-server-website-delivery-edge-runtime
+sdkwork-webserver-website-delivery-edge-runtime
   `-- management-disabled data-plane library -> host config + cloud assignment or local file
       -> delivery executor -> generated-SDK provider adapters -> public HTTP response
 
@@ -265,10 +265,13 @@ never invents a success state.
   IAM and Drive browser dependency APIs are dependency-owned Rust assembly contributions linked
   into this gateway and use `application.public-ingress`; no dependency gateway or port 3900 is
   required. Development keeps Vite only as the browser-visible origin and proxies canonical API
-  paths to the private gateway target. Production serves the packaged PC shell, runtime config,
-  and composed APIs from the application ingress itself. The archive carries IAM and Drive
-  runtime assets under `share/sdkwork`; packaged relative application/static roots resolve from
-  the parent of `bin/`, independent of the process working directory.
+  paths to the private gateway target. Production edge nginx (`expose.mode: api`) reverse-proxies
+  all public paths to the packaged gateway; the process `AdaptiveAppShell` serves Adaptive Web
+  (mobile → H5 → PC → static-fallback; desktop → PC → H5 → static-fallback) plus composed APIs
+  from the application ingress. The archive carries IAM and Drive runtime assets under
+  `share/sdkwork` and console roots under `share/sdkwork/webserver-{pc,h5,static}`; packaged
+  relative application/static roots resolve from the parent of `bin/`, independent of the process
+  working directory.
 - `cloud`: the dedicated website delivery edge-runtime nodes consume node-scoped immutable
   configuration and secret assignments; management assemblies are hosted by the platform cloud
   gateway and the application standalone gateway is not started.

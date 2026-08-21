@@ -51,10 +51,10 @@ trace:
     - NGINX_SPEC.md
     - TEST_SPEC.md
   components:
-    - crates/sdkwork-api-web-server-standalone-gateway
+    - crates/sdkwork-api-webserver-standalone-gateway
 verification:
-  - cargo test -p sdkwork-api-web-server-standalone-gateway --test http1_connection_semantics -- --nocapture
-  - cargo test -p sdkwork-api-web-server-standalone-gateway
+  - cargo test -p sdkwork-api-webserver-standalone-gateway --test http1_connection_semantics -- --nocapture
+  - cargo test -p sdkwork-api-webserver-standalone-gateway
   - cargo clippy --workspace --all-targets -- -D warnings
   - cargo fmt -- --check
   - pnpm verify

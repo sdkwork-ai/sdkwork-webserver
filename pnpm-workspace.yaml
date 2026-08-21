@@ -2,6 +2,7 @@ packages:
   - "."
   - "apps/sdkwork-webserver-pc"
   - "apps/sdkwork-webserver-pc/packages/*"
+  - "apps/sdkwork-webserver-h5"
   - "sdks/*/*-typescript"
   - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-contracts"
   - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-runtime"

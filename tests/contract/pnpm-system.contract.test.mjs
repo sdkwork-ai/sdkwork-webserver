@@ -50,7 +50,7 @@ test('root pnpm surface exposes every owned capability through canonical action-
   assert.equal(scripts['_sdkwork:clean'], 'node scripts/clean.mjs');
   assert.equal(
     scripts['gateway:route-composition:audit'],
-    'node ../sdkwork-specs/tools/audit-gateway-route-composition-workspace.mjs --workspace .. --prefix sdkwork-web-server',
+    'node ../sdkwork-specs/tools/audit-gateway-route-composition-workspace.mjs --workspace .. --prefix sdkwork-webserver',
   );
   assert.match(scripts['_sdkwork:check'], /pnpm api:check/u);
   assert.match(scripts['_sdkwork:check'], /pnpm sdk:check/u);

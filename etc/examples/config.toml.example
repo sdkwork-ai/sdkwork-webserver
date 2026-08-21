@@ -1,0 +1,71 @@
+# Safe standalone runtime configuration example.
+# Installers write the live file to /etc/sdkwork/webserver/config.toml.
+# Development: SDKWORK_WEBSERVER_CONFIG_FILE=etc/examples/config.toml.example
+#
+# Adaptive Web (same origin): process selects PC vs H5 by User-Agent /
+# Sec-CH-UA-Mobile. Roots below must stay architecture-separated
+# (APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md §2.2 / SDKWORK_WEBSERVER_SPEC.md §13.6).
+
+[profile]
+deployment_profile = "standalone"
+environment = "development"
+profile_id = "standalone.development"
+node_id = 0
+
+[ingress]
+bind = "127.0.0.1:3800"
+management_expose_allowed = true
+data_plane_operations_bind = "127.0.0.1:3901"
+public_http_url = "http://server-dev.sdkwork.com"
+cors_allowed_origins = ["http://server-dev.sdkwork.com", "http://127.0.0.1:3800"]
+
+[app_roots]
+app_root = "."
+tablet_surface = "pc"
+# Prefer the environment catalog for checkouts so one file documents all
+# lifecycle artifact roots. Explicit pc_static_root / h5_static_root would win.
+
+[app_roots.pc_static_by_environment]
+development = "apps/sdkwork-webserver-pc/dist/dev"
+test = "apps/sdkwork-webserver-pc/dist/test"
+staging = "apps/sdkwork-webserver-pc/dist/staging"
+production = "apps/sdkwork-webserver-pc/dist/prod"
+
+[app_roots.h5_static_by_environment]
+development = "apps/sdkwork-webserver-h5/dist/dev"
+test = "apps/sdkwork-webserver-h5/dist/test"
+staging = "apps/sdkwork-webserver-h5/dist/staging"
+production = "apps/sdkwork-webserver-h5/dist/prod"
+
+[app_roots.static_fallback_by_environment]
+development = "deployments/webserver/static"
+test = "deployments/webserver/static"
+staging = "deployments/webserver/static"
+production = "deployments/webserver/static"
+
+[deploy]
+deployment_profile = "standalone"
+environment = "development"
+profile_id = "standalone.development"
+use_memory_drive = true
+use_memory_content_provider = true
+
+[database]
+engine = "postgresql"
+host = "127.0.0.1"
+port = 5432
+name = "sdkwork_ai_dev"
+schema = "sdkwork_ai_dev"
+schema_fallback_public = false
+username = "sdkwork_ai_dev"
+password_file = ".sdkwork/runtime/secrets/database.secret"
+ssl_mode = "disable"
+max_connections = 10
+auto_migrate = true
+
+# Optional: validate sibling module deployments/webserver/ at startup
+# [[webserver.imports]]
+# id = "iam"
+# path = "../sdkwork-iam"
+# required = true
+# probe_upstreams = false

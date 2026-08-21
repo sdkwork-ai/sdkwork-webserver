@@ -687,7 +687,7 @@ function writeComponentSpec(profile, openapi) {
       displayName,
       version: "0.1.0",
       type: "sdk-family",
-      root: `sdkwork-web-server/sdks/${family}`,
+      root: `sdkwork-webserver/sdks/${family}`,
       domain: "web",
       capability,
       languages,

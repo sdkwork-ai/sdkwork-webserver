@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component",
+  "id": "sdkwork-webserver-h5",
+  "name": "SDKWork Webserver H5",
+  "surface": "h5",
+  "architecture": "react-h5",
+  "ownership": {
+    "module": "sdkwork-webserver",
+    "applicationRoot": "apps/sdkwork-webserver-h5"
+  }
+}

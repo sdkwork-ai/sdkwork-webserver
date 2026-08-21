@@ -21,8 +21,8 @@ const CRITICAL_SOURCE_FILES = [
   'Cargo.toml',
   'sdkwork.app.config.json',
   'apps/sdkwork-webserver-pc/sdkwork.app.config.json',
-  'crates/sdkwork-api-web-server-standalone-gateway/Cargo.toml',
-  'crates/sdkwork-api-web-server-standalone-gateway/src/main.rs',
+  'crates/sdkwork-api-webserver-standalone-gateway/Cargo.toml',
+  'crates/sdkwork-api-webserver-standalone-gateway/src/main.rs',
   'scripts/lib/webserver-topology.mjs',
 ];
 
@@ -135,9 +135,9 @@ async function run() {
   const args = [
     'run',
     '-p',
-    'sdkwork-api-web-server-standalone-gateway',
+    'sdkwork-api-webserver-standalone-gateway',
     '--bin',
-    'sdkwork-api-web-server-standalone-gateway',
+    'sdkwork-api-webserver-standalone-gateway',
   ];
   if (settings.dryRun) {
     console.log(`[sdkwork-web] command=${command} ${args.join(' ')}`);
@@ -157,7 +157,7 @@ async function run() {
       if (code === 0 || signal === 'SIGINT' || signal === 'SIGTERM') {
         resolve();
       } else {
-        reject(new Error(`sdkwork-api-web-server-standalone-gateway exited with code ${code ?? 1}`));
+        reject(new Error(`sdkwork-api-webserver-standalone-gateway exited with code ${code ?? 1}`));
       }
     });
   });

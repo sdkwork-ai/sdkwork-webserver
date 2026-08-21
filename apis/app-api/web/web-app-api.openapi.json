@@ -10,7 +10,7 @@
   },
   "servers": [
     {
-      "url": "https://api.web.sdkwork.com",
+      "url": "https://api.server.sdkwork.com",
       "description": "Production"
     },
     {

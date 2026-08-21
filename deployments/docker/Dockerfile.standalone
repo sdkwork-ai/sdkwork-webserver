@@ -24,9 +24,14 @@ ENV SDKWORK_WEBSERVER_APP_ROOT=/app \
     SDKWORK_APP_ROOT=/app \
     SDKWORK_IAM_APP_ROOT=/app/share/sdkwork/iam \
     SDKWORK_DRIVE_APP_ROOT=/app/share/sdkwork/drive \
+    SDKWORK_DEPLOY_APP_ROOT=/app/share/sdkwork/deploy \
+    SDKWORK_WEB_STORE_APP_ROOT=/app/share/sdkwork/webstore \
     SDKWORK_SKILLS_APP_ROOT=/app/share/sdkwork/skills \
     SDKWORK_MCP_APP_ROOT=/app/share/sdkwork/mcp \
     SDKWORK_WEBSERVER_PC_STATIC_ROOT=/app/share/sdkwork/webserver/web/pc \
+    SDKWORK_WEBSERVER_H5_STATIC_ROOT=/app/share/sdkwork/webserver/web/h5 \
+    SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT=/app/share/sdkwork/webserver/web/static \
+    SDKWORK_WEBSERVER_TABLET_SURFACE=pc \
     SDKWORK_WEBSERVER_RUNTIME_TARGET=container \
     SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE=standalone
 
