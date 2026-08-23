@@ -62,7 +62,7 @@ ENV SDKWORK_WEBSERVER_APP_ROOT=/app \
     # SDKWork space clone surface (A3): clone target and module import
     # activation for the sdkwork-webserver container.
     SDKWORK_SPACE_ROOT=/opt/deploy \
-    SDKWORK_SPACE_CLONE_URL=https://github.com/sdkwork-ai/sdkwork-space.git \
+    SDKWORK_SPACE_CLONE_URL=https://github.com/Sdkwork-Cloud/sdkwork-space.git \
     SDKWORK_SPACE_CLONE_PULL=true \
     SDKWORK_DEPLOY_SANDBOX_KEY=deploy.local.opt_deploy \
     SDKWORK_DEPLOY_SANDBOX_ROOT=/opt/deploy

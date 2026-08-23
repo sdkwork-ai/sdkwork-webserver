@@ -4,13 +4,18 @@ Authority: `SDKWORK_WEBSERVER_SPEC.md`, `NGINX_SPEC.md`, `SDKWORK_DEPLOY_SPEC.md
 
 | File | Role |
 | --- | --- |
-| `server.common.toml` | Shared baseline (hosts, certificates, locations, upstream skeleton) — reverse-proxy only for this product |
-| `server.standalone.toml` | Standalone upstream targets (`127.0.0.1:3800` = topology `defaults.gatewayBind`) |
-| `server.cloud.toml` | Cloud upstream targets (platform `sdkwork-api-cloud-gateway`) |
-| `nginx.standalone.conf` | Rendered sidecar of the standalone merge (do not hand-edit) |
-| `nginx.cloud.conf` | Rendered sidecar of the cloud merge (do not hand-edit) |
-| `app-roots.example.toml` | Process Adaptive Web `[app_roots]` catalog (copy into runtime `config.toml`; not nginx) |
-| `static/` | Process `static-fallback` content packaged to `/usr/share/sdkwork/webserver/web/static/` |
+| `server.common.toml` | Identity, nginx/main/http globals, upstream skeleton (no `[[http.server]]`) |
+| `server.development.toml` | `environment = "development"` — dev hosts/locations |
+| `server.test.toml` | `environment = "test"` |
+| `server.staging.toml` | `environment = "staging"` |
+| `server.production.toml` | `environment = "production"` — TLS production hosts |
+| `server.standalone.toml` | `profile = "standalone"` — upstream targets |
+| `server.cloud.toml` | `profile = "cloud"` — platform gateway upstream |
+| `nginx.<profile>.<environment>.conf` | Rendered sidecar (`pnpm nginx:render`) |
+| `app-roots.example.toml` | Process Adaptive Web `[app_roots]` (not nginx) |
+| `static/` | Process static-fallback packaged to `/usr/share/sdkwork/webserver/web/static/` |
+
+Effective merge: `merge(common, server.<environment>.toml, server.<profile>.toml)`.
 
 ## Nginx surface (`[nginx]`)
 
@@ -101,17 +106,22 @@ Relative paths (resolved from the runtime config file, app root, or cwd):
 
 ```toml
 [[webserver.imports]]
-id = "iam"
-path = "../sdkwork-iam/deployments/webserver"
-required = true
-probe_upstreams = true
-
-# Module root is also accepted; `deployments/webserver/` is discovered automatically.
-[[webserver.imports]]
-id = "commerce"
-path = "../sdkwork-commerce"
-required = true
+id = "sdkwork-cloudrouter"
+path = "/opt/deploy/sdkwork-space/sdkwork-cloudrouter"
+required = false
+probe_upstreams = false
 ```
+
+Docker entrypoint auto-discovers modules under `/opt/deploy/sdkwork-space/sdkwork-*/`
+and materializes:
+
+| Path | Content |
+| --- | --- |
+| `/etc/sdkwork/webserver/modules/<module-id>/` | Copied layout-v2 TOML (standalone upstream patched to container gateway port) |
+| `/etc/sdkwork/webserver/module-app-roots/<module-id>.toml` | Generated Adaptive Web dist catalog |
+| `/etc/sdkwork/webserver/config.toml` | `[[webserver.imports]]` entries |
+
+Module templates: `sdkwork-specs/examples/webserver/modules/README.md`.
 
 Absolute paths (used as-is; module roots are auto-discovered the same way):
 

@@ -159,6 +159,8 @@ main() {
 
   ensure_host_redis
 
+  bash "$docker_root/scripts/setup-host-space-clone.sh" || log "warning: sdkwork-space clone skipped or failed"
+
   # Provision PostgreSQL databases for each environment
   provision_identity sdkwork_ai_dev sdkwork_ai_dev sdkworkdev123
   provision_identity sdkwork_ai_test sdkwork_ai_test sdkworktest123

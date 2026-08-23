@@ -34,7 +34,10 @@ WSL host nginx sites are generated into `/etc/nginx/sites-enabled/sdkwork/<domai
 ## Quick Start (WSL External Mode)
 
 ```bash
-# One-command deployment (provisions DBs, deploys all envs, configures nginx)
+# 1. Clone sdkwork-space on the Ubuntu host (once)
+sudo bash deployments/docker/scripts/setup-host-space-clone.sh
+
+# 2. One-command deployment (provisions DBs, deploys all envs, configures nginx)
 sudo bash deployments/docker/scripts/wsl-external-deploy.sh
 
 # Or step by step:
@@ -92,12 +95,12 @@ node scripts/docker/validate-docker-deployment.mjs --matrix --compose
 | Environment | Container port | Host port | Host HTTPS | Domains | DB identity | Redis DB |
 | --- | --- | --- | --- | --- | --- | --- |
 | development | 3800 | 13800 | 18430 | `server-dev.sdkwork.com` (+ `web-app-dev` / `web-admin-dev`) | `sdkwork_ai_dev` | 0 |
-| test | 8888 | 18888 | 28430 | `server-test.sdkwork.com` (+ `web-app-test` / `web-admin-test`) | `sdkwork_ai_test` | 1 |
-| production | 8080 | 18080 | 38430 | `server.sdkwork.com` (+ `web-app` / `web-admin`) | `sdkwork_ai_prod` | 2 |
+| test | 3800 | 18888 | 28430 | `server-test.sdkwork.com` (+ `web-app-test` / `web-admin-test`) | `sdkwork_ai_test` | 1 |
+| production | 3800 | 18080 | 38430 | `server.sdkwork.com` (+ `web-app` / `web-admin`) | `sdkwork_ai_prod` | 2 |
 
 Host PostgreSQL (`5432`) and Redis (`6379`) stay on Ubuntu/WSL native services in external mode; containers reach them via `host.docker.internal`.
 
-Space clone defaults: `SDKWORK_SPACE_ROOT=/opt/deploy`, `SDKWORK_SPACE_CLONE_URL=https://github.com/sdkwork-ai/sdkwork-space.git` (volume `webserver-opt-deploy-*`). Drive sandbox key `deploy.local.opt_deploy` scopes the Deployments Local Projects file browser to `/opt/deploy` only.
+Space clone defaults: host path `SDKWORK_SPACE_HOST_PATH=/opt/deploy` bind-mounted to container `/opt/deploy`; checkout `SDKWORK_SPACE_CLONE_URL=https://github.com/Sdkwork-Cloud/sdkwork-space.git` at `/opt/deploy/sdkwork-space`. Multiple environment clusters on one Ubuntu host share the same checkout and use distinct host ports (`13800` / `18888` / `18080`). Module imports auto-discover from `sdkwork-*/deployments/webserver/` unless `SDKWORK_SPACE_MODULES` is set. See `SDKWORK_WEBSERVER_SPEC.md` §17.
 
 Base domain: `sdkwork.com` only (registered in topology `cloudPublicHosts`).
 

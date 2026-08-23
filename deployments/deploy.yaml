@@ -1,6 +1,5 @@
 version: 2
 defaultProfile: cloud.production
-
 profiles:
   cloud.production:
     deployment:
@@ -16,7 +15,49 @@ profiles:
       availabilityMode: high-availability
     install:
       layout: binary-package
-    expose: []
+    expose:
+      - tls: sdkwork.com
+        mode: web
+        web: adaptive
+        domain: server-admin.sdkwork.com
+        aliases:
+          - server-app.sdkwork.com
+          - server.sdkwork.com
+      - tls: birdcoder.com
+        mode: web
+        web: adaptive
+        domain: server-admin.birdcoder.com
+        aliases:
+          - server-app.birdcoder.com
+          - server.birdcoder.com
+      - tls: dtupay.com
+        mode: web
+        web: adaptive
+        domain: server-admin.dtupay.com
+        aliases:
+          - server-app.dtupay.com
+          - server.dtupay.com
+      - tls: sdkwork.cn
+        mode: web
+        web: adaptive
+        domain: server-admin.sdkwork.cn
+        aliases:
+          - server-app.sdkwork.cn
+          - server.sdkwork.cn
+      - tls: birdcoder.cn
+        mode: web
+        web: adaptive
+        domain: server-admin.birdcoder.cn
+        aliases:
+          - server-app.birdcoder.cn
+          - server.birdcoder.cn
+      - tls: dtupay.cn
+        mode: web
+        web: adaptive
+        domain: server-admin.dtupay.cn
+        aliases:
+          - server-app.dtupay.cn
+          - server.dtupay.cn
     packages: []
     overrides:
       topology:
@@ -36,7 +77,6 @@ profiles:
         listenerConfig: per-node-immutable-config-map
         trustedProxyCidrs: required-render-input
         customDomains: true
-
   cloud.test:
     deployment:
       deploymentProfile: cloud
@@ -51,7 +91,49 @@ profiles:
       availabilityMode: high-availability
     install:
       layout: binary-package
-    expose: []
+    expose:
+      - tls: sdkwork.com
+        mode: web
+        web: adaptive
+        domain: server-admin-test.sdkwork.com
+        aliases:
+          - server-app-test.sdkwork.com
+          - server-test.sdkwork.com
+      - tls: birdcoder.com
+        mode: web
+        web: adaptive
+        domain: server-admin-test.birdcoder.com
+        aliases:
+          - server-app-test.birdcoder.com
+          - server-test.birdcoder.com
+      - tls: dtupay.com
+        mode: web
+        web: adaptive
+        domain: server-admin-test.dtupay.com
+        aliases:
+          - server-app-test.dtupay.com
+          - server-test.dtupay.com
+      - tls: sdkwork.cn
+        mode: web
+        web: adaptive
+        domain: server-admin-test.sdkwork.cn
+        aliases:
+          - server-app-test.sdkwork.cn
+          - server-test.sdkwork.cn
+      - tls: birdcoder.cn
+        mode: web
+        web: adaptive
+        domain: server-admin-test.birdcoder.cn
+        aliases:
+          - server-app-test.birdcoder.cn
+          - server-test.birdcoder.cn
+      - tls: dtupay.cn
+        mode: web
+        web: adaptive
+        domain: server-admin-test.dtupay.cn
+        aliases:
+          - server-app-test.dtupay.cn
+          - server-test.dtupay.cn
     packages: []
     overrides:
       topology:
@@ -60,7 +142,6 @@ profiles:
         env: etc/topology/cloud.test.env
       kubernetes:
         reference: deployments/kubernetes/
-
   cloud.staging:
     deployment:
       deploymentProfile: cloud
@@ -75,7 +156,49 @@ profiles:
       availabilityMode: high-availability
     install:
       layout: binary-package
-    expose: []
+    expose:
+      - tls: sdkwork.com
+        mode: web
+        web: adaptive
+        domain: server-admin-staging.sdkwork.com
+        aliases:
+          - server-app-staging.sdkwork.com
+          - server-staging.sdkwork.com
+      - tls: birdcoder.com
+        mode: web
+        web: adaptive
+        domain: server-admin-staging.birdcoder.com
+        aliases:
+          - server-app-staging.birdcoder.com
+          - server-staging.birdcoder.com
+      - tls: dtupay.com
+        mode: web
+        web: adaptive
+        domain: server-admin-staging.dtupay.com
+        aliases:
+          - server-app-staging.dtupay.com
+          - server-staging.dtupay.com
+      - tls: sdkwork.cn
+        mode: web
+        web: adaptive
+        domain: server-admin-staging.sdkwork.cn
+        aliases:
+          - server-app-staging.sdkwork.cn
+          - server-staging.sdkwork.cn
+      - tls: birdcoder.cn
+        mode: web
+        web: adaptive
+        domain: server-admin-staging.birdcoder.cn
+        aliases:
+          - server-app-staging.birdcoder.cn
+          - server-staging.birdcoder.cn
+      - tls: dtupay.cn
+        mode: web
+        web: adaptive
+        domain: server-admin-staging.dtupay.cn
+        aliases:
+          - server-app-staging.dtupay.cn
+          - server-staging.dtupay.cn
     packages: []
     overrides:
       topology:
@@ -84,7 +207,6 @@ profiles:
         env: etc/topology/cloud.staging.env
       kubernetes:
         reference: deployments/kubernetes/
-
   standalone.test:
     deployment:
       deploymentProfile: standalone
@@ -100,16 +222,48 @@ profiles:
     install:
       layout: binary-package
     expose:
-      - domain: server-test.sdkwork.com
-        tls: none
+      - domain: server-admin-test.sdkwork.com
+        tls: sdkwork.com
         mode: api
+        aliases:
+          - server-app-test.sdkwork.com
+          - server-test.sdkwork.com
+      - domain: server-admin-test.birdcoder.com
+        tls: birdcoder.com
+        mode: api
+        aliases:
+          - server-app-test.birdcoder.com
+          - server-test.birdcoder.com
+      - domain: server-admin-test.dtupay.com
+        tls: dtupay.com
+        mode: api
+        aliases:
+          - server-app-test.dtupay.com
+          - server-test.dtupay.com
+      - domain: server-admin-test.sdkwork.cn
+        tls: sdkwork.cn
+        mode: api
+        aliases:
+          - server-app-test.sdkwork.cn
+          - server-test.sdkwork.cn
+      - domain: server-admin-test.birdcoder.cn
+        tls: birdcoder.cn
+        mode: api
+        aliases:
+          - server-app-test.birdcoder.cn
+          - server-test.birdcoder.cn
+      - domain: server-admin-test.dtupay.cn
+        tls: dtupay.cn
+        mode: api
+        aliases:
+          - server-app-test.dtupay.cn
+          - server-test.dtupay.cn
     packages: []
     overrides:
       topology:
         spec: specs/topology.spec.json
         profile: standalone.test
         env: etc/topology/standalone.test.env
-
   standalone.production:
     deployment:
       deploymentProfile: standalone
@@ -125,16 +279,48 @@ profiles:
     install:
       layout: binary-package
     expose:
-      - domain: server.sdkwork.com
-        tls: managed
+      - domain: server-admin.sdkwork.com
+        tls: sdkwork.com
         mode: api
+        aliases:
+          - server-app.sdkwork.com
+          - server.sdkwork.com
+      - domain: server-admin.birdcoder.com
+        tls: birdcoder.com
+        mode: api
+        aliases:
+          - server-app.birdcoder.com
+          - server.birdcoder.com
+      - domain: server-admin.dtupay.com
+        tls: dtupay.com
+        mode: api
+        aliases:
+          - server-app.dtupay.com
+          - server.dtupay.com
+      - domain: server-admin.sdkwork.cn
+        tls: sdkwork.cn
+        mode: api
+        aliases:
+          - server-app.sdkwork.cn
+          - server.sdkwork.cn
+      - domain: server-admin.birdcoder.cn
+        tls: birdcoder.cn
+        mode: api
+        aliases:
+          - server-app.birdcoder.cn
+          - server.birdcoder.cn
+      - domain: server-admin.dtupay.cn
+        tls: dtupay.cn
+        mode: api
+        aliases:
+          - server-app.dtupay.cn
+          - server.dtupay.cn
     packages: []
     overrides:
       topology:
         spec: specs/topology.spec.json
         profile: standalone.production
         env: etc/topology/standalone.production.env
-
   standalone.staging:
     deployment:
       deploymentProfile: standalone
@@ -150,9 +336,42 @@ profiles:
     install:
       layout: binary-package
     expose:
-      - domain: server-staging.sdkwork.com
-        tls: managed
+      - domain: server-admin-staging.sdkwork.com
+        tls: sdkwork.com
         mode: api
+        aliases:
+          - server-app-staging.sdkwork.com
+          - server-staging.sdkwork.com
+      - domain: server-admin-staging.birdcoder.com
+        tls: birdcoder.com
+        mode: api
+        aliases:
+          - server-app-staging.birdcoder.com
+          - server-staging.birdcoder.com
+      - domain: server-admin-staging.dtupay.com
+        tls: dtupay.com
+        mode: api
+        aliases:
+          - server-app-staging.dtupay.com
+          - server-staging.dtupay.com
+      - domain: server-admin-staging.sdkwork.cn
+        tls: sdkwork.cn
+        mode: api
+        aliases:
+          - server-app-staging.sdkwork.cn
+          - server-staging.sdkwork.cn
+      - domain: server-admin-staging.birdcoder.cn
+        tls: birdcoder.cn
+        mode: api
+        aliases:
+          - server-app-staging.birdcoder.cn
+          - server-staging.birdcoder.cn
+      - domain: server-admin-staging.dtupay.cn
+        tls: dtupay.cn
+        mode: api
+        aliases:
+          - server-app-staging.dtupay.cn
+          - server-staging.dtupay.cn
     packages: []
     overrides:
       topology:

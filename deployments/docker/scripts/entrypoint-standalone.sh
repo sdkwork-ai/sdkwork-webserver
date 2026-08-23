@@ -9,11 +9,29 @@ GATEWAY_BINARY="/app/bin/sdkwork-api-webserver-standalone-gateway"
 SERVICE_USER="sdkwork"
 
 log() {
-  echo "[sdkwork-webserver-entrypoint] $*"
+  # Always stderr: stdout is captured by $(module_imports_toml) and similar
+  # substitutions and must never leak into generated config.toml.
+  echo "[sdkwork-webserver-entrypoint] $*" >&2
 }
 
 ensure_directory() {
+  if [ -d "$1" ]; then
+    return 0
+  fi
   install -d -o "${SERVICE_USER}" -g "${SERVICE_USER}" -m 0750 "$1"
+}
+
+ensure_writable_directory() {
+  local dir="$1"
+  if [ -d "${dir}" ]; then
+    return 0
+  fi
+  if ! touch "${dir%/*}/.sdkwork-write-test" 2>/dev/null; then
+    log "warning: parent of ${dir} is read-only; skipping create"
+    return 0
+  fi
+  rm -f "${dir%/*}/.sdkwork-write-test"
+  ensure_directory "${dir}"
 }
 
 ensure_secret_file() {
@@ -113,21 +131,43 @@ apply_primary_domain() {
   export SDKWORK_CORS_ALLOWED_ORIGINS="${SDKWORK_CORS_ALLOWED_ORIGINS:-${public_url}}"
 }
 
-# A3: SDKWork space modules — clone repositories under $SDKWORK_SPACE_ROOT
-# (default /opt/deploy), wire their deployments/webserver layout-v2 imports
-# into the runtime config, and point PC/H5 static roots at built apps when present.
+# A3: SDKWork space — clone https://github.com/Sdkwork-Cloud/sdkwork-space under
+# $SDKWORK_SPACE_ROOT (default /opt/deploy), bind-mount the same host path into
+# containers, auto-discover sdkwork-* module imports, materialize layout-v2 TOML
+# under /etc/sdkwork/webserver/modules/, and wire PC/H5 static roots from
+# apps/*/dist/<envAlias> when present (SDKWORK_WEBSERVER_SPEC.md §13.6).
+
+space_checkout_dir() {
+  printf '%s/sdkwork-space' "${SDKWORK_SPACE_ROOT:-/opt/deploy}"
+}
+
+environment_dist_alias() {
+  case "${1:-development}" in
+    development) printf '%s' "dev" ;;
+    test) printf '%s' "test" ;;
+    staging) printf '%s' "staging" ;;
+    production) printf '%s' "prod" ;;
+    *) printf '%s' "dev" ;;
+  esac
+}
+
+module_repo_root() {
+  local module_id="$1"
+  printf '%s/%s' "$(space_checkout_dir)" "${module_id}"
+}
+
 clone_or_update_git_repo() {
   local url="$1"
   local dest="$2"
   if [ ! -d "${dest}/.git" ]; then
     if [ -e "${dest}" ]; then
       log "warning: ${dest} exists but is not a git checkout; skipping clone of ${url}"
-      return 0
+      return 1
     fi
     log "cloning ${url} into ${dest}"
     if ! run_as_service_user git clone --depth 1 "${url}" "${dest}"; then
       log "warning: git clone failed for ${url}; continuing without this module"
-      return 0
+      return 1
     fi
     return 0
   fi
@@ -146,77 +186,193 @@ clone_or_update_git_repo() {
       log "SDKWORK_SPACE_CLONE_PULL disabled; keeping ${dest}"
       ;;
   esac
+  return 0
+}
+
+module_webserver_enabled() {
+  local module_dir="$1"
+  local common="${module_dir}/deployments/webserver/server.common.toml"
+  [ -f "${common}" ] || return 1
+  if grep -Eq '^enabled[[:space:]]*=[[:space:]]*false' "${common}"; then
+    return 1
+  fi
+  return 0
+}
+
+discover_importable_modules() {
+  local checkout discovered="" module_dir module_id auto_discover
+  auto_discover="${SDKWORK_SPACE_AUTO_DISCOVER:-false}"
+  checkout="$(space_checkout_dir)"
+  if [ "${auto_discover}" = "true" ] || [ "${auto_discover}" = "1" ] || [ "${auto_discover}" = "yes" ]; then
+    if [ -d "${checkout}" ]; then
+      for module_dir in "${checkout}"/sdkwork-*; do
+        [ -d "${module_dir}" ] || continue
+        module_id="$(basename "${module_dir}")"
+        case "${module_id}" in
+          sdkwork-webserver) continue ;;
+        esac
+        if module_webserver_enabled "${module_dir}"; then
+          discovered="${discovered:+$discovered,}${module_id}"
+        fi
+      done
+    fi
+  fi
+  if [ -n "${SDKWORK_SPACE_MODULES:-}" ]; then
+    printf '%s' "${SDKWORK_SPACE_MODULES}"
+  else
+    printf '%s' "${discovered}"
+  fi
 }
 
 clone_sdkwork_space_modules() {
   local space_root="${SDKWORK_SPACE_ROOT:-/opt/deploy}"
+  local checkout clone_url base module module_dir local_path
   export SDKWORK_SPACE_ROOT="${space_root}"
-  ensure_directory "${space_root}"
-
-  local base="${SDKWORK_SPACE_CLONE_BASE:-}"
-  local modules="${SDKWORK_SPACE_MODULES:-}"
-  local clone_url="${SDKWORK_SPACE_CLONE_URL:-https://github.com/sdkwork-ai/sdkwork-space.git}"
-
-  if [ -n "${clone_url}" ]; then
-    local name
-    name="$(basename "${clone_url%.git}")"
-    clone_or_update_git_repo "${clone_url}" "${space_root}/${name}"
-    modules="${modules:+${modules},}${name}"
+  if [ ! -d "${space_root}" ]; then
+    ensure_writable_directory "${space_root}"
   fi
-  if [ -n "${base}" ] && [ -n "${modules}" ]; then
-    local module
-    IFS=',' read -r -a module_list <<< "${modules}"
+
+  checkout="$(space_checkout_dir)"
+  local_path="${SDKWORK_SPACE_LOCAL_PATH:-}"
+  if [ -n "${local_path}" ] && [ -d "${local_path}" ] && [ ! -e "${checkout}" ]; then
+    ln -sfn "${local_path}" "${checkout}"
+    log "linked space checkout ${checkout} -> ${local_path}"
+  fi
+
+  clone_url="${SDKWORK_SPACE_CLONE_URL:-https://github.com/Sdkwork-Cloud/sdkwork-space.git}"
+  if [ -d "${checkout}" ] && [ -n "$(ls -A "${checkout}" 2>/dev/null || true)" ]; then
+    log "using existing space checkout at ${checkout}"
+  elif [ -n "${clone_url}" ] && [ ! -d "${checkout}" ]; then
+    clone_or_update_git_repo "${clone_url}" "${checkout}" || true
+  elif [ -d "${checkout}/.git" ] && [ -n "${clone_url}" ]; then
+    clone_or_update_git_repo "${clone_url}" "${checkout}" || true
+  fi
+
+  base="${SDKWORK_SPACE_CLONE_BASE:-}"
+  if [ -n "${base}" ] && [ -n "${SDKWORK_SPACE_MODULES:-}" ]; then
+    IFS=',' read -r -a module_list <<< "${SDKWORK_SPACE_MODULES}"
     for module in "${module_list[@]}"; do
       module="$(printf '%s' "${module}" | xargs)"
       [ -z "${module}" ] && continue
-      # Skip the primary clone name when already handled via CLONE_URL.
-      if [ -d "${space_root}/${module}/.git" ] || [ -d "${space_root}/${module}" ]; then
-        if [ -d "${space_root}/${module}/.git" ]; then
-          clone_or_update_git_repo "${base}/${module}" "${space_root}/${module}"
-        fi
+      module_dir="$(module_repo_root "${module}")"
+      if [ -d "${module_dir}/.git" ]; then
+        clone_or_update_git_repo "${base}/${module}" "${module_dir}" || true
         continue
       fi
-      clone_or_update_git_repo "${base}/${module}" "${space_root}/${module}"
+      if [ ! -e "${module_dir}" ]; then
+        clone_or_update_git_repo "${base}/${module}" "${module_dir}" || true
+      fi
     done
   fi
-  export SDKWORK_SPACE_MODULES="${modules}"
-  chown -R "${SERVICE_USER}:${SERVICE_USER}" "${space_root}" 2>/dev/null || true
+
+  export SDKWORK_SPACE_IMPORT_MODULES="$(discover_importable_modules)"
+  if touch "${space_root}/.sdkwork-write-test" 2>/dev/null; then
+    rm -f "${space_root}/.sdkwork-write-test"
+    chown -R "${SERVICE_USER}:${SERVICE_USER}" "${space_root}" 2>/dev/null || true
+  else
+    log "space root ${space_root} is read-only; using host bind mount as-is"
+  fi
 }
 
-module_imports_toml() {
-  local imports=""
-  local module
-  IFS=',' read -r -a module_list <<< "${SDKWORK_SPACE_MODULES:-}"
+materialize_module_webserver_configs() {
+  local modules_root="${CONFIG_ROOT}/modules"
+  local catalog_root="${CONFIG_ROOT}/module-app-roots"
+  local module module_root module_ws link_target dest pc_root h5_root dist_alias gateway_port
+  dist_alias="$(environment_dist_alias "${SDKWORK_WEBSERVER_ENVIRONMENT:-development}")"
+  gateway_port="${SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT:-${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_INGRESS_BIND##*:}}"
+  gateway_port="${gateway_port:-3800}"
+  ensure_directory "${modules_root}"
+  ensure_directory "${catalog_root}"
+  IFS=',' read -r -a module_list <<< "${SDKWORK_SPACE_IMPORT_MODULES:-}"
   for module in "${module_list[@]}"; do
     module="$(printf '%s' "${module}" | xargs)"
     [ -z "${module}" ] && continue
-    local wsdir="${SDKWORK_SPACE_ROOT}/${module}/deployments/webserver"
-    if [ -f "${wsdir}/server.common.toml" ]; then
-      imports="${imports}  { id = \"${module}\", path = \"${wsdir}\", enabled = true },
-"
-      log "module import configured: ${module} -> ${wsdir}"
-    else
-      log "module ${module} has no deployments/webserver layout; skipped"
+    module_root="$(module_repo_root "${module}")"
+    module_ws="${module_root}/deployments/webserver"
+    if ! module_webserver_enabled "${module_root}"; then
+      continue
     fi
+    dest="${modules_root}/${module}"
+    rm -rf "${dest}"
+    mkdir -p "${dest}"
+    cp "${module_ws}/server.common.toml" "${dest}/"
+    if [ -f "${module_ws}/server.cloud.toml" ]; then
+      cp "${module_ws}/server.cloud.toml" "${dest}/"
+    fi
+    if [ -f "${module_ws}/server.standalone.toml" ]; then
+      sed "s/127.0.0.1:3800/127.0.0.1:${gateway_port}/g" \
+        "${module_ws}/server.standalone.toml" > "${dest}/server.standalone.toml"
+    fi
+    log "materialized module webserver config -> ${dest} (gateway upstream 127.0.0.1:${gateway_port})"
+
+    pc_root="$(module_app_static_root "${module}" pc)"
+    h5_root="$(module_app_static_root "${module}" h5)"
+    cat > "${catalog_root}/${module}.toml" <<EOF
+# Generated Adaptive Web catalog for imported module ${module}.
+# Authority: SDKWORK_WEBSERVER_SPEC.md §13.6 / §17.
+# Dist alias: ${dist_alias} (lifecycle environment: ${SDKWORK_WEBSERVER_ENVIRONMENT:-development})
+
+[app_roots]
+tablet_surface = "pc"
+pc_static_root = "${pc_root:-}"
+h5_static_root = "${h5_root:-}"
+static_fallback_root = "${module_root}/deployments/webserver/static"
+EOF
+    chown "${SERVICE_USER}:${SERVICE_USER}" "${catalog_root}/${module}.toml" 2>/dev/null || true
+    chmod 0640 "${catalog_root}/${module}.toml" 2>/dev/null || true
+    log "materialized module app-roots catalog -> ${catalog_root}/${module}.toml"
+  done
+  chown -R "${SERVICE_USER}:${SERVICE_USER}" "${modules_root}" 2>/dev/null || true
+  chown -R "${SERVICE_USER}:${SERVICE_USER}" "${catalog_root}" 2>/dev/null || true
+}
+
+module_imports_toml() {
+  local imports="" module module_root import_required import_probe
+  import_required="${SDKWORK_WEBSERVER_MODULE_IMPORT_REQUIRED:-false}"
+  import_probe="${SDKWORK_WEBSERVER_MODULE_IMPORT_PROBE_UPSTREAMS:-false}"
+  IFS=',' read -r -a module_list <<< "${SDKWORK_SPACE_IMPORT_MODULES:-}"
+  for module in "${module_list[@]}"; do
+    module="$(printf '%s' "${module}" | xargs)"
+    [ -z "${module}" ] && continue
+    module_root="$(module_repo_root "${module}")"
+    if ! module_webserver_enabled "${module_root}"; then
+      log "module ${module} is disabled or missing layout; skipped"
+      continue
+    fi
+    imports="${imports}[[webserver.imports]]
+id = \"${module}\"
+path = \"${module_root}\"
+enabled = true
+required = ${import_required}
+probe_upstreams = ${import_probe}
+
+"
+    log "module import configured: ${module} -> ${module_root}"
   done
   printf '%b' "${imports}"
 }
 
 module_app_static_root() {
   local module="$1"
-  local surface="$2"   # pc | h5
-  local match
+  local surface="$2"
+  local environment dist_alias apps_root app dist match
+  environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
+  dist_alias="$(environment_dist_alias "${environment}")"
   if [ "${surface}" = "pc" ]; then
     match="*pc*"
   else
     match="*h5*"
   fi
-  local apps_root="${SDKWORK_SPACE_ROOT}/${module}/apps"
+  apps_root="$(module_repo_root "${module}")/apps"
   [ -d "${apps_root}" ] || return 0
-  local app
   for app in "${apps_root}"/${match}; do
     [ -d "${app}" ] || continue
-    local dist="${app}/dist"
+    dist="${app}/dist/${dist_alias}"
+    if [ -f "${dist}/index.html" ]; then
+      printf '%s' "${dist}"
+      return 0
+    fi
+    dist="${app}/dist"
     if [ -f "${dist}/index.html" ]; then
       printf '%s' "${dist}"
       return 0
@@ -225,11 +381,23 @@ module_app_static_root() {
   return 0
 }
 
+app_roots_by_environment_toml() {
+  local pc_root="${SDKWORK_WEBSERVER_PC_STATIC_ROOT:-/app/share/sdkwork/webserver/web/pc}"
+  local h5_root="${SDKWORK_WEBSERVER_H5_STATIC_ROOT:-/app/share/sdkwork/webserver/web/h5}"
+  local static_root="${SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT:-/app/share/sdkwork/webserver/web/static}"
+  cat <<EOF
+tablet_surface = "pc"
+pc_static_root = "${pc_root}"
+h5_static_root = "${h5_root}"
+static_fallback_root = "${static_root}"
+EOF
+}
+
 render_runtime_config() {
   local environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
   local bind="${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_INGRESS_BIND:-0.0.0.0:3800}"
   local module
-  IFS=',' read -r -a module_list <<< "${SDKWORK_SPACE_MODULES:-}"
+  IFS=',' read -r -a module_list <<< "${SDKWORK_SPACE_IMPORT_MODULES:-}"
   for module in "${module_list[@]}"; do
     module="$(printf '%s' "${module}" | xargs)"
     [ -z "${module}" ] && continue
@@ -252,8 +420,9 @@ render_runtime_config() {
       fi
     fi
   done
-  local MODULE_IMPORTS_TOML
+  local MODULE_IMPORTS_TOML APP_ROOTS_ENV_TOML
   MODULE_IMPORTS_TOML="$(module_imports_toml)"
+  APP_ROOTS_ENV_TOML="$(app_roots_by_environment_toml)"
   local public_url="${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_HTTP_URL}"
   local data_plane_bind="${SDKWORK_WEBSERVER_DATA_PLANE_OPERATIONS_BIND:-127.0.0.1:3901}"
   local ingress_port="${bind##*:}"
@@ -307,12 +476,7 @@ iam_app_root = "/app/share/sdkwork/iam"
 drive_app_root = "/app/share/sdkwork/drive"
 deploy_app_root = "/app/share/sdkwork/deploy"
 web_store_app_root = "/app/share/sdkwork/webstore"
-# skills/mcp roots are injected via SDKWORK_SKILLS_APP_ROOT / SDKWORK_MCP_APP_ROOT
-# from compose (and newer gateways also accept skills_app_root / mcp_app_root in TOML).
-pc_static_root = "${SDKWORK_WEBSERVER_PC_STATIC_ROOT:-/app/share/sdkwork/webserver/web/pc}"
-h5_static_root = "${SDKWORK_WEBSERVER_H5_STATIC_ROOT:-/app/share/sdkwork/webserver/web/h5}"
-static_fallback_root = "${SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT:-/app/share/sdkwork/webserver/web/static}"
-tablet_surface = "pc"
+${APP_ROOTS_ENV_TOML}
 
 [deploy]
 deployment_profile = "standalone"
@@ -370,13 +534,9 @@ uuid = "${SDKWORK_WEBSERVER_NODE_UUID:-standalone-${environment}-node}"
 region_code = "${SDKWORK_WEBSERVER_REGION_CODE:-cn}"
 seed_locale = "${SDKWORK_DATABASE_SEED_LOCALE:-zh-CN}"
 
-# Imported sibling-module deployments/webserver layout-v2 configs (A3):
-# each entry loads the module's server.common.toml + profile file and
-# materializes its routes, upstreams, and apps static surfaces.
-[webserver]
-imports = [
+# Imported sibling-module deployments/webserver layout-v2 configs.
+# Materialized copies: /etc/sdkwork/webserver/modules/<module-id>/
 ${MODULE_IMPORTS_TOML}
-]
 EOF
   chown root:"${SERVICE_USER}" "${RUNTIME_CONFIG_FILE}"
   chmod 0640 "${RUNTIME_CONFIG_FILE}"
@@ -495,6 +655,7 @@ main() {
 
   apply_primary_domain
   clone_sdkwork_space_modules
+  materialize_module_webserver_configs
   for cert_domain in ${SDKWORK_WEBSERVER_CERT_DOMAINS:-sdkwork.com app.sdkwork.com}; do
     ensure_domain_certificate "${cert_domain}"
   done

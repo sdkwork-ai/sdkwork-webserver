@@ -97,6 +97,19 @@ export function validateDeploymentEnvironment(env, mode) {
     requireResolved(env, 'WEBSERVER_REDIS_HOST');
   }
 
+  requireResolved(env, 'SDKWORK_SPACE_ROOT');
+  requireResolved(env, 'SDKWORK_SPACE_HOST_PATH');
+  requireResolved(env, 'SDKWORK_SPACE_CLONE_URL');
+  if (String(env.SDKWORK_SPACE_ROOT ?? '').trim() !== '/opt/deploy') {
+    throw new Error('SDKWORK_SPACE_ROOT must be /opt/deploy for docker space integration');
+  }
+  if (String(env.SDKWORK_SPACE_HOST_PATH ?? '').trim() !== '/opt/deploy') {
+    throw new Error('SDKWORK_SPACE_HOST_PATH must be /opt/deploy for docker space integration');
+  }
+  if (!String(env.SDKWORK_SPACE_CLONE_URL ?? '').includes('sdkwork-space')) {
+    throw new Error('SDKWORK_SPACE_CLONE_URL must reference the sdkwork-space checkout');
+  }
+
   return { environment, expectedProfileId, hosts, mode };
 }
 

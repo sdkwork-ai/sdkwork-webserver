@@ -217,6 +217,19 @@ pub async fn assemble_api_router(
     assemble_business_routes(context).await
 }
 
+/// Seed the SDKWork space repository under the deployment root (owner API
+/// integration point).
+///
+/// The standalone gateway must not depend on service crates directly; this
+/// assembly-owned wrapper forwards to the Server Files service so the gateway
+/// only consumes the owner assembly (API_ASSEMBLY_SPEC §4/§6).
+pub async fn seed_space_repository() -> Result<std::path::PathBuf, String> {
+    let deployment_root = std::env::var("SDKWORK_DEPLOY_ROOT").ok();
+    sdkwork_routes_webserver_backend_api::ensure_space_repository(deployment_root.as_deref())
+        .await
+        .map_err(|error| error.to_string())
+}
+
 pub async fn migrate_database_from_env() -> Result<(), ApiAssemblyError> {
     // Migrate every in-process database module in startup order
     // (DATABASE_FRAMEWORK_SPEC §4.3): the Web module first, then the

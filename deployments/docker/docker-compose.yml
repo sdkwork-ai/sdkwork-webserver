@@ -24,6 +24,19 @@ x-webserver-common: &webserver-common
       condition: service_healthy
     redis:
       condition: service_healthy
+  environment:
+    SDKWORK_SPACE_ROOT: ${SDKWORK_SPACE_ROOT:-/opt/deploy}
+    SDKWORK_SPACE_HOST_PATH: ${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}
+    SDKWORK_SPACE_CLONE_URL: ${SDKWORK_SPACE_CLONE_URL:-https://github.com/Sdkwork-Cloud/sdkwork-space.git}
+    SDKWORK_SPACE_CLONE_PULL: ${SDKWORK_SPACE_CLONE_PULL:-true}
+    SDKWORK_WEBSERVER_MODULE_IMPORT_REQUIRED: ${SDKWORK_WEBSERVER_MODULE_IMPORT_REQUIRED:-false}
+    SDKWORK_WEBSERVER_MODULE_IMPORT_PROBE_UPSTREAMS: ${SDKWORK_WEBSERVER_MODULE_IMPORT_PROBE_UPSTREAMS:-false}
+    SDKWORK_DEPLOY_SANDBOX_KEY: ${SDKWORK_DEPLOY_SANDBOX_KEY:-deploy.local.opt_deploy}
+    SDKWORK_DEPLOY_SANDBOX_ROOT: ${SDKWORK_DEPLOY_SANDBOX_ROOT:-/opt/deploy}
+  volumes:
+    - ${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}:/opt/deploy:ro
+    - ${SDKWORK_SPACE_CHECKOUT_HOST_PATH:-${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}/sdkwork-space}:/opt/deploy/sdkwork-space:ro
+    - ./scripts/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
   healthcheck:
     test:
       [
@@ -119,21 +132,22 @@ services:
     volumes:
       - webserver-secrets-development:/etc/sdkwork/webserver/secrets
       - webserver-data-development:/var/lib/sdkwork/webserver
-      - ./scripts/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
       - ../../../sdkwork-skills/database:/app/share/sdkwork/skills/database:ro
+      - ../../../sdkwork-mcp/database:/app/share/sdkwork/mcp/database:ro
+      - ../../../sdkwork-deployments/database:/app/share/sdkwork/deploy/database:ro
 
   webserver-test:
     <<: *webserver-common
     profiles: [test]
     container_name: sdkwork-webserver-test
     ports:
-      - "${SDKWORK_WEBSERVER_TEST_HOST_PORT:-18888}:8888"
+      - "${SDKWORK_WEBSERVER_TEST_HOST_PORT:-18888}:3800"
       - "${SDKWORK_WEBSERVER_TEST_HTTPS_HOST_PORT:-28430}:8430"
     env_file:
       - path: env/test.env
         required: false
     environment:
-      SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT: "8888"
+      SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT: "3800"
       SDKWORK_WEBSERVER_ENVIRONMENT: test
       SDKWORK_WEBSERVER_PROFILE_ID: standalone.test
       SDKWORK_SKILLS_APP_ROOT: /app/share/sdkwork/skills
@@ -157,21 +171,22 @@ services:
     volumes:
       - webserver-secrets-test:/etc/sdkwork/webserver/secrets
       - webserver-data-test:/var/lib/sdkwork/webserver
-      - ./scripts/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
       - ../../../sdkwork-skills/database:/app/share/sdkwork/skills/database:ro
+      - ../../../sdkwork-mcp/database:/app/share/sdkwork/mcp/database:ro
+      - ../../../sdkwork-deployments/database:/app/share/sdkwork/deploy/database:ro
 
   webserver-production:
     <<: *webserver-common
     profiles: [production]
     container_name: sdkwork-webserver-production
     ports:
-      - "${SDKWORK_WEBSERVER_PROD_HOST_PORT:-18080}:8080"
+      - "${SDKWORK_WEBSERVER_PROD_HOST_PORT:-18080}:3800"
       - "${SDKWORK_WEBSERVER_PROD_HTTPS_HOST_PORT:-38430}:8430"
     env_file:
       - path: env/production.env
         required: false
     environment:
-      SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT: "8080"
+      SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT: "3800"
       SDKWORK_WEBSERVER_ENVIRONMENT: production
       SDKWORK_WEBSERVER_PROFILE_ID: standalone.production
       SDKWORK_SKILLS_APP_ROOT: /app/share/sdkwork/skills
@@ -195,8 +210,9 @@ services:
     volumes:
       - webserver-secrets-production:/etc/sdkwork/webserver/secrets
       - webserver-data-production:/var/lib/sdkwork/webserver
-      - ./scripts/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
       - ../../../sdkwork-skills/database:/app/share/sdkwork/skills/database:ro
+      - ../../../sdkwork-mcp/database:/app/share/sdkwork/mcp/database:ro
+      - ../../../sdkwork-deployments/database:/app/share/sdkwork/deploy/database:ro
 
 volumes:
   webserver-postgres-data:

@@ -16,7 +16,7 @@ sdkwork-web-axum.workspace = true
 sdkwork-web-bootstrap.workspace = true
 sdkwork-web-core.workspace = true
 sdkwork-utils-rust.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["fs", "process"] }
 tracing.workspace = true
 
 [dev-dependencies]

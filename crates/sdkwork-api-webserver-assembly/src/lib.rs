@@ -6,7 +6,8 @@ mod framework_observability;
 mod generated;
 
 pub use bootstrap::{
-    assemble_api_router, migrate_database_from_env, ApiAssembly, ApiAssemblyContext,
+    assemble_api_router, migrate_database_from_env, seed_space_repository, ApiAssembly,
+    ApiAssemblyContext,
 };
 
 pub fn assembly_route_count() -> usize {

@@ -1,18 +1,8 @@
-# Process Adaptive Web roots (not nginx layout-v2).
-# Authority: SDKWORK_WEBSERVER_SPEC.md §13.6, APP_CLIENT §2.1.
-# Copy [app_roots] into /etc/sdkwork/webserver/config.toml — not into server.*.toml.
-
-[profile]
-deployment_profile = "standalone"
-environment = "development"
-profile_id = "standalone.development"
+# Adaptive Web roots for sdkwork-webserver (copy into runtime config when in-process).
+# Docker entrypoint generates /etc/sdkwork/webserver/module-app-roots/sdkwork-webserver.toml
 
 [app_roots]
 tablet_surface = "pc"
-# Explicit roots win over by-environment maps.
-# pc_static_root = "/usr/share/sdkwork/webserver/web/pc"
-# h5_static_root = "/usr/share/sdkwork/webserver/web/h5"
-# static_fallback_root = "/usr/share/sdkwork/webserver/web/static"
 
 [app_roots.pc_static_by_environment]
 development = "apps/sdkwork-webserver-pc/dist/dev"

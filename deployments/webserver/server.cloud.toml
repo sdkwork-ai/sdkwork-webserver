@@ -1,14 +1,11 @@
-# Cloud deltas per SDKWORK_WEBSERVER_SPEC.md: inherits server.common.toml.
-# Upstream targets the platform cloud gateway service (APPLICATION_GATEWAY_SPEC /
-# DEPLOYMENT_SPEC): cloud management APIs are not hosted by this application's
-# standalone gateway. Cluster DNS may be overridden at deploy time.
 profile = "cloud"
+
+[http]
 
 [[http.upstream]]
 name = "gateway"
+
 [[http.upstream.target]]
-address = "sdkwork-api-cloud-gateway:80"
+address = "sdkwork-api-cloud-gateway:8080"
 weight = 1
-resolve = true
-maxFails = 3
-failTimeout = "10s"
+
