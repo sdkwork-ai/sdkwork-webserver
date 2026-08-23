@@ -338,6 +338,9 @@ pub(super) struct ProxyRequestContext<'a> {
     pub client_ip: IpAddr,
     pub external_scheme: &'a str,
     pub external_authority: &'a str,
+    /// Listener port for `$server_port` expansion (nginx semantics: the
+    /// port the request was accepted on, not the Host header's port).
+    pub listener_port: u16,
     pub normalized_path: &'a str,
     pub request_failure: RequestBodyFailure,
     pub tunnel_supervisor: &'a Arc<TunnelSupervisor>,
@@ -771,6 +774,7 @@ async fn proxy_request_dynamic(
                 &synthetic,
                 context.generation.resolver.clone(),
                 context.metrics.clone(),
+                context.generation.resolution_chain.clone(),
             ) {
                 Ok(upstream) => Arc::new(upstream),
                 Err(_) => {
@@ -930,6 +934,7 @@ async fn proxy_http_request(
         context.client_ip,
         context.external_scheme,
         context.external_authority,
+        context.listener_port,
     )
     .is_err()
     {
@@ -1263,6 +1268,7 @@ async fn proxy_websocket_request(
         context.client_ip,
         context.external_scheme,
         context.external_authority,
+        context.listener_port,
     )
     .is_err()
     {
@@ -1611,6 +1617,7 @@ fn apply_proxy_set_headers(
     client_ip: IpAddr,
     external_scheme: &str,
     external_authority: &str,
+    listener_port: u16,
 ) -> Result<(), ()> {
     for entry in entries {
         let trimmed = entry.trim();
@@ -1628,6 +1635,7 @@ fn apply_proxy_set_headers(
             client_ip,
             external_scheme,
             external_authority,
+            listener_port,
             target,
         )?;
         if expanded.is_empty() {
@@ -1646,6 +1654,7 @@ fn expand_proxy_header_value(
     client_ip: IpAddr,
     external_scheme: &str,
     external_authority: &str,
+    listener_port: u16,
     current: &HeaderMap,
 ) -> Result<String, ()> {
     let mut out = String::with_capacity(template.len());
@@ -1698,20 +1707,26 @@ fn expand_proxy_header_value(
                 }
             }
             "server_port" => {
-                let port = external_authority
-                    .rsplit_once(':')
-                    .and_then(|(_, port)| {
-                        if port.parse::<u16>().is_ok() {
-                            Some(port)
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or(match external_scheme {
-                        "https" => "443",
-                        _ => "80",
-                    });
-                out.push_str(port);
+                // nginx `$server_port`: the listener port, not the Host
+                // header's port.
+                if listener_port != 0 {
+                    out.push_str(&listener_port.to_string());
+                } else {
+                    let port = external_authority
+                        .rsplit_once(':')
+                        .and_then(|(_, port)| {
+                            if port.parse::<u16>().is_ok() {
+                                Some(port)
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or(match external_scheme {
+                            "https" => "443",
+                            _ => "80",
+                        });
+                    out.push_str(port);
+                }
             }
             _ => return Err(()),
         }

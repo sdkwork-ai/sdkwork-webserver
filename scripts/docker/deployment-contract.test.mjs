@@ -16,7 +16,7 @@ const baseDomains = ['sdkwork.com'];
 const suffixes = { development: 'dev', test: 'test', production: '' };
 
 function expectedHosts(environment) {
-  const role = suffixes[environment] ? `web-${suffixes[environment]}` : 'web';
+  const role = suffixes[environment] ? `server-${suffixes[environment]}` : 'server';
   return baseDomains.map((domain) => `${role}.${domain}`);
 }
 

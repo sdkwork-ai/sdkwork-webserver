@@ -3525,6 +3525,7 @@ dependencies = [
  "pin-project-lite",
  "ryu",
  "sha1_smol",
+ "socket2 0.5.10",
  "tokio",
  "tokio-util",
  "url",
@@ -4100,7 +4101,9 @@ dependencies = [
  "sdkwork-drive-contract",
  "sdkwork-drive-internal-sdk-generated-rust",
  "sdkwork-iam-web-adapter",
+ "sdkwork-intelligence-webserver-repository-sqlx",
  "sdkwork-knowledgebase-internal-sdk-generated-rust",
+ "sdkwork-server-files-service",
  "sdkwork-utils-rust",
  "sdkwork-web-axum",
  "sdkwork-web-bootstrap",
@@ -4114,6 +4117,7 @@ dependencies = [
  "sdkwork-webserver-drive-provider",
  "sdkwork-webserver-http-host",
  "sdkwork-webserver-knowledgebase-provider",
+ "sdkwork-webserver-resolver-cache",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -4790,6 +4794,7 @@ dependencies = [
  "sdkwork-webserver-core",
  "sdkwork-webserver-database-host",
  "sdkwork-webserver-edge-runtime",
+ "sdkwork-webserver-resolver-cache",
  "sdkwork-webserver-source-provider",
  "serde",
  "serde_json",
@@ -5217,14 +5222,17 @@ dependencies = [
  "sdkwork-iam-web-adapter",
  "sdkwork-intelligence-webserver-service",
  "sdkwork-routes-webserver-common",
+ "sdkwork-server-files-service",
  "sdkwork-utils-rust",
  "sdkwork-web-axum",
  "sdkwork-web-bootstrap",
  "sdkwork-web-core",
  "sdkwork-webserver-contract",
  "serde",
+ "serde_json",
  "tokio",
  "tower",
+ "tracing",
 ]
 
 [[package]]
@@ -5257,6 +5265,20 @@ dependencies = [
  "serde_json",
  "tokio",
  "tower",
+]
+
+[[package]]
+name = "sdkwork-server-files-service"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.19",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -5497,6 +5519,7 @@ dependencies = [
  "md-5 0.10.6",
  "regex",
  "sdkwork-utils-rust",
+ "sdkwork-webserver-resolver-cache",
  "serde",
  "serde_json",
  "sha1 0.10.7",
@@ -5593,6 +5616,19 @@ dependencies = [
  "sdkwork-webserver-core",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "sdkwork-webserver-resolver-cache"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "redis",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

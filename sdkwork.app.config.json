@@ -34,6 +34,8 @@
       "web.nginx.write",
       "web.servers.read",
       "web.servers.write",
+      "web.servers.files.read",
+      "web.servers.files.write",
       "web.auditLogs.read"
     ]
   },

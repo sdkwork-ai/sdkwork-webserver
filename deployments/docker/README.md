@@ -54,6 +54,31 @@ curl http://server-test.sdkwork.com/healthz
 curl http://server.sdkwork.com/healthz
 ```
 
+## Domain Access (WSL nginx → Docker)
+
+Ubuntu nginx on port **80** reverse-proxies domains to Docker host ports (no conflict with host PostgreSQL **5432** / Redis **6379**):
+
+| Domain | Docker host port |
+| --- | --- |
+| `server-dev.sdkwork.com` (+ app/admin dev) | 13800 |
+| `server-test.sdkwork.com` (+ app/admin test) | 18888 |
+| `server.sdkwork.com` (+ app/admin prod) | 18080 |
+| `sdkwork.com`, `app.sdkwork.com` | 18080 (prod) |
+
+One-shot setup inside WSL:
+
+```bash
+sudo bash deployments/docker/scripts/setup-wsl-domain-proxy.sh
+```
+
+Windows browser (run **PowerShell as Administrator** once):
+
+```powershell
+.\deployments\docker\scripts\setup-windows-port-forwarding-admin.ps1
+```
+
+Then open `http://server-dev.sdkwork.com` in the browser.
+
 ## Verification
 
 ```bash
@@ -64,11 +89,15 @@ node scripts/docker/validate-docker-deployment.mjs --matrix --compose
 
 ## Port And Domain Matrix
 
-| Environment | Container port | Host port | Domains | DB identity | Redis DB |
-| --- | --- | --- | --- | --- | --- |
-| development | 3800 | 13800 | `server-dev.sdkwork.com` (+ `web-app-dev` / `web-admin-dev`) | `sdkwork_ai_dev` | 0 |
-| test | 8888 | 18888 | `server-test.sdkwork.com` (+ `web-app-test` / `web-admin-test`) | `sdkwork_ai_test` | 1 |
-| production | 8080 | 18080 | `server.sdkwork.com` (+ `web-app` / `web-admin`) | `sdkwork_ai_prod` | 2 |
+| Environment | Container port | Host port | Host HTTPS | Domains | DB identity | Redis DB |
+| --- | --- | --- | --- | --- | --- | --- |
+| development | 3800 | 13800 | 18430 | `server-dev.sdkwork.com` (+ `web-app-dev` / `web-admin-dev`) | `sdkwork_ai_dev` | 0 |
+| test | 8888 | 18888 | 28430 | `server-test.sdkwork.com` (+ `web-app-test` / `web-admin-test`) | `sdkwork_ai_test` | 1 |
+| production | 8080 | 18080 | 38430 | `server.sdkwork.com` (+ `web-app` / `web-admin`) | `sdkwork_ai_prod` | 2 |
+
+Host PostgreSQL (`5432`) and Redis (`6379`) stay on Ubuntu/WSL native services in external mode; containers reach them via `host.docker.internal`.
+
+Space clone defaults: `SDKWORK_SPACE_ROOT=/opt/deploy`, `SDKWORK_SPACE_CLONE_URL=https://github.com/sdkwork-ai/sdkwork-space.git` (volume `webserver-opt-deploy-*`). Drive sandbox key `deploy.local.opt_deploy` scopes the Deployments Local Projects file browser to `/opt/deploy` only.
 
 Base domain: `sdkwork.com` only (registered in topology `cloudPublicHosts`).
 

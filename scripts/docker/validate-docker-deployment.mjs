@@ -42,7 +42,7 @@ const POSTGRES_KEYS = {
 
 function expectedHosts(environment) {
   const suffix = ENVIRONMENT_SUFFIX[environment];
-  const role = suffix ? `web-${suffix}` : 'web';
+  const role = suffix ? `server-${suffix}` : 'server';
   return BASE_DOMAINS.map((domain) => `${role}.${domain}`);
 }
 

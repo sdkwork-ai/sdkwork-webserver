@@ -1,0 +1,7 @@
+# SDKWork resolution cache seed (hosts style) — exported by
+# sdkwork-deployments from its domain/IP inventory. One entry per line:
+#   IP hostname [alias ...]
+127.0.0.1 localhost
+10.0.4.12 api-backend.internal
+10.0.4.13 api-backend.internal
+::1 localhost

@@ -18,14 +18,14 @@ export function PortalHero({
   t: PortalTranslator;
 }) {
   return (
-    <section className="overflow-hidden bg-[#07150f] text-white">
+    <section className="overflow-hidden bg-[#020617] text-white">
       <div className="mx-auto max-w-[1280px] px-5 pb-0 pt-12 sm:px-7 sm:pt-16 lg:px-10 lg:pt-20">
         <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1.18fr)_minmax(430px,0.82fr)] xl:gap-16">
           <div className="min-w-0 py-2 lg:py-8">
-            <div className="mb-6 flex items-center gap-3 text-xs font-bold uppercase text-emerald-300">
+            <div className="mb-6 flex items-center gap-3 text-xs font-bold uppercase text-blue-300">
               <CloudCog aria-hidden="true" size={16} />
               {t("hero.kicker")}
-              <span aria-hidden="true" className="h-px w-12 bg-emerald-300/45" />
+              <span aria-hidden="true" className="h-px w-12 bg-blue-300/45" />
             </div>
             <h1 className="m-0 max-w-[720px] text-[42px] font-bold leading-[1.08] sm:text-[54px] lg:text-[62px]">
               {t("hero.title")}
@@ -34,7 +34,7 @@ export function PortalHero({
               {t("hero.description")}
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
-              <a className="inline-flex min-h-12 items-center gap-2 rounded bg-emerald-400 px-6 text-sm font-bold text-emerald-950 no-underline transition-colors hover:bg-emerald-300" href={navigation.createApplicationHref}>
+              <a className="inline-flex min-h-12 items-center gap-2 rounded bg-blue-400 px-6 text-sm font-bold text-blue-950 no-underline transition-colors hover:bg-blue-300" href={navigation.createApplicationHref}>
                 <Rocket aria-hidden="true" size={18} />
                 {t("hero.primary")}
               </a>
@@ -42,12 +42,12 @@ export function PortalHero({
                 {t("hero.secondary")}
                 <ArrowRight aria-hidden="true" size={18} />
               </a>
-              <a className="inline-flex min-h-12 items-center gap-2 px-2 text-sm font-semibold text-emerald-100 no-underline transition-colors hover:text-white" href={navigation.documentationHref}>
+              <a className="inline-flex min-h-12 items-center gap-2 px-2 text-sm font-semibold text-blue-100 no-underline transition-colors hover:text-white" href={navigation.documentationHref}>
                 <BookOpen aria-hidden="true" size={18} />
                 {t("hero.documentation")}
               </a>
             </div>
-            <div className="mt-5 flex items-center gap-2 text-sm text-emerald-100">
+            <div className="mt-5 flex items-center gap-2 text-sm text-blue-100">
               <CheckCircle2 aria-hidden="true" size={17} />
               {t("hero.availability")}
             </div>

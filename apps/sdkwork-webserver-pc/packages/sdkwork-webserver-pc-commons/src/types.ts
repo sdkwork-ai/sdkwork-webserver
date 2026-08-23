@@ -29,10 +29,12 @@ export type WebserverResourceKey =
   | "application-deployments"
   | "nginx"
   | "servers"
+  | "servers-explorer"
   | "diagnostics"
   | "audit"
   | "skills"
-  | "mcp";
+  | "mcp"
+  | "plugins";
 
 export interface WebserverModuleEntry {
   description: string;

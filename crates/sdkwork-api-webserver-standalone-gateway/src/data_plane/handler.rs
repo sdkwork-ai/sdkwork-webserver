@@ -497,6 +497,14 @@ async fn route_admitted_request(
                     client_ip,
                     external_scheme: scheme.as_str(),
                     external_authority: &authority,
+                    listener_port: state
+                        .runtime
+                        .current()
+                        .app
+                        .listeners()
+                        .find(|listener| listener.id == state.listener_id)
+                        .map(|listener| listener.port)
+                        .unwrap_or(0),
                     normalized_path: &path,
                     request_failure,
                     tunnel_supervisor: &state.runtime.tunnel_supervisor,

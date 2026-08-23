@@ -610,6 +610,33 @@ fn resolve_required_file(
     configured: &str,
     diagnostic_path: &str,
 ) -> Result<PathBuf, WebServerConfigError> {
+    // `certs://<domain>/…` references the canonical certificate inventory
+    // (`/etc/sdkwork/certs/<domain>/`); the domain directory is the
+    // operator/ACME-managed certificate home.
+    if let Some(rest) = configured.strip_prefix(crate::config_paths::CERTS_URI_SCHEME) {
+        let (domain, file) = rest.split_once('/').ok_or_else(|| {
+            validation_error(
+                diagnostic_path,
+                format!("`{configured}` must be certs://<domain>/<file>"),
+            )
+        })?;
+        let directory = crate::config_paths::canonical_certificate_domain_directory(domain)
+            .map_err(|message| validation_error(diagnostic_path, message))?;
+        let candidate = directory.join(file);
+        let canonical = fs::canonicalize(&candidate).map_err(|error| {
+            validation_error(
+                diagnostic_path,
+                format!("certificate file {} is unavailable: {error}", candidate.display()),
+            )
+        })?;
+        if !canonical.is_file() {
+            return Err(validation_error(
+                diagnostic_path,
+                format!("{} is not a regular file", canonical.display()),
+            ));
+        }
+        return Ok(canonical);
+    }
     let configured = Path::new(configured);
     let candidate = if configured.is_absolute() {
         configured.to_path_buf()

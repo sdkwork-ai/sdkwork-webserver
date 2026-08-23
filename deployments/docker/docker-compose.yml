@@ -86,6 +86,7 @@ services:
     container_name: sdkwork-webserver-development
     ports:
       - "${SDKWORK_WEBSERVER_DEV_HOST_PORT:-13800}:3800"
+      - "${SDKWORK_WEBSERVER_DEV_HTTPS_HOST_PORT:-18430}:8430"
     env_file:
       - path: env/development.env
         required: false
@@ -127,6 +128,7 @@ services:
     container_name: sdkwork-webserver-test
     ports:
       - "${SDKWORK_WEBSERVER_TEST_HOST_PORT:-18888}:8888"
+      - "${SDKWORK_WEBSERVER_TEST_HTTPS_HOST_PORT:-28430}:8430"
     env_file:
       - path: env/test.env
         required: false
@@ -164,6 +166,7 @@ services:
     container_name: sdkwork-webserver-production
     ports:
       - "${SDKWORK_WEBSERVER_PROD_HOST_PORT:-18080}:8080"
+      - "${SDKWORK_WEBSERVER_PROD_HTTPS_HOST_PORT:-38430}:8430"
     env_file:
       - path: env/production.env
         required: false

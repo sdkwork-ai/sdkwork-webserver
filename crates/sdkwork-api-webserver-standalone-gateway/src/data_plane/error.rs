@@ -13,6 +13,9 @@ pub enum DataPlaneError {
     #[error(transparent)]
     Config(#[from] WebServerConfigError),
 
+    #[error("resolution cache error: {0}")]
+    ResolverCache(String),
+
     #[error("invalid listener bind address {bind}: {source}")]
     InvalidBind {
         bind: String,

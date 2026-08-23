@@ -1134,6 +1134,7 @@ fn proxy_set_header_expands_supported_nginx_variables() {
             client,
             "https",
             "server.sdkwork.com",
+            443,
             &current
         )
         .expect("expand"),
@@ -1146,6 +1147,7 @@ fn proxy_set_header_expands_supported_nginx_variables() {
             client,
             "https",
             "server.sdkwork.com",
+            443,
             &current
         )
         .expect("expand"),
@@ -1158,6 +1160,7 @@ fn proxy_set_header_expands_supported_nginx_variables() {
             client,
             "https",
             "server.sdkwork.com",
+            443,
             &current
         )
         .expect("expand"),
@@ -1170,6 +1173,7 @@ fn proxy_set_header_expands_supported_nginx_variables() {
             client,
             "https",
             "server.sdkwork.com",
+            443,
             &current
         )
         .expect("expand"),
@@ -1181,6 +1185,7 @@ fn proxy_set_header_expands_supported_nginx_variables() {
         client,
         "https",
         "server.sdkwork.com",
+        443,
         &current
     )
     .is_err());
@@ -1203,6 +1208,7 @@ fn apply_proxy_set_headers_overrides_host_and_forwarded_chain() {
         client,
         "https",
         "app.example.com:443",
+        443,
     )
     .expect("apply");
     assert_eq!(

@@ -1,0 +1,27 @@
+[package]
+name = "sdkwork-webserver-resolver-cache"
+version.workspace = true
+edition.workspace = true
+description = "Multi-layer resolution cache component: local file, in-process memory, Redis distributed, and database backends behind one plugin interface"
+
+[dependencies]
+async-trait = "0.1"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["time", "sync"] }
+tracing.workspace = true
+
+[features]
+default = ["memory"]
+memory = []
+redis = ["dep:redis"]
+database = []
+
+[dependencies.redis]
+version = "0.28"
+features = ["tokio-comp"]
+optional = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }

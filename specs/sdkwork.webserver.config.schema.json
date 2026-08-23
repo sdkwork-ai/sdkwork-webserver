@@ -155,6 +155,9 @@
       "items": {
         "$ref": "#/$defs/limitConnZone"
       }
+    },
+    "resolutionCache": {
+      "$ref": "#/$defs/resolutionCache"
     }
   },
   "$defs": {
@@ -2372,6 +2375,68 @@
             "minLength": 1,
             "maxLength": 4096
           }
+        }
+      }
+    },
+    "redisCacheConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "ttlSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2592000
+        },
+        "prefix": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "resolutionCache": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "memory": {
+          "type": "boolean"
+        },
+        "memoryMaxEntries": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000000
+        },
+        "memoryTtlSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2592000
+        },
+        "redis": {
+          "$ref": "#/$defs/redisCacheConfig"
+        },
+        "database": {
+          "type": "boolean"
+        },
+        "negativeTtlSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
         }
       }
     }

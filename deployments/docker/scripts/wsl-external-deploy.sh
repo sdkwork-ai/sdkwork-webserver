@@ -13,6 +13,8 @@ set -euo pipefail
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)"
 docker_root="$repo_root/deployments/docker"
+# shellcheck source=resolve-host-ports.sh
+source "$docker_root/scripts/resolve-host-ports.sh"
 
 log() { echo "[wsl-external-deploy] $*"; }
 
@@ -123,8 +125,12 @@ deploy_environment() {
 
 verify_environment() {
   local env_name="$1"
-  local port="$2"
-  local domain="$3"
+  local env_file="$docker_root/env/${env_name}.env"
+  load_host_ports_from_env "${env_file}"
+  local port domain https_port
+  port="$(host_http_port_for "${env_name}")"
+  https_port="$(host_https_port_for "${env_name}")"
+  domain="$(domain_for "${env_name}")"
 
   log "verifying $env_name..."
   if curl -fsS "http://127.0.0.1:${port}/healthz" >/dev/null 2>&1; then
@@ -134,9 +140,14 @@ verify_environment() {
     return 1
   fi
   if curl -fsS -H "Host: ${domain}" "http://127.0.0.1/healthz" >/dev/null 2>&1; then
-    log "  domain ${domain}: OK"
+    log "  domain ${domain} (nginx :80): OK"
   else
-    log "  domain ${domain}: FAILED (nginx may need configuration)"
+    log "  domain ${domain} (nginx :80): FAILED (nginx may need configuration)"
+  fi
+  if curl -kfsS "https://127.0.0.1:${https_port}/healthz" >/dev/null 2>&1; then
+    log "  direct https port ${https_port}: OK"
+  else
+    log "  direct https port ${https_port}: skipped or not ready"
   fi
 }
 
@@ -170,16 +181,17 @@ main() {
   sleep 15
 
   # Verify all environments
-  verify_environment development 13800 server-dev.sdkwork.com
-  verify_environment test 18888 server-test.sdkwork.com
-  verify_environment production 18080 server.sdkwork.com
+  verify_environment development
+  verify_environment test
+  verify_environment production
 
   log "deployment complete"
   log ""
-  log "Environment access URLs:"
-  log "  Development: http://server-dev.sdkwork.com  (port 13800)"
-  log "  Test:        http://server-test.sdkwork.com (port 18888)"
-  log "  Production:  http://server.sdkwork.com      (port 18080)"
+  log "Environment access URLs (host ports avoid Ubuntu 5432/6379/80 conflicts):"
+  log "  Development: http://server-dev.sdkwork.com  (direct http://127.0.0.1:13800)"
+  log "  Test:        http://server-test.sdkwork.com (direct http://127.0.0.1:18888)"
+  log "  Production:  http://server.sdkwork.com      (direct http://127.0.0.1:18080)"
+  log "  HTTPS (optional direct): dev :18430, test :28430, prod :38430"
   log ""
   log "Database connections (external PostgreSQL):"
   log "  Development: sdkwork_ai_dev"

@@ -2,11 +2,13 @@
 resolver = "2"
 members = [
   "crates/sdkwork-api-webserver-assembly",
+  "crates/sdkwork-server-files-service",
   "crates/sdkwork-webserver-database-host",
   "crates/sdkwork-webserver-http-host",
   "crates/sdkwork-routes-webserver-common",
   "crates/sdkwork-webserver-contract",
   "crates/sdkwork-webserver-core",
+  "crates/sdkwork-webserver-resolver-cache",
   "crates/sdkwork-webserver-delivery-runtime",
   "crates/sdkwork-webserver-drive-provider",
   "crates/sdkwork-webserver-knowledgebase-provider",
@@ -98,12 +100,14 @@ tokio-rustls = "0.26"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_ProcessStatus", "Win32_System_Threading"] }
 woothee = "0.13"
 
+sdkwork-server-files-service = { path = "crates/sdkwork-server-files-service" }
 sdkwork-webserver-acme-service = { path = "crates/sdkwork-webserver-acme-service" }
 sdkwork-webserver-edge-runtime = { path = "crates/sdkwork-webserver-edge-runtime" }
 sdkwork-web-agent = { path = "crates/sdkwork-web-agent" }
 sdkwork-webserver-certificate-worker = { path = "crates/sdkwork-webserver-certificate-worker" }
 sdkwork-webserver-contract = { path = "crates/sdkwork-webserver-contract" }
 sdkwork-webserver-core = { path = "crates/sdkwork-webserver-core" }
+sdkwork-webserver-resolver-cache = { path = "crates/sdkwork-webserver-resolver-cache" }
 sdkwork-webserver-delivery-runtime = { path = "crates/sdkwork-webserver-delivery-runtime" }
 sdkwork-webserver-drive-provider = { path = "crates/sdkwork-webserver-drive-provider" }
 sdkwork-webserver-knowledgebase-provider = { path = "crates/sdkwork-webserver-knowledgebase-provider" }

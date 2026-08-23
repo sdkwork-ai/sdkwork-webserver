@@ -6,21 +6,34 @@
 
 ## 域名约定
 
-| 环境 | 域名前缀 | 宿主端口 | 数据库 |
-| --- | --- | --- | --- |
-| 开发 (development) | `server-dev.sdkwork.com` | 13800 | sdkwork_ai_dev |
-| 测试 (test) | `server-test.sdkwork.com` | 18888 | sdkwork_ai_test |
-| 线上 (production) | `server.sdkwork.com` | 18080 | sdkwork_ai_prod |
+| 环境 | 域名前缀 | 数据库 |
+| --- | --- | --- |
+| 开发 (development) | `server-dev.sdkwork.com` | sdkwork_ai_dev |
+| 测试 (test) | `server-test.sdkwork.com` | sdkwork_ai_test |
+| 线上 (production) | `server.sdkwork.com` | sdkwork_ai_prod |
 
-支持的 Web Server 域名：仅 `sdkwork.com`
+Web Server 公开域名（`SDKWORK_WEBSERVER_CERT_DOMAINS`，每域一个证书目录）：
+`sdkwork.com`、`app.sdkwork.com`（`install-wsl-hosts.sh` 自动写入 `/etc/hosts`）。
 
-## 端口分配
+## 端口分配（HTTP 8110 / HTTPS 8430）
 
-| 环境 | 容器端口 | 宿主端口 | Redis DB |
-| --- | --- | --- | --- |
-| 开发 | 3800 | 13800 | 0 |
-| 测试 | 8888 | 18888 | 1 |
-| 线上 | 8080 | 18080 | 2 |
+| 环境 | HTTP | HTTPS | 管理面(容器内) | Redis DB |
+| --- | --- | --- | --- | --- |
+| 开发 | 8110 | 8430 | 3800 | 0 |
+| 测试 | 8110 | 8430 | 3800 | 1 |
+| 线上 | 8110 | 8430 | 3800 | 2 |
+
+数据面监听：HTTP `0.0.0.0:8110`、HTTPS `0.0.0.0:8430`（TLS 1.2-1.3，
+SNI 证书选择）。WSL2 中 `localhost:8110` / `localhost:8430` 直接访问容器。
+
+## 证书（`/etc/sdkwork/certs/<domain>/`）
+
+- 每个域名一个目录：`cert.pem`、`key.pem`（0600）、可选 `chain.pem`。
+- 配置引用 `certs://<domain>/<file>`（`SDKWORK_WEBSERVER_SPEC.md` §7.1）。
+- entrypoint 在目录缺失时生成自签兜底证书，HTTPS 立即可用；替换为真实
+  证书（操作者上传或 ACME worker 签发写入）无需重启。
+
+## 外部依赖（PostgreSQL / Redis 为 WSL 宿主已安装服务）
 
 ## 前置要求（WSL 宿主）
 
@@ -121,9 +134,8 @@ sudo bash deployments/docker/scripts/install-wsl-nginx.sh
 
 ```bash
 # 直接端口访问
-curl http://127.0.0.1:13800/healthz    # 开发
-curl http://127.0.0.1:18888/healthz    # 测试
-curl http://127.0.0.1:18080/healthz    # 线上
+curl http://127.0.0.1:8110/healthz     # 开发/测试/线上 HTTP
+curl -k https://127.0.0.1:8430/healthz  # HTTPS（自签证书用 -k）
 
 # 域名访问（需要 DNS 或 /etc/hosts 配置）
 curl http://server-dev.sdkwork.com/healthz     # 开发

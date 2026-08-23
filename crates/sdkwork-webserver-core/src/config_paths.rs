@@ -45,6 +45,25 @@ pub const DATA_PLANE_CONFIG_FILE_ENV: &str = "SDKWORK_WEBSERVER_SERVER_CONFIG_FI
 /// Secret files subdirectory under `<config-root>`.
 pub const SECRETS_SUBDIR: &str = "secrets";
 
+/// System-scope certificate inventory root (`/etc/sdkwork/certs`).
+/// Each domain owns a directory: `/etc/sdkwork/certs/<domain>/` containing
+/// `cert.pem` and `key.pem` (plus optional `chain.pem`). The ACME worker
+/// and operators share this layout; configs reference entries with the
+/// `certs://<domain>/` URI form.
+pub const CERTIFICATES_SUBDIR: &str = "certs";
+
+/// Leaf certificate file inside a domain certificate directory.
+pub const CERTIFICATE_FILE_NAME: &str = "cert.pem";
+
+/// Private key file inside a domain certificate directory.
+pub const PRIVATE_KEY_FILE_NAME: &str = "key.pem";
+
+/// Optional issuer chain file inside a domain certificate directory.
+pub const CERTIFICATE_CHAIN_FILE_NAME: &str = "chain.pem";
+
+/// URI scheme for `certs://<domain>/…` certificate references.
+pub const CERTS_URI_SCHEME: &str = "certs://";
+
 /// Linux system-scope config root (documented operator default).
 pub const LINUX_CONFIG_ROOT: &str = "/etc/sdkwork/webserver";
 
@@ -69,6 +88,44 @@ pub fn canonical_os_system_scope_sdkwork_base() -> Result<PathBuf, String> {
             "Web Server config discovery is not supported on this operating system; set {RUNTIME_CONFIG_FILE_ENV} or {DATA_PLANE_CONFIG_FILE_ENV}"
         ))
     }
+}
+
+/// Canonical OS system-scope certificate inventory root
+/// (`/etc/sdkwork/certs` on Linux, equivalent on macOS/Windows).
+/// `SDKWORK_CERTS_DIR` overrides the root for containers and tests.
+pub fn canonical_certificates_directory() -> Result<PathBuf, String> {
+    if let Ok(override_dir) = std::env::var("SDKWORK_CERTS_DIR") {
+        let override_dir = override_dir.trim();
+        if !override_dir.is_empty() {
+            return Ok(PathBuf::from(override_dir));
+        }
+    }
+    Ok(canonical_os_system_scope_sdkwork_base()?.join(CERTIFICATES_SUBDIR))
+}
+
+/// Canonical certificate directory for one domain:
+/// `/etc/sdkwork/certs/<domain>/`.
+pub fn canonical_certificate_domain_directory(domain: &str) -> Result<PathBuf, String> {
+    let domain = domain.trim().trim_end_matches('.').to_ascii_lowercase();
+    if domain.is_empty()
+        || domain.len() > 253
+        || domain
+            .chars()
+            .any(|character| !(character.is_ascii_alphanumeric() || matches!(character, '-' | '.' | '_')))
+    {
+        return Err(format!("invalid certificate domain `{domain}`"));
+    }
+    Ok(canonical_certificates_directory()?.join(domain))
+}
+
+/// Canonical leaf certificate path for a domain.
+pub fn canonical_certificate_file(domain: &str) -> Result<PathBuf, String> {
+    Ok(canonical_certificate_domain_directory(domain)?.join(CERTIFICATE_FILE_NAME))
+}
+
+/// Canonical private key path for a domain.
+pub fn canonical_certificate_key_file(domain: &str) -> Result<PathBuf, String> {
+    Ok(canonical_certificate_domain_directory(domain)?.join(PRIVATE_KEY_FILE_NAME))
 }
 
 /// Canonical OS system-scope config directory for application code `webserver`.

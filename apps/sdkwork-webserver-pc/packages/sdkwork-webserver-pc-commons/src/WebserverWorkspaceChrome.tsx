@@ -3,10 +3,12 @@ import {
   AppWindow,
   Bell,
   Boxes,
+  FolderOpen,
   Globe2,
   House,
   Layers3,
   LogOut,
+  Puzzle,
   Plug,
   Rocket,
   ScrollText,
@@ -39,6 +41,7 @@ interface WorkspaceHeaderProps {
 interface WorkspaceSidebarProps {
   basePath: string;
   entries: readonly { label?: string; resource: WebserverResourceKey }[];
+  surface: WorkspaceSurface;
   t: WorkspaceTranslator;
 }
 
@@ -111,13 +114,13 @@ export function WorkspaceHeader({
   );
 }
 
-export function WorkspaceSidebar({ basePath, entries, t }: WorkspaceSidebarProps) {
+export function WorkspaceSidebar({ basePath, entries, surface, t }: WorkspaceSidebarProps) {
   return (
     <aside className="sidebar">
       <span className="sidebar-label">{t("nav.workspace")}</span>
       <nav aria-label={t("nav.primary")}>
         {entries.map((entry) => {
-          const label = resourceText(t, entry.resource, entry.label);
+          const label = resourceText(t, entry.resource, entry.label, surface);
           return (
             <NavLink
               aria-label={label}
@@ -154,6 +157,8 @@ function ResourceIcon({ resource }: { resource: WebserverResourceKey }): ReactNo
     case "source-versions":
     case "application-source-versions":
       return <Layers3 {...iconProps} />;
+    case "plugins":
+      return <Puzzle {...iconProps} />;
     case "skills":
       return <Sparkles {...iconProps} />;
     case "mcp":
@@ -162,6 +167,8 @@ function ResourceIcon({ resource }: { resource: WebserverResourceKey }): ReactNo
       return <ServerCog {...iconProps} />;
     case "servers":
       return <Server {...iconProps} />;
+    case "servers-explorer":
+      return <FolderOpen {...iconProps} />;
     case "audit":
       return <ScrollText {...iconProps} />;
     case "diagnostics":
@@ -175,15 +182,24 @@ function resourceText(
   t: WorkspaceTranslator,
   resource: WebserverResourceKey,
   fallbackLabel?: string,
+  surface: WorkspaceSurface = "app-console",
 ): string {
-  const key = `resource.${resource}.label` as WebserverMessageKey;
-  const translated = t(key);
+  const candidates: WebserverMessageKey[] =
+    surface === "backend-admin"
+      ? [
+          `resource.${resource}.admin.label` as WebserverMessageKey,
+          `resource.${resource}.label` as WebserverMessageKey,
+        ]
+      : [`resource.${resource}.label` as WebserverMessageKey];
+  for (const key of candidates) {
+    const translated = t(key);
+    if (translated && translated !== key) {
+      return translated;
+    }
+  }
   const fallback = fallbackLabel?.trim();
   // Prefer i18n; fall back to module entry label when a key is missing so new
   // console modules (skills/mcp) never render as blank sidebar text.
-  if (translated && translated !== key) {
-    return translated;
-  }
   if (fallback) {
     return fallback;
   }

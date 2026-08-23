@@ -10,6 +10,11 @@ import { createMCPClients, MCPClientsProvider } from "@sdkwork/mcp-pc-core";
 import { useMemo } from "react";
 import { Link, Route, Routes } from "react-router-dom";
 
+/** Compatible with IAM session-auth boundary attachment (dual-token clients). */
+type AttachSdkClientBoundaries = (
+  clients: readonly { http?: unknown }[],
+) => readonly { http?: unknown }[];
+
 /**
  * Bridges the SDKWork MCP admin surface into the Web Server backend-admin
  * console. The menu entry (MCP Admin) stays in the host while the pages are
@@ -21,6 +26,7 @@ import { Link, Route, Routes } from "react-router-dom";
  */
 export interface McpAdminSurfaceProps {
   appApiBaseUrl: string;
+  attachSdkClientBoundaries?: AttachSdkClientBoundaries;
   backendApiBaseUrl: string;
   driveAppApiBaseUrl: string;
   resource: "mcp";
@@ -29,14 +35,27 @@ export interface McpAdminSurfaceProps {
 
 export function McpAdminSurface({
   appApiBaseUrl,
+  attachSdkClientBoundaries,
   backendApiBaseUrl,
   driveAppApiBaseUrl,
   tokenManager,
 }: McpAdminSurfaceProps) {
-  const clients = useMemo(
-    () => createMCPClients({ appApiBaseUrl, backendApiBaseUrl, driveAppApiBaseUrl, tokenManager }),
-    [appApiBaseUrl, backendApiBaseUrl, driveAppApiBaseUrl, tokenManager],
-  );
+  const clients = useMemo(() => {
+    const next = createMCPClients({
+      appApiBaseUrl,
+      backendApiBaseUrl,
+      driveAppApiBaseUrl,
+      tokenManager,
+    });
+    attachSdkClientBoundaries?.([next.app, next.backend, next.drive]);
+    return next;
+  }, [
+    appApiBaseUrl,
+    attachSdkClientBoundaries,
+    backendApiBaseUrl,
+    driveAppApiBaseUrl,
+    tokenManager,
+  ]);
   return (
     <div className="mcp-admin-surface">
       <MCPClientsProvider clients={clients}>

@@ -2024,6 +2024,204 @@ paths:
                       properties:
                         item:
                           $ref: '#/components/schemas/CreateServerResponse'
+  /backend/v3/api/server-files/nodes:
+    get:
+      operationId: serverFiles.nodes.list
+      summary: List Server Files deployment nodes
+      tags:
+      - server-files
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-web.backend
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.servers.files.read
+      x-sdkwork-owner: sdkwork-web
+      responses:
+        '200':
+          description: Server Files node inventory returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      additionalProperties: false
+                      required:
+                      - items
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/ServerFilesNode'
+  /backend/v3/api/server-files/nodes/{nodeId}/browse:
+    get:
+      operationId: serverFiles.node.browse
+      summary: Browse a deployment node directory
+      tags:
+      - server-files
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-web.backend
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.servers.files.read
+      x-sdkwork-owner: sdkwork-web
+      parameters:
+      - name: nodeId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: path
+        in: query
+        required: true
+        description: Absolute path to browse, resolved strictly inside the node filesystem root.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Directory listing returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ServerDirectoryListing'
+  /backend/v3/api/server-files/nodes/{nodeId}/read:
+    get:
+      operationId: serverFiles.node.read
+      summary: Read a text file on a deployment node
+      tags:
+      - server-files
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-web.backend
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.servers.files.read
+      x-sdkwork-owner: sdkwork-web
+      parameters:
+      - name: nodeId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: path
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: File content returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ServerFileContent'
+  /backend/v3/api/server-files/nodes/{nodeId}/operations:
+    get:
+      operationId: serverFiles.node.operations.list
+      summary: List operations available for a project directory
+      tags:
+      - server-files
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-web.backend
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.servers.files.read
+      x-sdkwork-owner: sdkwork-web
+      parameters:
+      - name: nodeId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: path
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Project operations returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ServerProjectOperations'
+    post:
+      operationId: serverFiles.node.operations.run
+      summary: Run a project operation on a deployment node
+      tags:
+      - server-files
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-web.backend
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.servers.files.write
+      x-sdkwork-owner: sdkwork-web
+      parameters:
+      - name: nodeId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServerRunOperationRequest'
+      responses:
+        '200':
+          description: Project operation result returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ServerOperationResult'
   /backend/v3/api/agent/heartbeat:
     post:
       operationId: heartbeat
@@ -3515,6 +3713,190 @@ components:
           agentToken:
             type: string
             description: Bootstrap agent credential; returned once at registration.
+    ServerFilesNode:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - name
+      - host
+      - sshPort
+      - status
+      - filesystemRoot
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        host:
+          type: string
+        sshPort:
+          type: integer
+        status:
+          type: string
+          enum:
+          - online
+          - offline
+          - unknown
+        filesystemRoot:
+          type: string
+          description: Authorized filesystem root the node may browse (e.g. /opt/deploy).
+        region:
+          type: string
+    ServerDirectoryListing:
+      type: object
+      additionalProperties: false
+      required:
+      - nodeId
+      - path
+      - parentPath
+      - entries
+      properties:
+        nodeId:
+          type: string
+        path:
+          type: string
+        parentPath:
+          type: string
+          nullable: true
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServerEntry'
+    ServerEntry:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      - kind
+      - path
+      properties:
+        name:
+          type: string
+        kind:
+          type: string
+          enum:
+          - directory
+          - file
+          - symlink
+        path:
+          type: string
+        size:
+          type: integer
+          format: int64
+        projectType:
+          type: string
+          enum:
+          - h5-app
+          - pc-app
+          - flutter-app
+          - rust-backend
+          - node-backend
+          - sdkwork-workspace
+          - generic
+        isProjectRoot:
+          type: boolean
+    ServerFileContent:
+      type: object
+      additionalProperties: false
+      required:
+      - nodeId
+      - path
+      - content
+      - size
+      properties:
+        nodeId:
+          type: string
+        path:
+          type: string
+        content:
+          type: string
+          description: Decoded text content, bounded by the node read size limit.
+        size:
+          type: integer
+          format: int64
+    ServerProjectOperations:
+      type: object
+      additionalProperties: false
+      required:
+      - nodeId
+      - path
+      - projectType
+      - operations
+      properties:
+        nodeId:
+          type: string
+        path:
+          type: string
+        projectType:
+          type: string
+          enum:
+          - h5-app
+          - pc-app
+          - flutter-app
+          - rust-backend
+          - node-backend
+          - sdkwork-workspace
+          - generic
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServerProjectOperation'
+    ServerProjectOperation:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - kind
+      - label
+      - permission
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum:
+          - build
+          - package
+          - start
+          - deploy
+          - stop
+          - restart
+        label:
+          type: string
+        permission:
+          type: string
+          description: IAM permission required to invoke the operation.
+        description:
+          type: string
+        dangerous:
+          type: boolean
+    ServerRunOperationRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - path
+      - operationId
+      properties:
+        path:
+          type: string
+        operationId:
+          type: string
+    ServerOperationResult:
+      type: object
+      additionalProperties: false
+      required:
+      - operationId
+      properties:
+        operationId:
+          type: string
+        exitCode:
+          type: integer
+          nullable: true
+        stdout:
+          type: string
+        stderr:
+          type: string
     AgentHeartbeatRequest:
       type: object
       additionalProperties: false

@@ -299,6 +299,16 @@ function selectedId(context: WebserverResourceActionContext): string {
   return String(value);
 }
 
+/** Map legacy console carrier fields onto CreateApplicationRequest.appKind. */
+function appKindFromCarrier(
+  applicationTypeValue: "WEB" | "API",
+  siteTypeValue: 1 | 2 | 3 | 4 | 5 | 6,
+): "STATIC_WEB" | "SPA_WEB" | "API_SERVICE" {
+  if (applicationTypeValue === "API") return "API_SERVICE";
+  if (siteTypeValue === 1) return "STATIC_WEB";
+  return "SPA_WEB";
+}
+
 function idempotencyParams(context: WebserverResourceActionContext): { idempotencyKey: string } {
   const idempotencyKey = context.idempotencyKey?.trim();
   if (!idempotencyKey) throw new Error("Idempotency key is required");

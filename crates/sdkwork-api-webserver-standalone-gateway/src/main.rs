@@ -5,6 +5,7 @@ use sdkwork_api_webserver_standalone_gateway::{
     run_data_plane_from_config_with_operations_until, run_data_plane_with_operations_until,
     run_database_migrate_only, validate_adaptive_app_shell_from_env, DataPlaneOperationsConfig,
 };
+use sdkwork_routes_webserver_backend_api::ensure_space_repository;
 use sdkwork_webserver_core::{
     resolve_webserver_config_path, validate_configured_module_imports, ConfigFormat,
     ConfigLoadOptions, WebServerConfigLoader,
@@ -292,7 +293,29 @@ fn validate_config(path: PathBuf, format_override: Option<ConfigFormat>) -> Main
     Ok(())
 }
 
+/// Seed the SDKWork space repository under the deployment root before the
+/// management plane accepts traffic. Non-fatal: a failed clone is logged as a
+/// warning so the control plane still starts (the Server Files explorer then
+/// simply browses whatever is already present).
+async fn seed_space_repository() {
+    let deployment_root = std::env::var("SDKWORK_DEPLOY_ROOT").ok();
+    match ensure_space_repository(deployment_root.as_deref()).await {
+        Ok(path) => tracing::info!(
+            path = %path.display(),
+            "SDKWork space repository is ready under the deployment root"
+        ),
+        Err(error) => tracing::warn!(
+            error = %error,
+            "could not seed the SDKWork space repository; browsing will continue over the existing tree"
+        ),
+    }
+}
+
 async fn run_management_plane() -> MainResult<()> {
+    // Ensure the canonical SDKWork space source is present and current so the
+    // Server Files explorer can browse and operate real project directories
+    // from the very first request.
+    seed_space_repository().await;
     let bind_address = std::env::var("SDKWORK_WEBSERVER_APPLICATION_PUBLIC_INGRESS_BIND")
         .unwrap_or_else(|_| "127.0.0.1:3800".to_owned());
     // Fail closed: the management listener exposes unauthenticated

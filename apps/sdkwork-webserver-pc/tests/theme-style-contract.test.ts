@@ -97,7 +97,19 @@ describe("webserver workspace theme styles", () => {
       /\.table-frame\s*\{[^}]*min-height:\s*0[^}]*overflow:\s*auto[^}]*overscroll-behavior:\s*contain/s,
     );
     expect(stylesheet).toMatch(
-      /\.pagination\s*\{[^}]*flex:\s*0 0 46px[^}]*border-top:\s*1px solid var\(--sdk-color-border-default\)/s,
+      /\.workspace > \*\s*\{[^}]*height:\s*100%/s,
+    );
+    expect(stylesheet).toMatch(
+      /\.skills-console-surface,[\s\S]*\.plugins-admin-surface\s*\{[^}]*height:\s*100%[^}]*display:\s*flex[^}]*overflow:\s*hidden/s,
+    );
+    expect(stylesheet).toMatch(
+      /\.plugin-source-toggle\s*\{[^}]*width:\s*max-content/s,
+    );
+    expect(stylesheet).toMatch(
+      /\.skills-console-primary\s*\{[^}]*width:\s*max-content/s,
+    );
+    expect(stylesheet).toMatch(
+      /\.skills-console-empty\s*\{[^}]*display:\s*flex[^}]*align-items:\s*center[^}]*justify-content:\s*center/s,
     );
   });
 });

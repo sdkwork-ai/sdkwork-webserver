@@ -47,6 +47,7 @@
     "@sdkwork/webserver-pc-admin-diagnostics": "workspace:*",
     "@sdkwork/webserver-pc-admin-nginx": "workspace:*",
     "@sdkwork/webserver-pc-admin-servers": "workspace:*",
+    "@sdkwork/webserver-pc-admin-servers-explorer": "workspace:*",
     "@sdkwork/webserver-pc-admin-shell": "workspace:*",
     "@sdkwork/webserver-pc-commons": "workspace:*",
     "@sdkwork/webserver-pc-console-core": "workspace:*",
@@ -65,8 +66,10 @@
     "react-dom": "catalog:",
     "react-router-dom": "^7.15.0",
     "tailwindcss": "catalog:",
+    "@sdkwork/webserver-pc-console-plugins": "workspace:*",
     "@sdkwork/webserver-pc-console-skills": "workspace:*",
     "@sdkwork/webserver-pc-console-mcp": "workspace:*",
+    "@sdkwork/webserver-pc-admin-plugins": "workspace:*",
     "@sdkwork/webserver-pc-admin-skills": "workspace:*",
     "@sdkwork/webserver-pc-admin-mcp": "workspace:*"
   },

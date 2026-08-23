@@ -3,6 +3,7 @@ use std::{
 };
 
 use sdkwork_webserver_core::{upstream_ip_is_allowed, ResolverConfig, UpstreamAddressPolicyConfig};
+use sdkwork_webserver_resolver_cache::{ResolutionChain, ResolutionOutcome};
 use tokio::{net::lookup_host, sync::Semaphore, time::timeout};
 
 use super::metrics::{DataPlaneMetrics, DnsResult};
@@ -65,6 +66,9 @@ pub(crate) struct GuardedDnsResolver {
     resolver: Arc<BoundedSystemResolver>,
     policy: UpstreamAddressPolicyConfig,
     metrics: Option<Arc<DataPlaneMetrics>>,
+    /// Multi-layer resolution cache chain (file → memory → Redis →
+    /// database). When absent, every lookup goes to the system resolver.
+    chain: Option<Arc<ResolutionChain>>,
 }
 
 impl GuardedDnsResolver {
@@ -74,6 +78,7 @@ impl GuardedDnsResolver {
             resolver,
             policy,
             metrics: None,
+            chain: None,
         }
     }
 
@@ -86,10 +91,91 @@ impl GuardedDnsResolver {
             resolver,
             policy,
             metrics: Some(metrics),
+            chain: None,
+        }
+    }
+
+    pub(crate) fn with_chain(
+        resolver: Arc<BoundedSystemResolver>,
+        policy: UpstreamAddressPolicyConfig,
+        metrics: Arc<DataPlaneMetrics>,
+        chain: Arc<ResolutionChain>,
+    ) -> Self {
+        Self {
+            resolver,
+            policy,
+            metrics: Some(metrics),
+            chain: Some(chain),
         }
     }
 
     pub(crate) async fn resolve_host(&self, host: String) -> io::Result<Vec<SocketAddr>> {
+        // Resolution cache chain first (local file → memory → Redis →
+        // database); the system resolver is the fallback and its results
+        // back-fill every layer.
+        if let Some(chain) = &self.chain {
+            let chain = chain.clone();
+            let resolver = self.resolver.clone();
+            let policy = self.policy.clone();
+            let metrics = self.metrics.clone();
+            let upstream: Box<
+                dyn Fn(&str) -> std::pin::Pin<
+                    Box<dyn std::future::Future<Output = Result<Vec<String>, ()>> + Send>,
+                > + Send
+                + Sync,
+            > = Box::new(move |domain: &str| {
+                let resolver = resolver.clone();
+                let policy = policy.clone();
+                let metrics = metrics.clone();
+                let domain = domain.to_owned();
+                Box::pin(async move {
+                    let addresses = match resolve_system_permitted(&resolver, &policy, &metrics, &domain)
+                        .await
+                    {
+                        Ok(addresses) => addresses,
+                        Err(_) => return Err(()),
+                    };
+                    Ok(addresses
+                        .into_iter()
+                        .map(|address| address.ip().to_string())
+                        .collect())
+                })
+            });
+            match chain.resolve(&host, &upstream).await {
+                ResolutionOutcome::Resolved(addresses) => {
+                    // Every layer's addresses still pass the SSRF guard.
+                    let mut unique = std::collections::HashSet::new();
+                    let mut approved = Vec::new();
+                    for address in addresses {
+                        let Ok(ip) = address.parse::<std::net::IpAddr>() else {
+                            continue;
+                        };
+                        if !upstream_ip_is_allowed(ip, &self.policy.allowed_cidrs) {
+                            return Err(io::Error::new(
+                                io::ErrorKind::PermissionDenied,
+                                "cached resolution is forbidden by the upstream address policy",
+                            ));
+                        }
+                        if unique.insert(ip) {
+                            approved.push(SocketAddr::new(ip, 0));
+                        }
+                    }
+                    if approved.is_empty() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::NotFound,
+                            "cached resolution returned no allowed addresses",
+                        ));
+                    }
+                    return Ok(approved);
+                }
+                ResolutionOutcome::NegativeHit => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::NotFound,
+                        "resolution is negative-cached",
+                    ));
+                }
+            }
+        }
         let _permit = self
             .resolver
             .permits
@@ -113,41 +199,52 @@ impl GuardedDnsResolver {
     }
 
     async fn resolve_permitted(&self, host: String) -> io::Result<Vec<SocketAddr>> {
-        let retained_limit = self.resolver.maximum_answers.saturating_add(1);
-        let addresses = timeout(
-            self.resolver.timeout,
-            (self.resolver.lookup)(host, retained_limit),
-        )
-        .await
-        .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "DNS lookup timed out"))??;
-        if addresses.len() > self.resolver.maximum_answers {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "DNS answer count exceeds the configured maximum",
-            ));
-        }
-        if addresses.is_empty() {
-            return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                "DNS lookup returned no addresses",
-            ));
-        }
-
-        let mut unique = HashSet::with_capacity(addresses.len());
-        let mut approved = Vec::with_capacity(addresses.len());
-        for address in addresses {
-            if !upstream_ip_is_allowed(address.ip(), &self.policy.allowed_cidrs) {
-                return Err(io::Error::new(
-                    io::ErrorKind::PermissionDenied,
-                    "DNS answer is forbidden by the upstream address policy",
-                ));
-            }
-            if unique.insert(address.ip()) {
-                approved.push(address);
-            }
-        }
-        Ok(approved)
+        resolve_system_permitted(&self.resolver, &self.policy, &self.metrics, &host).await
     }
+}
+
+/// System DNS resolution with timeout, answer cap, and SSRF policy guard.
+/// Shared by the direct path and the resolution-cache fallback.
+async fn resolve_system_permitted(
+    resolver: &BoundedSystemResolver,
+    policy: &UpstreamAddressPolicyConfig,
+    _metrics: &Option<Arc<DataPlaneMetrics>>,
+    host: &str,
+) -> io::Result<Vec<SocketAddr>> {
+    let retained_limit = resolver.maximum_answers.saturating_add(1);
+    let addresses = timeout(
+        resolver.timeout,
+        (resolver.lookup)(host.to_owned(), retained_limit),
+    )
+    .await
+    .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "DNS lookup timed out"))??;
+    if addresses.len() > resolver.maximum_answers {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "DNS answer count exceeds the configured maximum",
+        ));
+    }
+    if addresses.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "DNS lookup returned no addresses",
+        ));
+    }
+
+    let mut unique = HashSet::with_capacity(addresses.len());
+    let mut approved = Vec::with_capacity(addresses.len());
+    for address in addresses {
+        if !upstream_ip_is_allowed(address.ip(), &policy.allowed_cidrs) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "DNS answer is forbidden by the upstream address policy",
+            ));
+        }
+        if unique.insert(address.ip()) {
+            approved.push(address);
+        }
+    }
+    Ok(approved)
 }
 
 fn classify_dns_result(result: &io::Result<Vec<SocketAddr>>) -> DnsResult {

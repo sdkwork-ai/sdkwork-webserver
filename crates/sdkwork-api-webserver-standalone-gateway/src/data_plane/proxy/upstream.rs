@@ -1,4 +1,5 @@
 use super::*;
+use sdkwork_webserver_resolver_cache::ResolutionChain;
 
 impl ProxyUpstream<UpstreamClient> {
     pub(crate) fn build(
@@ -6,12 +7,21 @@ impl ProxyUpstream<UpstreamClient> {
         config: &UpstreamConfig,
         resolver: Arc<BoundedSystemResolver>,
         metrics: Arc<DataPlaneMetrics>,
+        resolution_chain: Option<Arc<ResolutionChain>>,
     ) -> Result<Self, DataPlaneError> {
-        let resolver = Arc::new(GuardedDnsResolver::new_observed(
-            resolver,
-            config.address_policy.clone(),
-            metrics,
-        ));
+        let resolver = Arc::new(match resolution_chain {
+            Some(chain) => GuardedDnsResolver::with_chain(
+                resolver,
+                config.address_policy.clone(),
+                metrics,
+                chain,
+            ),
+            None => GuardedDnsResolver::new_observed(
+                resolver,
+                config.address_policy.clone(),
+                metrics,
+            ),
+        });
         let client = UpstreamClient::build(app, config, resolver)?;
         let targets = config
             .targets

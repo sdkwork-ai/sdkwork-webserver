@@ -309,6 +309,36 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "server",
         "servers.create",
     ).with_required_permission("web.servers.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::AuthCritical),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/server-files/nodes",
+        "server-files",
+        "serverFiles.nodes.list",
+    ).with_required_permission("web.servers.files.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/server-files/nodes/{nodeId}/browse",
+        "server-files",
+        "serverFiles.node.browse",
+    ).with_required_permission("web.servers.files.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/server-files/nodes/{nodeId}/read",
+        "server-files",
+        "serverFiles.node.read",
+    ).with_required_permission("web.servers.files.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/server-files/nodes/{nodeId}/operations",
+        "server-files",
+        "serverFiles.node.operations.list",
+    ).with_required_permission("web.servers.files.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/backend/v3/api/server-files/nodes/{nodeId}/operations",
+        "server-files",
+        "serverFiles.node.operations.run",
+    ).with_required_permission("web.servers.files.write"),
     HttpRoute::agent_token(
         HttpMethod::Post,
         "/backend/v3/api/agent/heartbeat",

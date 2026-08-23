@@ -72,6 +72,24 @@
         "replacementCode": null
       },
       {
+        "code": "web.servers.files.read",
+        "name": "Browse server deployment file systems",
+        "resource": "serverFiles",
+        "action": "read",
+        "status": "active",
+        "since": "1.0.0",
+        "replacementCode": null
+      },
+      {
+        "code": "web.servers.files.write",
+        "name": "Run operations on server deployment projects",
+        "resource": "serverFiles",
+        "action": "write",
+        "status": "active",
+        "since": "1.0.0",
+        "replacementCode": null
+      },
+      {
         "code": "web.auditLogs.read",
         "name": "Read audit logs",
         "resource": "auditLogs",

@@ -65,11 +65,22 @@ compose_file_for() {
 
 port_for() {
   case "$1" in
-    development) echo 13800 ;;
-    test) echo 18888 ;;
-    production) echo 18080 ;;
+    development) echo "${SDKWORK_WEBSERVER_DEV_HOST_PORT:-13800}" ;;
+    test) echo "${SDKWORK_WEBSERVER_TEST_HOST_PORT:-18888}" ;;
+    production) echo "${SDKWORK_WEBSERVER_PROD_HOST_PORT:-18080}" ;;
     *) echo "?" ;;
   esac
+}
+
+load_host_ports() {
+  env_file=$1
+  if [ -f "$env_file" ]; then
+    # shellcheck disable=SC1090
+    set -a
+    # Only import host port variables so secrets are not exported broadly.
+    eval "$(grep -E '^SDKWORK_WEBSERVER_(DEV|TEST|PROD)_HOST_PORT=' "$env_file" || true)"
+    set +a
+  fi
 }
 
 env_file_for() {
@@ -96,6 +107,7 @@ deploy_one() {
   env_name=$1
   compose_file=$(compose_file_for "$env_name")
   env_file=$(ensure_env_file "$env_name")
+  load_host_ports "$env_file"
   project="sdkwork-webserver-$env_name"
   port=$(port_for "$env_name")
 

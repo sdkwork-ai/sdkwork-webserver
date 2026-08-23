@@ -12,15 +12,9 @@ catalogs:
     '@tailwindcss/vite':
       specifier: ^4.1.14
       version: 4.2.2
-    '@testing-library/jest-dom':
-      specifier: ^6.9.1
-      version: 6.9.1
     '@testing-library/react':
       specifier: ^16.3.2
       version: 16.3.2
-    '@types/qrcode':
-      specifier: ^1.5.6
-      version: 1.5.6
     '@types/react':
       specifier: ^19.2.14
       version: 19.2.14
@@ -36,9 +30,6 @@ catalogs:
     lucide-react:
       specifier: ^1.7.0
       version: 1.7.0
-    qrcode:
-      specifier: ^1.5.4
-      version: 1.5.4
     react:
       specifier: ^19.2.4
       version: 19.2.4
@@ -54,9 +45,6 @@ catalogs:
     vite:
       specifier: ^8.0.3
       version: 8.1.5
-    vite-plugin-dts:
-      specifier: ^4.5.4
-      version: 4.5.4
     vitest:
       specifier: ^4.1.8
       version: 4.1.10
@@ -1034,6 +1022,9 @@ importers:
       '@sdkwork/webserver-pc-admin-nginx':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-admin-nginx
+      '@sdkwork/webserver-pc-admin-plugins':
+        specifier: workspace:*
+        version: link:packages/sdkwork-webserver-pc-admin-plugins
       '@sdkwork/webserver-pc-admin-servers':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-admin-servers
@@ -1058,6 +1049,9 @@ importers:
       '@sdkwork/webserver-pc-console-mcp':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-console-mcp
+      '@sdkwork/webserver-pc-console-plugins':
+        specifier: workspace:*
+        version: link:packages/sdkwork-webserver-pc-console-plugins
       '@sdkwork/webserver-pc-console-shell':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-console-shell
@@ -1189,6 +1183,27 @@ importers:
         specifier: workspace:*
         version: link:../sdkwork-webserver-pc-commons
 
+  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-plugins:
+    dependencies:
+      '@sdkwork/drive-app-sdk':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-drive/sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-typescript
+      '@sdkwork/sdk-common':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      '@sdkwork/webserver-pc-commons':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-commons
+      '@sdkwork/webserver-pc-console-plugins':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-console-plugins
+      react:
+        specifier: 'catalog:'
+        version: 19.2.4
+      react-router-dom:
+        specifier: ^7.15.0
+        version: 7.18.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+
   apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-servers:
     dependencies:
       '@sdkwork/webserver-pc-commons':
@@ -1230,6 +1245,9 @@ importers:
       '@sdkwork/iam-contracts':
         specifier: workspace:*
         version: link:../../../../../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-contracts
+      '@sdkwork/utils':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-utils/packages/sdkwork-utils-typescript
       fflate:
         specifier: ^0.8.2
         version: 0.8.3
@@ -1302,6 +1320,27 @@ importers:
       '@sdkwork/sdk-common':
         specifier: workspace:*
         version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      react:
+        specifier: 'catalog:'
+        version: 19.2.4
+      react-router-dom:
+        specifier: ^7.15.0
+        version: 7.18.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+
+  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-console-plugins:
+    dependencies:
+      '@sdkwork/drive-app-sdk':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-drive/sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-typescript
+      '@sdkwork/sdk-common':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      '@sdkwork/utils':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-utils/packages/sdkwork-utils-typescript
+      '@sdkwork/webserver-pc-commons':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-commons
       react:
         specifier: 'catalog:'
         version: 19.2.4

@@ -64,6 +64,7 @@ aux_domains_for() {
 write_site() {
   local domain="$1"
   local upstream_port="$2"
+  local proxy_host="${3:-$domain}"
   local available="${SDKWORK_SITES_AVAILABLE}/${domain}.conf"
   local enabled="${SDKWORK_SITES_ENABLED}/${domain}.conf"
 
@@ -89,7 +90,7 @@ server {
     location / {
         proxy_pass http://sdkwork_webserver_${domain//./_};
         proxy_http_version 1.1;
-        proxy_set_header Host \$host;
+        proxy_set_header Host ${proxy_host};
         proxy_set_header X-Forwarded-Host \$host;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -105,7 +106,7 @@ server {
 EOF
 
   ln -sfn "${available}" "${enabled}"
-  log "installed ${enabled} -> 127.0.0.1:${upstream_port}"
+  log "installed ${enabled} -> 127.0.0.1:${upstream_port} (Host: ${proxy_host})"
 }
 
 install_environment() {
@@ -115,7 +116,12 @@ install_environment() {
   domain="$(domain_for "${environment}")"
   write_site "${domain}" "${port}"
   for aux in $(aux_domains_for "${environment}"); do
-    write_site "${aux}" "${port}"
+    if [ "${environment}" = "development" ]; then
+      write_site "${aux}" "${port}"
+    else
+      # Test/production gateways accept only the primary server-* ingress host.
+      write_site "${aux}" "${port}" "${domain}"
+    fi
   done
 }
 
@@ -155,6 +161,11 @@ main() {
   for environment in "$@"; do
     install_environment "${environment}"
   done
+
+  # Public portal domains route to the production Docker stack by default.
+  write_site "sdkwork.com" "$(port_for production)"
+  # app.sdkwork.com is not a registered standalone ingress host; rewrite to server.sdkwork.com.
+  write_site "app.sdkwork.com" "$(port_for production)" "server.sdkwork.com"
 
   if [ -L "${SITES_ENABLED}/default" ] || [ -e "${SITES_ENABLED}/default" ]; then
     rm -f "${SITES_ENABLED}/default"

@@ -13,6 +13,7 @@ use sdkwork_webserver_core::{
     CertificateConfig, CompiledWebServerApp, CompiledWebServerRevision, ListenerProtocol,
     ReloadConfig, TlsPolicyConfig,
 };
+use sdkwork_webserver_resolver_cache::{FileResolverSource, ResolutionChain};
 use sha2::{Digest, Sha256};
 use tokio::sync::{Mutex, Semaphore};
 
@@ -44,6 +45,8 @@ pub(crate) struct RuntimeGeneration {
     pub resolver: Arc<BoundedSystemResolver>,
     /// Per-generation cache of synthesized dynamic `proxy_pass` upstreams.
     pub dynamic_upstreams: std::sync::Mutex<HashMap<String, Arc<ProxyUpstream>>>,
+    /// Multi-layer resolution cache chain shared by upstream resolvers.
+    pub resolution_chain: Option<Arc<ResolutionChain>>,
 }
 
 impl RuntimeGeneration {
@@ -67,6 +70,7 @@ impl RuntimeGeneration {
                 )
             })
             .collect::<HashMap<_, _>>();
+        let resolution_chain = build_resolution_chain(&app)?;
         let upstreams = app
             .config()
             .upstreams
@@ -82,8 +86,14 @@ impl RuntimeGeneration {
                     })
                     .unwrap_or(&implicit_resolver)
                     .clone();
-                ProxyUpstream::build(&app, upstream, resolver, metrics.clone())
-                    .map(|runtime| (upstream.id.clone(), Arc::new(runtime)))
+                ProxyUpstream::build(
+                    &app,
+                    upstream,
+                    resolver,
+                    metrics.clone(),
+                    resolution_chain.clone(),
+                )
+                .map(|runtime| (upstream.id.clone(), Arc::new(runtime)))
             })
             .collect::<Result<HashMap<_, _>, _>>()?;
         let proxy_cache = app
@@ -99,6 +109,7 @@ impl RuntimeGeneration {
             proxy_cache,
             resolver,
             dynamic_upstreams: std::sync::Mutex::new(HashMap::new()),
+            resolution_chain,
         }))
     }
 
@@ -163,6 +174,80 @@ pub(crate) struct DataPlaneRuntime {
     pub tunnel_supervisor: Arc<TunnelSupervisor>,
     pub metrics: Arc<DataPlaneMetrics>,
 }
+/// Build the multi-layer resolution cache chain from the app config.
+/// Failure to load the configured file layer fails closed; Redis and
+/// database layers degrade to a warning (the chain still serves the upper
+/// layers).
+fn build_resolution_chain(
+    app: &sdkwork_webserver_core::CompiledWebServerApp,
+) -> Result<Option<Arc<ResolutionChain>>, DataPlaneError> {
+    let Some(config) = app.config().resolution_cache.as_ref() else {
+        return Ok(None);
+    };
+    if !config.enabled {
+        return Ok(None);
+    }
+    let file = match config.file.as_deref() {
+        Some(path) => Some(Arc::new(FileResolverSource::load(std::path::Path::new(path)).map_err(
+            |message| DataPlaneError::ResolverCache(message),
+        )?)),
+        None => None,
+    };
+    // External Redis (WSL host service) wiring: SDKWORK_WEBSERVER_REDIS_URL
+    // overrides the configured resolution-cache Redis URL so compose-provided
+    // external Redis is used without editing the app config.
+    let redis_config = config.redis.as_ref().map(|redis_config| {
+        if let Ok(url) = std::env::var("SDKWORK_WEBSERVER_REDIS_URL") {
+            let url = url.trim();
+            if !url.is_empty() {
+                let mut effective = redis_config.clone();
+                effective.url = url.to_owned();
+                return effective;
+            }
+        }
+        redis_config.clone()
+    });
+    let redis = redis_config.as_ref().and_then(|redis_config| {
+        match tokio::runtime::Handle::try_current().ok().map(|handle| {
+            handle.block_on(
+                sdkwork_webserver_resolver_cache::redis::RedisResolverCache::connect(redis_config),
+            )
+        }) {
+            Some(Ok(backend)) => {
+                Some(backend as std::sync::Arc<dyn sdkwork_webserver_resolver_cache::ResolverCacheBackend>)
+            }
+            _ => {
+                tracing::warn!(url = %redis_config.url, "Redis resolution cache unavailable; continuing with upper layers");
+                None
+            }
+        }
+    });
+    #[cfg(feature = "management")]
+    let database = if config.database {
+        sdkwork_intelligence_webserver_repository_sqlx::resolution_cache_from_shared_pool()
+    } else {
+        None
+    };
+    #[cfg(not(feature = "management"))]
+    let database = None;
+    if database.is_none() && config.database {
+        tracing::warn!("resolution cache database layer requested but no shared database pool is active");
+    }
+    tracing::info!(
+        file = config.file.as_deref().unwrap_or(""),
+        redis = redis.is_some(),
+        database = database.is_some(),
+        memory = config.memory,
+        "resolution cache chain built"
+    );
+    Ok(Some(Arc::new(ResolutionChain::build(
+        config,
+        file,
+        redis,
+        database,
+    ))))
+}
+
 
 impl DataPlaneRuntime {
     pub fn build(app: CompiledWebServerApp) -> Result<Arc<Self>, DataPlaneError> {

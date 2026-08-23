@@ -15,16 +15,16 @@ export function WebserverDocumentation({
   const t = useMemo(() => createDocumentationTranslator(locale), [locale]);
 
   return (
-    <div className="min-h-screen bg-white text-zinc-950 dark:bg-[#0d1511] dark:text-white">
+    <div className="min-h-screen bg-white text-zinc-950 dark:bg-[#020617] dark:text-white">
       <DocumentationHeader navigation={navigation} t={t} viewer={viewer} />
       <div className="mx-auto grid max-w-[1600px] lg:grid-cols-[250px_minmax(0,1fr)]">
         <DocumentationSidebar t={t} />
         <DocumentationContent navigation={navigation} supportedAgents={supportedAgents} t={t} />
       </div>
-      <footer className="border-t border-zinc-200 bg-zinc-50 py-7 text-zinc-700 dark:border-white/10 dark:bg-[#101713] dark:text-zinc-300">
+      <footer className="border-t border-zinc-200 bg-zinc-50 py-7 text-zinc-700 dark:border-white/10 dark:bg-[#0f172a] dark:text-zinc-300">
         <div className="mx-auto flex max-w-[1600px] flex-col gap-3 px-5 text-xs sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:pl-[298px] lg:pr-12">
           <span className="flex items-center gap-2 font-bold text-zinc-950 dark:text-white">
-            <Boxes aria-hidden="true" className="text-emerald-700 dark:text-emerald-300" size={16} />
+            <Boxes aria-hidden="true" className="text-blue-700 dark:text-blue-300" size={16} />
             {t("footer.product")}
           </span>
           <span>{t("footer.note")}</span>

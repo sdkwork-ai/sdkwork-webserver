@@ -16,6 +16,10 @@ DOMAINS=(
   server.sdkwork.com
   server-app.sdkwork.com
   server-admin.sdkwork.com
+  # Web Server public domains (SDKWORK_WEBSERVER_CERT_DOMAINS): optional HTTPS
+  # listeners use per-environment host ports 18430/28430/38430 (container 8430).
+  sdkwork.com
+  app.sdkwork.com
 )
 
 log() {

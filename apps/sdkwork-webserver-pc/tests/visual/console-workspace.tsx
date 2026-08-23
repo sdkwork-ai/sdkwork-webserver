@@ -219,7 +219,7 @@ const initialPath = new URLSearchParams(window.location.search).get("view") === 
   : "/console/sites";
 
 createRoot(root).render(
-  <SdkworkThemeProvider className="webserver-pc-theme" defaultTheme={defaultTheme} locale="en-US" themeColor="green-tech">
+  <SdkworkThemeProvider className="webserver-pc-theme" defaultTheme={defaultTheme} locale="en-US" themeColor="tech-blue">
     <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
         <Route

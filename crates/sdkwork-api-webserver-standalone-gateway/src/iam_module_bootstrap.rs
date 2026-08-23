@@ -5,37 +5,70 @@ const SKILLS_IAM_MODULE_MANIFEST: &str = "specs/iam.module.manifest.json";
 const MCP_IAM_MODULE_MANIFEST: &str = "specs/iam.module.manifest.json";
 
 /// Resolves consumer IAM module manifests that the standalone gateway must
-/// materialize into the shared IAM catalog (web + skills + mcp).
+/// materialize into the shared IAM catalog.
 ///
-/// Skills/MCP catalogs own `app_user` roleGrantExtensions for self-service
-/// CRUD; without federation, dual-token console calls pass surface checks but
-/// fail authorization (or appear broken when permissions are missing).
+/// Web always federates from `specs/iam.module.manifest.json` (not an IAM
+/// registry enabled module). Skills/MCP are federated only when a consumer app
+/// root exposes its own `specs/iam.module.manifest.json` *and* that module is
+/// not already listed in the packaged IAM registry `enabledModules`. Falling
+/// back to `iam/modules/{skills,mcp}` duplicates `moduleId` and crashes
+/// bootstrap with `additional module manifest duplicates moduleId skills`.
 pub(crate) fn federated_iam_module_manifest_paths() -> Result<Vec<PathBuf>, String> {
+    let enabled = iam_registry_enabled_modules();
     let mut manifests = Vec::with_capacity(3);
     manifests.push(web_iam_module_manifest_path()?);
-    if let Some(path) = optional_module_manifest_path(
-        "skills",
-        &[
-            env_app_root("SDKWORK_SKILLS_APP_ROOT"),
-            Some(sibling_app_root("sdkwork-skills")),
-            installed_iam_module_root("skills"),
-        ],
-        SKILLS_IAM_MODULE_MANIFEST,
-    ) {
-        manifests.push(path);
+    if !enabled.contains("skills") {
+        if let Some(path) = optional_module_manifest_path(
+            "skills",
+            &[
+                env_app_root("SDKWORK_SKILLS_APP_ROOT"),
+                Some(sibling_app_root("sdkwork-skills")),
+            ],
+            SKILLS_IAM_MODULE_MANIFEST,
+        ) {
+            manifests.push(path);
+        }
     }
-    if let Some(path) = optional_module_manifest_path(
-        "mcp",
-        &[
-            env_app_root("SDKWORK_MCP_APP_ROOT"),
-            Some(sibling_app_root("sdkwork-mcp")),
-            installed_iam_module_root("mcp"),
-        ],
-        MCP_IAM_MODULE_MANIFEST,
-    ) {
-        manifests.push(path);
+    if !enabled.contains("mcp") {
+        if let Some(path) = optional_module_manifest_path(
+            "mcp",
+            &[
+                env_app_root("SDKWORK_MCP_APP_ROOT"),
+                Some(sibling_app_root("sdkwork-mcp")),
+            ],
+            MCP_IAM_MODULE_MANIFEST,
+        ) {
+            manifests.push(path);
+        }
     }
     Ok(manifests)
+}
+
+fn iam_registry_enabled_modules() -> std::collections::BTreeSet<String> {
+    let mut enabled = std::collections::BTreeSet::new();
+    let candidates = [
+        env_app_root("SDKWORK_IAM_APP_ROOT").map(|root| root.join("iam/registry/iam-registry.config.json")),
+        Some(PathBuf::from("/app/share/sdkwork/iam/iam/registry/iam-registry.config.json")),
+        Some(PathBuf::from("/usr/share/sdkwork/iam/iam/registry/iam-registry.config.json")),
+        Some(sibling_app_root("sdkwork-iam").join("iam/registry/iam-registry.config.json")),
+    ];
+    for path in candidates.into_iter().flatten() {
+        let Ok(raw) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&raw) else {
+            continue;
+        };
+        if let Some(items) = value.get("enabledModules").and_then(|entry| entry.as_array()) {
+            for item in items {
+                if let Some(module_id) = item.as_str() {
+                    enabled.insert(module_id.to_string());
+                }
+            }
+            break;
+        }
+    }
+    enabled
 }
 
 pub(crate) fn web_iam_module_manifest_path() -> Result<PathBuf, String> {
@@ -84,26 +117,6 @@ fn env_app_root(key: &str) -> Option<PathBuf> {
 
 fn sibling_app_root(repo_name: &str) -> PathBuf {
     source_web_app_root().join("..").join(repo_name)
-}
-
-fn installed_iam_module_root(module_id: &str) -> Option<PathBuf> {
-    // Prefer process share roots used by standalone/Docker layouts.
-    let share_candidates = [
-        std::env::var_os("SDKWORK_SHARE_ROOT").map(PathBuf::from),
-        Some(PathBuf::from("/app/share/sdkwork")),
-        Some(PathBuf::from("/usr/share/sdkwork")),
-    ];
-    for share in share_candidates.into_iter().flatten() {
-        let module_dir = share
-            .join("iam")
-            .join("iam")
-            .join("modules")
-            .join(module_id);
-        if module_dir.join("iam.module.manifest.json").is_file() {
-            return Some(module_dir);
-        }
-    }
-    None
 }
 
 fn source_web_app_root() -> PathBuf {
@@ -166,27 +179,29 @@ mod tests {
     }
 
     #[test]
-    fn federated_manifests_include_skills_and_mcp_when_siblings_exist() {
+    fn federated_manifests_skip_skills_and_mcp_when_registry_enables_them() {
         let manifests = federated_iam_module_manifest_paths().expect("resolve federated manifests");
         assert!(
-            manifests
-                .iter()
-                .any(|path| path.ends_with("sdkwork-webserver/specs/iam.module.manifest.json")
-                    || path.ends_with("specs/iam.module.manifest.json")),
-            "web manifest must be present: {manifests:?}"
+            !manifests.is_empty(),
+            "at least the web IAM manifest must resolve"
         );
-        let skills = sibling_app_root("sdkwork-skills").join(SKILLS_IAM_MODULE_MANIFEST);
-        let mcp = sibling_app_root("sdkwork-mcp").join(MCP_IAM_MODULE_MANIFEST);
-        if skills.is_file() {
+        assert!(
+            manifests[0].ends_with("iam.module.manifest.json"),
+            "web manifest must be first: {manifests:?}"
+        );
+        let enabled = iam_registry_enabled_modules();
+        if enabled.contains("skills") {
+            let skills = sibling_app_root("sdkwork-skills").join(SKILLS_IAM_MODULE_MANIFEST);
             assert!(
-                manifests.iter().any(|path| path == &skills),
-                "skills sibling manifest must be federated: {manifests:?}"
+                manifests.iter().all(|path| path != &skills),
+                "skills must not be federated when already enabled in IAM registry: {manifests:?}"
             );
         }
-        if mcp.is_file() {
+        if enabled.contains("mcp") {
+            let mcp = sibling_app_root("sdkwork-mcp").join(MCP_IAM_MODULE_MANIFEST);
             assert!(
-                manifests.iter().any(|path| path == &mcp),
-                "mcp sibling manifest must be federated: {manifests:?}"
+                manifests.iter().all(|path| path != &mcp),
+                "mcp must not be federated when already enabled in IAM registry: {manifests:?}"
             );
         }
     }

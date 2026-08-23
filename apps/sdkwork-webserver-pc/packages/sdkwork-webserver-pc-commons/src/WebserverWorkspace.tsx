@@ -44,6 +44,7 @@ import {
   type ReactNode,
 } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+import { uuid } from "@sdkwork/utils/id";
 
 import { translateWebserver, type WebserverLocale, type WebserverMessageKey } from "./i18n/index.ts";
 import {
@@ -146,7 +147,7 @@ export function WebserverWorkspace({
         t={t}
         userLabel={userLabel}
       />
-      <WorkspaceSidebar basePath={basePath} entries={entries} t={t} />
+      <WorkspaceSidebar basePath={basePath} entries={entries} surface={surface} t={t} />
       <main className="workspace">
         {defaultResource ? (
           <Routes>
@@ -731,7 +732,7 @@ function ActionDialog({
   const [file, setFile] = useState<File>();
   const [files, setFiles] = useState<readonly File[]>([]);
   const [fieldOptions, setFieldOptions] = useState<WebserverResourceFieldOptions>(action.fieldOptions ?? {});
-  const [idempotencyKey] = useState(() => globalThis.crypto.randomUUID());
+  const [idempotencyKey] = useState(() => uuid());
   const [optionsBusy, setOptionsBusy] = useState(Boolean(action.loadFieldOptions));
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<Record<string, unknown>>();

@@ -12,7 +12,12 @@ import {
   UpdateSkillPackagePage,
 } from "@sdkwork/skills-pc-admin-skill";
 import { useMemo } from "react";
-import { Link, Route, Routes } from "react-router-dom";
+import { Link, Route, Routes, useSearchParams } from "react-router-dom";
+
+/** Compatible with IAM session-auth boundary attachment (dual-token clients). */
+type AttachSdkClientBoundaries = (
+  clients: readonly { http?: unknown }[],
+) => readonly { http?: unknown }[];
 
 /**
  * Bridges the SDKWork Skills admin surface into the Web Server backend-admin
@@ -23,6 +28,7 @@ import { Link, Route, Routes } from "react-router-dom";
  */
 export interface SkillsAdminSurfaceProps {
   appApiBaseUrl: string;
+  attachSdkClientBoundaries?: AttachSdkClientBoundaries;
   backendApiBaseUrl: string;
   driveAppApiBaseUrl: string;
   resource: "skills";
@@ -31,21 +37,47 @@ export interface SkillsAdminSurfaceProps {
   roleCodes?: readonly string[];
 }
 
+function AdminSkillsListPage({
+  grantedPermissions,
+  roleCodes,
+}: {
+  grantedPermissions: readonly string[];
+  roleCodes: readonly string[];
+}) {
+  const [searchParams] = useSearchParams();
+  const initialEditPackageId = searchParams.get("edit");
+  return (
+    <AdminSkillsPage
+      grantedPermissions={grantedPermissions}
+      roleCodes={roleCodes}
+      initialEditPackageId={initialEditPackageId}
+    />
+  );
+}
+
 export function SkillsAdminSurface({
   appApiBaseUrl,
+  attachSdkClientBoundaries,
   backendApiBaseUrl,
   driveAppApiBaseUrl,
   tokenManager,
   permissionScope,
   roleCodes = [],
 }: SkillsAdminSurfaceProps) {
-  const clients = useMemo(
-    () => ({
+  const clients = useMemo(() => {
+    const next = {
       ...createSkillsAppClients({ appApiBaseUrl, driveAppApiBaseUrl, tokenManager }),
       ...createSkillsBackendClients({ backendApiBaseUrl, tokenManager }),
-    }),
-    [appApiBaseUrl, backendApiBaseUrl, driveAppApiBaseUrl, tokenManager],
-  );
+    };
+    attachSdkClientBoundaries?.([next.app, next.backend, next.drive]);
+    return next;
+  }, [
+    appApiBaseUrl,
+    attachSdkClientBoundaries,
+    backendApiBaseUrl,
+    driveAppApiBaseUrl,
+    tokenManager,
+  ]);
   return (
     <div className="skills-admin-surface">
       <SkillsClientsProvider clients={clients}>
@@ -63,7 +95,9 @@ export function SkillsAdminSurface({
         <Routes>
           <Route
             path=""
-            element={<AdminSkillsPage grantedPermissions={permissionScope} roleCodes={roleCodes} />}
+            element={
+              <AdminSkillsListPage grantedPermissions={permissionScope} roleCodes={roleCodes} />
+            }
           />
           <Route path="edit/:packageId" element={<UpdateSkillPackagePage />} />
           <Route path="artifacts/:packageId" element={<PackageArtifactsPage />} />

@@ -25,6 +25,10 @@ export function App({ runtime }: { runtime: BootstrappedWebserverPcRuntime }) {
     setThemeSelection(commitWebserverTheme(nextTheme));
   };
 
+  useEffect(() => {
+    document.documentElement.lang = runtime.locale;
+  }, [runtime.locale]);
+
   return (
     <SdkworkThemeProvider
       className="webserver-pc-theme"

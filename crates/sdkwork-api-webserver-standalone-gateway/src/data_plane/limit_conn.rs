@@ -47,35 +47,66 @@ impl LimitConnRuntime {
         Self { zones: map }
     }
 
-    /// Admit a request against the first matching rule. Returns a lease
-    /// that the caller must keep alive for the duration of the response
-    /// (it releases the slot on drop). A no-op lease is returned when no
-    /// rule applies.
+    /// Admit a request against every configured rule (nginx checks each
+    /// `limit_conn` directive). Returns a lease that the caller must keep
+    /// alive for the duration of the response (it releases the slot on
+    /// drop). Slots acquired by earlier rules are rolled back when a later
+    /// rule rejects; a no-op lease is returned when no rule applies.
     pub(super) fn admit(
         &self,
         client_ip: IpAddr,
         rules: &[LimitConnConfig],
     ) -> Result<ConnectionLease, LimitConnDecision> {
+        let mut acquired: Vec<&str> = Vec::with_capacity(rules.len());
         for rule in rules {
             let Some(zone) = self.zones.get(&rule.zone) else {
                 // Semantic validation should reject unknown zones; fail closed.
+                for zone_name in &acquired {
+                    self.release(zone_name, client_ip);
+                }
                 return Err(LimitConnDecision::Reject);
             };
             let Ok(mut state) = zone.lock() else {
+                for zone_name in &acquired {
+                    self.release(zone_name, client_ip);
+                }
                 return Err(LimitConnDecision::Reject);
             };
             if !state.try_acquire(client_ip, rule.max_connections) {
+                for zone_name in &acquired {
+                    self.release(zone_name, client_ip);
+                }
                 return Err(LimitConnDecision::Reject);
             }
+            acquired.push(rule.zone.as_str());
+        }
+        let Some(first) = rules.first() else {
             return Ok(ConnectionLease {
-                zone: Some(zone.clone()),
+                zone: None,
                 client_ip,
             });
-        }
+        };
+        let zone = self.zones.get(&first.zone).expect("checked zone");
         Ok(ConnectionLease {
-            zone: None,
+            zone: Some(zone.clone()),
             client_ip,
         })
+    }
+
+    /// Release one connection slot for a key (rollback and drop path).
+    fn release(&self, zone_name: &str, client_ip: IpAddr) {
+        let Some(zone) = self.zones.get(zone_name) else {
+            return;
+        };
+        let Ok(mut state) = zone.lock() else {
+            return;
+        };
+        if let Some(count) = state.entries.get_mut(&client_ip) {
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                state.entries.remove(&client_ip);
+            }
+        }
     }
 }
 

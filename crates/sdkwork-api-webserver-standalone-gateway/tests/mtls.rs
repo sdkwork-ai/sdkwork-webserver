@@ -369,11 +369,19 @@ async fn stream_tls_terminate_requires_client_certificates_when_configured() {
             tcp,
         )
         .await;
-    eprintln!("[mtls] anonymous handshake result: {result:?}");
+    // tokio_rustls completes the handshake lazily: the server's
+    // CertificateRequired alert surfaces on the first IO, so the assertion
+    // is on the read result, not the connect result.
+    let mut anonymous_stream = result.expect("connect returns a stream");
+    let mut echoed = vec![0_u8; 4];
+    let read = tokio::time::timeout(
+        Duration::from_secs(2),
+        anonymous_stream.read(&mut echoed),
+    )
+    .await;
     assert!(
-        result.is_err(),
-        "stream mTLS must reject a certificate-less handshake; got {:?}",
-        result.as_ref().err()
+        matches!(read, Ok(Err(_))),
+        "stream mTLS must reject a certificate-less handshake; read={read:?}"
     );
 
     // With the trusted client certificate the stream echoes.

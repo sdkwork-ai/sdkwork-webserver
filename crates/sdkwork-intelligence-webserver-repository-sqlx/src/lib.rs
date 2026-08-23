@@ -1,8 +1,10 @@
 use sdkwork_database_id::SnowflakeIdGenerator;
 use sqlx::{Database, Pool};
 
+mod resolution_cache;
 mod runtime;
 
+pub use resolution_cache::{resolution_cache_from_shared_pool, SqlxResolutionCache};
 pub use runtime::{bootstrap_web_runtime_from_env, WebRuntime};
 
 /// Marks a dynamically assembled SQL statement as audited for sqlx 0.9's

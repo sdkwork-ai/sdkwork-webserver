@@ -54,7 +54,7 @@ export function PortalStatistics({
           className={`min-w-0 px-3 py-5 sm:px-4 lg:px-5 ${index >= 2 ? "bg-black/[0.06] lg:bg-transparent" : ""}`}
           key={label}
         >
-          <span className="flex items-center gap-2 text-xs font-semibold text-emerald-200">
+          <span className="flex items-center gap-2 text-xs font-semibold text-blue-200">
             <Icon aria-hidden="true" size={15} />
             {label}
           </span>

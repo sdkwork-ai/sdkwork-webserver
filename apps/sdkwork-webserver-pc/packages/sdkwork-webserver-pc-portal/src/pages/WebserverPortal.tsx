@@ -12,7 +12,7 @@ export function WebserverPortal({ clipboard, locale, navigation, statistics, vie
   const t = useMemo(() => createPortalTranslator(locale), [locale]);
 
   return (
-    <div className="min-h-screen bg-white text-zinc-950 dark:bg-[#0d1511] dark:text-white">
+    <div className="min-h-screen bg-white text-zinc-950 dark:bg-[#020617] dark:text-white">
       <PortalHeader navigation={navigation} t={t} viewer={viewer} />
       <main>
         <PortalHero clipboard={clipboard} navigation={navigation} statistics={statistics} t={t} />

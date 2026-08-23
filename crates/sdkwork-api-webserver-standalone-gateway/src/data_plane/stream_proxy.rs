@@ -223,7 +223,6 @@ async fn serve_stream_connection(
                 &generation,
                 certificate_ref,
                 resolved_client_auth.as_ref(),
-                stream_id,
             ) {
                 Ok(acceptor) => acceptor,
                 Err(error) => {
@@ -387,9 +386,7 @@ fn build_stream_tls_acceptor(
     generation: &Arc<super::runtime::RuntimeGeneration>,
     certificate_ref: &str,
     client_auth: Option<&sdkwork_webserver_core::ClientAuthConfig>,
-    stream_id: &str,
 ) -> Result<TlsAcceptor, String> {
-    eprintln!("[stream-tls] client_auth={client_auth:?} stream={stream_id}");
     install_crypto_provider().map_err(|error| error.to_string())?;
     let provider = rustls::crypto::CryptoProvider::get_default()
         .ok_or_else(|| "rustls crypto provider is not installed".to_owned())?;

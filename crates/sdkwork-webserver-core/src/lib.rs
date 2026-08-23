@@ -46,11 +46,15 @@ pub use config::{
     WEBSERVER_CONFIG_FILE_NAME,
 };
 pub use config_paths::{
+    canonical_certificate_domain_directory, canonical_certificate_file,
+    canonical_certificate_key_file, canonical_certificates_directory,
     canonical_data_plane_config_path, canonical_runtime_config_path,
     canonical_secrets_directory, canonical_webserver_config_directory,
-    runtime_config_override_from_env, APPLICATION_CODE, DATA_PLANE_CONFIG_FILE_ENV,
-    DATA_PLANE_CONFIG_FILE_NAME, LINUX_CONFIG_ROOT, RUNTIME_CONFIG_FILE_ENV,
-    RUNTIME_CONFIG_FILE_ENV_LEGACY, RUNTIME_CONFIG_FILE_NAME, SECRETS_SUBDIR,
+    runtime_config_override_from_env, APPLICATION_CODE, CERTIFICATES_SUBDIR,
+    CERTIFICATE_CHAIN_FILE_NAME, CERTIFICATE_FILE_NAME, CERTS_URI_SCHEME,
+    DATA_PLANE_CONFIG_FILE_ENV, DATA_PLANE_CONFIG_FILE_NAME, LINUX_CONFIG_ROOT,
+    PRIVATE_KEY_FILE_NAME, RUNTIME_CONFIG_FILE_ENV, RUNTIME_CONFIG_FILE_ENV_LEGACY,
+    RUNTIME_CONFIG_FILE_NAME, SECRETS_SUBDIR,
 };
 pub use module_imports::{
     merge_import_specs, parse_env_imports, resolve_import_path, resolve_import_profile,

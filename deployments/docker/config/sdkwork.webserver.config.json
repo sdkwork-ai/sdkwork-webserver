@@ -55,13 +55,64 @@
     {
       "id": "public-http",
       "bind": "0.0.0.0",
-      "port": 3800,
-      "protocols": ["http1"],
-      "defaultVirtualHostRef": "webserver-operations"
+      "port": 8110,
+      "protocols": [
+        "http1"
+      ],
+      "defaultVirtualHostRef": "webserver-operations",
+      "allowPlaintextHttp": true
+    },
+    {
+      "id": "public-https",
+      "bind": "0.0.0.0",
+      "port": 8430,
+      "protocols": [
+        "http1",
+        "http2"
+      ],
+      "tlsPolicyRef": "public-tls",
+      "defaultVirtualHostRef": "public-sites"
     }
   ],
-  "certificates": [],
-  "tlsPolicies": [],
+  "certificates": [
+    {
+      "id": "sdkwork-com",
+      "serverNames": [
+        "sdkwork.com"
+      ],
+      "source": {
+        "type": "protected-file",
+        "certificateFile": "certs://sdkwork.com/cert.pem",
+        "privateKeyFile": "certs://sdkwork.com/key.pem"
+      }
+    },
+    {
+      "id": "app-sdkwork-com",
+      "serverNames": [
+        "app.sdkwork.com"
+      ],
+      "source": {
+        "type": "protected-file",
+        "certificateFile": "certs://app.sdkwork.com/cert.pem",
+        "privateKeyFile": "certs://app.sdkwork.com/key.pem"
+      }
+    }
+  ],
+  "tlsPolicies": [
+    {
+      "id": "public-tls",
+      "certificateRefs": [
+        "sdkwork-com",
+        "app-sdkwork-com"
+      ],
+      "minimumVersion": "tls1.2",
+      "maximumVersion": "tls1.3",
+      "alpn": [
+        "h2",
+        "http/1.1"
+      ]
+    }
+  ],
   "resolvers": [],
   "resources": [
     {
@@ -76,15 +127,43 @@
   "virtualHosts": [
     {
       "id": "webserver-operations",
-      "listenerRefs": ["public-http"],
-      "serverNames": ["*"],
+      "listenerRefs": [
+        "public-http"
+      ],
+      "serverNames": [
+        "*.sdkwork.com"
+      ],
       "routes": [
         {
           "id": "health",
           "match": {
             "pathType": "exact",
             "path": "/healthz",
-            "methods": ["GET", "HEAD"]
+            "methods": [
+              "GET",
+              "HEAD"
+            ]
+          },
+          "resourceRef": "health-response"
+        }
+      ]
+    },
+    {
+      "id": "public-sites",
+      "listenerRefs": [
+        "public-http",
+        "public-https"
+      ],
+      "serverNames": [
+        "sdkwork.com",
+        "app.sdkwork.com"
+      ],
+      "routes": [
+        {
+          "id": "public-root",
+          "match": {
+            "pathType": "prefix",
+            "path": "/"
           },
           "resourceRef": "health-response"
         }
@@ -121,6 +200,6 @@
   "metadata": {
     "owner": "sdkwork",
     "purpose": "standalone-data-plane-seed-operations-only",
-    "adaptiveWeb": "Console PC/H5/static-fallback is owned by AdaptiveAppShell via config.toml [app_roots] and SDKWORK_WEBSERVER_{PC,H5,STATIC_FALLBACK}_STATIC_ROOT — not by this data-plane JSON."
+    "adaptiveWeb": "Console PC/H5/static-fallback is owned by AdaptiveAppShell via config.toml [app_roots] and SDKWORK_WEBSERVER_{PC,H5,STATIC_FALLBACK}_STATIC_ROOT \u2014 not by this data-plane JSON."
   }
 }

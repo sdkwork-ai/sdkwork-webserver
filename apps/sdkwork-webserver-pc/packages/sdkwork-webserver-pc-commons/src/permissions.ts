@@ -3,6 +3,7 @@ import { hasPermissionInScope } from "@sdkwork/iam-contracts";
 const WEBSERVER_ADMIN_PERMISSIONS = [
   "web.nginx.write",
   "web.servers.read",
+  "web.servers.files.read",
   "web.auditLogs.read",
   "skills.packages.manage",
   "skills.categories.manage",

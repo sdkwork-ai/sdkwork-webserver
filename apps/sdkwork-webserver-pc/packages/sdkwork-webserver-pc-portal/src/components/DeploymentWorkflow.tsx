@@ -22,7 +22,7 @@ export function DeploymentWorkflow({ t }: { t: PortalTranslator }) {
       <div className="mx-auto max-w-[1280px] px-5 sm:px-7 lg:px-10">
         <div className="grid items-end gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(420px,1.1fr)] lg:gap-16">
           <div>
-            <span className="text-xs font-bold uppercase text-emerald-700">{t("workflow.eyebrow")}</span>
+            <span className="text-xs font-bold uppercase text-blue-700">{t("workflow.eyebrow")}</span>
             <h2 className="mt-3 max-w-[700px] text-3xl font-bold leading-tight sm:text-4xl">{t("workflow.title")}</h2>
           </div>
           <p className="m-0 max-w-[680px] leading-7 text-zinc-600">{t("workflow.description")}</p>
@@ -31,7 +31,7 @@ export function DeploymentWorkflow({ t }: { t: PortalTranslator }) {
         <ol className="mt-14 grid gap-8 md:grid-cols-2 lg:grid-cols-4 lg:gap-10">
           {steps.map(([title, description], index) => (
             <li className="min-w-0" key={title}>
-              <span className="grid size-8 place-items-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-800">
+              <span className="grid size-8 place-items-center rounded-full bg-blue-100 text-xs font-bold text-blue-800">
                 {index + 1}
               </span>
               <h3 className="mt-5 text-base font-bold">{t(title)}</h3>
@@ -41,19 +41,19 @@ export function DeploymentWorkflow({ t }: { t: PortalTranslator }) {
         </ol>
       </div>
 
-      <div className="mt-16 bg-[#0b1b14] text-white" aria-label={t("workflow.panel.title")}>
+      <div className="mt-16 bg-[#0f172a] text-white" aria-label={t("workflow.panel.title")}>
         <div className="mx-auto grid max-w-[1280px] gap-8 px-5 py-10 sm:px-7 lg:grid-cols-[minmax(250px,0.65fr)_minmax(0,1.35fr)] lg:items-center lg:px-10 lg:py-12">
           <div>
             <header className="flex items-center gap-3">
               <div className="flex min-w-0 items-center gap-3 whitespace-nowrap">
-                <span className="size-2 rounded-full bg-emerald-500 motion-safe:animate-pulse" />
+                <span className="size-2 rounded-full bg-blue-500 motion-safe:animate-pulse" />
                 <strong className="truncate font-mono text-sm">{t("workflow.panel.title")}</strong>
               </div>
-              <span className="shrink-0 whitespace-nowrap bg-emerald-400/15 px-2 py-1 text-xs font-bold text-emerald-200">
+              <span className="shrink-0 whitespace-nowrap bg-blue-400/15 px-2 py-1 text-xs font-bold text-blue-200">
                 {t("workflow.panel.status")}
               </span>
             </header>
-            <p className="mt-5 flex items-center gap-2 text-xs font-semibold text-emerald-200">
+            <p className="mt-5 flex items-center gap-2 text-xs font-semibold text-blue-200">
               <CircleCheck aria-hidden="true" size={17} />
               {t("workflow.panel.audit")}
             </p>
@@ -63,7 +63,7 @@ export function DeploymentWorkflow({ t }: { t: PortalTranslator }) {
               <div className="min-w-0" key={label}>
                 <dt className="text-xs font-medium text-zinc-400">{t(label)}</dt>
                 <dd className="m-0 mt-2 flex min-w-0 items-center gap-2 text-sm font-semibold text-zinc-100">
-                  {index === 1 ? <ShieldCheck aria-hidden="true" className="shrink-0 text-emerald-600" size={16} /> : index === 3 ? <History aria-hidden="true" className="shrink-0 text-sky-600" size={16} /> : <Check aria-hidden="true" className="shrink-0 text-emerald-600" size={16} />}
+                  {index === 1 ? <ShieldCheck aria-hidden="true" className="shrink-0 text-blue-600" size={16} /> : index === 3 ? <History aria-hidden="true" className="shrink-0 text-sky-600" size={16} /> : <Check aria-hidden="true" className="shrink-0 text-blue-600" size={16} />}
                   <span className="min-w-0 break-words">{t(value)}</span>
                 </dd>
               </div>

@@ -442,6 +442,10 @@ pub struct WebServerAppConfig {
     /// `[http] limitConnZone` (nginx `limit_conn_zone`).
     #[serde(default)]
     pub limit_conn_zones: Vec<LimitConnZoneConfig>,
+    /// Multi-layer resolution cache (local file → memory → Redis →
+    /// database). Absent means the system resolver runs uncached.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolution_cache: Option<sdkwork_webserver_resolver_cache::ResolutionCacheConfig>,
     #[serde(default)]
     pub limits: WebServerLimits,
     pub listeners: Vec<ListenerConfig>,

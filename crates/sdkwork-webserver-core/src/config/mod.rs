@@ -48,6 +48,7 @@ pub use secure_link::{
     md5_hex, validate_md5_template, verify_md5_link, verify_secure_link, verify_secret_link,
     SecureLinkFailure,
 };
+pub use sdkwork_webserver_resolver_cache::{RedisCacheConfig, ResolutionCacheConfig};
 pub use server_toml::{
     load_server_toml_app, load_server_toml_file, materialize_app, merge_common_profile,
 };

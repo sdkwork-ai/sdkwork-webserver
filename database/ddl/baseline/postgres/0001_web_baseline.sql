@@ -1551,3 +1551,24 @@ BEGIN
           SELECT 1 FROM web_application a WHERE a.site_id = s.id
       );
 END $$;
+
+-- source: resolver-cache (sdkwork-webserver-resolver-cache)
+-- Migration: create_web_resolution_cache
+-- Description: Multi-layer resolution cache persistence (file -> memory ->
+-- Redis -> database). Seeded and maintained by the sdkwork-deployments
+-- control plane; read and back-filled by the data plane. Negative entries
+-- carry `negative = true` with a short expiry (fast-fail absorption).
+-- Date: 2026-08-22
+
+CREATE TABLE IF NOT EXISTS web_resolution_cache (
+    domain      VARCHAR(253) NOT NULL,
+    addresses   JSONB        NOT NULL DEFAULT '[]',
+    negative    BOOLEAN      NOT NULL DEFAULT false,
+    expires_at  TIMESTAMPTZ  NOT NULL,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (domain)
+);
+
+CREATE INDEX IF NOT EXISTS idx_web_resolution_cache_expires
+    ON web_resolution_cache (expires_at);

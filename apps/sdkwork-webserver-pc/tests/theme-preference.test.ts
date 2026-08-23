@@ -14,9 +14,9 @@ describe("webserver theme preference", () => {
     window.localStorage.clear();
   });
 
-  it("uses the green technology application palette", () => {
-    expect(WEBSERVER_THEME_COLOR).toBe("green-tech");
-    expect(WEBSERVER_THEME_OVERRIDES.border?.focus).toContain("16, 185, 129");
+  it("uses the tech-blue application palette", () => {
+    expect(WEBSERVER_THEME_COLOR).toBe("tech-blue");
+    expect(WEBSERVER_THEME_OVERRIDES.border?.focus).toContain("37, 99, 235");
     expect(WEBSERVER_THEME_OVERRIDES.radius?.panel).toBe("0.5rem");
   });
 

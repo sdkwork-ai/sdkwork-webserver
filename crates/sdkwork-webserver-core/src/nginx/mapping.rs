@@ -554,7 +554,7 @@ impl<'a> Mapper<'a> {
                     };
                 }
                 "ssl_client_certificate" => {
-                    let Some(path) = child.args.first() else {
+                    let Some(_path) = child.args.first() else {
                         return Err(NginxConfigError::unsupported(
                             child,
                             "ssl_client_certificate requires a CA file",
@@ -1813,7 +1813,7 @@ impl<'a> Mapper<'a> {
                     };
                 }
                 "ssl_client_certificate" => {
-                    let Some(path) = child.args.first() else {
+                    let Some(_path) = child.args.first() else {
                         return Err(NginxConfigError::unsupported(
                             child,
                             "ssl_client_certificate requires a CA file",

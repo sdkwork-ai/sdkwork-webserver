@@ -6,7 +6,9 @@ edition.workspace = true
 [dependencies]
 axum.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 sdkwork-iam-web-adapter.workspace = true
+sdkwork-server-files-service.workspace = true
 sdkwork-webserver-contract.workspace = true
 sdkwork-intelligence-webserver-service.workspace = true
 sdkwork-routes-webserver-common.workspace = true
@@ -14,6 +16,8 @@ sdkwork-web-axum.workspace = true
 sdkwork-web-bootstrap.workspace = true
 sdkwork-web-core.workspace = true
 sdkwork-utils-rust.workspace = true
+tokio.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 async-trait.workspace = true

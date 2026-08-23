@@ -21,6 +21,7 @@ services:
     restart: unless-stopped
     ports:
       - "${SDKWORK_WEBSERVER_PROD_HOST_PORT:-18080}:8080"
+      - "${SDKWORK_WEBSERVER_PROD_HTTPS_HOST_PORT:-38430}:8430"
     env_file:
       - path: env/production.env
         required: false
@@ -31,6 +32,11 @@ services:
       SDKWORK_DEPLOY_APP_ROOT: /app/share/sdkwork/deploy
       SDKWORK_SKILLS_APP_ROOT: /app/share/sdkwork/skills
       SDKWORK_MCP_APP_ROOT: /app/share/sdkwork/mcp
+      SDKWORK_SPACE_ROOT: ${SDKWORK_SPACE_ROOT:-/opt/deploy}
+      SDKWORK_SPACE_CLONE_URL: ${SDKWORK_SPACE_CLONE_URL:-https://github.com/sdkwork-ai/sdkwork-space.git}
+      SDKWORK_SPACE_CLONE_PULL: ${SDKWORK_SPACE_CLONE_PULL:-true}
+      SDKWORK_DEPLOY_SANDBOX_KEY: ${SDKWORK_DEPLOY_SANDBOX_KEY:-deploy.local.opt_deploy}
+      SDKWORK_DEPLOY_SANDBOX_ROOT: ${SDKWORK_DEPLOY_SANDBOX_ROOT:-/opt/deploy}
       SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_CORS_ALLOWED_ORIGINS:-http://server.sdkwork.com,http://localhost:18080,http://127.0.0.1:18080}
       SDKWORK_DATABASE_ENGINE: postgresql
       SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-host.docker.internal}
@@ -59,10 +65,11 @@ services:
       interval: 15s
       timeout: 5s
       retries: 8
-      start_period: 120s
+      start_period: 180s
     volumes:
       - webserver-secrets-production:/etc/sdkwork/webserver/secrets
       - webserver-data-production:/var/lib/sdkwork/webserver
+      - webserver-opt-deploy-production:/opt/deploy
       - ./scripts/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
       - ../../../sdkwork-skills/database:/app/share/sdkwork/skills/database:ro
       - ../../../sdkwork-mcp/database:/app/share/sdkwork/mcp/database:ro
@@ -71,3 +78,4 @@ services:
 volumes:
   webserver-secrets-production:
   webserver-data-production:
+  webserver-opt-deploy-production:

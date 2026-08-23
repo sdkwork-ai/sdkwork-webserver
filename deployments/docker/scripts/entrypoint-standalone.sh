@@ -27,6 +27,26 @@ ensure_secret_file() {
   fi
 }
 
+# A2: canonical certificate inventory (/etc/sdkwork/certs/<domain>/).
+# Operator/ACME material wins; a missing domain directory is bootstrapped
+# with a self-signed certificate so HTTPS listeners (8430) start and can be
+# replaced by real material without a restart.
+ensure_domain_certificate() {
+  local domain="$1"
+  local directory="${SDKWORK_CERTS_DIR:-/etc/sdkwork/certs}/${domain}"
+  local cert="${directory}/cert.pem"
+  local key="${directory}/key.pem"
+  if [ -s "${cert}" ] && [ -s "${key}" ]; then
+    log "certificate present: ${domain}"
+    return 0
+  fi
+  ensure_directory "${directory}"
+  log "generating self-signed bootstrap certificate for ${domain} (replace under ${directory})"
+  openssl req -x509 -newkey rsa:2048 -nodes     -days 3650     -keyout "${key}" -out "${cert}"     -subj "/CN=${domain}"     -addext "subjectAltName=DNS:${domain}" 2>/dev/null
+  chmod 0600 "${key}"
+  chown -R "${SERVICE_USER}:${SERVICE_USER}" "${directory}"
+}
+
 ensure_database_secret() {
   if [ -n "${SDKWORK_DATABASE_PASSWORD_FILE:-}" ]; then
     return 0
@@ -93,9 +113,147 @@ apply_primary_domain() {
   export SDKWORK_CORS_ALLOWED_ORIGINS="${SDKWORK_CORS_ALLOWED_ORIGINS:-${public_url}}"
 }
 
+# A3: SDKWork space modules — clone repositories under $SDKWORK_SPACE_ROOT
+# (default /opt/deploy), wire their deployments/webserver layout-v2 imports
+# into the runtime config, and point PC/H5 static roots at built apps when present.
+clone_or_update_git_repo() {
+  local url="$1"
+  local dest="$2"
+  if [ ! -d "${dest}/.git" ]; then
+    if [ -e "${dest}" ]; then
+      log "warning: ${dest} exists but is not a git checkout; skipping clone of ${url}"
+      return 0
+    fi
+    log "cloning ${url} into ${dest}"
+    if ! run_as_service_user git clone --depth 1 "${url}" "${dest}"; then
+      log "warning: git clone failed for ${url}; continuing without this module"
+      return 0
+    fi
+    return 0
+  fi
+  case "${SDKWORK_SPACE_CLONE_PULL:-true}" in
+    1|true|TRUE|yes|YES)
+      log "updating ${dest} (git fetch + pull --ff-only)"
+      if ! run_as_service_user git -C "${dest}" fetch --depth 1 origin; then
+        log "warning: git fetch failed for ${dest}; keeping existing checkout"
+        return 0
+      fi
+      if ! run_as_service_user git -C "${dest}" pull --ff-only; then
+        log "warning: git pull --ff-only failed for ${dest}; keeping existing checkout"
+      fi
+      ;;
+    *)
+      log "SDKWORK_SPACE_CLONE_PULL disabled; keeping ${dest}"
+      ;;
+  esac
+}
+
+clone_sdkwork_space_modules() {
+  local space_root="${SDKWORK_SPACE_ROOT:-/opt/deploy}"
+  export SDKWORK_SPACE_ROOT="${space_root}"
+  ensure_directory "${space_root}"
+
+  local base="${SDKWORK_SPACE_CLONE_BASE:-}"
+  local modules="${SDKWORK_SPACE_MODULES:-}"
+  local clone_url="${SDKWORK_SPACE_CLONE_URL:-https://github.com/sdkwork-ai/sdkwork-space.git}"
+
+  if [ -n "${clone_url}" ]; then
+    local name
+    name="$(basename "${clone_url%.git}")"
+    clone_or_update_git_repo "${clone_url}" "${space_root}/${name}"
+    modules="${modules:+${modules},}${name}"
+  fi
+  if [ -n "${base}" ] && [ -n "${modules}" ]; then
+    local module
+    IFS=',' read -r -a module_list <<< "${modules}"
+    for module in "${module_list[@]}"; do
+      module="$(printf '%s' "${module}" | xargs)"
+      [ -z "${module}" ] && continue
+      # Skip the primary clone name when already handled via CLONE_URL.
+      if [ -d "${space_root}/${module}/.git" ] || [ -d "${space_root}/${module}" ]; then
+        if [ -d "${space_root}/${module}/.git" ]; then
+          clone_or_update_git_repo "${base}/${module}" "${space_root}/${module}"
+        fi
+        continue
+      fi
+      clone_or_update_git_repo "${base}/${module}" "${space_root}/${module}"
+    done
+  fi
+  export SDKWORK_SPACE_MODULES="${modules}"
+  chown -R "${SERVICE_USER}:${SERVICE_USER}" "${space_root}" 2>/dev/null || true
+}
+
+module_imports_toml() {
+  local imports=""
+  local module
+  IFS=',' read -r -a module_list <<< "${SDKWORK_SPACE_MODULES:-}"
+  for module in "${module_list[@]}"; do
+    module="$(printf '%s' "${module}" | xargs)"
+    [ -z "${module}" ] && continue
+    local wsdir="${SDKWORK_SPACE_ROOT}/${module}/deployments/webserver"
+    if [ -f "${wsdir}/server.common.toml" ]; then
+      imports="${imports}  { id = \"${module}\", path = \"${wsdir}\", enabled = true },
+"
+      log "module import configured: ${module} -> ${wsdir}"
+    else
+      log "module ${module} has no deployments/webserver layout; skipped"
+    fi
+  done
+  printf '%b' "${imports}"
+}
+
+module_app_static_root() {
+  local module="$1"
+  local surface="$2"   # pc | h5
+  local match
+  if [ "${surface}" = "pc" ]; then
+    match="*pc*"
+  else
+    match="*h5*"
+  fi
+  local apps_root="${SDKWORK_SPACE_ROOT}/${module}/apps"
+  [ -d "${apps_root}" ] || return 0
+  local app
+  for app in "${apps_root}"/${match}; do
+    [ -d "${app}" ] || continue
+    local dist="${app}/dist"
+    if [ -f "${dist}/index.html" ]; then
+      printf '%s' "${dist}"
+      return 0
+    fi
+  done
+  return 0
+}
+
 render_runtime_config() {
   local environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
   local bind="${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_INGRESS_BIND:-0.0.0.0:3800}"
+  local module
+  IFS=',' read -r -a module_list <<< "${SDKWORK_SPACE_MODULES:-}"
+  for module in "${module_list[@]}"; do
+    module="$(printf '%s' "${module}" | xargs)"
+    [ -z "${module}" ] && continue
+    # Point PC/H5 static roots at cloned module apps when the operator did
+    # not pin them explicitly.
+    if [ -z "${SDKWORK_WEBSERVER_PC_STATIC_ROOT:-}" ]; then
+      local pc_root
+      pc_root="$(module_app_static_root "${module}" pc)"
+      if [ -n "${pc_root}" ]; then
+        export SDKWORK_WEBSERVER_PC_STATIC_ROOT="${pc_root}"
+        log "PC static root -> ${pc_root}"
+      fi
+    fi
+    if [ -z "${SDKWORK_WEBSERVER_H5_STATIC_ROOT:-}" ]; then
+      local h5_root
+      h5_root="$(module_app_static_root "${module}" h5)"
+      if [ -n "${h5_root}" ]; then
+        export SDKWORK_WEBSERVER_H5_STATIC_ROOT="${h5_root}"
+        log "H5 static root -> ${h5_root}"
+      fi
+    fi
+  done
+  local MODULE_IMPORTS_TOML
+  MODULE_IMPORTS_TOML="$(module_imports_toml)"
   local public_url="${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_HTTP_URL}"
   local data_plane_bind="${SDKWORK_WEBSERVER_DATA_PLANE_OPERATIONS_BIND:-127.0.0.1:3901}"
   local ingress_port="${bind##*:}"
@@ -151,9 +309,9 @@ deploy_app_root = "/app/share/sdkwork/deploy"
 web_store_app_root = "/app/share/sdkwork/webstore"
 # skills/mcp roots are injected via SDKWORK_SKILLS_APP_ROOT / SDKWORK_MCP_APP_ROOT
 # from compose (and newer gateways also accept skills_app_root / mcp_app_root in TOML).
-pc_static_root = "/app/share/sdkwork/webserver/web/pc"
-h5_static_root = "/app/share/sdkwork/webserver/web/h5"
-static_fallback_root = "/app/share/sdkwork/webserver/web/static"
+pc_static_root = "${SDKWORK_WEBSERVER_PC_STATIC_ROOT:-/app/share/sdkwork/webserver/web/pc}"
+h5_static_root = "${SDKWORK_WEBSERVER_H5_STATIC_ROOT:-/app/share/sdkwork/webserver/web/h5}"
+static_fallback_root = "${SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT:-/app/share/sdkwork/webserver/web/static}"
 tablet_surface = "pc"
 
 [deploy]
@@ -211,6 +369,14 @@ uuid = "${SDKWORK_WEBSERVER_NODE_UUID:-standalone-${environment}-node}"
 [region]
 region_code = "${SDKWORK_WEBSERVER_REGION_CODE:-cn}"
 seed_locale = "${SDKWORK_DATABASE_SEED_LOCALE:-zh-CN}"
+
+# Imported sibling-module deployments/webserver layout-v2 configs (A3):
+# each entry loads the module's server.common.toml + profile file and
+# materializes its routes, upstreams, and apps static surfaces.
+[webserver]
+imports = [
+${MODULE_IMPORTS_TOML}
+]
 EOF
   chown root:"${SERVICE_USER}" "${RUNTIME_CONFIG_FILE}"
   chmod 0640 "${RUNTIME_CONFIG_FILE}"
@@ -328,6 +494,10 @@ main() {
   fi
 
   apply_primary_domain
+  clone_sdkwork_space_modules
+  for cert_domain in ${SDKWORK_WEBSERVER_CERT_DOMAINS:-sdkwork.com app.sdkwork.com}; do
+    ensure_domain_certificate "${cert_domain}"
+  done
   ensure_database_secret
   for secret_name in encryption-key deploy-encryption-key \
     drive-internal-api-ingress-token knowledgebase-internal-api-ingress-token \

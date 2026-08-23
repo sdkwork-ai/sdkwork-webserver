@@ -14,11 +14,11 @@ const capabilities = [
 
 export function CapabilityBand({ t }: { t: PortalTranslator }) {
   return (
-    <section className="scroll-mt-16 bg-[#f3f6f4] py-16 text-zinc-950 sm:py-24 [@media(max-height:760px)]:py-14" id="capabilities">
+    <section className="scroll-mt-16 bg-[#f8fafc] py-16 text-zinc-950 sm:py-24 [@media(max-height:760px)]:py-14" id="capabilities">
       <div className="mx-auto max-w-[1280px] px-5 sm:px-7 lg:px-10">
         <div className="grid items-end gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(420px,1.1fr)] lg:gap-16">
           <div>
-            <span className="text-xs font-bold uppercase text-emerald-700">{t("capabilities.eyebrow")}</span>
+            <span className="text-xs font-bold uppercase text-blue-700">{t("capabilities.eyebrow")}</span>
             <h2 className="mt-3 max-w-[620px] text-3xl font-bold leading-tight sm:text-4xl">{t("capabilities.title")}</h2>
           </div>
           <p className="m-0 max-w-[680px] leading-7 text-zinc-600">{t("capabilities.description")}</p>
@@ -27,7 +27,7 @@ export function CapabilityBand({ t }: { t: PortalTranslator }) {
           {capabilities.map(({ description, icon: Icon, title }, index) => (
             <article className="min-w-0 py-2" key={title}>
               <div className="flex items-center justify-between gap-4">
-                <span className="grid size-11 place-items-center rounded bg-emerald-100 text-emerald-800">
+                <span className="grid size-11 place-items-center rounded bg-blue-100 text-blue-800">
                   <Icon aria-hidden="true" size={23} />
                 </span>
                 <span className="font-mono text-xs font-bold text-zinc-400">0{index + 1}</span>

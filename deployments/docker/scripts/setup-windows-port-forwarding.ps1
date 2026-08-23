@@ -69,7 +69,9 @@ if ($content -notlike "*$mark*") {
         "server-admin-test.sdkwork.com",
         "server.sdkwork.com",
         "server-app.sdkwork.com",
-        "server-admin.sdkwork.com"
+        "server-admin.sdkwork.com",
+        "sdkwork.com",
+        "app.sdkwork.com"
     )
     Add-Content -Path $hostsFile -Value ""
     Add-Content -Path $hostsFile -Value $mark

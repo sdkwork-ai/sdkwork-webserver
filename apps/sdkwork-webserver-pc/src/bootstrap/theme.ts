@@ -5,10 +5,10 @@ import type {
 } from "@sdkwork/ui-pc-react/theme";
 
 export const WEBSERVER_THEME_STORAGE_KEY = "sdkwork.webserver.theme";
-export const WEBSERVER_THEME_COLOR: SdkworkThemeColor = "green-tech";
+export const WEBSERVER_THEME_COLOR: SdkworkThemeColor = "tech-blue";
 export const WEBSERVER_THEME_OVERRIDES: SdkworkThemeOverrides = {
   border: {
-    focus: "rgba(16, 185, 129, 0.48)",
+    focus: "rgba(37, 99, 235, 0.48)",
   },
   radius: {
     control: "0.375rem",
