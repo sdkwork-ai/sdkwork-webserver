@@ -4103,7 +4103,6 @@ dependencies = [
  "sdkwork-iam-web-adapter",
  "sdkwork-intelligence-webserver-repository-sqlx",
  "sdkwork-knowledgebase-internal-sdk-generated-rust",
- "sdkwork-server-files-service",
  "sdkwork-utils-rust",
  "sdkwork-web-axum",
  "sdkwork-web-bootstrap",

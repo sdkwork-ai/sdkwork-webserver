@@ -95,7 +95,6 @@ sdkwork-web-store-sqlx = { workspace = true, optional = true }
 sdkwork-utils-rust.workspace = true
 sdkwork-web-core.workspace = true
 sdkwork-iam-web-adapter.workspace = true
-sdkwork-server-files-service.workspace = true
 
 [dev-dependencies]
 async-trait.workspace = true
