@@ -960,33 +960,52 @@ impl WebBackendApi for WebService {
                 ));
             }
         }
-        for (field, value) in [
-            ("startDate", query.start_date.as_deref()),
-            ("endDate", query.end_date.as_deref()),
-        ] {
-            if let Some(value) = value {
-                if chrono::DateTime::parse_from_rfc3339(value).is_err() {
-                    return Err(sdkwork_webserver_contract::WebServiceError::validation(
-                        format!("{field} must be an RFC 3339 date-time"),
-                    ));
-                }
-            }
-        }
-        if let (Some(start), Some(end)) = (query.start_date.as_deref(), query.end_date.as_deref()) {
-            let start = chrono::DateTime::parse_from_rfc3339(start).map_err(|_| {
-                sdkwork_webserver_contract::WebServiceError::validation("startDate is invalid")
-            })?;
-            let end = chrono::DateTime::parse_from_rfc3339(end).map_err(|_| {
-                sdkwork_webserver_contract::WebServiceError::validation("endDate is invalid")
-            })?;
+        let start_date = match query.start_date.as_deref() {
+            Some(value) => Some(
+                crate::audit_time::normalize_audit_instant(
+                    value,
+                    crate::audit_time::AuditInstantBound::StartInclusive,
+                )
+                .map_err(|detail| {
+                    sdkwork_webserver_contract::WebServiceError::validation(format!(
+                        "startDate {detail}"
+                    ))
+                })?,
+            ),
+            None => None,
+        };
+        let end_date = match query.end_date.as_deref() {
+            Some(value) => Some(
+                crate::audit_time::normalize_audit_instant(
+                    value,
+                    crate::audit_time::AuditInstantBound::EndExclusive,
+                )
+                .map_err(|detail| {
+                    sdkwork_webserver_contract::WebServiceError::validation(format!(
+                        "endDate {detail}"
+                    ))
+                })?,
+            ),
+            None => None,
+        };
+        if let (Some(start), Some(end)) = (start_date.as_deref(), end_date.as_deref()) {
             if start >= end {
                 return Err(sdkwork_webserver_contract::WebServiceError::validation(
                     "startDate must be earlier than endDate",
                 ));
             }
         }
+        let normalized = sdkwork_webserver_contract::ListAuditLogsQuery {
+            page_size: query.page_size,
+            cursor: query.cursor.clone(),
+            target_type: query.target_type.clone(),
+            action: query.action.clone(),
+            operator_id: query.operator_id,
+            start_date,
+            end_date,
+        };
         self.repository
-            .list_audit_logs(Some(tenant_id), query)
+            .list_audit_logs(Some(tenant_id), &normalized)
             .await
     }
 }

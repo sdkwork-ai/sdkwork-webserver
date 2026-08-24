@@ -1,157 +1,52 @@
-# Web Server Deploy Configuration
+# Web Server Configuration (layout v3)
 
-Authority: `SDKWORK_WEBSERVER_SPEC.md`, `NGINX_SPEC.md`, `SDKWORK_DEPLOY_SPEC.md`.
+Module `sdkwork-webserver` · runtime code `webserver` · enabled
 
-| File | Role |
-| --- | --- |
-| `server.common.toml` | Identity, nginx/main/http globals, upstream skeleton (no `[[http.server]]`) |
-| `server.development.toml` | `environment = "development"` — dev hosts/locations |
-| `server.test.toml` | `environment = "test"` |
-| `server.staging.toml` | `environment = "staging"` |
-| `server.production.toml` | `environment = "production"` — TLS production hosts |
-| `server.standalone.toml` | `profile = "standalone"` — upstream targets |
-| `server.cloud.toml` | `profile = "cloud"` — platform gateway upstream |
-| `nginx.<profile>.<environment>.conf` | Rendered sidecar (`pnpm nginx:render`) |
-| `app-roots.example.toml` | Process Adaptive Web `[app_roots]` (not nginx) |
-| `static/` | Process static-fallback packaged to `/usr/share/sdkwork/webserver/web/static/` |
+Authority: `SDKWORK_WEBSERVER_SPEC.md` · hosts: `APP_RUNTIME_TOPOLOGY_NAMING.md` §9.
 
-Effective merge: `merge(common, server.<environment>.toml, server.<profile>.toml)`.
+## Layout
 
-## Nginx surface (`[nginx]`)
-
-Canonical block:
-
-```toml
-[nginx]
-enabled = true
-profile = "http-core-v1"
-unknownDirectivePolicy = "error"
-strict = true
-confFile = "nginx.conf"
+```text
+deployments/webserver/
+  server.common.toml           # identity, nginx/main/http globals, platform certs, TLS defaults, upstream skeleton
+  server.development.toml      # environment = "development" — hosts + include only
+  server.test.toml             # environment = "test"
+  server.staging.toml          # environment = "staging"
+  server.production.toml       # environment = "production"
+  server.standalone.toml       # profile = "standalone" (upstream targets)
+  server.cloud.toml            # profile = "cloud" (platform gateway upstream)
+  snippets/gateway-locations.production.conf   # full gateway proxy (api-only edge products)
+  snippets/gateway-api-locations.production.conf  # /api/ + health only (Adaptive Web modules)
+  snippets/gateway-locations.nonproduction.conf   # dev/test/staging full proxy to gateway
+  snippets/adaptive-web.maps.conf            # PC/H5 UA maps (web / web+api modules only)
+  snippets/adaptive-web.dispatch.conf      # location / dispatch
+  snippets/adaptive-web.named-locations.conf  # @pc / @h5 static roots
+  app-roots.example.toml                     # process Adaptive Web dist catalog (PC/H5)
 ```
 
-- Root `enabled = false` turns the whole module web surface off (placeholders omit `[nginx]`).
-- `[nginx].enabled` (`nginx.enabled`) gates sidecar W16 and nginx.conf import activation only.
-- `strict` / `confFile` are deploy-validator keys (W16); the Rust `NginxConfig` runtime model carries `enabled` / `profile` / `unknownDirectivePolicy`.
+Merge at runtime:
 
-Gap catalog (implemented / partial / missing vs `http-core-v1`):
-[`specs/nginx-gap.catalog.json`](../../specs/nginx-gap.catalog.json).
-Checks: `pnpm check:nginx-gap`, `pnpm check:webserver-toml`, `pnpm check:webserver-toml:all`.
+```text
+effective(<profile>.<environment>) =
+  merge(server.common.toml, server.<environment>.toml, server.<profile>.toml)
+```
 
-Adaptive Web nginx snippets for **other** modules (`mode: web` / `web+api`) live in
-`sdkwork-specs/examples/webserver/adaptive-snippets/` — not in this product tree
-(validator W23).
+## Lifecycle environments
 
-## Edge nginx is reverse-proxy only
+| Environment | File | Hosts | Example | Listeners |
+| --- | --- | ---: | --- | --- |
+| development | `server.development.toml` | 42 | `server-dev.sdkwork.com` | 80 |
+| test | `server.test.toml` | 42 | `server-test.sdkwork.com` | 80 |
+| staging | `server.staging.toml` | 42 | `server-staging.sdkwork.com` | 80 |
+| production | `server.production.toml` | 42 | `server.sdkwork.com` | 443 ssl + 80 |
 
-`deploy.yaml` public-ingress expose items use `mode: api`. Edge nginx for
-`server.sdkwork.com` (and non-production public-ingress hosts) terminates TLS
-when configured and reverse-proxies **all** public paths — including `/` —
-to the `gateway` upstream (`sdkwork-webserver` process).
+Surfaces: application.public-ingress, application.app-http, application.backend-http.
 
-Console Adaptive Web (mobile → H5 → PC → static; desktop → PC → H5 → static)
-is owned by process `AdaptiveAppShell` via:
-
-| Surface | Env / TOML |
-| --- | --- |
-| PC SPA | `SDKWORK_WEBSERVER_PC_STATIC_ROOT` / `[app_roots].pc_static_root` or `[app_roots.pc_static_by_environment]` |
-| H5 SPA | `SDKWORK_WEBSERVER_H5_STATIC_ROOT` / `[app_roots].h5_static_root` or `[app_roots.h5_static_by_environment]` |
-| Ordinary static | `SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT` / `[app_roots].static_fallback_root` or by-environment map |
-| Tablet preference | `SDKWORK_WEBSERVER_TABLET_SURFACE` / `[app_roots].tablet_surface` (`pc` default, or `h5`) |
-
-Source builds: `apps/sdkwork-webserver-{pc,h5}/dist/{dev,test,staging,prod}/`.
-Installed: `/usr/share/sdkwork/webserver/web/{pc,h5,static}/`. Same public origin;
-device class selects the terminal root (`SDKWORK_WEBSERVER_SPEC.md` §13.6).
-
-Packaged topology profiles declare one `gateway-static` delivery per architecture
-(`pc-web` and `h5`) with the matching `runtimeRootEnv`; the process selects the
-surface at request time (`SDKWORK_DEPLOY_SPEC.md` §8 exception).
-
-## Host Registry
-
-Role host `web` (`applicationCode` remains `webserver`):
-
-| Environment | public-ingress | app-http | backend-http |
-| --- | --- | --- | --- |
-| production | `server.sdkwork.com` | `server-app.sdkwork.com` | `server-admin.sdkwork.com` |
-| development | `server-dev.sdkwork.com` | `server-app-dev.sdkwork.com` | `server-admin-dev.sdkwork.com` |
-| test | `server-test.sdkwork.com` | `server-app-test.sdkwork.com` | `server-admin-test.sdkwork.com` |
-| staging | `server-staging.sdkwork.com` | `server-app-staging.sdkwork.com` | `server-admin-staging.sdkwork.com` |
-
-Retired nicknames (must not reappear): `server.sdkwork.com`, `web-*.sdkwork.com`, `testserver.sdkwork.com`.
-
-## Validation
+## Refresh and validate
 
 ```bash
-node ../sdkwork-specs/tools/check-webserver-toml-standard.mjs --root .
-# or: pnpm check:webserver-toml
+node sdkwork-specs/tools/webserver/align-webserver-workspace.mjs <sdkwork-space-root>
+node sdkwork-specs/tools/webserver/audit-modules.mjs <sdkwork-space-root>
 ```
 
-## Sidecar Regeneration
-
-```bash
-pnpm nginx:render
-```
-
-Edge nginx site install path (reverse-proxy / operator sites): `/etc/nginx/sites-enabled/sdkwork/<domain>.conf` (`NGINX_SPEC.md`).
-
-## Imported Sibling Modules
-
-The standalone gateway can validate other SDKWork modules' layout-v2
-`deployments/webserver/` directories before startup.
-
-### Runtime TOML (`config.toml`)
-
-Relative paths (resolved from the runtime config file, app root, or cwd):
-
-```toml
-[[webserver.imports]]
-id = "sdkwork-cloudrouter"
-path = "/opt/deploy/sdkwork-space/sdkwork-cloudrouter"
-required = false
-probe_upstreams = false
-```
-
-Docker entrypoint auto-discovers modules under `/opt/deploy/sdkwork-space/sdkwork-*/`
-and materializes:
-
-| Path | Content |
-| --- | --- |
-| `/etc/sdkwork/webserver/modules/<module-id>/` | Copied layout-v2 TOML (standalone upstream patched to container gateway port) |
-| `/etc/sdkwork/webserver/module-app-roots/<module-id>.toml` | Generated Adaptive Web dist catalog |
-| `/etc/sdkwork/webserver/config.toml` | `[[webserver.imports]]` entries |
-
-Module templates: `sdkwork-specs/examples/webserver/modules/README.md`.
-
-Absolute paths (used as-is; module roots are auto-discovered the same way):
-
-```toml
-[[webserver.imports]]
-id = "iam"
-path = "/opt/sdkwork/sdkwork-iam/deployments/webserver"
-
-[[webserver.imports]]
-id = "commerce"
-path = "E:/sdkwork-space/sdkwork-commerce"
-```
-
-### Environment override
-
-```bash
-# Comma-separated id=path pairs (relative or absolute)
-export SDKWORK_WEBSERVER_MODULE_IMPORTS="iam=../sdkwork-iam,commerce=/opt/sdkwork/sdkwork-commerce"
-
-# Or JSON array (same fields as runtime TOML entries; preferred for Windows absolute paths)
-export SDKWORK_WEBSERVER_MODULE_IMPORTS='[{"id":"iam","path":"E:/sdkwork-space/sdkwork-iam"}]'
-```
-
-Paths may be **absolute** or **relative**. Relative paths are tried against the
-runtime config directory, `SDKWORK_APP_ROOT`, `SDKWORK_WEBSERVER_APP_ROOT`, and
-the process working directory. Each value may point at `deployments/webserver/`
-or at a module repository root containing that directory. Each import is materialized with
-`load_server_toml_app` for the active deployment profile (`standalone` or `cloud`).
-Required imports fail closed when layout-v2 validation or upstream TCP probing fails.
-
-```bash
-cargo run -p sdkwork-api-webserver-standalone-gateway -- validate-module-imports
-```
+Sidecars (required when `nginx.enabled = true`): `nginx.<profile>.<environment>.conf` must match `effective(<profile>.<environment>)` when `nginx.strict = true`. Regenerate with `align-webserver-workspace.mjs` or `render-nginx-sidecars.mjs`.

@@ -4,9 +4,10 @@
 set -euo pipefail
 
 SPACE_ROOT="${SDKWORK_SPACE_ROOT:-/opt/deploy}"
-CLONE_URL="${SDKWORK_SPACE_CLONE_URL:-https://github.com/Sdkwork-Cloud/sdkwork-space.git}"
+CLONE_URL="${SDKWORK_SPACE_CLONE_URL:-https://github.com/sdkwork-ai/sdkwork-space.git}"
 LOCAL_PATH="${SDKWORK_SPACE_LOCAL_PATH:-}"
 CHECKOUT="${SPACE_ROOT}/sdkwork-space"
+RECURSE_SUBMODULES="${SDKWORK_SPACE_RECURSE_SUBMODULES:-true}"
 
 log() {
   echo "[sdkwork-webserver-space-clone] $*"
@@ -39,6 +40,21 @@ require_git() {
   fi
 }
 
+configure_submodule_https() {
+  # .gitmodules uses git@github.com: URLs; rewrite to HTTPS for hosts without SSH keys.
+  git config --global url."https://github.com/".insteadOf "git@github.com:" 2>/dev/null || true
+}
+
+sync_submodules() {
+  if [ "${RECURSE_SUBMODULES}" != "true" ]; then
+    return 0
+  fi
+  configure_submodule_https
+  log "initializing submodules (recursive)"
+  git -C "${CHECKOUT}" submodule sync --recursive
+  git -C "${CHECKOUT}" submodule update --init --recursive --jobs "$(nproc 2>/dev/null || echo 4)"
+}
+
 main() {
   if link_local_checkout; then
     log "using local workspace checkout at ${CHECKOUT}"
@@ -46,16 +62,30 @@ main() {
   fi
 
   require_git
+  configure_submodule_https
   install -d -m 0755 "${SPACE_ROOT}"
   if [ ! -d "${CHECKOUT}/.git" ]; then
+    if [ -e "${CHECKOUT}" ]; then
+      log "removing existing ${CHECKOUT} (not a git checkout)"
+      rm -rf "${CHECKOUT}"
+    fi
     log "cloning ${CLONE_URL} -> ${CHECKOUT}"
-    git clone --depth 1 "${CLONE_URL}" "${CHECKOUT}"
+    if [ "${RECURSE_SUBMODULES}" = "true" ]; then
+      git clone --recurse-submodules "${CLONE_URL}" "${CHECKOUT}"
+    else
+      git clone "${CLONE_URL}" "${CHECKOUT}"
+    fi
   else
     log "updating ${CHECKOUT}"
-    git -C "${CHECKOUT}" fetch --depth 1 origin
+    git -C "${CHECKOUT}" fetch origin
     git -C "${CHECKOUT}" pull --ff-only
+    sync_submodules
   fi
   log "space checkout ready at ${CHECKOUT}"
+  if [ "${RECURSE_SUBMODULES}" = "true" ]; then
+    submodule_count="$(git -C "${CHECKOUT}" submodule status --recursive 2>/dev/null | wc -l | tr -d ' ')"
+    log "submodules initialized: ${submodule_count}"
+  fi
   log "bind mount ${SPACE_ROOT}:/opt/deploy in docker compose to share modules across clusters"
 }
 

@@ -13,6 +13,35 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("admin workspace idempotency keys", () => {
+  it("opens create dialogs when crypto.randomUUID is unavailable", async () => {
+    const originalCrypto = globalThis.crypto;
+    Object.defineProperty(globalThis, "crypto", {
+      configurable: true,
+      value: {
+        getRandomValues(target: Uint8Array) {
+          for (let index = 0; index < target.length; index += 1) {
+            target[index] = (index * 13) & 0xff;
+          }
+          return target;
+        },
+      },
+    });
+
+    try {
+      const registry = createWebserverAdminApplicationRegistry(client({}), testSourceStorage(), testMediaStorage());
+      renderWorkspace("/admin/applications", registry);
+      fireEvent.click(await screen.findByRole("button", { name: "Create application" }));
+      expect(screen.getByTestId("application-creation-drawer")).toBeTruthy();
+    } finally {
+      Object.defineProperty(globalThis, "crypto", {
+        configurable: true,
+        value: originalCrypto,
+      });
+    }
+  });
+});
+
 describe("admin workspace application controls", () => {
   it("renders constrained application fields as selects", async () => {
     const create = vi.fn().mockResolvedValue({ id: "app-1" });

@@ -174,7 +174,7 @@ Rendering is deterministic and idempotent: normalizing rendered output must repr
 For the SDKWork Nginx deployment profile, rendering and deployment follow `NGINX_SPEC.md`:
 
 - Linux site files use `/etc/nginx/sites-enabled/sdkwork/<domain>.conf` with the complete public domain as the filename stem.
-- Certificate paths default to `/opt/certs/letsencrypt/live/<cert-name>/fullchain.pem` and `privkey.pem` when that protected-file profile is selected.
+- Certificate paths default to `/etc/sdkwork/certs/letsencrypt/<cert-name>/fullchain.pem` and `privkey.pem` when that protected-file profile is selected.
 - Plan reports the canonical target, upstream, certificate references, checksum, validation command, reload action, and post-reload probes without writing.
 - Render writes only to a staging target. Deploy uses an atomic file replacement with ownership/mode checks and retains a bounded previous artifact.
 - Deployment runs the real selected Nginx binary's configuration test for the exact staged content, reloads through the declared service manager only after validation, and verifies public health/readiness and expected content/TLS behavior.

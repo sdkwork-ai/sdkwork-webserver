@@ -180,8 +180,9 @@ mod tests {
     use axum::Router;
     use sdkwork_web_axum::with_web_request_context;
     use sdkwork_web_core::{
-        access_token_jwt, WebAuthLevel, WebDeploymentMode, WebEnvironment, WebFrameworkError,
-        WebLoginScope, WebRequestContextResolver, WebRequestPrincipal, WebSubjectType,
+        access_token_jwt, NoOpAuditEmitter, NoOpSecurityEventEmitter, WebAuthLevel,
+        WebDeploymentMode, WebEnvironment, WebFrameworkError, WebLoginScope,
+        WebRequestContextResolver, WebRequestPrincipal, WebSubjectType,
     };
     use sdkwork_webserver_contract::{
         AuthenticatedMachineCredential, MachineCredentialAuthenticator, WebServiceResult,
@@ -284,7 +285,12 @@ mod tests {
                 "/internal/v3/api/web/runtime_assignments/current",
                 get(|| async { StatusCode::OK }),
             ),
-            build_web_internal_api_framework_layer(resolver, None),
+            build_web_internal_api_framework_layer(
+                resolver,
+                None,
+                std::sync::Arc::new(NoOpAuditEmitter),
+                std::sync::Arc::new(NoOpSecurityEventEmitter),
+            ),
         );
         let response = app
             .oneshot(
@@ -319,6 +325,8 @@ mod tests {
                     std::sync::Arc::new(NoopMachineAuthenticator),
                 ),
                 None,
+                std::sync::Arc::new(NoOpAuditEmitter),
+                std::sync::Arc::new(NoOpSecurityEventEmitter),
             ),
         );
         let response = app

@@ -378,6 +378,40 @@ impl WebAppApi for StubAppApi {
         ))
     }
 
+    async fn create_platform_target(
+        &self,
+        _context: &WebAppRequestContext,
+        _application_id: &str,
+        _request: &sdkwork_webserver_contract::CreatePlatformTargetRequest,
+    ) -> WebServiceResult<sdkwork_webserver_contract::PlatformTargetResponse> {
+        Err(sdkwork_webserver_contract::WebServiceError::Internal(
+            "not implemented".into(),
+        ))
+    }
+
+    async fn list_platform_targets(
+        &self,
+        _context: &WebAppRequestContext,
+        _application_id: &str,
+        _page: i32,
+        _page_size: i32,
+    ) -> WebServiceResult<sdkwork_webserver_contract::PlatformTargetPage> {
+        Err(sdkwork_webserver_contract::WebServiceError::Internal(
+            "not implemented".into(),
+        ))
+    }
+
+    async fn retrieve_platform_target(
+        &self,
+        _context: &WebAppRequestContext,
+        _application_id: &str,
+        _platform_target_id: &str,
+    ) -> WebServiceResult<sdkwork_webserver_contract::PlatformTargetResponse> {
+        Err(sdkwork_webserver_contract::WebServiceError::Internal(
+            "not implemented".into(),
+        ))
+    }
+
     async fn list_deployments(
         &self,
         _context: &WebAppRequestContext,

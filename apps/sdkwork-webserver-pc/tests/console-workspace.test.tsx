@@ -117,6 +117,21 @@ describe("console workspace access", () => {
     expect(onSignOut).toHaveBeenCalledOnce();
   });
 
+  it("allows any authenticated user to browse console pages without IAM resource scopes", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      code: 0,
+      data: { items: [], pageInfo: { mode: "offset", page: 1, pageSize: 20, hasMore: false } },
+      traceId: "trace-navigation-empty-scope",
+    }), {
+      headers: { "content-type": "application/json" },
+      status: 200,
+    })));
+    renderWorkspace("/console/applications", {}, [], vi.fn(), "en-US", deployRenderers());
+
+    expect(await screen.findByRole("heading", { name: "My applications" })).toBeTruthy();
+    expect(screen.queryByText("This feature is not authorized")).toBeNull();
+  });
+
   it("matches wildcard scopes and selects an owned application for deployment history", async () => {
     const listApplications = vi.fn().mockResolvedValue({
       items: [{ id: "site-1", name: "Customer portal" }],

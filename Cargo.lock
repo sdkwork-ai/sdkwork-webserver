@@ -5502,6 +5502,7 @@ dependencies = [
  "sdkwork-webserver-core",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "thiserror 2.0.19",
  "tokio",
 ]
@@ -5516,6 +5517,7 @@ dependencies = [
  "ipnet",
  "jsonschema",
  "md-5 0.10.6",
+ "rcgen",
  "regex",
  "sdkwork-utils-rust",
  "sdkwork-webserver-resolver-cache",
@@ -5525,6 +5527,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.19",
  "toml 0.8.23",
+ "tracing",
  "url",
 ]
 

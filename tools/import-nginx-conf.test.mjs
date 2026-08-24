@@ -11,7 +11,7 @@ import { buildDraft, classify, emitToml, readNginxEnabled, scanDirectives, valid
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
-const STANDALONE_CONF = path.join(REPO_ROOT, 'deployments', 'webserver', 'nginx.standalone.conf');
+const STANDALONE_CONF = path.join(REPO_ROOT, 'deployments', 'webserver', 'nginx.standalone.production.conf');
 
 test('import classifies product standalone conf with multiple servers', () => {
   const source = fs.readFileSync(STANDALONE_CONF, 'utf8');
@@ -33,7 +33,7 @@ test('import classifies product standalone conf with multiple servers', () => {
   assert.ok(api.loc.proxySetHeader?.includes('Host $host'));
 });
 
-test('emitToml produces parseable layout v2 draft', () => {
+test('emitToml produces parseable layout v3 draft', () => {
   const source = fs.readFileSync(STANDALONE_CONF, 'utf8');
   const draft = buildDraft(classify(scanDirectives(source)).mapped);
   const toml = emitToml(draft, { id: 'import-test' });

@@ -152,14 +152,6 @@
         "export": "sdkwork_api_drive_assembly::assemble_app_api_contribution"
       },
       {
-        "name": "skillsAppApiContribution",
-        "export": "sdkwork_api_skills_assembly::assemble_app_api_contribution"
-      },
-      {
-        "name": "mcpAppApiContribution",
-        "export": "sdkwork_api_mcp_assembly::assemble_app_api_contribution"
-      },
-      {
         "name": "webserverHttpHost",
         "export": "crate-root",
         "provider": "sdkwork-webserver-http-host"
@@ -299,32 +291,6 @@
         "sameOriginAllowed": true,
         "cargoDependency": "sdkwork-api-drive-assembly",
         "embeddedExecutableExport": "sdkwork_api_drive_assembly::assemble_app_api_contribution",
-        "profileCoverage": ["standalone"],
-        "coverageEvidence": ["src/profile.rs"]
-      },
-      {
-        "workspace": "sdkwork-skills",
-        "sdkFamily": "sdkwork-skills-app-sdk",
-        "apiAuthority": "sdkwork-skills-app-api",
-        "surface": "app-api",
-        "apiPrefix": "/app/v3/api/skills",
-        "runtimeMode": "same-origin",
-        "sameOriginAllowed": true,
-        "cargoDependency": "sdkwork-api-skills-assembly",
-        "embeddedExecutableExport": "sdkwork_api_skills_assembly::assemble_app_api_contribution",
-        "profileCoverage": ["standalone"],
-        "coverageEvidence": ["src/profile.rs"]
-      },
-      {
-        "workspace": "sdkwork-mcp",
-        "sdkFamily": "sdkwork-mcp-app-sdk",
-        "apiAuthority": "sdkwork-mcp-app-api",
-        "surface": "app-api",
-        "apiPrefix": "/app/v3/api/mcp",
-        "runtimeMode": "same-origin",
-        "sameOriginAllowed": true,
-        "cargoDependency": "sdkwork-api-mcp-assembly",
-        "embeddedExecutableExport": "sdkwork_api_mcp_assembly::assemble_app_api_contribution",
         "profileCoverage": ["standalone"],
         "coverageEvidence": ["src/profile.rs"]
       },

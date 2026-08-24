@@ -12,6 +12,7 @@
     }
   },
   "dependencies": {
+    "@sdkwork/utils": "workspace:*",
     "@sdkwork/iam-contracts": "workspace:*",
     "fflate": "^0.8.2",
     "ignore": "^7.0.6",

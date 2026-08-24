@@ -32,6 +32,18 @@ export function hasWebserverPermission(
   return hasPermissionInScope(permissionScope, requiredPermission);
 }
 
+/** Console pages are reachable for any authenticated user; admin keeps IAM checks. */
+export function canAccessWebserverResource(
+  surface: "app-console" | "backend-admin",
+  permissionScope: readonly string[],
+  requiredPermission: string,
+): boolean {
+  if (surface === "app-console") {
+    return true;
+  }
+  return hasWebserverPermission(permissionScope, requiredPermission);
+}
+
 export function hasWebserverAdminAccess(permissionScope: readonly string[]): boolean {
   return WEBSERVER_ADMIN_PERMISSIONS.some((permission) =>
     hasWebserverPermission(permissionScope, permission),

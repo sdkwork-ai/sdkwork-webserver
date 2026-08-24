@@ -22,6 +22,7 @@ services:
     ports:
       - "${SDKWORK_WEBSERVER_TEST_HOST_PORT:-18888}:3800"
       - "${SDKWORK_WEBSERVER_TEST_HTTPS_HOST_PORT:-28430}:8430"
+      - "${SDKWORK_WEBSERVER_TEST_IMPORT_HTTP_HOST_PORT:-18898}:8080"
     env_file:
       - path: env/test.env
         required: false
@@ -34,8 +35,12 @@ services:
       SDKWORK_MCP_APP_ROOT: /app/share/sdkwork/mcp
       SDKWORK_SPACE_ROOT: ${SDKWORK_SPACE_ROOT:-/opt/deploy}
       SDKWORK_SPACE_HOST_PATH: ${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}
-      SDKWORK_SPACE_CLONE_URL: ${SDKWORK_SPACE_CLONE_URL:-https://github.com/Sdkwork-Cloud/sdkwork-space.git}
+      SDKWORK_SPACE_CLONE_URL: ${SDKWORK_SPACE_CLONE_URL:-https://github.com/sdkwork-ai/sdkwork-space.git}
       SDKWORK_SPACE_CLONE_PULL: ${SDKWORK_SPACE_CLONE_PULL:-true}
+      # Import every enabled sibling module's deployments/webserver/ from the
+      # space checkout (SDKWORK_WEBSERVER_SPEC.md §17); SDKWORK_SPACE_MODULES
+      # remains the explicit override.
+      SDKWORK_SPACE_AUTO_DISCOVER: ${SDKWORK_SPACE_AUTO_DISCOVER:-true}
       SDKWORK_WEBSERVER_MODULE_IMPORT_REQUIRED: ${SDKWORK_WEBSERVER_MODULE_IMPORT_REQUIRED:-false}
       SDKWORK_WEBSERVER_MODULE_IMPORT_PROBE_UPSTREAMS: ${SDKWORK_WEBSERVER_MODULE_IMPORT_PROBE_UPSTREAMS:-false}
       SDKWORK_DEPLOY_SANDBOX_KEY: ${SDKWORK_DEPLOY_SANDBOX_KEY:-deploy.local.opt_deploy}

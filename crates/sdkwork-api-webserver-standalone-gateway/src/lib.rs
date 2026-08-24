@@ -6,6 +6,8 @@ mod app_shell;
 mod bootstrap;
 mod data_plane;
 #[cfg(feature = "management")]
+mod dependency_assembly;
+#[cfg(feature = "management")]
 mod iam_module_bootstrap;
 mod metric_dimensions;
 #[cfg(feature = "management")]

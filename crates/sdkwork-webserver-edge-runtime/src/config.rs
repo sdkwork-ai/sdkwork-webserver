@@ -51,7 +51,7 @@ impl EdgeRuntimeConfig {
 
         let cert_live_root = PathBuf::from(
             std::env::var("SDKWORK_WEBSERVER_CERT_LIVE_ROOT")
-                .unwrap_or_else(|_| "/opt/certs/letsencrypt/live".to_string()),
+                .unwrap_or_else(|_| "/etc/sdkwork/certs/letsencrypt".to_string()),
         );
 
         let nginx_command_timeout_ms = std::env::var("SDKWORK_WEBSERVER_NGINX_COMMAND_TIMEOUT_MS")

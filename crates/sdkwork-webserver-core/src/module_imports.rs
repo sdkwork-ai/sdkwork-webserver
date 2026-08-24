@@ -1,15 +1,15 @@
 //! Imported sibling-module `deployments/webserver/` validation.
 //!
-//! Operators declare other SDKWork modules whose layout-v2 web server
+//! Operators declare other SDKWork modules whose layout v3 web server
 //! configuration must be present and materializable before the gateway starts.
 //! Paths may be **absolute** or **relative**:
 //!
-//! - **Absolute** (`/etc/sdkwork/iam/deployments/webserver`, `E:\sdkwork-space\sdkwork-iam`):
-//!   used as-is; when the path is a module root, `deployments/webserver/` is
-//!   discovered automatically.
-//! - **Relative** (`../sdkwork-iam`, `deployments/webserver`): resolved against
-//!   the runtime config directory, `SDKWORK_APP_ROOT`, `SDKWORK_WEBSERVER_APP_ROOT`,
-//!   and the process working directory (first match with layout-v2 files wins).
+//! - **Layout v3 TOML directory** (`/etc/sdkwork/iam/deployments/webserver`,
+//!   module root, or relative path): loaded through the standard
+//!   `server.common.toml` merge pipeline.
+//! - **Stock nginx `.conf` file** (`nginx.standalone.development.conf` or a
+//!   symlink under `imports.d/`): loaded through the nginx compatibility
+//!   loader and merged into the module-imports data plane.
 
 use std::{
     collections::HashSet,
@@ -20,7 +20,10 @@ use std::{
 
 use serde::Deserialize;
 
-use crate::config::{load_server_toml_app, WebServerAppConfig, WebServerConfigError};
+use crate::config::{
+    load_server_toml_app, ConfigFormat, ConfigLoadOptions, WebServerAppConfig,
+    WebServerConfigError, WebServerConfigLoader,
+};
 
 /// Comma-separated `id=path` pairs override/supplement runtime TOML imports.
 pub const MODULE_IMPORTS_ENV: &str = "SDKWORK_WEBSERVER_MODULE_IMPORTS";
@@ -140,6 +143,48 @@ fn layout_v2_webserver_dir(path: &Path) -> bool {
     path.join("server.common.toml").is_file()
 }
 
+fn is_nginx_conf_path(path: &Path) -> bool {
+    path.extension().and_then(|value| value.to_str()) == Some("conf")
+}
+
+fn resolve_conf_import_path(
+    base: &Path,
+    configured: &str,
+    id: &str,
+) -> Result<PathBuf, ModuleImportError> {
+    let label = if id.is_empty() { "import" } else { id };
+    let trimmed = configured.trim();
+    let raw = Path::new(trimmed);
+    let candidates = if raw.is_absolute() {
+        vec![PathBuf::from(trimmed)]
+    } else {
+        import_path_anchors(base)
+            .into_iter()
+            .map(|anchor| anchor.join(trimmed))
+            .collect()
+    };
+    for candidate in candidates {
+        if candidate.is_file() && is_nginx_conf_path(&candidate) {
+            return candidate.canonicalize().map_err(|error| {
+                ModuleImportError::InvalidSpec {
+                    id: id.to_owned(),
+                    message: format!(
+                        "cannot canonicalize nginx conf import `{}` for `{label}`: {error}",
+                        candidate.display()
+                    ),
+                }
+            });
+        }
+    }
+    Err(ModuleImportError::InvalidSpec {
+        id: id.to_owned(),
+        message: format!(
+            "nginx conf import `{trimmed}` for `{label}` was not found under {}",
+            base.display()
+        ),
+    })
+}
+
 fn webserver_dir_candidates(path: PathBuf) -> Vec<PathBuf> {
     let mut candidates = vec![path.clone()];
     let nested = path.join("deployments").join("webserver");
@@ -172,6 +217,10 @@ fn resolve_import_path_for(
             id: id.to_owned(),
             message: "`path` must not be empty".to_owned(),
         });
+    }
+
+    if trimmed.ends_with(".conf") {
+        return resolve_conf_import_path(base, trimmed, id);
     }
 
     let raw = Path::new(trimmed);
@@ -223,7 +272,7 @@ fn resolve_import_path_for(
             return Err(ModuleImportError::InvalidSpec {
                 id: id.to_owned(),
                 message: format!(
-                    "import path `{}` for `{label}` exists but is not a layout-v2 webserver directory (missing server.common.toml); expected that directory or a module root containing `{WEBSERVER_DEPLOY_SUBDIR}/`",
+                    "import path `{}` for `{label}` exists but is not a layout v3 webserver directory (missing server.common.toml); expected that directory or a module root containing `{WEBSERVER_DEPLOY_SUBDIR}/`",
                     canonical.display(),
                 ),
             });
@@ -351,7 +400,61 @@ pub fn resolve_import_profile(import: &WebserverModuleImport) -> Result<String, 
     }
 }
 
-/// Validate one import: layout v2 files, materialization, optional upstream probe.
+/// Effective lifecycle environment for an import.
+pub fn resolve_import_environment(import: &WebserverModuleImport) -> Result<String, ModuleImportError> {
+    let environment = std::env::var("SDKWORK_WEBSERVER_ENVIRONMENT")
+        .or_else(|_| std::env::var("SDKWORK_ENVIRONMENT"))
+        .unwrap_or_else(|_| "production".to_owned());
+    if matches!(
+        environment.as_str(),
+        "development" | "test" | "staging" | "production"
+    ) {
+        Ok(environment)
+    } else {
+        Err(ModuleImportError::InvalidSpec {
+            id: import.id.clone(),
+            message: format!(
+                "environment must be `development`, `test`, `staging`, or `production`, got `{environment}`"
+            ),
+        })
+    }
+}
+
+/// Load one module import as a materialized app model. Layout v3 TOML
+/// directories and stock nginx `.conf` files are supported.
+pub fn load_module_import_app_config(
+    import: &WebserverModuleImport,
+) -> Result<WebServerAppConfig, ModuleImportError> {
+    let app_key = format!("imported-{}", import.id);
+    if is_nginx_conf_path(&import.path) {
+        let loader = WebServerConfigLoader::new();
+        let options = ConfigLoadOptions {
+            format: Some(ConfigFormat::NginxConf),
+            app_key: Some(app_key),
+            ..ConfigLoadOptions::default()
+        };
+        return loader
+            .load(&import.path, &options)
+            .map(|loaded| loaded.app)
+            .map_err(|source| ModuleImportError::Validation {
+                id: import.id.clone(),
+                path: import.path.clone(),
+                source,
+            });
+    }
+    let profile = resolve_import_profile(import)?;
+    let environment = resolve_import_environment(import)?;
+    load_server_toml_app(import.webserver_dir(), &profile, &environment, &app_key).map_err(
+        |source| ModuleImportError::Validation {
+            id: import.id.clone(),
+            path: import.path.clone(),
+            source,
+        },
+    )
+}
+
+/// Validate one import: layout v3 TOML or nginx `.conf`, materialization,
+/// optional upstream probe.
 pub fn validate_module_import(import: &WebserverModuleImport) -> Result<ModuleImportValidation, ModuleImportError> {
     if !import.enabled {
         return Ok(ModuleImportValidation {
@@ -366,13 +469,7 @@ pub fn validate_module_import(import: &WebserverModuleImport) -> Result<ModuleIm
     }
     let profile = resolve_import_profile(import)?;
     let app_key = format!("imported-{}", import.id);
-    let config = load_server_toml_app(import.webserver_dir(), &profile, &app_key).map_err(|source| {
-        ModuleImportError::Validation {
-            id: import.id.clone(),
-            path: import.path.clone(),
-            source,
-        }
-    })?;
+    let config = load_module_import_app_config(import)?;
     let mut probed_upstreams = Vec::new();
     let mut unreachable_upstreams = Vec::new();
     if import.probe_upstreams {

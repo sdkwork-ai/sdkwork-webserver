@@ -88,6 +88,9 @@ fn validate_query(query: Option<&str>, path: &str) -> Result<(), String> {
     if cursor && page.is_some() {
         return Err("page and cursor cannot be combined".to_string());
     }
+    if page.is_some() && path_matches_cursor_patterns(path) {
+        return Err("page is not supported by this endpoint; use cursor pagination".to_string());
+    }
     if cursor && !path_matches_cursor_patterns(path) {
         return Err("cursor pagination is not supported by this endpoint".to_string());
     }
@@ -115,7 +118,7 @@ mod tests {
 
     #[test]
     fn accepts_canonical_values_and_rejects_aliases() {
-        assert!(validate_query(Some("page=2&page_size=20"), "/backend/v3/api/audit_logs").is_ok());
+        assert!(validate_query(Some("page=2&page_size=20"), "/backend/v3/api/audit_logs").is_err());
         assert!(validate_query(Some("pageSize=20"), "/backend/v3/api/audit_logs").is_err());
         assert!(validate_query(Some("%70ageSize=20"), "/backend/v3/api/audit_logs").is_err());
         assert!(validate_query(Some("page_size=201"), "/backend/v3/api/audit_logs").is_err());
@@ -127,6 +130,7 @@ mod tests {
         )
         .is_err());
         assert!(validate_query(Some("cursor=opaque-token"), "/backend/v3/api/audit_logs").is_ok());
+        assert!(validate_query(Some("page_size=20"), "/backend/v3/api/audit_logs").is_ok());
         assert!(validate_query(Some("cursor="), "/backend/v3/api/audit_logs").is_err());
         assert!(validate_query(
             Some("cursor=opaque-token"),

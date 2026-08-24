@@ -45,6 +45,7 @@ fi
 install -d -o root -g sdkwork -m 0750 "${CONFIG_ROOT}"
 install -d -o sdkwork -g sdkwork -m 0750 \
   "${CONFIG_ROOT}/secrets" \
+  "${CONFIG_ROOT}/imports.d" \
   "${DATA_ROOT}" "${LOG_ROOT}" "${CACHE_ROOT}" "${RUN_ROOT}"
 install -d -o sdkwork -g sdkwork -m 0750 \
   "${DATA_ROOT}/acme-webroot" "${DATA_ROOT}/acme-accounts" "${DATA_ROOT}/tls-materials"
@@ -240,6 +241,13 @@ uuid = "standalone-${ENVIRONMENT}-node"
 [region]
 region_code = "cn"
 seed_locale = "zh-CN"
+
+# Imported sibling-module deployments/webserver layout v3 configs
+# (nginx include style). Drop one `imports.d/<module-id>.toml` file per
+# module to import its per-environment web server configuration; see
+# SDKWORK_WEBSERVER_SPEC.md §17.
+[webserver]
+include = ["${CONFIG_ROOT}/imports.d/*.toml"]
 EOF
 chown root:sdkwork "${RUNTIME_CONFIG_FILE}"
 chmod 0640 "${RUNTIME_CONFIG_FILE}"

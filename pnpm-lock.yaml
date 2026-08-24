@@ -12,9 +12,15 @@ catalogs:
     '@tailwindcss/vite':
       specifier: ^4.1.14
       version: 4.2.2
+    '@testing-library/jest-dom':
+      specifier: ^6.9.1
+      version: 6.9.1
     '@testing-library/react':
       specifier: ^16.3.2
       version: 16.3.2
+    '@types/qrcode':
+      specifier: ^1.5.6
+      version: 1.5.6
     '@types/react':
       specifier: ^19.2.14
       version: 19.2.14
@@ -30,6 +36,9 @@ catalogs:
     lucide-react:
       specifier: ^1.7.0
       version: 1.7.0
+    qrcode:
+      specifier: ^1.5.4
+      version: 1.5.4
     react:
       specifier: ^19.2.4
       version: 19.2.4
@@ -45,6 +54,9 @@ catalogs:
     vite:
       specifier: ^8.0.3
       version: 8.1.5
+    vite-plugin-dts:
+      specifier: ^4.5.4
+      version: 4.5.4
     vitest:
       specifier: ^4.1.8
       version: 4.1.10
@@ -201,6 +213,9 @@ importers:
       '@sdkwork/sdk-common':
         specifier: workspace:*
         version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      '@sdkwork/utils':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-utils/packages/sdkwork-utils-typescript
       react:
         specifier: 'catalog:'
         version: 19.2.4
@@ -231,6 +246,9 @@ importers:
       '@sdkwork/sdk-common':
         specifier: workspace:*
         version: link:../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      '@sdkwork/utils':
+        specifier: ^0.11.0
+        version: 0.11.0
     devDependencies:
       rollup:
         specifier: ^4.0.0
@@ -621,6 +639,10 @@ importers:
         version: link:../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
 
   ../sdkwork-sdk-commons/sdkwork-sdk-common-typescript:
+    dependencies:
+      '@sdkwork/utils':
+        specifier: ^0.11.0
+        version: 0.11.0
     devDependencies:
       '@types/node':
         specifier: ^25.6.0
@@ -831,6 +853,9 @@ importers:
       '@radix-ui/react-tooltip':
         specifier: ^1.2.8
         version: 1.2.12(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@sdkwork/utils':
+        specifier: ^0.11.0
+        version: 0.11.0
       '@tanstack/react-table':
         specifier: ^8.21.3
         version: 8.21.3(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -1028,6 +1053,9 @@ importers:
       '@sdkwork/webserver-pc-admin-servers':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-admin-servers
+      '@sdkwork/webserver-pc-admin-servers-explorer':
+        specifier: workspace:*
+        version: link:packages/sdkwork-webserver-pc-admin-servers-explorer
       '@sdkwork/webserver-pc-admin-shell':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-admin-shell
@@ -1209,6 +1237,24 @@ importers:
       '@sdkwork/webserver-pc-commons':
         specifier: workspace:*
         version: link:../sdkwork-webserver-pc-commons
+
+  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-servers-explorer:
+    dependencies:
+      '@sdkwork/sdk-common':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      '@sdkwork/webserver-pc-commons':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-commons
+      lucide-react:
+        specifier: 'catalog:'
+        version: 1.7.0(react@19.2.4)
+      react:
+        specifier: 'catalog:'
+        version: 19.2.4
+      react-router-dom:
+        specifier: ^7.15.0
+        version: 7.18.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
 
   apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-shell:
     dependencies:

@@ -2,7 +2,7 @@
 //!
 //! `ConfigSource` is the common interface over the three authored formats:
 //! stock nginx `http`/`stream` configuration (`NginxConfConfigSource`),
-//! layout v2 `server.toml` directories and single-file TOML
+//! layout v3 `server.toml` directories and single-file TOML
 //! (`TomlConfigSource`), and the JSON application config
 //! (`JsonConfigSource`). Every strategy materializes into the same
 //! `WebServerAppConfig` model, so semantic validation and compilation are
@@ -32,8 +32,10 @@ use super::{
 
 /// Default `app_key` for strategies that do not receive one explicitly.
 pub const DEFAULT_APP_KEY: &str = "webserver";
-/// Default layout v2 profile for TOML directories.
+/// Default layout v3 profile for TOML directories.
 pub const DEFAULT_TOML_PROFILE: &str = "standalone";
+/// Default lifecycle environment for layout v3 TOML directories.
+pub const DEFAULT_TOML_ENVIRONMENT: &str = "production";
 
 /// Number of leading bytes read for content sniffing.
 const MAX_SNIFF_BYTES: usize = 64 * 1024;
@@ -44,7 +46,7 @@ pub enum ConfigFormat {
     /// Stock nginx `http`/`stream` configuration (`nginx.conf`,
     /// `sites-enabled/*.conf`).
     NginxConf,
-    /// Layout v2 `server.toml` directory or a single TOML file.
+    /// Layout v3 `server.toml` directory or a single TOML file.
     Toml,
     /// JSON application config (`sdkwork.webserver.config.json`).
     Json,
@@ -218,9 +220,12 @@ pub struct ConfigLoadOptions {
     /// App key stamped into the materialized model. The JSON source keeps
     /// the `appKey` declared inside the document.
     pub app_key: Option<String>,
-    /// Layout v2 profile for TOML directories (`standalone` / `cloud`);
+    /// Layout v3 profile for TOML directories (`standalone` / `cloud`);
     /// defaults to `standalone`.
     pub profile: Option<String>,
+    /// Layout v3 lifecycle environment (`development` / `test` / `staging` /
+    /// `production`); defaults to `production`.
+    pub environment: Option<String>,
 }
 
 impl ConfigLoadOptions {
@@ -290,8 +295,8 @@ impl ConfigSource for JsonConfigSource {
     }
 }
 
-/// TOML strategy: layout v2 directory (`server.common.toml` plus
-/// `server.<profile>.toml`) or a single TOML file.
+/// TOML strategy: layout v3 directory (`server.common.toml` plus
+/// `server.<environment>.toml` and `server.<profile>.toml`) or a single TOML file.
 #[derive(Debug, Default)]
 pub struct TomlConfigSource;
 
@@ -316,7 +321,8 @@ impl ConfigSource for TomlConfigSource {
         let app_key = options.app_key.as_deref().unwrap_or(DEFAULT_APP_KEY);
         if path.is_dir() {
             let profile = options.profile.as_deref().unwrap_or(DEFAULT_TOML_PROFILE);
-            let app = load_server_toml_app(path, profile, app_key)?;
+            let environment = options.environment.as_deref().unwrap_or(DEFAULT_TOML_ENVIRONMENT);
+            let app = load_server_toml_app(path, profile, environment, app_key)?;
             return Ok(LoadedWebServerConfig {
                 app,
                 format: ConfigFormat::Toml,

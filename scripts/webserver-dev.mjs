@@ -108,6 +108,7 @@ function buildRuntimeEnv(settings) {
         iamEnv.SDKWORK_DATABASE_AUTO_MIGRATE ?? autoMigrate,
       SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE: settings.deploymentProfile,
       SDKWORK_WEBSERVER_ENVIRONMENT: settings.environment,
+      SDKWORK_WEBSERVER_APP_ROOT: REPO_ROOT,
       SDKWORK_WEBSERVER_RUNTIME_TARGET: 'server',
       SDKWORK_WEBSERVER_SNOWFLAKE_NODE_ID: process.env.SDKWORK_WEBSERVER_SNOWFLAKE_NODE_ID ?? '0',
     },
@@ -138,6 +139,8 @@ async function run() {
     'sdkwork-api-webserver-standalone-gateway',
     '--bin',
     'sdkwork-api-webserver-standalone-gateway',
+    '--',
+    'serve-management',
   ];
   if (settings.dryRun) {
     console.log(`[sdkwork-web] command=${command} ${args.join(' ')}`);

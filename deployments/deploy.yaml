@@ -58,6 +58,62 @@ profiles:
         aliases:
           - server-app.dtupay.cn
           - server.dtupay.cn
+      - tls: skubc.com
+        mode: web
+        web: adaptive
+        domain: server-admin.skubc.com
+        aliases:
+          - server-app.skubc.com
+          - server.skubc.com
+      - tls: skubc.cn
+        mode: web
+        web: adaptive
+        domain: server-admin.skubc.cn
+        aliases:
+          - server-app.skubc.cn
+          - server.skubc.cn
+      - tls: zowalk.com
+        mode: web
+        web: adaptive
+        domain: server-admin.zowalk.com
+        aliases:
+          - server-app.zowalk.com
+          - server.zowalk.com
+      - tls: zowalk.cn
+        mode: web
+        web: adaptive
+        domain: server-admin.zowalk.cn
+        aliases:
+          - server-app.zowalk.cn
+          - server.zowalk.cn
+      - tls: offer86.com
+        mode: web
+        web: adaptive
+        domain: server-admin.offer86.com
+        aliases:
+          - server-app.offer86.com
+          - server.offer86.com
+      - tls: offer86.cn
+        mode: web
+        web: adaptive
+        domain: server-admin.offer86.cn
+        aliases:
+          - server-app.offer86.cn
+          - server.offer86.cn
+      - tls: 86offer.com
+        mode: web
+        web: adaptive
+        domain: server-admin.86offer.com
+        aliases:
+          - server-app.86offer.com
+          - server.86offer.com
+      - tls: 86offer.cn
+        mode: web
+        web: adaptive
+        domain: server-admin.86offer.cn
+        aliases:
+          - server-app.86offer.cn
+          - server.86offer.cn
     packages: []
     overrides:
       topology:
@@ -134,6 +190,62 @@ profiles:
         aliases:
           - server-app-test.dtupay.cn
           - server-test.dtupay.cn
+      - tls: skubc.com
+        mode: web
+        web: adaptive
+        domain: server-admin-test.skubc.com
+        aliases:
+          - server-app-test.skubc.com
+          - server-test.skubc.com
+      - tls: skubc.cn
+        mode: web
+        web: adaptive
+        domain: server-admin-test.skubc.cn
+        aliases:
+          - server-app-test.skubc.cn
+          - server-test.skubc.cn
+      - tls: zowalk.com
+        mode: web
+        web: adaptive
+        domain: server-admin-test.zowalk.com
+        aliases:
+          - server-app-test.zowalk.com
+          - server-test.zowalk.com
+      - tls: zowalk.cn
+        mode: web
+        web: adaptive
+        domain: server-admin-test.zowalk.cn
+        aliases:
+          - server-app-test.zowalk.cn
+          - server-test.zowalk.cn
+      - tls: offer86.com
+        mode: web
+        web: adaptive
+        domain: server-admin-test.offer86.com
+        aliases:
+          - server-app-test.offer86.com
+          - server-test.offer86.com
+      - tls: offer86.cn
+        mode: web
+        web: adaptive
+        domain: server-admin-test.offer86.cn
+        aliases:
+          - server-app-test.offer86.cn
+          - server-test.offer86.cn
+      - tls: 86offer.com
+        mode: web
+        web: adaptive
+        domain: server-admin-test.86offer.com
+        aliases:
+          - server-app-test.86offer.com
+          - server-test.86offer.com
+      - tls: 86offer.cn
+        mode: web
+        web: adaptive
+        domain: server-admin-test.86offer.cn
+        aliases:
+          - server-app-test.86offer.cn
+          - server-test.86offer.cn
     packages: []
     overrides:
       topology:
@@ -199,6 +311,62 @@ profiles:
         aliases:
           - server-app-staging.dtupay.cn
           - server-staging.dtupay.cn
+      - tls: skubc.com
+        mode: web
+        web: adaptive
+        domain: server-admin-staging.skubc.com
+        aliases:
+          - server-app-staging.skubc.com
+          - server-staging.skubc.com
+      - tls: skubc.cn
+        mode: web
+        web: adaptive
+        domain: server-admin-staging.skubc.cn
+        aliases:
+          - server-app-staging.skubc.cn
+          - server-staging.skubc.cn
+      - tls: zowalk.com
+        mode: web
+        web: adaptive
+        domain: server-admin-staging.zowalk.com
+        aliases:
+          - server-app-staging.zowalk.com
+          - server-staging.zowalk.com
+      - tls: zowalk.cn
+        mode: web
+        web: adaptive
+        domain: server-admin-staging.zowalk.cn
+        aliases:
+          - server-app-staging.zowalk.cn
+          - server-staging.zowalk.cn
+      - tls: offer86.com
+        mode: web
+        web: adaptive
+        domain: server-admin-staging.offer86.com
+        aliases:
+          - server-app-staging.offer86.com
+          - server-staging.offer86.com
+      - tls: offer86.cn
+        mode: web
+        web: adaptive
+        domain: server-admin-staging.offer86.cn
+        aliases:
+          - server-app-staging.offer86.cn
+          - server-staging.offer86.cn
+      - tls: 86offer.com
+        mode: web
+        web: adaptive
+        domain: server-admin-staging.86offer.com
+        aliases:
+          - server-app-staging.86offer.com
+          - server-staging.86offer.com
+      - tls: 86offer.cn
+        mode: web
+        web: adaptive
+        domain: server-admin-staging.86offer.cn
+        aliases:
+          - server-app-staging.86offer.cn
+          - server-staging.86offer.cn
     packages: []
     overrides:
       topology:
@@ -258,6 +426,54 @@ profiles:
         aliases:
           - server-app-test.dtupay.cn
           - server-test.dtupay.cn
+      - domain: server-admin-test.skubc.com
+        tls: skubc.com
+        mode: api
+        aliases:
+          - server-app-test.skubc.com
+          - server-test.skubc.com
+      - domain: server-admin-test.skubc.cn
+        tls: skubc.cn
+        mode: api
+        aliases:
+          - server-app-test.skubc.cn
+          - server-test.skubc.cn
+      - domain: server-admin-test.zowalk.com
+        tls: zowalk.com
+        mode: api
+        aliases:
+          - server-app-test.zowalk.com
+          - server-test.zowalk.com
+      - domain: server-admin-test.zowalk.cn
+        tls: zowalk.cn
+        mode: api
+        aliases:
+          - server-app-test.zowalk.cn
+          - server-test.zowalk.cn
+      - domain: server-admin-test.offer86.com
+        tls: offer86.com
+        mode: api
+        aliases:
+          - server-app-test.offer86.com
+          - server-test.offer86.com
+      - domain: server-admin-test.offer86.cn
+        tls: offer86.cn
+        mode: api
+        aliases:
+          - server-app-test.offer86.cn
+          - server-test.offer86.cn
+      - domain: server-admin-test.86offer.com
+        tls: 86offer.com
+        mode: api
+        aliases:
+          - server-app-test.86offer.com
+          - server-test.86offer.com
+      - domain: server-admin-test.86offer.cn
+        tls: 86offer.cn
+        mode: api
+        aliases:
+          - server-app-test.86offer.cn
+          - server-test.86offer.cn
     packages: []
     overrides:
       topology:
@@ -315,6 +531,54 @@ profiles:
         aliases:
           - server-app.dtupay.cn
           - server.dtupay.cn
+      - domain: server-admin.skubc.com
+        tls: skubc.com
+        mode: api
+        aliases:
+          - server-app.skubc.com
+          - server.skubc.com
+      - domain: server-admin.skubc.cn
+        tls: skubc.cn
+        mode: api
+        aliases:
+          - server-app.skubc.cn
+          - server.skubc.cn
+      - domain: server-admin.zowalk.com
+        tls: zowalk.com
+        mode: api
+        aliases:
+          - server-app.zowalk.com
+          - server.zowalk.com
+      - domain: server-admin.zowalk.cn
+        tls: zowalk.cn
+        mode: api
+        aliases:
+          - server-app.zowalk.cn
+          - server.zowalk.cn
+      - domain: server-admin.offer86.com
+        tls: offer86.com
+        mode: api
+        aliases:
+          - server-app.offer86.com
+          - server.offer86.com
+      - domain: server-admin.offer86.cn
+        tls: offer86.cn
+        mode: api
+        aliases:
+          - server-app.offer86.cn
+          - server.offer86.cn
+      - domain: server-admin.86offer.com
+        tls: 86offer.com
+        mode: api
+        aliases:
+          - server-app.86offer.com
+          - server.86offer.com
+      - domain: server-admin.86offer.cn
+        tls: 86offer.cn
+        mode: api
+        aliases:
+          - server-app.86offer.cn
+          - server.86offer.cn
     packages: []
     overrides:
       topology:
@@ -372,6 +636,54 @@ profiles:
         aliases:
           - server-app-staging.dtupay.cn
           - server-staging.dtupay.cn
+      - domain: server-admin-staging.skubc.com
+        tls: skubc.com
+        mode: api
+        aliases:
+          - server-app-staging.skubc.com
+          - server-staging.skubc.com
+      - domain: server-admin-staging.skubc.cn
+        tls: skubc.cn
+        mode: api
+        aliases:
+          - server-app-staging.skubc.cn
+          - server-staging.skubc.cn
+      - domain: server-admin-staging.zowalk.com
+        tls: zowalk.com
+        mode: api
+        aliases:
+          - server-app-staging.zowalk.com
+          - server-staging.zowalk.com
+      - domain: server-admin-staging.zowalk.cn
+        tls: zowalk.cn
+        mode: api
+        aliases:
+          - server-app-staging.zowalk.cn
+          - server-staging.zowalk.cn
+      - domain: server-admin-staging.offer86.com
+        tls: offer86.com
+        mode: api
+        aliases:
+          - server-app-staging.offer86.com
+          - server-staging.offer86.com
+      - domain: server-admin-staging.offer86.cn
+        tls: offer86.cn
+        mode: api
+        aliases:
+          - server-app-staging.offer86.cn
+          - server-staging.offer86.cn
+      - domain: server-admin-staging.86offer.com
+        tls: 86offer.com
+        mode: api
+        aliases:
+          - server-app-staging.86offer.com
+          - server-staging.86offer.com
+      - domain: server-admin-staging.86offer.cn
+        tls: 86offer.cn
+        mode: api
+        aliases:
+          - server-app-staging.86offer.cn
+          - server-staging.86offer.cn
     packages: []
     overrides:
       topology:

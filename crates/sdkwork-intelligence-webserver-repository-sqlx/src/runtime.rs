@@ -102,7 +102,7 @@ fn certificate_issuer_from_env(
     let renew_before_days = parse_env_or("SDKWORK_WEBSERVER_CERT_RENEW_BEFORE_DAYS", 30_u32)?;
     let webroot = std::env::var("SDKWORK_WEBSERVER_ACME_WEBROOT").ok();
     let cert_root = std::env::var("SDKWORK_WEBSERVER_CERT_LIVE_ROOT")
-        .unwrap_or_else(|_| "/opt/certs/letsencrypt/live".to_string());
+        .unwrap_or_else(|_| "/etc/sdkwork/certs/letsencrypt".to_string());
     let operation_timeout_ms = parse_env_or(
         "SDKWORK_WEBSERVER_ACME_OPERATION_TIMEOUT_MS",
         DEFAULT_ACME_OPERATION_TIMEOUT_MS,

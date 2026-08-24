@@ -88,10 +88,10 @@ ensure_credential_entry_bootstrap_token() {
   local environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
   local file="${SECRETS_ROOT}/credential-entry-bootstrap-access-token"
   case "${environment}" in
-    development|test) ;;
+    development|test|production) ;;
     *)
-      # Production-like containers must provision a real IAM-issued bootstrap
-      # credential (iam-credential-entry contract); do not invent a fixture.
+      # Staging and other production-like profiles must provision a real
+      # IAM-issued bootstrap credential (iam-credential-entry contract).
       return 0
       ;;
   esac
@@ -121,21 +121,65 @@ apply_primary_domain() {
   elif [ "${environment}" = "production" ]; then
     host_role="server"
   fi
-  local public_url="http://${host_role}.${domain}"
+  local scheme="http"
   if [ "${environment}" = "production" ] && [ "${SDKWORK_WEBSERVER_PUBLIC_SCHEME:-http}" = "https" ]; then
-    public_url="https://${host_role}.${domain}"
+    scheme="https"
   fi
+  local host_port
+  host_port="$(host_http_port_for_environment)"
+  local public_url="${scheme}://${host_role}.${domain}:${host_port}"
+  # When WSL nginx :80 is unavailable, browsers use host-published ports; keep
+  # portless origins too for nginx-backed operator routing.
+  local public_url_portless="${scheme}://${host_role}.${domain}"
   export SDKWORK_WEBSERVER_APPLICATION_PUBLIC_HTTP_URL="${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_HTTP_URL:-${public_url}}"
   export SDKWORK_WEBSERVER_APPLICATION_APP_HTTP_URL="${SDKWORK_WEBSERVER_APPLICATION_APP_HTTP_URL:-${public_url}}"
   export SDKWORK_WEBSERVER_APPLICATION_BACKEND_HTTP_URL="${SDKWORK_WEBSERVER_APPLICATION_BACKEND_HTTP_URL:-${public_url}}"
-  export SDKWORK_CORS_ALLOWED_ORIGINS="${SDKWORK_CORS_ALLOWED_ORIGINS:-${public_url}}"
+  export SDKWORK_CORS_ALLOWED_ORIGINS="${SDKWORK_CORS_ALLOWED_ORIGINS:-$(default_docker_cors_allowed_origins "${scheme}" "${host_port}" "${domain}" "${environment}")}"
 }
 
-# A3: SDKWork space — clone https://github.com/Sdkwork-Cloud/sdkwork-space under
+host_http_port_for_environment() {
+  case "${SDKWORK_WEBSERVER_ENVIRONMENT:-development}" in
+    development) printf '%s' "${SDKWORK_WEBSERVER_DEV_HOST_PORT:-13800}" ;;
+    test) printf '%s' "${SDKWORK_WEBSERVER_TEST_HOST_PORT:-18888}" ;;
+    production) printf '%s' "${SDKWORK_WEBSERVER_PROD_HOST_PORT:-18080}" ;;
+    *) printf '%s' "${SDKWORK_WEBSERVER_DEV_HOST_PORT:-13800}" ;;
+  esac
+}
+
+default_docker_cors_allowed_origins() {
+  local scheme="$1"
+  local host_port="$2"
+  local domain="$3"
+  local environment="$4"
+  local origins=""
+  local host hosts
+  case "${environment}" in
+    development)
+      hosts="server-dev.${domain} server-app-dev.${domain} server-admin-dev.${domain}"
+      ;;
+    test)
+      hosts="server-test.${domain} server-app-test.${domain} server-admin-test.${domain}"
+      ;;
+    production)
+      hosts="server.${domain} server-app.${domain} server-admin.${domain} ${domain} app.${domain}"
+      ;;
+    *)
+      hosts="server-dev.${domain} server-app-dev.${domain} server-admin-dev.${domain}"
+      ;;
+  esac
+  for host in ${hosts}; do
+    origins="${origins:+$origins,}${scheme}://${host}:${host_port}"
+    origins="${origins},${scheme}://${host}"
+  done
+  origins="${origins},${scheme}://localhost:${host_port},${scheme}://127.0.0.1:${host_port}"
+  printf '%s' "${origins}"
+}
+
+# A3: SDKWork space — clone https://github.com/sdkwork-ai/sdkwork-space under
 # $SDKWORK_SPACE_ROOT (default /opt/deploy), bind-mount the same host path into
-# containers, auto-discover sdkwork-* module imports, materialize layout-v2 TOML
+# containers, auto-discover sdkwork-* module imports, materialize layout v3 TOML
 # under /etc/sdkwork/webserver/modules/, and wire PC/H5 static roots from
-# apps/*/dist/<envAlias> when present (SDKWORK_WEBSERVER_SPEC.md §13.6).
+# apps/*/dist/<envAlias> when present (SDKWORK_WEBSERVER_SPEC.md §13.6 / §17).
 
 space_checkout_dir() {
   printf '%s/sdkwork-space' "${SDKWORK_SPACE_ROOT:-/opt/deploy}"
@@ -201,7 +245,10 @@ module_webserver_enabled() {
 
 discover_importable_modules() {
   local checkout discovered="" module_dir module_id auto_discover
-  auto_discover="${SDKWORK_SPACE_AUTO_DISCOVER:-false}"
+  # Standard behavior (SDKWORK_WEBSERVER_SPEC.md §17): auto-import every
+  # enabled sibling module's deployments/webserver/ from the space checkout.
+  # SDKWORK_SPACE_MODULES remains the explicit override.
+  auto_discover="${SDKWORK_SPACE_AUTO_DISCOVER:-true}"
   checkout="$(space_checkout_dir)"
   if [ "${auto_discover}" = "true" ] || [ "${auto_discover}" = "1" ] || [ "${auto_discover}" = "yes" ]; then
     if [ -d "${checkout}" ]; then
@@ -239,7 +286,7 @@ clone_sdkwork_space_modules() {
     log "linked space checkout ${checkout} -> ${local_path}"
   fi
 
-  clone_url="${SDKWORK_SPACE_CLONE_URL:-https://github.com/Sdkwork-Cloud/sdkwork-space.git}"
+  clone_url="${SDKWORK_SPACE_CLONE_URL:-https://github.com/sdkwork-ai/sdkwork-space.git}"
   if [ -d "${checkout}" ] && [ -n "$(ls -A "${checkout}" 2>/dev/null || true)" ]; then
     log "using existing space checkout at ${checkout}"
   elif [ -n "${clone_url}" ] && [ ! -d "${checkout}" ]; then
@@ -295,7 +342,16 @@ materialize_module_webserver_configs() {
     dest="${modules_root}/${module}"
     rm -rf "${dest}"
     mkdir -p "${dest}"
+    # Materialize the complete layout v3 directory (SDKWORK_WEBSERVER_SPEC.md
+    # §17): common + one file per lifecycle environment + both profile files,
+    # with the standalone upstream patched to the container gateway port. The
+    # snapshot is itself a loadable layout v3 directory for operators.
     cp "${module_ws}/server.common.toml" "${dest}/"
+    for env_name in development test staging production; do
+      if [ -f "${module_ws}/server.${env_name}.toml" ]; then
+        cp "${module_ws}/server.${env_name}.toml" "${dest}/"
+      fi
+    done
     if [ -f "${module_ws}/server.cloud.toml" ]; then
       cp "${module_ws}/server.cloud.toml" "${dest}/"
     fi
@@ -303,7 +359,7 @@ materialize_module_webserver_configs() {
       sed "s/127.0.0.1:3800/127.0.0.1:${gateway_port}/g" \
         "${module_ws}/server.standalone.toml" > "${dest}/server.standalone.toml"
     fi
-    log "materialized module webserver config -> ${dest} (gateway upstream 127.0.0.1:${gateway_port})"
+    log "materialized module webserver config -> ${dest} (layout v3, gateway upstream 127.0.0.1:${gateway_port})"
 
     pc_root="$(module_app_static_root "${module}" pc)"
     h5_root="$(module_app_static_root "${module}" h5)"
@@ -326,10 +382,15 @@ EOF
   chown -R "${SERVICE_USER}:${SERVICE_USER}" "${catalog_root}" 2>/dev/null || true
 }
 
-module_imports_toml() {
-  local imports="" module module_root import_required import_probe
-  import_required="${SDKWORK_WEBSERVER_MODULE_IMPORT_REQUIRED:-false}"
-  import_probe="${SDKWORK_WEBSERVER_MODULE_IMPORT_PROBE_UPSTREAMS:-false}"
+# nginx-style module imports: one `imports.d/<module-id>.conf` symlink per
+# sibling module pointing at the rendered nginx sidecar for the active profile
+# and environment (SDKWORK_WEBSERVER_SPEC.md §17). Runtime `[webserver] include`
+# loads these `.conf` files; drop or remove a symlink to add/remove a module.
+materialize_module_import_files() {
+  local imports_root="${CONFIG_ROOT}/imports.d"
+  local module module_root nginx_conf
+  ensure_directory "${imports_root}"
+  rm -f "${imports_root}"/*.conf "${imports_root}"/*.toml 2>/dev/null || true
   IFS=',' read -r -a module_list <<< "${SDKWORK_SPACE_IMPORT_MODULES:-}"
   for module in "${module_list[@]}"; do
     module="$(printf '%s' "${module}" | xargs)"
@@ -339,17 +400,27 @@ module_imports_toml() {
       log "module ${module} is disabled or missing layout; skipped"
       continue
     fi
-    imports="${imports}[[webserver.imports]]
-id = \"${module}\"
-path = \"${module_root}\"
-enabled = true
-required = ${import_required}
-probe_upstreams = ${import_probe}
-
-"
-    log "module import configured: ${module} -> ${module_root}"
+    nginx_conf="$(module_nginx_conf_path "${module_root}")" || {
+      log "module ${module} has no nginx sidecar for active profile/environment; skipped"
+      continue
+    }
+    ln -sfn "${nginx_conf}" "${imports_root}/${module}.conf"
+    chown -h "${SERVICE_USER}:${SERVICE_USER}" "${imports_root}/${module}.conf" 2>/dev/null || true
+    log "module import conf -> ${imports_root}/${module}.conf (${nginx_conf})"
   done
-  printf '%b' "${imports}"
+}
+
+module_nginx_conf_path() {
+  local module_root="$1"
+  local environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
+  local profile="${SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE:-${SDKWORK_DEPLOYMENT_PROFILE:-standalone}}"
+  local module_ws="${module_root}/deployments/webserver"
+  local conf="${module_ws}/nginx.${profile}.${environment}.conf"
+  if [ -f "${conf}" ]; then
+    printf '%s' "${conf}"
+    return 0
+  fi
+  return 1
 }
 
 module_app_static_root() {
@@ -420,8 +491,7 @@ render_runtime_config() {
       fi
     fi
   done
-  local MODULE_IMPORTS_TOML APP_ROOTS_ENV_TOML
-  MODULE_IMPORTS_TOML="$(module_imports_toml)"
+  local APP_ROOTS_ENV_TOML
   APP_ROOTS_ENV_TOML="$(app_roots_by_environment_toml)"
   local public_url="${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_HTTP_URL}"
   local data_plane_bind="${SDKWORK_WEBSERVER_DATA_PLANE_OPERATIONS_BIND:-127.0.0.1:3901}"
@@ -448,9 +518,9 @@ render_runtime_config() {
 
   # NOTE: The RuntimeTomlConfig struct uses #[serde(deny_unknown_fields)].
   # Supported top-level sections: profile, ingress, app_roots, deploy, database,
-  # secrets, acme, tls, node, region. Redis is NOT a TOML section — it is
-  # configured exclusively via SDKWORK_WEBSERVER_REDIS_* environment variables
-  # injected directly by Docker Compose.
+  # secrets, acme, tls, node, region, webserver (imports). Redis is NOT a TOML
+  # section — it is configured exclusively via SDKWORK_WEBSERVER_REDIS_* environment
+  # variables injected directly by Docker Compose.
 
   ensure_directory "${CONFIG_ROOT}"
   cat > "${RUNTIME_CONFIG_FILE}" <<EOF
@@ -534,9 +604,11 @@ uuid = "${SDKWORK_WEBSERVER_NODE_UUID:-standalone-${environment}-node}"
 region_code = "${SDKWORK_WEBSERVER_REGION_CODE:-cn}"
 seed_locale = "${SDKWORK_DATABASE_SEED_LOCALE:-zh-CN}"
 
-# Imported sibling-module deployments/webserver layout-v2 configs.
-# Materialized copies: /etc/sdkwork/webserver/modules/<module-id>/
-${MODULE_IMPORTS_TOML}
+# Imported sibling-module nginx sidecars (default) and optional TOML import
+# descriptors under imports.d/. Materialized layout v3 copies:
+# /etc/sdkwork/webserver/modules/<module-id>/
+[webserver]
+include = ["imports.d/*.conf", "imports.d/*.toml"]
 EOF
   chown root:"${SERVICE_USER}" "${RUNTIME_CONFIG_FILE}"
   chmod 0640 "${RUNTIME_CONFIG_FILE}"
@@ -625,6 +697,84 @@ ensure_adaptive_web_roots() {
   chmod 0755 "${static_root}"
 }
 
+run_module_browser_build() {
+  local module="$1"
+  local architecture="$2"
+  local environment="${3:-development}"
+  local deployment_profile="${4:-standalone}"
+  local module_root build_tool
+  module_root="$(module_repo_root "${module}")"
+  if [ ! -d "${module_root}" ]; then
+    log "module checkout missing: ${module_root}"
+    return 1
+  fi
+  build_tool="${SDKWORK_BROWSER_BUILD_TOOL:-/app/scripts/docker/build-module-browser.mjs}"
+  if [ ! -f "${build_tool}" ]; then
+    build_tool="$(space_checkout_dir)/sdkwork-webserver/scripts/docker/build-module-browser.mjs"
+  fi
+  if [ ! -f "${build_tool}" ]; then
+    log "browser build tool missing; set SDKWORK_BROWSER_BUILD_TOOL"
+    return 1
+  fi
+  log "building ${module} ${architecture} ${environment} (${deployment_profile})"
+  SDKWORK_SPACE_ROOT="$(dirname "$(space_checkout_dir)")" \
+    run_as_service_user node "${build_tool}" \
+      --module "${module}" \
+      --architecture "${architecture}" \
+      --environment "${environment}" \
+      --deployment-profile "${deployment_profile}"
+}
+
+module_has_browser_surface() {
+  local module="$1"
+  local architecture="$2"
+  local apps_root app match
+  if [ "${architecture}" = "pc" ]; then
+    match="*pc*"
+  else
+    match="*h5*"
+  fi
+  apps_root="$(module_repo_root "${module}")/apps"
+  [ -d "${apps_root}" ] || return 1
+  for app in "${apps_root}"/${match}; do
+    [ -d "${app}" ] || continue
+    if [ -f "${app}/vite.config.ts" ] \
+      || [ -f "${app}/vite.config.mjs" ] \
+      || [ -f "${app}/vite.config.web.mjs" ] \
+      || [ -f "${app}/vite.config.web.ts" ] \
+      || [ -f "${app}/vite.config.browser.ts" ] \
+      || [ -f "${app}/vite.config.browser.mjs" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+run_module_browser_build_all() {
+  local module="$1"
+  local environment="${2:-development}"
+  local deployment_profile="${3:-standalone}"
+  local built=0
+  for architecture in pc h5; do
+    if module_has_browser_surface "${module}" "${architecture}"; then
+      run_module_browser_build "${module}" "${architecture}" "${environment}" "${deployment_profile}" || return 1
+      built=1
+    fi
+  done
+  if [ "${built}" -eq 0 ]; then
+    log "module ${module} has no pc/h5 browser surfaces to build"
+    return 1
+  fi
+  return 0
+}
+
+reload_module_static_catalog() {
+  clone_sdkwork_space_modules
+  materialize_module_webserver_configs
+  materialize_module_import_files
+  log "refreshed module static catalogs under ${CONFIG_ROOT}/module-app-roots"
+}
+
 run_as_service_user() {
   if [ "$(id -u)" -eq 0 ]; then
     runuser -u "${SERVICE_USER}" -- "$@"
@@ -656,6 +806,7 @@ main() {
   apply_primary_domain
   clone_sdkwork_space_modules
   materialize_module_webserver_configs
+  materialize_module_import_files
   for cert_domain in ${SDKWORK_WEBSERVER_CERT_DOMAINS:-sdkwork.com app.sdkwork.com}; do
     ensure_domain_certificate "${cert_domain}"
   done
@@ -671,9 +822,52 @@ main() {
   ensure_adaptive_web_roots
 
   case "${1:-serve-management}" in
+    build-browser)
+      shift
+      module=""
+      architecture="all"
+      environment="dev"
+      deployment_profile="standalone"
+      reload_catalog="false"
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --module) module="$2"; shift 2 ;;
+          --architecture) architecture="$2"; shift 2 ;;
+          --environment) environment="$2"; shift 2 ;;
+          --deployment-profile) deployment_profile="$2"; shift 2 ;;
+          --reload-static) reload_catalog="true"; shift ;;
+          *) log "unknown build-browser option: $1"; exit 2 ;;
+        esac
+      done
+      if [ -z "${module}" ]; then
+        log "usage: build-browser --module <sdkwork-module> [--architecture pc|h5|all] [--environment dev|test|staging|prod] [--deployment-profile standalone|cloud] [--reload-static]"
+        exit 2
+      fi
+      clone_sdkwork_space_modules
+      if [ "${architecture}" = "all" ]; then
+        run_module_browser_build_all "${module}" "${environment}" "${deployment_profile}" || exit 1
+      else
+        run_module_browser_build "${module}" "${architecture}" "${environment}" "${deployment_profile}" || exit 1
+      fi
+      if [ "${reload_catalog}" = "true" ]; then
+        reload_module_static_catalog
+      fi
+      ;;
+    reload-module-static)
+      shift
+      reload_module_static_catalog
+      ;;
     serve-management)
       log "running database migration"
       run_as_service_user "${GATEWAY_BINARY}" db-migrate
+      if [ -n "$(ls "${CONFIG_ROOT}/imports.d/"*.toml 2>/dev/null || true)" ]; then
+        log "module imports detected; management in background, module-imports data plane in foreground"
+        run_as_service_user "${GATEWAY_BINARY}" serve-management \
+          > "${MANAGEMENT_LOG_FILE:-/var/lib/sdkwork/webserver/management.log}" 2>&1 &
+        MANAGEMENT_PID=$!
+        trap 'kill "${MANAGEMENT_PID}" 2>/dev/null || true' EXIT
+        exec_as_service_user "${GATEWAY_BINARY}" serve-imports
+      fi
       log "starting management listener on ${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_INGRESS_BIND:-127.0.0.1:3800}"
       exec_as_service_user "${GATEWAY_BINARY}" serve-management
       ;;

@@ -146,8 +146,44 @@ pub async fn assemble_business_routes(
         route_manifest = compose_route_manifests(&route_manifest, &deploy_blocks.route_manifest);
         domain_context_injectors.extend(deploy_blocks.domain_context_injectors);
         readiness_checks.push(deploy_blocks.readiness_check);
+        router = router.merge(deploy_blocks.router);
+        merge_same_origin_dependency_contribution(
+            &mut router,
+            &mut route_manifest,
+            &mut domain_context_injectors,
+            &mut readiness_checks,
+            sdkwork_api_skills_assembly::assemble_app_api_contribution()
+                .await
+                .map_err(|detail| ApiAssemblyError::Initialization { detail })?,
+        )?;
+        merge_same_origin_dependency_contribution(
+            &mut router,
+            &mut route_manifest,
+            &mut domain_context_injectors,
+            &mut readiness_checks,
+            sdkwork_api_skills_assembly::assemble_backend_api_contribution()
+                .await
+                .map_err(|detail| ApiAssemblyError::Initialization { detail })?,
+        )?;
+        merge_same_origin_dependency_contribution(
+            &mut router,
+            &mut route_manifest,
+            &mut domain_context_injectors,
+            &mut readiness_checks,
+            sdkwork_api_mcp_assembly::assemble_app_api_contribution()
+                .await
+                .map_err(|detail| ApiAssemblyError::Initialization { detail })?,
+        )?;
+        merge_same_origin_dependency_contribution(
+            &mut router,
+            &mut route_manifest,
+            &mut domain_context_injectors,
+            &mut readiness_checks,
+            sdkwork_api_mcp_assembly::assemble_backend_api_contribution()
+                .await
+                .map_err(|detail| ApiAssemblyError::Initialization { detail })?,
+        )?;
         router = router
-            .merge(deploy_blocks.router)
             .merge(mount_app(service.clone()))
             .merge(mount_backend(service.clone()))
             // Web Node agent routes authenticate through the shared api-key
@@ -284,6 +320,22 @@ fn compose_route_manifests(
     )
 }
 
+/// Merges a same-origin dependency contribution into the host assembly before
+/// the single Web Framework layer is installed (API_ASSEMBLY_SPEC §6.1).
+fn merge_same_origin_dependency_contribution(
+    router: &mut Router,
+    route_manifest: &mut HttpRouteManifest,
+    domain_context_injectors: &mut Vec<Arc<dyn sdkwork_web_core::DomainContextInjector>>,
+    readiness_checks: &mut Vec<Arc<dyn ReadinessCheck>>,
+    contribution: ApiAssemblyContribution,
+) -> Result<(), ApiAssemblyError> {
+    *route_manifest = compose_route_manifests(route_manifest, &contribution.route_manifest);
+    domain_context_injectors.extend(contribution.domain_context_injectors);
+    readiness_checks.push(contribution.readiness_check);
+    *router = router.clone().merge(contribution.router);
+    Ok(())
+}
+
 fn selected_route_manifest(context: ApiAssemblyContext) -> HttpRouteManifest {
     let mut routes = Vec::new();
     if context.includes_standalone_control_plane() {
@@ -361,6 +413,22 @@ mod tests {
                 "{path} must not require a permission"
             );
         }
+    }
+
+    #[test]
+    fn composed_manifest_includes_skills_dependency_blocks() {
+        let base = selected_route_manifest(ApiAssemblyContext::default());
+        let skills = sdkwork_api_skills_assembly::skills_api_route_manifest();
+        let composed = compose_route_manifests(&base, &skills);
+
+        assert!(composed
+            .routes()
+            .iter()
+            .any(|route| route.path.starts_with("/app/v3/api/skills")));
+        assert!(composed
+            .routes()
+            .iter()
+            .any(|route| route.path.starts_with("/backend/v3/api/skills")));
     }
 
     #[test]

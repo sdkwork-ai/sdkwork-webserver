@@ -6,7 +6,7 @@ remains `sdkwork-web`; topology and deployment identity follow the repository na
 | Path | Purpose |
 | --- | --- |
 | `deploy.yaml` | Deploy v2 authority for cloud and standalone production profiles |
-| `webserver/` | Declarative web server config (SDKWORK_WEBSERVER_SPEC.md layout v2) and rendered nginx sidecars |
+| `webserver/` | Declarative web server config (SDKWORK_WEBSERVER_SPEC.md layout v3) and rendered nginx sidecars |
 | `docker/` | Standalone WSL multi-environment compose stacks and cloud website image contract |
 | `kubernetes/` | Digest-bound cloud workload, service, migration, and disruption contracts |
 

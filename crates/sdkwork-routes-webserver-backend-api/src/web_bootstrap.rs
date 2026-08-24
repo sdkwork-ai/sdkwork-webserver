@@ -237,9 +237,9 @@ mod tests {
     use axum::Router;
     use sdkwork_web_axum::with_web_request_context;
     use sdkwork_web_core::{
-        access_token_jwt, auth_token_jwt, WebAuthLevel, WebDeploymentMode, WebEnvironment,
-        WebFrameworkError, WebLoginScope, WebRequestContextResolver, WebRequestPrincipal,
-        WebSubjectType,
+        access_token_jwt, auth_token_jwt, NoOpAuditEmitter, NoOpSecurityEventEmitter, WebAuthLevel,
+        WebDeploymentMode, WebEnvironment, WebFrameworkError, WebLoginScope,
+        WebRequestContextResolver, WebRequestPrincipal, WebSubjectType,
     };
     use tower::ServiceExt;
 
@@ -319,7 +319,7 @@ mod tests {
             call_applications(TestResolver {
                 tenant_id: "42",
                 login_scope: WebLoginScope::Tenant,
-                permissions: vec!["web.sites.read".to_owned()],
+                permissions: Vec::new(),
             })
             .await,
             StatusCode::FORBIDDEN
@@ -341,7 +341,12 @@ mod tests {
                 "/backend/v3/api/applications",
                 get(|| async { StatusCode::OK }),
             ),
-            build_web_backend_api_framework_layer(resolver, None),
+            build_web_backend_api_framework_layer(
+                resolver,
+                None,
+                std::sync::Arc::new(NoOpAuditEmitter),
+                std::sync::Arc::new(NoOpSecurityEventEmitter),
+            ),
         );
         app.oneshot(
             Request::builder()

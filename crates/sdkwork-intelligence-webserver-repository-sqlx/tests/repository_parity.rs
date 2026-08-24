@@ -200,8 +200,7 @@ async fn verify_certificate_revocation_ari_and_tls_projection(context: &TestCont
                 name: "Parity Revocation Site".to_string(),
                 slug: Some("parity-revocation".to_string()),
                 description: None,
-                application_type: "WEB".to_string(),
-                site_type: 1,
+                app_kind: "WEB".to_string(),
                 runtime_config: None,
                 store_listing: None,
             },
@@ -486,8 +485,7 @@ async fn verify_certificate_activation_compensation(context: &TestContext) {
                 name: "Certificate Compensation Site".to_string(),
                 slug: Some("certificate-compensation".to_string()),
                 description: None,
-                application_type: "WEB".to_string(),
-                site_type: 1,
+                app_kind: "WEB".to_string(),
                 runtime_config: None,
                 store_listing: None,
             },
@@ -651,8 +649,7 @@ async fn verify_repository_contract(context: &TestContext) {
                         name: format!("Alpha Site {index}"),
                         slug: Some(format!("alpha-{index}")),
                         description: None,
-                        application_type: "WEB".to_owned(),
-                        site_type: 1,
+                        app_kind: "WEB".to_owned(),
                         runtime_config: None,
                         store_listing: None,
                     },
@@ -670,15 +667,14 @@ async fn verify_repository_contract(context: &TestContext) {
                 name: "Alpha API".to_owned(),
                 slug: Some("alpha-api".to_owned()),
                 description: None,
-                application_type: "API".to_owned(),
-                site_type: 6,
+                app_kind: "API".to_owned(),
                 runtime_config: None,
                 store_listing: None,
             },
         )
         .await
         .expect("create API application");
-    assert_eq!(api_application.application_type, "API");
+    assert_eq!(api_application.app_kind, "API");
     let api_page = repository
         .list_applications(
             TENANT_A,
@@ -746,8 +742,7 @@ async fn verify_repository_contract(context: &TestContext) {
                 name: "Tenant B".to_owned(),
                 slug: Some("alpha-0".to_owned()),
                 description: None,
-                application_type: "WEB".to_owned(),
-                site_type: 1,
+                app_kind: "WEB".to_owned(),
                 runtime_config: None,
                 store_listing: None,
             },
@@ -765,8 +760,7 @@ async fn verify_repository_contract(context: &TestContext) {
                 name: "Duplicate".to_owned(),
                 slug: Some("alpha-0".to_owned()),
                 description: None,
-                application_type: "WEB".to_owned(),
-                site_type: 1,
+                app_kind: "WEB".to_owned(),
                 runtime_config: None,
                 store_listing: None,
             },
@@ -2166,7 +2160,7 @@ async fn verify_public_repository_surface(context: &TestContext, site_id: &str) 
                 cursor: Some(
                     "djF8OTk5OS0xMi0zMVQyMzo1OTo1OVp8OTIyMzM3MjAzNjg1NDc3NTgwNw".to_string(),
                 ),
-                page_size: 20,
+                page_size: Some(20),
                 ..ListAuditLogsQuery::default()
             },
         )
@@ -2174,6 +2168,18 @@ async fn verify_public_repository_surface(context: &TestContext, site_id: &str) 
         .expect("list audit timestamp projections");
     assert_eq!(audit_page.items[0].action, "repository.parity");
     assert_eq!(audit_page.has_more, Some(false));
+
+    let first_audit_page = repository
+        .list_audit_logs(
+            Some(TENANT_A),
+            &ListAuditLogsQuery {
+                page_size: Some(20),
+                ..ListAuditLogsQuery::default()
+            },
+        )
+        .await
+        .expect("list audit logs without cursor on first page");
+    assert_eq!(first_audit_page.items[0].action, "repository.parity");
 
     repository
         .unbind_listener_certificate(TENANT_A, site_id, &domain.id, &listener_binding.id)

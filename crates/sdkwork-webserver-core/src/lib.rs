@@ -17,7 +17,7 @@ pub use config::{
     load_and_compile_webserver_config_json, load_and_compile_webserver_config_revision, normalize_authority_host, normalize_server_name,
     normalize_uri_path, parse_htpasswd, parse_limit_conn, parse_limit_conn_zone, parse_limit_req,
     parse_limit_req_zone, parse_rewrite, expand_proxy_pass_template, validate_proxy_pass_template,
-    resolve_webserver_config_path, server_name_covers, sub_filter_content_type_matches,
+    resolve_nginx_sidecar_path, resolve_webserver_config_path, server_name_covers, sub_filter_content_type_matches,
     upstream_ip_is_allowed, validate_md5_template, verify_md5_link, verify_secure_link,
     verify_secret_link, md5_hex, AccessAction,
     AccessDecision, AccessRuleConfig, AuthBasicConfig, AuthBasicDecision, AuthBasicUserConfig,
@@ -43,7 +43,8 @@ pub use config::{
     WebServerConfigError, WebServerConfigFileRevision, WebServerConfigLoader, WebServerLimits, XFrameOptions,
     MAX_CONFIG_BYTES, MAX_REWRITE_INTERNAL_REDIRECTS, MAX_SUB_FILTER_BODY_BYTES,
     WEBSERVER_CONFIG_FILE_ENV,
-    WEBSERVER_CONFIG_FILE_NAME,
+    WEBSERVER_CONFIG_FILE_NAME, APP_ROOT_ENV, DEPLOYMENT_PROFILE_ENV, ENVIRONMENT_ENV,
+    NGINX_CONFIG_FILE_ENV,
 };
 pub use config_paths::{
     canonical_certificate_domain_directory, canonical_certificate_file,
@@ -57,13 +58,15 @@ pub use config_paths::{
     RUNTIME_CONFIG_FILE_NAME, SECRETS_SUBDIR,
 };
 pub use module_imports::{
-    merge_import_specs, parse_env_imports, resolve_import_path, resolve_import_profile,
-    validate_imports, validate_module_import, ModuleImportError, ModuleImportValidation,
-    WebserverImportEntry, WebserverModuleImport, MODULE_IMPORTS_ENV,
+    load_module_import_app_config, merge_import_specs, parse_env_imports, resolve_import_path,
+    resolve_import_profile, validate_imports, validate_module_import, ModuleImportError,
+    ModuleImportValidation, WebserverImportEntry, WebserverModuleImport, MODULE_IMPORTS_ENV,
 };
 pub use runtime_config::{
-    load_runtime_toml_config, parse_runtime_toml_config, resolve_runtime_config_path,
-    validate_configured_module_imports, RuntimeTomlConfig,
+    compile_merged_imports_app, configured_module_imports, expand_webserver_import_includes,
+    imported_certificate_names, load_runtime_toml_config, merged_imports_app_config,
+    parse_runtime_toml_config, resolve_runtime_config_path, validate_configured_module_imports,
+    IMPORT_LISTENER_PORTS_ENV, RuntimeTomlConfig,
 };
 pub use runtime_env::{
     web_dev_auth_bypass_enabled, web_environment_name, web_is_production_like_environment,

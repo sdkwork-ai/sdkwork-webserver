@@ -2,6 +2,7 @@
 
 pub mod agent_ops;
 pub mod app;
+pub mod audit_time;
 pub mod backend;
 pub mod certificate_ops;
 pub mod certificate_renewal_ops;

@@ -66,6 +66,7 @@ import {
 } from "./application-source-repository.ts";
 import { formatWebserverErrorMessage } from "./error-message.ts";
 import {
+  canAccessWebserverResource,
   hasPlatformSuperAdminAccess,
   hasWebserverPermission,
   hasWebserverSuperAdminAccess,
@@ -162,6 +163,7 @@ export function WebserverWorkspace({
                     permissionScope={permissionScope}
                     registry={registry}
                     source={registry[entry.resource]}
+                    surface={surface}
                   />
                 )}
               />
@@ -195,16 +197,18 @@ function ResourcePage({
   permissionScope,
   registry,
   source,
+  surface,
 }: {
   entry: { permission: string; resource: WebserverResourceKey };
   locale: WebserverLocale;
   permissionScope: readonly string[];
   registry: WebserverResourceRegistry;
   source?: WebserverResourceDataSource;
+  surface: "app-console" | "backend-admin";
 }) {
   const t = (key: WebserverMessageKey, values?: Record<string, string | number>) =>
     translateWebserver(locale, key, values);
-  const authorized = hasWebserverPermission(permissionScope, entry.permission);
+  const authorized = canAccessWebserverResource(surface, permissionScope, entry.permission);
   const scopeKind = source?.scopeKind ?? "application";
   const scopeSource = registry.applications;
   const scopeStorageKey = `sdkwork.webserver.${scopeKind}Id`;

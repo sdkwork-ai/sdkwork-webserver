@@ -50,23 +50,44 @@ pub struct ListApplicationsQuery {
     pub keyword: Option<String>,
 }
 
-/// Backend audit log list filters. `start_date`/`end_date` are RFC 3339
-/// instants; `operator_id` is an int64 serialized as a string on the wire.
+/// Backend audit log list filters. `start_date`/`end_date` accept RFC 3339
+/// instants or date-only `YYYY-MM-DD` (normalized at the service boundary);
+/// `operator_id` is an int64 serialized as a string on the wire.
 /// Cursor mode (`cursor` + `page_size`, keyset on `(created_at, id)`) is the
-/// contract for this growing log table; `page`/`cursor` must not be combined.
+/// contract for this growing log table.
+///
+/// Fields are declared flat (no `#[serde(flatten)]`) because Axum's
+/// `serde_urlencoded` Query extractor cannot reliably deserialize flattened
+/// structs; flatten here surfaces as HTTP 40002 Malformed request.
 #[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
 pub struct ListAuditLogsQuery {
-    #[serde(default = "crate::dto::default_page")]
-    pub page: i32,
-    #[serde(default = "crate::dto::default_page_size")]
-    pub page_size: i32,
+    #[serde(
+        default,
+        deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_i32"
+    )]
+    pub page_size: Option<i32>,
+    #[serde(default, deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_string")]
     pub cursor: Option<String>,
+    #[serde(default, deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_string")]
     pub target_type: Option<String>,
+    #[serde(default, deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_string")]
     pub action: Option<String>,
-    #[serde(with = "sdkwork_utils_rust::serde_int64::option")]
+    #[serde(
+        default,
+        deserialize_with = "sdkwork_utils_rust::serde_int64::option_query::deserialize"
+    )]
     pub operator_id: Option<i64>,
+    #[serde(default, deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_string")]
     pub start_date: Option<String>,
+    #[serde(default, deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_string")]
     pub end_date: Option<String>,
+}
+
+impl ListAuditLogsQuery {
+    pub fn resolved_page_size(&self) -> i32 {
+        self.page_size.unwrap_or(crate::dto::default_page_size())
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -707,4 +728,45 @@ pub trait WebBackendApi: Send + Sync {
         context: &WebBackendRequestContext,
         query: &ListAuditLogsQuery,
     ) -> WebServiceResult<AuditLogPage>;
+}
+
+#[cfg(test)]
+mod list_audit_logs_query_tests {
+    use super::ListAuditLogsQuery;
+
+    #[test]
+    fn deserializes_empty_query_for_first_page() {
+        let query: ListAuditLogsQuery = serde_urlencoded::from_str("").expect("empty query");
+        assert_eq!(query.resolved_page_size(), 20);
+        assert!(query.cursor.is_none());
+    }
+
+    #[test]
+    fn deserializes_canonical_cursor_pagination_and_filters() {
+        let query: ListAuditLogsQuery = serde_urlencoded::from_str(
+            "page_size=20&cursor=opaque-token&target_type=site&action=create&operator_id=42&start_date=2024-01-01&end_date=2024-12-31",
+        )
+        .expect("canonical query");
+        assert_eq!(query.resolved_page_size(), 20);
+        assert_eq!(query.cursor.as_deref(), Some("opaque-token"));
+        assert_eq!(query.target_type.as_deref(), Some("site"));
+        assert_eq!(query.action.as_deref(), Some("create"));
+        assert_eq!(query.operator_id, Some(42));
+        assert_eq!(query.start_date.as_deref(), Some("2024-01-01"));
+        assert_eq!(query.end_date.as_deref(), Some("2024-12-31"));
+    }
+
+    #[test]
+    fn treats_blank_operator_id_as_absent() {
+        let query: ListAuditLogsQuery =
+            serde_urlencoded::from_str("operator_id=").expect("blank operator_id");
+        assert!(query.operator_id.is_none());
+    }
+
+    #[test]
+    fn ignores_unsupported_page_parameter() {
+        let query: ListAuditLogsQuery =
+            serde_urlencoded::from_str("page=1&page_size=20").expect("page is ignored at extract");
+        assert_eq!(query.resolved_page_size(), 20);
+    }
 }

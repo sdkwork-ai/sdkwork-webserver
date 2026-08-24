@@ -64,18 +64,17 @@ pub(crate) async fn assemble_standalone_profile(
     let drive = sdkwork_api_drive_assembly::assemble_app_api_contribution()
         .await
         .map_err(|error| StandaloneProfileError::assembly_unavailable("sdkwork-drive", error))?;
-    let skills = sdkwork_api_skills_assembly::assemble_app_api_contribution()
-        .await
-        .map_err(|error| StandaloneProfileError::assembly_unavailable("sdkwork-skills", error))?;
-    let mcp = sdkwork_api_mcp_assembly::assemble_app_api_contribution()
-        .await
-        .map_err(|error| StandaloneProfileError::assembly_unavailable("sdkwork-mcp", error))?;
+    let dependency_contributions =
+        crate::dependency_assembly::optional_same_origin_dependency_contributions().await?;
     let machine_authenticator = web.machine_credential_authenticator.clone();
     let audit_emitter = web.audit_emitter.clone();
     let security_event_emitter = web.security_event_emitter.clone();
 
+    let mut contributions = vec![web.into_contribution(), iam, drive];
+    contributions.extend(dependency_contributions);
+
     compose_owner_contributions(
-        vec![web.into_contribution(), iam, drive, skills, mcp],
+        contributions,
         machine_authenticator,
         audit_emitter,
         security_event_emitter,

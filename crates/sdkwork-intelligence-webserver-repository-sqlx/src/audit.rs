@@ -11,6 +11,22 @@ use super::support::{
     json_write_expression, new_uuid, next_id, now_rfc3339, store_error,
 };
 
+/// Upper bound for the first audit-log keyset page when no opaque cursor is
+/// supplied. Matches PAGINATION_SPEC keyset head semantics for growing logs.
+const AUDIT_LOG_FIRST_PAGE_CREATED_AT: &str = "9999-12-31T23:59:59Z";
+
+fn resolve_audit_list_cursor(query: &ListAuditLogsQuery) -> WebServiceResult<String> {
+    if let Some(cursor) = query.cursor.as_deref() {
+        if !cursor.is_empty() {
+            return Ok(cursor.to_owned());
+        }
+    }
+    Ok(encode_keyset_cursor(
+        AUDIT_LOG_FIRST_PAGE_CREATED_AT,
+        i64::MAX,
+    ))
+}
+
 /// Strongly typed audit list filter value so PostgreSQL receives correctly
 /// typed parameters instead of text literals.
 enum AuditBindValue {
@@ -111,15 +127,19 @@ fn push_audit_filters(
 }
 
 /// Validates an audit log date filter as an RFC 3339 timestamp so malformed
-/// values never reach the database comparison.
+/// values never reach the database comparison. Service-layer normalization
+/// converts Adaptive Web `YYYY-MM-DD` filters before this check runs.
 fn validate_audit_date_range(value: &str, name: &str) -> WebServiceResult<()> {
     if value.trim().is_empty() || value.len() > 64 {
         return Err(WebServiceError::validation(format!(
             "{name} must contain 1..64 characters"
         )));
     }
-    chrono::DateTime::parse_from_rfc3339(value)
-        .map_err(|_| WebServiceError::validation(format!("{name} must be an RFC 3339 timestamp")))?;
+    chrono::DateTime::parse_from_rfc3339(value).map_err(|_| {
+        WebServiceError::validation(format!(
+            "{name} must be an RFC 3339 timestamp or YYYY-MM-DD date"
+        ))
+    })?;
     Ok(())
 }
 
@@ -131,13 +151,10 @@ impl WebRepository {
     ) -> WebServiceResult<AuditLogPage> {
         // Cursor mode (keyset on (created_at, id)) is the only contract for
         // this growing log table (PAGINATION_SPEC §6/§12): no deep OFFSET and
-        // no full COUNT per request. Offset pagination is rejected.
-        let cursor = query.cursor.as_deref().ok_or_else(|| {
-            WebServiceError::validation(
-                "cursor is required for audit log listing; offset pagination is not supported on this growing collection",
-            )
-        })?;
-        self.list_audit_logs_cursor_repo(tenant_id, query, cursor)
+        // no full COUNT per request. The first page may omit cursor; later
+        // pages must use the opaque `nextCursor` from the prior response.
+        let cursor = resolve_audit_list_cursor(query)?;
+        self.list_audit_logs_cursor_repo(tenant_id, query, &cursor)
             .await
     }
 
@@ -150,7 +167,7 @@ impl WebRepository {
         query: &ListAuditLogsQuery,
         cursor: &str,
     ) -> WebServiceResult<AuditLogPage> {
-        let page_size = query.page_size;
+        let page_size = query.resolved_page_size();
         if !(1..=200).contains(&page_size) {
             return Err(WebServiceError::validation(
                 "page_size must be between 1 and 200",

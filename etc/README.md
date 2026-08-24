@@ -82,6 +82,59 @@ Authority: [`sdkwork-specs/APPLICATION_DEPLOY_LAYOUT_SPEC.md`](../../sdkwork-spe
 
 Installed Linux default: `/etc/sdkwork/webserver/config.toml` + `sdkwork.webserver.config.json` + `secrets/`.
 
+### Module Imports (`imports.d/`, nginx include style)
+
+Sibling-module `deployments/webserver/` imports are declared **one file per
+module** under `/etc/sdkwork/webserver/imports.d/<module-id>.toml` and loaded
+through the runtime config `[webserver] include` pattern (nginx-style):
+
+```toml
+[webserver]
+include = ["/etc/sdkwork/webserver/imports.d/*.toml"]
+```
+
+Each included file carries a `[[webserver.imports]]` entry (`id`, `path`,
+`enabled`, `required`, `probe_upstreams`); relative `path` values resolve
+against the runtime config directory. Include semantics mirror nginx: matched
+files load in sorted order after the inline `[[webserver.imports]]` entries, a
+later same-`id` entry replaces the earlier one, a glob that matches nothing is
+skipped, and an explicit (non-glob) pattern naming a missing file fails
+startup. Glob matching is limited to the final path component (`*`, `?`).
+Environment selection per import (`development`/`test`/`staging`/`production`)
+is unchanged: each import loads its `server.<environment>.toml` for the active
+`SDKWORK_WEBSERVER_ENVIRONMENT` (`SDKWORK_WEBSERVER_SPEC.md` §2.2 / §17).
+
+The Docker standalone entrypoint generates these files automatically from the
+sdkwork-space checkout; the `.deb` installer creates the (empty) directory and
+include pattern so operators can drop in module import files.
+
+### Merged Module Data Plane (`serve-imports`)
+
+At startup the gateway merges every enabled module import into **one
+data-plane configuration** (`merge(common, server.<environment>.toml,
+server.<profile>.toml)` per module, standard layout v3 merge semantics) and
+serves it with the `serve-imports` operation: module domains
+(`[[http.server]] serverName`), servers (`listen`), and resources
+(locations/upstreams/static roots) become live listeners with Host/SNI
+routing. The Docker standalone entrypoint runs the management API in the
+background and `serve-imports` in the foreground when `imports.d/` is
+non-empty.
+
+- **Listener port remap** — declared module ports stay authoritative; the
+  container binds unprivileged ports via
+  `SDKWORK_WEBSERVER_IMPORT_LISTENER_PORTS` (default `80=8080,443=8430`,
+  comma-separated `declared=actual` pairs).
+- **Bootstrap certificates** — when a referenced certificate has no material
+  on disk, the runtime auto-generates a self-signed placeholder (SAN covers
+  the certificate's server names plus a `*.<name>` wildcard so one
+  placeholder stays valid across lifecycle environments) and logs a warning;
+  operators replace it with ACME-issued or uploaded material without a
+  restart. A half-present pair (certificate without key or vice versa) fails
+  closed with a precise diagnostic.
+- **Certificates inventory** — `list-import-certificates` prints the merged
+  certificate names for provisioning; material lives under
+  `/etc/sdkwork/certs/letsencrypt/<name>/` (or `certs://` inventory paths).
+
 The data-plane JSON file is discovered in this order: an explicit config argument, then
 `SDKWORK_WEBSERVER_SERVER_CONFIG_FILE`, then the canonical OS system-scope directory for
 application code `webserver` joined with `sdkwork.webserver.config.json`: Linux
@@ -239,7 +292,7 @@ Authority: `APPLICATION_DEPLOY_LAYOUT_SPEC.md` (`../sdkwork-specs/`).
 | Secrets | `/etc/sdkwork/webserver/secrets/` |
 | Override | `SDKWORK_WEBSERVER_CONFIG_FILE` |
 
-Source profiles live under `etc/` (`sdkwork.deployment.config.json` index). Deploy manifest: `deployments/deploy.yaml`. Web data-plane source: `deployments/webserver/` (`SDKWORK_WEBSERVER_SPEC.md` layout v2).
+Source profiles live under `etc/` (`sdkwork.deployment.config.json` index). Deploy manifest: `deployments/deploy.yaml`. Web data-plane source: `deployments/webserver/` (`SDKWORK_WEBSERVER_SPEC.md` layout v3).
 
 ```bash
 node ../sdkwork-specs/tools/check-source-config-standard.mjs --root .

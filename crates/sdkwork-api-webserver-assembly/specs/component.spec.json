@@ -53,6 +53,11 @@
     "requiredPorts": [
       {"name": "webServerRepositoryRuntime", "export": "crate-root", "provider": "sdkwork-intelligence-webserver-repository-sqlx"},
       {"name": "webServerDatabaseLifecycle", "export": "crate-root", "provider": "sdkwork-webserver-database-host"},
+      {"name": "deploymentsDomainCertificateBlocks", "export": "sdkwork_api_deployments_assembly::assemble_domain_certificate_blocks", "provider": "sdkwork-api-deployments-assembly"},
+      {"name": "skillsAppApiContribution", "export": "sdkwork_api_skills_assembly::assemble_app_api_contribution", "provider": "sdkwork-api-skills-assembly"},
+      {"name": "skillsBackendApiContribution", "export": "sdkwork_api_skills_assembly::assemble_backend_api_contribution", "provider": "sdkwork-api-skills-assembly"},
+      {"name": "mcpAppApiContribution", "export": "sdkwork_api_mcp_assembly::assemble_app_api_contribution", "provider": "sdkwork-api-mcp-assembly"},
+      {"name": "mcpBackendApiContribution", "export": "sdkwork_api_mcp_assembly::assemble_backend_api_contribution", "provider": "sdkwork-api-mcp-assembly"},
       {"name": "skillsDatabaseLifecycle", "export": "sdkwork_api_skills_assembly::bootstrap_database_from_env", "provider": "sdkwork-api-skills-assembly"},
       {"name": "mcpDatabaseLifecycle", "export": "sdkwork_api_mcp_assembly::bootstrap_database_from_env", "provider": "sdkwork-api-mcp-assembly"}
     ],
@@ -61,7 +66,60 @@
     "sdkClients": [],
     "sdkDependencies": [],
     "dependencyApiExports": [],
-    "dependencyApiSurfaces": [],
+    "dependencyApiSurfaces": [
+      {
+        "workspace": "sdkwork-skills",
+        "sdkFamily": "sdkwork-skills-app-sdk",
+        "apiAuthority": "sdkwork-skills-app-api",
+        "surface": "app-api",
+        "apiPrefix": "/app/v3/api",
+        "runtimeMode": "same-origin",
+        "sameOriginAllowed": true,
+        "cargoDependency": "sdkwork-api-skills-assembly",
+        "embeddedExecutableExport": "sdkwork_api_skills_assembly::assemble_app_api_contribution",
+        "profileCoverage": ["standalone"],
+        "coverageEvidence": ["src/bootstrap.rs"]
+      },
+      {
+        "workspace": "sdkwork-skills",
+        "sdkFamily": "sdkwork-skills-backend-sdk",
+        "apiAuthority": "sdkwork-skills-backend-api",
+        "surface": "backend-api",
+        "apiPrefix": "/backend/v3/api",
+        "runtimeMode": "same-origin",
+        "sameOriginAllowed": true,
+        "cargoDependency": "sdkwork-api-skills-assembly",
+        "embeddedExecutableExport": "sdkwork_api_skills_assembly::assemble_backend_api_contribution",
+        "profileCoverage": ["standalone"],
+        "coverageEvidence": ["src/bootstrap.rs"]
+      },
+      {
+        "workspace": "sdkwork-mcp",
+        "sdkFamily": "sdkwork-mcp-app-sdk",
+        "apiAuthority": "sdkwork-mcp-app-api",
+        "surface": "app-api",
+        "apiPrefix": "/app/v3/api",
+        "runtimeMode": "same-origin",
+        "sameOriginAllowed": true,
+        "cargoDependency": "sdkwork-api-mcp-assembly",
+        "embeddedExecutableExport": "sdkwork_api_mcp_assembly::assemble_app_api_contribution",
+        "profileCoverage": ["standalone"],
+        "coverageEvidence": ["src/bootstrap.rs"]
+      },
+      {
+        "workspace": "sdkwork-mcp",
+        "sdkFamily": "sdkwork-mcp-backend-sdk",
+        "apiAuthority": "sdkwork-mcp-backend-api",
+        "surface": "backend-api",
+        "apiPrefix": "/backend/v3/api",
+        "runtimeMode": "same-origin",
+        "sameOriginAllowed": true,
+        "cargoDependency": "sdkwork-api-mcp-assembly",
+        "embeddedExecutableExport": "sdkwork_api_mcp_assembly::assemble_backend_api_contribution",
+        "profileCoverage": ["standalone"],
+        "coverageEvidence": ["src/bootstrap.rs"]
+      }
+    ],
     "events": [],
     "configKeys": []
   },

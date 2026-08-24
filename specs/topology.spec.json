@@ -107,6 +107,82 @@
         "standalone.staging",
         "standalone.production"
       ]
+    },
+    "dependency.skills-app-api": {
+      "connectivityPlane": "dependency",
+      "protocols": [
+        "http"
+      ],
+      "runtimeMode": "same-origin",
+      "sameOriginAllowed": true,
+      "optional": true,
+      "apiAuthority": "sdkwork-skills-app-api",
+      "sdkFamily": "sdkwork-skills-app-sdk",
+      "prefix": "/app/v3/api",
+      "executableAssemblyExport": "sdkwork_api_skills_assembly::assemble_app_api_contribution",
+      "profileCoverage": [
+        "standalone.development",
+        "standalone.test",
+        "standalone.staging",
+        "standalone.production"
+      ]
+    },
+    "dependency.skills-backend-api": {
+      "connectivityPlane": "dependency",
+      "protocols": [
+        "http"
+      ],
+      "runtimeMode": "same-origin",
+      "sameOriginAllowed": true,
+      "optional": true,
+      "apiAuthority": "sdkwork-skills-backend-api",
+      "sdkFamily": "sdkwork-skills-backend-sdk",
+      "prefix": "/backend/v3/api",
+      "executableAssemblyExport": "sdkwork_api_skills_assembly::assemble_backend_api_contribution",
+      "profileCoverage": [
+        "standalone.development",
+        "standalone.test",
+        "standalone.staging",
+        "standalone.production"
+      ]
+    },
+    "dependency.mcp-app-api": {
+      "connectivityPlane": "dependency",
+      "protocols": [
+        "http"
+      ],
+      "runtimeMode": "same-origin",
+      "sameOriginAllowed": true,
+      "optional": true,
+      "apiAuthority": "sdkwork-mcp-app-api",
+      "sdkFamily": "sdkwork-mcp-app-sdk",
+      "prefix": "/app/v3/api",
+      "executableAssemblyExport": "sdkwork_api_mcp_assembly::assemble_app_api_contribution",
+      "profileCoverage": [
+        "standalone.development",
+        "standalone.test",
+        "standalone.staging",
+        "standalone.production"
+      ]
+    },
+    "dependency.mcp-backend-api": {
+      "connectivityPlane": "dependency",
+      "protocols": [
+        "http"
+      ],
+      "runtimeMode": "same-origin",
+      "sameOriginAllowed": true,
+      "optional": true,
+      "apiAuthority": "sdkwork-mcp-backend-api",
+      "sdkFamily": "sdkwork-mcp-backend-sdk",
+      "prefix": "/backend/v3/api",
+      "executableAssemblyExport": "sdkwork_api_mcp_assembly::assemble_backend_api_contribution",
+      "profileCoverage": [
+        "standalone.development",
+        "standalone.test",
+        "standalone.staging",
+        "standalone.production"
+      ]
     }
   },
   "cloudPublicHosts": {
@@ -121,7 +197,15 @@
             "server-dev.dtupay.com",
             "server-dev.sdkwork.cn",
             "server-dev.birdcoder.cn",
-            "server-dev.dtupay.cn"
+            "server-dev.dtupay.cn",
+            "server-dev.skubc.com",
+            "server-dev.skubc.cn",
+            "server-dev.zowalk.com",
+            "server-dev.zowalk.cn",
+            "server-dev.offer86.com",
+            "server-dev.offer86.cn",
+            "server-dev.86offer.com",
+            "server-dev.86offer.cn"
           ]
         },
         "test": {
@@ -131,7 +215,15 @@
             "server-test.dtupay.com",
             "server-test.sdkwork.cn",
             "server-test.birdcoder.cn",
-            "server-test.dtupay.cn"
+            "server-test.dtupay.cn",
+            "server-test.skubc.com",
+            "server-test.skubc.cn",
+            "server-test.zowalk.com",
+            "server-test.zowalk.cn",
+            "server-test.offer86.com",
+            "server-test.offer86.cn",
+            "server-test.86offer.com",
+            "server-test.86offer.cn"
           ]
         },
         "staging": {
@@ -141,7 +233,15 @@
             "server-staging.dtupay.com",
             "server-staging.sdkwork.cn",
             "server-staging.birdcoder.cn",
-            "server-staging.dtupay.cn"
+            "server-staging.dtupay.cn",
+            "server-staging.skubc.com",
+            "server-staging.skubc.cn",
+            "server-staging.zowalk.com",
+            "server-staging.zowalk.cn",
+            "server-staging.offer86.com",
+            "server-staging.offer86.cn",
+            "server-staging.86offer.com",
+            "server-staging.86offer.cn"
           ]
         }
       },
@@ -151,7 +251,15 @@
         "server.dtupay.com",
         "server.sdkwork.cn",
         "server.birdcoder.cn",
-        "server.dtupay.cn"
+        "server.dtupay.cn",
+        "server.skubc.com",
+        "server.skubc.cn",
+        "server.zowalk.com",
+        "server.zowalk.cn",
+        "server.offer86.com",
+        "server.offer86.cn",
+        "server.86offer.com",
+        "server.86offer.cn"
       ]
     },
     "application.app-http": {
@@ -164,7 +272,15 @@
             "server-app-dev.dtupay.com",
             "server-app-dev.sdkwork.cn",
             "server-app-dev.birdcoder.cn",
-            "server-app-dev.dtupay.cn"
+            "server-app-dev.dtupay.cn",
+            "server-app-dev.skubc.com",
+            "server-app-dev.skubc.cn",
+            "server-app-dev.zowalk.com",
+            "server-app-dev.zowalk.cn",
+            "server-app-dev.offer86.com",
+            "server-app-dev.offer86.cn",
+            "server-app-dev.86offer.com",
+            "server-app-dev.86offer.cn"
           ]
         },
         "test": {
@@ -174,7 +290,15 @@
             "server-app-test.dtupay.com",
             "server-app-test.sdkwork.cn",
             "server-app-test.birdcoder.cn",
-            "server-app-test.dtupay.cn"
+            "server-app-test.dtupay.cn",
+            "server-app-test.skubc.com",
+            "server-app-test.skubc.cn",
+            "server-app-test.zowalk.com",
+            "server-app-test.zowalk.cn",
+            "server-app-test.offer86.com",
+            "server-app-test.offer86.cn",
+            "server-app-test.86offer.com",
+            "server-app-test.86offer.cn"
           ]
         },
         "staging": {
@@ -184,7 +308,15 @@
             "server-app-staging.dtupay.com",
             "server-app-staging.sdkwork.cn",
             "server-app-staging.birdcoder.cn",
-            "server-app-staging.dtupay.cn"
+            "server-app-staging.dtupay.cn",
+            "server-app-staging.skubc.com",
+            "server-app-staging.skubc.cn",
+            "server-app-staging.zowalk.com",
+            "server-app-staging.zowalk.cn",
+            "server-app-staging.offer86.com",
+            "server-app-staging.offer86.cn",
+            "server-app-staging.86offer.com",
+            "server-app-staging.86offer.cn"
           ]
         }
       },
@@ -194,7 +326,15 @@
         "server-app.dtupay.com",
         "server-app.sdkwork.cn",
         "server-app.birdcoder.cn",
-        "server-app.dtupay.cn"
+        "server-app.dtupay.cn",
+        "server-app.skubc.com",
+        "server-app.skubc.cn",
+        "server-app.zowalk.com",
+        "server-app.zowalk.cn",
+        "server-app.offer86.com",
+        "server-app.offer86.cn",
+        "server-app.86offer.com",
+        "server-app.86offer.cn"
       ]
     },
     "application.backend-http": {
@@ -207,7 +347,15 @@
             "server-admin-dev.dtupay.com",
             "server-admin-dev.sdkwork.cn",
             "server-admin-dev.birdcoder.cn",
-            "server-admin-dev.dtupay.cn"
+            "server-admin-dev.dtupay.cn",
+            "server-admin-dev.skubc.com",
+            "server-admin-dev.skubc.cn",
+            "server-admin-dev.zowalk.com",
+            "server-admin-dev.zowalk.cn",
+            "server-admin-dev.offer86.com",
+            "server-admin-dev.offer86.cn",
+            "server-admin-dev.86offer.com",
+            "server-admin-dev.86offer.cn"
           ]
         },
         "test": {
@@ -217,7 +365,15 @@
             "server-admin-test.dtupay.com",
             "server-admin-test.sdkwork.cn",
             "server-admin-test.birdcoder.cn",
-            "server-admin-test.dtupay.cn"
+            "server-admin-test.dtupay.cn",
+            "server-admin-test.skubc.com",
+            "server-admin-test.skubc.cn",
+            "server-admin-test.zowalk.com",
+            "server-admin-test.zowalk.cn",
+            "server-admin-test.offer86.com",
+            "server-admin-test.offer86.cn",
+            "server-admin-test.86offer.com",
+            "server-admin-test.86offer.cn"
           ]
         },
         "staging": {
@@ -227,7 +383,15 @@
             "server-admin-staging.dtupay.com",
             "server-admin-staging.sdkwork.cn",
             "server-admin-staging.birdcoder.cn",
-            "server-admin-staging.dtupay.cn"
+            "server-admin-staging.dtupay.cn",
+            "server-admin-staging.skubc.com",
+            "server-admin-staging.skubc.cn",
+            "server-admin-staging.zowalk.com",
+            "server-admin-staging.zowalk.cn",
+            "server-admin-staging.offer86.com",
+            "server-admin-staging.offer86.cn",
+            "server-admin-staging.86offer.com",
+            "server-admin-staging.86offer.cn"
           ]
         }
       },
@@ -237,7 +401,15 @@
         "server-admin.dtupay.com",
         "server-admin.sdkwork.cn",
         "server-admin.birdcoder.cn",
-        "server-admin.dtupay.cn"
+        "server-admin.dtupay.cn",
+        "server-admin.skubc.com",
+        "server-admin.skubc.cn",
+        "server-admin.zowalk.com",
+        "server-admin.zowalk.cn",
+        "server-admin.offer86.com",
+        "server-admin.offer86.cn",
+        "server-admin.86offer.com",
+        "server-admin.86offer.cn"
       ]
     },
     "platform.api-gateway": {
@@ -250,7 +422,15 @@
             "api-dev.dtupay.com",
             "api-dev.sdkwork.cn",
             "api-dev.birdcoder.cn",
-            "api-dev.dtupay.cn"
+            "api-dev.dtupay.cn",
+            "api-dev.skubc.com",
+            "api-dev.skubc.cn",
+            "api-dev.zowalk.com",
+            "api-dev.zowalk.cn",
+            "api-dev.offer86.com",
+            "api-dev.offer86.cn",
+            "api-dev.86offer.com",
+            "api-dev.86offer.cn"
           ]
         },
         "test": {
@@ -260,7 +440,15 @@
             "api-test.dtupay.com",
             "api-test.sdkwork.cn",
             "api-test.birdcoder.cn",
-            "api-test.dtupay.cn"
+            "api-test.dtupay.cn",
+            "api-test.skubc.com",
+            "api-test.skubc.cn",
+            "api-test.zowalk.com",
+            "api-test.zowalk.cn",
+            "api-test.offer86.com",
+            "api-test.offer86.cn",
+            "api-test.86offer.com",
+            "api-test.86offer.cn"
           ]
         },
         "staging": {
@@ -270,7 +458,15 @@
             "api-staging.dtupay.com",
             "api-staging.sdkwork.cn",
             "api-staging.birdcoder.cn",
-            "api-staging.dtupay.cn"
+            "api-staging.dtupay.cn",
+            "api-staging.skubc.com",
+            "api-staging.skubc.cn",
+            "api-staging.zowalk.com",
+            "api-staging.zowalk.cn",
+            "api-staging.offer86.com",
+            "api-staging.offer86.cn",
+            "api-staging.86offer.com",
+            "api-staging.86offer.cn"
           ]
         }
       },
@@ -280,7 +476,15 @@
         "api.dtupay.com",
         "api.sdkwork.cn",
         "api.birdcoder.cn",
-        "api.dtupay.cn"
+        "api.dtupay.cn",
+        "api.skubc.com",
+        "api.skubc.cn",
+        "api.zowalk.com",
+        "api.zowalk.cn",
+        "api.offer86.com",
+        "api.offer86.cn",
+        "api.86offer.com",
+        "api.86offer.cn"
       ]
     }
   },

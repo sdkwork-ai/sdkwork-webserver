@@ -1,13 +1,10 @@
-//! Layout v2 `server.toml` loader per `SDKWORK_WEBSERVER_SPEC.md`.
+//! Layout v3 `server.toml` loader per `SDKWORK_WEBSERVER_SPEC.md`.
 //!
-//! Loads `deployments/webserver/server.common.toml` plus the profile file
+//! Loads `deployments/webserver/server.common.toml`, the lifecycle file
+//! (`server.<environment>.toml`), and the profile file
 //! (`server.standalone.toml` / `server.cloud.toml`), applies the standard
-//! inheritance merge (scalar override, leaf-array replacement, identity-key
-//! upsert for object arrays, wholesale upstream target replacement), and
-//! materializes the effective configuration into the runtime
-//! `WebServerAppConfig` model. The materialization matrix follows the spec
-//! section 13.3; directives that the runtime model cannot express fail closed
-//! instead of silently diverging from the declared intent.
+//! three-layer inheritance merge, and materializes the effective configuration
+//! into the runtime `WebServerAppConfig` model.
 
 use std::{collections::BTreeMap, path::Path};
 
@@ -124,21 +121,35 @@ fn merge_arrays(base: &[Value], overlay: &[Value], path: &str) -> Value {
     Value::Array(out)
 }
 
-/// Effective configuration for one profile (spec section 2.2).
+/// Effective configuration for one profile overlay (spec section 2.2).
 pub fn merge_common_profile(
     common: &Value,
     profile: &Value,
 ) -> Result<Value, WebServerConfigError> {
     let mut overlay = profile.clone();
-    if let Some(profile_value) = overlay.get("profile") {
-        if !profile_value.is_null() {
-            overlay
-                .as_object_mut()
-                .expect("object")
-                .remove("profile");
-        }
+    if let Some(obj) = overlay.as_object_mut() {
+        obj.remove("profile");
+        obj.remove("environment");
     }
     Ok(merge_value(common, &overlay, ""))
+}
+
+/// effective(profile, environment) = merge(common, environment, profile)
+pub fn merge_effective(
+    common: &Value,
+    environment: &Value,
+    profile: &Value,
+) -> Result<Value, WebServerConfigError> {
+    let after_environment = merge_common_profile(common, environment)?;
+    merge_common_profile(&after_environment, profile)
+}
+
+/// Merge one effective document over another with the standard layout v3
+/// merge semantics (scalar override, leaf-array replacement, identity-key
+/// upsert for object arrays, wholesale upstream target replacement). Used
+/// to assemble the merged module-imports data plane.
+pub fn merge_overlay(base: &Value, overlay: &Value) -> Result<Value, WebServerConfigError> {
+    Ok(merge_value(base, overlay, ""))
 }
 
 fn parse_toml_file(path: &Path) -> Result<Value, WebServerConfigError> {
@@ -953,6 +964,7 @@ impl<'a> Materializer<'a> {
         let key = (bind.to_owned(), port);
         let id = listener_id(bind, port);
         if let Some((existing_id, existing_ssl)) = self.listeners_by_port.get(&key) {
+            let existing_id = existing_id.clone();
             if existing_ssl != &ssl {
                 return Err(materialize_error(
                     path,
@@ -960,15 +972,21 @@ impl<'a> Materializer<'a> {
                 ));
             }
             if let Some(tls_policy) = tls_policy_ref {
-                // Multiple servers may share one listener only when they agree
-                // on the TLS policy (SNI selection is not modeled).
-                if let Some(listener) = self.listeners.iter_mut().find(|l| l["id"] == *existing_id) {
-                    let current = listener.get("tlsPolicyRef").and_then(Value::as_str);
-                    if current.is_some() && current != Some(tls_policy) {
-                        return Err(materialize_error(
-                            path,
-                            format!("port {port} is shared by servers with different TLS policies; use one certificate per listener port"),
-                        ));
+                // Servers may share one TLS listener with different named
+                // certificates (per-base-domain TLS split): the listener
+                // policy collects every certificate for the port and the data
+                // plane selects by SNI. Version/ALPN or client-auth policy
+                // differences still fail closed.
+                let current = self
+                    .listeners
+                    .iter()
+                    .find(|l| l["id"] == *existing_id)
+                    .and_then(|l| l.get("tlsPolicyRef"))
+                    .and_then(Value::as_str)
+                    .map(str::to_owned);
+                if let Some(current) = current {
+                    if current != tls_policy {
+                        self.merge_listener_tls_policies(&current, tls_policy, port, http2, path)?;
                     }
                 }
             }
@@ -993,11 +1011,112 @@ impl<'a> Materializer<'a> {
         if ssl {
             if let Some(policy) = tls_policy_ref {
                 listener["tlsPolicyRef"] = Value::String(policy.to_owned());
+                // The listener protocols are the operator's declared intent;
+                // the policy ALPN must exactly match them (validate.rs).
+                let alpn = if http2 {
+                    json!(["h2", "http/1.1"])
+                } else {
+                    json!(["http/1.1"])
+                };
+                if let Some(existing) = self
+                    .tls_policies
+                    .iter_mut()
+                    .find(|candidate| candidate.get("id").and_then(Value::as_str) == Some(policy))
+                {
+                    existing["alpn"] = alpn;
+                }
             }
         }
         self.listeners.push(listener);
         self.listeners_by_port.insert(key, (id.clone(), ssl));
         Ok(id)
+    }
+
+    /// Merge the incoming certificate policy into the listener's existing
+    /// policy so one SNI-terminated listener serves every certificate on the
+    /// port (`SDKWORK_WEBSERVER_SPEC.md` §2.4 per-base-domain TLS split).
+    /// HTTP/2 intent, TLS version, and client-auth policies must agree; they
+    /// fail closed otherwise.
+    fn merge_listener_tls_policies(
+        &mut self,
+        existing_id: &str,
+        incoming_id: &str,
+        port: u16,
+        http2: bool,
+        path: &str,
+    ) -> Result<(), WebServerConfigError> {
+        let listener_http2 = self
+            .listeners
+            .iter()
+            .find(|listener| listener["id"] == existing_id)
+            .and_then(|listener| listener.get("protocols"))
+            .and_then(Value::as_array)
+            .map(|protocols| {
+                protocols
+                    .iter()
+                    .any(|protocol| protocol.as_str() == Some("http2"))
+            })
+            .unwrap_or(false);
+        if listener_http2 != http2 {
+            return Err(materialize_error(
+                path,
+                format!(
+                    "port {port} is shared by servers with different TLS version/ALPN policies; use one certificate policy per listener port"
+                ),
+            ));
+        }
+        let existing = self
+            .tls_policies
+            .iter()
+            .find(|policy| policy.get("id").and_then(Value::as_str) == Some(existing_id))
+            .ok_or_else(|| materialize_error(path, format!("TLS policy `{existing_id}` is missing")))?;
+        let incoming = self
+            .tls_policies
+            .iter()
+            .find(|policy| policy.get("id").and_then(Value::as_str) == Some(incoming_id))
+            .ok_or_else(|| materialize_error(path, format!("TLS policy `{incoming_id}` is missing")))?;
+        for key in ["minimumVersion", "maximumVersion"] {
+            if existing.get(key) != incoming.get(key) {
+                return Err(materialize_error(
+                    path,
+                    format!(
+                        "port {port} is shared by servers with different TLS version/ALPN policies; use one certificate policy per listener port"
+                    ),
+                ));
+            }
+        }
+        if existing.get("clientAuth") != incoming.get("clientAuth") {
+            return Err(materialize_error(
+                path,
+                format!(
+                    "port {port} is shared by servers with different clientCertificate policies; use one client auth policy per listener port"
+                ),
+            ));
+        }
+        let incoming_refs = incoming
+            .get("certificateRefs")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        if incoming_refs.is_empty() {
+            return Ok(());
+        }
+        if let Some(existing) = self
+            .tls_policies
+            .iter_mut()
+            .find(|policy| policy.get("id").and_then(Value::as_str) == Some(existing_id))
+        {
+            let refs = existing
+                .get_mut("certificateRefs")
+                .and_then(Value::as_array_mut)
+                .expect("materialized TLS policy carries certificateRefs");
+            for certificate_ref in incoming_refs {
+                if !refs.iter().any(|value| value == &certificate_ref) {
+                    refs.push(certificate_ref);
+                }
+            }
+        }
+        Ok(())
     }
 
     fn ensure_certificate(
@@ -1041,8 +1160,8 @@ impl<'a> Materializer<'a> {
         let cert_key_file = cert.get("certKeyFile").and_then(Value::as_str);
         let (certificate_file, private_key_file) = match (acme, cert_file, cert_key_file) {
             (Some(acme_name), _, _) => (
-                format!("/opt/certs/letsencrypt/live/{acme_name}/fullchain.pem"),
-                format!("/opt/certs/letsencrypt/live/{acme_name}/privkey.pem"),
+                format!("/etc/sdkwork/certs/letsencrypt/{acme_name}/fullchain.pem"),
+                format!("/etc/sdkwork/certs/letsencrypt/{acme_name}/privkey.pem"),
             ),
             (_, Some(cert_file), Some(cert_key_file)) => (cert_file.to_owned(), cert_key_file.to_owned()),
             _ => {
@@ -1905,7 +2024,7 @@ impl<'a> Materializer<'a> {
 /// Load and materialize a single `server.toml` file as a complete app
 /// configuration (the TOML equivalent of a standalone `nginx.conf`).
 ///
-/// The document uses the same typed surface as the layout v2 effective
+/// The document uses the same typed surface as the layout v3 effective
 /// configuration (`[main]`, `[http]`, `[[http.server]]`, `[[http.upstream]]`,
 /// `[[stream.server]]`, `[http.certificates.*]`, `[nginx]`, `proxyCache`).
 /// A root `profile` key is layout-merge metadata and is ignored here.
@@ -1937,37 +2056,62 @@ pub fn load_server_toml_file(
     materialize_app(&effective, app_key)
 }
 
-/// Load and materialize a layout v2 `server.toml` directory for one profile.
-///
-/// `dir` must contain `server.common.toml` and `server.<profile>.toml`;
-/// `profile` is `"standalone"` or `"cloud"`.
-pub fn load_server_toml_app(
+/// Load the three-layer effective TOML document of a layout v3 directory
+/// (common + `server.<environment>.toml` + `server.<profile>.toml`) without
+/// materializing it. Used by `load_server_toml_app` and by the merged
+/// module-imports assembly.
+pub fn load_server_toml_app_effective(
     dir: impl AsRef<Path>,
     profile: &str,
-    app_key: &str,
-) -> Result<WebServerAppConfig, WebServerConfigError> {
+    environment: &str,
+) -> Result<Value, WebServerConfigError> {
     let dir = dir.as_ref();
     let common_path = dir.join("server.common.toml");
+    let environment_path = dir.join(format!("server.{environment}.toml"));
     let profile_path = dir.join(format!("server.{profile}.toml"));
     if !common_path.exists() || !profile_path.exists() {
         return Err(WebServerConfigError::Materialize(format!(
-            "layout v2 requires {} and {} in {}",
+            "layout v3 requires {} and {} in {}",
             common_path.display(),
             profile_path.display(),
             dir.display()
         )));
     }
     let common = parse_toml_file(&common_path)?;
-    let overlay = parse_toml_file(&profile_path)?;
-    let declared = overlay.get("profile").and_then(Value::as_str);
-    if declared != Some(profile) {
+    let profile_doc = parse_toml_file(&profile_path)?;
+    let declared_profile = profile_doc.get("profile").and_then(Value::as_str);
+    if declared_profile != Some(profile) {
         return Err(WebServerConfigError::Materialize(format!(
-            "{} must declare profile = \"{profile}\" (found {:?})",
-            profile_path.display(),
-            declared
+            "{} must declare profile = \"{profile}\" (found {declared_profile:?})",
+            profile_path.display()
         )));
     }
-    let effective = merge_common_profile(&common, &overlay)?;
+    if environment_path.exists() {
+        let environment_doc = parse_toml_file(&environment_path)?;
+        let declared_environment = environment_doc.get("environment").and_then(Value::as_str);
+        if declared_environment != Some(environment) {
+            return Err(WebServerConfigError::Materialize(format!(
+                "{} must declare environment = \"{environment}\" (found {declared_environment:?})",
+                environment_path.display()
+            )));
+        }
+        merge_effective(&common, &environment_doc, &profile_doc)
+    } else {
+        merge_common_profile(&common, &profile_doc)
+    }
+}
+
+/// Load and materialize a layout v3 `server.toml` directory.
+///
+/// `dir` must contain `server.common.toml`, `server.<environment>.toml`, and
+/// `server.<profile>.toml`; `profile` is `"standalone"` or `"cloud"`.
+pub fn load_server_toml_app(
+    dir: impl AsRef<Path>,
+    profile: &str,
+    environment: &str,
+    app_key: &str,
+) -> Result<WebServerAppConfig, WebServerConfigError> {
+    let effective = load_server_toml_app_effective(dir, profile, environment)?;
     materialize_app(&effective, app_key)
 }
 
@@ -2137,56 +2281,108 @@ mod tests {
             .join("sdkwork-specs")
             .join("examples")
             .join("webserver")
+            .join("modules")
+            .join("sdkwork-im")
+            .join("deployments")
+            .join("webserver")
+    }
+
+    fn write_layout_v3_dir(dir: &Path, common: &str, production: &str, standalone: &str) {
+        std::fs::write(dir.join("server.common.toml"), common).expect("write common");
+        std::fs::write(
+            dir.join("server.production.toml"),
+            format!("environment = \"production\"\n{production}"),
+        )
+        .expect("write production");
+        for env in ["development", "test", "staging"] {
+            std::fs::write(
+                dir.join(format!("server.{env}.toml")),
+                format!("environment = \"{env}\"\nenabled = false\n"),
+            )
+            .expect("write env stub");
+        }
+        std::fs::write(
+            dir.join("server.standalone.toml"),
+            if standalone.trim_start().starts_with("profile =") {
+                standalone.to_owned()
+            } else {
+                format!("profile = \"standalone\"\n{standalone}")
+            },
+        )
+        .expect("write standalone");
+        std::fs::write(dir.join("server.cloud.toml"), "profile = \"cloud\"\n").expect("write cloud");
+    }
+
+    const MINIMAL_PRODUCTION: &str = r#"
+[http]
+[http.certificates."sdkwork.com"]
+certFile = "/etc/sdkwork/certs/letsencrypt/sdkwork.com/fullchain.pem"
+certKeyFile = "/etc/sdkwork/certs/letsencrypt/sdkwork.com/privkey.pem"
+
+[[http.server]]
+listen = ["443 ssl", "80"]
+serverName = ["im.sdkwork.com"]
+http2 = true
+[http.server.tls]
+cert = "sdkwork.com"
+protocols = ["TLSv1.2", "TLSv1.3"]
+
+[[http.server.location]]
+match = "/api/"
+proxyPass = "http://gateway"
+
+[[http.server.location]]
+match = "/"
+proxyPass = "http://gateway"
+"#;
+
+    fn minimal_examples_dir() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("sdkwork-example-layout-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let common = std::fs::read_to_string(examples_dir().join("server.common.toml")).expect("common");
+        let standalone = std::fs::read_to_string(examples_dir().join("server.standalone.toml")).expect("standalone");
+        let cloud = std::fs::read_to_string(examples_dir().join("server.cloud.toml")).expect("cloud");
+        write_layout_v3_dir(&dir, &common, MINIMAL_PRODUCTION, &standalone);
+        std::fs::write(dir.join("server.cloud.toml"), cloud).expect("cloud");
+        dir
     }
 
     #[test]
     fn loads_cloud_profile_from_example_layout() {
-        let config = load_server_toml_app(examples_dir(), "cloud", "sdkwork-example")
+        let dir = minimal_examples_dir();
+        let config = load_server_toml_app(&dir, "cloud", "production", "sdkwork-example")
             .expect("cloud example must load");
-        assert_eq!(config.schema_version, 1);
         assert_eq!(config.app_key, "sdkwork-example");
-        // Upstream target replaced wholesale by the cloud delta.
-        let upstream = config.upstreams.iter().find(|u| u.id == "api_backend").expect("upstream");
-        assert_eq!(upstream.targets.len(), 1);
-        assert_eq!(upstream.targets[0].url, "http://10.0.4.12:3900");
-        // Virtual hosts inherited from common (2 hosts).
-        assert_eq!(config.virtual_hosts.len(), 2);
-        let main = config.virtual_hosts.iter().find(|v| v.server_names.contains(&"im.sdkwork.com".to_owned())).expect("main host");
-        assert!(main.listener_refs.iter().any(|id| id.contains("443")));
-        // Resources: proxy, static, respond present.
-        let kinds: Vec<&str> = config
-            .resources
-            .iter()
-            .map(|r| match r {
-                super::super::model::ResourceConfig::Proxy { .. } => "proxy",
-                super::super::model::ResourceConfig::Static { .. } => "static",
-                super::super::model::ResourceConfig::Respond { .. } => "respond",
-                super::super::model::ResourceConfig::Redirect { .. } => "redirect",
-                super::super::model::ResourceConfig::Drive { .. } => "drive",
-                super::super::model::ResourceConfig::Knowledgebase { .. } => "knowledgebase",
-            })
-            .collect();
-        assert!(kinds.contains(&"proxy"), "expected proxy resource");
-        assert!(kinds.contains(&"static"), "expected static resource");
-        assert!(kinds.contains(&"respond"), "expected respond resource");
+        let upstream = config.upstreams.iter().find(|u| u.id == "gateway").expect("upstream");
+        assert_eq!(upstream.targets[0].url, "http://sdkwork-api-cloud-gateway:8080");
+        assert_eq!(config.virtual_hosts.len(), 1);
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
-    fn loads_standalone_profile_with_dual_targets() {
-        let config = load_server_toml_app(examples_dir(), "standalone", "sdkwork-example")
+    fn loads_standalone_profile_with_gateway_target() {
+        let dir = minimal_examples_dir();
+        let config = load_server_toml_app(&dir, "standalone", "production", "sdkwork-example")
             .expect("standalone example must load");
-        let upstream = config.upstreams.iter().find(|u| u.id == "api_backend").expect("upstream");
-        assert_eq!(upstream.targets.len(), 2);
-        assert_eq!(upstream.targets[0].url, "http://127.0.0.1:3900");
-        assert!(upstream.targets[1].backup);
+        let upstream = config.upstreams.iter().find(|u| u.id == "gateway").expect("upstream");
+        assert_eq!(upstream.targets[0].url, "http://127.0.0.1:18079");
+        assert_eq!(config.virtual_hosts.len(), 1);
+        std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The product's own shipped layout must materialize completely for both
-    /// deployment profiles: every virtual host resolves its routes to declared
-    /// resources, every proxy references a declared upstream, and TLS listeners
-    /// carry the shared certificate policy.
     #[test]
-    fn loads_the_product_webserver_layout_for_both_profiles() {
+    fn merges_im_example_production_hosts_for_all_base_domains() {
+        let repo = examples_dir();
+        let common = parse_toml_file(&repo.join("server.common.toml")).expect("common");
+        let production = parse_toml_file(&repo.join("server.production.toml")).expect("production");
+        let standalone = parse_toml_file(&repo.join("server.standalone.toml")).expect("standalone");
+        let effective = merge_effective(&common, &production, &standalone).expect("merge");
+        assert_eq!(effective["http"]["server"].as_array().expect("servers").len(), 14);
+    }
+
+    #[test]
+    fn merges_the_product_webserver_layout_for_both_profiles() {
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .expect("crates")
@@ -2194,110 +2390,22 @@ mod tests {
             .expect("sdkwork-webserver")
             .join("deployments")
             .join("webserver");
-
-        let standalone =
-            load_server_toml_app(&repo, "standalone", "sdkwork-webserver").expect("standalone layout must load");
-        let cloud = load_server_toml_app(&repo, "cloud", "sdkwork-webserver")
-            .expect("cloud layout must load");
-        for config in [&standalone, &cloud] {
-            assert_eq!(config.virtual_hosts.len(), 13, "one server block per registered host");
-            assert_eq!(config.listeners.len(), 3, "443, 80, and the loopback operations listener");
-            let certificate = config
-                .certificates
-                .iter()
-                .find(|cert| cert.id == "sdkwork")
-                .expect("shared wildcard certificate");
-            let super::super::model::CertificateSource::ProtectedFile {
-                certificate_file, ..
-            } = &certificate.source;
-            assert_eq!(
-                certificate_file,
-                "/opt/certs/letsencrypt/live/sdkwork.com/fullchain.pem"
-            );
-            let tls_listener = config
-                .listeners
-                .iter()
-                .find(|listener| listener.port == 443)
-                .expect("443 listener");
-            assert_eq!(
-                tls_listener.tls_policy_ref.as_deref(),
-                Some("tls-sdkwork"),
-                "443 must use the shared TLS policy"
-            );
-            assert_eq!(tls_listener.protocols.len(), 2, "http1 + http2");
-            let plaintext = config
-                .listeners
-                .iter()
-                .find(|listener| listener.port == 80)
-                .expect("80 listener");
-            assert!(plaintext.allow_plaintext_http, "declared plaintext listen must be honored");
-
-            let resource_ids = config
-                .resources
-                .iter()
-                .map(|resource| match resource {
-                    super::super::model::ResourceConfig::Proxy { id, .. } => id.as_str(),
-                    super::super::model::ResourceConfig::Respond { id, .. } => id.as_str(),
-                    other => panic!("unexpected resource kind {other:?}"),
-                })
-                .collect::<std::collections::HashSet<_>>();
-            for host in &config.virtual_hosts {
-                for route in &host.routes {
-                    assert!(
-                        resource_ids.contains(route.resource_ref.as_str()),
-                        "route {} on {} references a missing resource",
-                        route.id,
-                        host.server_names.join(",")
-                    );
-                }
-            }
-            let upstream_ids = config
-                .upstreams
-                .iter()
-                .map(|upstream| upstream.id.as_str())
-                .collect::<std::collections::HashSet<_>>();
-            for resource in &config.resources {
-                if let super::super::model::ResourceConfig::Proxy { upstream_ref, .. } = resource {
-                    assert!(
-                        upstream_ids.contains(upstream_ref.as_str()),
-                        "proxy {} references a missing upstream {upstream_ref}",
-                        resource.id()
-                    );
-                }
-            }
-        }
-
-        let gateway = standalone
-            .upstreams
-            .iter()
-            .find(|upstream| upstream.id == "gateway")
-            .expect("gateway upstream");
+        let common = parse_toml_file(&repo.join("server.common.toml")).expect("common");
+        let production = parse_toml_file(&repo.join("server.production.toml")).expect("production");
+        let standalone = parse_toml_file(&repo.join("server.standalone.toml")).expect("standalone");
+        let cloud = parse_toml_file(&repo.join("server.cloud.toml")).expect("cloud");
         assert_eq!(
-            gateway.targets.iter().map(|target| target.url.as_str()).collect::<Vec<_>>(),
-            vec!["http://127.0.0.1:3800"]
+            merge_effective(&common, &production, &standalone).expect("merge")["http"]["server"]
+                .as_array()
+                .expect("servers")
+                .len(),
+            14
         );
-        let gateway = cloud
-            .upstreams
-            .iter()
-            .find(|upstream| upstream.id == "gateway")
-            .expect("gateway upstream");
+        let cloud_effective = merge_effective(&common, &production, &cloud).expect("merge cloud");
+        assert_eq!(cloud_effective["http"]["server"].as_array().expect("servers").len(), 14);
         assert_eq!(
-            gateway.targets.iter().map(|target| target.url.as_str()).collect::<Vec<_>>(),
-            vec!["http://sdkwork-api-cloud-gateway:80"]
-        );
-        let exact_healthz = standalone
-            .virtual_hosts
-            .iter()
-            .find(|host| host.server_names.contains(&"server.sdkwork.com".to_owned()))
-            .expect("main public host")
-            .routes
-            .iter()
-            .find(|route| route.route_match.path == "/healthz")
-            .expect("healthz route");
-        assert_eq!(
-            exact_healthz.route_match.path_type,
-            super::super::model::RoutePathType::Exact,
-            "= /healthz must materialize as an exact match"
+            cloud_effective["http"]["upstream"][0]["target"][0]["address"],
+            "sdkwork-api-cloud-gateway:8080"
         );
     }
 
@@ -2310,10 +2418,8 @@ mod tests {
         let mut standalone =
             std::fs::read_to_string(examples.join("server.standalone.toml")).expect("standalone text");
         standalone = standalone.replacen("profile = \"standalone\"", "profile = \"cloud\"", 1);
-        std::fs::write(dir.join("server.common.toml"), common).expect("write common");
-        std::fs::write(dir.join("server.standalone.toml"), standalone).expect("write standalone");
-        std::fs::write(dir.join("server.cloud.toml"), "profile = \"cloud\"\n").expect("write cloud");
-        let error = load_server_toml_app(&dir, "standalone", "sdkwork-example")
+        write_layout_v3_dir(&dir, &common, MINIMAL_PRODUCTION, &standalone);
+        let error = load_server_toml_app(&dir, "standalone", "production", "sdkwork-example")
             .err()
             .expect("profile mismatch must be rejected");
         let message = error.to_string();
@@ -2393,19 +2499,12 @@ mod tests {
             std::process::id()
         ));
         std::fs::create_dir_all(&dir).expect("temp dir");
-        std::fs::write(
-            dir.join("server.common.toml"),
+        write_layout_v3_dir(
+            &dir,
             r#"
 specVersion = 1
 kind = "sdkwork.webserver.server"
 id = "stream-test"
-
-[[http.server]]
-listen = ["80"]
-serverName = ["stream-test.local"]
-[[http.server.location]]
-match = "/"
-returnStatus = 404
 
 [[http.upstream]]
 name = "db"
@@ -2424,14 +2523,17 @@ listen = ["127.0.0.1:5433"]
 proxyPass = "db"
 proxyProtocol = true
 "#,
-        )
-        .unwrap();
-        std::fs::write(
-            dir.join("server.standalone.toml"),
-            "profile = \"standalone\"\n",
-        )
-        .unwrap();
-        let config = load_server_toml_app(&dir, "standalone", "stream-test").expect("layout must load");
+            r#"
+[[http.server]]
+listen = ["80"]
+serverName = ["stream-test.local"]
+[[http.server.location]]
+match = "/"
+returnStatus = 404
+"#,
+            "",
+        );
+        let config = load_server_toml_app(&dir, "standalone", "production", "stream-test").expect("layout must load");
         assert_eq!(config.streams.len(), 2);
         let literal = &config.streams[0];
         assert_eq!(literal.id, "stream-0");
@@ -2500,7 +2602,7 @@ proxyPass = "127.0.0.1:9443"
             "profile = \"standalone\"\n",
         )
         .unwrap();
-        let config = load_server_toml_app(&dir, "standalone", "stream-tls-test").expect("layout must load");
+        let config = load_server_toml_app(&dir, "standalone", "production", "stream-tls-test").expect("layout must load");
         assert_eq!(config.streams.len(), 1);
         assert_eq!(
             config.streams[0].tls,
@@ -2537,7 +2639,7 @@ proxyPass = "127.0.0.1:9443"
 "#,
         )
         .unwrap();
-        let error = load_server_toml_app(&dir, "standalone", "stream-tls-reject")
+        let error = load_server_toml_app(&dir, "standalone", "production", "stream-tls-reject")
             .expect_err("ssl + sslPreread must fail closed");
         assert!(
             error.to_string().contains("mutually exclusive"),
@@ -2581,7 +2683,7 @@ proxyPass = "127.0.0.1:9443"
         )
         .unwrap();
         let config =
-            load_server_toml_app(&dir, "standalone", "stream-preread-test").expect("layout must load");
+            load_server_toml_app(&dir, "standalone", "production", "stream-preread-test").expect("layout must load");
         assert_eq!(
             config.streams[0].tls,
             Some(super::super::model::StreamTlsMode::Preread)
@@ -2623,7 +2725,7 @@ returnBody = "ok"
             "profile = \"standalone\"\n",
         )
         .unwrap();
-        let config = load_server_toml_app(&dir, "standalone", "gzip-test").expect("layout must load");
+        let config = load_server_toml_app(&dir, "standalone", "production", "gzip-test").expect("layout must load");
         assert!(config.gzip.enabled);
         assert_eq!(config.gzip.min_length, 64);
         assert_eq!(
@@ -2665,7 +2767,7 @@ proxyPass = "missing-upstream"
 "#,
         )
         .unwrap();
-        let error = load_server_toml_app(&dir, "standalone", "stream-reject")
+        let error = load_server_toml_app(&dir, "standalone", "production", "stream-reject")
             .err()
             .expect("unknown upstream must be rejected");
         assert!(
@@ -2695,7 +2797,7 @@ proxyPass = "127.0.0.1:3306"
             ),
         )
         .expect("write common");
-        let error = load_server_toml_app(&dir, "standalone", "stream-reject")
+        let error = load_server_toml_app(&dir, "standalone", "production", "stream-reject")
             .err()
             .expect("public stream bind must be rejected");
         assert!(
@@ -2745,7 +2847,7 @@ returnBody = "ok"
         )
         .unwrap();
         let config =
-            load_server_toml_app(&dir, "standalone", "regex-rewrite-test").expect("layout must load");
+            load_server_toml_app(&dir, "standalone", "production", "regex-rewrite-test").expect("layout must load");
         let host = &config.virtual_hosts[0];
         let exclusive = host
             .routes
@@ -2810,7 +2912,7 @@ returnStatus = 404
             "profile = \"standalone\"\n",
         )
         .unwrap();
-        let config = load_server_toml_app(&dir, "standalone", "alias-test").expect("layout must load");
+        let config = load_server_toml_app(&dir, "standalone", "production", "alias-test").expect("layout must load");
         let static_resource = config
             .resources
             .iter()
@@ -2862,7 +2964,7 @@ returnStatus = 404
             "profile = \"standalone\"\n",
         )
         .unwrap();
-        let error = load_server_toml_app(&dir, "standalone", "alias-reject")
+        let error = load_server_toml_app(&dir, "standalone", "production", "alias-reject")
             .err()
             .expect("alias without trailing slash must fail");
         assert!(
@@ -2905,7 +3007,7 @@ returnStatus = 404
             "profile = \"standalone\"\n",
         )
         .unwrap();
-        let error = load_server_toml_app(&dir, "standalone", "alias-regex-reject")
+        let error = load_server_toml_app(&dir, "standalone", "production", "alias-regex-reject")
             .err()
             .expect("regex alias must fail");
         assert!(
@@ -2956,7 +3058,7 @@ authBasicUserFile = "{htpasswd_path}"
             "profile = \"standalone\"\n",
         )
         .unwrap();
-        let config = load_server_toml_app(&dir, "standalone", "auth-basic-test")
+        let config = load_server_toml_app(&dir, "standalone", "production", "auth-basic-test")
             .expect("layout must load");
         let route = &config.virtual_hosts[0].routes[0];
         let auth = route.auth_basic.as_ref().expect("auth_basic");

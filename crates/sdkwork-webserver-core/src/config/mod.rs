@@ -24,8 +24,9 @@ pub use auth_basic::{
 };
 pub use compiled::{normalize_authority_host, CompiledWebServerApp, SelectedRoute};
 pub use discovery::{
-    canonical_webserver_config_directory, resolve_webserver_config_path, WEBSERVER_CONFIG_FILE_ENV,
-    WEBSERVER_CONFIG_FILE_NAME,
+    canonical_webserver_config_directory, resolve_nginx_sidecar_path, resolve_webserver_config_path,
+    APP_ROOT_ENV, DEPLOYMENT_PROFILE_ENV, ENVIRONMENT_ENV, NGINX_CONFIG_FILE_ENV,
+    WEBSERVER_CONFIG_FILE_ENV, WEBSERVER_CONFIG_FILE_NAME,
 };
 pub use error::{ConfigDiagnostic, WebServerConfigError};
 pub use limit_req::{parse_limit_req, parse_limit_req_zone, LimitReqParseError};
@@ -50,7 +51,8 @@ pub use secure_link::{
 };
 pub use sdkwork_webserver_resolver_cache::{RedisCacheConfig, ResolutionCacheConfig};
 pub use server_toml::{
-    load_server_toml_app, load_server_toml_file, materialize_app, merge_common_profile,
+    load_server_toml_app, load_server_toml_app_effective, load_server_toml_file, materialize_app,
+    merge_common_profile, merge_effective, merge_overlay,
 };
 pub use source::{
     ConfigFormat, ConfigLoadOptions, ConfigSource, JsonConfigSource, LoadedWebServerConfig,

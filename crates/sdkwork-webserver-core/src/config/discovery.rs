@@ -17,6 +17,23 @@ use std::{
 
 use crate::config_paths::{DATA_PLANE_CONFIG_FILE_ENV, DATA_PLANE_CONFIG_FILE_NAME};
 
+/// Override for nginx compatibility sidecar path (`SDKWORK_WEBSERVER_SPEC.md` §4.3).
+pub const NGINX_CONFIG_FILE_ENV: &str = "SDKWORK_WEBSERVER_NGINX_CONFIG_FILE";
+
+/// Deployment profile for nginx sidecar selection.
+pub const DEPLOYMENT_PROFILE_ENV: &str = "SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE";
+
+/// Lifecycle environment for nginx sidecar selection.
+pub const ENVIRONMENT_ENV: &str = "SDKWORK_WEBSERVER_ENVIRONMENT";
+
+/// Application root for repo-relative config discovery.
+pub const APP_ROOT_ENV: &str = "SDKWORK_WEBSERVER_APP_ROOT";
+
+const WEBSERVER_DEPLOY_SUBDIR: &str = "deployments/webserver";
+const LAYOUT_V3_COMMON_FILE: &str = "server.common.toml";
+const VALID_DEPLOYMENT_PROFILES: &[&str] = &["standalone", "cloud"];
+const VALID_ENVIRONMENTS: &[&str] = &["development", "test", "staging", "production"];
+
 /// Canonical Web Server data-plane config file name inside the application
 /// config directory (`specs/sdkwork.webserver.config.schema.json` is the schema
 /// authority for this format).
@@ -32,6 +49,122 @@ pub const WEBSERVER_CONFIG_FILE_ENV: &str = DATA_PLANE_CONFIG_FILE_ENV;
 pub fn resolve_webserver_config_path(argument: Option<String>) -> Result<PathBuf, String> {
     let default_directory = canonical_webserver_config_directory()?;
     resolve_webserver_config_path_with_default(argument, &default_directory)
+}
+
+/// Resolve the nginx compatibility sidecar for the current deployment profile
+/// and lifecycle environment.
+///
+/// Resolution order:
+///
+/// 1. Explicit command-line argument.
+/// 2. `SDKWORK_WEBSERVER_NGINX_CONFIG_FILE`.
+/// 3. `{app_root}/deployments/webserver/nginx.<profile>.<environment>.conf`.
+/// 4. Canonical OS config directory with the same sidecar file name.
+pub fn resolve_nginx_sidecar_path(argument: Option<String>) -> Result<PathBuf, String> {
+    if let Some(path) = argument {
+        if path.trim().is_empty() {
+            return Err("the nginx config argument must not be empty".to_owned());
+        }
+        return Ok(PathBuf::from(path));
+    }
+    if let Ok(path) = env::var(NGINX_CONFIG_FILE_ENV) {
+        if path.trim().is_empty() {
+            return Err(format!("{NGINX_CONFIG_FILE_ENV} must not be empty"));
+        }
+        return Ok(PathBuf::from(path));
+    }
+
+    let profile = resolve_deployment_profile()?;
+    let environment = resolve_lifecycle_environment();
+    let sidecar_name = nginx_sidecar_file_name(&profile, &environment);
+
+    if let Some(app_root) = resolve_application_root() {
+        let repo_sidecar = app_root
+            .join(WEBSERVER_DEPLOY_SUBDIR)
+            .join(&sidecar_name);
+        if repo_sidecar.is_file() {
+            return Ok(repo_sidecar);
+        }
+    }
+
+    let default_directory = canonical_webserver_config_directory()?;
+    let installed_sidecar = default_directory.join(&sidecar_name);
+    match fs::metadata(&installed_sidecar) {
+        Ok(metadata) if metadata.is_file() => Ok(installed_sidecar),
+        Ok(_) => Err(format!(
+            "no nginx sidecar at {}; the path is not a regular file",
+            installed_sidecar.display()
+        )),
+        Err(source) if source.kind() == io::ErrorKind::NotFound => Err(format!(
+            "no nginx sidecar found; expected {sidecar_name} under {WEBSERVER_DEPLOY_SUBDIR}/ or the canonical config directory; pass a path, set {NGINX_CONFIG_FILE_ENV}, or run align-webserver-workspace to render sidecars"
+        )),
+        Err(source) => Err(format!(
+            "nginx sidecar at {} is not accessible: {source}",
+            installed_sidecar.display()
+        )),
+    }
+}
+
+fn nginx_sidecar_file_name(profile: &str, environment: &str) -> String {
+    format!("nginx.{profile}.{environment}.conf")
+}
+
+fn resolve_deployment_profile() -> Result<String, String> {
+    let raw = env::var(DEPLOYMENT_PROFILE_ENV)
+        .or_else(|_| env::var("SDKWORK_DEPLOYMENT_PROFILE"))
+        .unwrap_or_else(|_| "standalone".to_owned())
+        .to_ascii_lowercase();
+    if VALID_DEPLOYMENT_PROFILES.contains(&raw.as_str()) {
+        Ok(raw)
+    } else {
+        Err(format!(
+            "{DEPLOYMENT_PROFILE_ENV} must be one of {}",
+            VALID_DEPLOYMENT_PROFILES.join("|")
+        ))
+    }
+}
+
+fn resolve_lifecycle_environment() -> String {
+    let raw = env::var(ENVIRONMENT_ENV)
+        .or_else(|_| env::var("SDKWORK_ENVIRONMENT"))
+        .or_else(|_| env::var("SDKWORK_WEBSERVER_CONFIG_PROFILE"))
+        .unwrap_or_else(|_| "development".to_owned())
+        .to_ascii_lowercase();
+    if VALID_ENVIRONMENTS.contains(&raw.as_str()) {
+        raw
+    } else {
+        "development".to_owned()
+    }
+}
+
+fn resolve_application_root() -> Option<PathBuf> {
+    for key in [APP_ROOT_ENV, "SDKWORK_APP_ROOT"] {
+        if let Ok(path) = env::var(key) {
+            if !path.trim().is_empty() {
+                let root = PathBuf::from(path);
+                if root.join(WEBSERVER_DEPLOY_SUBDIR)
+                    .join(LAYOUT_V3_COMMON_FILE)
+                    .is_file()
+                {
+                    return Some(root);
+                }
+            }
+        }
+    }
+
+    let mut cursor = env::current_dir().ok()?;
+    loop {
+        let marker = cursor
+            .join(WEBSERVER_DEPLOY_SUBDIR)
+            .join(LAYOUT_V3_COMMON_FILE);
+        if marker.is_file() {
+            return Some(cursor);
+        }
+        if !cursor.pop() {
+            break;
+        }
+    }
+    None
 }
 
 /// Resolution core with an injected default directory so tests can use
@@ -196,5 +329,42 @@ mod tests {
                 .map(|name| name.to_string_lossy().into_owned()),
             Some("webserver".to_owned())
         );
+    }
+
+    #[test]
+    fn nginx_sidecar_resolves_from_app_root() {
+        let _guard = env_test_lock();
+        let module = tempfile::tempdir().expect("temp dir");
+        let webserver_dir = module.path().join("deployments/webserver");
+        std::fs::create_dir_all(&webserver_dir).expect("create webserver dir");
+        std::fs::write(webserver_dir.join("server.common.toml"), b"enabled = true\n").expect("write common");
+        std::fs::write(
+            webserver_dir.join("nginx.standalone.development.conf"),
+            b"# sidecar\n",
+        )
+        .expect("write sidecar");
+
+        with_env(APP_ROOT_ENV, Some(module.path().to_str().expect("utf8")), || {
+            with_env(DEPLOYMENT_PROFILE_ENV, Some("standalone"), || {
+                with_env(ENVIRONMENT_ENV, Some("development"), || {
+                    let resolved =
+                        resolve_nginx_sidecar_path(None).expect("sidecar must resolve");
+                    assert_eq!(
+                        resolved,
+                        webserver_dir.join("nginx.standalone.development.conf")
+                    );
+                });
+            });
+        });
+    }
+
+    #[test]
+    fn nginx_sidecar_explicit_argument_wins() {
+        let _guard = env_test_lock();
+        with_env(NGINX_CONFIG_FILE_ENV, Some("/env/nginx.conf"), || {
+            let resolved = resolve_nginx_sidecar_path(Some("/arg/nginx.conf".to_owned()))
+                .expect("argument must resolve");
+            assert_eq!(resolved, PathBuf::from("/arg/nginx.conf"));
+        });
     }
 }

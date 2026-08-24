@@ -8,8 +8,46 @@
 #   3. Stops any existing embedded stacks
 #   4. Deploys all three environments (development, test, production)
 #   5. Configures /etc/hosts and nginx for domain routing
-#   6. Verifies all endpoints are healthy
+# Usage:
+#   sudo bash deployments/docker/scripts/wsl-external-deploy.sh
+#   sudo bash deployments/docker/scripts/wsl-external-deploy.sh --rebuild
+#   sudo bash deployments/docker/scripts/wsl-external-deploy.sh --rebuild --skip-frontend-build
 set -euo pipefail
+
+rebuild=false
+rebuild_args=()
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --rebuild)
+      rebuild=true
+      shift
+      ;;
+    --skip-frontend-build|--skip-release-build|--skip-image-build|--deploy-only|--no-validate|--pull)
+      rebuild=true
+      rebuild_args+=("$1")
+      shift
+      ;;
+    -h|--help)
+      cat <<'EOF'
+Usage: wsl-external-deploy.sh [options]
+
+  --rebuild                  Rebuild PC/H5, release archive, Docker image, then deploy
+  --skip-frontend-build      Pass through to redeploy-all-environments.sh
+  --skip-release-build       Pass through to redeploy-all-environments.sh
+  --skip-image-build         Pass through to redeploy-all-environments.sh
+  --deploy-only              Redeploy existing image only (no rebuild)
+  --no-validate              Skip validate-docker-deployment.mjs before compose up
+  --pull                     docker compose pull before up
+EOF
+      exit 0
+      ;;
+    *)
+      echo "unsupported option: $1" >&2
+      exit 2
+      ;;
+  esac
+done
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)"
 docker_root="$repo_root/deployments/docker"
@@ -167,12 +205,15 @@ main() {
   provision_identity sdkwork_ai_prod sdkwork_ai_prod sdkworkprod123
   ensure_pg_hba_docker_access
 
-  stop_existing_stacks
-
-  # Deploy all environments
-  for env_name in development test production; do
-    deploy_environment "$env_name"
-  done
+  if [ "$rebuild" = true ]; then
+    log "rebuild frontend, release archive, docker image, and redeploy all environments"
+    bash "$repo_root/scripts/docker/redeploy-all-environments.sh" "${rebuild_args[@]}"
+  else
+    stop_existing_stacks
+    for env_name in development test production; do
+      deploy_environment "$env_name"
+    done
+  fi
 
   # Configure nginx and hosts
   bash "$docker_root/scripts/install-wsl-hosts.sh" || true

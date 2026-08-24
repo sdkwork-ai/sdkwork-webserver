@@ -3,6 +3,7 @@ import {
   createSdkworkAppbasePcAuthRuntime,
   createSdkworkSessionAuthUnauthorizedIntegration,
 } from "@sdkwork/auth-runtime-pc-react";
+import { initializeCredentialEntryTokenManager } from "@sdkwork/iam-credential-entry";
 import { createClient as createIamAppClient } from "@sdkwork/iam-app-sdk";
 import { createPersistentIamTokenStore } from "@sdkwork/iam-runtime";
 import { createTokenManager } from "@sdkwork/sdk-common";
@@ -54,6 +55,10 @@ export async function bootstrapWebserverPcRuntime() {
     return consoleClientsPromise;
   };
   await auth.runtime.hydrateTokenManager();
+  // hydrateTokenManager may restore a persisted session that has Auth-Token but
+  // no Access-Token; credential-entry metadata routes require the bootstrap
+  // Access-Token injected into index.html by the standalone gateway.
+  initializeCredentialEntryTokenManager(tokenManager);
   const getAuthRuntime = () => auth.getRuntime() as unknown as SdkworkIamRuntimeAuthRuntimeLike;
   const authController = createSdkworkIamRuntimeAuthController({ getRuntime: getAuthRuntime });
   const loadAuthRuntimeConfig = createWebserverAuthRuntimeConfigLoader(auth.appbaseApp);

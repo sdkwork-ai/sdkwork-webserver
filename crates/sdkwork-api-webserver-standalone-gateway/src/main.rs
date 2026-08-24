@@ -6,8 +6,9 @@ use sdkwork_api_webserver_standalone_gateway::{
     run_database_migrate_only, validate_adaptive_app_shell_from_env, DataPlaneOperationsConfig,
 };
 use sdkwork_webserver_core::{
-    resolve_webserver_config_path, validate_configured_module_imports, ConfigFormat,
-    ConfigLoadOptions, WebServerConfigLoader,
+    compile_merged_imports_app, imported_certificate_names, resolve_nginx_sidecar_path,
+    resolve_webserver_config_path,
+    validate_configured_module_imports, ConfigFormat, ConfigLoadOptions, WebServerConfigLoader,
 };
 use tokio::signal;
 
@@ -55,7 +56,8 @@ async fn run() -> MainResult<()> {
         })?;
     }
     match arguments.next().as_deref() {
-        None | Some("serve-management") => run_management_plane().await?,
+        None => run_default_gateway(arguments.next()).await?,
+        Some("serve-management") => run_management_plane().await?,
         Some("db-migrate") => run_database_migrate_only()
             .await
             .map_err(|error| io::Error::other(format!("database migration failed: {error}")))?,
@@ -90,6 +92,16 @@ async fn run() -> MainResult<()> {
             reject_format_for_nginx(format_override)?;
             validate_nginx_compat(arguments.next())?;
         }
+        Some("serve-imports") => {
+            let operations = DataPlaneOperationsConfig::from_env().map_err(|error| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("data-plane operations config is invalid: {error}"),
+                )
+            })?;
+            run_imports_data_plane_command(operations, shutdown_signal()).await?;
+        }
+        Some("list-import-certificates") => list_import_certificates_command()?,
         Some("help" | "--help" | "-h") => print_help(),
         Some(command) => {
             return Err(io::Error::new(
@@ -169,6 +181,13 @@ fn load_options(format: Option<ConfigFormat>) -> ConfigLoadOptions {
     }
 }
 
+/// Default entry point: nginx compatibility mode using the effective sidecar
+/// for the current deployment profile and lifecycle environment.
+async fn run_default_gateway(configured: Option<String>) -> MainResult<()> {
+    reject_format_for_nginx(None)?;
+    run_nginx_compat_until(configured, shutdown_signal()).await
+}
+
 /// nginx configuration compatibility mode: load a stock nginx config file
 /// (`nginx.conf`) or a directory of `sites-enabled`-style `*.conf` files,
 /// materialize it into the runtime model, and serve it with the data plane.
@@ -178,7 +197,7 @@ async fn run_nginx_compat_until(
     configured: Option<String>,
     shutdown: impl std::future::Future<Output = ()> + Send,
 ) -> MainResult<()> {
-    let path = config_path(configured)?;
+    let path = nginx_config_path(configured)?;
     let loader = config_loader();
     let options = load_options(Some(ConfigFormat::NginxConf));
     let loaded = loader
@@ -205,7 +224,7 @@ async fn run_nginx_compat_until(
 /// Validate nginx compatibility materialization and print the effective
 /// surface without starting listeners.
 fn validate_nginx_compat(configured: Option<String>) -> MainResult<()> {
-    let path = config_path(configured)?;
+    let path = nginx_config_path(configured)?;
     let loader = config_loader();
     let options = load_options(Some(ConfigFormat::NginxConf));
     let loaded = loader
@@ -400,8 +419,63 @@ fn log_config_diagnostics(error: &sdkwork_webserver_core::WebServerConfigError) 
     }
 }
 
+/// Serve the merged module-imports data plane: every configured sibling
+/// module's `deployments/webserver/` effective configuration is merged into
+/// one app and served (module domains, servers, and resources). Listener
+/// ports declared by the module TOMLs can be remapped to the container binds
+/// with `SDKWORK_WEBSERVER_IMPORT_LISTENER_PORTS` (for example
+/// `80=8080,443=8430`). Exits cleanly when no module imports are configured.
+async fn run_imports_data_plane_command(
+    operations: Option<DataPlaneOperationsConfig>,
+    shutdown: impl std::future::Future<Output = ()> + Send,
+) -> MainResult<()> {
+    let Some(compiled) = compile_merged_imports_app().map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("merged module-imports configuration failed: {error}"),
+        )
+    })? else {
+        println!("no module webserver imports configured; nothing to serve");
+        return Ok(());
+    };
+    let app = compiled.config();
+    tracing::info!(
+        listeners = app.listeners.len(),
+        virtual_hosts = app.virtual_hosts.len(),
+        resources = app.resources.len(),
+        upstreams = app.upstreams.len(),
+        certificates = app.certificates.len(),
+        "serving merged module-imports data plane"
+    );
+    run_data_plane_with_operations_until(compiled, operations, shutdown)
+        .await
+        .map_err(|error| io::Error::other(format!("module-imports data plane failed: {error}")))?;
+    Ok(())
+}
+
+/// Print the certificate names of the merged module-imports configuration
+/// (one per line) so operators can provision bootstrap certificates before
+/// starting the data plane.
+fn list_import_certificates_command() -> MainResult<()> {
+    let names = imported_certificate_names()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+    if names.is_empty() {
+        println!("no module webserver imports configured");
+        return Ok(());
+    }
+    for name in names {
+        println!("{name}");
+    }
+    Ok(())
+}
+
 fn config_path(argument: Option<String>) -> MainResult<PathBuf> {
     resolve_webserver_config_path(argument)
+        .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message).into())
+}
+
+fn nginx_config_path(argument: Option<String>) -> MainResult<PathBuf> {
+    resolve_nginx_sidecar_path(argument)
         .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message).into())
 }
 
@@ -410,10 +484,15 @@ fn print_help() {
         "sdkwork-api-webserver-standalone-gateway\n\
          \n\
          Operations:\n\
-           serve-management       Start the existing management API (default).\n\
+           (default)              Serve nginx compatibility sidecar for the current profile×environment.\n\
+           serve-nginx [path]     Same as default; optional explicit nginx.conf or sites-enabled directory.\n\
+           serve-management       Start the management API (control plane).\n\
            db-migrate             Run database migration and exit.\n\
            validate <config>      Validate and compile Web Server app config (JSON, TOML, or nginx conf; format auto-detected).\n\
            validate-module-imports  Validate imported sibling-module deployments/webserver/ configs.\n\
+           serve-imports          Serve the merged module-imports data plane (module domains/servers/resources).\n\
+                                  Remap declared listener ports with SDKWORK_WEBSERVER_IMPORT_LISTENER_PORTS (e.g. 80=8080,443=8430).\n\
+           list-import-certificates  Print certificate names of the merged module-imports configuration.\n\
            validate-app-shell     Validate the configured standalone PC app shell.\n\
            data-plane <config>    Start HTTP/HTTPS application listeners without a database.\n\
                                   Set SDKWORK_WEBSERVER_DATA_PLANE_OPERATIONS_BIND to an explicit loopback socket for host health and metrics.\n\
@@ -426,9 +505,15 @@ fn print_help() {
          \n\
          Config resolution: explicit <config> argument, then\n\
          SDKWORK_WEBSERVER_SERVER_CONFIG_FILE, then the canonical OS config\n\
-         directory (Linux /etc/sdkwork/webserver, macOS\n\
-         /Library/Application Support/sdkwork/webserver, Windows\n\
-         %ProgramData%\\sdkwork\\webserver) joined with sdkwork.webserver.config.json.\n"
+         directory joined with sdkwork.webserver.config.json.\n\
+         \n\
+         Nginx sidecar resolution: explicit <path> argument, then\n\
+         SDKWORK_WEBSERVER_NGINX_CONFIG_FILE, then\n\
+         deployments/webserver/nginx.<profile>.<environment>.conf under\n\
+         SDKWORK_WEBSERVER_APP_ROOT (or the current working directory tree),\n\
+         then the canonical OS config directory. Profile and environment come\n\
+         from SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE and\n\
+         SDKWORK_WEBSERVER_ENVIRONMENT (defaults: standalone, development).\n"
     );
 }
 
