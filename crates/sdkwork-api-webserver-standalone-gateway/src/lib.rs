@@ -4,6 +4,8 @@ mod adaptive_surface;
 mod app_shell;
 #[cfg(feature = "management")]
 mod bootstrap;
+#[cfg(feature = "management")]
+mod credential_entry_bootstrap;
 mod data_plane;
 #[cfg(feature = "management")]
 mod dependency_assembly;
@@ -23,6 +25,8 @@ mod website_runtime_recovery;
 pub use app_shell::validate_adaptive_app_shell_from_env;
 #[cfg(feature = "management")]
 pub use bootstrap::{build_router, run_database_migrate_only};
+#[cfg(feature = "management")]
+pub use credential_entry_bootstrap::issue_credential_entry_bootstrap_token_to_file;
 pub use data_plane::{
     probe_data_plane_operations_from_env, run_data_plane_from_config_until,
     run_data_plane_from_config_with_operations_until, run_data_plane_until,

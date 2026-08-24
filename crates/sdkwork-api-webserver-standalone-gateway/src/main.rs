@@ -2,6 +2,7 @@ use std::{error::Error, io, path::PathBuf};
 
 use sdkwork_api_webserver_standalone_gateway::{
     build_router, configure_packaged_runtime_roots_from_env,
+    issue_credential_entry_bootstrap_token_to_file,
     run_data_plane_from_config_with_operations_until, run_data_plane_with_operations_until,
     run_database_migrate_only, validate_adaptive_app_shell_from_env, DataPlaneOperationsConfig,
 };
@@ -61,6 +62,24 @@ async fn run() -> MainResult<()> {
         Some("db-migrate") => run_database_migrate_only()
             .await
             .map_err(|error| io::Error::other(format!("database migration failed: {error}")))?,
+        Some("issue-credential-entry-bootstrap-token") => {
+            let output = arguments
+                .next()
+                .map(PathBuf::from)
+                .filter(|path| !path.as_os_str().is_empty())
+                .unwrap_or_else(default_credential_entry_bootstrap_token_path);
+            issue_credential_entry_bootstrap_token_to_file(&output)
+                .await
+                .map_err(|error| {
+                    io::Error::other(format!(
+                        "credential-entry bootstrap token issuance failed: {error}"
+                    ))
+                })?;
+            println!(
+                "issued credential-entry bootstrap Access-Token to {}",
+                output.display()
+            );
+        }
         Some("validate") => validate_config(config_path(arguments.next())?, format_override)?,
         Some("validate-module-imports") => validate_module_imports_command()?,
         Some("validate-app-shell") => {
@@ -472,6 +491,10 @@ fn list_import_certificates_command() -> MainResult<()> {
 fn config_path(argument: Option<String>) -> MainResult<PathBuf> {
     resolve_webserver_config_path(argument)
         .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message).into())
+}
+
+fn default_credential_entry_bootstrap_token_path() -> PathBuf {
+    PathBuf::from("/etc/sdkwork/webserver/secrets/credential-entry-bootstrap-access-token")
 }
 
 fn nginx_config_path(argument: Option<String>) -> MainResult<PathBuf> {

@@ -80,25 +80,29 @@ ensure_database_secret() {
   fi
 }
 
-# Local/dev-like credential-entry bootstrap Access-Token for the PC login page
-# (same shape as scripts/deb/postinst.sh.template for the test package). Without
-# this token, /app/v3/api/system/iam/runtime returns 401 and the browser shows
-# "身份服务暂时不可用" even though IAM is running in-process.
+# Credential-entry bootstrap Access-Token for the PC login page (see
+# IAM_CREDENTIAL_ENTRY_SPEC.md). Production IAM rejects unsigned fixture JWTs;
+# issue a tenant-signed session through the gateway after runtime config and
+# database bootstrap are ready.
 ensure_credential_entry_bootstrap_token() {
   local environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
   local file="${SECRETS_ROOT}/credential-entry-bootstrap-access-token"
+  ensure_directory "${SECRETS_ROOT}"
+  export SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_TENANT_ID="${SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_TENANT_ID:-100001}"
+  export SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_APP_ID="${SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_APP_ID:-sdkwork-web}"
+  if run_as_service_user "${GATEWAY_BINARY}" issue-credential-entry-bootstrap-token "${file}"; then
+    chown "${SERVICE_USER}:${SERVICE_USER}" "${file}" 2>/dev/null || true
+    chmod 0600 "${file}" 2>/dev/null || true
+    log "issued IAM-signed credential-entry bootstrap Access-Token (${environment})"
+    return 0
+  fi
   case "${environment}" in
-    development|test|production) ;;
+    development|test) ;;
     *)
-      # Staging and other production-like profiles must provision a real
-      # IAM-issued bootstrap credential (iam-credential-entry contract).
+      log "warning: IAM bootstrap token issuance failed; production login metadata will be unavailable until a private token is provisioned"
       return 0
       ;;
   esac
-  if [ -s "${file}" ]; then
-    return 0
-  fi
-  ensure_directory "${SECRETS_ROOT}"
   b64url() { printf '%s' "$1" | openssl base64 -A | tr '+/' '-_' | tr -d '='; }
   local header='{"alg":"none","typ":"JWT"}'
   local expires="$(( $(date +%s) + 86400 * 365 ))"
@@ -108,7 +112,7 @@ ensure_credential_entry_bootstrap_token() {
   printf '%s.%s.%s' "$(b64url "${header}")" "$(b64url "${payload}")" "signature" > "${file}"
   chown "${SERVICE_USER}:${SERVICE_USER}" "${file}"
   chmod 0600 "${file}"
-  log "provisioned credential-entry bootstrap Access-Token for ${environment}"
+  log "provisioned development fixture credential-entry bootstrap Access-Token for ${environment}"
 }
 
 apply_primary_domain() {
@@ -816,9 +820,9 @@ main() {
     web-internal-api-ingress-token; do
     ensure_secret_file "${secret_name}"
   done
-  ensure_credential_entry_bootstrap_token
 
   render_runtime_config
+  ensure_credential_entry_bootstrap_token
   ensure_adaptive_web_roots
 
   case "${1:-serve-management}" in
