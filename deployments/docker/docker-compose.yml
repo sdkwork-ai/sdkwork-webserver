@@ -19,12 +19,15 @@ name: sdkwork-webserver
 x-webserver-common: &webserver-common
   image: registry.sdkwork.com/apps/sdkwork-webserver-standalone:${SDKWORK_WEBSERVER_IMAGE_TAG:-0.1.0}
   restart: unless-stopped
+  cap_add:
+    - NET_BIND_SERVICE
   depends_on:
     postgres:
       condition: service_healthy
     redis:
       condition: service_healthy
   environment:
+    SDKWORK_WEBSERVER_IMPORT_LISTENER_PORTS: ${SDKWORK_WEBSERVER_IMPORT_LISTENER_PORTS:-}
     SDKWORK_SPACE_ROOT: ${SDKWORK_SPACE_ROOT:-/opt/deploy}
     SDKWORK_SPACE_HOST_PATH: ${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}
     SDKWORK_SPACE_CLONE_URL: ${SDKWORK_SPACE_CLONE_URL:-https://github.com/sdkwork-ai/sdkwork-space.git}
@@ -33,13 +36,23 @@ x-webserver-common: &webserver-common
     # space checkout (SDKWORK_WEBSERVER_SPEC.md §17); SDKWORK_SPACE_MODULES
     # remains the explicit override.
     SDKWORK_SPACE_AUTO_DISCOVER: ${SDKWORK_SPACE_AUTO_DISCOVER:-true}
+    SDKWORK_SPACE_MODULES: ${SDKWORK_SPACE_MODULES:-}
     SDKWORK_WEBSERVER_MODULE_IMPORT_REQUIRED: ${SDKWORK_WEBSERVER_MODULE_IMPORT_REQUIRED:-false}
     SDKWORK_WEBSERVER_MODULE_IMPORT_PROBE_UPSTREAMS: ${SDKWORK_WEBSERVER_MODULE_IMPORT_PROBE_UPSTREAMS:-false}
+    # Module /api/ proxy target: docker (sibling container via
+    # docker-compose.platform-api-gateway.yml; default), bundled (in-container
+    # process), or external.
+    SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT: ${SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT:-docker}
+    SDKWORK_MODULE_API_GATEWAY_HOST: ${SDKWORK_MODULE_API_GATEWAY_HOST:-}
+    SDKWORK_MODULE_API_GATEWAY_PORT: ${SDKWORK_MODULE_API_GATEWAY_PORT:-3900}
+    SDKWORK_MODULE_API_GATEWAY_BINARY: ${SDKWORK_MODULE_API_GATEWAY_BINARY:-/app/bin/sdkwork-api-cloud-gateway}
+    SDKWORK_MODULE_API_GATEWAY_INSTALL_ROOT: ${SDKWORK_MODULE_API_GATEWAY_INSTALL_ROOT:-/opt/sdkwork/api-gateway}
     SDKWORK_DEPLOY_SANDBOX_KEY: ${SDKWORK_DEPLOY_SANDBOX_KEY:-deploy.local.opt_deploy}
     SDKWORK_DEPLOY_SANDBOX_ROOT: ${SDKWORK_DEPLOY_SANDBOX_ROOT:-/opt/deploy}
   volumes:
     - ${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}:/opt/deploy:ro
-    - ${SDKWORK_SPACE_CHECKOUT_HOST_PATH:-${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}/sdkwork-space}:/opt/deploy/sdkwork-space:ro
+    - ${SDKWORK_SPACE_CHECKOUT_HOST_PATH:-${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}/sdkwork-space}:/opt/deploy/sdkwork-space:rw
+    - ${SDKWORK_MODULE_API_GATEWAY_CHECKOUT_HOST_PATH:-../../../sdkwork-api-cloud-gateway}:/opt/deploy/sdkwork-space/sdkwork-api-cloud-gateway:ro
     - ./scripts/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
   healthcheck:
     test:
@@ -103,8 +116,8 @@ services:
     container_name: sdkwork-webserver-development
     ports:
       - "${SDKWORK_WEBSERVER_DEV_HOST_PORT:-13800}:3800"
-      - "${SDKWORK_WEBSERVER_DEV_HTTPS_HOST_PORT:-18430}:8430"
-      - "${SDKWORK_WEBSERVER_DEV_IMPORT_HTTP_HOST_PORT:-13808}:8080"
+      - "${SDKWORK_WEBSERVER_DEV_IMPORT_HTTP_HOST_PORT:-80}:80"
+      - "${SDKWORK_WEBSERVER_DEV_HTTPS_HOST_PORT:-443}:443"
     env_file:
       - path: env/development.env
         required: false
@@ -147,8 +160,8 @@ services:
     container_name: sdkwork-webserver-test
     ports:
       - "${SDKWORK_WEBSERVER_TEST_HOST_PORT:-18888}:3800"
-      - "${SDKWORK_WEBSERVER_TEST_HTTPS_HOST_PORT:-28430}:8430"
-      - "${SDKWORK_WEBSERVER_TEST_IMPORT_HTTP_HOST_PORT:-18898}:8080"
+      - "${SDKWORK_WEBSERVER_TEST_IMPORT_HTTP_HOST_PORT:-18898}:80"
+      - "${SDKWORK_WEBSERVER_TEST_HTTPS_HOST_PORT:-28430}:443"
     env_file:
       - path: env/test.env
         required: false
@@ -187,8 +200,8 @@ services:
     container_name: sdkwork-webserver-production
     ports:
       - "${SDKWORK_WEBSERVER_PROD_HOST_PORT:-18080}:3800"
-      - "${SDKWORK_WEBSERVER_PROD_HTTPS_HOST_PORT:-38430}:8430"
-      - "${SDKWORK_WEBSERVER_PROD_IMPORT_HTTP_HOST_PORT:-18098}:8080"
+      - "${SDKWORK_WEBSERVER_PROD_IMPORT_HTTP_HOST_PORT:-18098}:80"
+      - "${SDKWORK_WEBSERVER_PROD_HTTPS_HOST_PORT:-38430}:443"
     env_file:
       - path: env/production.env
         required: false

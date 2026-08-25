@@ -309,7 +309,10 @@ describe("console release controls", () => {
           id: "create",
           label: "Create application",
           applicationSubmission: "create",
+          applicationMediaOptional: true,
+          sourceInputOptional: true,
           bodyTemplate: {
+            name: "",
             shortDescription: "",
             fullDescription: "",
             releaseNotes: "",
@@ -387,8 +390,7 @@ describe("console release controls", () => {
 
     expect(createApplication).toHaveBeenCalledWith(expect.objectContaining({
       name: "Portal",
-      applicationType: "WEB",
-      siteType: 1,
+      appKind: "STATIC_WEB",
     }), { idempotencyKey: "create-portal-v1" });
     expect(uploadArchive).toHaveBeenCalledWith(expect.objectContaining({
       appResourceId: "site-1",
@@ -814,6 +816,121 @@ function testMediaStorage(): ApplicationMediaStorage {
         altText,
         metadata: { drive: { nodeId, spaceId: "store-assets" } },
       };
+    }),
+  };
+}
+
+describe("console workspace deferred application create", () => {
+  it("creates an application with name only without uploading source", async () => {
+    const createApplication = vi.fn().mockResolvedValue({ id: "site-draft", name: "Draft Portal" });
+    const createSourceVersion = vi.fn();
+    const createDeployment = vi.fn();
+    const registry = createWebserverConsoleRegistry(consoleClient({
+      createApplication,
+      createDeployment,
+      createSourceVersion,
+      applicationItems: [],
+    }), testSourceStorage(), testMediaStorage());
+    renderWorkspace("/console/sites", registry, appUserPermissionScope);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create application" }));
+    fireEvent.change(screen.getByLabelText("Application name"), { target: { value: "Draft Portal" } });
+    fireEvent.click(screen.getByTestId("application-create-now"));
+
+    await waitFor(() => expect(createApplication).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Draft Portal" }),
+      { idempotencyKey: expect.any(String) },
+    ));
+    expect(createSourceVersion).not.toHaveBeenCalled();
+    expect(createDeployment).not.toHaveBeenCalled();
+  });
+
+  it("shows Add source code for applications without a source version", async () => {
+    const registry = createWebserverConsoleRegistry(consoleClient({
+      applicationItems: [{ id: "site-1", name: "Portal", status: 2 }],
+    }), testSourceStorage(), testMediaStorage());
+    renderWorkspace("/console/sites", registry, appUserPermissionScope);
+
+    expect(await screen.findByRole("button", { name: "Add source code Portal" })).toBeTruthy();
+    expect(screen.getByText("No source yet")).toBeTruthy();
+  });
+
+  it("shows Modify source code after a source version exists", async () => {
+    const registry = createWebserverConsoleRegistry(consoleClient({
+      applicationItems: [{ id: "site-1", name: "Portal", status: 2 }],
+      sourceVersionItems: [{ id: "source-version-1", versionTag: "v1.0.0", sourceType: "ARCHIVE" }],
+    }), testSourceStorage(), testMediaStorage());
+    renderWorkspace("/console/sites", registry, appUserPermissionScope);
+
+    expect(await screen.findByRole("button", { name: "Modify source code Portal" })).toBeTruthy();
+    expect(screen.getByText("Source added")).toBeTruthy();
+  });
+});
+
+function consoleClient(overrides: {
+  applicationItems?: Array<Record<string, unknown>>;
+  createApplication?: ReturnType<typeof vi.fn>;
+  createDeployment?: ReturnType<typeof vi.fn>;
+  createSourceVersion?: ReturnType<typeof vi.fn>;
+  sourceVersionItems?: Array<Record<string, unknown>>;
+} = {}): WebserverConsoleSdkClients {
+  return {
+    drive: {},
+    web: {
+      application: {
+        list: vi.fn().mockResolvedValue({
+          items: overrides.applicationItems ?? [{ id: "site-1", name: "Portal" }],
+          pageInfo: { page: 1, pageSize: 20, hasMore: false },
+        }),
+        create: overrides.createApplication ?? vi.fn(),
+        update: vi.fn(),
+        activate: vi.fn(),
+        pause: vi.fn(),
+        delete: vi.fn(),
+      },
+      sourceVersion: {
+        applications: {
+          sourceVersions: {
+            list: vi.fn().mockResolvedValue({
+              items: overrides.sourceVersionItems ?? [],
+              pageInfo: { page: 1, pageSize: 20, hasMore: false },
+            }),
+            create: overrides.createSourceVersion ?? vi.fn(),
+            gitImport: { create: vi.fn() },
+          },
+        },
+      },
+      deployment: {
+        applications: {
+          deployments: {
+            create: overrides.createDeployment ?? vi.fn(),
+          },
+        },
+      },
+    },
+  } as unknown as WebserverConsoleSdkClients;
+}
+
+function testSourceStorage(): ApplicationSourceStorage {
+  return {
+    prepare: vi.fn(async ({ files, mode }) => ({
+      archive: files[0] ?? new File(["source"], "source.zip", { type: "application/zip" }),
+      archiveHash: "a".repeat(64),
+      inputMode: mode,
+      sourceFileCount: files.length || 1,
+      uncompressedSize: files[0]?.size ?? 6,
+    })),
+    store: vi.fn().mockResolvedValue({
+      archiveDriveUri: "drive://spaces/space-1/nodes/node-1",
+      archiveHash: "a".repeat(64),
+      archiveSize: "6",
+      extractedCount: "1",
+      configSnapshot: {
+        appConfigDetected: true,
+        appConfigPath: "sdkwork.app.config.json",
+        deploymentConfigDetected: true,
+        deploymentConfigPath: "etc/sdkwork.deployment.config.json",
+      },
     }),
   };
 }

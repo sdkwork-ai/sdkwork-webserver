@@ -6,6 +6,10 @@ CONFIG_ROOT="/etc/sdkwork/webserver"
 SECRETS_ROOT="${CONFIG_ROOT}/secrets"
 RUNTIME_CONFIG_FILE="${CONFIG_ROOT}/config.toml"
 GATEWAY_BINARY="/app/bin/sdkwork-api-webserver-standalone-gateway"
+PLATFORM_GATEWAY_BINARY="${SDKWORK_MODULE_API_GATEWAY_BINARY:-/app/bin/sdkwork-api-cloud-gateway}"
+PLATFORM_GATEWAY_INSTALL_ROOT="${SDKWORK_MODULE_API_GATEWAY_INSTALL_ROOT:-/opt/sdkwork/api-gateway}"
+PLATFORM_GATEWAY_CONFIG="${SDKWORK_MODULE_API_GATEWAY_CONFIG_FILE:-/etc/sdkwork/api-gateway/sdkwork-api-cloud-gateway.toml}"
+PLATFORM_GATEWAY_SECRETS_ROOT="/run/secrets/sdkwork/api-gateway"
 SERVICE_USER="sdkwork"
 
 log() {
@@ -84,10 +88,25 @@ ensure_database_secret() {
 # IAM_CREDENTIAL_ENTRY_SPEC.md). Production IAM rejects unsigned fixture JWTs;
 # issue a tenant-signed session through the gateway after runtime config and
 # database bootstrap are ready.
+is_unsigned_credential_entry_fixture() {
+  local file="$1"
+  [ -s "${file}" ] || return 1
+  local token
+  token="$(tr -d '[:space:]' < "${file}")"
+  case "${token}" in
+    *.signature) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 ensure_credential_entry_bootstrap_token() {
   local environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
   local file="${SECRETS_ROOT}/credential-entry-bootstrap-access-token"
   ensure_directory "${SECRETS_ROOT}"
+  if is_unsigned_credential_entry_fixture "${file}"; then
+    rm -f "${file}"
+    log "removed stale unsigned credential-entry bootstrap Access-Token (${environment})"
+  fi
   export SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_TENANT_ID="${SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_TENANT_ID:-100001}"
   export SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_APP_ID="${SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_APP_ID:-sdkwork-web}"
   if run_as_service_user "${GATEWAY_BINARY}" issue-credential-entry-bootstrap-token "${file}"; then
@@ -132,8 +151,8 @@ apply_primary_domain() {
   local host_port
   host_port="$(host_http_port_for_environment)"
   local public_url="${scheme}://${host_role}.${domain}:${host_port}"
-  # When WSL nginx :80 is unavailable, browsers use host-published ports; keep
-  # portless origins too for nginx-backed operator routing.
+  # When browsers use host-published ports (no host reverse proxy), keep
+  # portless origins too for operator routing via Windows :80 -> import plane.
   local public_url_portless="${scheme}://${host_role}.${domain}"
   export SDKWORK_WEBSERVER_APPLICATION_PUBLIC_HTTP_URL="${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_HTTP_URL:-${public_url}}"
   export SDKWORK_WEBSERVER_APPLICATION_APP_HTTP_URL="${SDKWORK_WEBSERVER_APPLICATION_APP_HTTP_URL:-${public_url}}"
@@ -251,10 +270,16 @@ discover_importable_modules() {
   local checkout discovered="" module_dir module_id auto_discover
   # Standard behavior (SDKWORK_WEBSERVER_SPEC.md §17): auto-import every
   # enabled sibling module's deployments/webserver/ from the space checkout.
-  # SDKWORK_SPACE_MODULES remains the explicit override.
-  auto_discover="${SDKWORK_SPACE_AUTO_DISCOVER:-true}"
+  # AUTO_DISCOVER=true (default): import every enabled sibling.
+  # SDKWORK_SPACE_MODULES pins an explicit list only when AUTO_DISCOVER is off.
+  # Accept AUTO_DISCOVER as a compose/env alias of SDKWORK_SPACE_AUTO_DISCOVER.
+  auto_discover="${SDKWORK_SPACE_AUTO_DISCOVER:-${AUTO_DISCOVER:-true}}"
+  case "${auto_discover}" in
+    1|true|TRUE|yes|YES) auto_discover="true" ;;
+    0|false|FALSE|no|NO) auto_discover="false" ;;
+  esac
   checkout="$(space_checkout_dir)"
-  if [ "${auto_discover}" = "true" ] || [ "${auto_discover}" = "1" ] || [ "${auto_discover}" = "yes" ]; then
+  if [ "${auto_discover}" = "true" ]; then
     if [ -d "${checkout}" ]; then
       for module_dir in "${checkout}"/sdkwork-*; do
         [ -d "${module_dir}" ] || continue
@@ -267,12 +292,59 @@ discover_importable_modules() {
         fi
       done
     fi
-  fi
-  if [ -n "${SDKWORK_SPACE_MODULES:-}" ]; then
-    printf '%s' "${SDKWORK_SPACE_MODULES}"
-  else
     printf '%s' "${discovered}"
+  else
+    printf '%s' "${SDKWORK_SPACE_MODULES:-}"
   fi
+}
+
+# Platform API plane (api*.brand): ensure sdkwork-api-cloud-gateway deployments/
+# webserver sidecar is available under the space checkout so import.conf includes
+# multi-brand api-dev.* / api.* reverse-proxy (SDKWORK_WEBSERVER_SPEC.md §17).
+ensure_platform_api_gateway_module_checkout() {
+  local checkout module_root sibling candidate
+  checkout="$(space_checkout_dir)"
+  module_root="${checkout}/sdkwork-api-cloud-gateway"
+  if [ -f "${module_root}/deployments/webserver/server.common.toml" ]; then
+    return 0
+  fi
+  sibling="${SDKWORK_MODULE_API_GATEWAY_CHECKOUT:-}"
+  if [ -z "${sibling}" ]; then
+    for candidate in \
+      "${checkout}/../sdkwork-api-cloud-gateway" \
+      "${SDKWORK_SPACE_ROOT:-/opt/deploy}/sdkwork-api-cloud-gateway" \
+      "/workspace/sdkwork-api-cloud-gateway" \
+      "/app/../sdkwork-api-cloud-gateway"; do
+      if [ -f "${candidate}/deployments/webserver/server.common.toml" ]; then
+        sibling="$(cd "${candidate}" && pwd)"
+        break
+      fi
+    done
+  fi
+  if [ -n "${sibling}" ] && [ -f "${sibling}/deployments/webserver/server.common.toml" ]; then
+    ensure_directory "${checkout}"
+    ln -sfn "${sibling}" "${module_root}"
+    log "linked platform API gateway module ${module_root} -> ${sibling}"
+    return 0
+  fi
+  log "warning: sdkwork-api-cloud-gateway webserver layout not found under ${checkout}; api*.brand reverse proxy will be missing until the module is present"
+  return 1
+}
+
+ensure_platform_api_gateway_import_listed() {
+  local modules module_root
+  modules="${SDKWORK_SPACE_IMPORT_MODULES:-}"
+  case ",${modules}," in
+    *,sdkwork-api-cloud-gateway,*) return 0 ;;
+  esac
+  module_root="$(module_repo_root sdkwork-api-cloud-gateway)"
+  if ! module_webserver_enabled "${module_root}"; then
+    log "warning: sdkwork-api-cloud-gateway not importable; api*.brand hosts will not be reverse-proxied"
+    return 1
+  fi
+  export SDKWORK_SPACE_IMPORT_MODULES="sdkwork-api-cloud-gateway${modules:+,${modules}}"
+  log "ensured sdkwork-api-cloud-gateway import for platform API plane (api*.brand)"
+  return 0
 }
 
 clone_sdkwork_space_modules() {
@@ -284,6 +356,9 @@ clone_sdkwork_space_modules() {
   fi
 
   checkout="$(space_checkout_dir)"
+  if [ -d "${checkout}/.git" ]; then
+    git config --global --add safe.directory "${checkout}" 2>/dev/null || true
+  fi
   local_path="${SDKWORK_SPACE_LOCAL_PATH:-}"
   if [ -n "${local_path}" ] && [ -d "${local_path}" ] && [ ! -e "${checkout}" ]; then
     ln -sfn "${local_path}" "${checkout}"
@@ -316,7 +391,9 @@ clone_sdkwork_space_modules() {
     done
   fi
 
+  ensure_platform_api_gateway_module_checkout || true
   export SDKWORK_SPACE_IMPORT_MODULES="$(discover_importable_modules)"
+  ensure_platform_api_gateway_import_listed || true
   if touch "${space_root}/.sdkwork-write-test" 2>/dev/null; then
     rm -f "${space_root}/.sdkwork-write-test"
     chown -R "${SERVICE_USER}:${SERVICE_USER}" "${space_root}" 2>/dev/null || true
@@ -325,11 +402,115 @@ clone_sdkwork_space_modules() {
   fi
 }
 
+module_app_static_root_for_alias() {
+  local module="$1"
+  local surface="$2"
+  local dist_alias="$3"
+  local profile apps_root expected app dist
+  profile="${SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE:-${SDKWORK_DEPLOYMENT_PROFILE:-standalone}}"
+  apps_root="$(module_repo_root "${module}")/apps"
+  [ -d "${apps_root}" ] || return 0
+  expected="${apps_root}/${module}-${surface}"
+  if [ -f "${expected}/dist/${profile}/${dist_alias}/index.html" ]; then
+    printf '%s' "${expected}/dist/${profile}/${dist_alias}"
+    return 0
+  fi
+  for app in "${apps_root}"/*-"${surface}"; do
+    [ -d "${app}" ] || continue
+    dist="${app}/dist/${profile}/${dist_alias}"
+    if [ -f "${dist}/index.html" ]; then
+      printf '%s' "${dist}"
+      return 0
+    fi
+  done
+  return 0
+}
+
+write_module_app_roots_catalog() {
+  local module="$1"
+  local module_root="$2"
+  local catalog_root="$3"
+  local environment dist_alias pc_root h5_root static_fallback
+  local pc_dev pc_test pc_staging pc_prod
+  local h5_dev h5_test h5_staging h5_prod
+  environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
+  dist_alias="$(environment_dist_alias "${environment}")"
+  pc_root="$(module_app_static_root "${module}" pc)"
+  h5_root="$(module_app_static_root "${module}" h5)"
+  static_fallback="${module_root}/deployments/webserver/static"
+  pc_dev="$(module_app_static_root_for_alias "${module}" pc dev)"
+  pc_test="$(module_app_static_root_for_alias "${module}" pc test)"
+  pc_staging="$(module_app_static_root_for_alias "${module}" pc staging)"
+  pc_prod="$(module_app_static_root_for_alias "${module}" pc prod)"
+  h5_dev="$(module_app_static_root_for_alias "${module}" h5 dev)"
+  h5_test="$(module_app_static_root_for_alias "${module}" h5 test)"
+  h5_staging="$(module_app_static_root_for_alias "${module}" h5 staging)"
+  h5_prod="$(module_app_static_root_for_alias "${module}" h5 prod)"
+  cat > "${catalog_root}/${module}.toml" <<EOF
+# Generated Adaptive Web catalog for imported module ${module}.
+# Authority: SDKWORK_WEBSERVER_SPEC.md §13.6 / §17.
+# Active dist alias: ${dist_alias} (lifecycle environment: ${environment})
+
+[app_roots]
+tablet_surface = "pc"
+pc_static_root = "${pc_root:-}"
+h5_static_root = "${h5_root:-}"
+static_fallback_root = "${static_fallback}"
+
+[app_roots.pc_static_by_environment]
+development = "${pc_dev:-${static_fallback}}"
+test = "${pc_test:-${static_fallback}}"
+staging = "${pc_staging:-${static_fallback}}"
+production = "${pc_prod:-${static_fallback}}"
+
+[app_roots.h5_static_by_environment]
+development = "${h5_dev:-${static_fallback}}"
+test = "${h5_test:-${static_fallback}}"
+staging = "${h5_staging:-${static_fallback}}"
+production = "${h5_prod:-${static_fallback}}"
+
+[app_roots.static_fallback_by_environment]
+development = "${static_fallback}"
+test = "${static_fallback}"
+staging = "${static_fallback}"
+production = "${static_fallback}"
+EOF
+  chown "${SERVICE_USER}:${SERVICE_USER}" "${catalog_root}/${module}.toml" 2>/dev/null || true
+  chmod 0640 "${catalog_root}/${module}.toml" 2>/dev/null || true
+  log "materialized module app-roots catalog -> ${catalog_root}/${module}.toml (pc=${pc_root:-none} h5=${h5_root:-none})"
+}
+
+materialize_module_toml_layout() {
+  local module_root="$1"
+  local dest="$2"
+  local gateway_port="$3"
+  local module_ws="${module_root}/deployments/webserver"
+  rm -rf "${dest}"
+  mkdir -p "${dest}"
+  cp "${module_ws}/server.common.toml" "${dest}/"
+  for env_name in development test staging production; do
+    if [ -f "${module_ws}/server.${env_name}.toml" ]; then
+      cp "${module_ws}/server.${env_name}.toml" "${dest}/"
+    fi
+  done
+  if [ -f "${module_ws}/server.cloud.toml" ]; then
+    cp "${module_ws}/server.cloud.toml" "${dest}/"
+  fi
+  if [ -f "${module_ws}/server.standalone.toml" ]; then
+    sed -e "s/127.0.0.1:3800/127.0.0.1:${gateway_port}/g" \
+        -e "s/127.0.0.1:18079/127.0.0.1:${gateway_port}/g" \
+        -e "s/0.0.0.0:3900/127.0.0.1:${gateway_port}/g" \
+      "${module_ws}/server.standalone.toml" > "${dest}/server.standalone.toml"
+  fi
+  log "materialized module webserver config -> ${dest} (layout v3 TOML, gateway upstream 127.0.0.1:${gateway_port})"
+}
+
+# Prepare per-module config trees. When nginx.enabled + sidecar exist, only the
+# nginx `.conf` tree is materialized (never a competing TOML import descriptor).
 materialize_module_webserver_configs() {
   local modules_root="${CONFIG_ROOT}/modules"
   local catalog_root="${CONFIG_ROOT}/module-app-roots"
-  local module module_root module_ws link_target dest pc_root h5_root dist_alias gateway_port
-  dist_alias="$(environment_dist_alias "${SDKWORK_WEBSERVER_ENVIRONMENT:-development}")"
+  local module module_root dest gateway_port
   gateway_port="${SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT:-${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_INGRESS_BIND##*:}}"
   gateway_port="${gateway_port:-3800}"
   ensure_directory "${modules_root}"
@@ -339,87 +520,32 @@ materialize_module_webserver_configs() {
     module="$(printf '%s' "${module}" | xargs)"
     [ -z "${module}" ] && continue
     module_root="$(module_repo_root "${module}")"
-    module_ws="${module_root}/deployments/webserver"
     if ! module_webserver_enabled "${module_root}"; then
       continue
     fi
     dest="${modules_root}/${module}"
-    rm -rf "${dest}"
-    mkdir -p "${dest}"
-    # Materialize the complete layout v3 directory (SDKWORK_WEBSERVER_SPEC.md
-    # §17): common + one file per lifecycle environment + both profile files,
-    # with the standalone upstream patched to the container gateway port. The
-    # snapshot is itself a loadable layout v3 directory for operators.
-    cp "${module_ws}/server.common.toml" "${dest}/"
-    for env_name in development test staging production; do
-      if [ -f "${module_ws}/server.${env_name}.toml" ]; then
-        cp "${module_ws}/server.${env_name}.toml" "${dest}/"
-      fi
-    done
-    if [ -f "${module_ws}/server.cloud.toml" ]; then
-      cp "${module_ws}/server.cloud.toml" "${dest}/"
+    write_module_app_roots_catalog "${module}" "${module_root}" "${catalog_root}"
+    # nginx.conf path wins exclusively; TOML layout is only for nginx.enabled=false.
+    if module_nginx_import_enabled "${module_root}"; then
+      continue
     fi
-    if [ -f "${module_ws}/server.standalone.toml" ]; then
-      sed "s/127.0.0.1:3800/127.0.0.1:${gateway_port}/g" \
-        "${module_ws}/server.standalone.toml" > "${dest}/server.standalone.toml"
-    fi
-    log "materialized module webserver config -> ${dest} (layout v3, gateway upstream 127.0.0.1:${gateway_port})"
-
-    pc_root="$(module_app_static_root "${module}" pc)"
-    h5_root="$(module_app_static_root "${module}" h5)"
-    cat > "${catalog_root}/${module}.toml" <<EOF
-# Generated Adaptive Web catalog for imported module ${module}.
-# Authority: SDKWORK_WEBSERVER_SPEC.md §13.6 / §17.
-# Dist alias: ${dist_alias} (lifecycle environment: ${SDKWORK_WEBSERVER_ENVIRONMENT:-development})
-
-[app_roots]
-tablet_surface = "pc"
-pc_static_root = "${pc_root:-}"
-h5_static_root = "${h5_root:-}"
-static_fallback_root = "${module_root}/deployments/webserver/static"
-EOF
-    chown "${SERVICE_USER}:${SERVICE_USER}" "${catalog_root}/${module}.toml" 2>/dev/null || true
-    chmod 0640 "${catalog_root}/${module}.toml" 2>/dev/null || true
-    log "materialized module app-roots catalog -> ${catalog_root}/${module}.toml"
+    materialize_module_toml_layout "${module_root}" "${dest}" "${gateway_port}"
   done
   chown -R "${SERVICE_USER}:${SERVICE_USER}" "${modules_root}" 2>/dev/null || true
   chown -R "${SERVICE_USER}:${SERVICE_USER}" "${catalog_root}" 2>/dev/null || true
 }
 
-# nginx-style module imports: one `imports.d/<module-id>.conf` symlink per
-# sibling module pointing at the rendered nginx sidecar for the active profile
-# and environment (SDKWORK_WEBSERVER_SPEC.md §17). Runtime `[webserver] include`
-# loads these `.conf` files; drop or remove a symlink to add/remove a module.
-materialize_module_import_files() {
-  local imports_root="${CONFIG_ROOT}/imports.d"
-  local module module_root nginx_conf
-  ensure_directory "${imports_root}"
-  rm -f "${imports_root}"/*.conf "${imports_root}"/*.toml 2>/dev/null || true
-  IFS=',' read -r -a module_list <<< "${SDKWORK_SPACE_IMPORT_MODULES:-}"
-  for module in "${module_list[@]}"; do
-    module="$(printf '%s' "${module}" | xargs)"
-    [ -z "${module}" ] && continue
-    module_root="$(module_repo_root "${module}")"
-    if ! module_webserver_enabled "${module_root}"; then
-      log "module ${module} is disabled or missing layout; skipped"
-      continue
-    fi
-    nginx_conf="$(module_nginx_conf_path "${module_root}")" || {
-      log "module ${module} has no nginx sidecar for active profile/environment; skipped"
-      continue
-    }
-    ln -sfn "${nginx_conf}" "${imports_root}/${module}.conf"
-    chown -h "${SERVICE_USER}:${SERVICE_USER}" "${imports_root}/${module}.conf" 2>/dev/null || true
-    log "module import conf -> ${imports_root}/${module}.conf (${nginx_conf})"
-  done
+module_nginx_sidecar_abs_path() {
+  local module_root="$1"
+  local environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
+  local profile="${2:-${SDKWORK_WEBSERVER_IMPORT_PROFILE:-${SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE:-${SDKWORK_DEPLOYMENT_PROFILE:-standalone}}}}"
+  printf '%s/deployments/webserver/nginx.%s.%s.conf' "${module_root}" "${profile}" "${environment}"
 }
 
 module_nginx_conf_path() {
   local module_root="$1"
-  local environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
-  local profile="${SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE:-${SDKWORK_DEPLOYMENT_PROFILE:-standalone}}"
-  local module_ws="${module_root}/deployments/webserver"
-  local conf="${module_ws}/nginx.${profile}.${environment}.conf"
+  local conf
+  conf="$(module_nginx_sidecar_abs_path "${module_root}")"
   if [ -f "${conf}" ]; then
     printf '%s' "${conf}"
     return 0
@@ -427,33 +553,859 @@ module_nginx_conf_path() {
   return 1
 }
 
+# SDKWORK_WEBSERVER_SPEC.md §4.2: nginx.enabled=true with a rendered sidecar
+# activates nginx `.conf` import; otherwise the layout v3 TOML directory is used.
+# The two import shapes are mutually exclusive for each module.
+module_nginx_import_enabled() {
+  local module_dir="$1"
+  local common="${module_dir}/deployments/webserver/server.common.toml"
+  [ -f "${common}" ] || return 1
+  if grep -Eq '^enabled[[:space:]]*=[[:space:]]*false' "${common}"; then
+    return 1
+  fi
+  if awk '
+    /^\[nginx\]/ { in_nginx=1; next }
+    /^\[/ { in_nginx=0 }
+    in_nginx && /^[[:space:]]*enabled[[:space:]]*=[[:space:]]*false/ { found=1; exit }
+    END { exit(found ? 0 : 1) }
+  ' "${common}"; then
+    return 1
+  fi
+  module_nginx_conf_path "${module_dir}" >/dev/null 2>&1
+}
+
+# First DNS-label token: memory-dev.sdkwork.com -> memory, mem-dev -> mem.
+hostname_first_token() {
+  local label="${1%%.*}"
+  printf '%s' "${label%%-*}"
+}
+
+# Tokens this module owns (application code plus documented short aliases).
+module_hostname_tokens() {
+  local code="${1#sdkwork-}"
+  case "${code}" in
+    memory) printf '%s' "memory mem" ;;
+    cloudrouter) printf '%s' "cloudrouter router" ;;
+    api-cloud-gateway) printf '%s' "api" ;;
+    *) printf '%s' "${code}" ;;
+  esac
+}
+
+is_platform_api_gateway_module() {
+  case "${1:-}" in
+    sdkwork-api-cloud-gateway) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Platform API plane (api*.xxx.com): every path proxies to sdkwork-api-cloud-gateway.
+# Do not fall back to SPA static roots — that would serve placeholder HTML for /.
+write_platform_api_gateway_locations_docker() {
+  local module_ws="$1"
+  mkdir -p "${module_ws}/snippets"
+  cat > "${module_ws}/snippets/gateway-locations.docker.conf" <<'EOF'
+    location = /healthz {
+        proxy_pass http://gateway;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_connect_timeout 2s;
+        proxy_read_timeout 10s;
+    }
+
+    location = /readyz {
+        proxy_pass http://gateway;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_connect_timeout 2s;
+        proxy_read_timeout 10s;
+    }
+
+    location /api/ {
+        proxy_pass http://gateway;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 300s;
+    }
+
+    location / {
+        proxy_pass http://gateway;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 300s;
+    }
+EOF
+}
+
+# Drop server_name tokens owned by another imported sibling so the merged
+# module-imports data plane does not fail duplicate-hostname validation.
+strip_cross_module_server_names() {
+  local module="$1"
+  local conf="$2"
+  local tmp sibling token host kept dropped line prefix names suffix owner
+  declare -A token_owner=()
+  IFS=',' read -r -a sibling_list <<< "${SDKWORK_SPACE_IMPORT_MODULES:-}"
+  for sibling in "${sibling_list[@]}"; do
+    sibling="$(printf '%s' "${sibling}" | xargs)"
+    [ -z "${sibling}" ] && continue
+    for token in $(module_hostname_tokens "${sibling}"); do
+      token_owner["${token}"]="${sibling}"
+    done
+  done
+  tmp="$(mktemp)"
+  while IFS= read -r line || [ -n "${line}" ]; do
+    case "${line}" in
+      *server_name*)
+        prefix="${line%%server_name*}server_name"
+        names="${line#*server_name}"
+        suffix=""
+        if [[ "${names}" == *";"* ]]; then
+          suffix=";${names#*;}"
+          names="${names%%;*}"
+        fi
+        kept=""
+        dropped=""
+        for host in ${names}; do
+          [ -z "${host}" ] && continue
+          token="$(hostname_first_token "${host}")"
+          owner="${token_owner[${token}]:-}"
+          if [ -n "${owner}" ] && [ "${owner}" != "${module}" ]; then
+            dropped="${dropped:+${dropped} }${host}"
+            continue
+          fi
+          kept="${kept:+${kept} }${host}"
+        done
+        if [ -z "${kept}" ]; then
+          printf '%s\n' "${line}" >> "${tmp}"
+          continue
+        fi
+        printf '%s %s%s\n' "${prefix}" "${kept}" "${suffix}" >> "${tmp}"
+        if [ -n "${dropped}" ]; then
+          log "module ${module} dropped sibling hostnames from server_name: ${dropped}"
+        fi
+        ;;
+      *)
+        printf '%s\n' "${line}" >> "${tmp}"
+        ;;
+    esac
+  done < "${conf}"
+  chmod 0644 "${tmp}"
+  chown "${SERVICE_USER}:${SERVICE_USER}" "${tmp}" 2>/dev/null || true
+  mv -f "${tmp}" "${conf}"
+}
+
+# --- Module API gateway (sdkwork-api-cloud-gateway) deployment modes ----------
+# SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT:
+#   docker   — sibling container reachable as sdkwork-api-cloud-gateway:<port> (default)
+#   bundled  — co-located process inside the webserver container
+#   external — operator-managed endpoint (requires SDKWORK_MODULE_API_GATEWAY_HOST)
+module_api_gateway_deployment() {
+  printf '%s' "${SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT:-docker}"
+}
+
+module_api_gateway_port() {
+  printf '%s' "${SDKWORK_MODULE_API_GATEWAY_PORT:-3900}"
+}
+
+module_api_gateway_upstream_host() {
+  local deployment="$1"
+  case "${deployment}" in
+    bundled)
+      printf '%s' "${SDKWORK_MODULE_API_GATEWAY_HOST:-127.0.0.1}"
+      ;;
+    docker)
+      printf '%s' "${SDKWORK_MODULE_API_GATEWAY_HOST:-sdkwork-api-cloud-gateway}"
+      ;;
+    external)
+      if [ -z "${SDKWORK_MODULE_API_GATEWAY_HOST:-}" ]; then
+        log "SDKWORK_MODULE_API_GATEWAY_HOST is required when SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=external"
+        exit 1
+      fi
+      printf '%s' "${SDKWORK_MODULE_API_GATEWAY_HOST}"
+      ;;
+    *)
+      log "unknown SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=${deployment}; defaulting to docker"
+      printf '%s' "sdkwork-api-cloud-gateway"
+      ;;
+  esac
+}
+
+module_api_gateway_upstream_endpoint() {
+  local deployment host port
+  deployment="$(module_api_gateway_deployment)"
+  host="$(module_api_gateway_upstream_host "${deployment}")"
+  port="$(module_api_gateway_port)"
+  printf '%s:%s' "${host}" "${port}"
+}
+
+rewrite_module_gateway_upstream() {
+  local conf="$1"
+  local endpoint host port
+  endpoint="$(module_api_gateway_upstream_endpoint)"
+  host="${endpoint%%:*}"
+  port="${endpoint##*:}"
+  if [ ! -f "${conf}" ]; then
+    return 0
+  fi
+  if ! grep -q 'upstream gateway {' "${conf}"; then
+    return 0
+  fi
+  sed -i "/upstream gateway {/,/}/ s|^[[:space:]]*server[[:space:]].*|        server ${host}:${port};|" "${conf}"
+  log "module nginx upstream gateway -> ${endpoint} (deployment=$(module_api_gateway_deployment))"
+}
+
+discover_module_api_gateway_allowed_hosts() {
+  local environment profile imports_root conf line hosts brands brand api_hosts
+  environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
+  profile="${SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE:-${SDKWORK_DEPLOYMENT_PROFILE:-standalone}}"
+  imports_root="${CONFIG_ROOT}/imports.d/import.conf"
+  hosts=""
+  if [ -f "${imports_root}" ]; then
+    while IFS= read -r line; do
+      case "${line}" in
+        include\ *)
+          conf="${line#include }"
+          conf="${conf%;}"
+          [ -f "${conf}" ] || continue
+          while IFS= read -r host; do
+            [ -n "${host}" ] || continue
+            case ",${hosts}," in
+              *,"${host}",*) continue ;;
+            esac
+            hosts="${hosts:+${hosts},}${host}"
+          done < <(sed -n 's/.*server_name[[:space:]]\+\([^;]*\);.*/\1/p' "${conf}" | tr ' ' '\n' | sed '/^$/d')
+          ;;
+      esac
+    done < "${imports_root}"
+  fi
+  # Platform API plane hosts (api*.brand) — always allow even when import scan is empty.
+  brands="sdkwork.com birdcoder.com dtupay.com sdkwork.cn birdcoder.cn dtupay.cn skubc.com skubc.cn zowalk.com zowalk.cn offer86.com offer86.cn 86offer.com 86offer.cn"
+  api_hosts=""
+  case "${environment}" in
+    development)
+      for brand in ${brands}; do
+        api_hosts="${api_hosts:+${api_hosts},}api-dev.${brand}"
+      done
+      ;;
+    test)
+      for brand in ${brands}; do
+        api_hosts="${api_hosts:+${api_hosts},}api-test.${brand}"
+      done
+      ;;
+    production)
+      for brand in ${brands}; do
+        api_hosts="${api_hosts:+${api_hosts},}api.${brand}"
+      done
+      ;;
+  esac
+  if [ -n "${api_hosts}" ]; then
+    hosts="${hosts:+${hosts},}${api_hosts}"
+  fi
+  hosts="${hosts},127.0.0.1:$(module_api_gateway_port),localhost:$(module_api_gateway_port)"
+  printf '%s' "${hosts}" | sed 's/^,//'
+}
+
+ensure_platform_api_gateway_directories() {
+  ensure_directory "/etc/sdkwork/api-gateway"
+  ensure_directory "${PLATFORM_GATEWAY_SECRETS_ROOT}"
+  ensure_directory "/var/lib/sdkwork/api-gateway"
+}
+
+ensure_platform_api_gateway_secret_file() {
+  local name="$1"
+  local file="${PLATFORM_GATEWAY_SECRETS_ROOT}/${name}"
+  if [ ! -s "${file}" ]; then
+    ensure_platform_api_gateway_directories
+    openssl rand -hex 32 > "${file}"
+    chown "${SERVICE_USER}:${SERVICE_USER}" "${file}" 2>/dev/null || true
+    chmod 0600 "${file}" 2>/dev/null || true
+  fi
+}
+
+export_platform_api_gateway_database_env() {
+  export SDKWORK_DATABASE_ENGINE="${SDKWORK_DATABASE_ENGINE:-postgresql}"
+  export SDKWORK_DATABASE_HOST="${SDKWORK_DATABASE_HOST:-127.0.0.1}"
+  export SDKWORK_DATABASE_PORT="${SDKWORK_DATABASE_PORT:-5432}"
+  export SDKWORK_DATABASE_NAME="${SDKWORK_DATABASE_NAME:-sdkwork_ai_dev}"
+  export SDKWORK_DATABASE_SCHEMA="${SDKWORK_DATABASE_SCHEMA:-${SDKWORK_DATABASE_NAME}}"
+  export SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC="${SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC:-false}"
+  export SDKWORK_DATABASE_USERNAME="${SDKWORK_DATABASE_USERNAME:-sdkwork_ai_dev}"
+  export SDKWORK_DATABASE_SSL_MODE="${SDKWORK_DATABASE_SSL_MODE:-disable}"
+  export SDKWORK_DATABASE_MAX_CONNECTIONS="${SDKWORK_DATABASE_MAX_CONNECTIONS:-50}"
+  export SDKWORK_DATABASE_AUTO_MIGRATE="${SDKWORK_DATABASE_AUTO_MIGRATE:-false}"
+}
+
+export_platform_api_gateway_redis_env() {
+  local redis_host redis_port redis_password redis_tls
+  redis_host="${SDKWORK_WEBSERVER_REDIS_HOST:-${WEBSERVER_REDIS_HOST:-127.0.0.1}}"
+  redis_port="${SDKWORK_WEBSERVER_REDIS_PORT:-${WEBSERVER_REDIS_PORT:-6379}}"
+  redis_password="${SDKWORK_WEBSERVER_REDIS_PASSWORD:-${WEBSERVER_REDIS_PASSWORD:-}}"
+  redis_tls="${SDKWORK_WEBSERVER_REDIS_TLS:-${WEBSERVER_REDIS_TLS:-false}}"
+  export SDKWORK_CLOUDROUTER_REDIS_ENABLED="true"
+  export SDKWORK_CLOUDROUTER_REDIS_HOST="${redis_host}"
+  export SDKWORK_CLOUDROUTER_REDIS_PORT="${redis_port}"
+  export SDKWORK_CLOUDROUTER_REDIS_DATABASE="${SDKWORK_CLOUDROUTER_REDIS_DATABASE:-0}"
+  export SDKWORK_CLOUDROUTER_REDIS_TLS="${redis_tls}"
+  export SDKWORK_CLOUDROUTER_REDIS_PASSWORD="${redis_password}"
+  export SDKWORK_RTC_STATE_REDIS_URL="${SDKWORK_RTC_STATE_REDIS_URL:-redis://${redis_host}:${redis_port}/1}"
+  export SDKWORK_API_CLOUD_GATEWAY_WEB_REDIS_URL="${SDKWORK_API_CLOUD_GATEWAY_WEB_REDIS_URL:-redis://${redis_host}:${redis_port}/2}"
+}
+
+export_platform_api_gateway_runtime_env() {
+  local environment allowed_hosts
+  environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
+  export SDKWORK_API_CLOUD_GATEWAY_DEPLOYMENT_PROFILE=standalone
+  export SDKWORK_API_CLOUD_GATEWAY_RUNTIME_TARGET=container
+  export SDKWORK_API_CLOUD_GATEWAY_ENVIRONMENT="${environment}"
+  export SDKWORK_API_CLOUD_GATEWAY_PROFILE_ID="standalone.${environment}"
+  export SDKWORK_ENVIRONMENT="${SDKWORK_ENVIRONMENT:-${environment}}"
+  export SDKWORK_API_CLOUD_GATEWAY_BIND="${SDKWORK_MODULE_API_GATEWAY_BIND:-127.0.0.1:$(module_api_gateway_port)}"
+  export SDKWORK_API_CLOUD_GATEWAY_CONFIG_FILE="${PLATFORM_GATEWAY_CONFIG}"
+  export SDKWORK_APP_ROOT="${PLATFORM_GATEWAY_INSTALL_ROOT}"
+  export SDKWORK_DATABASE_MODULES_ROOT="${PLATFORM_GATEWAY_INSTALL_ROOT}/database-modules"
+  allowed_hosts="${SDKWORK_MODULE_API_GATEWAY_ALLOWED_HOSTS:-}"
+  if [ -z "${allowed_hosts}" ]; then
+    allowed_hosts="$(discover_module_api_gateway_allowed_hosts)"
+  fi
+  export SDKWORK_API_CLOUD_GATEWAY_ALLOWED_HOSTS="${allowed_hosts}"
+  export SDKWORK_CORS_ALLOWED_ORIGINS="${SDKWORK_MODULE_API_GATEWAY_CORS_ALLOWED_ORIGINS:-${SDKWORK_CORS_ALLOWED_ORIGINS:-}}"
+  export SDKWORK_API_CLOUD_GATEWAY_MIGRATE_ON_START="${SDKWORK_MODULE_API_GATEWAY_MIGRATE_ON_START:-true}"
+  export SDKWORK_API_CLOUD_GATEWAY_PROVISION_IAM_SIGNING_MASTER_SECRET="${SDKWORK_MODULE_API_GATEWAY_PROVISION_IAM_SIGNING_MASTER_SECRET:-true}"
+  export SDKWORK_IAM_SIGNING_MASTER_SECRET_FILE="${SDKWORK_IAM_SIGNING_MASTER_SECRET_FILE:-${PLATFORM_GATEWAY_SECRETS_ROOT}/iam-signing-master.key}"
+  export SDKWORK_API_CLOUD_GATEWAY_PROVISION_PAYMENT_CREDENTIAL_KEY="${SDKWORK_MODULE_API_GATEWAY_PROVISION_PAYMENT_CREDENTIAL_KEY:-true}"
+  export SDKWORK_PAYMENT_CREDENTIAL_MASTER_KEY_FILE="${SDKWORK_PAYMENT_CREDENTIAL_MASTER_KEY_FILE:-${PLATFORM_GATEWAY_SECRETS_ROOT}/payment-credential-master.key}"
+  export SDKWORK_API_CLOUD_GATEWAY_PROVISION_KNOWLEDGEBASE_RPC_SECRETS="${SDKWORK_MODULE_API_GATEWAY_PROVISION_KNOWLEDGEBASE_RPC_SECRETS:-true}"
+  export SDKWORK_KNOWLEDGEBASE_ENVIRONMENT="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
+  export SDKWORK_KNOWLEDGEBASE_DEPLOYMENT_PROFILE=standalone
+  export SDKWORK_KNOWLEDGEBASE_TENANT_ID="${SDKWORK_MODULE_API_GATEWAY_KNOWLEDGEBASE_TENANT_ID:-100001}"
+  export SDKWORK_KNOWLEDGEBASE_ACTOR_ID="${SDKWORK_MODULE_API_GATEWAY_KNOWLEDGEBASE_ACTOR_ID:-1}"
+  export SDKWORK_KNOWLEDGEBASE_SECRETS_ENCRYPTION_KEY_FILE="${PLATFORM_GATEWAY_SECRETS_ROOT}/knowledgebase-rpc/knowledgebase-secrets.key"
+  export SDKWORK_WEBSERVER_SECRET_ENCRYPTION_KEY_FILE="${PLATFORM_GATEWAY_SECRETS_ROOT}/knowledgebase-rpc/webserver-secrets.key"
+  export SDKWORK_IM_GROUP_KNOWLEDGEBASE_LAUNCH_TICKET_SECRET_FILE="${PLATFORM_GATEWAY_SECRETS_ROOT}/knowledgebase-rpc/im-launch-ticket.key"
+  export SDKWORK_IM_KNOWLEDGEBASE_RPC_CLIENT_ENDPOINT="${SDKWORK_MODULE_API_GATEWAY_KNOWLEDGEBASE_RPC_ENDPOINT:-https://127.0.0.1:50054}"
+  export SDKWORK_IM_KNOWLEDGEBASE_RPC_CLIENT_CA_CERT_PATH="${PLATFORM_GATEWAY_SECRETS_ROOT}/knowledgebase-rpc/ca.crt"
+  export SDKWORK_IM_KNOWLEDGEBASE_RPC_CLIENT_CERT_PATH="${PLATFORM_GATEWAY_SECRETS_ROOT}/knowledgebase-rpc/client.crt"
+  export SDKWORK_IM_KNOWLEDGEBASE_RPC_CLIENT_KEY_PATH="${PLATFORM_GATEWAY_SECRETS_ROOT}/knowledgebase-rpc/client.key"
+  export SDKWORK_IM_KNOWLEDGEBASE_RPC_CLIENT_TLS_DOMAIN="${SDKWORK_MODULE_API_GATEWAY_KNOWLEDGEBASE_RPC_TLS_DOMAIN:-knowledgebase.local}"
+  export SDKWORK_IM_KNOWLEDGEBASE_RPC_CLIENT_CALLER_CONTEXT_SIGNING_KEY_FILE="${PLATFORM_GATEWAY_SECRETS_ROOT}/knowledgebase-rpc/caller-context.key"
+  export SDKWORK_IM_PRINCIPAL_DIRECTORY="${SDKWORK_MODULE_API_GATEWAY_IM_PRINCIPAL_DIRECTORY:-postgres}"
+  export SDKWORK_IM_ID_NODE_ID="${SDKWORK_MODULE_API_GATEWAY_IM_ID_NODE_ID:-2}"
+  export SDKWORK_API_CLOUD_GATEWAY_IAM_ALLOWED_AUDIENCES="${SDKWORK_MODULE_API_GATEWAY_IAM_ALLOWED_AUDIENCES:-sdkwork-api-cloud-gateway}"
+  export_platform_api_gateway_database_env
+  export_platform_api_gateway_redis_env
+}
+
+wait_for_bundled_knowledgebase_rpc() {
+  local secrets_root ca attempt max_attempts
+  secrets_root="${PLATFORM_GATEWAY_SECRETS_ROOT}/knowledgebase-rpc"
+  ca="${secrets_root}/ca.crt"
+  max_attempts="${SDKWORK_MODULE_API_GATEWAY_KNOWLEDGEBASE_RPC_WAIT_ATTEMPTS:-60}"
+  if [ ! -s "${ca}" ]; then
+    log "warning: knowledgebase RPC CA missing at ${ca}; skipping RPC readiness wait"
+    return 0
+  fi
+  for attempt in $(seq 1 "${max_attempts}"); do
+    if curl -fsS --connect-timeout 2 --cacert "${ca}" "https://127.0.0.1:50054/healthz" >/dev/null 2>&1; then
+      log "bundled knowledgebase RPC ready at https://127.0.0.1:50054/healthz"
+      return 0
+    fi
+    sleep 2
+  done
+  log "bundled knowledgebase RPC not ready at https://127.0.0.1:50054/healthz after ${max_attempts} attempts"
+  return 1
+}
+
+start_bundled_knowledgebase_rpc() {
+  local deployment rpc_entrypoint
+  deployment="$(module_api_gateway_deployment)"
+  [ "${deployment}" = "bundled" ] || return 0
+  rpc_entrypoint="${PLATFORM_GATEWAY_INSTALL_ROOT}/container/knowledgebase-rpc-entrypoint"
+  if [ ! -x "${rpc_entrypoint}" ]; then
+    log "warning: bundled knowledgebase RPC entrypoint missing at ${rpc_entrypoint}; continuing without RPC sidecar"
+    return 0
+  fi
+  ensure_platform_api_gateway_directories
+  export SDKWORK_KNOWLEDGEBASE_RPC_SECRETS_ROOT="${PLATFORM_GATEWAY_SECRETS_ROOT}/knowledgebase-rpc"
+  export SDKWORK_KNOWLEDGEBASE_ENVIRONMENT="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
+  export SDKWORK_KNOWLEDGEBASE_DEPLOYMENT_PROFILE=standalone
+  export SDKWORK_KNOWLEDGEBASE_RPC_ENABLED="true"
+  export SDKWORK_KNOWLEDGEBASE_RPC_BIND_ADDR="${SDKWORK_MODULE_API_GATEWAY_KNOWLEDGEBASE_RPC_BIND:-127.0.0.1:50054}"
+  export SDKWORK_KNOWLEDGEBASE_DRIVE_STORAGE_ROOT="${SDKWORK_MODULE_API_GATEWAY_KNOWLEDGEBASE_DRIVE_ROOT:-/var/lib/sdkwork/api-gateway/knowledgebase-drive}"
+  export SDKWORK_KNOWLEDGEBASE_OPERATOR_ID=sdkwork-knowledgebase
+  export SDKWORK_KNOWLEDGEBASE_ACTOR_ID="${SDKWORK_MODULE_API_GATEWAY_KNOWLEDGEBASE_ACTOR_ID:-1}"
+  export SDKWORK_KNOWLEDGEBASE_TENANT_ID="${SDKWORK_MODULE_API_GATEWAY_KNOWLEDGEBASE_TENANT_ID:-100001}"
+  export SDKWORK_API_CLOUD_GATEWAY_PROVISION_KNOWLEDGEBASE_RPC_SECRETS="${SDKWORK_MODULE_API_GATEWAY_PROVISION_KNOWLEDGEBASE_RPC_SECRETS:-true}"
+  export_platform_api_gateway_database_env
+  log "starting bundled knowledgebase RPC (${rpc_entrypoint}) on ${SDKWORK_KNOWLEDGEBASE_RPC_BIND_ADDR}"
+  run_as_service_user "${rpc_entrypoint}" \
+    > "${SDKWORK_MODULE_API_GATEWAY_KNOWLEDGEBASE_RPC_LOG_FILE:-/var/lib/sdkwork/webserver/module-knowledgebase-rpc.log}" 2>&1 &
+  PLATFORM_KB_RPC_PID=$!
+  wait_for_bundled_knowledgebase_rpc || {
+    log "warning: bundled knowledgebase RPC failed readiness; continuing gateway startup"
+  }
+}
+
+wait_for_module_api_gateway() {
+  local endpoint host port attempt max_attempts
+  endpoint="$(module_api_gateway_upstream_endpoint)"
+  host="${endpoint%%:*}"
+  port="${endpoint##*:}"
+  max_attempts="${SDKWORK_MODULE_API_GATEWAY_WAIT_ATTEMPTS:-}"
+  if [ -z "${max_attempts}" ]; then
+    case "${SDKWORK_MODULE_API_GATEWAY_REQUIRED:-false}" in
+      1|true|TRUE|yes|YES) max_attempts=90 ;;
+      # Docker/external: webserver must start with import reverse-proxy config
+      # even when the independent gateway is temporarily down (502 until healthy).
+      *) max_attempts=3 ;;
+    esac
+  fi
+  for attempt in $(seq 1 "${max_attempts}"); do
+    if curl -fsS --connect-timeout 2 "http://${host}:${port}/healthz" >/dev/null 2>&1; then
+      log "module API gateway ready at http://${endpoint}/healthz"
+      return 0
+    fi
+    sleep 1
+  done
+  log "module API gateway not ready at http://${endpoint}/healthz after ${max_attempts} attempts"
+  return 1
+}
+
+start_bundled_module_api_gateway() {
+  local deployment
+  deployment="$(module_api_gateway_deployment)"
+  [ "${deployment}" = "bundled" ] || return 0
+  if [ ! -x "${PLATFORM_GATEWAY_BINARY}" ]; then
+    log "bundled module API gateway binary missing at ${PLATFORM_GATEWAY_BINARY}"
+    log "build sdkwork-api-cloud-gateway and mount it, or set SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=docker"
+    exit 1
+  fi
+  if [ ! -d "${PLATFORM_GATEWAY_INSTALL_ROOT}/database-modules" ]; then
+    log "bundled module API gateway install root missing database-modules at ${PLATFORM_GATEWAY_INSTALL_ROOT}"
+    log "mount the cloud-gateway release/install tree to ${PLATFORM_GATEWAY_INSTALL_ROOT} or use docker deployment mode"
+    exit 1
+  fi
+  ensure_platform_api_gateway_directories
+  ensure_platform_api_gateway_secret_file "iam-signing-master.key"
+  ensure_platform_api_gateway_secret_file "payment-credential-master.key"
+  start_bundled_knowledgebase_rpc
+  export_platform_api_gateway_runtime_env
+  if [ "${SDKWORK_MODULE_API_GATEWAY_MIGRATE_ON_START:-true}" = "true" ]; then
+    log "running bundled module API gateway database migrations"
+    run_as_service_user "${PLATFORM_GATEWAY_BINARY}" --migrate-databases || {
+      log "warning: bundled module API gateway --migrate-databases failed; continuing startup"
+    }
+  fi
+  log "starting bundled module API gateway (${PLATFORM_GATEWAY_BINARY}) on ${SDKWORK_API_CLOUD_GATEWAY_BIND}"
+  run_as_service_user "${PLATFORM_GATEWAY_BINARY}" \
+    > "${SDKWORK_MODULE_API_GATEWAY_LOG_FILE:-/var/lib/sdkwork/webserver/module-api-gateway.log}" 2>&1 &
+  PLATFORM_GATEWAY_PID=$!
+  wait_for_module_api_gateway
+}
+
+prepare_module_api_gateway() {
+  local deployment required
+  deployment="$(module_api_gateway_deployment)"
+  required="${SDKWORK_MODULE_API_GATEWAY_REQUIRED:-false}"
+  case "${deployment}" in
+    bundled)
+      start_bundled_module_api_gateway
+      ;;
+    docker|external)
+      # Default: do not block webserver startup on an independent gateway.
+      # Import reverse-proxy config is already rewritten; /healthz on api*.brand
+      # returns 502 until the operator's gateway is healthy.
+      case "${required}" in
+        1|true|TRUE|yes|YES)
+          log "waiting for module API gateway (${deployment}) at $(module_api_gateway_upstream_endpoint)"
+          if ! wait_for_module_api_gateway; then
+            log "module API gateway required but not ready; aborting startup"
+            exit 1
+          fi
+          return 0
+          ;;
+      esac
+      log "module API gateway deployment=${deployment} upstream=$(module_api_gateway_upstream_endpoint); not waiting (set SDKWORK_MODULE_API_GATEWAY_REQUIRED=true to block)"
+      return 0
+      ;;
+    *)
+      log "unknown module API gateway deployment ${deployment}; skipping prepare"
+      return 0
+      ;;
+  esac
+}
+
+materialize_module_nginx_import_tree() {
+  local module="$1"
+  local module_root="$2"
+  local profile="${3:-${SDKWORK_WEBSERVER_IMPORT_PROFILE:-${SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE:-${SDKWORK_DEPLOYMENT_PROFILE:-standalone}}}}"
+  local checkout_ws="${module_root}/deployments/webserver"
+  local overlay_root="${CONFIG_ROOT}/import-sidecars/${module}/${profile}"
+  local module_ws="${checkout_ws}"
+  local environment conf_name static_root pc_dist_root h5_dist_root
+  environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
+  conf_name="${module_ws}/nginx.${profile}.${environment}.conf"
+  static_root="${module_ws}/static"
+
+  if [ ! -d "${checkout_ws}" ]; then
+    log "module ${module} missing ${checkout_ws}; skipped"
+    return 1
+  fi
+  if [ ! -f "${checkout_ws}/nginx.${profile}.${environment}.conf" ]; then
+    log "module ${module} missing nginx sidecar ${checkout_ws}/nginx.${profile}.${environment}.conf; skipped"
+    return 1
+  fi
+
+  # Always materialize a writable overlay under /etc/sdkwork/webserver/import-sidecars/.
+  # Docker rewrites (upstream gateway host, Adaptive Web roots, TLS strip) must
+  # not mutate the space checkout (SDKWORK_WEBSERVER_SPEC.md §17 import surface).
+  # Overlays are profile-scoped so the standalone and cloud import sets coexist.
+  rm -rf "${overlay_root}"
+  mkdir -p "${overlay_root}"
+  cp -a "${checkout_ws}/." "${overlay_root}/"
+  module_ws="${overlay_root}"
+  conf_name="${module_ws}/nginx.${profile}.${environment}.conf"
+  static_root="${module_ws}/static"
+  log "module ${module} using import overlay ${module_ws}"
+
+  # Upstream listen addresses must be connectable targets inside the container.
+  sed -i -e "s/0\.0\.0\.0:/127.0.0.1:/g" "${conf_name}"
+
+  # Adaptive Web runtime only accepts literal path SPA fallbacks (not =404).
+  sed -i -E 's/try_files[[:space:]]+\$uri[[:space:]]+\$uri\/[[:space:]]+=404;/try_files \$uri \$uri\/ \/index.html;/g' "${conf_name}"
+
+  # Module /api/, /healthz, /readyz proxy targets: normalize every `upstream
+  # gateway` block to sdkwork-api-cloud-gateway (bundled sidecar process,
+  # docker sibling container, or external endpoint).
+  rewrite_module_gateway_upstream "${conf_name}"
+
+  # Merged data plane: one listener owns each hostname. Sibling modules
+  # sometimes list historical aliases (sdkwork-llm lists memory-dev / mem-dev
+  # while sdkwork-memory also owns them). Keep a hostname only when its
+  # first label token belongs to this module.
+  strip_cross_module_server_names "${module}" "${conf_name}"
+
+  # Container import data plane listens on declared ports 80 / 443 ssl.
+  # Strip TLS listeners/directives so multi-brand production sidecars load
+  # without requiring every brand certificate on the local host.
+  sed -i \
+    -e '/listen[[:space:]]\+443/d' \
+    -e '/^[[:space:]]*ssl_certificate/d' \
+    -e '/^[[:space:]]*ssl_certificate_key/d' \
+    -e '/^[[:space:]]*ssl_trusted_certificate/d' \
+    -e '/^[[:space:]]*ssl_stapling/d' \
+    -e '/^[[:space:]]*ssl_protocols/d' \
+    -e '/^[[:space:]]*ssl_prefer_server_ciphers/d' \
+    -e '/^[[:space:]]*ssl_session_cache/d' \
+    -e '/^[[:space:]]*ssl_session_timeout/d' \
+    -e '/^[[:space:]]*ssl_ciphers/d' \
+    -e '/^[[:space:]]*ssl_dhparam/d' \
+    -e '/^[[:space:]]*ssl_ecdh_curve/d' \
+    "${conf_name}"
+
+  # Prefer module browser build outputs for Adaptive Web named locations
+  # (apps/*-{pc,h5}/dist/<profile>/<envAlias>/). Only fall back to module static/
+  # when dist/<profile>/<envAlias>/index.html is missing — operators should run
+  # materialize-space-dist-aliases.sh or pnpm build:{pc,h5}:<alias> first.
+  # Mapper contract (nginx/mapping.rs): location / Adaptive Web dispatch must
+  # be `try_files $uri $uri/ @$surface` with NO root/alias/proxy_pass; @pc/@h5
+  # own the document roots. Stock nginx `/__sdkwork_adaptive_dispatch__` is
+  # not a supported try_files probe.
+  mkdir -p "${module_ws}/snippets" "${static_root}"
+  # Modules that ship an empty deployments/webserver/static/ (no index.html)
+  # must still resolve location / to a readable document root. Without this,
+  # the data plane returns 404 "static path is not available" for Host hits.
+  ensure_module_static_fallback_index "${static_root}"
+  pc_dist_root="$(module_app_static_root "${module}" pc)"
+  h5_dist_root="$(module_app_static_root "${module}" h5)"
+  pc_root="${pc_dist_root:-${static_root}}"
+  h5_root="${h5_dist_root:-${static_root}}"
+  if [ -z "${pc_dist_root}" ] && [ -z "${h5_dist_root}" ]; then
+    log "warning: module ${module} missing apps/*-{pc,h5}/dist/$(environment_dist_alias "${environment}")/index.html; Adaptive Web falls back to ${static_root}"
+  else
+    log "module ${module} Adaptive Web dist alias=$(environment_dist_alias "${environment}") pc=${pc_dist_root:-none} h5=${h5_dist_root:-none}"
+  fi
+  cat > "${module_ws}/snippets/adaptive-web.named-locations.docker.conf" <<EOF
+location @pc {
+    root ${pc_root};
+    index index.html;
+    try_files \$uri \$uri/ /index.html;
+}
+
+location @h5 {
+    root ${h5_root};
+    index index.html;
+    try_files \$uri \$uri/ /index.html;
+}
+EOF
+  is_placeholder_dist_root() {
+    local root="$1"
+    [ -n "${root}" ] || return 0
+    [ -f "${root}/index.html" ] || return 0
+    grep -qi 'placeholder' "${root}/index.html" 2>/dev/null
+  }
+  spa_root="${static_root}"
+  if [ -n "${pc_dist_root}" ] && ! is_placeholder_dist_root "${pc_dist_root}"; then
+    spa_root="${pc_dist_root}"
+  elif [ -n "${h5_dist_root}" ] && ! is_placeholder_dist_root "${h5_dist_root}"; then
+    spa_root="${h5_dist_root}"
+  elif [ -n "${pc_dist_root}" ]; then
+    spa_root="${pc_dist_root}"
+  elif [ -n "${h5_dist_root}" ]; then
+    spa_root="${h5_dist_root}"
+  fi
+  if is_platform_api_gateway_module "${module}"; then
+    # api*.brand domains are the platform API plane: proxy everything to
+    # sdkwork-api-cloud-gateway (never SPA static fallback).
+    write_platform_api_gateway_locations_docker "${module_ws}"
+    log "module ${module} platform API plane: / and /api/ proxy -> $(module_api_gateway_upstream_endpoint)"
+  else
+    cat > "${module_ws}/snippets/gateway-api-locations.docker.conf" <<EOF
+    location = /healthz {
+        proxy_pass http://gateway;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+    }
+
+    location = /readyz {
+        proxy_pass http://gateway;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+    }
+
+    location /api/ {
+        proxy_pass http://gateway;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+EOF
+    {
+      cat "${module_ws}/snippets/gateway-api-locations.docker.conf"
+      cat <<EOF
+
+    location / {
+        root ${spa_root};
+        index index.html;
+        try_files \$uri \$uri/ /index.html;
+    }
+EOF
+    } > "${module_ws}/snippets/gateway-locations.docker.conf"
+  fi
+  if [ -f "${module_ws}/snippets/adaptive-web.dispatch.conf" ]; then
+    cat > "${module_ws}/snippets/adaptive-web.dispatch.conf" <<EOF
+root ${spa_root};
+index index.html;
+try_files \$uri \$uri/ /index.html;
+EOF
+  fi
+  docker_gateway_includes='include snippets/gateway-locations.docker.conf;'
+  sed -i \
+    -e "s|include snippets/gateway-locations.nonproduction.conf;|${docker_gateway_includes}|" \
+    -e "s|include snippets/gateway-locations.test.conf;|${docker_gateway_includes}|" \
+    -e "s|include snippets/gateway-locations.production.conf;|${docker_gateway_includes}|" \
+    -e 's|include snippets/adaptive-web.named-locations.conf;||' \
+    "${conf_name}"
+  if [ -f "${module_ws}/snippets/adaptive-web.named-locations.conf" ]; then
+    sed -i \
+      -e "s|root /usr/share/sdkwork/[^/]*/web/pc;|root ${pc_root};|g" \
+      -e "s|root /usr/share/sdkwork/[^/]*/web/h5;|root ${h5_root};|g" \
+      -e "s|root /usr/share/sdkwork/[^;]*;|root ${pc_root};|g" \
+      "${module_ws}/snippets/adaptive-web.named-locations.conf"
+  fi
+  sed -i \
+    -e "s|root /usr/share/sdkwork/[^/]*/web/pc;|root ${pc_root};|g" \
+    -e "s|root /usr/share/sdkwork/[^/]*/web/h5;|root ${h5_root};|g" \
+    -e "s|root /usr/share/sdkwork/[^;]*;|root ${pc_root};|g" \
+    "${conf_name}"
+
+  chown -R "${SERVICE_USER}:${SERVICE_USER}" "${module_ws}" 2>/dev/null || true
+  chmod -R a+rX "${module_ws}" 2>/dev/null || true
+
+  printf '%s' "${conf_name}"
+}
+
+# Write imports.d/ import sets (SDKWORK_WEBSERVER_SPEC.md §17.3): both the
+# standalone and cloud aggregators (import.conf.<profile>) plus optional
+# per-profile layout-imports.<profile>.toml for modules without nginx sidecars.
+# The active import.conf / layout-imports.toml copies default to the cloud set
+# and can be switched with scripts/webserver-import-profile.mjs.
+materialize_module_import_files() {
+  local imports_root="${CONFIG_ROOT}/imports.d"
+  local modules_root="${CONFIG_ROOT}/modules"
+  local environment active_profile import_profile
+  local module module_root nginx_conf import_conf layout_toml sidecar_path
+  local include_count layout_count
+  environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
+  active_profile="${SDKWORK_WEBSERVER_IMPORT_PROFILE:-cloud}"
+
+  ensure_directory "${imports_root}"
+  shopt -s nullglob
+  rm -f "${imports_root}"/*.conf "${imports_root}"/*.toml 2>/dev/null || true
+  find "${imports_root}" -maxdepth 1 -type l -delete 2>/dev/null || true
+  shopt -u nullglob
+
+  for import_profile in standalone cloud; do
+    import_conf="${imports_root}/import.conf.${import_profile}"
+    layout_toml="${imports_root}/layout-imports.${import_profile}.toml"
+    include_count=0
+    layout_count=0
+
+    cat > "${import_conf}" <<EOF
+# Generated by sdkwork-webserver-entrypoint (SDKWORK_WEBSERVER_SPEC.md §17.3).
+# Import set: ${import_profile}. Each line includes one sibling module sidecar
+# from the space checkout:
+#   /opt/deploy/sdkwork-space/<module>/deployments/webserver/nginx.${import_profile}.${environment}.conf
+# Lifecycle environment: ${environment}  Import profile: ${import_profile}
+EOF
+
+    cat > "${layout_toml}" <<EOF
+# Generated by sdkwork-webserver-entrypoint for layout v3 module imports (${import_profile}).
+EOF
+
+    IFS=',' read -r -a module_list <<< "${SDKWORK_SPACE_IMPORT_MODULES:-}"
+    for module in "${module_list[@]}"; do
+      module="$(printf '%s' "${module}" | xargs)"
+      [ -z "${module}" ] && continue
+      module_root="$(module_repo_root "${module}")"
+      if ! module_webserver_enabled "${module_root}"; then
+        log "module ${module} is disabled or missing layout; skipped"
+        continue
+      fi
+      if module_nginx_import_enabled "${module_root}"; then
+        sidecar_path="$(module_nginx_sidecar_abs_path "${module_root}" "${import_profile}")"
+        nginx_conf="$(materialize_module_nginx_import_tree "${module}" "${module_root}" "${import_profile}")" || continue
+        printf 'include %s;\n' "${nginx_conf}" >> "${import_conf}"
+        include_count=$((include_count + 1))
+        if [ "${nginx_conf}" = "${sidecar_path}" ]; then
+          log "module nginx include -> ${sidecar_path}"
+        else
+          log "module nginx include -> ${nginx_conf} (overlay; checkout sidecar ${sidecar_path})"
+        fi
+        continue
+      fi
+      if [ ! -f "${modules_root}/${module}/server.common.toml" ]; then
+        log "module ${module} has no materialized layout v3 config; skipped"
+        continue
+      fi
+      cat >> "${layout_toml}" <<EOF
+
+[[webserver.imports]]
+id = "${module}"
+path = "${modules_root}/${module}"
+enabled = true
+required = false
+probe_upstreams = false
+EOF
+      layout_count=$((layout_count + 1))
+      log "module layout import -> ${modules_root}/${module}"
+    done
+
+    if [ "${include_count}" -eq 0 ]; then
+      rm -f "${import_conf}"
+      log "no nginx sidecars discovered; removed ${import_conf}"
+    else
+      chown "${SERVICE_USER}:${SERVICE_USER}" "${import_conf}" 2>/dev/null || true
+      chmod 0644 "${import_conf}" 2>/dev/null || true
+      log "wrote ${import_conf} with ${include_count} module sidecar include(s)"
+    fi
+
+    if [ "${layout_count}" -eq 0 ]; then
+      rm -f "${layout_toml}"
+    else
+      chown "${SERVICE_USER}:${SERVICE_USER}" "${layout_toml}" 2>/dev/null || true
+      chmod 0640 "${layout_toml}" 2>/dev/null || true
+      log "wrote ${layout_toml} with ${layout_count} layout v3 import(s)"
+    fi
+  done
+
+  activate_import_profile "${active_profile}"
+}
+
+# Activate one materialized import set by copying its aggregator files to the
+# active import.conf / layout-imports.toml the runtime config loads.
+activate_import_profile() {
+  local profile="$1"
+  local imports_root="${CONFIG_ROOT}/imports.d"
+  case "${profile}" in
+    standalone|cloud) ;;
+    *)
+      log "unsupported import profile ${profile}; keeping current activation"
+      return 1
+      ;;
+  esac
+  if [ -f "${imports_root}/import.conf.${profile}" ]; then
+    cp -f "${imports_root}/import.conf.${profile}" "${imports_root}/import.conf"
+    chown "${SERVICE_USER}:${SERVICE_USER}" "${imports_root}/import.conf" 2>/dev/null || true
+    chmod 0644 "${imports_root}/import.conf" 2>/dev/null || true
+  else
+    rm -f "${imports_root}/import.conf"
+  fi
+  if [ -f "${imports_root}/layout-imports.${profile}.toml" ]; then
+    cp -f "${imports_root}/layout-imports.${profile}.toml" "${imports_root}/layout-imports.toml"
+    chown "${SERVICE_USER}:${SERVICE_USER}" "${imports_root}/layout-imports.toml" 2>/dev/null || true
+    chmod 0640 "${imports_root}/layout-imports.toml" 2>/dev/null || true
+  else
+    rm -f "${imports_root}/layout-imports.toml"
+  fi
+  log "activated import profile ${profile} under ${imports_root}"
+}
+
 module_app_static_root() {
   local module="$1"
   local surface="$2"
-  local environment dist_alias apps_root app dist match
+  local environment profile dist_alias apps_root expected app dist
   environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
+  profile="${SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE:-${SDKWORK_DEPLOYMENT_PROFILE:-standalone}}"
   dist_alias="$(environment_dist_alias "${environment}")"
-  if [ "${surface}" = "pc" ]; then
-    match="*pc*"
-  else
-    match="*h5*"
-  fi
   apps_root="$(module_repo_root "${module}")/apps"
   [ -d "${apps_root}" ] || return 0
-  for app in "${apps_root}"/${match}; do
+  # FRONTEND_CODE_SPEC.md §7 / WEBSERVER_SPEC.md §17: apps/*-{pc,h5}/dist/<profile>/<alias>/
+  expected="${apps_root}/${module}-${surface}"
+  if [ -f "${expected}/dist/${profile}/${dist_alias}/index.html" ]; then
+    printf '%s' "${expected}/dist/${profile}/${dist_alias}"
+    return 0
+  fi
+  for app in "${apps_root}"/*-"${surface}"; do
+    [ -d "${app}" ] || continue
+    dist="${app}/dist/${profile}/${dist_alias}"
+    if [ -f "${dist}/index.html" ]; then
+      printf '%s' "${dist}"
+      return 0
+    fi
+  done
+  # Migration fallback: legacy environment-only dist/<alias>/ subtrees.
+  for app in "${apps_root}"/*-"${surface}"; do
     [ -d "${app}" ] || continue
     dist="${app}/dist/${dist_alias}"
     if [ -f "${dist}/index.html" ]; then
       printf '%s' "${dist}"
       return 0
     fi
-    dist="${app}/dist"
-    if [ -f "${dist}/index.html" ]; then
-      printf '%s' "${dist}"
-      return 0
-    fi
   done
   return 0
+}
+
+# Seed a readable SPA shell when module static/ (or Docker copy) has no
+# index.html. Operators replace this by building apps/*-{pc,h5}/dist/<alias>.
+ensure_module_static_fallback_index() {
+  local static_root="$1"
+  local index_file="${static_root}/index.html"
+  mkdir -p "${static_root}"
+  if [ -s "${index_file}" ]; then
+    return 0
+  fi
+  cat > "${index_file}" <<'EOF'
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>SDKWork</title></head><body><p>Static fallback placeholder — replace with packaged PC/H5 assets.</p></body></html>
+EOF
+  chmod 0644 "${index_file}" 2>/dev/null || true
 }
 
 app_roots_by_environment_toml() {
@@ -472,29 +1424,9 @@ render_runtime_config() {
   local environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
   local bind="${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_INGRESS_BIND:-0.0.0.0:3800}"
   local module
-  IFS=',' read -r -a module_list <<< "${SDKWORK_SPACE_IMPORT_MODULES:-}"
-  for module in "${module_list[@]}"; do
-    module="$(printf '%s' "${module}" | xargs)"
-    [ -z "${module}" ] && continue
-    # Point PC/H5 static roots at cloned module apps when the operator did
-    # not pin them explicitly.
-    if [ -z "${SDKWORK_WEBSERVER_PC_STATIC_ROOT:-}" ]; then
-      local pc_root
-      pc_root="$(module_app_static_root "${module}" pc)"
-      if [ -n "${pc_root}" ]; then
-        export SDKWORK_WEBSERVER_PC_STATIC_ROOT="${pc_root}"
-        log "PC static root -> ${pc_root}"
-      fi
-    fi
-    if [ -z "${SDKWORK_WEBSERVER_H5_STATIC_ROOT:-}" ]; then
-      local h5_root
-      h5_root="$(module_app_static_root "${module}" h5)"
-      if [ -n "${h5_root}" ]; then
-        export SDKWORK_WEBSERVER_H5_STATIC_ROOT="${h5_root}"
-        log "H5 static root -> ${h5_root}"
-      fi
-    fi
-  done
+  # Keep bundled webserver PC/H5 roots as the management console. Sibling
+  # Adaptive Web assets are wired per-module via module-app-roots + nginx
+  # named locations (SDKWORK_WEBSERVER_SPEC.md §13.6 / §17).
   local APP_ROOTS_ENV_TOML
   APP_ROOTS_ENV_TOML="$(app_roots_by_environment_toml)"
   local public_url="${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_HTTP_URL}"
@@ -525,6 +1457,23 @@ render_runtime_config() {
   # secrets, acme, tls, node, region, webserver (imports). Redis is NOT a TOML
   # section — it is configured exclusively via SDKWORK_WEBSERVER_REDIS_* environment
   # variables injected directly by Docker Compose.
+
+  local webserver_includes=""
+  if [ -f "${CONFIG_ROOT}/imports.d/import.conf" ]; then
+    webserver_includes='"imports.d/import.conf"'
+  fi
+  if [ -f "${CONFIG_ROOT}/imports.d/layout-imports.toml" ]; then
+    if [ -n "${webserver_includes}" ]; then
+      webserver_includes+=', "imports.d/layout-imports.toml"'
+    else
+      webserver_includes='"imports.d/layout-imports.toml"'
+    fi
+  fi
+  if [ -z "${webserver_includes}" ]; then
+    webserver_includes=""
+  else
+    webserver_includes="[${webserver_includes}]"
+  fi
 
   ensure_directory "${CONFIG_ROOT}"
   cat > "${RUNTIME_CONFIG_FILE}" <<EOF
@@ -608,11 +1557,10 @@ uuid = "${SDKWORK_WEBSERVER_NODE_UUID:-standalone-${environment}-node}"
 region_code = "${SDKWORK_WEBSERVER_REGION_CODE:-cn}"
 seed_locale = "${SDKWORK_DATABASE_SEED_LOCALE:-zh-CN}"
 
-# Imported sibling-module nginx sidecars (default) and optional TOML import
-# descriptors under imports.d/. Materialized layout v3 copies:
-# /etc/sdkwork/webserver/modules/<module-id>/
+# Sibling-module imports: imports.d/import.conf aggregates checkout nginx
+# sidecars via include; layout-imports.toml lists layout v3 directories.
 [webserver]
-include = ["imports.d/*.conf", "imports.d/*.toml"]
+include = ${webserver_includes:-[]}
 EOF
   chown root:"${SERVICE_USER}" "${RUNTIME_CONFIG_FILE}"
   chmod 0640 "${RUNTIME_CONFIG_FILE}"
@@ -864,12 +1812,19 @@ main() {
     serve-management)
       log "running database migration"
       run_as_service_user "${GATEWAY_BINARY}" db-migrate
-      if [ -n "$(ls "${CONFIG_ROOT}/imports.d/"*.toml 2>/dev/null || true)" ]; then
-        log "module imports detected; management in background, module-imports data plane in foreground"
+      module_imports_present=false
+      if [ -f "${CONFIG_ROOT}/imports.d/import.conf" ] \
+        || [ -f "${CONFIG_ROOT}/imports.d/layout-imports.toml" ]; then
+        module_imports_present=true
+      fi
+      if [ "${module_imports_present}" = true ]; then
+        log "module imports detected; preparing module API gateway (deployment=$(module_api_gateway_deployment))"
+        prepare_module_api_gateway
+        log "management in background, module-imports data plane in foreground"
         run_as_service_user "${GATEWAY_BINARY}" serve-management \
           > "${MANAGEMENT_LOG_FILE:-/var/lib/sdkwork/webserver/management.log}" 2>&1 &
         MANAGEMENT_PID=$!
-        trap 'kill "${MANAGEMENT_PID}" 2>/dev/null || true' EXIT
+        trap 'kill "${MANAGEMENT_PID}" 2>/dev/null || true; kill "${PLATFORM_GATEWAY_PID:-}" 2>/dev/null || true; kill "${PLATFORM_KB_RPC_PID:-}" 2>/dev/null || true' EXIT
         exec_as_service_user "${GATEWAY_BINARY}" serve-imports
       fi
       log "starting management listener on ${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_INGRESS_BIND:-127.0.0.1:3800}"

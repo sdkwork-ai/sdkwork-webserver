@@ -158,6 +158,12 @@
     },
     "resolutionCache": {
       "$ref": "#/$defs/resolutionCache"
+    },
+    "appDomainFallback": {
+      "$ref": "#/$defs/appDomainFallback"
+    },
+    "usageMetering": {
+      "$ref": "#/$defs/usageMetering"
     }
   },
   "$defs": {
@@ -972,6 +978,11 @@
           "minLength": 1,
           "maxLength": 255
         },
+        "stripPrefix": {
+          "type": "boolean",
+          "default": false,
+          "description": "nginx alias semantics: replace the route's matched path prefix with root (the alias value). false (nginx root) appends the full request path."
+        },
         "followSymlinks": {
           "const": false,
           "default": false
@@ -998,6 +1009,12 @@
         "stripPrefix": {
           "type": "boolean",
           "default": false
+        },
+        "targetUri": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "nginx proxy_pass URI part (http://backend/api/ -> /api/): the route's matched path prefix is replaced with this URI before forwarding."
         },
         "requestSetHeaders": {
           "type": "array",
@@ -2437,6 +2454,113 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 3600
+        }
+      }
+    },
+    "appDomainFallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "App publishing domain fallback (appDomainFallback): when no local virtual host or website runtime binding matches a request host, resolve the server through the sdkwork-deployments control plane and serve the site's compiled runtime descriptor.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "suffixes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "string"
+          },
+          "description": "Platform app-domain suffixes (sdkwork.com, sdkwork.cn, birdcoder.com, birdcoder.cn, dtupay.com, dtupay.cn, skubc.com, skubc.cn, zowalk.com, zowalk.cn, offer86.com, offer86.cn, 86offer.com, 86offer.cn)."
+        },
+        "lookup": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Deploy control-plane lookup channel: embedded (shared Deploy database, standalone) or http (control-plane API, cloud).",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "embedded",
+                "http"
+              ]
+            },
+            "endpoint": {
+              "type": "string"
+            },
+            "authTokenFile": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode"
+          ]
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 30000,
+          "default": 2000
+        },
+        "cacheTtlMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "negativeCacheTtlMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400000,
+          "default": 5000
+        }
+      }
+    },
+    "usageMetering": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "SaaS traffic usage metering: per-domain / per-server-IP traffic facts attributed to tenant and app, ingested into sdkwork-deployments billing tables.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "windowSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400,
+          "default": 60
+        },
+        "flushIntervalMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 3600000,
+          "default": 30000
+        },
+        "channel": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Usage ingest channel: embedded (shared Deploy database, standalone) or http (control-plane ingest endpoint, cloud).",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "embedded",
+                "http"
+              ]
+            },
+            "endpoint": {
+              "type": "string"
+            },
+            "authTokenFile": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode"
+          ]
         }
       }
     }

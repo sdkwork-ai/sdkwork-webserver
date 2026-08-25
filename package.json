@@ -76,7 +76,7 @@
     "docker:down:production:external": "node scripts/docker/compose.mjs down --environment production --external",
     "docker:up:all:shared": "node scripts/docker/compose.mjs up --environment all --shared",
     "docker:down:all:shared": "node scripts/docker/compose.mjs down --environment all --shared",
-    "deploy:apply:standalone": "bash scripts/docker/deploy-docker-environment.sh",
+    "deploy:apply:standalone": "pnpm exec sdkwork-app deploy:apply --profile standalone.production --environment production",
     "deploy:reapply:all": "bash scripts/docker/deploy-docker-environment.sh all --validate",
     "deploy:rebuild:all": "bash scripts/docker/redeploy-all-environments.sh",
     "deploy:rebuild:all:wsl": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/docker/redeploy-all-environments.ps1",
@@ -160,7 +160,6 @@
     "deploy:validate:cloud": "pnpm exec sdkwork-app deploy:validate --profile cloud.production",
     "deploy:plan:standalone": "pnpm exec sdkwork-app deploy:plan --profile standalone.production",
     "deploy:plan:cloud": "pnpm exec sdkwork-app deploy:plan --profile cloud.production",
-    "deploy:apply:standalone": "pnpm exec sdkwork-app deploy:apply --profile standalone.production --environment production",
     "deploy:apply:cloud": "pnpm exec sdkwork-app deploy:apply --profile cloud.production --environment production",
     "deploy:rollback:standalone": "pnpm exec sdkwork-app deploy:rollback --profile standalone.production --environment production",
     "deploy:rollback:cloud": "pnpm exec sdkwork-app deploy:rollback --profile cloud.production --environment production",
@@ -179,7 +178,18 @@
     "_sdkwork:release:package:standalone": "node scripts/webserver-release.mjs package --deployment-profile standalone",
     "_sdkwork:release:package:cloud": "node scripts/webserver-release.mjs package --deployment-profile cloud",
     "_sdkwork:release:validate:standalone": "node scripts/webserver-release.mjs validate --deployment-profile standalone",
-    "_sdkwork:release:validate:cloud": "node scripts/webserver-release.mjs validate --deployment-profile cloud"
+    "_sdkwork:release:validate:cloud": "node scripts/webserver-release.mjs validate --deployment-profile cloud",
+    "build:h5:dev:cloud": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture h5 --environment dev --deployment-profile cloud",
+    "build:h5:test:cloud": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture h5 --environment test --deployment-profile cloud",
+    "build:h5:staging:cloud": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture h5 --environment staging --deployment-profile cloud",
+    "build:h5:prod:cloud": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture h5 --environment prod --deployment-profile cloud",
+    "build:pc:dev:cloud": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture pc --environment dev --deployment-profile cloud",
+    "build:pc:test:cloud": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture pc --environment test --deployment-profile cloud",
+    "build:pc:staging:cloud": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture pc --environment staging --deployment-profile cloud",
+    "build:pc:prod:cloud": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture pc --environment prod --deployment-profile cloud",
+    "import:switch:standalone": "node scripts/webserver-import-profile.mjs standalone",
+    "import:switch:cloud": "node scripts/webserver-import-profile.mjs cloud",
+    "import:status": "node scripts/webserver-import-profile.mjs status"
   },
   "exports": {
     ".": {

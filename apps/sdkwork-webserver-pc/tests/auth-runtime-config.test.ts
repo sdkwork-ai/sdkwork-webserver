@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createTokenManager } from "@sdkwork/sdk-common";
 import {
   createWebserverAuthRuntimeConfigLoader,
   resolveWebserverAuthRuntimeConfigFromMetadata,
@@ -69,6 +70,26 @@ describe("webserver IAM runtime config", () => {
       { code: 0, data: { auth: { loginMethods: ["password"] } } },
       { code: 0, data: { qrLoginEnabled: true } },
     )).toThrow(/IAM/);
+  });
+
+  it("re-seeds credential-entry bootstrap Access-Token before metadata SDK calls", async () => {
+    const tokenManager = createTokenManager();
+    tokenManager.setAccessToken("stale-access-token");
+    vi.stubGlobal("__SDKWORK_CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN__", "bootstrap-access-token");
+    const runtimeRetrieve = vi.fn().mockResolvedValue(runtimeMetadata);
+    const policyRetrieve = vi.fn().mockResolvedValue(verificationPolicyMetadata);
+    const load = createWebserverAuthRuntimeConfigLoader({
+      system: {
+        iam: {
+          runtime: { retrieve: runtimeRetrieve },
+          verificationPolicy: { retrieve: policyRetrieve },
+        },
+      },
+    }, tokenManager);
+
+    await expect(load()).resolves.toMatchObject({ qrLoginEnabled: true });
+    expect(tokenManager.getAccessToken()).toBe("bootstrap-access-token");
+    vi.unstubAllGlobals();
   });
 
   it("clears a failed metadata request so retry performs fresh SDK calls", async () => {

@@ -1,15 +1,25 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+
+import { parseDotEnv } from '../../../sdkwork-specs/tools/postgres/postgres-config.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DOCKER_ROOT = path.join(REPO_ROOT, 'deployments', 'docker');
 const COMPOSE_FILE = path.join(DOCKER_ROOT, 'docker-compose.yml');
 const COMPOSE_EXTERNAL_FILE = path.join(DOCKER_ROOT, 'docker-compose.external.yml');
+const COMPOSE_PLATFORM_GATEWAY_FILE = path.join(
+  DOCKER_ROOT,
+  'docker-compose.platform-api-gateway.yml',
+);
+const COMPOSE_PLATFORM_GATEWAY_EMBEDDED_FILE = path.join(
+  DOCKER_ROOT,
+  'docker-compose.platform-api-gateway.embedded.yml',
+);
 
 const VALID_ENVIRONMENTS = ['development', 'test', 'production'];
 
@@ -20,6 +30,7 @@ function parseArgs(argv) {
     detach: true,
     external: false,
     shared: false,
+    platformApiGatewayDocker: false,
     validate: false,
     envFile: undefined,
     dryRun: false,
@@ -35,6 +46,8 @@ function parseArgs(argv) {
       settings.external = true;
     } else if (argument === '--shared') {
       settings.shared = true;
+    } else if (argument === '--platform-api-gateway-docker') {
+      settings.platformApiGatewayDocker = true;
     } else if (argument === '--validate') {
       settings.validate = true;
     } else if (argument === '--env-file') {
@@ -59,6 +72,7 @@ Options:
   --environment <development|test|production|all>   Default: development
   --external                                      External PostgreSQL/Redis mode
   --shared                                        All profiles in one project (embedded only)
+  --platform-api-gateway-docker                   Add platform-api-gateway sibling container overlay
   --validate                                      Validate env before compose up
   --env-file <path>                               Override env file path
   --no-detach                                     Foreground mode for "up"
@@ -92,6 +106,22 @@ function run(command, args) {
   }
 }
 
+function usesPlatformGatewayAttachOverlay(envFile) {
+  const env = parseDotEnv(readFileSync(envFile, 'utf8'));
+  return String(env.SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK ?? '').trim().length > 0;
+}
+
+function usesPlatformGatewayDockerOverlay(settings, envFile) {
+  if (usesPlatformGatewayAttachOverlay(envFile)) {
+    return false;
+  }
+  if (settings.platformApiGatewayDocker) {
+    return true;
+  }
+  const env = parseDotEnv(readFileSync(envFile, 'utf8'));
+  return String(env.SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT ?? 'docker').trim() === 'docker';
+}
+
 function composeArgs(settings, envFile, project, profiles) {
   const args = [
     'compose',
@@ -104,6 +134,18 @@ function composeArgs(settings, envFile, project, profiles) {
   ];
   if (settings.external) {
     args.push('-f', COMPOSE_EXTERNAL_FILE);
+  }
+  if (usesPlatformGatewayAttachOverlay(envFile)) {
+    args.push(
+      '-f',
+      path.join(DOCKER_ROOT, 'docker-compose.platform-api-gateway-attach.embedded.yml'),
+    );
+  } else if (usesPlatformGatewayDockerOverlay(settings, envFile)) {
+    // compose.mjs drives docker-compose.yml (embedded/profiled); use the
+    // embedded overlay. Standalone per-env deploys use deploy-docker-environment.sh
+    // with docker-compose.platform-api-gateway.yml.
+    const embedded = COMPOSE_PLATFORM_GATEWAY_EMBEDDED_FILE;
+    args.push('-f', existsSync(embedded) ? embedded : COMPOSE_PLATFORM_GATEWAY_FILE);
   }
   for (const profile of profiles) {
     args.push('--profile', profile);

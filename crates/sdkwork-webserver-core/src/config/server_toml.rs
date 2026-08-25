@@ -13,6 +13,7 @@ use serde_json::{json, Map, Value};
 use super::{
     error::WebServerConfigError,
     model::WebServerAppConfig,
+    network::hostname_upstream_allowed_cidrs,
     proxy_headers::merge_proxy_set_headers,
     validate_webserver_config,
 };
@@ -175,6 +176,7 @@ fn materialize_static_resource(
     resource_id: &str,
     configured_root: &str,
     location: &Map<String, Value>,
+    strip_prefix: bool,
 ) -> Value {
     let root = configured_root.trim_start_matches('/');
     let index_files: Vec<Value> = location
@@ -193,6 +195,9 @@ fn materialize_static_resource(
         "type": "static",
         "root": root,
         "indexFiles": index_files,
+        // nginx semantics: `root` appends the full request path, `alias`
+        // replaces the matched location prefix with the configured value.
+        "stripPrefix": strip_prefix,
     });
     if let Some(try_files) = location.get("tryFiles").and_then(Value::as_array) {
         if let Some(last) = try_files.iter().filter_map(Value::as_str).last() {
@@ -1209,6 +1214,7 @@ impl<'a> Materializer<'a> {
             .ok_or_else(|| materialize_error(path, format!("upstream `{name}` must declare a target array")))?;
         let mut target_values = Vec::new();
         let mut authorized_literal_ips: Vec<String> = Vec::new();
+        let mut has_hostname_target = false;
         for (index, target) in targets.iter().enumerate() {
             let target_path = format!("{path}.target[{index}]");
             let target = target
@@ -1246,13 +1252,32 @@ impl<'a> Materializer<'a> {
             target_values.push(entry);
             // Literal IP targets are operator-declared in server.toml; the
             // runtime SSRF guard must be told the target is authorized.
-            let host = address.rsplit_once(':').map(|(host, _)| host).unwrap_or(&address);
+            let host = address.rsplit_once(':').map(|(host, _)| host).unwrap_or(address);
             if host.parse::<std::net::IpAddr>().is_ok() {
-                authorized_literal_ips.push(format!("{host}/32"));
+                match host.parse::<std::net::IpAddr>() {
+                    Ok(std::net::IpAddr::V4(ip)) => {
+                        authorized_literal_ips.push(format!("{ip}/32"));
+                    }
+                    Ok(std::net::IpAddr::V6(ip)) => {
+                        authorized_literal_ips.push(format!("{ip}/128"));
+                    }
+                    Err(_) => {}
+                }
+            } else {
+                // Hostname targets (Docker Compose DNS, WSL service names) are
+                // also operator-declared; authorize the standard private /
+                // loopback ranges so resolved Docker bridge addresses work.
+                // Hard-forbidden ranges stay blocked by upstream_ip_is_allowed.
+                has_hostname_target = true;
             }
         }
         if target_values.is_empty() {
             return Err(materialize_error(path, format!("upstream `{name}` has no live targets after `down` filtering")));
+        }
+        if has_hostname_target {
+            for network in hostname_upstream_allowed_cidrs() {
+                authorized_literal_ips.push(network.to_string());
+            }
         }
         let (load_balancing, hash) = match upstream.get("loadBalancing").and_then(Value::as_str) {
             None | Some("round-robin") => {
@@ -1412,36 +1437,67 @@ impl<'a> Materializer<'a> {
                     "proxyPassRequestHeaders": proxy_pass_request_headers,
                 }));
             } else {
-            let upstream_ref = if let Some(rest) = proxy_pass.strip_prefix("http://").or_else(|| proxy_pass.strip_prefix("https://")) {
-                if rest.contains(':') {
-                    // Literal host:port target: synthesize a dedicated upstream.
-                    let literal_id = format!("literal-{}", rest.replace([':', '/', '.'], "-"));
-                    if !self.upstream_names.contains(&literal_id) {
-                        let host = rest.rsplit_once(':').map_or("", |(host, _)| host);
-                        let address_policy = host.parse::<std::net::IpAddr>().ok().map(|ip| {
-                            match ip {
-                                std::net::IpAddr::V4(ip) => format!("{ip}/32"),
-                                std::net::IpAddr::V6(ip) => format!("{ip}/128"),
-                            }
-                        });
-                        let mut literal_upstream = json!({
-                            "id": literal_id,
-                            "targets": [{ "url": proxy_pass }],
-                            "loadBalancing": "round-robin",
-                        });
-                        if let Some(cidr) = address_policy {
-                            literal_upstream["addressPolicy"] =
-                                json!({ "allowedCidrs": [cidr] });
+            // Split the proxyPass URI part (nginx `proxy_pass` replacement
+            // semantics): a URI part replaces the matched location prefix.
+            let (authority, target_uri) = if let Some(rest) = proxy_pass
+                .strip_prefix("http://")
+                .or_else(|| proxy_pass.strip_prefix("https://"))
+            {
+                if rest.contains("unix:") {
+                    return Err(materialize_error(
+                        &path,
+                        "unix: proxyPass sockets are not supported by the runtime model",
+                    ));
+                }
+                match rest.split_once('/') {
+                    Some((authority, uri_path)) => {
+                        let uri = format!("/{uri_path}");
+                        if uri.contains('?') {
+                            return Err(materialize_error(
+                                &path,
+                                "query strings in the proxyPass URI part are not supported by the runtime model",
+                            ));
                         }
-                        self.upstreams.push(literal_upstream);
-                        self.upstream_names.push(literal_id.clone());
+                        (authority.to_owned(), Some(uri))
                     }
-                    literal_id
-                } else {
-                    rest.to_owned()
+                    None => (rest.to_owned(), None),
                 }
             } else {
                 return Err(materialize_error(&path, format!("proxyPass `{proxy_pass}` must be http(s)://upstream or http(s)://host:port")));
+            };
+            if authority.is_empty() {
+                return Err(materialize_error(
+                    &path,
+                    format!("proxyPass `{proxy_pass}` has an empty upstream authority"),
+                ));
+            }
+            let upstream_ref = if authority.contains(':') {
+                // Literal host:port target: synthesize a dedicated upstream;
+                // the target URL never carries the proxy_pass URI part.
+                let literal_id = format!("literal-{}", authority.replace([':', '/', '.'], "-"));
+                if !self.upstream_names.contains(&literal_id) {
+                    let host = authority.rsplit_once(':').map_or("", |(host, _)| host);
+                    let address_policy = host.parse::<std::net::IpAddr>().ok().map(|ip| {
+                        match ip {
+                            std::net::IpAddr::V4(ip) => format!("{ip}/32"),
+                            std::net::IpAddr::V6(ip) => format!("{ip}/128"),
+                        }
+                    });
+                    let mut literal_upstream = json!({
+                        "id": literal_id,
+                        "targets": [{ "url": format!("http://{authority}") }],
+                        "loadBalancing": "round-robin",
+                    });
+                    if let Some(cidr) = address_policy {
+                        literal_upstream["addressPolicy"] =
+                            json!({ "allowedCidrs": [cidr] });
+                    }
+                    self.upstreams.push(literal_upstream);
+                    self.upstream_names.push(literal_id.clone());
+                }
+                literal_id
+            } else {
+                authority
             };
             if !self.upstream_names.contains(&upstream_ref) {
                 return Err(materialize_error(&path, format!("proxyPass references undefined upstream `{upstream_ref}`")));
@@ -1463,14 +1519,18 @@ impl<'a> Materializer<'a> {
                 validate_proxy_set_header_entry(&path, entry)?;
             }
             let merged_headers = merge_proxy_set_headers(inherited_proxy_set_headers, &request_set_headers);
-            self.resources.push(json!({
+            let mut proxy_resource = json!({
                 "id": resource_id,
                 "type": "proxy",
                 "upstreamRef": upstream_ref,
                 "stripPrefix": false,
                 "requestSetHeaders": merged_headers,
                 "proxyPassRequestHeaders": proxy_pass_request_headers,
-            }));
+            });
+            if let Some(uri) = target_uri {
+                proxy_resource["targetUri"] = Value::String(uri);
+            }
+            self.resources.push(proxy_resource);
             }
         } else if let Some(root) = if location.contains_key("root") {
             location.get("root").and_then(Value::as_str)
@@ -1483,10 +1543,11 @@ impl<'a> Materializer<'a> {
                 &resource_id,
                 root,
                 location,
+                false,
             ));
         } else if let Some(alias) = location.get("alias").and_then(Value::as_str) {
-            // Runtime static serving strips the matched location prefix before
-            // joining the configured directory (nginx `alias` semantics).
+            // nginx `alias` semantics: the matched location prefix is
+            // replaced by the configured directory before joining.
             if !alias.ends_with('/') {
                 return Err(materialize_error(
                     &path,
@@ -1503,6 +1564,7 @@ impl<'a> Materializer<'a> {
                 &resource_id,
                 alias,
                 location,
+                true,
             ));
         } else if let Some(status) = location.get("returnStatus").and_then(Value::as_u64) {
             let status: u16 = u16::try_from(status)

@@ -101,13 +101,18 @@ function readEnvFile(environment) {
 
 function resolveCheckoutHostPath(settings) {
   const env = readEnvFile(settings.deploymentEnvironment);
-  return env.SDKWORK_SPACE_CHECKOUT_HOST_PATH
-    ?? env.SDKWORK_SPACE_HOST_PATH
+  const checkoutHostPath = env.SDKWORK_SPACE_CHECKOUT_HOST_PATH
     ?? process.env.SDKWORK_SPACE_CHECKOUT_HOST_PATH
-    ?? process.env.SDKWORK_SPACE_HOST_PATH
+    ?? (env.SDKWORK_SPACE_HOST_PATH
+      ? path.posix.join(env.SDKWORK_SPACE_HOST_PATH, 'sdkwork-space')
+      : undefined)
+    ?? (process.env.SDKWORK_SPACE_HOST_PATH
+      ? path.resolve(process.env.SDKWORK_SPACE_HOST_PATH, 'sdkwork-space')
+      : undefined)
     ?? (process.platform === 'win32'
       ? path.resolve(REPO_ROOT, '..')
       : '/opt/deploy/sdkwork-space');
+  return checkoutHostPath;
 }
 
 function resolveServiceName(deploymentEnvironment, composeLayout) {
@@ -195,6 +200,8 @@ function buildInContainer(settings, plan) {
     `${checkoutHostPath}:/opt/deploy/sdkwork-space:rw`,
     '-v',
     `${path.join(REPO_ROOT, 'scripts', 'docker', 'build-module-browser.mjs')}:/app/scripts/docker/build-module-browser.mjs:ro`,
+    '-v',
+    `${path.join(REPO_ROOT, '..', 'sdkwork-specs')}:/sdkwork-specs:ro`,
     service,
     'build-browser',
     '--module',

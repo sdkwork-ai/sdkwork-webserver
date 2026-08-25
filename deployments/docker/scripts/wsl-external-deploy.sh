@@ -215,9 +215,9 @@ main() {
     done
   fi
 
-  # Configure nginx and hosts
+  # Configure hosts; retire host nginx (Docker webserver owns reverse proxy)
   bash "$docker_root/scripts/install-wsl-hosts.sh" || true
-  bash "$docker_root/scripts/install-wsl-nginx.sh" || true
+  bash "$docker_root/scripts/uninstall-wsl-nginx.sh" || true
 
   # Wait for health checks
   log "waiting for health checks..."
@@ -230,11 +230,10 @@ main() {
 
   log "deployment complete"
   log ""
-  log "Environment access URLs (host ports avoid Ubuntu 5432/6379/80 conflicts):"
-  log "  Development: http://server-dev.sdkwork.com  (direct http://127.0.0.1:13800)"
-  log "  Test:        http://server-test.sdkwork.com (direct http://127.0.0.1:18888)"
-  log "  Production:  http://server.sdkwork.com      (direct http://127.0.0.1:18080)"
-  log "  HTTPS (optional direct): dev :18430, test :28430, prod :38430"
+  log "Environment access (Docker published ports; host nginx retired):"
+  log "  Management:  http://server-dev.sdkwork.com:13800  http://server-test.sdkwork.com:18888  http://server.sdkwork.com:18080"
+  log "  Public HTTP/HTTPS: development owns host :80 / :443; test :18898/:28430; prod :18098/:38430"
+  log "  Example: curl --noproxy '*' -H 'Host: api-dev.sdkwork.com' http://127.0.0.1/healthz"
   log ""
   log "Database connections (external PostgreSQL):"
   log "  Development: sdkwork_ai_dev"

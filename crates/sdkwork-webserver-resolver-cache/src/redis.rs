@@ -6,7 +6,7 @@
 //! keeps latency off the hot path; failures degrade to the next chain
 //! layer (the backend returns `None` and drops the write).
 
-use redis::aio::ConnectionManager;
+use redis::aio::MultiplexedConnection;
 use std::sync::Arc;
 
 use crate::{
@@ -18,7 +18,7 @@ use crate::{
 /// Redis backend. Constructed through [`RedisResolverCache::connect`]; the
 /// `build` variant keeps the error path out of the chain constructor.
 pub struct RedisResolverCache {
-    pool: ConnectionManager,
+    pool: MultiplexedConnection,
     prefix: String,
 }
 
@@ -26,7 +26,7 @@ impl RedisResolverCache {
     pub async fn connect(config: &RedisCacheConfig) -> Result<Arc<Self>, String> {
         let client = redis::Client::open(config.url.as_str())
             .map_err(|error| format!("invalid Redis URL: {error}"))?;
-        let pool = ConnectionManager::new(client)
+        let pool = client.get_multiplexed_async_connection()
             .await
             .map_err(|error| format!("cannot connect to Redis: {error}"))?;
         Ok(Arc::new(Self {

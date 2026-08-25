@@ -67,6 +67,8 @@ struct ListenerState {
     runtime: Arc<DataPlaneRuntime>,
     website_delivery: Option<Arc<sdkwork_webserver_delivery_runtime::WebsiteDeliveryExecutor>>,
     provider_resources: Option<Arc<sdkwork_webserver_delivery_runtime::AppConfigResourceExecutor>>,
+    deploy_fallback: Option<Arc<crate::deploy_fallback::DeployFallbackResolver>>,
+    usage_meter: Option<Arc<crate::usage_metering::UsageMeteringAggregator>>,
     listener_id: String,
     is_tls: bool,
 }

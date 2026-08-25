@@ -12,6 +12,7 @@ import { parseDotEnv } from '../../../sdkwork-specs/tools/postgres/postgres-conf
 const BASE_DOMAINS = ['sdkwork.com'];
 const ENVIRONMENTS = ['development', 'test', 'production'];
 const DEPENDENCY_MODES = ['embedded', 'external'];
+const MODULE_API_GATEWAY_DEPLOYMENTS = ['bundled', 'docker', 'external'];
 const DATABASE_IDENTITIES = {
   development: 'sdkwork_ai_dev',
   test: 'sdkwork_ai_test',
@@ -110,7 +111,17 @@ export function validateDeploymentEnvironment(env, mode) {
     throw new Error('SDKWORK_SPACE_CLONE_URL must reference the sdkwork-space checkout');
   }
 
-  return { environment, expectedProfileId, hosts, mode };
+  const gatewayDeployment = String(env.SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT ?? 'docker').trim();
+  if (!MODULE_API_GATEWAY_DEPLOYMENTS.includes(gatewayDeployment)) {
+    throw new Error(
+      `SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT must be one of ${MODULE_API_GATEWAY_DEPLOYMENTS.join(', ')}`,
+    );
+  }
+  if (gatewayDeployment === 'external' && !String(env.SDKWORK_MODULE_API_GATEWAY_HOST ?? '').trim()) {
+    throw new Error('SDKWORK_MODULE_API_GATEWAY_HOST is required when deployment mode is external');
+  }
+
+  return { environment, expectedProfileId, hosts, mode, gatewayDeployment };
 }
 
 function runComposeConfig(appRoot, envFile, mode, environment) {

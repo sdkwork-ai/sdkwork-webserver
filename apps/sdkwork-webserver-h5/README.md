@@ -11,6 +11,11 @@ this H5 root. Plan folding collapses when one surface is missing; neither uses
 
 ```bash
 pnpm --dir apps/sdkwork-webserver-h5 install
-pnpm --dir apps/sdkwork-webserver-h5 run build:standalone
+pnpm --dir apps/sdkwork-webserver-h5 run build:prod          # standalone (default, same-origin)
+pnpm --dir apps/sdkwork-webserver-h5 run build:prod:cloud    # cloud (unified api.<domain> edge)
 pnpm --dir apps/sdkwork-webserver-h5 check
 ```
+
+Both profiles coexist under `dist/<profile>/<envAlias>/` (`dist/standalone/prod`,
+`dist/cloud/prod`) per `FRONTEND_CODE_SPEC.md` §7; `build:standalone` /
+`build:cloud` remain migration aliases delegating to the canonical runner.

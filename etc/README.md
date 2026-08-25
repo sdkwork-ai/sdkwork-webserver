@@ -31,7 +31,7 @@ paths to the gateway. Console PC/H5 selection lives in the process (`AdaptiveApp
 | Ordinary static | `SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT` / `[app_roots].static_fallback_root` or by-environment map |
 | Tablet preference | `SDKWORK_WEBSERVER_TABLET_SURFACE` / `[app_roots].tablet_surface` (`pc` default, or `h5`) |
 
-Source builds land in `apps/sdkwork-webserver-{pc,h5}/dist/{dev,test,staging,prod}/`.
+Source builds land in `apps/sdkwork-webserver-{pc,h5}/dist/{standalone,cloud}/{dev,test,staging,prod}/` (standalone is the default profile).
 Install layout: `/usr/share/sdkwork/webserver/web/{pc,h5,static}/`. See
 `etc/examples/config.toml.example` for the full per-environment catalog.
 

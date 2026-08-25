@@ -118,7 +118,7 @@ describe("admin workspace application controls", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Create application" }).at(-1)!);
 
     await waitFor(() => expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "Public API", applicationType: "API", siteType: 6 }),
+      expect.objectContaining({ name: "Public API", appKind: "API_SERVICE" }),
       { idempotencyKey: expect.any(String) },
     ));
     expect(sourceStorage.store).toHaveBeenCalledWith(expect.objectContaining({ applicationId: "app-1" }));
@@ -147,26 +147,26 @@ describe("admin workspace application controls", () => {
     renderWorkspace("/admin/applications", registry);
 
     fireEvent.click(await screen.findByRole("button", { name: "Create application" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    expect(screen.getByRole("alert").textContent).toContain("Enter an application name");
+    const createNow = screen.getByTestId("application-create-now") as HTMLButtonElement;
+    expect(createNow.disabled).toBe(true);
     expect(screen.getByRole("heading", { name: "Application basics" })).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("Application name"), { target: { value: "Portal" } });
+    expect(createNow.disabled).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(screen.getByRole("heading", { name: "Store listing details" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Application basics" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(screen.getByRole("heading", { name: "Source version" })).toBeTruthy();
+    const sourceTrigger = screen.getByRole("button", { name: "Choose ZIP package" });
     expect((screen.getByLabelText("Version") as HTMLInputElement).value).toBe("v1.0.0");
 
-    const sourceTrigger = screen.getByRole("button", { name: "Choose ZIP package" });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    const releaseAlert = screen.getByRole("alert");
-    expect(releaseAlert.textContent).toContain("Select the initial application source");
-    expect(releaseAlert.textContent).not.toContain("version");
-    await waitFor(() => expect(document.activeElement).toBe(sourceTrigger));
+    expect(screen.getByRole("heading", { name: "Deployment configuration" })).toBeTruthy();
 
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("heading", { name: "Source version" })).toBeTruthy();
     fireEvent.change(screen.getByTestId("application-source-input"), {
       target: { files: [new File(["source"], "source.zip", { type: "application/zip" })] },
     });
@@ -180,6 +180,7 @@ describe("admin workspace application controls", () => {
     fireEvent.change(versionInput, { target: { value: "v1.0.1" } });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(screen.getByRole("heading", { name: "Deployment configuration" })).toBeTruthy();
+    expect(sourceTrigger).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
     expect(screen.getByRole("heading", { name: "Review and create" })).toBeTruthy();
 
@@ -250,10 +251,9 @@ describe("admin workspace application controls", () => {
 
     const repositoryInput = screen.getByLabelText("HTTPS Git repository") as HTMLInputElement;
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    expect(screen.getByRole("alert").textContent).toContain("Enter a Git repository");
-    expect(screen.getByRole("alert").textContent).not.toContain("version");
-    await waitFor(() => expect(document.activeElement).toBe(repositoryInput));
+    expect(screen.getByRole("heading", { name: "Deployment configuration" })).toBeTruthy();
 
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
     fireEvent.change(repositoryInput, { target: { value: "http://github.com/sdkwork/example.git" } });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(screen.getByRole("alert").textContent).toContain("Enter a valid HTTPS Git repository");
@@ -509,9 +509,14 @@ describe("admin workspace application controls", () => {
     fireEvent.click(createButton);
     expect(document.activeElement).toBe(screen.getByLabelText("Application name"));
 
+    fireEvent.change(screen.getByLabelText("Application name"), { target: { value: "Focus portal" } });
     const drawer = screen.getByTestId("application-creation-drawer");
     const closeButton = screen.getByRole("button", { name: "Close" });
     const continueButton = screen.getByRole("button", { name: "Continue" });
+    const createNowButton = screen.getByTestId("application-create-now");
+    createNowButton.focus();
+    fireEvent.keyDown(drawer, { key: "Tab" });
+    expect(document.activeElement).toBe(continueButton);
     continueButton.focus();
     fireEvent.keyDown(drawer, { key: "Tab" });
     expect(document.activeElement).toBe(closeButton);
@@ -559,6 +564,48 @@ describe("admin workspace application controls", () => {
     ));
   });
 
+  it("creates an application with name only without uploading source", async () => {
+    const create = vi.fn().mockResolvedValue({ id: "app-draft" });
+    const createSourceVersion = vi.fn();
+    const createDeployment = vi.fn();
+    const registry = createWebserverAdminApplicationRegistry(client({
+      create,
+      createDeployment,
+      createSourceVersion,
+    }), testSourceStorage(), testMediaStorage());
+    renderWorkspace("/admin/applications", registry);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create application" }));
+    fireEvent.change(screen.getByLabelText("Application name"), { target: { value: "Draft App" } });
+    fireEvent.click(screen.getByTestId("application-create-now"));
+
+    await waitFor(() => expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Draft App" }),
+      { idempotencyKey: expect.any(String) },
+    ));
+    expect(createSourceVersion).not.toHaveBeenCalled();
+    expect(createDeployment).not.toHaveBeenCalled();
+  });
+
+  it("shows Add source code for applications without a source version", async () => {
+    const registry = createWebserverAdminApplicationRegistry(client({
+      applicationItems: [{ id: "app-1", name: "Public API", status: 2 }],
+    }), testSourceStorage(), testMediaStorage());
+    renderWorkspace("/admin/applications", registry);
+
+    expect(await screen.findByRole("button", { name: "Add source code Public API" })).toBeTruthy();
+  });
+
+  it("shows Modify source code after a source version exists", async () => {
+    const registry = createWebserverAdminApplicationRegistry(client({
+      applicationItems: [{ id: "app-1", name: "Public API", status: 2 }],
+      sourceVersionItems: [{ id: "source-version-1", versionTag: "v1.0.0", sourceType: "ARCHIVE" }],
+    }), testSourceStorage(), testMediaStorage());
+    renderWorkspace("/admin/applications", registry);
+
+    expect(await screen.findByRole("button", { name: "Modify source code Public API" })).toBeTruthy();
+  });
+
   it("uploads a new immutable source version from an independent row dialog", async () => {
     const createSourceVersion = vi.fn().mockResolvedValue({ id: "source-version-2", status: 1 });
     const sourceStorage = testSourceStorage();
@@ -568,7 +615,7 @@ describe("admin workspace application controls", () => {
     }), sourceStorage, testMediaStorage());
     renderWorkspace("/admin/applications", registry);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Update code Public API" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add source code Public API" }));
 
     const dialog = screen.getByTestId("application-source-update-dialog");
     expect(dialog.classList.contains("application-creation-drawer")).toBe(false);
@@ -610,7 +657,7 @@ describe("admin workspace application controls", () => {
     }), testSourceStorage(), testMediaStorage());
     renderWorkspace("/admin/applications", registry);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Update code Public API" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Modify source code Public API" }));
 
     const repository = await screen.findByLabelText("HTTPS Git repository") as HTMLInputElement;
     await waitFor(() => expect(repository.value).toBe("https://github.com/sdkwork/public-api.git"));
@@ -644,7 +691,7 @@ describe("admin workspace application controls", () => {
 
     expect(await screen.findByRole("columnheader", { name: "Actions" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Edit Public API" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Update code Public API" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Modify source code Public API" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Delete Public API" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Publish Public API" }));
 

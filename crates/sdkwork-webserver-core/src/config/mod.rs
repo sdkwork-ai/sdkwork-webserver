@@ -63,9 +63,11 @@ pub use sub_filter::{
     apply_sub_filters, sub_filter_content_type_matches, MAX_SUB_FILTER_BODY_BYTES,
 };
 pub use model::{
-    AccessAction, AccessRuleConfig, AcmeHttp01Config, AuthBasicConfig, AuthBasicUserConfig,
-    CertificateConfig, CertificateSource, ClientAuthConfig, ClientAuthMode, GzipConfig,
-    LimitConnConfig, LimitConnZoneConfig, LimitReqConfig, LimitReqZoneConfig, NginxConfig, ConfigProviderType,
+    AccessAction, AccessRuleConfig, AcmeHttp01Config, AppDomainFallbackConfig,
+    AppDomainFallbackLookup, AuthBasicConfig, AuthBasicUserConfig, CertificateConfig,
+    UsageMeteringChannel, UsageMeteringConfig,
+    CertificateSource, ClientAuthConfig, ClientAuthMode, GzipConfig, LimitConnConfig,
+    LimitConnZoneConfig, LimitReqConfig, LimitReqZoneConfig, NginxConfig, ConfigProviderType,
     CustomHeaderConfig, DeploymentConfig, ListenerConfig, ListenerProtocol, ListenerTlsRuntime,
     ObservabilityConfig, ProviderCachePolicy, ProxyCacheConfig, ProxyProtocolConfig, ProxyProtocolCrc32cPolicy,
     ProxyProtocolVersion, ReloadConfig, ReloadMode, ResolverConfig, ResourceConfig,
@@ -80,7 +82,9 @@ pub use model::{
     UpstreamTargetConfig, UpstreamTlsConfig, UpstreamTlsTrustMode, VirtualHostConfig,
     WebServerAppConfig, WebServerLimits, XFrameOptions,
 };
-pub use network::{is_supported_upstream_allowed_cidr, upstream_ip_is_allowed};
+pub use network::{
+    hostname_upstream_allowed_cidrs, is_supported_upstream_allowed_cidr, upstream_ip_is_allowed,
+};
 pub use uri::{normalize_uri_path, UriPathNormalizationError};
 pub use validate::{normalize_server_name, server_name_covers};
 

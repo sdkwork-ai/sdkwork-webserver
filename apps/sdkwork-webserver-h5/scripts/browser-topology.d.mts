@@ -24,7 +24,10 @@ export interface BrowserDevelopmentServerOptions {
 
 export const CANONICAL_API_PROXY_PATHS: readonly string[];
 
-export function resolveBrowserDistOutDir(environment: WebserverLifecycleEnvironment): string;
+export function resolveBrowserDistOutDir(
+  environment: WebserverLifecycleEnvironment,
+  deploymentProfile?: WebserverDeploymentProfile,
+): string;
 
 export function resolveViteRuntimeProfile(
   mode: string,

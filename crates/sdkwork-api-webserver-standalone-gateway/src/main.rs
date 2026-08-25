@@ -511,6 +511,9 @@ fn print_help() {
            serve-nginx [path]     Same as default; optional explicit nginx.conf or sites-enabled directory.\n\
            serve-management       Start the management API (control plane).\n\
            db-migrate             Run database migration and exit.\n\
+           issue-credential-entry-bootstrap-token [path]\n\
+                                  Issue an IAM-signed credential-entry bootstrap Access-Token\n\
+                                  for the login page (default secrets path).\n\
            validate <config>      Validate and compile Web Server app config (JSON, TOML, or nginx conf; format auto-detected).\n\
            validate-module-imports  Validate imported sibling-module deployments/webserver/ configs.\n\
            serve-imports          Serve the merged module-imports data plane (module domains/servers/resources).\n\

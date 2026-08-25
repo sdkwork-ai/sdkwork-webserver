@@ -17,6 +17,7 @@ management = [
   "dep:sdkwork-web-store-sqlx",
   "dep:sdkwork-webserver-http-host",
   "dep:sdkwork-intelligence-webserver-repository-sqlx",
+  "dep:sdkwork-intelligence-deploy-repository-sqlx",
 ]
 
 [lib]
@@ -35,6 +36,7 @@ sdkwork-api-iam-assembly = { workspace = true, optional = true }
 sdkwork-api-drive-assembly = { workspace = true, optional = true }
 sdkwork-api-skills-assembly = { workspace = true, optional = true }
 sdkwork-api-mcp-assembly = { workspace = true, optional = true }
+async-trait.workspace = true
 atomic-waker.workspace = true
 arc-swap.workspace = true
 axum.workspace = true
@@ -70,6 +72,7 @@ tower-http.workspace = true
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 url.workspace = true
+reqwest.workspace = true
 webpki-roots.workspace = true
 x509-parser.workspace = true
 windows-sys.workspace = true
@@ -78,6 +81,8 @@ zeroize.workspace = true
 sdkwork-database-sqlx = { workspace = true, optional = true }
 sdkwork-webserver-http-host = { workspace = true, optional = true }
 sdkwork-intelligence-webserver-repository-sqlx = { workspace = true, optional = true }
+sdkwork-intelligence-deploy-repository-sqlx = { path = "../../../sdkwork-deployments/crates/sdkwork-intelligence-deploy-repository-sqlx", optional = true }
+sdkwork-deploy-contract = { path = "../../../sdkwork-deployments/crates/sdkwork-deploy-contract" }
 sdkwork-webserver-core.workspace = true
 sdkwork-webserver-resolver-cache = { workspace = true, features = ["redis"] }
 sdkwork-webserver-contract.workspace = true

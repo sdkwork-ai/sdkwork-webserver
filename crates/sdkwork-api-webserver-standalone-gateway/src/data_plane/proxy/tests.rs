@@ -149,6 +149,7 @@ fn rewritten_target_encodes_canonical_reserved_and_unicode_path_bytes() {
     let rewritten = build_target_url(
         &target,
         true,
+        None,
         "/rewrite",
         "/rewrite/a%3Fb%23c%25d/%E4%B8%AD",
         "/rewrite/a?b#c%d/中",
@@ -166,11 +167,42 @@ fn rewritten_target_encodes_canonical_reserved_and_unicode_path_bytes() {
 }
 
 #[test]
+fn target_uri_replaces_the_route_prefix() {
+    let target = Url::parse("https://origin.example").expect("valid target");
+    let rewritten = build_target_url(
+        &target,
+        false,
+        Some("/api"),
+        "/v1/",
+        "/v1/items",
+        "/v1/items",
+        Some("x=1"),
+    )
+    .expect("replacement URL");
+    assert_eq!(
+        rewritten.as_str(),
+        "https://origin.example/api/items?x=1"
+    );
+    let rewritten = build_target_url(
+        &target,
+        false,
+        Some("/"),
+        "/v1/",
+        "/v1/items",
+        "/v1/items",
+        None,
+    )
+    .expect("root replacement URL");
+    assert_eq!(rewritten.as_str(), "https://origin.example/items");
+}
+
+#[test]
 fn no_rewrite_target_preserves_raw_path_and_query_encoding() {
     let target = Url::parse("https://origin.example/base").expect("valid target");
     let rewritten = build_target_url(
         &target,
         false,
+        None,
         "/rewrite",
         "/rewrite/a%2Fb/%E4%B8%AD",
         "/rewrite/a/b/中",

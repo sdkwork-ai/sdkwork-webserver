@@ -112,64 +112,378 @@ function parseArgs(argv) {
   return out;
 }
 
-function stripComments(source) {
-  return source
-    .split(/\r?\n/u)
-    .map((line) => {
-      const hash = line.indexOf('#');
-      return hash === -1 ? line : line.slice(0, hash);
-    })
-    .join('\n');
+/**
+ * nginx configuration tokenizer mirroring `ngx_conf_read_token()`
+ * (nginx 1.26.2): `#` comments only at token boundaries, single- and
+ * double-quoted strings (each quote type closes only itself), backslash
+ * escapes (`\"` `\'` `\\` collapse, `\t` `\r` `\n` become control
+ * characters, other `\c` is preserved), `${name}` stays inside one token,
+ * and a closing quote requires a following terminator (nginx `need_space`).
+ */
+class NginxLexer {
+  constructor(text, source) {
+    this.text = text;
+    this.source = source;
+    this.pos = 0;
+    this.line = 1;
+  }
+
+  peek() {
+    return this.pos < this.text.length ? this.text[this.pos] : null;
+  }
+
+  skipWhitespaceAndComments() {
+    for (;;) {
+      while (this.peek() !== null && /\s/u.test(this.peek())) {
+        if (this.peek() === '\n') this.line += 1;
+        this.pos += 1;
+      }
+      if (this.peek() !== '#') return;
+      while (this.peek() !== null && this.peek() !== '\n') this.pos += 1;
+    }
+  }
+
+  parseDirectives(closing) {
+    const directives = [];
+    for (;;) {
+      this.skipWhitespaceAndComments();
+      const next = this.peek();
+      if (next === null) {
+        if (closing) throw new Error(`${this.source}:${this.line}: unexpected end of file inside a block`);
+        return directives;
+      }
+      if (next === '}') {
+        if (closing !== '}') throw new Error(`${this.source}:${this.line}: unexpected '}'`);
+        this.pos += 1;
+        return directives;
+      }
+      directives.push(this.parseDirective());
+    }
+  }
+
+  parseDirective() {
+    const name = this.parseToken();
+    if (name === '') throw new Error(`${this.source}:${this.line}: expected a directive name`);
+    const line = this.line;
+    const args = [];
+    let children = [];
+    for (;;) {
+      this.skipWhitespaceAndComments();
+      const next = this.peek();
+      if (next === null) {
+        throw new Error(`${this.source}:${line}: directive \`${name}\` is not terminated`);
+      }
+      if (next === ';') {
+        this.pos += 1;
+        break;
+      }
+      if (next === '{') {
+        this.pos += 1;
+        children = this.parseDirectives('}');
+        break;
+      }
+      if (next === '}') {
+        throw new Error(`${this.source}:${line}: directive \`${name}\` is missing ';' or '{'`);
+      }
+      args.push(this.parseToken());
+    }
+    return { name, args, children, line, source: this.source };
+  }
+
+  parseToken() {
+    this.skipWhitespaceAndComments();
+    if (this.peek() === null) return '';
+    let raw = '';
+    let doubleQuoted = false;
+    let singleQuoted = false;
+    let escaped = false;
+    let variable = false;
+    let atWordStart = true;
+    let wordComplete = false;
+    for (;;) {
+      const ch = this.peek();
+      if (ch === null) {
+        if (doubleQuoted || singleQuoted) {
+          throw new Error(`${this.source}:${this.line}: unterminated quoted string`);
+        }
+        break;
+      }
+      if (escaped) {
+        escaped = false;
+        this.pos += 1;
+        if (ch === '\n') this.line += 1;
+        raw += ch;
+        atWordStart = false;
+        continue;
+      }
+      if (doubleQuoted || singleQuoted) {
+        this.pos += 1;
+        if (ch === '\n') this.line += 1;
+        if (ch === '\\') {
+          raw += '\\';
+          escaped = true;
+        } else if ((doubleQuoted && ch === '"') || (singleQuoted && ch === "'")) {
+          doubleQuoted = false;
+          singleQuoted = false;
+          wordComplete = true;
+        } else {
+          raw += ch;
+        }
+        continue;
+      }
+      if (wordComplete) {
+        if (/[ \t\r\n]/u.test(ch)) {
+          this.pos += 1;
+          if (ch === '\n') this.line += 1;
+        } else if (ch === ')') {
+          this.pos += 1;
+        } else if (ch === ';' || ch === '{' || ch === '}') {
+          break;
+        } else {
+          throw new Error(`${this.source}:${this.line}: unexpected character ${JSON.stringify(ch)} after a quoted string`);
+        }
+        return this.unescapeWord(raw);
+      }
+      if (atWordStart) {
+        if (/[ \t\r\n]/u.test(ch)) {
+          this.pos += 1;
+          if (ch === '\n') this.line += 1;
+        } else if (ch === '#' || ch === ';' || ch === '{') {
+          break;
+        } else if (ch === '\\') {
+          this.pos += 1;
+          raw += '\\';
+          escaped = true;
+          atWordStart = false;
+        } else if (ch === '"' || ch === "'") {
+          this.pos += 1;
+          doubleQuoted = ch === '"';
+          singleQuoted = ch === "'";
+          atWordStart = false;
+        } else if (ch === '$') {
+          this.pos += 1;
+          raw += '$';
+          variable = true;
+          atWordStart = false;
+        } else {
+          this.pos += 1;
+          raw += ch;
+          atWordStart = false;
+        }
+        continue;
+      }
+      if (ch === '{' && variable) {
+        this.pos += 1;
+        raw += '{';
+        variable = false;
+        continue;
+      }
+      variable = false;
+      if (ch === '\\') {
+        this.pos += 1;
+        raw += '\\';
+        escaped = true;
+        continue;
+      }
+      if (ch === '$') {
+        this.pos += 1;
+        raw += '$';
+        variable = true;
+        continue;
+      }
+      if (/[ \t\r\n;{]/u.test(ch)) {
+        break;
+      }
+      this.pos += 1;
+      if (ch === '\n') this.line += 1;
+      raw += ch;
+    }
+    return this.unescapeWord(raw);
+  }
+
+  unescapeWord(raw) {
+    let out = '';
+    for (let i = 0; i < raw.length; i += 1) {
+      const ch = raw[i];
+      if (ch !== '\\') {
+        out += ch;
+        continue;
+      }
+      const next = raw[i + 1];
+      if (next === '"' || next === "'" || next === '\\') {
+        out += next;
+        i += 1;
+      } else if (next === 't') {
+        out += '\t';
+        i += 1;
+      } else if (next === 'r') {
+        out += '\r';
+        i += 1;
+      } else if (next === 'n') {
+        out += '\n';
+        i += 1;
+      } else if (next !== undefined) {
+        out += '\\' + next;
+        i += 1;
+      } else {
+        out += '\\';
+      }
+    }
+    return out;
+  }
 }
 
-function scanDirectives(source) {
-  const text = stripComments(source);
+/** libc-glob-style match used by nginx `include`: `*`, `?`, `[a-z]`/`[!a-z]`. */
+function globMatch(pattern, name) {
+  if (pattern === '*') return true;
+  const memo = new Map();
+  const match = (p, n) => {
+    const key = `${p}:${n}`;
+    if (memo.has(key)) return memo.get(key);
+    let result = false;
+    if (p === '') {
+      result = n === '';
+    } else if (p[0] === '*') {
+      for (let split = 0; split <= n.length && !result; split += 1) {
+        result = match(p.slice(1), n.slice(split));
+      }
+    } else if (n === '') {
+      result = false;
+    } else if (p[0] === '?') {
+      result = match(p.slice(1), n.slice(1));
+    } else if (p[0] === '[') {
+      const end = p.indexOf(']');
+      if (end === -1) {
+        result = p[0] === n[0] && match(p.slice(1), n.slice(1));
+      } else {
+        let klass = p.slice(1, end);
+        let negated = false;
+        if (klass[0] === '!' || klass[0] === '^') {
+          negated = true;
+          klass = klass.slice(1);
+        }
+        const matched = classMatch(klass, n[0]);
+        result = (matched !== negated) && match(p.slice(end + 1), n.slice(1));
+      }
+    } else {
+      result = p[0] === n[0] && match(p.slice(1), n.slice(1));
+    }
+    memo.set(key, result);
+    return result;
+  };
+  return match(pattern, name);
+}
+
+function classMatch(klass, ch) {
+  for (let i = 0; i < klass.length; i += 1) {
+    if (i + 2 < klass.length && klass[i + 1] === '-') {
+      if (klass[i] <= ch && ch <= klass[i + 2]) return true;
+      i += 2;
+    } else if (klass[i] === ch) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Expand glob `include` patterns across the whole path (libc glob). */
+function expandGlobPattern(patternPath) {
+  const text = patternPath.split(path.sep).join('/');
+  const absolute = text.startsWith('/');
+  let current = absolute ? ['/'] : [''];
+  const segments = text.split('/').filter((segment) => segment !== '');
+  segments.forEach((segment, index) => {
+    const isLast = index + 1 === segments.length;
+    const next = [];
+    if (/[*?[]/u.test(segment)) {
+      for (const base of current) {
+        const dirPath = base === '/' ? '/' : base;
+        let entries = [];
+        try {
+          entries = fs.readdirSync(dirPath, { withFileTypes: true });
+        } catch {
+          continue;
+        }
+        for (const entry of entries) {
+          if (!globMatch(segment, entry.name)) continue;
+          const candidate = path.join(dirPath, entry.name);
+          if (isLast ? entry.isFile() : entry.isDirectory()) next.push(candidate);
+        }
+      }
+    } else {
+      for (const base of current) {
+        const dirPath = base === '/' ? '/' : base;
+        const candidate = path.join(dirPath, segment);
+        const exists = fs.existsSync(candidate) && fs.statSync(candidate);
+        if (isLast ? exists && exists.isFile() : exists && exists.isDirectory()) {
+          next.push(candidate);
+        }
+      }
+    }
+    current = next;
+  });
+  return current.sort();
+}
+
+/**
+ * Expand `include` directives in a parsed tree. Relative paths resolve
+ * against the top-level configuration directory (nginx `conf_prefix`
+ * semantics); a glob matching nothing is a no-op, a missing literal path is
+ * an error, and a depth budget bounds the expansion like the Rust loader.
+ */
+function expandIncludes(nodes, baseDir, depth = 0) {
+  if (depth > 64) throw new Error(`include expansion exceeds the depth budget at ${baseDir}`);
+  const expanded = [];
+  for (const node of nodes) {
+    if (node.name === 'include') {
+      const pattern = node.args[0];
+      if (!pattern) throw new Error(`${node.source}:${node.line}: include requires a path pattern`);
+      const patternPath = path.isAbsolute(pattern) ? pattern : path.resolve(baseDir, pattern);
+      const matches = /[*?[]/u.test(pattern)
+        ? expandGlobPattern(patternPath)
+        : fs.existsSync(patternPath) && fs.statSync(patternPath).isFile()
+          ? [patternPath]
+          : null;
+      if (matches === null) {
+        throw new Error(`${node.source}:${node.line}: include path ${pattern} matches no files`);
+      }
+      for (const includePath of matches) {
+        const includeText = fs.readFileSync(includePath, 'utf8');
+        const includeTree = new NginxLexer(includeText, includePath).parseDirectives(null);
+        expanded.push(...expandIncludes(includeTree, baseDir, depth + 1));
+      }
+    } else {
+      expanded.push({
+        ...node,
+        children: expandIncludes(node.children, baseDir, depth + 1),
+      });
+    }
+  }
+  return expanded;
+}
+
+/** Flatten a parsed tree into the importer's directive list with contexts. */
+function flattenDirectives(nodes) {
   const directives = [];
   const stack = [];
-  let i = 0;
-  let pendingBlock = null;
   let blockSeq = 0;
-  while (i < text.length) {
-    while (i < text.length && /\s/u.test(text[i])) i += 1;
-    if (i >= text.length) break;
-    if (text[i] === '{') {
-      if (pendingBlock) {
-        stack.push(pendingBlock);
-        pendingBlock = null;
-      } else {
-        stack.push({ kind: 'anonymous', header: 'anonymous', id: ++blockSeq });
-      }
-      i += 1;
-      continue;
-    }
-    if (text[i] === '}') {
-      stack.pop();
-      pendingBlock = null;
-      i += 1;
-      continue;
-    }
-    const start = i;
-    while (i < text.length && text[i] !== ';' && text[i] !== '{' && text[i] !== '}') i += 1;
-    const chunk = text.slice(start, i).trim().replace(/\s+/gu, ' ');
-    if (i < text.length && text[i] === '{') {
-      const name = chunk.split(' ')[0];
-      pendingBlock = {
+  const visit = (node) => {
+    const hasBlock = node.children.length > 0;
+    const name = node.name;
+    if (hasBlock) {
+      blockSeq += 1;
+      stack.push({
         kind: BLOCK_OPENERS.has(name) ? name : 'anonymous',
-        header: chunk,
-        id: ++blockSeq,
-      };
-      continue;
+        header: [name, ...node.args].join(' '),
+        id: blockSeq,
+      });
+      for (const child of node.children) visit(child);
+      stack.pop();
+      return;
     }
-    if (i >= text.length || text[i] !== ';') {
-      while (i < text.length && text[i] !== '{' && text[i] !== '}') i += 1;
-      continue;
-    }
-    i += 1;
-    if (!chunk) continue;
-    const name = chunk.split(' ')[0];
     directives.push({
       name,
-      statement: `${chunk};`,
+      statement: [name, ...node.args].join(' ') + ';',
       context: stack.map((frame) => frame.kind),
       contextHeader: stack.map((frame) => frame.header || frame.kind),
       contextIds: stack.map((frame) => frame.id),
@@ -179,9 +493,18 @@ function scanDirectives(source) {
       upstreamHeader: [...stack].reverse().find((frame) => frame.kind === 'upstream')?.header ?? null,
       mapHeader: [...stack].reverse().find((frame) => frame.kind === 'map')?.header ?? null,
     });
-  }
+  };
+  for (const node of nodes) visit(node);
   return directives;
 }
+
+function scanDirectives(source, options = {}) {
+  const sourcePath = options.sourcePath ?? null;
+  const tree = new NginxLexer(source, sourcePath ?? '<conf>').parseDirectives(null);
+  const expanded = sourcePath ? expandIncludes(tree, path.dirname(sourcePath)) : tree;
+  return flattenDirectives(expanded);
+}
+
 
 function classify(directives) {
   const mapped = [];
@@ -666,7 +989,7 @@ function main() {
     throw new Error(`conf not found: ${confPath}`);
   }
   const nginx = readNginxEnabled(args.moduleRoot);
-  const directives = scanDirectives(fs.readFileSync(confPath, 'utf8'));
+  const directives = scanDirectives(fs.readFileSync(confPath, 'utf8'), { sourcePath: confPath });
   const classified = classify(directives);
   const draft = buildDraft(classified.mapped);
   if (args.writeDraft) {

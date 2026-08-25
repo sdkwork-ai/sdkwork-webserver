@@ -1,0 +1,267 @@
+# Optional overlay for embedded/profiled stacks (docker-compose.yml).
+# Standalone per-environment files use docker-compose.platform-api-gateway.yml.
+#
+# Usage:
+#   docker compose \
+#     -f deployments/docker/docker-compose.yml \
+#     -f deployments/docker/docker-compose.platform-api-gateway.embedded.yml \
+#     --profile development up -d
+
+x-platform-api-gateway-image: &platform-api-gateway-image
+  image: ${SDKWORK_MODULE_API_GATEWAY_IMAGE:-sdkwork-api-cloud-gateway:local}
+
+x-platform-api-gateway-network: &platform-api-gateway-network
+  networks:
+    default:
+      aliases:
+        - sdkwork-api-cloud-gateway
+
+x-platform-api-gateway-healthcheck: &platform-api-gateway-healthcheck
+  healthcheck:
+    test:
+      [
+        "CMD-SHELL",
+        "curl -fsS http://127.0.0.1:3900/readyz >/dev/null 2>&1 || exit 1",
+      ]
+    interval: 15s
+    timeout: 5s
+    retries: 20
+    start_period: 240s
+
+x-platform-api-gateway-common-env: &platform-api-gateway-common-env
+  SDKWORK_API_CLOUD_GATEWAY_DEPLOYMENT_PROFILE: standalone
+  SDKWORK_API_CLOUD_GATEWAY_RUNTIME_TARGET: container
+  SDKWORK_API_CLOUD_GATEWAY_BIND: 0.0.0.0:3900
+  SDKWORK_API_CLOUD_GATEWAY_MIGRATE_ON_START: ${SDKWORK_MODULE_API_GATEWAY_MIGRATE_ON_START:-true}
+  SDKWORK_DATABASE_AUTO_MIGRATE: "false"
+  SDKWORK_DATABASE_ENGINE: postgresql
+  SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-disable}
+  SDKWORK_DATABASE_MAX_CONNECTIONS: ${SDKWORK_DATABASE_MAX_CONNECTIONS:-50}
+  SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC: "false"
+  SDKWORK_API_CLOUD_GATEWAY_PROVISION_IAM_SIGNING_MASTER_SECRET: ${SDKWORK_MODULE_API_GATEWAY_PROVISION_IAM_SIGNING_MASTER_SECRET:-true}
+  SDKWORK_IAM_SIGNING_MASTER_SECRET_FILE: /run/secrets/sdkwork/api-gateway/iam-signing-master.key
+  SDKWORK_API_CLOUD_GATEWAY_PROVISION_PAYMENT_CREDENTIAL_KEY: ${SDKWORK_MODULE_API_GATEWAY_PROVISION_PAYMENT_CREDENTIAL_KEY:-true}
+  SDKWORK_PAYMENT_CREDENTIAL_MASTER_KEY_FILE: /run/secrets/sdkwork/api-gateway/payment-credential-master.key
+  SDKWORK_CLOUDROUTER_REDIS_ENABLED: "true"
+  SDKWORK_CLOUDROUTER_REDIS_TLS: ${WEBSERVER_REDIS_TLS:-false}
+  SDKWORK_CLOUDROUTER_REDIS_PASSWORD: ${WEBSERVER_REDIS_PASSWORD:-}
+  SDKWORK_IM_PRINCIPAL_DIRECTORY: postgres
+  SDKWORK_IM_ID_NODE_ID: ${SDKWORK_MODULE_API_GATEWAY_IM_ID_NODE_ID:-2}
+  SDKWORK_API_CLOUD_GATEWAY_IAM_ALLOWED_AUDIENCES: sdkwork-api-cloud-gateway
+  RUST_LOG: ${RUST_LOG:-info}
+
+x-platform-api-gateway-volumes: &platform-api-gateway-volumes
+  volumes:
+    - platform-api-gateway-data:/var/lib/sdkwork/api-gateway
+    - platform-api-gateway-secrets:/run/secrets/sdkwork/api-gateway
+
+x-platform-knowledgebase-rpc: &platform-knowledgebase-rpc
+  image: ${SDKWORK_MODULE_API_GATEWAY_IMAGE:-sdkwork-api-cloud-gateway:local}
+  entrypoint: ["/opt/sdkwork/api-gateway/container/knowledgebase-rpc-entrypoint"]
+  restart: unless-stopped
+  volumes:
+    - platform-api-gateway-data:/var/lib/sdkwork/api-gateway
+    - platform-api-gateway-secrets:/run/secrets/sdkwork/api-gateway
+  healthcheck:
+    test:
+      [
+        "CMD-SHELL",
+        "curl -fsS --cacert /run/secrets/sdkwork/api-gateway/knowledgebase-rpc/ca.crt https://127.0.0.1:50054/healthz >/dev/null 2>&1 || exit 1",
+      ]
+    interval: 10s
+    timeout: 5s
+    retries: 20
+    start_period: 120s
+
+x-platform-api-gateway-webserver-env: &platform-api-gateway-webserver-env
+  SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT: docker
+  SDKWORK_MODULE_API_GATEWAY_HOST: sdkwork-api-cloud-gateway
+  SDKWORK_MODULE_API_GATEWAY_PORT: "3900"
+
+services:
+  platform-api-gateway-development:
+    <<: [*platform-api-gateway-image, *platform-api-gateway-network, *platform-api-gateway-healthcheck, *platform-api-gateway-volumes]
+    profiles: [development]
+    restart: unless-stopped
+    ports:
+      - "${SDKWORK_MODULE_API_GATEWAY_DEV_HOST_PORT:-13900}:3900"
+    environment:
+      <<: *platform-api-gateway-common-env
+      SDKWORK_API_CLOUD_GATEWAY_ENVIRONMENT: development
+      SDKWORK_API_CLOUD_GATEWAY_PROFILE_ID: standalone.development
+      SDKWORK_ENVIRONMENT: development
+      SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-postgres}
+      SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
+      SDKWORK_DATABASE_NAME: ${WEBSERVER_POSTGRES_DEV_DB:-sdkwork_ai_dev}
+      SDKWORK_DATABASE_SCHEMA: ${WEBSERVER_POSTGRES_DEV_DB:-sdkwork_ai_dev}
+      SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_DEV_USER:-sdkwork_ai_dev}
+      SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_DEV_PASSWORD:-sdkworkdev123}
+      SDKWORK_CLOUDROUTER_REDIS_HOST: ${WEBSERVER_REDIS_HOST:-redis}
+      SDKWORK_CLOUDROUTER_REDIS_PORT: ${WEBSERVER_REDIS_PORT:-6379}
+      SDKWORK_RTC_STATE_REDIS_URL: redis://${WEBSERVER_REDIS_HOST:-redis}:${WEBSERVER_REDIS_PORT:-6379}/1
+      SDKWORK_API_CLOUD_GATEWAY_WEB_REDIS_URL: redis://${WEBSERVER_REDIS_HOST:-redis}:${WEBSERVER_REDIS_PORT:-6379}/2
+      SDKWORK_API_CLOUD_GATEWAY_ALLOWED_HOSTS: ${SDKWORK_MODULE_API_GATEWAY_ALLOWED_HOSTS:-}
+      SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_MODULE_API_GATEWAY_CORS_ALLOWED_ORIGINS:-${SDKWORK_CORS_ALLOWED_ORIGINS:-}}
+    depends_on:
+      platform-knowledgebase-rpc-development:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  platform-knowledgebase-rpc-development:
+    <<: *platform-knowledgebase-rpc
+    profiles: [development]
+    environment:
+      SDKWORK_KNOWLEDGEBASE_ENVIRONMENT: development
+      SDKWORK_KNOWLEDGEBASE_DEPLOYMENT_PROFILE: standalone
+      SDKWORK_KNOWLEDGEBASE_RPC_ENABLED: "true"
+      SDKWORK_KNOWLEDGEBASE_RPC_BIND_ADDR: 0.0.0.0:50054
+      SDKWORK_KNOWLEDGEBASE_RPC_TLS_ENABLED: "true"
+      SDKWORK_KNOWLEDGEBASE_RPC_MTLS_ENABLED: "true"
+      SDKWORK_KNOWLEDGEBASE_RPC_HEALTH_ENABLED: "true"
+      SDKWORK_KNOWLEDGEBASE_RPC_SERVER_CERT_PATH: /run/secrets/sdkwork/api-gateway/knowledgebase-rpc/server.crt
+      SDKWORK_KNOWLEDGEBASE_RPC_SERVER_KEY_PATH: /run/secrets/sdkwork/api-gateway/knowledgebase-rpc/server.key
+      SDKWORK_KNOWLEDGEBASE_RPC_CLIENT_CA_CERTIFICATE_PATH: /run/secrets/sdkwork/api-gateway/knowledgebase-rpc/ca.crt
+      SDKWORK_KNOWLEDGEBASE_RPC_SPIFFE_TRUST_DOMAIN: sdkwork.internal
+      SDKWORK_KNOWLEDGEBASE_RPC_IM_CALLER_CONTEXT_SIGNING_KEY_FILE: /run/secrets/sdkwork/api-gateway/knowledgebase-rpc/caller-context.key
+      SDKWORK_KNOWLEDGEBASE_DRIVE_STORAGE_ROOT: /var/lib/sdkwork/api-gateway/knowledgebase-drive
+      SDKWORK_KNOWLEDGEBASE_OPERATOR_ID: sdkwork-knowledgebase
+      SDKWORK_KNOWLEDGEBASE_ACTOR_ID: ${SDKWORK_MODULE_API_GATEWAY_KNOWLEDGEBASE_ACTOR_ID:-1}
+      SDKWORK_KNOWLEDGEBASE_TENANT_ID: ${SDKWORK_MODULE_API_GATEWAY_KNOWLEDGEBASE_TENANT_ID:-100001}
+      SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-postgres}
+      SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
+      SDKWORK_DATABASE_NAME: ${WEBSERVER_POSTGRES_DEV_DB:-sdkwork_ai_dev}
+      SDKWORK_DATABASE_SCHEMA: ${WEBSERVER_POSTGRES_DEV_DB:-sdkwork_ai_dev}
+      SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_DEV_USER:-sdkwork_ai_dev}
+      SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_DEV_PASSWORD:-sdkworkdev123}
+      SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-disable}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  platform-api-gateway-test:
+    <<: [*platform-api-gateway-image, *platform-api-gateway-network, *platform-api-gateway-healthcheck, *platform-api-gateway-volumes]
+    profiles: [test]
+    restart: unless-stopped
+    ports:
+      - "${SDKWORK_MODULE_API_GATEWAY_TEST_HOST_PORT:-18900}:3900"
+    environment:
+      <<: *platform-api-gateway-common-env
+      SDKWORK_API_CLOUD_GATEWAY_ENVIRONMENT: test
+      SDKWORK_API_CLOUD_GATEWAY_PROFILE_ID: standalone.test
+      SDKWORK_ENVIRONMENT: test
+      SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-postgres}
+      SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
+      SDKWORK_DATABASE_NAME: ${WEBSERVER_POSTGRES_TEST_DB:-sdkwork_ai_test}
+      SDKWORK_DATABASE_SCHEMA: ${WEBSERVER_POSTGRES_TEST_DB:-sdkwork_ai_test}
+      SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_TEST_USER:-sdkwork_ai_test}
+      SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_TEST_PASSWORD:-sdkworktest123}
+      SDKWORK_CLOUDROUTER_REDIS_HOST: ${WEBSERVER_REDIS_HOST:-redis}
+      SDKWORK_CLOUDROUTER_REDIS_PORT: ${WEBSERVER_REDIS_PORT:-6379}
+      SDKWORK_RTC_STATE_REDIS_URL: redis://${WEBSERVER_REDIS_HOST:-redis}:${WEBSERVER_REDIS_PORT:-6379}/1
+      SDKWORK_API_CLOUD_GATEWAY_WEB_REDIS_URL: redis://${WEBSERVER_REDIS_HOST:-redis}:${WEBSERVER_REDIS_PORT:-6379}/2
+      SDKWORK_API_CLOUD_GATEWAY_ALLOWED_HOSTS: ${SDKWORK_MODULE_API_GATEWAY_ALLOWED_HOSTS:-}
+      SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_MODULE_API_GATEWAY_CORS_ALLOWED_ORIGINS:-${SDKWORK_CORS_ALLOWED_ORIGINS:-}}
+    depends_on:
+      platform-knowledgebase-rpc-test:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  platform-knowledgebase-rpc-test:
+    <<: *platform-knowledgebase-rpc
+    profiles: [test]
+    environment:
+      SDKWORK_KNOWLEDGEBASE_ENVIRONMENT: test
+      SDKWORK_KNOWLEDGEBASE_DEPLOYMENT_PROFILE: standalone
+      SDKWORK_KNOWLEDGEBASE_RPC_ENABLED: "true"
+      SDKWORK_KNOWLEDGEBASE_RPC_BIND_ADDR: 0.0.0.0:50054
+      SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-postgres}
+      SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
+      SDKWORK_DATABASE_NAME: ${WEBSERVER_POSTGRES_TEST_DB:-sdkwork_ai_test}
+      SDKWORK_DATABASE_SCHEMA: ${WEBSERVER_POSTGRES_TEST_DB:-sdkwork_ai_test}
+      SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_TEST_USER:-sdkwork_ai_test}
+      SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_TEST_PASSWORD:-sdkworktest123}
+      SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-disable}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  platform-api-gateway-production:
+    <<: [*platform-api-gateway-image, *platform-api-gateway-network, *platform-api-gateway-healthcheck, *platform-api-gateway-volumes]
+    profiles: [production]
+    restart: unless-stopped
+    ports:
+      - "${SDKWORK_MODULE_API_GATEWAY_PROD_HOST_PORT:-18090}:3900"
+    environment:
+      <<: *platform-api-gateway-common-env
+      SDKWORK_API_CLOUD_GATEWAY_ENVIRONMENT: production
+      SDKWORK_API_CLOUD_GATEWAY_PROFILE_ID: standalone.production
+      SDKWORK_ENVIRONMENT: production
+      SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-postgres}
+      SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
+      SDKWORK_DATABASE_NAME: ${WEBSERVER_POSTGRES_PROD_DB:-sdkwork_ai_prod}
+      SDKWORK_DATABASE_SCHEMA: ${WEBSERVER_POSTGRES_PROD_DB:-sdkwork_ai_prod}
+      SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_PROD_USER:-sdkwork_ai_prod}
+      SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_PROD_PASSWORD:-sdkworkprod123}
+      SDKWORK_CLOUDROUTER_REDIS_HOST: ${WEBSERVER_REDIS_HOST:-redis}
+      SDKWORK_CLOUDROUTER_REDIS_PORT: ${WEBSERVER_REDIS_PORT:-6379}
+      SDKWORK_RTC_STATE_REDIS_URL: redis://${WEBSERVER_REDIS_HOST:-redis}:${WEBSERVER_REDIS_PORT:-6379}/1
+      SDKWORK_API_CLOUD_GATEWAY_WEB_REDIS_URL: redis://${WEBSERVER_REDIS_HOST:-redis}:${WEBSERVER_REDIS_PORT:-6379}/2
+      SDKWORK_API_CLOUD_GATEWAY_ALLOWED_HOSTS: ${SDKWORK_MODULE_API_GATEWAY_ALLOWED_HOSTS:-}
+      SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_MODULE_API_GATEWAY_CORS_ALLOWED_ORIGINS:-${SDKWORK_CORS_ALLOWED_ORIGINS:-}}
+    depends_on:
+      platform-knowledgebase-rpc-production:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  platform-knowledgebase-rpc-production:
+    <<: *platform-knowledgebase-rpc
+    profiles: [production]
+    environment:
+      SDKWORK_KNOWLEDGEBASE_ENVIRONMENT: production
+      SDKWORK_KNOWLEDGEBASE_DEPLOYMENT_PROFILE: standalone
+      SDKWORK_KNOWLEDGEBASE_RPC_ENABLED: "true"
+      SDKWORK_KNOWLEDGEBASE_RPC_BIND_ADDR: 0.0.0.0:50054
+      SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-postgres}
+      SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
+      SDKWORK_DATABASE_NAME: ${WEBSERVER_POSTGRES_PROD_DB:-sdkwork_ai_prod}
+      SDKWORK_DATABASE_SCHEMA: ${WEBSERVER_POSTGRES_PROD_DB:-sdkwork_ai_prod}
+      SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_PROD_USER:-sdkwork_ai_prod}
+      SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_PROD_PASSWORD:-sdkworkprod123}
+      SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-disable}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  webserver-development:
+    depends_on:
+      platform-api-gateway-development:
+        condition: service_healthy
+    environment:
+      <<: *platform-api-gateway-webserver-env
+
+  webserver-test:
+    depends_on:
+      platform-api-gateway-test:
+        condition: service_healthy
+    environment:
+      <<: *platform-api-gateway-webserver-env
+
+  webserver-production:
+    depends_on:
+      platform-api-gateway-production:
+        condition: service_healthy
+    environment:
+      <<: *platform-api-gateway-webserver-env
+
+volumes:
+  platform-api-gateway-data:
+  platform-api-gateway-secrets:

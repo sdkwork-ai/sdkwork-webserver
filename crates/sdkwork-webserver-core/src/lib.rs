@@ -11,6 +11,7 @@ pub mod runtime_env;
 pub mod tls_runtime;
 pub mod website_runtime;
 
+pub use nginx::prefer_h5_surface;
 pub use config::{
     apply_rewrites, apply_sub_filters, apr1_hash, evaluate_access, evaluate_auth_basic,
     inspect_webserver_config_revision, load_and_compile_webserver_config,
@@ -18,9 +19,11 @@ pub use config::{
     normalize_uri_path, parse_htpasswd, parse_limit_conn, parse_limit_conn_zone, parse_limit_req,
     parse_limit_req_zone, parse_rewrite, expand_proxy_pass_template, validate_proxy_pass_template,
     resolve_nginx_sidecar_path, resolve_webserver_config_path, server_name_covers, sub_filter_content_type_matches,
-    upstream_ip_is_allowed, validate_md5_template, verify_md5_link, verify_secure_link,
+    hostname_upstream_allowed_cidrs, upstream_ip_is_allowed, validate_md5_template, verify_md5_link, verify_secure_link,
     verify_secret_link, md5_hex, AccessAction,
-    AccessDecision, AccessRuleConfig, AuthBasicConfig, AuthBasicDecision, AuthBasicUserConfig,
+    AccessDecision, AccessRuleConfig, AppDomainFallbackConfig, AppDomainFallbackLookup,
+    AuthBasicConfig, AuthBasicDecision, AuthBasicUserConfig, UsageMeteringChannel,
+    UsageMeteringConfig,
     CertificateConfig, CertificateSource, ClientAuthConfig, ClientAuthMode,
     CompiledWebServerApp, CompiledWebServerRevision, ConfigDiagnostic, ConfigFormat,
     ConfigLoadOptions, ConfigProviderType, ConfigSource,

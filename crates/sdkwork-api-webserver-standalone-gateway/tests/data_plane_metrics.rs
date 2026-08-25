@@ -418,6 +418,7 @@ async fn website_operations_listener_exports_executor_cache_metrics() {
         run_website_data_plane_with_operations_until(
             compiled,
             executor,
+            None,
             Some(operations),
             async move {
                 let _ = shutdown_rx.await;

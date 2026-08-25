@@ -7,9 +7,9 @@
 //! - **Layout v3 TOML directory** (`/etc/sdkwork/iam/deployments/webserver`,
 //!   module root, or relative path): loaded through the standard
 //!   `server.common.toml` merge pipeline.
-//! - **Stock nginx `.conf` file** (`nginx.standalone.development.conf` or a
-//!   symlink under `imports.d/`): loaded through the nginx compatibility
-//!   loader and merged into the module-imports data plane.
+//! - **Stock nginx `.conf` file** (`nginx.standalone.development.conf` or an
+//!   entry listed in `imports.d/import.conf`): loaded through the nginx
+//!   compatibility loader and merged into the module-imports data plane.
 
 use std::{
     collections::HashSet,
@@ -143,7 +143,7 @@ fn layout_v2_webserver_dir(path: &Path) -> bool {
     path.join("server.common.toml").is_file()
 }
 
-fn is_nginx_conf_path(path: &Path) -> bool {
+pub(crate) fn is_nginx_conf_path(path: &Path) -> bool {
     path.extension().and_then(|value| value.to_str()) == Some("conf")
 }
 

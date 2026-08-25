@@ -16,8 +16,8 @@ export const CANONICAL_API_PROXY_PATHS = Object.freeze([
   '/metrics',
 ]);
 
-export function resolveBrowserDistOutDir(environment) {
-  return resolveSpecsBrowserDistOutDir(environment);
+export function resolveBrowserDistOutDir(environment, deploymentProfile = 'standalone') {
+  return resolveSpecsBrowserDistOutDir(environment, deploymentProfile);
 }
 
 export function resolveViteRuntimeProfile(mode, processEnv = process.env) {

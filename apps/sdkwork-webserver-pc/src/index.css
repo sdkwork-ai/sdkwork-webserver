@@ -180,18 +180,21 @@ tbody tr { cursor: pointer; transition: background .12s ease, box-shadow .12s ea
 tbody tr:hover { background: var(--sdk-color-surface-panel-muted); }
 tbody tr.selected { background: var(--sdk-color-brand-primary-soft); box-shadow: inset 3px 0 var(--sdk-color-brand-primary); }
 tbody tr:last-child td { border-bottom: 0; }
-.resource-table.has-row-actions { min-width: 760px; }
-.row-actions-column, .row-actions-cell { right: 0; width: 152px; min-width: 152px; max-width: 152px; padding-inline: 8px; text-align: center; }
+.resource-table.has-row-actions { min-width: 860px; }
+.row-actions-column, .row-actions-cell { right: 0; width: 236px; min-width: 236px; max-width: 236px; padding-inline: 8px; text-align: center; }
 .row-actions-column { z-index: 3; box-shadow: -1px 0 var(--sdk-color-border-subtle); }
 .row-actions-cell { position: sticky; z-index: 1; background: var(--sdk-color-surface-panel); box-shadow: -1px 0 var(--sdk-color-border-subtle); }
 tbody tr:hover .row-actions-cell { background: var(--sdk-color-surface-panel-muted); }
 tbody tr.selected .row-actions-cell { background: color-mix(in srgb, var(--sdk-color-surface-panel) 88%, var(--sdk-color-brand-primary) 12%); }
 .row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
 .row-action-button { width: 30px; min-width: 30px; height: 30px; display: inline-grid; place-items: center; padding: 0; color: var(--sdk-color-text-secondary); background: transparent; border: 1px solid transparent; border-radius: 4px; transition: color .16s ease, background .16s ease, border-color .16s ease; }
+.row-action-button-labeled { width: auto; min-width: 0; grid-auto-flow: column; gap: 5px; padding: 0 8px; font-size: 12px; font-weight: 650; white-space: nowrap; }
 .row-action-button:not(:disabled):hover { color: var(--sdk-color-brand-primary); background: var(--sdk-color-brand-primary-soft); border-color: var(--sdk-color-border-default); }
 .row-action-button-danger { color: var(--webserver-color-danger-text); }
 .row-action-button-danger:not(:disabled):hover { color: var(--webserver-color-danger-text); background: var(--webserver-color-danger-surface); border-color: var(--webserver-color-danger-border); }
 .row-action-button:focus-visible { outline: 2px solid var(--sdk-color-border-focus); outline-offset: 1px; }
+.status-badge.source-config-ready { color: var(--sdk-color-text-secondary); background: var(--sdk-color-surface-panel-muted); border: 1px solid var(--sdk-color-border-subtle); }
+.status-badge.source-config-missing { color: var(--sdk-color-text-muted); background: transparent; border: 1px dashed var(--sdk-color-border-default); }
 .empty-state { width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 24px; color: var(--sdk-color-text-muted); font-size: 13px; text-align: center; }
 .empty-state h3 { margin: 0; color: var(--sdk-color-text-primary); font-size: 15px; font-weight: 650; }
 .empty-state p { margin: 0; max-width: 36rem; }

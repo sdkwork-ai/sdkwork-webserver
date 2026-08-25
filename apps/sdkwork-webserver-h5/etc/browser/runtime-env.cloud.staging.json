@@ -14,10 +14,10 @@
     "zh-CN",
     "en-US"
   ],
-  "appApiBaseUrl": "https://web.staging.sdkwork.com",
-  "backendApiBaseUrl": "https://web.staging.sdkwork.com",
+  "appApiBaseUrl": "https://api-staging.sdkwork.com",
+  "backendApiBaseUrl": "https://api-staging.sdkwork.com",
   "driveAppApiBaseUrl": "https://api-staging.sdkwork.com",
-  "appbaseAppApiBaseUrl": "https://iam.staging.sdkwork.com",
+  "appbaseAppApiBaseUrl": "https://api-staging.sdkwork.com",
   "messagingPcUrl": "https://messaging-staging.sdkwork.com/notifications",
-  "deployAppApiBaseUrl": "https://web.staging.sdkwork.com"
+  "deployAppApiBaseUrl": "https://api-staging.sdkwork.com"
 }

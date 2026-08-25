@@ -24,6 +24,7 @@ pub struct CompiledWebServerApp {
     compiled_listeners: HashMap<String, CompiledListener>,
     compiled_hosts: Vec<CompiledVirtualHost>,
     static_roots: HashMap<String, PathBuf>,
+    static_h5_roots: HashMap<String, PathBuf>,
     certificate_paths: HashMap<String, (PathBuf, PathBuf)>,
     upstream_tls_paths: HashMap<String, CompiledUpstreamTlsPaths>,
     /// Resolved `clientAuth.caCertificateFiles` per TLS policy (relative
@@ -44,10 +45,9 @@ struct CompiledUpstreamTlsPaths {
 struct CompiledListener {
     exact_hosts: HashMap<String, usize>,
     /// Wildcard server names keyed by their suffix (without the leading
-    /// `*.`): a request host matches when `host.split_once('.')` yields that
-    /// exact suffix, which is the Nginx one-level `*.suffix` semantics. A
-    /// map lookup replaces a per-request linear scan over every wildcard
-    /// (O(1) instead of O(wildcards)).
+    /// `*.`): a request host matches when it is a proper subdomain of that
+    /// suffix (`host` ends with `.suffix`), which is the nginx any-depth
+    /// leading-wildcard semantics; the longest matching suffix wins.
     wildcard_hosts: HashMap<String, usize>,
     default_host: Option<usize>,
 }
@@ -92,28 +92,32 @@ impl CompiledWebServerApp {
         let tls_policies = index_by_id(config.tls_policies.iter().map(|item| item.id.as_str()));
 
         let mut static_roots = HashMap::new();
+        let mut static_h5_roots = HashMap::new();
         for (index, resource) in config.resources.iter().enumerate() {
-            if let ResourceConfig::Static { id, root, .. } = resource {
+            if let ResourceConfig::Static {
+                id,
+                root,
+                h5_root,
+                ..
+            } = resource
+            {
                 // Absolute roots (nginx `root` compatibility) are used
                 // directly; relative roots stay chrooted to the
                 // configuration directory (server.toml semantics).
-                let root_path = Path::new(root);
-                let resolved = if root_path.is_absolute() {
-                    canonical_directory(root_path, &format!("/resources/{index}/root"))?
-                } else {
-                    let resolved = canonical_directory(
-                        &base_directory.join(root),
-                        &format!("/resources/{index}/root"),
-                    )?;
-                    if !resolved.starts_with(&base_directory) {
-                        return Err(validation_error(
-                            format!("/resources/{index}/root"),
-                            "static root escapes the configuration directory",
-                        ));
-                    }
-                    resolved
-                };
+                let resolved = resolve_static_root(
+                    Path::new(root),
+                    &base_directory,
+                    &format!("/resources/{index}/root"),
+                )?;
                 static_roots.insert(id.clone(), resolved);
+                if let Some(h5_root) = h5_root {
+                    let resolved_h5 = resolve_static_root(
+                        Path::new(h5_root),
+                        &base_directory,
+                        &format!("/resources/{index}/h5Root"),
+                    )?;
+                    static_h5_roots.insert(id.clone(), resolved_h5);
+                }
             }
         }
 
@@ -311,6 +315,7 @@ impl CompiledWebServerApp {
             compiled_listeners,
             compiled_hosts,
             static_roots,
+            static_h5_roots,
             certificate_paths,
             upstream_tls_paths,
             client_auth_ca_paths,
@@ -376,6 +381,10 @@ impl CompiledWebServerApp {
         self.static_roots.get(resource_id).map(PathBuf::as_path)
     }
 
+    pub fn static_h5_root(&self, resource_id: &str) -> Option<&Path> {
+        self.static_h5_roots.get(resource_id).map(PathBuf::as_path)
+    }
+
     /// Every provider-backed resource (Drive or Knowledgebase) in this
     /// configuration, in declaration order. The data-plane bootstrap uses
     /// this to assemble provider connections and to fail closed when a
@@ -431,13 +440,24 @@ impl CompiledWebServerApp {
             .as_deref()
             .and_then(|host| listener.exact_hosts.get(host).copied())
             .or_else(|| {
-                // One-level wildcard (`*.suffix`) semantics: the host must be
-                // exactly one label plus the configured suffix, which is a
-                // constant-time map lookup on `host.split_once('.')`.
+                // nginx leading wildcard (`*.suffix`) semantics: any-depth
+                // subdomain matches, the bare suffix domain does not, and
+                // the longest matching suffix wins. Walk the host's dot
+                // boundaries left to right (O(labels) hash lookups, first
+                // hit is the longest suffix) instead of scanning every
+                // wildcard per request.
                 normalized_host.as_deref().and_then(|host| {
-                    host.split_once('.')
-                        .and_then(|(label, remainder)| (!label.is_empty()).then_some(remainder))
-                        .and_then(|suffix| listener.wildcard_hosts.get(suffix).copied())
+                    let mut candidate = host;
+                    loop {
+                        let Some((_, rest)) = candidate.split_once('.') else {
+                            break;
+                        };
+                        candidate = rest;
+                        if let Some(index) = listener.wildcard_hosts.get(candidate) {
+                            return Some(*index);
+                        }
+                    }
+                    None
                 })
             })
             .or(listener.default_host)?;
@@ -603,6 +623,24 @@ fn canonical_directory(
         ));
     }
     Ok(canonical)
+}
+
+fn resolve_static_root(
+    root: &Path,
+    base_directory: &Path,
+    diagnostic_path: &str,
+) -> Result<PathBuf, WebServerConfigError> {
+    if root.is_absolute() {
+        return canonical_directory(root, diagnostic_path);
+    }
+    let resolved = canonical_directory(&base_directory.join(root), diagnostic_path)?;
+    if !resolved.starts_with(base_directory) {
+        return Err(validation_error(
+            diagnostic_path,
+            "static root escapes the configuration directory",
+        ));
+    }
+    Ok(resolved)
 }
 
 fn resolve_required_file(

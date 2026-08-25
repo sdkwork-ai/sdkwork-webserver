@@ -6,15 +6,15 @@ use axum::{
     http::{
         header::{
             AUTHORIZATION, CONNECTION, CONTENT_LENGTH, CONTENT_TYPE, EXPECT, HOST, LOCATION,
-            RETRY_AFTER, TE, TRANSFER_ENCODING, WWW_AUTHENTICATE,
+            RETRY_AFTER, TE, TRANSFER_ENCODING, USER_AGENT, WWW_AUTHENTICATE,
         },
-        HeaderMap, HeaderName, HeaderValue, Request, Response, StatusCode, Version,
+        HeaderMap, HeaderName, HeaderValue, Method, Request, Response, StatusCode, Version,
     },
 };
 use futures_util::StreamExt;
 use sdkwork_webserver_core::{
     apply_rewrites, evaluate_access, evaluate_auth_basic, normalize_authority_host,
-    verify_secure_link,
+    prefer_h5_surface, verify_secure_link,
     website_runtime::{ProviderResourceReference, WebsiteProviderType},
     AccessDecision, AuthBasicDecision, ResourceConfig, RewriteOutcome, RoutePathType,
     SecureLinkFailure, SecurityHeadersConfig, XFrameOptions, MAX_REWRITE_INTERNAL_REDIRECTS,
@@ -53,6 +53,23 @@ pub async fn route_request(
     let transport_peer = connection.transport_peer;
     let _proxy_protocol = connection.proxy_protocol;
     let version = request.version();
+    // Traffic usage metering inputs captured before the request is consumed.
+    let metering_host = request
+        .headers()
+        .get(HOST)
+        .and_then(|value| value.to_str().ok())
+        .and_then(sdkwork_webserver_core::normalize_authority_host);
+    let metering_ingress = request
+        .headers()
+        .get(CONTENT_LENGTH)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(0);
+    // Captured before `state` and `request` move into the routing call.
+    let metering_is_website_listener = state.website_delivery.is_some();
+    let metering_meter = state.usage_meter.clone();
+    let metering_fallback = state.deploy_fallback.clone();
+    let metering_listener_id = state.listener_id.clone();
     let mut admitted = match state.runtime.request_gate.try_begin() {
         Ok(admitted) => admitted,
         Err(RequestAdmissionRejection::Saturated) => {
@@ -81,6 +98,36 @@ pub async fn route_request(
     );
     let response =
         route_admitted_request(peer, transport_peer, state, request, &mut admitted).await;
+    // App-config listeners (no website delivery executor) meter every served
+    // response here; website listeners meter inside the delivery layer where
+    // route identity and exact bytes are known. App-domain fallback responses
+    // carry the Deploy attribution cached by the resolver.
+    if !metering_is_website_listener {
+        if let Some(meter) = metering_meter {
+            if let Some(hostname) = metering_host {
+                let attribution = metering_fallback
+                    .as_ref()
+                    .and_then(|fallback| fallback.attribution(&hostname))
+                    .unwrap_or_default();
+                let egress_bytes = response
+                    .headers()
+                    .get(CONTENT_LENGTH)
+                    .and_then(|value| value.to_str().ok())
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .unwrap_or(0);
+                meter.record(crate::usage_metering::MeteredRequest {
+                    hostname: &hostname,
+                    server_ip: transport_peer.ip(),
+                    server_port: transport_peer.port(),
+                    listener_id: &metering_listener_id,
+                    attribution: &attribution,
+                    ingress_bytes: metering_ingress,
+                    egress_bytes,
+                    status_class: status_class_label(response.status().as_u16()),
+                });
+            }
+        }
+    }
     hold_request_permit(response, admitted, response_body_idle_timeout)
 }
 
@@ -199,16 +246,52 @@ async fn route_admitted_request(
         let query = request.uri().query().map(str::to_owned);
         let delivery_method = request.method().clone();
         let delivery_headers = request.headers().clone();
+        let metering = state.usage_meter.as_ref().map(|meter| {
+            crate::usage_metering::MeteringContext {
+                server_ip: transport_peer.ip(),
+                server_port: transport_peer.port(),
+                listener_id: state.listener_id.clone(),
+                meter: meter.clone(),
+            }
+        });
         let response = serve_website_request(
             executor,
             scheme.website_delivery_scheme(),
-            authority,
-            path,
-            query,
-            delivery_method,
-            delivery_headers,
+            authority.clone(),
+            path.clone(),
+            query.clone(),
+            delivery_method.clone(),
+            delivery_headers.clone(),
+            metering,
         )
         .await;
+        if response.status() == StatusCode::NOT_FOUND {
+            if let Some(fallback_response) = serve_deploy_fallback(
+                &state,
+                scheme.website_delivery_scheme(),
+                authority,
+                path,
+                query,
+                &delivery_method,
+                &delivery_headers,
+                transport_peer,
+            )
+            .await
+            {
+                if generation.app.config().observability.access_log {
+                    tracing::info!(
+                        config_generation = generation.id,
+                        config_revision = %generation.revision,
+                        listener_id = %state.listener_id,
+                        scheme = scheme.as_str(),
+                        method = %method,
+                        status = fallback_response.status().as_u16(),
+                        "app-domain fallback request served"
+                    );
+                }
+                return fallback_response;
+            }
+        }
         if generation.app.config().observability.access_log {
             tracing::info!(
                 config_generation = generation.id,
@@ -231,6 +314,23 @@ async fn route_admitted_request(
         else {
             if let Some(response) = classify_request(&state, admitted, false, request.version()) {
                 return response;
+            }
+            // App publishing domain fallback: the host is not declared in the
+            // local configuration; ask the Deploy control plane for a server
+            // before falling back to 404.
+            if let Some(fallback_response) = serve_deploy_fallback(
+                &state,
+                scheme.website_delivery_scheme(),
+                authority.clone(),
+                path.clone(),
+                request.uri().query().map(str::to_owned),
+                request.method(),
+                request.headers(),
+                transport_peer,
+            )
+            .await
+            {
+                return fallback_response;
             }
             return text_response(StatusCode::NOT_FOUND, "route was not found\n");
         };
@@ -449,9 +549,29 @@ async fn route_admitted_request(
             }
         }
         ResourceConfig::Static {
-            id, spa_fallback, ..
+            id,
+            strip_prefix,
+            spa_fallback,
+            ..
         } => {
-            let Some(root) = generation.app.static_root(id) else {
+            let prefer_h5 = prefer_h5_surface(
+                request
+                    .headers()
+                    .get(USER_AGENT)
+                    .and_then(|value| value.to_str().ok()),
+                request
+                    .headers()
+                    .get("sec-ch-ua-mobile")
+                    .and_then(|value| value.to_str().ok()),
+            );
+            let Some(root) = (if prefer_h5 {
+                generation
+                    .app
+                    .static_h5_root(id)
+                    .or_else(|| generation.app.static_root(id))
+            } else {
+                generation.app.static_root(id)
+            }) else {
                 return text_response(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "static resource is unavailable\n",
@@ -468,6 +588,7 @@ async fn route_admitted_request(
                     serve_static(
                         root,
                         selected.route,
+                        *strip_prefix,
                         spa_fallback.as_deref(),
                         &path,
                         request,
@@ -480,6 +601,7 @@ async fn route_admitted_request(
         ResourceConfig::Proxy {
             upstream_ref,
             strip_prefix,
+            target_uri,
             request_set_headers,
             dynamic_target,
             proxy_pass_request_headers,
@@ -490,6 +612,7 @@ async fn route_admitted_request(
                     generation: &generation,
                     upstream_ref,
                     strip_prefix: *strip_prefix,
+                    target_uri: target_uri.as_deref(),
                     request_set_headers,
                     dynamic_target: dynamic_target.as_deref(),
                     proxy_pass_request_headers: *proxy_pass_request_headers,
@@ -1186,5 +1309,90 @@ mod tests {
         config.x_content_type_options = false;
         let response = apply_security_headers(base_response(), Some(&config), "https");
         assert!(response.headers().get("x-content-type-options").is_none());
+    }
+}
+
+/// App publishing domain fallback: resolve a host that no local
+/// configuration declares through the Deploy control plane and serve the
+/// resolved site (GET/HEAD only; other methods keep the regular 404).
+async fn serve_deploy_fallback(
+    state: &ListenerState,
+    scheme: sdkwork_webserver_delivery_runtime::WebsiteDeliveryScheme,
+    authority: String,
+    path: String,
+    query: Option<String>,
+    method: &Method,
+    headers: &HeaderMap,
+    server_addr: std::net::SocketAddr,
+) -> Option<Response<Body>> {
+    let fallback = state.deploy_fallback.as_ref()?;
+    let delivery_method = match *method {
+        Method::GET => sdkwork_webserver_delivery_runtime::WebsiteDeliveryMethod::Get,
+        Method::HEAD => sdkwork_webserver_delivery_runtime::WebsiteDeliveryMethod::Head,
+        _ => return None,
+    };
+    let request_id = sdkwork_web_core::new_request_id();
+    let trace_context = sdkwork_web_core::resolve_trace_context(headers, &request_id);
+    let trace_id = sdkwork_web_core::trace_id_from_traceparent(&trace_context.traceparent)
+        .unwrap_or(request_id.as_str())
+        .to_owned();
+    let request = super::website_delivery::delivery_request(
+        scheme,
+        authority,
+        path,
+        delivery_method,
+        request_id,
+        trace_id,
+        headers,
+    )
+    .ok()?;
+    let served = match fallback.serve(&request).await {
+        Ok(outcome) => Some(outcome),
+        Err(error) => {
+            tracing::warn!(error = ?error, "app-domain fallback failed; serving 404");
+            None
+        }
+    };
+    if let Some(meter) = state.usage_meter.clone() {
+        if let Some(hostname) =
+            sdkwork_webserver_core::normalize_authority_host(&request.authority)
+        {
+            let attribution = fallback.attribution(&hostname).unwrap_or_default();
+            let (status_class, egress_bytes) = match &served {
+                Some(sdkwork_webserver_delivery_runtime::WebsiteDeliveryOutcome::Content(
+                    content,
+                )) => ("2xx", content.response_content_length),
+                Some(sdkwork_webserver_delivery_runtime::WebsiteDeliveryOutcome::Redirect(_)) => {
+                    ("3xx", 0)
+                }
+                Some(sdkwork_webserver_delivery_runtime::WebsiteDeliveryOutcome::NotFound) => {
+                    ("4xx", 0)
+                }
+                Some(sdkwork_webserver_delivery_runtime::WebsiteDeliveryOutcome::NotModified) => {
+                    ("2xx", 0)
+                }
+                None => ("5xx", 0),
+            };
+            meter.record(crate::usage_metering::MeteredRequest {
+                hostname: &hostname,
+                server_ip: server_addr.ip(),
+                server_port: server_addr.port(),
+                listener_id: &state.listener_id,
+                attribution: &attribution,
+                ingress_bytes: 0,
+                egress_bytes,
+                status_class,
+            });
+        }
+    }
+    served.map(|outcome| super::website_delivery::outcome_response(outcome, query.as_deref()))
+}
+
+fn status_class_label(status: u16) -> &'static str {
+    match status {
+        200..=299 => "2xx",
+        300..=399 => "3xx",
+        400..=499 => "4xx",
+        _ => "5xx",
     }
 }

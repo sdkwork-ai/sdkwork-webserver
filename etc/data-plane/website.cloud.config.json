@@ -11,7 +11,9 @@
       "id": "website-http",
       "bind": "0.0.0.0",
       "port": 8080,
-      "protocols": ["http1"],
+      "protocols": [
+        "http1"
+      ],
       "defaultVirtualHostRef": "website-delivery",
       "allowPlaintextHttp": true
     }
@@ -32,8 +34,12 @@
   "virtualHosts": [
     {
       "id": "website-delivery",
-      "listenerRefs": ["website-http"],
-      "serverNames": ["localhost"],
+      "listenerRefs": [
+        "website-http"
+      ],
+      "serverNames": [
+        "localhost"
+      ],
       "routes": [
         {
           "id": "unmatched",
@@ -76,5 +82,38 @@
   "metadata": {
     "owner": "sdkwork",
     "purpose": "cloud-website-delivery"
+  },
+  "appDomainFallback": {
+    "enabled": true,
+    "suffixes": [
+      "sdkwork.com",
+      "sdkwork.cn",
+      "birdcoder.com",
+      "birdcoder.cn",
+      "dtupay.com",
+      "dtupay.cn",
+      "skubc.com",
+      "skubc.cn",
+      "zowalk.com",
+      "zowalk.cn",
+      "offer86.com",
+      "offer86.cn",
+      "86offer.com",
+      "86offer.cn"
+    ],
+    "lookup": {
+      "mode": "embedded"
+    },
+    "timeoutMs": 2000,
+    "cacheTtlMs": 60000,
+    "negativeCacheTtlMs": 5000
+  },
+  "usageMetering": {
+    "enabled": true,
+    "windowSeconds": 60,
+    "flushIntervalMs": 30000,
+    "channel": {
+      "mode": "embedded"
+    }
   }
 }

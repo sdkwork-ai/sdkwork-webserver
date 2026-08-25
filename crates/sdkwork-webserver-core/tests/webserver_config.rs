@@ -2,9 +2,10 @@ use std::{fs, path::Path};
 
 use sdkwork_webserver_core::{
     inspect_webserver_config_revision, load_and_compile_webserver_config,
-    load_and_compile_webserver_config_revision, ConfigProviderType, ProxyProtocolCrc32cPolicy,
-    ProxyProtocolVersion, ResourceConfig, ResourceSampleFailurePolicy, TrustedProxyHeader,
-    WebServerConfigError,
+    load_and_compile_webserver_config_revision, AppDomainFallbackLookup, ConfigProviderType,
+    UsageMeteringChannel,
+    ProxyProtocolCrc32cPolicy, ProxyProtocolVersion, ResourceConfig, ResourceSampleFailurePolicy,
+    TrustedProxyHeader, WebServerConfigError,
 };
 use serde_json::{json, Value};
 use tempfile::TempDir;
@@ -162,9 +163,17 @@ fn exact_route_precedes_prefix_and_methods_are_enforced() {
         .select_route("http", "api.example.net:18080", "/", "GET")
         .expect("select wildcard host");
     assert_eq!(wildcard.virtual_host.id, "wildcard-host");
-    assert!(compiled
+    // nginx leading-wildcard semantics: subdomains of any depth match.
+    let deep = compiled
         .select_route("http", "api.eu.example.net:18080", "/", "GET")
-        .is_none());
+        .expect("nginx wildcard matches subdomains of any depth");
+    assert_eq!(deep.virtual_host.id, "wildcard-host");
+    assert!(
+        compiled
+            .select_route("http", "example.net:18080", "/", "GET")
+            .is_none(),
+        "the bare suffix domain does not match the wildcard"
+    );
 }
 
 #[test]
@@ -2445,4 +2454,117 @@ fn security_headers_compile_and_hop_by_hop_custom_headers_are_rejected() {
         .diagnostics()
         .iter()
         .any(|diagnostic| diagnostic.message.contains("hop-by-hop header")));
+}
+
+#[test]
+fn app_domain_fallback_section_compiles_and_validates() {
+    let directory = TempDir::new().expect("temp dir");
+    // Valid section: defaults resolve, custom suffixes and embedded lookup.
+    let mut config = base_config();
+    config["appDomainFallback"] = json!({
+        "enabled": true,
+        "suffixes": ["sdkwork.com", "sdkwork.cn", "86offer.cn"],
+        "lookup": {"mode": "embedded"},
+        "timeoutMs": 1500,
+        "cacheTtlMs": 30000,
+        "negativeCacheTtlMs": 2000
+    });
+    let path = write_config(directory.path(), &config);
+    let compiled = load_and_compile_webserver_config(path).expect("fallback config compiles");
+    let fallback = compiled
+        .config()
+        .app_domain_fallback
+        .as_ref()
+        .expect("fallback section must be present");
+    assert!(fallback.enabled);
+    assert_eq!(fallback.suffixes, vec!["sdkwork.com", "sdkwork.cn", "86offer.cn"]);
+    assert_eq!(fallback.timeout_ms, 1500);
+    assert!(matches!(fallback.lookup, AppDomainFallbackLookup::Embedded));
+
+    // HTTP lookup requires an absolute endpoint.
+    let mut config = base_config();
+    config["appDomainFallback"] = json!({
+        "enabled": true,
+        "lookup": {"mode": "http", "endpoint": "not-a-url"}
+    });
+    let path = write_config(directory.path(), &config);
+    let error = load_and_compile_webserver_config(path).expect_err("bad endpoint must fail");
+    assert!(error.diagnostics().iter().any(|diagnostic| {
+        diagnostic.message.contains("absolute http(s) endpoint URL")
+    }));
+
+    // Wildcard or malformed suffixes are rejected.
+    let mut config = base_config();
+    config["appDomainFallback"] = json!({
+        "enabled": true,
+        "suffixes": ["*.sdkwork.com"]
+    });
+    let path = write_config(directory.path(), &config);
+    let error = load_and_compile_webserver_config(path).expect_err("wildcard suffix must fail");
+    assert!(error.diagnostics().iter().any(|diagnostic| {
+        diagnostic.message.contains("without a leading dot or wildcard")
+    }));
+
+    // The full 14-suffix platform catalog is the default when absent.
+    let mut config = base_config();
+    config["appDomainFallback"] = json!({"enabled": true, "lookup": {"mode": "embedded"}});
+    let path = write_config(directory.path(), &config);
+    let compiled = load_and_compile_webserver_config(path).expect("default suffixes compile");
+    let fallback = compiled
+        .config()
+        .app_domain_fallback
+        .as_ref()
+        .expect("fallback section");
+    assert_eq!(fallback.suffixes.len(), 14);
+    assert!(fallback.suffixes.contains(&"sdkwork.com".to_owned()));
+    assert!(fallback.suffixes.contains(&"86offer.cn".to_owned()));
+}
+
+#[test]
+fn usage_metering_section_compiles_and_validates() {
+    let directory = TempDir::new().expect("temp dir");
+    let mut config = base_config();
+    config["usageMetering"] = json!({
+        "enabled": true,
+        "windowSeconds": 60,
+        "flushIntervalMs": 30000,
+        "channel": {"mode": "embedded"}
+    });
+    let path = write_config(directory.path(), &config);
+    let compiled = load_and_compile_webserver_config(path).expect("metering config compiles");
+    let metering = compiled
+        .config()
+        .usage_metering
+        .as_ref()
+        .expect("usageMetering section must be present");
+    assert!(metering.enabled);
+    assert_eq!(metering.window_seconds, 60);
+    assert_eq!(metering.flush_interval_ms, 30_000);
+    assert!(matches!(metering.channel, UsageMeteringChannel::Embedded));
+
+    // http channel requires an absolute endpoint.
+    let mut config = base_config();
+    config["usageMetering"] = json!({
+        "enabled": true,
+        "channel": {"mode": "http", "endpoint": "not-a-url"}
+    });
+    let path = write_config(directory.path(), &config);
+    let error = load_and_compile_webserver_config(path).expect_err("bad endpoint must fail");
+    assert!(error.diagnostics().iter().any(|diagnostic| {
+        diagnostic.message.contains("absolute http(s) endpoint URL")
+    }));
+
+    // out-of-range window fails.
+    let mut config = base_config();
+    config["usageMetering"] = json!({
+        "enabled": true,
+        "windowSeconds": 0,
+        "channel": {"mode": "embedded"}
+    });
+    let path = write_config(directory.path(), &config);
+    let error = load_and_compile_webserver_config(path).expect_err("zero window must fail");
+    assert!(error
+        .diagnostics()
+        .iter()
+        .any(|diagnostic| diagnostic.path.contains("usageMetering/windowSeconds")));
 }

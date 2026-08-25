@@ -26,16 +26,16 @@ tablet_surface = "pc"
 # lifecycle artifact roots. Explicit pc_static_root / h5_static_root would win.
 
 [app_roots.pc_static_by_environment]
-development = "apps/sdkwork-webserver-pc/dist/dev"
-test = "apps/sdkwork-webserver-pc/dist/test"
-staging = "apps/sdkwork-webserver-pc/dist/staging"
-production = "apps/sdkwork-webserver-pc/dist/prod"
+development = "apps/sdkwork-webserver-pc/dist/standalone/dev"
+test = "apps/sdkwork-webserver-pc/dist/standalone/test"
+staging = "apps/sdkwork-webserver-pc/dist/standalone/staging"
+production = "apps/sdkwork-webserver-pc/dist/standalone/prod"
 
 [app_roots.h5_static_by_environment]
-development = "apps/sdkwork-webserver-h5/dist/dev"
-test = "apps/sdkwork-webserver-h5/dist/test"
-staging = "apps/sdkwork-webserver-h5/dist/staging"
-production = "apps/sdkwork-webserver-h5/dist/prod"
+development = "apps/sdkwork-webserver-h5/dist/standalone/dev"
+test = "apps/sdkwork-webserver-h5/dist/standalone/test"
+staging = "apps/sdkwork-webserver-h5/dist/standalone/staging"
+production = "apps/sdkwork-webserver-h5/dist/standalone/prod"
 
 [app_roots.static_fallback_by_environment]
 development = "deployments/webserver/static"

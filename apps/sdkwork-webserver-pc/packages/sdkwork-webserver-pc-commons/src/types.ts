@@ -91,6 +91,12 @@ export interface ApplicationDeploymentSourceDefaults {
   repository?: string;
 }
 
+export interface ApplicationWizardSkips {
+  deployment?: boolean;
+  media?: boolean;
+  source?: boolean;
+}
+
 export interface WebserverResourceActionContext {
   applicationSubmission?: import("./application-media.ts").ApplicationSubmissionInput;
   body: Record<string, unknown>;
@@ -103,6 +109,7 @@ export interface WebserverResourceActionContext {
   sourceInputMode?: ApplicationDeploymentSourceMode;
   sourceRepository?: string;
   scopeId?: string;
+  wizardSkips?: ApplicationWizardSkips;
 }
 
 export interface WebserverResourceFieldOption {
@@ -132,6 +139,7 @@ export interface WebserverResourceFieldOptionPage {
 
 export interface WebserverResourceAction {
   acceptedFileTypes?: string;
+  applicationMediaOptional?: boolean;
   applicationSubmission?: "create" | "update";
   availableWhen?(context: WebserverResourceActionContext): boolean;
   bodyTemplate: Record<string, unknown>;
@@ -155,12 +163,14 @@ export interface WebserverResourceAction {
   permission?: string;
   readOnlyFields?: readonly string[];
   requiredFields?: readonly string[];
+  resolveActionLabelKey?(context: Pick<WebserverResourceActionContext, "selectedItem">): string | undefined;
   resultFields?: readonly string[];
   requiresConfirmation?: boolean;
   requiresFile?: boolean;
   requiresScope?: boolean;
   requiresSelection?: boolean;
   sourceInput?: "archive-directory-or-git";
+  sourceInputOptional?: boolean;
 }
 
 export interface WebserverResourceDataSource {

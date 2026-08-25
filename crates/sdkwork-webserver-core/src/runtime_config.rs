@@ -17,9 +17,10 @@ use crate::config::{WebServerAppConfig, WebServerConfigError};
 use crate::config_paths::{
     canonical_runtime_config_path, runtime_config_override_from_env, RUNTIME_CONFIG_FILE_ENV,
 };
+use crate::nginx::parse_nginx_config;
 use crate::module_imports::{
-    load_module_import_app_config, merge_import_specs, validate_imports, WebserverImportEntry,
-    WebserverModuleImport,
+    is_nginx_conf_path, load_module_import_app_config, merge_import_specs, validate_imports,
+    WebserverImportEntry, WebserverModuleImport,
 };
 use crate::nginx::merge_nginx_apps;
 
@@ -139,12 +140,14 @@ pub struct WebserverSection {
     #[serde(default)]
     pub imports: Vec<WebserverImportEntry>,
     /// nginx-style include patterns (for example
-    /// `/etc/sdkwork/webserver/imports.d/*.conf` or `imports.d/*.toml`).
-    /// Matched `.toml` files are parsed with the runtime TOML schema and their
-    /// `[[webserver.imports]]` entries are appended. Matched `.conf` files are
-    /// registered as nginx-conf imports whose `id` is the file stem. Inline
-    /// entries come first; included files follow in sorted order. A later entry
-    /// with the same `id` replaces the earlier one.
+    /// `imports.d/import.conf` or `imports.d/layout-imports.toml`).
+    /// `import.conf` is an aggregator of top-level `include` directives
+    /// pointing at sibling module nginx sidecars under the space checkout;
+    /// each included sidecar becomes one module import entry. Matched
+    /// `.toml` files are parsed with the runtime TOML schema and their
+    /// `[[webserver.imports]]` entries are appended. Inline entries come
+    /// first; included files follow in sorted order. A later entry with the
+    /// same `id` replaces the earlier one.
     #[serde(default)]
     pub include: Vec<String>,
 }
@@ -163,6 +166,12 @@ pub fn expand_webserver_import_includes(
     for pattern in section.include.iter().map(|p| p.trim()).filter(|p| !p.is_empty()) {
         for path in resolve_include_paths(&base, pattern)? {
             if path.extension().and_then(|value| value.to_str()) == Some("conf") {
+                if is_import_aggregator_conf(&path) {
+                    for entry in expand_import_aggregator_conf(&path)? {
+                        upsert_import_entry(&mut merged, entry)?;
+                    }
+                    continue;
+                }
                 let entry = WebserverImportEntry {
                     id: import_id_from_include_path(&path)?,
                     path: path.to_string_lossy().into_owned(),
@@ -171,24 +180,40 @@ pub fn expand_webserver_import_includes(
                     required: false,
                     probe_upstreams: false,
                 };
-                upsert_import_entry(&mut merged, entry);
+                upsert_import_entry(&mut merged, entry)?;
                 continue;
             }
             let included = parse_runtime_toml_config(&path)?;
             for entry in included.webserver.imports {
-                upsert_import_entry(&mut merged, entry);
+                upsert_import_entry(&mut merged, entry)?;
             }
         }
     }
     Ok(merged)
 }
 
-fn upsert_import_entry(merged: &mut Vec<WebserverImportEntry>, entry: WebserverImportEntry) {
+fn upsert_import_entry(
+    merged: &mut Vec<WebserverImportEntry>,
+    entry: WebserverImportEntry,
+) -> Result<(), String> {
+    if let Some(existing) = merged.iter().find(|item| item.id == entry.id) {
+        let existing_conf = is_nginx_conf_path(Path::new(&existing.path));
+        let incoming_conf = is_nginx_conf_path(Path::new(&entry.path));
+        if existing_conf != incoming_conf {
+            return Err(format!(
+                "module import `{}`: nginx `.conf` and layout v3 TOML directory imports are mutually exclusive (existing `{}`, incoming `{}`)",
+                entry.id,
+                existing.path,
+                entry.path
+            ));
+        }
+    }
     if let Some(existing) = merged.iter_mut().find(|item| item.id == entry.id) {
         *existing = entry;
     } else {
         merged.push(entry);
     }
+    Ok(())
 }
 
 fn import_id_from_include_path(path: &Path) -> Result<String, String> {
@@ -204,6 +229,101 @@ fn import_id_from_include_path(path: &Path) -> Result<String, String> {
             )
         })?;
     Ok(stem.to_owned())
+}
+
+fn is_import_aggregator_conf(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        == Some("import.conf")
+}
+
+fn module_import_id_from_nginx_sidecar(path: &Path) -> Result<String, String> {
+    let components = path
+        .components()
+        .map(|component| component.as_os_str().to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    for index in 0..components.len() {
+        if components[index] == "import-sidecars" {
+            if let Some(module_id) = components.get(index + 1) {
+                if !module_id.is_empty() {
+                    return Ok(module_id.clone());
+                }
+            }
+            break;
+        }
+    }
+    for index in 0..components.len().saturating_sub(1) {
+        if components[index] == "deployments" && components[index + 1] == "webserver" {
+            if index > 0 {
+                let module_id = components[index - 1].clone();
+                if !module_id.is_empty() {
+                    return Ok(module_id);
+                }
+            }
+            break;
+        }
+    }
+    import_id_from_include_path(path)
+}
+
+fn expand_import_aggregator_conf(
+    aggregator: &Path,
+) -> Result<Vec<WebserverImportEntry>, String> {
+    let text = std::fs::read_to_string(aggregator).map_err(|error| {
+        format!(
+            "read import aggregator {}: {error}",
+            aggregator.display()
+        )
+    })?;
+    let parsed = parse_nginx_config(&text, aggregator).map_err(|error| {
+        format!(
+            "parse import aggregator {}: {error}",
+            aggregator.display()
+        )
+    })?;
+    let base = aggregator.parent().unwrap_or_else(|| Path::new("/"));
+    let mut entries = Vec::new();
+    for directive in parsed {
+        if directive.name != "include" {
+            return Err(format!(
+                "import aggregator `{}` accepts only top-level include directives, found `{}`",
+                aggregator.display(),
+                directive.name
+            ));
+        }
+        let pattern = directive
+            .args
+            .first()
+            .map(String::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                format!(
+                    "import aggregator `{}:{}`: include requires a path pattern",
+                    aggregator.display(),
+                    directive.line
+                )
+            })?;
+        for target in resolve_include_paths(base, pattern)? {
+            if !is_nginx_conf_path(&target) {
+                return Err(format!(
+                    "import aggregator `{}` referenced non-nginx path `{}`",
+                    aggregator.display(),
+                    target.display()
+                ));
+            }
+            let entry = WebserverImportEntry {
+                id: module_import_id_from_nginx_sidecar(&target)?,
+                path: target.to_string_lossy().into_owned(),
+                profile: None,
+                enabled: true,
+                required: false,
+                probe_upstreams: false,
+            };
+            upsert_import_entry(&mut entries, entry)?;
+        }
+    }
+    Ok(entries)
 }
 
 fn resolve_include_paths(base: &Path, pattern: &str) -> Result<Vec<PathBuf>, String> {
@@ -1173,16 +1293,16 @@ environment = "development"
 tablet_surface = "pc"
 
 [app_roots.pc_static_by_environment]
-development = "apps/sdkwork-webserver-pc/dist/dev"
-test = "apps/sdkwork-webserver-pc/dist/test"
-staging = "apps/sdkwork-webserver-pc/dist/staging"
-production = "apps/sdkwork-webserver-pc/dist/prod"
+development = "apps/sdkwork-webserver-pc/dist/standalone/dev"
+test = "apps/sdkwork-webserver-pc/dist/standalone/test"
+staging = "apps/sdkwork-webserver-pc/dist/standalone/staging"
+production = "apps/sdkwork-webserver-pc/dist/standalone/prod"
 
 [app_roots.h5_static_by_environment]
-development = "apps/sdkwork-webserver-h5/dist/dev"
-test = "apps/sdkwork-webserver-h5/dist/test"
-staging = "apps/sdkwork-webserver-h5/dist/staging"
-production = "apps/sdkwork-webserver-h5/dist/prod"
+development = "apps/sdkwork-webserver-h5/dist/standalone/dev"
+test = "apps/sdkwork-webserver-h5/dist/standalone/test"
+staging = "apps/sdkwork-webserver-h5/dist/standalone/staging"
+production = "apps/sdkwork-webserver-h5/dist/standalone/prod"
 
 [app_roots.static_fallback_by_environment]
 development = "deployments/webserver/static"
@@ -1196,11 +1316,11 @@ production = "deployments/webserver/static"
         config.apply_to_env().expect("config must apply");
         assert_eq!(
             std::env::var("SDKWORK_WEBSERVER_PC_STATIC_ROOT").unwrap(),
-            "apps/sdkwork-webserver-pc/dist/dev"
+            "apps/sdkwork-webserver-pc/dist/standalone/dev"
         );
         assert_eq!(
             std::env::var("SDKWORK_WEBSERVER_H5_STATIC_ROOT").unwrap(),
-            "apps/sdkwork-webserver-h5/dist/dev"
+            "apps/sdkwork-webserver-h5/dist/standalone/dev"
         );
         assert_eq!(
             std::env::var("SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT").unwrap(),
@@ -1343,6 +1463,78 @@ production = "deployments/webserver/static"
     }
 
     #[test]
+    fn expands_import_conf_aggregator_into_module_sidecars() {
+        let temp = std::env::temp_dir().join(format!(
+            "sdkwork-webserver-import-aggregator-{}",
+            std::process::id()
+        ));
+        let imports_dir = temp.join("imports.d");
+        let checkout = temp.join("sdkwork-space");
+        let im_ws = checkout.join("sdkwork-im/deployments/webserver");
+        std::fs::create_dir_all(&imports_dir).unwrap();
+        std::fs::create_dir_all(&im_ws).unwrap();
+        let im_conf = im_ws.join("nginx.standalone.development.conf");
+        std::fs::write(
+            &im_conf,
+            "user sdkwork;\nevents {}\nhttp { server { listen 80; server_name im-dev.example.com; location / { return 200; } } }\n",
+        )
+        .unwrap();
+        std::fs::write(
+            imports_dir.join("import.conf"),
+            format!("include {};\n", im_conf.display()),
+        )
+        .unwrap();
+        let config_path = temp.join("config.toml");
+        std::fs::write(
+            &config_path,
+            "[webserver]\ninclude = [\"imports.d/import.conf\"]\n",
+        )
+        .unwrap();
+        let config = parse_runtime_toml_config(&config_path).expect("config must parse");
+        let expanded =
+            expand_webserver_import_includes(&config_path, &config.webserver).expect("expand");
+        assert_eq!(expanded.len(), 1);
+        assert_eq!(expanded[0].id, "sdkwork-im");
+        assert_eq!(expanded[0].path, im_conf.to_string_lossy());
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn expands_import_conf_aggregator_for_import_sidecar_overlay() {
+        let temp = std::env::temp_dir().join(format!(
+            "sdkwork-webserver-import-overlay-{}",
+            std::process::id()
+        ));
+        let imports_dir = temp.join("imports.d");
+        let overlay = temp.join("import-sidecars/sdkwork-im");
+        std::fs::create_dir_all(&imports_dir).unwrap();
+        std::fs::create_dir_all(&overlay).unwrap();
+        let im_conf = overlay.join("nginx.standalone.development.conf");
+        std::fs::write(
+            &im_conf,
+            "user sdkwork;\nevents {}\nhttp { server { listen 80; server_name im-dev.example.com; location / { return 200; } } }\n",
+        )
+        .unwrap();
+        std::fs::write(
+            imports_dir.join("import.conf"),
+            format!("include {};\n", im_conf.display()),
+        )
+        .unwrap();
+        let config_path = temp.join("config.toml");
+        std::fs::write(
+            &config_path,
+            "[webserver]\ninclude = [\"imports.d/import.conf\"]\n",
+        )
+        .unwrap();
+        let config = parse_runtime_toml_config(&config_path).expect("config must parse");
+        let expanded =
+            expand_webserver_import_includes(&config_path, &config.webserver).expect("expand");
+        assert_eq!(expanded.len(), 1);
+        assert_eq!(expanded[0].id, "sdkwork-im");
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
     fn missing_explicit_include_file_fails_closed() {
         let temp = std::env::temp_dir().join(format!(
             "sdkwork-webserver-include-missing-{}",
@@ -1359,6 +1551,41 @@ production = "deployments/webserver/static"
         let error = expand_webserver_import_includes(&config_path, &config.webserver)
             .expect_err("missing explicit include must fail closed");
         assert!(error.contains("missing file"), "unexpected diagnostic: {error}");
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn conf_and_toml_imports_for_same_id_are_mutually_exclusive() {
+        let temp = std::env::temp_dir().join(format!(
+            "sdkwork-webserver-include-exclusive-{}",
+            std::process::id()
+        ));
+        let imports_dir = temp.join("imports.d");
+        std::fs::create_dir_all(&imports_dir).unwrap();
+        let config_path = temp.join("config.toml");
+        std::fs::write(
+            &config_path,
+            "[webserver]\ninclude = [\"imports.d/*.conf\", \"imports.d/*.toml\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            imports_dir.join("sdkwork-im.conf"),
+            "user sdkwork;\nevents {}\nhttp { server { listen 80; server_name im.example.com; location / { return 200; } } }\n",
+        )
+        .unwrap();
+        write_import_file(
+            &imports_dir,
+            "sdkwork-im.toml",
+            "sdkwork-im",
+            "/srv/layout-v3",
+        );
+        let config = parse_runtime_toml_config(&config_path).expect("config must parse");
+        let error = expand_webserver_import_includes(&config_path, &config.webserver)
+            .expect_err("conf and toml imports for the same id must fail closed");
+        assert!(
+            error.contains("mutually exclusive"),
+            "unexpected diagnostic: {error}"
+        );
         let _ = std::fs::remove_dir_all(&temp);
     }
 
@@ -1435,6 +1662,8 @@ production = "deployments/webserver/static"
             virtual_hosts: Vec::new(),
             streams: Vec::new(),
             proxy_cache: Default::default(),
+            app_domain_fallback: None,
+            usage_metering: None,
             observability: Default::default(),
             deployment: Default::default(),
             metadata: Default::default(),
@@ -1489,6 +1718,8 @@ production = "deployments/webserver/static"
             virtual_hosts: Vec::new(),
             streams: Vec::new(),
             proxy_cache: Default::default(),
+            app_domain_fallback: None,
+            usage_metering: None,
             observability: Default::default(),
             deployment: Default::default(),
             metadata: Default::default(),

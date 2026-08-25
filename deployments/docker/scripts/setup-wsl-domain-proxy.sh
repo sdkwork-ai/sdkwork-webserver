@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
-# One-shot WSL Ubuntu setup: external PG/Redis + Docker stacks + domain nginx reverse-proxy.
+# One-shot WSL Ubuntu setup: external PG/Redis + Docker stacks + hosts.
+# Host nginx is NOT used — sdkwork-webserver Docker owns domain reverse proxy.
 #
 # Usage (inside WSL Ubuntu, password sudo):
 #   sudo bash deployments/docker/scripts/setup-wsl-domain-proxy.sh
 #
 # Windows browser access (run PowerShell as Administrator on Windows host):
-#   deployments/docker/scripts/setup-windows-port-forwarding.ps1
+#   deployments/docker/scripts/setup-windows-port-forwarding-admin.ps1
 set -euo pipefail
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)"
 docker_root="$repo_root/deployments/docker"
+dev_import_port="${SDKWORK_WEBSERVER_DEV_IMPORT_HTTP_HOST_PORT:-80}"
+dev_mgmt_port="${SDKWORK_WEBSERVER_DEV_HOST_PORT:-13800}"
 
 log() { echo "[setup-wsl-domain-proxy] $*"; }
 
@@ -20,69 +23,45 @@ require_root() {
   fi
 }
 
-stop_port80_conflicts() {
-  if ! ss -tlnp | grep -q ':80 '; then
-    return 0
-  fi
-  local owner
-  owner="$(ss -tlnp | awk '/:80 / {print $0}' | head -1)"
-  if echo "${owner}" | grep -q nginx; then
-    return 0
-  fi
-  local pid
-  pid="$(echo "${owner}" | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -1)"
-  if [ -n "${pid}" ]; then
-    log "stopping non-nginx process on :80 (pid=${pid})"
-    kill "${pid}" 2>/dev/null || true
-    sleep 2
-  fi
-}
-
-verify_domain() {
+verify_host() {
   local domain="$1"
-  if curl -fsS -H "Host: ${domain}" "http://127.0.0.1/healthz" >/dev/null 2>&1; then
-    log "  ${domain}: OK"
+  local port="$2"
+  if curl -fsS --noproxy '*' -H "Host: ${domain}" "http://127.0.0.1:${port}/healthz" >/dev/null 2>&1; then
+    log "  ${domain} via :${port}: OK"
     return 0
   fi
-  if curl -fsS "http://${domain}/healthz" >/dev/null 2>&1; then
-    log "  ${domain}: OK (/etc/hosts)"
-    return 0
-  fi
-  log "  ${domain}: FAILED"
+  log "  ${domain} via :${port}: FAILED"
   return 1
 }
 
 main() {
   require_root
-  stop_port80_conflicts
 
   bash "${docker_root}/scripts/setup-host-external-deps.sh"
   bash "${repo_root}/scripts/docker/deploy-docker-environment.sh" all --validate
   bash "${docker_root}/scripts/install-wsl-hosts.sh"
-  bash "${docker_root}/scripts/install-wsl-nginx.sh" development test production
-
-  systemctl enable nginx >/dev/null 2>&1 || true
-  systemctl restart nginx
+  # Retire host nginx — Docker webserver is the reverse proxy.
+  bash "${docker_root}/scripts/uninstall-wsl-nginx.sh" || true
 
   log "waiting for containers..."
   sleep 20
 
-  log "domain verification (nginx :80 -> Docker host ports):"
-  verify_domain server-dev.sdkwork.com
-  verify_domain server-test.sdkwork.com
-  verify_domain server.sdkwork.com
-  verify_domain sdkwork.com
-  verify_domain app.sdkwork.com
+  log "domain verification (Docker published ports; no host nginx):"
+  verify_host server-dev.sdkwork.com "${dev_mgmt_port}" || true
+  verify_host api-dev.sdkwork.com "${dev_import_port}" || true
+  verify_host api-dev.birdcoder.com "${dev_import_port}" || true
+  verify_host im-dev.sdkwork.com "${dev_import_port}" || true
 
   log ""
-  log "WSL access URLs:"
-  log "  http://server-dev.sdkwork.com"
-  log "  http://server-test.sdkwork.com"
-  log "  http://server.sdkwork.com"
-  log "  http://sdkwork.com"
+  log "WSL / Windows access (hosts -> 127.0.0.1):"
+  log "  Management:  http://server-dev.sdkwork.com:${dev_mgmt_port}/healthz"
+  log "  Modules/API: http://api-dev.sdkwork.com/  (Docker host :${dev_import_port})"
+  log "               http://im-dev.sdkwork.com/"
+  log "               http://api-dev.birdcoder.cn/"
+  log "  HTTPS:       https://api-dev.sdkwork.com/  (Docker host :443)"
   log ""
   log "Windows: run as Administrator:"
-  log "  deployments/docker/scripts/setup-windows-port-forwarding.ps1"
+  log "  deployments/docker/scripts/setup-windows-port-forwarding-admin.ps1"
 }
 
 main "$@"

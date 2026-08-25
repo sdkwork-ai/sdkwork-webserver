@@ -20,6 +20,14 @@ const WORKSPACE_ROOT = path.resolve(REPO_ROOT, '..');
 const DOCKER_ROOT = path.join(REPO_ROOT, 'deployments', 'docker');
 const RELEASE_OUTPUT_ROOT = path.join(REPO_ROOT, 'dist', 'release');
 const STAGE_ROOT = path.join(REPO_ROOT, '.sdkwork', 'runtime', 'docker-standalone-context');
+const CLOUD_GATEWAY_ROOT = path.join(WORKSPACE_ROOT, 'sdkwork-api-cloud-gateway');
+const CLOUD_GATEWAY_BUILD_SCRIPT = path.join(
+  CLOUD_GATEWAY_ROOT,
+  'scripts',
+  'build-api-cloud-gateway-container.mjs',
+);
+const CLOUD_GATEWAY_INSTALL_DIR = path.join(CLOUD_GATEWAY_ROOT, 'dist', 'container-image-build');
+const CLOUD_GATEWAY_BINARY_NAME = 'sdkwork-api-cloud-gateway';
 const EMBEDDED_MODULE_DATABASES = [
   { repo: 'sdkwork-skills', shareName: 'skills' },
   { repo: 'sdkwork-mcp', shareName: 'mcp' },
@@ -42,6 +50,8 @@ function parseArgs(argv) {
     version: appVersion(),
     tag: undefined,
     skipReleaseBuild: false,
+    skipPlatformGateway: false,
+    skipPlatformGatewayBuild: false,
     dryRun: false,
     help: false,
   };
@@ -55,6 +65,10 @@ function parseArgs(argv) {
       settings.tag = argv[++index];
     } else if (argument === '--skip-release-build') {
       settings.skipReleaseBuild = true;
+    } else if (argument === '--skip-platform-gateway') {
+      settings.skipPlatformGateway = true;
+    } else if (argument === '--skip-platform-gateway-build') {
+      settings.skipPlatformGatewayBuild = true;
     } else if (argument === '--dry-run') {
       settings.dryRun = true;
     } else if (argument === '--help' || argument === '-h') {
@@ -77,6 +91,8 @@ Options:
   --version <semver>           Default: sdkwork.app.config.json release.currentVersion
   --tag <image-tag>            Default: release version
   --skip-release-build         Do not invoke release packaging when the archive is missing
+  --skip-platform-gateway      Omit bundled sdkwork-api-cloud-gateway from the image (use docker mode)
+  --skip-platform-gateway-build  Require prebuilt cloud-gateway artifacts; do not invoke build:container
   --dry-run                    Print the resolved build plan only
   --help, -h                   Show this help`);
 }
@@ -120,6 +136,63 @@ function copyTree(source, target) {
       writeFileSync(current.to, readFileSync(current.from));
     }
   }
+}
+
+function cloudGatewayBinaryPath() {
+  return path.join(CLOUD_GATEWAY_INSTALL_DIR, 'bin', CLOUD_GATEWAY_BINARY_NAME);
+}
+
+function ensurePlatformGatewayInstallTree(settings) {
+  if (settings.skipPlatformGateway) {
+    console.log('skipping bundled sdkwork-api-cloud-gateway (SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=docker expected)');
+    return null;
+  }
+  const binary = cloudGatewayBinaryPath();
+  const installRoot = CLOUD_GATEWAY_INSTALL_DIR;
+  if (!existsSync(binary) || !existsSync(path.join(installRoot, 'database-modules'))) {
+    if (settings.skipPlatformGatewayBuild) {
+      throw new Error(
+        `bundled platform gateway artifacts missing at ${installRoot}; ` +
+          'build sdkwork-api-cloud-gateway (pnpm build:container) or pass --skip-platform-gateway',
+      );
+    }
+    if (!existsSync(CLOUD_GATEWAY_BUILD_SCRIPT)) {
+      throw new Error(
+        `missing ${CLOUD_GATEWAY_BUILD_SCRIPT}; clone sdkwork-api-cloud-gateway beside sdkwork-webserver`,
+      );
+    }
+    console.log('building sdkwork-api-cloud-gateway container install tree (pnpm build:container --skip-build when possible)');
+    const buildArgs = [CLOUD_GATEWAY_BUILD_SCRIPT];
+    if (existsSync(binary)) {
+      buildArgs.push('--skip-build');
+    }
+    run('node', buildArgs, { cwd: CLOUD_GATEWAY_ROOT });
+  }
+  if (!existsSync(binary)) {
+    throw new Error(`platform gateway binary missing after build: ${binary}`);
+  }
+  if (!existsSync(path.join(installRoot, 'database-modules'))) {
+    throw new Error(`platform gateway install root missing database-modules: ${installRoot}`);
+  }
+  return { binary, installRoot };
+}
+
+function stagePlatformGatewayInstall(settings) {
+  const stagedInstallRoot = path.join(STAGE_ROOT, 'opt', 'sdkwork', 'api-gateway');
+  const artifacts = ensurePlatformGatewayInstallTree(settings);
+  if (!artifacts) {
+    mkdirSync(stagedInstallRoot, { recursive: true });
+    writeFileSync(
+      path.join(stagedInstallRoot, '.bundled-gateway-omitted'),
+      'SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=docker or mount artifacts for bundled mode\n',
+    );
+    return null;
+  }
+  const stagedBinary = path.join(STAGE_ROOT, 'bin', CLOUD_GATEWAY_BINARY_NAME);
+  copyTree(artifacts.binary, stagedBinary);
+  copyTree(artifacts.installRoot, stagedInstallRoot);
+  console.log(`staged bundled platform gateway: ${stagedBinary} + ${stagedInstallRoot}`);
+  return { stagedBinary, stagedInstallRoot };
 }
 
 async function ensureReleaseArchive(settings) {
@@ -179,11 +252,13 @@ async function stageContext(settings) {
     readFileSync(path.join(DOCKER_ROOT, 'scripts', 'entrypoint-standalone.sh')),
     { mode: 0o755 },
   );
+  const platformGateway = stagePlatformGatewayInstall(settings);
   rmSync(extractRoot, { recursive: true, force: true });
   return {
     archive,
     dockerfile: path.join(DOCKER_ROOT, 'Dockerfile.standalone'),
     image: `registry.sdkwork.com/apps/sdkwork-webserver-standalone:${settings.tag}`,
+    platformGateway,
   };
 }
 
@@ -206,6 +281,11 @@ async function main() {
   console.log(`release archive: ${plan.archive}`);
   console.log(`docker context: ${STAGE_ROOT}`);
   console.log(`image tag: ${plan.image}`);
+  if (plan.platformGateway) {
+    console.log(`bundled platform gateway: ${plan.platformGateway.stagedBinary}`);
+  } else {
+    console.log('bundled platform gateway: omitted (--skip-platform-gateway or build skipped)');
+  }
   if (settings.dryRun) {
     console.log(`docker ${buildArgs.join(' ')}`);
     return;

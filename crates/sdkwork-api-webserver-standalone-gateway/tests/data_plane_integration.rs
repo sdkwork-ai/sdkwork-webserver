@@ -4074,7 +4074,8 @@ async fn normalizes_route_static_and_rewritten_proxy_paths_once() {
                 "type": "static",
                 "root": "public",
                 "indexFiles": ["index.html"],
-                "followSymlinks": false
+                "followSymlinks": false,
+                "stripPrefix": true
             },
             {
                 "id": "proxy",

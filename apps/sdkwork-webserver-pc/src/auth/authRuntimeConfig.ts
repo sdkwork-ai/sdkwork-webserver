@@ -7,6 +7,9 @@ import {
   type SdkworkAuthVerificationPolicyConfig,
   type SdkworkCanonicalAuthMetadataLike,
 } from "@sdkwork/iam-contracts";
+import { readBootstrapAccessTokenFromProcessEnv } from "@sdkwork/iam-credential-entry";
+import { resetTokenManagerToBootstrapAccessToken } from "@sdkwork/iam-runtime";
+import type { AuthTokenManager } from "@sdkwork/sdk-common";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -211,10 +214,25 @@ export function resolveWebserverAuthRuntimeConfigFromMetadata(
 
 export function createWebserverAuthRuntimeConfigLoader(
   client: WebserverAuthRuntimeMetadataClient,
+  tokenManager?: AuthTokenManager,
 ): () => Promise<SdkworkAuthRuntimeConfig> {
   let currentRequest: Promise<SdkworkAuthRuntimeConfig> | null = null;
 
+  const prepareCredentialEntryBootstrapAccessToken = () => {
+    if (!tokenManager) {
+      return;
+    }
+    // Login metadata routes are access-token-only. A stale persisted Access-Token
+    // from an expired session must not override the gateway-injected bootstrap
+    // credential on /auth/login.
+    resetTokenManagerToBootstrapAccessToken(
+      tokenManager,
+      readBootstrapAccessTokenFromProcessEnv(),
+    );
+  };
+
   return () => {
+    prepareCredentialEntryBootstrapAccessToken();
     if (!currentRequest) {
       const request = Promise.all([
         client.system.iam.runtime.retrieve(),

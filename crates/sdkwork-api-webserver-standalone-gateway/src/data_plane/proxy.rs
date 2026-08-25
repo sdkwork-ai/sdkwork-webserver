@@ -50,6 +50,9 @@ use super::{
 const CANONICAL_PROXY_PATH_ENCODE_SET: &AsciiSet = &CONTROLS.add(b'%');
 const ATTEMPTED_TARGET_WORDS: usize = 16;
 const SPLITMIX64_GAMMA: u64 = 0x9e37_79b9_7f4a_7c15;
+/// Upper bound on the dynamic-upstream cache: variable `proxy_pass` targets
+/// keyed by evaluated authority stay bounded under adversarial Host headers.
+const DYNAMIC_UPSTREAM_CACHE_MAXIMUM: usize = 4096;
 static RANDOM_SEED_SEQUENCE: AtomicU64 = AtomicU64::new(SPLITMIX64_GAMMA);
 
 pub struct ProxyUpstream<T = UpstreamClient> {
@@ -329,6 +332,9 @@ pub(super) struct ProxyRequestContext<'a> {
     pub generation: &'a Arc<RuntimeGeneration>,
     pub upstream_ref: &'a str,
     pub strip_prefix: bool,
+    /// nginx `proxy_pass` URI part (`http://backend/api/` → `/api/`): the
+    /// route's matched prefix is replaced with this URI before forwarding.
+    pub target_uri: Option<&'a str>,
     pub request_set_headers: &'a [String],
     /// Variable `proxy_pass` template evaluated per request.
     pub dynamic_target: Option<&'a str>,
@@ -643,6 +649,7 @@ pub(super) async fn proxy_request(
     let target_url = match build_target_url(
         selected.url,
         context.strip_prefix,
+        context.target_uri,
         &context.route.route_match.path,
         request.uri().path(),
         context.normalized_path,
@@ -751,7 +758,7 @@ async fn proxy_request_dynamic(
             }
         },
         Err(_) => {
-            eprintln!("[dynamic-proxy] url parse failed");
+            tracing::debug!("dynamic proxy_pass target failed to parse");
             return upgrade_failure_response(
                 upgrade,
                 text_response(StatusCode::BAD_GATEWAY, "invalid proxy_pass target
@@ -759,17 +766,24 @@ async fn proxy_request_dynamic(
             );
         }
     };
+    // Dynamic upstreams are cached per evaluated authority so repeated
+    // variable `proxy_pass` targets reuse one connection pool. The cache is
+    // bounded (an attacker-controlled Host header must not grow memory
+    // without limit), and the (synchronous) upstream build runs OUTSIDE the
+    // lock so one slow build never serializes every dynamic-proxy request.
     let upstream = {
-        let mut cache = context
+        let cached = context
             .generation
             .dynamic_upstreams
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if let Some(upstream) = cache.get(&authority) {
-            upstream.clone()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(&authority)
+            .cloned();
+        if let Some(upstream) = cached {
+            upstream
         } else {
             let synthetic = synthetic_dynamic_upstream_config(&target_url);
-            let upstream = match ProxyUpstream::build(
+            let built = match ProxyUpstream::build(
                 &context.generation.app,
                 &synthetic,
                 context.generation.resolver.clone(),
@@ -788,8 +802,22 @@ async fn proxy_request_dynamic(
                     );
                 }
             };
-            cache.insert(authority.clone(), upstream.clone());
-            upstream
+            let mut cache = context
+                .generation
+                .dynamic_upstreams
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(existing) = cache.get(&authority) {
+                existing.clone()
+            } else {
+                if cache.len() >= DYNAMIC_UPSTREAM_CACHE_MAXIMUM {
+                    if let Some(victim) = cache.keys().next().cloned() {
+                        cache.remove(&victim);
+                    }
+                }
+                cache.insert(authority.clone(), built.clone());
+                built
+            }
         }
     };
     let upstream_permit = match upstream.try_admit() {
@@ -1223,6 +1251,7 @@ fn build_retry_target_url(
     build_target_url(
         selected.url,
         context.strip_prefix,
+        context.target_uri,
         &context.route.route_match.path,
         request_parts.uri.path(),
         context.normalized_path,
@@ -1533,23 +1562,35 @@ fn trim_ascii_whitespace(mut value: &[u8]) -> &[u8] {
 fn build_target_url(
     target: &Url,
     strip_prefix: bool,
+    target_uri: Option<&str>,
     route_path: &str,
     request_path: &str,
     normalized_path: &str,
     query: Option<&str>,
 ) -> Result<Url, ()> {
-    if strip_prefix {
+    // nginx `proxy_pass` URI replacement: when the target has a URI part,
+    // the location-matched prefix is replaced with that URI and the
+    // forwarded path is appended. Legacy `stripPrefix` resources (no URI
+    // part) keep the upstream target's own path as the base.
+    if strip_prefix || target_uri.is_some() {
         let forwarded_path = normalized_path
             .strip_prefix(route_path)
             .unwrap_or(normalized_path);
         let mut rewritten = target.clone();
-        let base_path = rewritten.path().trim_end_matches('/');
-        let path = if forwarded_path.is_empty() {
-            "/"
-        } else {
-            forwarded_path
+        let replacement = match target_uri {
+            Some(uri) => uri.to_owned(),
+            None => rewritten.path().to_owned(),
         };
-        let combined_path = format!("{base_path}/{}", path.trim_start_matches('/'));
+        let base_path = replacement.trim_end_matches('/');
+        let combined_path = if forwarded_path.is_empty() {
+            if base_path.is_empty() {
+                "/".to_owned()
+            } else {
+                base_path.to_owned()
+            }
+        } else {
+            format!("{base_path}/{}", forwarded_path.trim_start_matches('/'))
+        };
         let encoded_path =
             utf8_percent_encode(&combined_path, CANONICAL_PROXY_PATH_ENCODE_SET).to_string();
         rewritten.set_path(&encoded_path);

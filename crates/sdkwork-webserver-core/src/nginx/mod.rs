@@ -16,14 +16,25 @@
 //!
 //! Safe nginx tuning directives are accepted and ignored (the runtime owns
 //! timeouts, buffering, header forwarding, and TLS defaults). Directives the
-//! runtime cannot enforce — `sub_filter`, `limit_conn`, variable `proxy_pass`
-//! — fail closed with a precise diagnostic.
+//! runtime cannot enforce — named locations, `try_files =code` fallbacks,
+//! regex `server_name`, trailing-wildcard names, `return 444`, `unix:`
+//! sockets — fail closed with a precise diagnostic.
+//!
+//! nginx configuration language details are tokenizer-exact with
+//! `ngx_conf_read_token()` (quotes, escapes, comments, `${vars}`), and the
+//! materialized model follows nginx semantics: `listen` defaults to port 80,
+//! the first server on a socket is its default server (`default_server`
+//! overrides), `proxy_pass` URI parts replace the matched prefix, `root`
+//! appends the full request path while `alias` replaces the prefix, and
+//! leading-wildcard `server_name` matches subdomains of any depth.
 
+mod adaptive_web;
 mod load;
 mod mapping;
 mod merge;
 mod parser;
 
+pub use adaptive_web::prefer_h5_surface;
 pub use load::{load_nginx_compat, NginxLoadReport};
 pub use mapping::{materialize_nginx_app, NginxConfigError};
 pub use merge::merge_nginx_apps;

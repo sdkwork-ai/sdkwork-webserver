@@ -1,0 +1,38 @@
+# Overlay: attach webserver to an independently-deployed sdkwork-api-cloud-gateway
+# compose network (do not start a second gateway container).
+#
+# Use when the platform gateway already runs as its own project, e.g.
+#   sdkwork-gateway-development  (service name: gateway, network: *_default)
+#
+# Required env:
+#   SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK=<docker network name>
+#   SDKWORK_MODULE_API_GATEWAY_HOST=gateway   # service DNS on that network
+#   SDKWORK_MODULE_API_GATEWAY_PORT=3900
+#
+# Usage:
+#   docker compose \
+#     -f deployments/docker/docker-compose.development.yml \
+#     -f deployments/docker/docker-compose.platform-api-gateway-attach.yml \
+#     --env-file deployments/docker/env/development.env up -d
+#
+# deploy-docker-environment.sh / compose.mjs select this overlay automatically
+# when SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK is non-empty.
+
+services:
+  webserver:
+    environment:
+      SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT: docker
+      SDKWORK_MODULE_API_GATEWAY_HOST: ${SDKWORK_MODULE_API_GATEWAY_HOST:-gateway}
+      SDKWORK_MODULE_API_GATEWAY_PORT: ${SDKWORK_MODULE_API_GATEWAY_PORT:-3900}
+      # Prefer DB/Redis on the attached gateway compose network when operators
+      # point WEBSERVER_*_HOST at postgres/redis service names.
+      SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-postgres}
+      SDKWORK_WEBSERVER_REDIS_HOST: ${WEBSERVER_REDIS_HOST:-redis}
+    networks:
+      - default
+      - module-api-gateway
+
+networks:
+  module-api-gateway:
+    name: ${SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK:?SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK must be set}
+    external: true

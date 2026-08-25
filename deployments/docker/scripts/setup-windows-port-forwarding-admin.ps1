@@ -1,7 +1,12 @@
 $ErrorActionPreference = "Stop"
 $hostsFile = "$env:SystemRoot\System32\drivers\etc\hosts"
 $mark = "# sdkwork-webserver-docker-wsl"
-$domains = @(
+$wslDistro = "Ubuntu-22.04"
+# sdkwork-webserver Docker publishes host :80 / :443 for the public data plane.
+# WSL mirrors those ports to Windows localhost — no portproxy to a side port.
+$discoverScript = "/mnt/e/sdkwork-space/sdkwork-webserver/deployments/docker/scripts/discover-module-hosts.sh"
+
+$coreDomains = @(
     "server-dev.sdkwork.com",
     "server-app-dev.sdkwork.com",
     "server-admin-dev.sdkwork.com",
@@ -14,6 +19,21 @@ $domains = @(
     "sdkwork.com",
     "app.sdkwork.com"
 )
+
+$discovered = New-Object System.Collections.Generic.List[string]
+foreach ($envName in @("development", "test", "production")) {
+    $raw = wsl -d $wslDistro -e bash -lc "bash '$discoverScript' $envName" 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($raw)) { continue }
+    foreach ($line in ($raw -split "[\r\n]+")) {
+        $hostName = $line.Trim()
+        if ($hostName.Length -gt 0) { [void]$discovered.Add($hostName) }
+    }
+}
+
+$domains = @($coreDomains + $discovered.ToArray() | Select-Object -Unique | Sort-Object)
+if ($domains.Count -lt 20) {
+    throw "discovered too few domains ($($domains.Count)); aborting hosts rewrite"
+}
 
 $lines = Get-Content $hostsFile
 $filtered = New-Object System.Collections.Generic.List[string]
@@ -29,7 +49,7 @@ foreach ($line in $lines) {
     }
     if ($skip) { continue }
     foreach ($d in $domains) {
-        if ($line -match "\s$d(\s|$)") { continue 2 }
+        if ($line -match "\s$([regex]::Escape($d))(\s|$)") { continue 2 }
     }
     $filtered.Add($line)
 }
@@ -39,16 +59,20 @@ foreach ($d in $domains) {
     $filtered.Add("127.0.0.1 $d")
 }
 Set-Content -Path $hostsFile -Value $filtered -Encoding ascii
-Write-Host "Updated Windows hosts ($($domains.Count) sdkwork-webserver domains)"
+Write-Host "Updated Windows hosts ($($domains.Count) sdkwork-webserver/module domains)"
 
-$wslIP = (wsl -e bash -c "hostname -I | awk '{print `$1}'").Trim()
-Write-Host "WSL IP: $wslIP"
+# Clear stale portproxy (previously 80 -> 8088/13808). Docker now owns :80/:443.
+$iphlp = Get-Service -Name iphlpsvc -ErrorAction SilentlyContinue
+if ($iphlp -and $iphlp.Status -ne "Running") {
+    Start-Service iphlpsvc
+    Write-Host "Started IP Helper"
+}
 netsh interface portproxy reset | Out-Null
-netsh interface portproxy add v4tov4 listenport=80 listenaddress=0.0.0.0 connectport=80 connectaddress=$wslIP | Out-Null
-netsh interface portproxy add v4tov4 listenport=443 listenaddress=0.0.0.0 connectport=443 connectaddress=$wslIP | Out-Null
-Write-Host "Port forwarding: Windows :80/:443 -> ${wslIP}:80/:443"
+Write-Host "Cleared Windows portproxy (sdkwork-webserver Docker publishes :80 / :443 via WSL)"
+Write-Host "Public domains: http://api-dev.sdkwork.com/  https://api-dev.sdkwork.com/"
+Write-Host "Management console ports: :13800 / :18888 / :18080"
 
-$ruleName = "SDKWork Web Server HTTP/HTTPS"
+$ruleName = "SDKWork Web Server HTTP"
 if (-not (Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue)) {
     New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -LocalPort 80,443 -Protocol TCP -Action Allow -Profile Any | Out-Null
 }

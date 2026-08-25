@@ -55,6 +55,20 @@ pub fn upstream_ip_is_allowed(ip: IpAddr, allowed_cidrs: &[IpNet]) -> bool {
     true
 }
 
+/// CIDRs authorized when an operator declares a hostname upstream target
+/// (for example Docker Compose service DNS `gateway:3900`). Hard-forbidden
+/// ranges remain blocked by [`upstream_ip_is_allowed`].
+pub fn hostname_upstream_allowed_cidrs() -> Vec<IpNet> {
+    ALLOWABLE_RESTRICTED_NETWORKS
+        .iter()
+        .map(|value| {
+            value
+                .parse::<IpNet>()
+                .expect("static restricted network is valid")
+        })
+        .collect()
+}
+
 pub fn is_supported_upstream_allowed_cidr(network: &IpNet) -> bool {
     ALLOWABLE_RESTRICTED_NETWORKS.iter().any(|candidate| {
         candidate
@@ -111,6 +125,15 @@ mod tests {
             .iter()
             .map(|value| value.parse().expect("valid test CIDR"))
             .collect()
+    }
+
+    #[test]
+    fn hostname_upstream_policy_authorizes_docker_private_ranges() {
+        let allowed = hostname_upstream_allowed_cidrs();
+        assert!(upstream_ip_is_allowed("192.168.0.5".parse().unwrap(), &allowed));
+        assert!(upstream_ip_is_allowed("10.0.0.2".parse().unwrap(), &allowed));
+        assert!(upstream_ip_is_allowed("127.0.0.1".parse().unwrap(), &allowed));
+        assert!(!upstream_ip_is_allowed("169.254.169.254".parse().unwrap(), &allowed));
     }
 
     #[test]

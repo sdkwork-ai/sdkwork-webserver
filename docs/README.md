@@ -10,6 +10,7 @@ those standards instead of copying normative text.
 | [architecture/tech/TECH_ARCHITECTURE.md](architecture/tech/TECH_ARCHITECTURE.md) | Current runtime and module architecture |
 | [product/prd/PRD-cloud-site-delivery-data-plane.md](product/prd/PRD-cloud-site-delivery-data-plane.md) | Live Drive/Wiki cloud delivery product contract |
 | [architecture/tech/TECH-cloud-site-delivery-data-plane.md](architecture/tech/TECH-cloud-site-delivery-data-plane.md) | Compiled descriptor and provider data-plane design |
+| [architecture/tech/TECH-app-domain-publishing-fallback.md](architecture/tech/TECH-app-domain-publishing-fallback.md) | User app publishing domains (default `<slug>.app.<suffix>` + custom) and the Deploy control-plane fallback for unmatched hosts |
 | [standards-alignment.md](standards-alignment.md) | Current SDKWork integration and verification evidence |
 | [engineering/reviews/REVIEW-20260731-domain-certificate-deployment-data-model.md](engineering/reviews/REVIEW-20260731-domain-certificate-deployment-data-model.md) | Current Web/Deploy/IAM domain, certificate, deployment, and database ownership review |
 | [engineering/reviews/REVIEW-20260723-webserver-production-readiness.md](engineering/reviews/REVIEW-20260723-webserver-production-readiness.md) | Consolidated implementation, configuration, deployment coverage, verification, and production gate review |

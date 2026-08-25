@@ -72,8 +72,10 @@ const registry: WebserverResourceRegistry = {
         environment: ["production", "staging", "test", "development"],
       },
       permission: "web.sites.write",
-      requiredFields: ["name", "versionTag"],
+      requiredFields: ["name"],
       sourceInput: "archive-directory-or-git",
+      sourceInputOptional: true,
+      applicationMediaOptional: true,
     }, {
       id: "update",
       label: "Edit",
@@ -104,6 +106,9 @@ const registry: WebserverResourceRegistry = {
       }),
       permission: "web.sites.write",
       requiredFields: ["versionTag"],
+      resolveActionLabelKey: ({ selectedItem }) => (
+        selectedItem?.hasSourceVersion ? "action.applications.update-source" : "action.applications.add-source"
+      ),
       requiresSelection: true,
       sourceInput: "archive-directory-or-git",
     }, {

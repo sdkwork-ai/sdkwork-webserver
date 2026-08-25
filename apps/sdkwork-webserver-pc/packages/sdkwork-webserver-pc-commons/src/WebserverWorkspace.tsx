@@ -48,6 +48,10 @@ import { uuid } from "@sdkwork/utils/id";
 
 import { translateWebserver, type WebserverLocale, type WebserverMessageKey } from "./i18n/index.ts";
 import {
+  applicationHasSourceVersion,
+  hasApplicationSourceInput,
+} from "./application-create-flow.ts";
+import {
   APPLICATION_PREVIEW_LIMIT,
   ApplicationMediaValidationError,
   validateApplicationMediaFile,
@@ -83,6 +87,7 @@ import type {
   WebserverResourceFieldOptions,
   WebserverResourceKey,
   WebserverResourceRegistry,
+  ApplicationWizardSkips,
 } from "./types.ts";
 import { WorkspaceHeader, WorkspaceSidebar } from "./WebserverWorkspaceChrome.tsx";
 
@@ -593,15 +598,16 @@ function ResourcePage({
                             <td className="row-actions-cell">
                               <div className="row-actions">
                                 {applicationRowActions.map((candidate) => {
-                                  const label = actionText(t, entry.resource, candidate);
+                                  const label = resolveActionLabel(t, entry.resource, candidate, item);
                                   const rowLabel = t("table.rowAction", {
                                     action: label,
                                     name: recordLabel(item, index),
                                   });
+                                  const sourceRowAction = candidate.id === "update-source";
                                   return (
                                     <button
                                       aria-label={rowLabel}
-                                      className={`row-action-button${candidate.dangerous ? " row-action-button-danger" : ""}`}
+                                      className={`row-action-button${sourceRowAction ? " row-action-button-labeled" : ""}${candidate.dangerous ? " row-action-button-danger" : ""}`}
                                       disabled={busy || !actionAvailable(candidate, item, scopeId)}
                                       key={candidate.id}
                                       onClick={(event) => {
@@ -613,6 +619,7 @@ function ResourcePage({
                                       type="button"
                                     >
                                       <ActionIcon action={candidate} />
+                                      {sourceRowAction ? <span>{label}</span> : null}
                                     </button>
                                   );
                                 })}
@@ -659,7 +666,7 @@ function ResourcePage({
           {action ? (
             <ActionDialog
               action={action}
-              label={actionText(t, entry.resource, action)}
+              label={resolveActionLabel(t, entry.resource, action, selected)}
               locale={locale}
               onClose={() => setAction(undefined)}
               onComplete={() => {
@@ -756,13 +763,16 @@ function ActionDialog({
   const applicationStageRef = useRef<HTMLDivElement>(null);
   const submitInFlightRef = useRef(false);
   const confirmationRequired = Boolean(action.dangerous || action.requiresConfirmation);
-  const sourceInputRequired = Boolean(action.sourceInput);
+  const sourceInputRequired = Boolean(action.sourceInput) && !action.sourceInputOptional;
+  const applicationMediaOptional = Boolean(action.applicationMediaOptional && action.applicationSubmission === "create");
+  const sourceInputOptional = Boolean(action.sourceInputOptional && action.applicationSubmission === "create");
   const applicationCreationWizard = action.applicationSubmission === "create";
   const applicationEditDrawer = action.applicationSubmission === "update";
   const sourceUpdateAction = action.id === "update-source";
   const applicationDrawer = applicationCreationWizard || applicationEditDrawer;
   const [applicationStep, setApplicationStep] = useState<ApplicationWizardStep>(0);
   const [furthestApplicationStep, setFurthestApplicationStep] = useState<ApplicationWizardStep>(0);
+  const [wizardSkips, setWizardSkips] = useState<ApplicationWizardSkips>({});
   const applicationIdentityFields = ["name", "description", "applicationType", "siteType"] as const;
   const applicationListingFields = [
     "shortDescription",
@@ -783,14 +793,18 @@ function ActionDialog({
     "publicRoot",
     "spaFallback",
   ] as const;
-  const applicationRequiredFields: readonly string[] = [
-    "name",
-    "versionTag",
-    "appConfigPath",
-    "deploymentConfigPath",
-    "publicRoot",
-    "spaFallback",
-  ];
+  const applicationRequiredFields: readonly string[] = applicationCreationWizard
+    ? sourceInputOptional
+      ? ["name"]
+      : [
+        "name",
+        "versionTag",
+        "appConfigPath",
+        "deploymentConfigPath",
+        "publicRoot",
+        "spaFallback",
+      ]
+    : [];
 
   function closeDialog(): void {
     if (busy && !action.dismissibleWhileBusy) return;
@@ -802,7 +816,15 @@ function ActionDialog({
   }
 
   const sourceInputError = (): WebserverMessageKey | undefined => {
-    if (!sourceInputRequired) return undefined;
+    if (!sourceInputRequired && !hasApplicationSourceInput({
+      file,
+      files,
+      sourceInputMode,
+      sourceRepository,
+    })) {
+      return undefined;
+    }
+    if (!action.sourceInput) return undefined;
     if (sourceInputMode === "git") {
       if (!sourceRepository.trim()) {
         return applicationCreationWizard
@@ -877,11 +899,21 @@ function ActionDialog({
         : undefined;
     }
     if (step === 1) {
+      if (applicationMediaOptional) {
+        if (wizardSkips.media) return undefined;
+        if (mediaErrors.icon || mediaErrors.cover || mediaErrors.previews) {
+          return "dialog.applicationMediaRequired";
+        }
+        return undefined;
+      }
       return !applicationSubmissionReady(applicationSubmission, mediaErrors)
         ? "dialog.applicationMediaRequired"
         : undefined;
     }
     if (step === 3) {
+      if (sourceInputOptional && (wizardSkips.source || wizardSkips.deployment)) {
+        return undefined;
+      }
       return hasMissingRequiredFields(body, [
         "appConfigPath",
         "deploymentConfigPath",
@@ -890,6 +922,18 @@ function ActionDialog({
       ]) ? "dialog.applicationConfigRequired" : undefined;
     }
     if (step === 2) {
+      if (sourceInputOptional) {
+        if (wizardSkips.source) return undefined;
+        if (!hasApplicationSourceInput({ file, files, sourceInputMode, sourceRepository })) {
+          return undefined;
+        }
+        if (hasMissingRequiredFields(body, ["versionTag"])) {
+          return "dialog.applicationVersionRequired";
+        }
+        const sourceError = sourceInputError();
+        if (sourceError) return sourceError;
+        return undefined;
+      }
       const versionMissing = hasMissingRequiredFields(body, ["versionTag"]);
       const sourceError = sourceInputError();
       if (versionMissing && sourceError) return "dialog.applicationReleaseRequired";
@@ -897,6 +941,29 @@ function ActionDialog({
       if (sourceError) return sourceError;
     }
     return undefined;
+  };
+
+  const skipOptionalApplicationStep = (step: ApplicationWizardStep): void => {
+    if (step === 1 && applicationMediaOptional) {
+      setWizardSkips((current) => ({ ...current, media: true }));
+    }
+    if (step === 2 && sourceInputOptional) {
+      setWizardSkips((current) => ({ ...current, source: true, deployment: true }));
+      setFiles([]);
+      setSourceRepository("");
+    }
+    if (step === 3 && sourceInputOptional) {
+      setWizardSkips((current) => ({ ...current, deployment: true }));
+    }
+    setError(undefined);
+    moveToApplicationStep((step + 1) as ApplicationWizardStep);
+  };
+
+  const canSkipApplicationStep = (step: ApplicationWizardStep): boolean => {
+    if (step === 1) return applicationMediaOptional;
+    if (step === 2) return sourceInputOptional;
+    if (step === 3) return sourceInputOptional;
+    return false;
   };
 
   const applicationStepReady = (step: ApplicationWizardStep): boolean => !applicationStepError(step);
@@ -1018,18 +1085,25 @@ function ActionDialog({
     };
   }, [action, scopeId, selected]);
 
-  async function submit(event: FormEvent): Promise<void> {
-    event.preventDefault();
+  function remainingCreateSkips(): ApplicationWizardSkips {
+    return {
+      media: applicationStep < 1 || wizardSkips.media,
+      source: applicationStep < 2 || wizardSkips.source,
+      deployment: applicationStep < 3 || wizardSkips.deployment,
+    };
+  }
+
+  async function executeAction(skips: ApplicationWizardSkips | undefined = wizardSkips): Promise<void> {
     if (submitInFlightRef.current) return;
-    if (applicationCreationWizard && applicationStep < 4) {
-      moveToApplicationStep((applicationStep + 1) as ApplicationWizardStep);
-      return;
-    }
     if (
       (confirmationRequired && !confirmed)
       || (action.requiresFile && !file)
       || Boolean(sourceInputError())
-      || (action.applicationSubmission && !applicationSubmissionReady(applicationSubmission, mediaErrors))
+      || (action.applicationSubmission === "create" && !applicationMediaOptional
+        && !applicationSubmissionReady(applicationSubmission, mediaErrors)
+        && !skips?.media)
+      || (action.applicationSubmission === "update"
+        && !applicationSubmissionReady(applicationSubmission, mediaErrors))
     ) return;
     submitInFlightRef.current = true;
     const abortController = new AbortController();
@@ -1050,6 +1124,7 @@ function ActionDialog({
         signal: abortController.signal,
         sourceInputMode,
         sourceRepository: sourceInputMode === "git" ? sourceRepository : undefined,
+        wizardSkips: applicationCreationWizard ? skips : undefined,
       });
       if (action.resultFields?.length && isRecord(response)) {
         setResult(response);
@@ -1064,6 +1139,26 @@ function ActionDialog({
       if (abortControllerRef.current === abortController) abortControllerRef.current = undefined;
       setBusy(false);
     }
+  }
+
+  async function submit(event: FormEvent): Promise<void> {
+    event.preventDefault();
+    if (applicationCreationWizard && applicationStep < 4) {
+      moveToApplicationStep((applicationStep + 1) as ApplicationWizardStep);
+      return;
+    }
+    await executeAction();
+  }
+
+  async function createApplicationNow(): Promise<void> {
+    if (hasMissingRequiredFields(body, ["name"])) {
+      setError(t("dialog.applicationBasicRequired"));
+      focusApplicationStep(0, true);
+      return;
+    }
+    const skips = remainingCreateSkips();
+    setWizardSkips(skips);
+    await executeAction(skips);
   }
 
   return (
@@ -1211,6 +1306,7 @@ function ActionDialog({
               furthestStep={furthestApplicationStep}
               locale={locale}
               onStepChange={moveToApplicationStep}
+              optionalStepIndexes={sourceInputOptional ? [1, 2, 3] : undefined}
             />
             <div className="application-wizard-stage" data-testid="application-wizard-stage" ref={applicationStageRef}>
               <div className="application-wizard-stage-content">
@@ -1219,6 +1315,7 @@ function ActionDialog({
                     <div className="application-step-heading">
                       <div>
                         <h3 data-application-step-heading id="application-basics-title" tabIndex={-1}>{t("dialog.applicationBasics")}</h3>
+                        {sourceInputOptional ? <p className="application-step-hint">{t("dialog.applicationBasicsHint")}</p> : null}
                       </div>
                       <AppWindow aria-hidden="true" size={19} />
                     </div>
@@ -1230,6 +1327,7 @@ function ActionDialog({
                     <div className="application-step-heading">
                       <div>
                         <h3 data-application-step-heading id="application-media-title" tabIndex={-1}>{t("dialog.applicationMedia")}</h3>
+                        {applicationMediaOptional ? <p className="application-step-hint">{t("dialog.applicationOptionalStepHint")}</p> : null}
                       </div>
                       <Images aria-hidden="true" size={19} />
                     </div>
@@ -1239,7 +1337,10 @@ function ActionDialog({
                       errors={mediaErrors}
                       existing={existingStoreListing}
                       locale={locale}
-                      onChange={setApplicationSubmission}
+                      onChange={(next) => {
+                        setApplicationSubmission(next);
+                        setWizardSkips((current) => ({ ...current, media: false }));
+                      }}
                       onErrors={setMediaErrors}
                       submission={applicationSubmission}
                     />
@@ -1257,6 +1358,7 @@ function ActionDialog({
                     <div className="application-step-heading">
                       <div>
                         <h3 data-application-step-heading id="application-source-version-title" tabIndex={-1}>{t("dialog.applicationStepSource")}</h3>
+                        {sourceInputOptional ? <p className="application-step-hint">{t("dialog.applicationOptionalSourceHint")}</p> : null}
                       </div>
                       <FileArchive aria-hidden="true" size={19} />
                     </div>
@@ -1270,7 +1372,7 @@ function ActionDialog({
                             <div>
                               <h4 id="application-source-title">{t("dialog.applicationSource")}</h4>
                             </div>
-                            <span className="required-mark">{t("dialog.mediaRequired")}</span>
+                            <span className="required-mark">{sourceInputOptional ? t("dialog.optional") : t("dialog.mediaRequired")}</span>
                           </div>
                           <ApplicationSourcePicker
                             busy={busy}
@@ -1279,14 +1381,17 @@ function ActionDialog({
                             mode={sourceInputMode}
                             onFilesChange={(nextFiles) => {
                               setFiles(nextFiles);
+                              setWizardSkips((current) => ({ ...current, source: false, deployment: false }));
                               setError(undefined);
                             }}
                             onModeChange={(nextMode) => {
                               setSourceInputMode(nextMode);
+                              setWizardSkips((current) => ({ ...current, source: false, deployment: false }));
                               setError(undefined);
                             }}
                             onRepositoryChange={(repository) => {
                               setSourceRepository(repository);
+                              setWizardSkips((current) => ({ ...current, source: false, deployment: false }));
                               setError(undefined);
                             }}
                             repository={sourceRepository}
@@ -1301,6 +1406,7 @@ function ActionDialog({
                     <div className="application-step-heading">
                       <div>
                         <h3 data-application-step-heading id="application-configuration-title" tabIndex={-1}>{t("dialog.applicationDeploymentConfig")}</h3>
+                        {sourceInputOptional ? <p className="application-step-hint">{t("dialog.applicationOptionalConfigHint")}</p> : null}
                       </div>
                       <Settings2 aria-hidden="true" size={19} />
                     </div>
@@ -1385,6 +1491,16 @@ function ActionDialog({
           <footer className="application-wizard-footer">
             <button className="secondary-button" disabled={busy && !action.dismissibleWhileBusy} onClick={closeDialog} type="button">{t("dialog.cancel")}</button>
             <div className="application-wizard-navigation">
+              {canSkipApplicationStep(applicationStep) ? (
+                <button
+                  className="secondary-button"
+                  disabled={busy}
+                  onClick={() => skipOptionalApplicationStep(applicationStep)}
+                  type="button"
+                >
+                  {t("dialog.skipForNow")}
+                </button>
+              ) : null}
               {applicationStep > 0 ? (
                 <button
                   className="secondary-button"
@@ -1397,24 +1513,66 @@ function ActionDialog({
                 </button>
               ) : null}
               {applicationStep < 4 ? (
-                <button
-                  className="command-button"
-                  disabled={busy || optionsBusy}
-                  onClick={() => moveToApplicationStep((applicationStep + 1) as ApplicationWizardStep)}
-                  type="button"
-                >
-                  {applicationStep === 3 ? t("dialog.review") : t("dialog.next")}
-                  <ChevronRight aria-hidden="true" size={16} />
-                </button>
+                <>
+                  {sourceInputOptional && applicationStep === 0 ? (
+                    <>
+                      <button
+                        className="command-button"
+                        data-testid="application-create-now"
+                        disabled={busy || optionsBusy || !applicationStepReady(0)}
+                        onClick={() => void createApplicationNow()}
+                        type="button"
+                      >
+                        {busy ? <><LoaderCircle aria-hidden="true" className="is-spinning" size={16} />{t("dialog.submitting")}</> : t("dialog.createApplicationNow")}
+                      </button>
+                      <button
+                        className="secondary-button"
+                        disabled={busy || optionsBusy || !applicationStepReady(0)}
+                        onClick={() => moveToApplicationStep(1)}
+                        type="button"
+                      >
+                        {t("dialog.next")}
+                        <ChevronRight aria-hidden="true" size={16} />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        className="command-button"
+                        disabled={busy || optionsBusy}
+                        onClick={() => moveToApplicationStep((applicationStep + 1) as ApplicationWizardStep)}
+                        type="button"
+                      >
+                        {applicationStep === 0
+                          ? t("dialog.continueSetup")
+                          : applicationStep === 3
+                            ? t("dialog.review")
+                            : t("dialog.next")}
+                        <ChevronRight aria-hidden="true" size={16} />
+                      </button>
+                      {sourceInputOptional ? (
+                        <button
+                          className="secondary-button"
+                          data-testid="application-create-now"
+                          disabled={busy || optionsBusy || !applicationStepReady(0)}
+                          onClick={() => void createApplicationNow()}
+                          type="button"
+                        >
+                          {busy ? <><LoaderCircle aria-hidden="true" className="is-spinning" size={16} />{t("dialog.submitting")}</> : t("dialog.createApplicationNow")}
+                        </button>
+                      ) : null}
+                    </>
+                  )}
+                </>
               ) : (
                 <button
                   className="command-button"
                   disabled={busy
                     || optionsBusy
                     || !applicationStepReady(0)
-                    || !applicationStepReady(1)
-                    || !applicationStepReady(2)
-                    || !applicationStepReady(3)
+                    || (!sourceInputOptional && !applicationStepReady(1))
+                    || (!sourceInputOptional && !applicationStepReady(2))
+                    || (!sourceInputOptional && !applicationStepReady(3))
                     || hasUnavailableOptions(body, fieldOptions, action.paginatedFields)}
                   type="submit"
                 >
@@ -1614,30 +1772,36 @@ function ApplicationWizardProgress({
   furthestStep,
   locale,
   onStepChange,
+  optionalStepIndexes,
 }: {
   currentStep: ApplicationWizardStep;
   furthestStep: ApplicationWizardStep;
   locale: WebserverLocale;
   onStepChange(step: ApplicationWizardStep): void;
+  optionalStepIndexes?: readonly number[];
 }) {
   const t = (key: WebserverMessageKey, values: Record<string, string | number> = {}) => translateWebserver(locale, key, values);
-  const steps = [
+  const optionalSuffix = t("dialog.applicationStepOptionalSuffix");
+  const stepLabels = [
     t("dialog.applicationStepBasics"),
     t("dialog.applicationStepMedia"),
     t("dialog.applicationStepSource"),
     t("dialog.applicationStepConfig"),
     t("dialog.applicationStepReview"),
   ];
+  const steps = stepLabels.map((step, index) => (
+    optionalStepIndexes?.includes(index) ? `${step}${optionalSuffix}` : step
+  ));
   return (
     <nav aria-label={t("dialog.applicationSteps")} className="application-wizard-progress" data-testid="application-wizard-progress">
       <ol>
         {steps.map((step, index) => (
           <li
             className={index === currentStep ? "active" : index < currentStep ? "complete" : index <= furthestStep ? "visited" : undefined}
-            key={step}
+            key={stepLabels[index]}
           >
             <button
-              aria-label={`${index + 1}. ${step}`}
+              aria-label={`${index + 1}. ${stepLabels[index]}`}
               aria-current={index === currentStep ? "step" : undefined}
               disabled={index > furthestStep}
               onClick={() => onStepChange(index as ApplicationWizardStep)}
@@ -1646,7 +1810,7 @@ function ApplicationWizardProgress({
               <span className="application-wizard-step-number">
                 {index < currentStep ? <Check aria-hidden="true" size={14} /> : index + 1}
               </span>
-              <span className="application-wizard-step-label">{step}</span>
+              <span className="application-wizard-step-label">{steps[index]}</span>
             </button>
           </li>
         ))}
@@ -2763,17 +2927,23 @@ function resourceText(
   return field === "label" ? resource : "";
 }
 
+function resolveActionLabel(
+  t: (key: WebserverMessageKey) => string,
+  resource: WebserverResourceKey,
+  action: WebserverResourceAction,
+  selectedItem?: Record<string, unknown>,
+): string {
+  const resolvedKey = action.resolveActionLabelKey?.({ selectedItem })
+    ?? (`action.${resource}.${action.id}` as WebserverMessageKey);
+  return t(resolvedKey);
+}
+
 function actionText(
   t: (key: WebserverMessageKey) => string,
   resource: WebserverResourceKey,
   action: WebserverResourceAction,
 ): string {
-  const key = `action.${resource}.${action.id}` as WebserverMessageKey;
-  try {
-    return t(key);
-  } catch {
-    return action.label;
-  }
+  return resolveActionLabel(t, resource, action);
 }
 
 function recordKey(item: Record<string, unknown>, index: number): string {
@@ -2799,6 +2969,14 @@ function recordLabel(item: Record<string, unknown>, index: number): string {
 
 function displayValue(value: unknown, column: string, resource: WebserverResourceKey, locale: WebserverLocale): ReactNode {
   if (value === null || value === undefined) return "-";
+  if (resource === "applications" && column === "hasSourceVersion") {
+    const configured = value === true;
+    return (
+      <span className={`status-badge source-config-${configured ? "ready" : "missing"}`}>
+        {applicationSourceStatus(configured, locale)}
+      </span>
+    );
+  }
   if (resource === "applications" && column === "status") {
     return <span className={`status-badge application-status-${String(value).toLowerCase()}`}>{applicationStatus(value, locale)}</span>;
   }
@@ -2856,6 +3034,7 @@ function fieldLabel(value: string, locale: WebserverLocale): string {
       applicationId: "Application",
       applicationName: "Application",
       applicationType: "Application type",
+      hasSourceVersion: "Source code",
       appConfigPath: "Application manifest path",
       artifactDriveUri: "Package",
       artifactHash: "Package hash",
@@ -2928,6 +3107,7 @@ function fieldLabel(value: string, locale: WebserverLocale): string {
       applicationId: "应用",
       applicationName: "应用",
       applicationType: "应用类型",
+      hasSourceVersion: "源码",
       appConfigPath: "应用清单路径",
       artifactDriveUri: "发布包",
       artifactHash: "发布包哈希",
@@ -3150,7 +3330,7 @@ function resourceColumns(
 ): string[] {
   const available = Array.from(new Set(items.flatMap((item) => Object.keys(item))));
   const preferred: Partial<Record<WebserverResourceKey, readonly string[]>> = {
-    applications: ["id", "name", "applicationType", "siteType", "status", "updatedAt", "createdAt"],
+    applications: ["id", "name", "applicationType", "siteType", "hasSourceVersion", "status", "updatedAt", "createdAt"],
     deployments: ["versionTag", "environment", "status", "rollbackFromDeploymentId", "artifactHash", "createdAt", "startedAt", "completedAt", "durationMs"],
     "source-versions": ["versionTag", "sourceType", "retained", "configSnapshot", "artifactSize", "artifactHash", "status", "createdAt"],
     "application-source-versions": ["versionTag", "sourceType", "retained", "configSnapshot", "artifactSize", "artifactHash", "status", "createdAt"],
@@ -3172,6 +3352,14 @@ function applicationStatus(value: unknown, locale: WebserverLocale): string {
     "zh-CN": { "0": "草稿", "1": "运行中", "2": "已停用" },
   };
   return statuses[locale][String(value)] ?? String(value);
+}
+
+function applicationSourceStatus(configured: boolean, locale: WebserverLocale): string {
+  const labels: Record<WebserverLocale, { configured: string; missing: string }> = {
+    "en-US": { configured: "Source added", missing: "No source yet" },
+    "zh-CN": { configured: "已配置源码", missing: "未配置源码" },
+  };
+  return configured ? labels[locale].configured : labels[locale].missing;
 }
 
 function serverStatus(value: unknown, locale: WebserverLocale): string {

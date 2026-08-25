@@ -1,9 +1,12 @@
 import type { WebserverAdminSdkClient } from "@sdkwork/webserver-pc-admin-core";
 import {
+  applicationHasSourceVersion,
   normalizeWebserverPage,
   normalizeApplicationGitRepositoryUrl,
   applicationStoreListing,
   resolveApplicationStoreListing,
+  shouldCreateApplicationListing,
+  shouldCreateApplicationSource,
   WebserverActionError,
   type ApplicationMediaStorage,
   type ApplicationSourceStorage,
@@ -30,9 +33,10 @@ export function createWebserverAdminApplicationRegistry(
   mediaStorage: ApplicationMediaStorage,
 ): WebserverResourceRegistry {
   return {
-    applications: source(
-      (query) => client.application.list({ page: query.page, pageSize: query.pageSize, keyword: query.search }),
-      [
+    applications: source(async (query) => enrichApplicationsWithSourceVersionFlag(
+      client,
+      await client.application.list({ page: query.page, pageSize: query.pageSize, keyword: query.search }),
+    ), [
         action(
           "create",
           "Create application",
@@ -59,6 +63,7 @@ export function createWebserverAdminApplicationRegistry(
           },
           (context) => createApplicationWithInitialVersion(client, sourceStorage, mediaStorage, context),
           {
+            applicationMediaOptional: true,
             applicationSubmission: "create",
             fieldOptions: {
               applicationType: ["WEB", "API"],
@@ -66,8 +71,9 @@ export function createWebserverAdminApplicationRegistry(
               environment: ["production", "staging", "test", "development"],
             },
             permission: "web.sites.write",
-            requiredFields: ["name", "versionTag"],
+            requiredFields: ["name"],
             sourceInput: "archive-directory-or-git",
+            sourceInputOptional: true,
           },
         ),
         action(
@@ -106,6 +112,11 @@ export function createWebserverAdminApplicationRegistry(
             },
             permission: "web.sites.write",
             requiredFields: ["versionTag"],
+            resolveActionLabelKey: ({ selectedItem }) => (
+              applicationHasSourceVersion(selectedItem)
+                ? "action.applications.update-source"
+                : "action.applications.add-source"
+            ),
             requiresSelection: true,
             sourceInput: "archive-directory-or-git",
           },
@@ -121,6 +132,7 @@ export function createWebserverAdminApplicationRegistry(
           },
           (context) => deployApplication(client, context),
           {
+            availableWhen: ({ selectedItem }) => applicationHasSourceVersion(selectedItem),
             requiresConfirmation: true,
             requiresSelection: true,
             fieldOptions: {
@@ -330,36 +342,42 @@ async function createApplicationWithInitialVersion(
     runtimeConfig: deploymentConfiguration(context.body),
   };
   const idempotency = idempotencyParams(context);
-  const prepared = context.sourceInputMode === "git"
-    ? undefined
-    : await prepareSource(sourceStorage, context, 0, 14);
+  const createSource = shouldCreateApplicationSource(context);
+  const prepared = createSource && context.sourceInputMode !== "git"
+    ? await prepareSource(sourceStorage, context, 0, 14)
+    : undefined;
   const application = await client.application.create(applicationRequest, idempotency);
   const applicationId = application.id?.trim();
   if (!applicationId) throw new Error("The created application did not return an ID");
   context.onProgress?.(16);
-  let storeListing: ApplicationStoreListingInput;
-  try {
-    storeListing = await resolveApplicationStoreListing({
-      applicationId,
-      applicationName: applicationRequest.name,
-      body: context.body,
-      mediaStorage,
-      onProgress: (progress) => context.onProgress?.(scaleProgress(progress, 16, 46)),
-      signal: context.signal,
-      submission: requiredApplicationSubmission(context),
-    });
-    await client.application.update(
-      applicationId,
-      { storeListing: sdkStoreListing(storeListing) },
-      idempotency,
-    );
-    context.onProgress?.(48);
-  } catch (error) {
-    throw new WebserverActionError(
-      "application-draft-media-failed",
-      { applicationId },
-      { cause: error },
-    );
+  if (shouldCreateApplicationListing(context)) {
+    try {
+      const storeListing = await resolveApplicationStoreListing({
+        applicationId,
+        applicationName: applicationRequest.name,
+        body: context.body,
+        mediaStorage,
+        onProgress: (progress) => context.onProgress?.(scaleProgress(progress, 16, 46)),
+        signal: context.signal,
+        submission: requiredApplicationSubmission(context),
+      });
+      await client.application.update(
+        applicationId,
+        { storeListing: sdkStoreListing(storeListing) },
+        idempotency,
+      );
+      context.onProgress?.(48);
+    } catch (error) {
+      throw new WebserverActionError(
+        "application-draft-media-failed",
+        { applicationId },
+        { cause: error },
+      );
+    }
+  }
+  if (!createSource) {
+    context.onProgress?.(100);
+    return { applicationId };
   }
   let sourceVersionId: string;
   if (prepared) {
@@ -414,6 +432,25 @@ async function createApplicationWithInitialVersion(
       { cause: error },
     );
   }
+}
+
+async function enrichApplicationsWithSourceVersionFlag(
+  client: WebserverAdminSdkClient,
+  page: Awaited<ReturnType<WebserverAdminSdkClient["application"]["list"]>>,
+) {
+  const items = await Promise.all(page.items.map(async (item) => {
+    const applicationId = item.id?.trim();
+    if (!applicationId) {
+      return { ...item, hasSourceVersion: false };
+    }
+    try {
+      const versions = await client.applicationSourceVersion.applications.sourceVersions.list(applicationId, { pageSize: 1 });
+      return { ...item, hasSourceVersion: versions.items.length > 0 };
+    } catch {
+      return { ...item, hasSourceVersion: false };
+    }
+  }));
+  return { ...page, items };
 }
 
 async function updateApplicationListing(

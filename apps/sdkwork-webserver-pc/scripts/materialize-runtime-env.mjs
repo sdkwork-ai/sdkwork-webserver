@@ -7,8 +7,11 @@ import { fileURLToPath } from 'node:url';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEPLOYMENT_CONFIG_PATH = path.join(APP_ROOT, 'etc', 'sdkwork.deployment.config.json');
-const SUPPORTED_ENVIRONMENTS = new Set(['development', 'test', 'staging', 'production']);
-const SUPPORTED_PROFILES = new Set(['standalone', 'cloud']);
+const SUPPORTED_ENVIRONMENTS = ['development', 'test', 'staging', 'production'];
+const SUPPORTED_PROFILES = ['standalone', 'cloud'];
+const PROFILE_MATRIX = SUPPORTED_PROFILES.flatMap((profile) =>
+  SUPPORTED_ENVIRONMENTS.map((environment) => `${profile}.${environment}`),
+);
 const SDK_BASE_URL_KEYS = [
   'appApiBaseUrl',
   'backendApiBaseUrl',
@@ -23,6 +26,36 @@ function option(argv, name, fallback) {
   return index >= 0 ? argv[index + 1] : fallback;
 }
 
+function normalizeOrigin(url) {
+  return new URL(url).origin;
+}
+
+function loadParentDeploymentConfig() {
+  const deployment = JSON.parse(readFileSync(DEPLOYMENT_CONFIG_PATH, 'utf8'));
+  const parentRelative = deployment.parentDeploymentConfig;
+  if (typeof parentRelative !== 'string' || parentRelative.length === 0) {
+    throw new Error('deployment config does not declare parentDeploymentConfig');
+  }
+  const parentPath = path.resolve(path.dirname(DEPLOYMENT_CONFIG_PATH), parentRelative);
+  if (!existsSync(parentPath)) {
+    throw new Error(`parent deployment config does not exist: ${parentPath}`);
+  }
+  return {
+    path: parentPath,
+    value: JSON.parse(readFileSync(parentPath, 'utf8')),
+  };
+}
+
+function resolveCloudApiBaseUrl(parent, environment) {
+  const value = parent.value.environments?.[environment]?.cloudApiBaseUrl;
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(
+      `parent deployment config must declare environments.${environment}.cloudApiBaseUrl`,
+    );
+  }
+  return normalizeOrigin(value);
+}
+
 export function resolveSource(deploymentProfile, environment) {
   const profileId = `${deploymentProfile}.${environment}`;
   const deployment = JSON.parse(readFileSync(DEPLOYMENT_CONFIG_PATH, 'utf8'));
@@ -35,11 +68,30 @@ export function resolveSource(deploymentProfile, environment) {
     throw new Error(`browser runtime source does not exist for ${profileId}: ${sourcePath}`);
   }
   const value = JSON.parse(readFileSync(source, 'utf8'));
-  validateRuntimeSource(value, { deploymentProfile, environment, sourcePath });
+  validateRuntimeSource(value, {
+    cloudApiBaseUrl: resolveCloudApiBaseUrl(loadParentDeploymentConfig(), environment),
+    deploymentProfile,
+    environment,
+    sourcePath,
+  });
   return { path: source, value };
 }
 
-export function validateRuntimeSource(value, { deploymentProfile, environment, sourcePath = '<runtime-source>' }) {
+export function assertFullProfileMatrix() {
+  const deployment = JSON.parse(readFileSync(DEPLOYMENT_CONFIG_PATH, 'utf8'));
+  const profiles = deployment.profiles ?? {};
+  const missing = PROFILE_MATRIX.filter((profileId) => typeof profiles[profileId]?.source !== 'string');
+  if (missing.length > 0) {
+    throw new Error(`deployment config must declare browser sources for all ${PROFILE_MATRIX.length} profiles; missing: ${missing.join(', ')}`);
+  }
+}
+
+export function validateRuntimeSource(value, {
+  cloudApiBaseUrl,
+  deploymentProfile,
+  environment,
+  sourcePath = '<runtime-source>',
+}) {
   const profileId = `${deploymentProfile}.${environment}`;
   if (value.deploymentProfile !== deploymentProfile || value.environment !== environment) {
     throw new Error(`browser runtime source identity does not match ${profileId}: ${sourcePath}`);
@@ -63,7 +115,15 @@ export function validateRuntimeSource(value, { deploymentProfile, environment, s
     if (value.browserOriginMode !== 'cross-origin') {
       throw new Error(`${profileId}.browserOriginMode must equal cross-origin`);
     }
-    for (const key of SDK_BASE_URL_KEYS) validateAbsoluteHttpUrl(value[key], `${profileId}.${key}`);
+    for (const key of SDK_BASE_URL_KEYS) {
+      validateAbsoluteHttpUrl(value[key], `${profileId}.${key}`);
+      const origin = normalizeOrigin(value[key]);
+      if (origin !== cloudApiBaseUrl) {
+        throw new Error(
+          `${profileId}.${key} must equal the unified cloud API edge ${cloudApiBaseUrl} (ENVIRONMENT_SPEC §5.1.0.1), not ${origin}`,
+        );
+      }
+    }
   }
   for (const key of NAVIGATION_URL_KEYS) validateAbsoluteHttpUrl(value[key], `${profileId}.${key}`, environment);
 }
@@ -91,13 +151,14 @@ function main() {
   const deploymentProfile = option(argv, '--deployment-profile', 'standalone');
   const environment = option(argv, '--environment', 'development');
   const check = argv.includes('--check');
-  if (!SUPPORTED_PROFILES.has(deploymentProfile)) {
+  if (!SUPPORTED_PROFILES.includes(deploymentProfile)) {
     throw new Error(`unsupported deployment profile: ${deploymentProfile}`);
   }
-  if (!SUPPORTED_ENVIRONMENTS.has(environment)) {
+  if (!SUPPORTED_ENVIRONMENTS.includes(environment)) {
     throw new Error(`unsupported environment: ${environment}`);
   }
 
+  assertFullProfileMatrix();
   const source = resolveSource(deploymentProfile, environment);
   const deployment = JSON.parse(readFileSync(DEPLOYMENT_CONFIG_PATH, 'utf8'));
   const outputPath = deployment.materialization?.output;

@@ -67,7 +67,7 @@ export default defineConfig(({ command, mode }) => {
       strictPort: true,
     } : undefined,
     build: {
-      outDir: resolveBrowserDistOutDir(runtimeProfile.environment),
+      outDir: resolveBrowserDistOutDir(runtimeProfile.environment, runtimeProfile.deploymentProfile),
       emptyOutDir: true,
       sourcemap: true,
       target: "es2022",

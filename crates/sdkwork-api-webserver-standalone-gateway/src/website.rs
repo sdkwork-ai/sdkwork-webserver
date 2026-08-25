@@ -414,6 +414,7 @@ where
         .await?;
     let poll_interval = runtime_set_poll_interval()?;
     let (stop_tx, stop_rx) = watch::channel(false);
+    let fallback_providers = Arc::clone(&providers);
     let watcher = match configured_source {
         ConfiguredRuntimeSetSource::File { path } => {
             let watcher_context = RuntimeSetWatchContext {
@@ -445,12 +446,19 @@ where
         }
     };
 
+    let deploy_fallback = build_deploy_fallback(
+        host_config.app().config(),
+        fallback_providers,
+        initial.runtime_set().node_uuid(),
+        environment,
+    );
     let data_plane = async move {
         match tls_runtime {
             Some(tls_runtime) => {
                 run_website_data_plane_with_tls_operations_until(
                     host_config.into_app(),
                     executor,
+                    deploy_fallback,
                     operations,
                     tls_runtime,
                     shutdown,
@@ -461,6 +469,7 @@ where
                 run_website_data_plane_with_operations_until(
                     host_config.into_app(),
                     executor,
+                    deploy_fallback,
                     operations,
                     shutdown,
                 )
@@ -2561,4 +2570,56 @@ mod tests {
             Value::String(website_runtime_set_snapshot_sha256(&snapshot).unwrap());
         serde_json::to_vec(&value).unwrap()
     }
+}
+
+/// Build the app publishing domain fallback resolver when the host config
+/// declares an enabled `appDomainFallback` section and the Deploy lookup is
+/// available. The embedded lookup resolves through the shared Deploy
+/// database (same process as the deploy control plane in standalone
+/// deployments); without the management feature or the shared pool the
+/// fallback stays disabled and unmatched hosts keep the regular 404.
+#[cfg(feature = "management")]
+fn build_deploy_fallback(
+    app_config: &sdkwork_webserver_core::config::WebServerAppConfig,
+    providers: std::sync::Arc<sdkwork_webserver_delivery_runtime::WebsiteProviderRegistry>,
+    node_uuid: &str,
+    environment: WebsiteRuntimeEnvironment,
+) -> Option<std::sync::Arc<crate::deploy_fallback::DeployFallbackResolver>> {
+    use sdkwork_database_sqlx::process_shared_database_pool;
+
+    let config = app_config.app_domain_fallback.as_ref()?;
+    if !config.enabled {
+        return None;
+    }
+    let Some(pool) = process_shared_database_pool() else {
+        tracing::warn!(
+            "app-domain fallback is enabled but the shared database pool is unavailable; unmatched hosts keep 404"
+        );
+        return None;
+    };
+    // The gateway only ever installs the PostgreSQL pool; the enum is
+    // single-variant in this build (bootstrap installs postgres pools only).
+    let sdkwork_database_sqlx::DatabasePool::Postgres(pool, _) = pool;
+    let lookup = std::sync::Arc::new(crate::deploy_fallback::EmbeddedDeployServerLookup::new(
+        sdkwork_intelligence_deploy_repository_sqlx::DeployRepository::new_lookup(pool),
+    ));
+    Some(std::sync::Arc::new(crate::deploy_fallback::DeployFallbackResolver::new(
+        std::sync::Arc::new(config.clone()),
+        lookup,
+        providers,
+        node_uuid,
+        environment,
+    )))
+}
+
+/// Non-management builds never construct the embedded Deploy lookup; the
+/// fallback is disabled and unmatched hosts keep the regular 404.
+#[cfg(not(feature = "management"))]
+fn build_deploy_fallback(
+    _app_config: &sdkwork_webserver_core::config::WebServerAppConfig,
+    _providers: std::sync::Arc<sdkwork_webserver_delivery_runtime::WebsiteProviderRegistry>,
+    _node_uuid: &str,
+    _environment: WebsiteRuntimeEnvironment,
+) -> Option<std::sync::Arc<crate::deploy_fallback::DeployFallbackResolver>> {
+    None
 }

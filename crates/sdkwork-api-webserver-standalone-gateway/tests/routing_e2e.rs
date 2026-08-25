@@ -318,7 +318,8 @@ async fn alias_substitutes_the_matched_prefix_before_static_serving() {
             "type": "static",
             "root": "assets",
             "indexFiles": ["index.html"],
-            "followSymlinks": false
+            "followSymlinks": false,
+            "stripPrefix": true
         }],
         "virtualHosts": [{
             "id": "host",

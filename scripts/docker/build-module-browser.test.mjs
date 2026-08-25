@@ -35,7 +35,7 @@ test('buildModuleBrowser dry-run plans both surfaces for sdkwork-im dev', () => 
   });
   assert.equal(result.module, 'sdkwork-im');
   assert.equal(result.plans.length, 2);
-  assert.ok(result.plans.every((plan) => plan.outDir === 'dist/dev'));
+  assert.ok(result.plans.every((plan) => plan.outDir === 'dist/standalone/dev'));
 });
 
 test('resolveModuleBrowserBuildPlan defaults to host mode', () => {

@@ -83,6 +83,32 @@ load_host_ports() {
   fi
 }
 
+load_module_api_gateway_settings() {
+  env_file=$1
+  SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=docker
+  SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK=
+  if [ -f "$env_file" ]; then
+    # shellcheck disable=SC1090
+    set -a
+    eval "$(grep -E '^SDKWORK_MODULE_API_GATEWAY_(DEPLOYMENT|ATTACH_NETWORK|HOST|PORT)=' "$env_file" || true)"
+    set +a
+  fi
+  SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT="${SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT:-docker}"
+}
+
+compose_platform_gateway_args() {
+  deployment="${SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT:-docker}"
+  attach_network="${SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK:-}"
+  # Prefer attaching to an already-running independent gateway compose network.
+  if [ -n "$attach_network" ]; then
+    printf '%s\n' "-f" "$docker_root/docker-compose.platform-api-gateway-attach.yml"
+    return 0
+  fi
+  if [ "$deployment" = "docker" ]; then
+    printf '%s\n' "-f" "$docker_root/docker-compose.platform-api-gateway.yml"
+  fi
+}
+
 env_file_for() {
   case "$1" in
     development) echo "$docker_root/env/development.env" ;;
@@ -108,6 +134,8 @@ deploy_one() {
   compose_file=$(compose_file_for "$env_name")
   env_file=$(ensure_env_file "$env_name")
   load_host_ports "$env_file"
+  load_module_api_gateway_settings "$env_file"
+  gateway_deployment="${SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT:-docker}"
   project="sdkwork-webserver-$env_name"
   port=$(port_for "$env_name")
 
@@ -120,6 +148,14 @@ deploy_one() {
     -p "$project"
     -f "$compose_file"
   )
+  while IFS= read -r extra_arg; do
+    [ -n "$extra_arg" ] || continue
+    compose_args+=("$extra_arg")
+  done < <(compose_platform_gateway_args)
+
+  if [ -n "${SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK:-}" ]; then
+    echo "module-api-gateway=docker attach-network=${SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK} host=${SDKWORK_MODULE_API_GATEWAY_HOST:-gateway}"
+  fi
 
   if [ "$down" = true ]; then
     docker compose "${compose_args[@]}" down --remove-orphans
@@ -132,7 +168,7 @@ deploy_one() {
   fi
 
   docker compose "${compose_args[@]}" up -d --remove-orphans
-  echo "deployed $env_name ($project) -> http://127.0.0.1:${port}/healthz"
+  echo "deployed $env_name ($project) -> http://127.0.0.1:${port}/healthz (module-api-gateway=${gateway_deployment})"
 }
 
 case "$target" in

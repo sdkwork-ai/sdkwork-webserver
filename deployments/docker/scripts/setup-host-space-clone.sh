@@ -58,33 +58,41 @@ sync_submodules() {
 main() {
   if link_local_checkout; then
     log "using local workspace checkout at ${CHECKOUT}"
-    exit 0
-  fi
-
-  require_git
-  configure_submodule_https
-  install -d -m 0755 "${SPACE_ROOT}"
-  if [ ! -d "${CHECKOUT}/.git" ]; then
-    if [ -e "${CHECKOUT}" ]; then
-      log "removing existing ${CHECKOUT} (not a git checkout)"
-      rm -rf "${CHECKOUT}"
-    fi
-    log "cloning ${CLONE_URL} -> ${CHECKOUT}"
-    if [ "${RECURSE_SUBMODULES}" = "true" ]; then
-      git clone --recurse-submodules "${CLONE_URL}" "${CHECKOUT}"
-    else
-      git clone "${CLONE_URL}" "${CHECKOUT}"
-    fi
   else
-    log "updating ${CHECKOUT}"
-    git -C "${CHECKOUT}" fetch origin
-    git -C "${CHECKOUT}" pull --ff-only
-    sync_submodules
+    require_git
+    configure_submodule_https
+    install -d -m 0755 "${SPACE_ROOT}"
+    if [ ! -d "${CHECKOUT}/.git" ]; then
+      if [ -e "${CHECKOUT}" ]; then
+        log "removing existing ${CHECKOUT} (not a git checkout)"
+        rm -rf "${CHECKOUT}"
+      fi
+      log "cloning ${CLONE_URL} -> ${CHECKOUT}"
+      if [ "${RECURSE_SUBMODULES}" = "true" ]; then
+        git clone --recurse-submodules "${CLONE_URL}" "${CHECKOUT}"
+      else
+        git clone "${CLONE_URL}" "${CHECKOUT}"
+      fi
+    else
+      log "updating ${CHECKOUT}"
+      git -C "${CHECKOUT}" fetch origin
+      git -C "${CHECKOUT}" pull --ff-only
+      sync_submodules
+    fi
   fi
   log "space checkout ready at ${CHECKOUT}"
-  if [ "${RECURSE_SUBMODULES}" = "true" ]; then
+  if [ "${RECURSE_SUBMODULES}" = "true" ] && [ -d "${CHECKOUT}/.git" ]; then
     submodule_count="$(git -C "${CHECKOUT}" submodule status --recursive 2>/dev/null | wc -l | tr -d ' ')"
     log "submodules initialized: ${submodule_count}"
+  fi
+  script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+  # Prefer copying browser dist trees from the Windows/WSL workspace, then
+  # materialize any missing dist/{standalone,cloud}/{dev,test,staging,prod} aliases so Docker
+  # Adaptive Web roots resolve under /opt/deploy/sdkwork-space (SPEC §17.1).
+  if [ -f "${script_dir}/sync-workspace-dist-to-space.sh" ]; then
+    bash "${script_dir}/sync-workspace-dist-to-space.sh" "${CHECKOUT}"
+  elif [ -f "${script_dir}/materialize-space-dist-aliases.sh" ]; then
+    bash "${script_dir}/materialize-space-dist-aliases.sh" "${CHECKOUT}"
   fi
   log "bind mount ${SPACE_ROOT}:/opt/deploy in docker compose to share modules across clusters"
 }

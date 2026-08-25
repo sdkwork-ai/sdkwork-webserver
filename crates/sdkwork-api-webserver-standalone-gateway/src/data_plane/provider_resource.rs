@@ -49,7 +49,9 @@ pub(crate) fn translate_provider_path(
     request_path: &str,
     resource_subpath: Option<&str>,
 ) -> String {
-    let relative = relative_request_path(route, request_path);
+    // Drive resources keep alias-style prefix stripping (the matched route
+    // prefix is removed before the provider subpath is prepended).
+    let relative = relative_request_path(route, true, request_path);
     match resource_subpath {
         None if relative.is_empty() => "/".to_owned(),
         None => relative.to_owned(),

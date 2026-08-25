@@ -467,6 +467,17 @@ pub struct WebServerAppConfig {
     /// Shared HTTP response cache for proxied surfaces.
     #[serde(default)]
     pub proxy_cache: ProxyCacheConfig,
+    /// App publishing domain fallback: when no local virtual host or website
+    /// runtime binding matches a request host, resolve the server through the
+    /// sdkwork-deployments control plane (default app domains
+    /// `<slug>.app[-<env>].<suffix>` and user custom domains).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_domain_fallback: Option<AppDomainFallbackConfig>,
+    /// SaaS traffic usage metering: per-domain / per-server-IP traffic facts
+    /// attributed to the serving tenant and app, ingested into the
+    /// sdkwork-deployments billing tables.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage_metering: Option<UsageMeteringConfig>,
     #[serde(default)]
     pub observability: ObservabilityConfig,
     #[serde(default)]
@@ -942,11 +953,20 @@ pub enum ResourceConfig {
     Static {
         id: String,
         root: String,
+        /// Adaptive Web H5 document root (`location @h5`). When absent the
+        /// PC `root` is used for every client.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        h5_root: Option<String>,
         #[serde(default = "default_index_files")]
         index_files: Vec<String>,
         spa_fallback: Option<String>,
         #[serde(default)]
         follow_symlinks: bool,
+        /// nginx `alias` semantics: the route's matched path prefix is
+        /// replaced by `root` (the alias value) before opening the file.
+        /// `false` (nginx `root`) appends the full request path to `root`.
+        #[serde(default)]
+        strip_prefix: bool,
     },
     Proxy {
         id: String,
@@ -954,6 +974,13 @@ pub enum ResourceConfig {
         upstream_ref: String,
         #[serde(default)]
         strip_prefix: bool,
+        /// nginx `proxy_pass` URI part (`http://backend/api/` → `/api/`).
+        /// When present the route's matched path prefix is replaced by this
+        /// URI before forwarding (nginx replacement semantics); a missing
+        /// value forwards the full request URI like `proxy_pass` without a
+        /// URI part.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        target_uri: Option<String>,
         /// nginx `proxy_set_header` entries as `"Name value"` strings.
         /// Supported value tokens: literals plus `$host`, `$scheme`,
         /// `$remote_addr`, `$proxy_add_x_forwarded_for`, `$http_upgrade`,
@@ -1659,6 +1686,189 @@ fn default_proxy_cache_ttl_seconds() -> u64 {
 
 fn default_proxy_cache_stale_ttl_seconds() -> u64 {
     60
+}
+
+/// App publishing domain fallback (`appDomainFallback`). When no local
+/// virtual host or website runtime binding matches a request, the data plane
+/// resolves the host through the sdkwork-deployments control plane and
+/// serves the site's latest compiled runtime descriptor. Default app domains
+/// (`<slug>.app[-<env>].<suffix>` over the configured suffixes) and user
+/// custom domains both resolve there.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AppDomainFallbackConfig {
+    #[serde(default = "default_app_domain_fallback_enabled")]
+    pub enabled: bool,
+    /// Platform app-domain suffixes (same 14-domain catalog as
+    /// sdkwork-deployments: sdkwork.com, sdkwork.cn, birdcoder.com,
+    /// birdcoder.cn, dtupay.com, dtupay.cn, skubc.com, skubc.cn,
+    /// zowalk.com, zowalk.cn, offer86.com, offer86.cn, 86offer.com,
+    /// 86offer.cn). Requests for `<slug>.app[-<env>].<suffix>` are
+    /// classified as default app domains; every other hostname is treated
+    /// as a user custom domain.
+    #[serde(default = "default_app_domain_suffixes")]
+    pub suffixes: Vec<String>,
+    /// Lookup channel: `embedded` resolves through the shared Deploy
+    /// database (standalone deployment); `http` calls the control plane
+    /// API (cloud deployment).
+    #[serde(default)]
+    pub lookup: AppDomainFallbackLookup,
+    /// Upper bound for a control-plane resolution call.
+    #[serde(default = "default_app_domain_timeout_ms")]
+    pub timeout_ms: u64,
+    /// How long a resolved server stays cached before re-lookup.
+    #[serde(default = "default_app_domain_cache_ttl_ms")]
+    pub cache_ttl_ms: u64,
+    /// How long a resolution miss stays cached (negative cache).
+    #[serde(default = "default_app_domain_negative_cache_ttl_ms")]
+    pub negative_cache_ttl_ms: u64,
+}
+
+/// Fallback lookup channel configuration.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "lowercase")]
+pub enum AppDomainFallbackLookup {
+    /// Resolve through the shared Deploy database (`deploy_site_binding` /
+    /// `deploy_site_revision`). Requires the process database connection.
+    Embedded,
+    /// Resolve through the Deploy control-plane API (cloud deployment).
+    Http {
+        /// Absolute control-plane resolve endpoint base URL.
+        endpoint: String,
+        /// Optional file whose trimmed content is the API access token.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        auth_token_file: Option<String>,
+    },
+}
+
+impl Default for AppDomainFallbackLookup {
+    fn default() -> Self {
+        Self::Embedded
+    }
+}
+
+impl Default for AppDomainFallbackConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_app_domain_fallback_enabled(),
+            suffixes: default_app_domain_suffixes(),
+            lookup: AppDomainFallbackLookup::Embedded,
+            timeout_ms: default_app_domain_timeout_ms(),
+            cache_ttl_ms: default_app_domain_cache_ttl_ms(),
+            negative_cache_ttl_ms: default_app_domain_negative_cache_ttl_ms(),
+        }
+    }
+}
+
+fn default_app_domain_fallback_enabled() -> bool {
+    true
+}
+
+/// Default platform app-domain suffixes; the Deploy control plane
+/// provisions these per app and the Web Server resolves them on miss.
+pub fn default_app_domain_suffixes() -> Vec<String> {
+    [
+        "sdkwork.com",
+        "sdkwork.cn",
+        "birdcoder.com",
+        "birdcoder.cn",
+        "dtupay.com",
+        "dtupay.cn",
+        "skubc.com",
+        "skubc.cn",
+        "zowalk.com",
+        "zowalk.cn",
+        "offer86.com",
+        "offer86.cn",
+        "86offer.com",
+        "86offer.cn",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
+}
+
+fn default_app_domain_timeout_ms() -> u64 {
+    2_000
+}
+
+fn default_app_domain_cache_ttl_ms() -> u64 {
+    60_000
+}
+
+fn default_app_domain_negative_cache_ttl_ms() -> u64 {
+    5_000
+}
+
+/// SaaS traffic usage metering (`usageMetering`). Every served request is
+/// counted per domain (hostname) and per server IP with tenant/app
+/// attribution when known, aggregated in memory windows and ingested into
+/// the sdkwork-deployments billing tables (`deploy_usage_event` +
+/// daily rollups) through the configured channel.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UsageMeteringConfig {
+    #[serde(default = "default_usage_metering_enabled")]
+    pub enabled: bool,
+    /// Aggregation window in seconds (events are aggregated per window and
+    /// deduplicated on the window key).
+    #[serde(default = "default_usage_metering_window_seconds")]
+    pub window_seconds: u64,
+    /// How often aggregated windows are flushed to the ingest channel.
+    #[serde(default = "default_usage_metering_flush_interval_ms")]
+    pub flush_interval_ms: u64,
+    /// Ingest channel: `embedded` writes through the shared Deploy database
+    /// (standalone deployment); `http` posts to the Deploy control-plane
+    /// ingest endpoint (cloud deployment).
+    #[serde(default)]
+    pub channel: UsageMeteringChannel,
+}
+
+/// Usage ingest channel configuration.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "lowercase")]
+pub enum UsageMeteringChannel {
+    /// Write through the shared Deploy database (`deploy_usage_event`).
+    /// Requires the process database connection.
+    Embedded,
+    /// POST batches to the Deploy control-plane ingest endpoint
+    /// (`/backend/v3/api/usage/ingest`).
+    Http {
+        /// Absolute control-plane ingest endpoint URL.
+        endpoint: String,
+        /// Optional file whose trimmed content is the API access token.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        auth_token_file: Option<String>,
+    },
+}
+
+impl Default for UsageMeteringChannel {
+    fn default() -> Self {
+        Self::Embedded
+    }
+}
+
+impl Default for UsageMeteringConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_usage_metering_enabled(),
+            window_seconds: default_usage_metering_window_seconds(),
+            flush_interval_ms: default_usage_metering_flush_interval_ms(),
+            channel: UsageMeteringChannel::default(),
+        }
+    }
+}
+
+fn default_usage_metering_enabled() -> bool {
+    true
+}
+
+fn default_usage_metering_window_seconds() -> u64 {
+    60
+}
+
+fn default_usage_metering_flush_interval_ms() -> u64 {
+    30_000
 }
 
 impl Default for ObservabilityConfig {

@@ -32,12 +32,23 @@ COPY entrypoint-standalone.sh /usr/local/bin/sdkwork-webserver-entrypoint
 RUN chmod 0755 /usr/local/bin/sdkwork-webserver-entrypoint \
     && install -d -o sdkwork -g sdkwork -m 0750 \
         /etc/sdkwork/webserver/secrets \
+        /etc/sdkwork/api-gateway \
         /etc/sdkwork/certs \
+        /run/secrets/sdkwork/api-gateway \
         /var/lib/sdkwork/webserver/acme-webroot \
         /var/lib/sdkwork/webserver/acme-accounts \
         /var/lib/sdkwork/webserver/tls-materials \
+        /var/lib/sdkwork/api-gateway \
         /opt/deploy \
     && chown sdkwork:sdkwork /opt/deploy
+# Bundled module API gateway (SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=bundled):
+# staged by scripts/docker/build-standalone-image.mjs from sdkwork-api-cloud-gateway
+# dist/container-image-build. Omit with --skip-platform-gateway when using docker mode.
+COPY --chown=10001:10001 opt/sdkwork/api-gateway /opt/sdkwork/api-gateway
+RUN if [ -f /app/bin/sdkwork-api-cloud-gateway ]; then chmod 0755 /app/bin/sdkwork-api-cloud-gateway; fi \
+    && if [ -d /opt/sdkwork/api-gateway/bin ]; then chmod 0755 /opt/sdkwork/api-gateway/bin/* 2>/dev/null || true; fi \
+    && if [ -f /opt/sdkwork/api-gateway/container/knowledgebase-rpc-entrypoint ]; then \
+         chmod 0755 /opt/sdkwork/api-gateway/container/knowledgebase-rpc-entrypoint; fi
 
 ENV SDKWORK_WEBSERVER_APP_ROOT=/app \
     SDKWORK_WEBSERVER_SERVER_APP_ROOT=/app \
@@ -54,9 +65,13 @@ ENV SDKWORK_WEBSERVER_APP_ROOT=/app \
     SDKWORK_WEBSERVER_TABLET_SURFACE=pc \
     SDKWORK_WEBSERVER_RUNTIME_TARGET=container \
     SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE=standalone \
-    # Module-imports data plane: declared module listener ports (80/443)
-    # are remapped to the container's unprivileged binds.
-    SDKWORK_WEBSERVER_IMPORT_LISTENER_PORTS=80=8080,443=8430 \
+    # Module /api/ proxy: docker sibling sdkwork-api-cloud-gateway (default).
+    # Set SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=bundled for an in-container
+    # process, or external with SDKWORK_MODULE_API_GATEWAY_HOST.
+    # Module-imports listen on declared 80/443 (do not set
+    # SDKWORK_WEBSERVER_IMPORT_LISTENER_PORTS unless remapping is required).
+    SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=docker \
+    SDKWORK_MODULE_API_GATEWAY_PORT=3900 \
     # Language toolchain environment
     PATH="/usr/local/bin:/usr/bin:/bin:/root/.local/share/pnpm:${PATH}" \
     PNPM_HOME="/root/.local/share/pnpm" \
@@ -70,7 +85,7 @@ ENV SDKWORK_WEBSERVER_APP_ROOT=/app \
     SDKWORK_DEPLOY_SANDBOX_KEY=deploy.local.opt_deploy \
     SDKWORK_DEPLOY_SANDBOX_ROOT=/opt/deploy
 
-EXPOSE 3800 8888 8080
+EXPOSE 80 443 3800
 
 ENTRYPOINT ["/usr/local/bin/sdkwork-webserver-entrypoint"]
 CMD ["serve-management"]

@@ -15,6 +15,7 @@ use super::{
 pub async fn serve_static(
     root: &Path,
     route: &RouteConfig,
+    strip_prefix: bool,
     spa_fallback: Option<&str>,
     normalized_request_path: &str,
     request: Request<Body>,
@@ -23,7 +24,7 @@ pub async fn serve_static(
         return text_response(StatusCode::METHOD_NOT_ALLOWED, "method is not allowed\n");
     }
 
-    let relative = relative_request_path(route, normalized_request_path);
+    let relative = relative_request_path(route, strip_prefix, normalized_request_path);
     let target = match open_static_path(
         root,
         relative,
@@ -55,7 +56,17 @@ pub async fn serve_static(
     }
 }
 
-pub(crate) fn relative_request_path<'a>(route: &RouteConfig, request_path: &'a str) -> &'a str {
+/// nginx path semantics for a static resource: `root` appends the full
+/// request path (`strip_prefix = false`), `alias` replaces the route's
+/// matched prefix with the alias value (`strip_prefix = true`).
+pub(crate) fn relative_request_path<'a>(
+    route: &RouteConfig,
+    strip_prefix: bool,
+    request_path: &'a str,
+) -> &'a str {
+    if !strip_prefix {
+        return request_path;
+    }
     match route.route_match.path_type {
         RoutePathType::Exact | RoutePathType::Prefix | RoutePathType::PrefixExclusive => {
             request_path

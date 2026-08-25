@@ -1,0 +1,38 @@
+# Optional overlay: attach profiled webserver-* services (docker-compose.yml)
+# to an already-running independent sdkwork-api-cloud-gateway compose network.
+#
+# Used by scripts/docker/compose.mjs when SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK
+# is set. Standalone per-env deploys use docker-compose.platform-api-gateway-attach.yml.
+
+services:
+  webserver-development:
+    environment:
+      SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT: docker
+      SDKWORK_MODULE_API_GATEWAY_HOST: ${SDKWORK_MODULE_API_GATEWAY_HOST:-gateway}
+      SDKWORK_MODULE_API_GATEWAY_PORT: ${SDKWORK_MODULE_API_GATEWAY_PORT:-3900}
+    networks:
+      default: {}
+      platform_api_gateway_attach: {}
+
+  webserver-test:
+    environment:
+      SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT: docker
+      SDKWORK_MODULE_API_GATEWAY_HOST: ${SDKWORK_MODULE_API_GATEWAY_HOST:-gateway}
+      SDKWORK_MODULE_API_GATEWAY_PORT: ${SDKWORK_MODULE_API_GATEWAY_PORT:-3900}
+    networks:
+      default: {}
+      platform_api_gateway_attach: {}
+
+  webserver-production:
+    environment:
+      SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT: docker
+      SDKWORK_MODULE_API_GATEWAY_HOST: ${SDKWORK_MODULE_API_GATEWAY_HOST:-gateway}
+      SDKWORK_MODULE_API_GATEWAY_PORT: ${SDKWORK_MODULE_API_GATEWAY_PORT:-3900}
+    networks:
+      default: {}
+      platform_api_gateway_attach: {}
+
+networks:
+  platform_api_gateway_attach:
+    external: true
+    name: ${SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK:?SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK must be set to the gateway compose network}

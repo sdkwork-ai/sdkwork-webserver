@@ -15,7 +15,7 @@ const STANDALONE_CONF = path.join(REPO_ROOT, 'deployments', 'webserver', 'nginx.
 
 test('import classifies product standalone conf with multiple servers', () => {
   const source = fs.readFileSync(STANDALONE_CONF, 'utf8');
-  const directives = scanDirectives(source);
+  const directives = scanDirectives(source, { sourcePath: STANDALONE_CONF });
   const classified = classify(directives);
   assert.equal(classified.blocked.length, 0);
   assert.equal(classified.unsupported.length, 0, JSON.stringify(classified.unsupported, null, 2));

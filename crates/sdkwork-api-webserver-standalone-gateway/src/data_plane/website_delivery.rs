@@ -52,6 +52,7 @@ pub(crate) async fn serve_website_request(
     query: Option<String>,
     method: Method,
     headers: HeaderMap,
+    metering: Option<crate::usage_metering::MeteringContext>,
 ) -> Response<Body> {
     let request_id = new_request_id();
     let trace_context = resolve_trace_context(&headers, &request_id);
@@ -85,14 +86,29 @@ pub(crate) async fn serve_website_request(
             )
         }
     };
+    let metered_authority = request.authority.clone();
     let response = match executor.execute(request).await {
-        Ok(outcome) => outcome_response(outcome, query.as_deref()),
+        Ok(outcome) => {
+            if let Some(context) = &metering {
+                context.meter.record(crate::usage_metering::MeteredRequest {
+                    hostname: &metered_authority,
+                    server_ip: context.server_ip,
+                    server_port: context.server_port,
+                    listener_id: &context.listener_id,
+                    attribution: &outcome_attribution(&outcome),
+                    ingress_bytes: request_ingress_bytes(&headers),
+                    egress_bytes: outcome_egress_bytes(&outcome),
+                    status_class: outcome_status_class(&outcome),
+                });
+            }
+            outcome_response(outcome, query.as_deref())
+        }
         Err(error) => delivery_error_response(error),
     };
     finalize_response(response, &request_id, suppress_body)
 }
 
-fn delivery_request(
+pub(crate) fn delivery_request(
     scheme: WebsiteDeliveryScheme,
     authority: String,
     path: String,
@@ -627,6 +643,49 @@ pub(crate) enum RequestHeaderError {
     Range,
 }
 
+/// Traffic attribution for a website delivery outcome: the routed site and
+/// binding when content was served (the control plane resolves the tenant
+/// from the binding at ingest).
+fn outcome_attribution(
+    outcome: &WebsiteDeliveryOutcome,
+) -> crate::usage_metering::UsageAttribution {
+    match outcome {
+        WebsiteDeliveryOutcome::Content(content) => crate::usage_metering::UsageAttribution {
+            tenant_id: None,
+            organization_id: None,
+            site_uuid: Some(content.route.site_uuid.clone()),
+            binding_uuid: Some(content.route.binding_uuid.clone()),
+            app_id: None,
+            app_slug: None,
+        },
+        _ => crate::usage_metering::UsageAttribution::default(),
+    }
+}
+
+fn outcome_egress_bytes(outcome: &WebsiteDeliveryOutcome) -> u64 {
+    match outcome {
+        WebsiteDeliveryOutcome::Content(content) => content.response_content_length,
+        _ => 0,
+    }
+}
+
+fn outcome_status_class(outcome: &WebsiteDeliveryOutcome) -> &'static str {
+    match outcome {
+        WebsiteDeliveryOutcome::Content(_) => "2xx",
+        WebsiteDeliveryOutcome::NotModified => "2xx",
+        WebsiteDeliveryOutcome::Redirect(_) => "3xx",
+        WebsiteDeliveryOutcome::NotFound => "4xx",
+    }
+}
+
+fn request_ingress_bytes(headers: &HeaderMap) -> u64 {
+    headers
+        .get(CONTENT_LENGTH)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -866,6 +925,7 @@ mod tests {
             None,
             Method::GET,
             HeaderMap::new(),
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -893,6 +953,7 @@ mod tests {
             None,
             Method::HEAD,
             HeaderMap::new(),
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -923,6 +984,7 @@ mod tests {
             None,
             Method::GET,
             headers,
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
@@ -935,6 +997,7 @@ mod tests {
             Some("from=legacy".to_owned()),
             Method::GET,
             HeaderMap::new(),
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::PERMANENT_REDIRECT);
@@ -951,6 +1014,7 @@ mod tests {
             None,
             Method::GET,
             HeaderMap::new(),
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
@@ -963,6 +1027,7 @@ mod tests {
             None,
             Method::HEAD,
             HeaderMap::new(),
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
@@ -984,6 +1049,7 @@ mod tests {
             None,
             Method::GET,
             headers,
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::RANGE_NOT_SATISFIABLE);
@@ -1000,6 +1066,7 @@ mod tests {
             Some("lang=zh".to_owned()),
             Method::GET,
             HeaderMap::new(),
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::PERMANENT_REDIRECT);
@@ -1034,6 +1101,7 @@ mod tests {
             None,
             Method::GET,
             headers,
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -1065,6 +1133,7 @@ mod tests {
             None,
             Method::GET,
             headers,
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -1089,6 +1158,7 @@ mod tests {
             None,
             Method::GET,
             HeaderMap::new(),
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
@@ -1110,6 +1180,7 @@ mod tests {
             None,
             Method::GET,
             mobile_headers(),
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -1136,6 +1207,7 @@ mod tests {
             None,
             Method::HEAD,
             mobile_headers(),
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -1162,6 +1234,7 @@ mod tests {
             None,
             Method::GET,
             headers,
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
@@ -1187,6 +1260,7 @@ mod tests {
             None,
             Method::GET,
             headers,
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
@@ -1211,6 +1285,7 @@ mod tests {
             None,
             Method::GET,
             headers,
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -1227,6 +1302,7 @@ mod tests {
             None,
             Method::GET,
             headers,
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::RANGE_NOT_SATISFIABLE);
@@ -1246,6 +1322,7 @@ mod tests {
             None,
             Method::GET,
             headers,
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
@@ -1270,6 +1347,7 @@ mod tests {
             None,
             Method::GET,
             headers,
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
@@ -1290,6 +1368,7 @@ mod tests {
                 None,
                 Method::GET,
                 headers,
+                None,
             )
             .await;
             assert_eq!(
@@ -1312,6 +1391,7 @@ mod tests {
             None,
             Method::GET,
             mobile_headers(),
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
@@ -1326,6 +1406,7 @@ mod tests {
             None,
             Method::GET,
             mobile_headers(),
+            None,
         )
         .await;
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);

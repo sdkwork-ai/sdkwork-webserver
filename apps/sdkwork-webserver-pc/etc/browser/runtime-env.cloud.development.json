@@ -14,10 +14,10 @@
     "zh-CN",
     "en-US"
   ],
-  "appApiBaseUrl": "https://server-app-dev.sdkwork.com",
-  "backendApiBaseUrl": "https://server-admin-dev.sdkwork.com",
+  "appApiBaseUrl": "https://api-dev.sdkwork.com",
+  "backendApiBaseUrl": "https://api-dev.sdkwork.com",
   "driveAppApiBaseUrl": "https://api-dev.sdkwork.com",
   "appbaseAppApiBaseUrl": "https://api-dev.sdkwork.com",
   "messagingPcUrl": "https://messaging-dev.sdkwork.com/notifications",
-  "deployAppApiBaseUrl": "https://server-app-dev.sdkwork.com"
+  "deployAppApiBaseUrl": "https://api-dev.sdkwork.com"
 }

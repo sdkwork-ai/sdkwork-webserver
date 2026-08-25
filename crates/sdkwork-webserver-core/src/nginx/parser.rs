@@ -1,11 +1,21 @@
 //! nginx configuration lexer/parser and `include` expansion.
 //!
-//! The parser accepts the nginx configuration language subset used by
-//! `server`/`upstream`/`location` blocks: directive names, quoted or
-//! unquoted arguments (including `$variables`), `{ }` blocks, `;`
-//! terminators, and `#` comments. It is intentionally strict: unknown
-//! syntax fails with the file and line so operators can see exactly what
-//! the runtime cannot consume.
+//! The tokenizer mirrors `ngx_conf_read_token()` (nginx 1.26.2): directive
+//! names and arguments separated by whitespace, `;` terminators, `{ }`
+//! blocks, `#` comments at token boundaries, single- and double-quoted
+//! strings (each quote type closes only itself), and backslash escapes
+//! (`\"` `\'` `\\` collapse, `\t` `\r` `\n` become control characters, any
+//! other `\c` is preserved verbatim). Mid-token `#`, `}`, and quotes are
+//! ordinary characters exactly as nginx tokenizes them, and a `{` directly
+//! after `$` stays inside the token (`${name}` variables).
+//!
+//! `include` follows nginx: patterns containing `*`, `?`, or `[` are globs
+//! matched with libc-glob semantics (`*` any sequence, `?` one character,
+//! `[a-z]`/`[!a-z]` classes) and expanded in sorted order; a glob matching
+//! no files is a no-op; a literal include path must exist. Relative include
+//! paths resolve against the top-level loaded configuration directory
+//! (nginx resolves them against the main `nginx.conf` directory), not the
+//! including file's own directory.
 
 use std::{
     fs,
@@ -46,15 +56,23 @@ pub enum NginxParseError {
     IncludeCycle { path: PathBuf },
 }
 
+/// Maximum `{` nesting depth. nginx has no limit, but the recursive
+/// tokenizer must never overflow the stack on pathological input; deeper
+/// configurations fail closed with a precise diagnostic.
+const MAXIMUM_BLOCK_DEPTH: usize = 256;
+
 /// Parse one nginx configuration text into top-level directives.
 pub fn parse_nginx_config(text: &str, source: &Path) -> Result<Vec<NginxDirective>, NginxParseError> {
     let mut lexer = Lexer::new(text, source);
-    lexer.parse_directives(None)
+    lexer.parse_directives(None, 0)
 }
 
 /// Expand `include` directives in a directive list, resolving paths relative
-/// to `base_dir` (globs like `sites-enabled/*.conf` supported). The expanded
-/// list replaces the including directive in place; `map`-style includes of
+/// to `base_dir` — the top-level loaded configuration directory (nginx
+/// `conf_prefix` semantics; relative paths never resolve against the
+/// including file's own directory). Globs like `sites-enabled/*.conf` are
+/// supported; a glob that matches nothing expands to nothing, and a literal
+/// missing path is an error, both matching nginx. `map`-style includes of
 /// fragments keep their block context because expansion happens per level.
 pub fn expand_includes(
     directives: Vec<NginxDirective>,
@@ -86,25 +104,11 @@ pub fn expand_includes(
                 base_dir.join(pattern)
             };
             let mut matches = Vec::new();
-            if pattern.contains('*') {
-                let pattern_text = pattern_path.to_string_lossy().replace('\\', "/");
-                let (directory, file_pattern) = match pattern_text.rsplit_once('/') {
-                    Some((directory, file_pattern)) => (directory.to_owned(), file_pattern.to_owned()),
-                    None => (String::from("."), pattern_text),
-                };
-                let entries = fs::read_dir(&directory).map_err(|source| NginxParseError::Read {
-                    path: PathBuf::from(&directory),
-                    source,
-                })?;
-                let mut collected = Vec::new();
-                for entry in entries.flatten() {
-                    let name = entry.file_name().to_string_lossy().into_owned();
-                    if glob_match(&file_pattern, &name) {
-                        collected.push(entry.path());
-                    }
-                }
-                collected.sort();
-                matches = collected;
+            if pattern.contains('*') || pattern.contains('?') || pattern.contains('[') {
+                // nginx globs the full pattern path (directory segments can
+                // carry glob characters too); matches are sorted because
+                // nginx globs without GLOB_NOSORT.
+                matches = expand_glob_pattern(&pattern_path)?;
             } else if pattern_path.is_file() {
                 matches.push(pattern_path);
             } else {
@@ -122,13 +126,12 @@ pub fn expand_includes(
                         source,
                     }
                 })?;
-                let include_dir = include_path
-                    .parent()
-                    .map(Path::to_path_buf)
-                    .unwrap_or_else(|| PathBuf::from("."));
                 stack.push(include_path.clone());
                 let parsed = parse_nginx_config(&text, &include_path)?;
-                let nested = expand_includes(parsed, &include_dir, budget, stack)?;
+                // Relative includes inside the included file resolve against
+                // the root `base_dir` (nginx `conf_prefix`), not this file's
+                // own directory.
+                let nested = expand_includes(parsed, base_dir, budget, stack)?;
                 stack.pop();
                 expanded.extend(nested);
             }
@@ -143,17 +146,141 @@ pub fn expand_includes(
     Ok(expanded)
 }
 
+/// Expand a glob `include` pattern across the whole path, walking each
+/// segment left to right (libc `glob()` semantics: `*`, `?`, `[a-z]`
+/// classes on every segment, literal segments joined directly). Only
+/// regular files are returned, in sorted order; a pattern matching no files
+/// yields an empty list (nginx include tolerates empty glob matches).
+fn expand_glob_pattern(pattern: &Path) -> Result<Vec<PathBuf>, NginxParseError> {
+    let text = pattern.to_string_lossy().replace('\\', "/");
+    let absolute = text.starts_with('/');
+    // Windows drive prefix (`C:/...`): start the walk at the drive root so
+    // joined paths stay absolute instead of drive-relative.
+    let drive_prefix = (text.len() >= 3
+        && text.as_bytes()[1] == b':'
+        && text.as_bytes()[2] == b'/')
+        .then(|| &text[..3]);
+    let mut segments = text
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    if drive_prefix.is_some() {
+        segments.remove(0);
+    }
+    let mut current = if let Some(prefix) = drive_prefix {
+        vec![PathBuf::from(prefix)]
+    } else if absolute {
+        vec![PathBuf::from("/")]
+    } else {
+        vec![PathBuf::new()]
+    };
+    for (index, segment) in segments.iter().enumerate() {
+        let is_last = index + 1 == segments.len();
+        let mut next = Vec::new();
+        if segment.contains('*') || segment.contains('?') || segment.contains('[') {
+            for base in &current {
+                let entries = fs::read_dir(base).map_err(|source| NginxParseError::Read {
+                    path: base.clone(),
+                    source,
+                })?;
+                for entry in entries.flatten() {
+                    let name = entry.file_name().to_string_lossy().into_owned();
+                    if !glob_match(segment, &name) {
+                        continue;
+                    }
+                    let candidate = base.join(&name);
+                    if is_last {
+                        if candidate.is_file() {
+                            next.push(candidate);
+                        }
+                    } else if candidate.is_dir() {
+                        next.push(candidate);
+                    }
+                }
+            }
+        } else {
+            for base in &current {
+                let candidate = base.join(segment);
+                if is_last {
+                    if candidate.is_file() {
+                        next.push(candidate);
+                    }
+                } else if candidate.is_dir() {
+                    next.push(candidate);
+                }
+            }
+        }
+        current = next;
+    }
+    current.sort();
+    Ok(current)
+}
+
+/// libc-glob-style file pattern matching used by nginx `include`:
+/// `*` matches any (possibly empty) sequence, `?` exactly one character,
+/// and `[a-z]` / `[!a-z]` / `[^a-z]` character classes with ranges. An
+/// unterminated `[` is a literal character (libc glob behavior).
 fn glob_match(pattern: &str, name: &str) -> bool {
-    if pattern == "*" {
-        return true;
+    glob_match_bytes(pattern.as_bytes(), name.as_bytes())
+}
+
+fn glob_match_bytes(pattern: &[u8], name: &[u8]) -> bool {
+    if let Some(rest) = pattern.strip_prefix(b"*") {
+        // `*` greedily consumes; backtrack when the remainder cannot match.
+        for split in 0..=name.len() {
+            if glob_match_bytes(rest, &name[split..]) {
+                return true;
+            }
+        }
+        return false;
     }
-    if let Some(prefix) = pattern.strip_suffix('*') {
-        return name.starts_with(prefix);
+    let Some((&first, name_rest)) = name.split_first() else {
+        return pattern.is_empty();
+    };
+    let Some((&p, pattern_rest)) = pattern.split_first() else {
+        return false;
+    };
+    match p {
+        b'?' => glob_match_bytes(pattern_rest, name_rest),
+        b'[' => {
+            // Character class: `[!...]` / `[^...]` negate, `a-z` ranges apply.
+            let Some(end) = pattern_rest.iter().position(|&byte| byte == b']') else {
+                // Unterminated class is a literal `[`.
+                return first == b'[' && glob_match_bytes(pattern_rest, name_rest);
+            };
+            let class = &pattern_rest[..end];
+            let (negated, class) = match class.split_first() {
+                Some((&b'!' | &b'^', rest)) => (true, rest),
+                _ => (false, class),
+            };
+            let matched = class_matches(class, first);
+            if matched != negated {
+                glob_match_bytes(&pattern_rest[end + 1..], name_rest)
+            } else {
+                false
+            }
+        }
+        _ => first == p && glob_match_bytes(pattern_rest, name_rest),
     }
-    if let Some(suffix) = pattern.strip_prefix('*') {
-        return name.ends_with(suffix);
+}
+
+fn class_matches(class: &[u8], byte: u8) -> bool {
+    let mut index = 0;
+    while index < class.len() {
+        if index + 2 < class.len() && class[index + 1] == b'-' {
+            let (start, end) = (class[index], class[index + 2]);
+            if start <= byte && byte <= end {
+                return true;
+            }
+            index += 3;
+        } else {
+            if class[index] == byte {
+                return true;
+            }
+            index += 1;
+        }
     }
-    pattern == name
+    false
 }
 
 struct Lexer<'a> {
@@ -176,7 +303,13 @@ impl<'a> Lexer<'a> {
     fn parse_directives(
         &mut self,
         closing: Option<char>,
+        depth: usize,
     ) -> Result<Vec<NginxDirective>, NginxParseError> {
+        if depth > MAXIMUM_BLOCK_DEPTH {
+            return Err(self.syntax(format!(
+                "block nesting exceeds the {MAXIMUM_BLOCK_DEPTH} level limit"
+            )));
+        }
         let mut directives = Vec::new();
         loop {
             self.skip_whitespace_and_comments();
@@ -193,11 +326,11 @@ impl<'a> Lexer<'a> {
                 self.position += 1;
                 return Ok(directives);
             }
-            directives.push(self.parse_directive()?);
+            directives.push(self.parse_directive(depth)?);
         }
     }
 
-    fn parse_directive(&mut self) -> Result<NginxDirective, NginxParseError> {
+    fn parse_directive(&mut self, depth: usize) -> Result<NginxDirective, NginxParseError> {
         let name = self.parse_token()?;
         if name.is_empty() {
             return Err(self.syntax("expected a directive name"));
@@ -221,7 +354,7 @@ impl<'a> Lexer<'a> {
                 }
                 '{' => {
                     self.position += 1;
-                    children = self.parse_directives(Some('}'))?;
+                    children = self.parse_directives(Some('}'), depth + 1)?;
                     break;
                 }
                 '}' => {
@@ -239,41 +372,175 @@ impl<'a> Lexer<'a> {
         })
     }
 
+    /// Read one argument token with nginx tokenizer semantics.
+    ///
+    /// Mirrors `ngx_conf_read_token()`: `"` / `'` start a quoted string at a
+    /// word boundary (each quote type closes only itself; a quote character
+    /// mid-word is an ordinary character); `\` escapes the next character;
+    /// a `{` directly after `$` is part of the token (`${name}`); `#` and
+    /// `}` mid-word are ordinary characters. After a closing quote the next
+    /// character must be whitespace, `;`, `{`, `}`, or `)` (nginx
+    /// `need_space` state), otherwise the configuration is rejected.
     fn parse_token(&mut self) -> Result<String, NginxParseError> {
         self.skip_whitespace_and_comments();
-        let Some(first) = self.peek() else {
+        if self.peek().is_none() {
             return Ok(String::new());
-        };
-        if first == '"' || first == '\'' {
-            let quote = first;
-            self.position += 1;
-            let mut token = String::new();
-            loop {
-                let Some(ch) = self.peek() else {
+        }
+        let mut raw = String::new();
+        let mut double_quoted = false;
+        let mut single_quoted = false;
+        let mut escaped = false;
+        let mut variable = false;
+        let mut at_word_start = true;
+        let mut word_complete = false;
+        loop {
+            let Some(ch) = self.peek() else {
+                if double_quoted || single_quoted {
                     return Err(self.syntax("unterminated quoted string"));
-                };
-                self.position += ch.len_utf8();
-                if ch == quote {
-                    break;
                 }
+                break;
+            };
+            if escaped {
+                // The escaped character is consumed raw: it cannot terminate
+                // the word, open/close a quote, or start a comment.
+                escaped = false;
+                self.position += ch.len_utf8();
                 if ch == '\n' {
                     self.line += 1;
                 }
-                token.push(ch);
+                raw.push(ch);
+                at_word_start = false;
+                continue;
             }
-            return Ok(token);
-        }
-        let start = self.position;
-        while let Some(ch) = self.peek() {
-            if ch.is_whitespace() || matches!(ch, ';' | '{' | '}' | '#' | '"' | '\'') {
-                break;
+            if double_quoted {
+                self.position += ch.len_utf8();
+                if ch == '\n' {
+                    self.line += 1;
+                }
+                if ch == '\\' {
+                    // nginx: inside a quoted string `\` escapes the next
+                    // character (including the closing quote).
+                    raw.push('\\');
+                    escaped = true;
+                } else if ch == '"' {
+                    double_quoted = false;
+                    word_complete = true;
+                } else {
+                    raw.push(ch);
+                }
+                continue;
             }
-            if ch == '\n' {
+            if single_quoted {
+                self.position += ch.len_utf8();
+                if ch == '\n' {
+                    self.line += 1;
+                }
+                if ch == '\\' {
+                    raw.push('\\');
+                    escaped = true;
+                } else if ch == '\'' {
+                    single_quoted = false;
+                    word_complete = true;
+                } else {
+                    raw.push(ch);
+                }
+                continue;
+            }
+            if word_complete {
+                // nginx `need_space`: after a closing quote the token is
+                // complete and the next character must be whitespace, `;`,
+                // `{`, `}`, or `)`.
+                match ch {
+                    ' ' | '\t' | '\r' | '\n' => {
+                        self.position += ch.len_utf8();
+                        if ch == '\n' {
+                            self.line += 1;
+                        }
+                    }
+                    ')' => {
+                        self.position += 1;
+                    }
+                    ';' | '{' | '}' => break,
+                    _ => {
+                        return Err(self.syntax(format!(
+                            "unexpected character {ch:?} after a quoted string"
+                        )));
+                    }
+                }
+                return Ok(unescape_word(&raw));
+            }
+            if at_word_start {
+                match ch {
+                    ' ' | '\t' | '\r' | '\n' => {
+                        self.position += ch.len_utf8();
+                        if ch == '\n' {
+                            self.line += 1;
+                        }
+                    }
+                    // `#` at a token boundary starts a comment; the token
+                    // ends here and the caller skips the comment.
+                    '#' | ';' | '{' => break,
+                    '\\' => {
+                        self.position += 1;
+                        raw.push('\\');
+                        escaped = true;
+                        at_word_start = false;
+                    }
+                    '"' => {
+                        self.position += 1;
+                        double_quoted = true;
+                        at_word_start = false;
+                    }
+                    '\'' => {
+                        self.position += 1;
+                        single_quoted = true;
+                        at_word_start = false;
+                    }
+                    '$' => {
+                        self.position += ch.len_utf8();
+                        raw.push('$');
+                        variable = true;
+                        at_word_start = false;
+                    }
+                    _ => {
+                        self.position += ch.len_utf8();
+                        raw.push(ch);
+                        at_word_start = false;
+                    }
+                }
+                continue;
+            }
+            // Mid-word: `{` directly after `$` belongs to the token
+            // (`${name}`); `}` and `#` are ordinary characters.
+            if ch == '{' && variable {
+                self.position += ch.len_utf8();
+                raw.push('{');
+                variable = false;
+                continue;
+            }
+            variable = false;
+            if ch == '\\' {
+                self.position += 1;
+                raw.push('\\');
+                escaped = true;
+                continue;
+            }
+            if ch == '$' {
+                self.position += ch.len_utf8();
+                raw.push('$');
+                variable = true;
+                continue;
+            }
+            if ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n' || ch == ';' || ch == '{' {
                 break;
             }
             self.position += ch.len_utf8();
+            if ch == '\n' {
+                self.line += 1;
+            }
+            raw.push(ch);
         }
-        Ok(self.text[start..self.position].to_owned())
+        Ok(unescape_word(&raw))
     }
 
     fn skip_whitespace_and_comments(&mut self) {
@@ -313,6 +580,33 @@ impl<'a> Lexer<'a> {
             message: message.to_string(),
         }
     }
+}
+
+/// Apply the nginx word-copy escape table (`ngx_conf_read_token`): `\"`,
+/// `\'`, and `\\` collapse to the escaped character, `\t` `\r` `\n` become
+/// control characters, and every other `\c` pair is preserved verbatim.
+fn unescape_word(raw: &str) -> String {
+    let mut output = String::with_capacity(raw.len());
+    let mut chars = raw.chars();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            output.push(ch);
+            continue;
+        }
+        match chars.next() {
+            // The backslash collapses; the escaped character is kept.
+            Some(escaped @ ('"' | '\'' | '\\')) => output.push(escaped),
+            Some('t') => output.push('\t'),
+            Some('r') => output.push('\r'),
+            Some('n') => output.push('\n'),
+            Some(other) => {
+                output.push('\\');
+                output.push(other);
+            }
+            None => output.push('\\'),
+        }
+    }
+    output
 }
 
 #[cfg(test)]
@@ -439,5 +733,189 @@ server {
         assert_eq!(expanded.len(), 2);
         assert_eq!(expanded[0].children[0].args, vec!["1"]);
         assert_eq!(expanded[1].children[0].args, vec!["2"]);
+    }
+
+    #[test]
+    fn quote_escapes_follow_nginx_word_copy_rules() {
+        let directives = parse(
+            r#"server {
+    set $escaped "a\"b";
+    set $tab "a\tb";
+    set $literal "a\qb";
+    set $mixed 'it"s fine';
+}"#,
+        );
+        let children = &directives[0].children;
+        assert_eq!(children[0].args, vec!["$escaped", "a\"b"]);
+        assert_eq!(children[1].args, vec!["$tab", "a\tb"]);
+        assert_eq!(children[2].args, vec!["$literal", "a\\qb"]);
+        assert_eq!(children[3].args, vec!["$mixed", "it\"s fine"]);
+    }
+
+    #[test]
+    fn hash_and_close_brace_are_ordinary_mid_token() {
+        let directives = parse(
+            r#"server {
+    proxy_pass http://127.0.0.1:8080/faq#section;
+    server_name example.com#internal;
+}"#,
+        );
+        let children = &directives[0].children;
+        assert_eq!(
+            children[0].args,
+            vec!["http://127.0.0.1:8080/faq#section"]
+        );
+        assert_eq!(children[1].args, vec!["example.com#internal"]);
+    }
+
+    #[test]
+    fn dollar_brace_variables_stay_in_one_token() {
+        let directives = parse(
+            r#"server {
+    set $combined "pre${suffix}post";
+    proxy_set_header X-Test ${header_name};
+}"#,
+        );
+        let children = &directives[0].children;
+        assert_eq!(children[0].args, vec!["$combined", "pre${suffix}post"]);
+        assert_eq!(children[1].args, vec!["X-Test", "${header_name}"]);
+    }
+
+    #[test]
+    fn escaped_terminators_do_not_end_the_token() {
+        let directives = parse(
+            r#"server {
+    set $semi "a\;b";
+    set $brace a\{b;
+    set $slash "a\\b";
+}"#,
+        );
+        let children = &directives[0].children;
+        assert_eq!(children[0].args, vec!["$semi", "a\\;b"]);
+        assert_eq!(children[1].args, vec!["$brace", "a\\{b"]);
+        assert_eq!(children[2].args, vec!["$slash", "a\\b"]);
+    }
+
+    #[test]
+    fn adjacent_text_after_quoted_string_is_rejected() {
+        let error = parse_nginx_config(
+            "server {\n    set $x \"abc\"def;\n}\n",
+            Path::new("bad.conf"),
+        )
+        .expect_err("nginx need_space rule must reject adjacent text");
+        assert!(error.to_string().contains("after a quoted string"), "{error}");
+    }
+
+    #[test]
+    fn unterminated_quoted_string_is_rejected() {
+        let error = parse_nginx_config("set $x \"abc;\n", Path::new("bad.conf"))
+            .expect_err("unterminated quote must fail");
+        assert!(error.to_string().contains("unterminated quoted string"), "{error}");
+    }
+
+    #[test]
+    fn question_mark_and_character_class_globs_expand() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        std::fs::write(directory.path().join("site-a.conf"), "server { listen 1; }\n").unwrap();
+        std::fs::write(directory.path().join("site-b.conf"), "server { listen 2; }\n").unwrap();
+        std::fs::write(directory.path().join("other.txt"), "ignore\n").unwrap();
+        let pattern = directory.path().join("site-?.conf");
+        let parsed = parse_nginx_config(
+            &format!("include {};\n", pattern.display()),
+            Path::new("main.conf"),
+        )
+        .expect("parse");
+        let mut budget = 16;
+        let mut stack = Vec::new();
+        let expanded =
+            expand_includes(parsed, directory.path(), &mut budget, &mut stack).expect("expand");
+        assert_eq!(expanded.len(), 2);
+        let pattern = directory.path().join("site-[ab].conf");
+        let parsed = parse_nginx_config(
+            &format!("include {};\n", pattern.display()),
+            Path::new("main.conf"),
+        )
+        .expect("parse");
+        let expanded =
+            expand_includes(parsed, directory.path(), &mut budget, &mut stack).expect("expand");
+        assert_eq!(expanded.len(), 2);
+    }
+
+    #[test]
+    fn empty_glob_include_is_a_noop_like_nginx() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let parsed = parse_nginx_config(
+            &format!(
+                "include {};\n",
+                directory.path().join("missing-*.conf").display()
+            ),
+            Path::new("main.conf"),
+        )
+        .expect("parse");
+        let mut budget = 16;
+        let mut stack = Vec::new();
+        let expanded =
+            expand_includes(parsed, directory.path(), &mut budget, &mut stack).expect("expand");
+        assert!(expanded.is_empty());
+    }
+
+    #[test]
+    fn globs_in_directory_segments_expand_like_libc_glob() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let a = root.path().join("sites-a");
+        let b = root.path().join("sites-b");
+        let other = root.path().join("not-sites");
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        std::fs::create_dir_all(&other).unwrap();
+        std::fs::write(a.join("one.conf"), "server { listen 1; }
+").unwrap();
+        std::fs::write(b.join("two.conf"), "server { listen 2; }
+").unwrap();
+        std::fs::write(other.join("x.conf"), "server { listen 9; }
+").unwrap();
+        let parsed = parse_nginx_config(
+            &format!(
+                "include {};
+",
+                root.path().join("sites-*/*.conf").display()
+            ),
+            Path::new("main.conf"),
+        )
+        .expect("parse");
+        let mut budget = 16;
+        let mut stack = Vec::new();
+        let expanded =
+            expand_includes(parsed, root.path(), &mut budget, &mut stack).expect("expand");
+        assert_eq!(expanded.len(), 2);
+        let listens = expanded
+            .iter()
+            .map(|directive| directive.children[0].args[0].clone())
+            .collect::<Vec<_>>();
+        assert_eq!(listens, vec!["1", "2"], "sorted across directory matches");
+    }
+
+    #[test]
+    fn nested_includes_resolve_against_the_root_directory() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let snippets = root.path().join("snippets");
+        std::fs::create_dir_all(&snippets).unwrap();
+        std::fs::write(
+            root.path().join("fragments"),
+            "include snippets/frag.conf;\n",
+        )
+        .unwrap();
+        std::fs::write(snippets.join("frag.conf"), "server { listen 7; }\n").unwrap();
+        let parsed = parse_nginx_config(
+            "include fragments;\n",
+            Path::new("main.conf"),
+        )
+        .expect("parse");
+        let mut budget = 16;
+        let mut stack = Vec::new();
+        let expanded =
+            expand_includes(parsed, root.path(), &mut budget, &mut stack).expect("expand");
+        assert_eq!(expanded.len(), 1);
+        assert_eq!(expanded[0].children[0].args, vec!["7"]);
     }
 }

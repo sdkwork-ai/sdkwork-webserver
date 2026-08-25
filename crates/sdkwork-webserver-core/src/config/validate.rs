@@ -8,9 +8,10 @@ use ipnet::IpNet;
 use url::Url;
 
 use super::{
-    is_supported_upstream_allowed_cidr, upstream_ip_is_allowed, CertificateSource,
-    ConfigDiagnostic, ListenerProtocol, ResourceConfig, RouteConfig, RoutePathType,
-    SecurityHeadersConfig, StreamTargetConfig, TlsVersion, UpstreamConfig,
+    is_supported_upstream_allowed_cidr, upstream_ip_is_allowed, AppDomainFallbackLookup,
+    UsageMeteringChannel,
+    CertificateSource, ConfigDiagnostic, ListenerProtocol, ResourceConfig, RouteConfig,
+    RoutePathType, SecurityHeadersConfig, StreamTargetConfig, TlsVersion, UpstreamConfig,
     UpstreamLoadBalancingStrategy, UpstreamTlsTrustMode, WebServerAppConfig, WebServerConfigError,
     WebServerLimits,
 };
@@ -71,6 +72,8 @@ impl SemanticValidator {
         self.validate_limits(config);
         self.validate_resource_pressure(config);
         self.validate_limit_req_zones(config);
+        self.validate_app_domain_fallback(config);
+        self.validate_usage_metering(config);
         self.register_ids(config);
 
         let listeners = config
@@ -946,6 +949,102 @@ impl SemanticValidator {
                 self.push(
                     format!("{path}/ratePerSecond"),
                     "ratePerSecond must be a positive finite number",
+                );
+            }
+        }
+    }
+
+    fn validate_app_domain_fallback(&mut self, config: &WebServerAppConfig) {
+        let Some(fallback) = config.app_domain_fallback.as_ref() else {
+            return;
+        };
+        if fallback.suffixes.is_empty() || fallback.suffixes.len() > 64 {
+            self.push(
+                "/appDomainFallback/suffixes",
+                "suffixes must contain between 1 and 64 platform app-domain suffixes",
+            );
+        }
+        let mut seen = std::collections::HashSet::new();
+        for (index, suffix) in fallback.suffixes.iter().enumerate() {
+            let path = format!("/appDomainFallback/suffixes/{index}");
+            let suffix = suffix.trim().to_ascii_lowercase();
+            if suffix.is_empty()
+                || suffix.starts_with('.')
+                || suffix.ends_with('.')
+                || suffix.starts_with("*.")
+                || suffix.contains('/')
+                || suffix.len() > 253
+                || !suffix.bytes().all(|byte| {
+                    byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'.' || byte == b'-'
+                })
+            {
+                self.push(
+                    &path,
+                    "suffix must be a normalized lowercase ASCII domain without a leading dot or wildcard",
+                );
+            }
+            if !seen.insert(suffix.clone()) {
+                self.push(&path, format!("duplicate app-domain suffix {suffix}"));
+            }
+        }
+        match &fallback.lookup {
+            AppDomainFallbackLookup::Embedded => {}
+            AppDomainFallbackLookup::Http { endpoint, .. } => {
+                if endpoint.trim().is_empty()
+                    || !endpoint.starts_with("https://")
+                        && !endpoint.starts_with("http://")
+                {
+                    self.push(
+                        "/appDomainFallback/lookup/endpoint",
+                        "http lookup requires an absolute http(s) endpoint URL",
+                    );
+                }
+            }
+        }
+        if !(100..=30_000).contains(&fallback.timeout_ms) {
+            self.push(
+                "/appDomainFallback/timeoutMs",
+                "timeoutMs must be between 100 and 30000",
+            );
+        }
+        if fallback.cache_ttl_ms > 86_400_000 {
+            self.push(
+                "/appDomainFallback/cacheTtlMs",
+                "cacheTtlMs must not exceed 24 hours",
+            );
+        }
+        if fallback.negative_cache_ttl_ms > 86_400_000 {
+            self.push(
+                "/appDomainFallback/negativeCacheTtlMs",
+                "negativeCacheTtlMs must not exceed 24 hours",
+            );
+        }
+    }
+
+    fn validate_usage_metering(&mut self, config: &WebServerAppConfig) {
+        let Some(metering) = config.usage_metering.as_ref() else {
+            return;
+        };
+        if !(1..=86_400).contains(&metering.window_seconds) {
+            self.push(
+                "/usageMetering/windowSeconds",
+                "windowSeconds must be between 1 and 86400",
+            );
+        }
+        if !(1_000..=3_600_000).contains(&metering.flush_interval_ms) {
+            self.push(
+                "/usageMetering/flushIntervalMs",
+                "flushIntervalMs must be between 1000 and 3600000",
+            );
+        }
+        if let UsageMeteringChannel::Http { endpoint, .. } = &metering.channel {
+            if endpoint.trim().is_empty()
+                || !endpoint.starts_with("https://")
+                    && !endpoint.starts_with("http://")
+            {
+                self.push(
+                    "/usageMetering/channel/endpoint",
+                    "http channel requires an absolute http(s) endpoint URL",
                 );
             }
         }

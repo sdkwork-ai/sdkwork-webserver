@@ -30,8 +30,7 @@ use sdkwork_webserver_core::{
     ProxyProtocolConfig, WebServerLimits,
 };
 use sdkwork_webserver_delivery_runtime::{AppConfigResourceExecutor, WebsiteDeliveryExecutor};
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
+use tokio::{    io::{AsyncRead, AsyncWrite},
     net::{TcpListener, TcpStream},
     sync::watch,
     task::JoinSet,
@@ -59,6 +58,12 @@ use super::{
     tls_runtime::FileTlsRuntimeController,
     DataPlaneError, DataPlaneRuntime, ListenerState,
 };
+
+use crate::deploy_fallback::DeployFallbackResolver;
+use crate::usage_metering::{
+    HttpUsageIngestChannel, UsageIngestChannel, UsageMeteringAggregator,
+};
+use sdkwork_webserver_core::config::{UsageMeteringChannel, WebServerAppConfig};
 
 struct PreparedListener {
     config: ListenerConfig,
@@ -109,8 +114,16 @@ where
         }
         None => DataPlaneRuntime::build(app)?,
     };
-    let result =
-        run_data_plane_runtime_until(runtime.clone(), operations, None, None, None, shutdown).await;
+    let result = run_data_plane_runtime_until(
+        runtime.clone(),
+        operations,
+        None,
+        None,
+        None,
+        None,
+        shutdown,
+    )
+    .await;
     let health_result = runtime.stop_active_health().await;
     let resource_result = runtime.stop_resource_pressure().await;
     result.and(health_result).and(resource_result)
@@ -119,17 +132,19 @@ where
 pub async fn run_website_data_plane_until<F>(
     app: CompiledWebServerApp,
     website_delivery: Arc<WebsiteDeliveryExecutor>,
+    deploy_fallback: Option<Arc<DeployFallbackResolver>>,
     shutdown: F,
 ) -> Result<(), DataPlaneError>
 where
     F: Future<Output = ()> + Send,
 {
-    run_website_data_plane_with_operations_until(app, website_delivery, None, shutdown).await
+    run_website_data_plane_with_operations_until(app, website_delivery, deploy_fallback, None, shutdown).await
 }
 
 pub async fn run_website_data_plane_with_operations_until<F>(
     app: CompiledWebServerApp,
     website_delivery: Arc<WebsiteDeliveryExecutor>,
+    deploy_fallback: Option<Arc<DeployFallbackResolver>>,
     operations: Option<DataPlaneOperationsConfig>,
     shutdown: F,
 ) -> Result<(), DataPlaneError>
@@ -148,6 +163,7 @@ where
         Some(website_delivery),
         None,
         None,
+        deploy_fallback,
         shutdown,
     )
     .await;
@@ -159,6 +175,7 @@ where
 pub async fn run_website_data_plane_with_tls_operations_until<F>(
     app: CompiledWebServerApp,
     website_delivery: Arc<WebsiteDeliveryExecutor>,
+    deploy_fallback: Option<Arc<DeployFallbackResolver>>,
     operations: Option<DataPlaneOperationsConfig>,
     tls_runtime: Arc<FileTlsRuntimeController>,
     shutdown: F,
@@ -178,6 +195,7 @@ where
         Some(website_delivery),
         None,
         Some(tls_runtime),
+        deploy_fallback,
         shutdown,
     )
     .await;
@@ -192,12 +210,14 @@ pub(crate) async fn run_data_plane_runtime_until<F>(
     website_delivery: Option<Arc<WebsiteDeliveryExecutor>>,
     provider_resources: Option<Arc<AppConfigResourceExecutor>>,
     tls_runtime: Option<Arc<FileTlsRuntimeController>>,
+    deploy_fallback: Option<Arc<DeployFallbackResolver>>,
     shutdown: F,
 ) -> Result<(), DataPlaneError>
 where
     F: Future<Output = ()> + Send,
 {
     let initial = runtime.current();
+    let usage_meter = build_usage_meter(initial.app.config());
     if let Some(tls_runtime) = tls_runtime.as_ref() {
         let matching_listeners = initial
             .app
@@ -262,6 +282,8 @@ where
         let runtime = runtime.clone();
         let website_delivery = website_delivery.clone();
         let provider_resources = provider_resources.clone();
+        let deploy_fallback = deploy_fallback.clone();
+        let usage_meter = usage_meter.clone();
         let listener_id = listener.config.id.clone();
         tracing::info!(
             listener_id = %listener_id,
@@ -274,6 +296,8 @@ where
                 runtime,
                 website_delivery,
                 provider_resources,
+                deploy_fallback,
+                usage_meter,
                 listener,
                 shutdown_rx,
                 drain_timeout,
@@ -461,6 +485,8 @@ async fn serve_listener(
     runtime: Arc<DataPlaneRuntime>,
     website_delivery: Option<Arc<WebsiteDeliveryExecutor>>,
     provider_resources: Option<Arc<AppConfigResourceExecutor>>,
+    deploy_fallback: Option<Arc<DeployFallbackResolver>>,
+    usage_meter: Option<Arc<UsageMeteringAggregator>>,
     listener: PreparedListener,
     shutdown: watch::Receiver<bool>,
     drain_timeout: Duration,
@@ -477,6 +503,8 @@ async fn serve_listener(
         runtime: runtime.clone(),
         website_delivery,
         provider_resources,
+        deploy_fallback,
+        usage_meter,
         listener_id: listener_id.clone(),
         is_tls: listener.tls.is_some(),
     };
@@ -784,4 +812,72 @@ async fn collect_shutdown_results(
         }
     }
     first_error.map_or(Ok(()), Err)
+}
+
+
+/// Build the SaaS traffic usage meter when the app config enables
+/// `usageMetering` and an ingest channel is available. The embedded channel
+/// writes through the shared Deploy database (management feature); the http
+/// channel posts to the Deploy control-plane ingest endpoint. An
+/// unavailable channel disables metering with a warning — it never blocks
+/// the data plane.
+fn build_usage_meter(
+    app_config: &WebServerAppConfig,
+) -> Option<Arc<UsageMeteringAggregator>> {
+    let config = app_config.usage_metering.as_ref()?;
+    if !config.enabled {
+        return None;
+    }
+    let channel: Arc<dyn UsageIngestChannel> = match &config.channel {
+        UsageMeteringChannel::Embedded => {
+            #[cfg(feature = "management")]
+            {
+                use sdkwork_database_sqlx::process_shared_database_pool;
+                let Some(pool) = process_shared_database_pool() else {
+                    tracing::warn!(
+                        "usage metering is enabled but the shared database pool is unavailable"
+                    );
+                    return None;
+                };
+                let sdkwork_database_sqlx::DatabasePool::Postgres(pool, _) = pool;
+                Arc::new(crate::usage_metering::EmbeddedUsageIngestChannel::new(
+                    sdkwork_intelligence_deploy_repository_sqlx::DeployRepository::new_lookup(pool),
+                ))
+            }
+            #[cfg(not(feature = "management"))]
+            {
+                tracing::warn!(
+                    "usage metering embedded channel requires the management feature"
+                );
+                return None;
+            }
+        }
+        UsageMeteringChannel::Http {
+            endpoint,
+            auth_token_file,
+        } => {
+            let auth_token = auth_token_file.as_ref().and_then(|path| {
+                std::fs::read_to_string(path)
+                    .ok()
+                    .map(|value| value.trim().to_owned())
+                    .filter(|value| !value.is_empty())
+            });
+            match HttpUsageIngestChannel::new(endpoint.clone(), auth_token) {
+                Ok(channel) => Arc::new(channel),
+                Err(error) => {
+                    tracing::warn!(error = %error, "usage metering http channel unavailable");
+                    return None;
+                }
+            }
+        }
+    };
+    let node_uuid = std::env::var("SDKWORK_WEBSERVER_NODE_UUID")
+        .unwrap_or_else(|_| "webserver-node".to_owned());
+    let meter = Arc::new(UsageMeteringAggregator::new(
+        Arc::new(config.clone()),
+        channel,
+        node_uuid,
+    ));
+    meter.spawn_flush();
+    Some(meter)
 }

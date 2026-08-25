@@ -175,6 +175,12 @@ fn merge_shared_listener(
             left.listeners[left_index].protocols.push(*protocol);
         }
     }
+    // nginx default server: the first file loaded owns the listener default;
+    // a later file's default only applies when the first declared none.
+    if left.listeners[left_index].default_virtual_host_ref.is_none() {
+        left.listeners[left_index].default_virtual_host_ref =
+            right_listener.default_virtual_host_ref.clone();
+    }
     let left_policy_id = left.listeners[left_index].tls_policy_ref.clone();
     let right_policy_id = right_listener.tls_policy_ref.clone();
     match (left_policy_id, right_policy_id) {

@@ -17,8 +17,8 @@
     "build:test": "node ../../../sdkwork-specs/tools/build-browser-client.mjs --app-root . --environment test",
     "build:staging": "node ../../../sdkwork-specs/tools/build-browser-client.mjs --app-root . --environment staging",
     "build:prod": "node ../../../sdkwork-specs/tools/build-browser-client.mjs --app-root . --environment prod",
-    "build:standalone": "node scripts/verify-build-sources.mjs && node scripts/materialize-runtime-env.mjs --deployment-profile standalone --environment production && tsc -p tsconfig.json --noEmit && vite build --mode standalone.production",
-    "build:cloud": "node scripts/verify-build-sources.mjs && node scripts/materialize-runtime-env.mjs --deployment-profile cloud --environment production && tsc -p tsconfig.json --noEmit && vite build --mode cloud.production",
+    "build:standalone": "node ../../../sdkwork-specs/tools/build-browser-client.mjs --app-root . --environment prod --deployment-profile standalone",
+    "build:cloud": "node ../../../sdkwork-specs/tools/build-browser-client.mjs --app-root . --environment prod --deployment-profile cloud",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "check:source-config": "node ../../../sdkwork-specs/tools/check-source-config-standard.mjs --root .",
@@ -29,7 +29,11 @@
     "start": "pnpm preview",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "_sdkwork:dev:standalone": "node scripts/verify-build-sources.mjs && node scripts/materialize-runtime-env.mjs --deployment-profile standalone --environment development && vite --mode standalone.development",
-    "_sdkwork:dev:cloud": "node scripts/verify-build-sources.mjs && node scripts/materialize-runtime-env.mjs --deployment-profile cloud --environment development && vite --mode cloud.development"
+    "_sdkwork:dev:cloud": "node scripts/verify-build-sources.mjs && node scripts/materialize-runtime-env.mjs --deployment-profile cloud --environment development && vite --mode cloud.development",
+    "build:dev:cloud": "node ../../../sdkwork-specs/tools/build-browser-client.mjs --app-root . --environment dev --deployment-profile cloud",
+    "build:test:cloud": "node ../../../sdkwork-specs/tools/build-browser-client.mjs --app-root . --environment test --deployment-profile cloud",
+    "build:staging:cloud": "node ../../../sdkwork-specs/tools/build-browser-client.mjs --app-root . --environment staging --deployment-profile cloud",
+    "build:prod:cloud": "node ../../../sdkwork-specs/tools/build-browser-client.mjs --app-root . --environment prod --deployment-profile cloud"
   },
   "dependencies": {
     "react": "catalog:",

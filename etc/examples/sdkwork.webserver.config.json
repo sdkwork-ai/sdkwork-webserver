@@ -58,7 +58,9 @@
       "id": "public-http",
       "bind": "127.0.0.1",
       "port": 8080,
-      "protocols": ["http1"],
+      "protocols": [
+        "http1"
+      ],
       "defaultVirtualHostRef": "example-web"
     }
   ],
@@ -77,7 +79,9 @@
       "id": "web-static",
       "type": "static",
       "root": "public",
-      "indexFiles": ["index.html"],
+      "indexFiles": [
+        "index.html"
+      ],
       "spaFallback": "index.html",
       "followSymlinks": false
     },
@@ -93,8 +97,18 @@
       "id": "example-origin",
       "loadBalancing": "least-connections",
       "targets": [
-        {"url": "https://example.com", "weight": 1, "slowStartMs": 30000, "maxConnections": 32},
-        {"url": "https://example.net", "weight": 1, "backup": true, "maxConnections": 32}
+        {
+          "url": "https://example.com",
+          "weight": 1,
+          "slowStartMs": 30000,
+          "maxConnections": 32
+        },
+        {
+          "url": "https://example.net",
+          "weight": 1,
+          "backup": true,
+          "maxConnections": 32
+        }
       ],
       "connectTimeoutMs": 5000,
       "requestTimeoutMs": 30000,
@@ -107,22 +121,35 @@
       "retry": {
         "maxAttempts": 2,
         "timeoutMs": 30000,
-        "retryOn": ["error", "timeout", "http_502", "http_503", "http_504"]
+        "retryOn": [
+          "error",
+          "timeout",
+          "http_502",
+          "http_503",
+          "http_504"
+        ]
       }
     }
   ],
   "virtualHosts": [
     {
       "id": "example-web",
-      "listenerRefs": ["public-http"],
-      "serverNames": ["localhost"],
+      "listenerRefs": [
+        "public-http"
+      ],
+      "serverNames": [
+        "localhost"
+      ],
       "routes": [
         {
           "id": "health",
           "match": {
             "pathType": "exact",
             "path": "/healthz",
-            "methods": ["GET", "HEAD"]
+            "methods": [
+              "GET",
+              "HEAD"
+            ]
           },
           "resourceRef": "health-response"
         },
@@ -174,5 +201,38 @@
   },
   "metadata": {
     "owner": "sdkwork"
+  },
+  "appDomainFallback": {
+    "enabled": true,
+    "suffixes": [
+      "sdkwork.com",
+      "sdkwork.cn",
+      "birdcoder.com",
+      "birdcoder.cn",
+      "dtupay.com",
+      "dtupay.cn",
+      "skubc.com",
+      "skubc.cn",
+      "zowalk.com",
+      "zowalk.cn",
+      "offer86.com",
+      "offer86.cn",
+      "86offer.com",
+      "86offer.cn"
+    ],
+    "lookup": {
+      "mode": "embedded"
+    },
+    "timeoutMs": 2000,
+    "cacheTtlMs": 60000,
+    "negativeCacheTtlMs": 5000
+  },
+  "usageMetering": {
+    "enabled": true,
+    "windowSeconds": 60,
+    "flushIntervalMs": 30000,
+    "channel": {
+      "mode": "embedded"
+    }
   }
 }

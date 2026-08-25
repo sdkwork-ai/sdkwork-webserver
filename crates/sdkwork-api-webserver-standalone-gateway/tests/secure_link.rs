@@ -34,7 +34,8 @@ fn write_config(port: u16, route: Value, resource: Option<Value>, root: Option<&
             "type": "static",
             "root": root,
             "indexFiles": ["index.html"],
-            "followSymlinks": false
+            "followSymlinks": false,
+            "stripPrefix": true
         }));
     }
     let config = json!({
