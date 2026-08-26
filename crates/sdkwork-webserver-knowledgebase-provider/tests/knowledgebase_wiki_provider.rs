@@ -409,7 +409,7 @@ fn test_provider() -> (
 fn context() -> WebsiteProviderRuntimeContext {
     WebsiteProviderRuntimeContext {
         tenant_scope_hash: "tenant-scope".to_string(),
-        site_uuid: "site-1".to_string(),
+        app_uuid: "site-1".to_string(),
         binding_uuid: "binding-1".to_string(),
         variant_uuid: "variant-1".to_string(),
         mount_uuid: "mount-1".to_string(),

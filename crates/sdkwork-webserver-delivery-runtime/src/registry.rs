@@ -310,7 +310,7 @@ async fn validate_job(
     let request = ValidateWebsiteResourceRequest {
         context: WebsiteProviderRuntimeContext {
             tenant_scope_hash: job.descriptor.tenant_scope_hash.clone(),
-            site_uuid: job.descriptor.site_uuid.clone(),
+            app_uuid: job.descriptor.app_uuid.clone(),
             binding_uuid: job.binding.binding_uuid.clone(),
             variant_uuid: job.mount.variant_uuid.clone(),
             mount_uuid: job.mount.mount_uuid.clone(),

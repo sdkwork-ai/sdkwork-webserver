@@ -59,7 +59,7 @@ trace:
 verification:
   - pnpm --dir apps/sdkwork-webserver-pc typecheck
   - pnpm --dir apps/sdkwork-webserver-pc test
-  - pnpm --dir apps/sdkwork-webserver-pc build:standalone
+  - pnpm --dir apps/sdkwork-webserver-pc build:prod
   - cargo test -p sdkwork-api-webserver-standalone-gateway
   - node ../sdkwork-specs/tools/check-topology-deployment-profiles.mjs --root .
   - node ../sdkwork-specs/tools/resolve-app-runtime-plan.mjs --root . --deployment-profile standalone --environment development --runtime-target browser --client-architecture pc-web --json

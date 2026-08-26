@@ -1,4 +1,4 @@
-use std::{
+﻿use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, LazyLock, Mutex, MutexGuard},
 };
@@ -94,13 +94,13 @@ pub enum WebsiteRuntimeSetError {
         source: WebsiteRuntimeDescriptorError,
     },
     #[error(
-        "website runtime route {hostname}{path_prefix} is owned by both Site {first_site_uuid} and Site {second_site_uuid}"
+        "website runtime route {hostname}{path_prefix} is owned by both Site {first_app_uuid} and Site {second_app_uuid}"
     )]
     RouteConflict {
         hostname: String,
         path_prefix: String,
-        first_site_uuid: String,
-        second_site_uuid: String,
+        first_app_uuid: String,
+        second_app_uuid: String,
     },
     #[error(
         "website runtime set scope mismatch: expected node {expected_node_uuid} in {expected_environment:?}, received node {actual_node_uuid} in {actual_environment:?}"
@@ -216,15 +216,15 @@ impl CompiledWebsiteRuntimeSet {
         let mut exact_hosts: HashMap<String, PrefixIndex> = HashMap::new();
         let mut wildcard_hosts: HashMap<String, PrefixIndex> = HashMap::new();
         for (descriptor_index, descriptor) in descriptors.iter().enumerate() {
-            let site_uuid = &descriptor.descriptor().site_uuid;
+            let app_uuid = &descriptor.descriptor().app_uuid;
             for binding in &descriptor.descriptor().bindings {
                 let key = (binding.hostname.clone(), binding.path_prefix.clone());
-                if let Some(first_site_uuid) = owners.insert(key, site_uuid.clone()) {
+                if let Some(first_app_uuid) = owners.insert(key, app_uuid.clone()) {
                     return Err(WebsiteRuntimeSetError::RouteConflict {
                         hostname: binding.hostname.clone(),
                         path_prefix: binding.path_prefix.clone(),
-                        first_site_uuid,
-                        second_site_uuid: site_uuid.clone(),
+                        first_app_uuid,
+                        second_app_uuid: app_uuid.clone(),
                     });
                 }
                 if let Some(suffix) = binding.hostname.strip_prefix("*.") {
@@ -533,11 +533,11 @@ fn validate_snapshot(snapshot: &WebsiteRuntimeSetSnapshot) -> Result<(), Website
     if snapshot
         .descriptors
         .windows(2)
-        .any(|pair| pair[0].site_uuid >= pair[1].site_uuid)
+        .any(|pair| pair[0].app_uuid >= pair[1].app_uuid)
     {
         diagnostics.push(ConfigDiagnostic::new(
             "/descriptors",
-            "descriptors must be uniquely ordered by siteUuid",
+            "descriptors must be uniquely ordered by appUuid",
         ));
     }
     for (index, descriptor) in snapshot.descriptors.iter().enumerate() {

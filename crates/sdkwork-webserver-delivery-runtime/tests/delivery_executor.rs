@@ -279,7 +279,7 @@ async fn routes_wiki_through_the_registered_provider_with_compiled_scope() {
     );
     assert_eq!(content.route.runtime_set_generation, 1);
     assert_eq!(content.route.tenant_scope_hash, TENANT_SCOPE_HASH);
-    assert_eq!(content.route.site_uuid, "site-wiki");
+    assert_eq!(content.route.app_uuid, "site-wiki");
     assert_eq!(content.route.binding_uuid, "binding-wiki");
     assert_eq!(content.route.variant_uuid, "variant-default");
     assert_eq!(content.route.mount_uuid, "mount-wiki");
@@ -1193,13 +1193,13 @@ fn descriptor_fixture(handler: FixtureHandler) -> Value {
         "schemaVersion": "sdkwork.website-runtime.v1",
         "kind": "sdkwork.website-runtime.descriptor",
         "revisionUuid": format!("revision-{site}"),
-        "siteUuid": format!("site-{site}"),
+        "appUuid": format!("site-{site}"),
         "tenantScopeHash": TENANT_SCOPE_HASH,
         "environment": "production",
         "generatedAt": "2026-07-21T00:00:00Z",
         "compilerVersion": "deploy-descriptor-compiler/1",
         "descriptorSha256": "0".repeat(64),
-        "siteDefaultVariantUuid": "variant-default",
+        "appDefaultVariantUuid": "variant-default",
         "bindings": [{
             "bindingUuid": format!("binding-{site}"),
             "hostname": "example.com",

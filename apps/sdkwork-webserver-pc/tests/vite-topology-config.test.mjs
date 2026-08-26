@@ -87,6 +87,6 @@ describe('Vite browser topology', () => {
 
   it('keeps React workspace deduplication enabled', () => {
     const viteConfig = readFileSync(path.join(appRoot, 'vite.config.ts'), 'utf8');
-    expect(viteConfig).toMatch(/dedupe:\s*\["react",\s*"react-dom",\s*"react-router",\s*"react-router-dom"\]/u);
+    expect(viteConfig).toMatch(/dedupe:\s*\["react",\s*"react-dom",\s*"react-router",\s*"react-router-dom",\s*"@sdkwork\/utils"\]/u);
   });
 });

@@ -38,10 +38,6 @@ const STANDALONE_H5_ROOT = 'share/sdkwork/webserver-h5';
 const STANDALONE_STATIC_FALLBACK_ROOT = 'share/sdkwork/webserver-static';
 const STANDALONE_IAM_ROOT = 'share/sdkwork/iam';
 const STANDALONE_DRIVE_ROOT = 'share/sdkwork/drive';
-/** CDN-publishable cloud profile bundles (FRONTEND_CODE_SPEC.md §7). */
-const CLOUD_PC_BUNDLE = path.join(REPO_ROOT, 'apps', 'sdkwork-webserver-pc', 'dist', 'cloud', 'prod');
-const CLOUD_H5_BUNDLE = path.join(REPO_ROOT, 'apps', 'sdkwork-webserver-h5', 'dist', 'cloud', 'prod');
-const CLOUD_PRODUCTION_API_EDGE = 'https://api.sdkwork.com';
 const STANDALONE_SAME_ORIGIN_PATHS = Object.freeze({
   shell: '/',
   runtimeEnv: '/runtime-env.json',
@@ -693,41 +689,7 @@ async function smoke(settings) {
         temporaryRoot,
       });
     } else {
-      if (existsSync(pcStaticRoot)) {
-        throw new Error('cloud release must not contain the standalone PC app shell');
-      }
-      for (const dependencyRoot of [STANDALONE_IAM_ROOT, STANDALONE_DRIVE_ROOT]) {
-        if (existsSync(path.join(packageRoot, ...dependencyRoot.split('/')))) {
-          throw new Error('cloud release must not contain standalone dependency runtime assets');
-        }
-      }
-      // Cloud packages stay server-only; the cloud.production PC/H5 bundles
-      // must exist as the CDN-publishable artifacts with the unified API edge.
-      for (const [label, bundle] of [['PC', CLOUD_PC_BUNDLE], ['H5', CLOUD_H5_BUNDLE]]) {
-        for (const bootstrapFile of ['index.html', 'runtime-env.json']) {
-          const metadata = statSync(path.join(bundle, bootstrapFile));
-          if (!metadata.isFile() || metadata.size === 0) {
-            throw new Error(`cloud ${label} CDN bundle ${bootstrapFile} is not a non-empty regular file`);
-          }
-        }
-        const assets = readdirSync(path.join(bundle, 'assets'), { withFileTypes: true });
-        if (!assets.some((entry) => entry.isFile())) {
-          throw new Error(`cloud ${label} CDN bundle does not contain an assets/ file`);
-        }
-        const runtimeEnv = JSON.parse(readFileSync(path.join(bundle, 'runtime-env.json'), 'utf8'));
-        if (
-          runtimeEnv.browserOriginMode !== 'cross-origin'
-          || runtimeEnv.deploymentProfile !== 'cloud'
-          || runtimeEnv.profileId !== 'cloud.production'
-        ) {
-          throw new Error(`cloud ${label} CDN bundle runtime-env must declare cloud.production cross-origin`);
-        }
-        for (const field of ['appApiBaseUrl', 'backendApiBaseUrl', 'driveAppApiBaseUrl', 'appbaseAppApiBaseUrl', 'deployAppApiBaseUrl']) {
-          if (runtimeEnv[field] !== CLOUD_PRODUCTION_API_EDGE) {
-            throw new Error(`cloud ${label} CDN bundle runtime-env.${field} must equal the unified API edge ${CLOUD_PRODUCTION_API_EDGE}`);
-          }
-        }
-      }
+      throw new Error('--deployment-profile must be standalone (sdkwork-webserver is standalone-only)');
     }
 
     const certificateFile = path.join(temporaryRoot, 'smoke-cert.pem');

@@ -2935,7 +2935,7 @@ function resolveActionLabel(
 ): string {
   const resolvedKey = action.resolveActionLabelKey?.({ selectedItem })
     ?? (`action.${resource}.${action.id}` as WebserverMessageKey);
-  return t(resolvedKey);
+  return t(resolvedKey as WebserverMessageKey);
 }
 
 function actionText(

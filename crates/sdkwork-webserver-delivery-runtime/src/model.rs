@@ -46,7 +46,7 @@ pub struct WebsiteDeliveryRouteIdentity {
     pub runtime_set_generation: u64,
     pub revision_uuid: String,
     pub tenant_scope_hash: String,
-    pub site_uuid: String,
+    pub app_uuid: String,
     pub binding_uuid: String,
     pub variant_uuid: String,
     pub mount_uuid: String,

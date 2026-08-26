@@ -16,7 +16,16 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "types": ["vite/client", "vitest/globals"]
+    "types": ["vite/client", "vitest/globals"],
+    "paths": {
+      "react": ["./node_modules/@types/react"],
+      "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime"],
+      "react/jsx-dev-runtime": ["./node_modules/@types/react/jsx-dev-runtime"],
+      "react-dom": ["./node_modules/@types/react-dom"],
+      "react-dom/*": ["./node_modules/@types/react-dom/*"],
+      "@sdkwork/sdk-common": ["../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript/src/index.ts"],
+      "@sdkwork/sdk-common/*": ["../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript/src/*"]
+    }
   },
   "include": ["src", "packages", "tests", "vite.config.ts"]
 }

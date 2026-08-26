@@ -176,7 +176,7 @@ impl EdgeRuntime {
         Ok(PendingEdgeDeployment { activation, permit })
     }
 
-    pub fn deploy_site_config(
+    pub fn deploy_app_config(
         &self,
         domain: &str,
         config_content: &str,

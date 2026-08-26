@@ -197,25 +197,6 @@
   },
   "targets": [
     {
-      "id": "linux-x64-cloud-server-tar-gz",
-      "profile": "server",
-      "platform": "linux",
-      "architecture": "x64",
-      "formats": [
-        "tar.gz"
-      ],
-      "runner": "ubuntu-24.04",
-      "outputGlobs": [
-        "dist/release/sdkwork-webserver-linux-x64-cloud-server-*.tar.gz",
-        "dist/release/sdkwork-webserver-linux-x64-cloud-server-*.tar.gz.sha256",
-        "dist/release/sdkwork-webserver-linux-x64-cloud-server-*.tar.gz.sigstore.json",
-        "dist/release/sdkwork-webserver-linux-x64-cloud-server-*.tar.gz.cdx.json",
-        "dist/release/sdkwork-webserver-linux-x64-cloud-server-*.tar.gz.cdx.json.sha256"
-      ],
-      "deploymentProfile": "cloud",
-      "runtimeTarget": "server"
-    },
-    {
       "id": "linux-x64-standalone-server-tar-gz",
       "profile": "server",
       "platform": "linux",
@@ -232,25 +213,6 @@
         "dist/release/sdkwork-webserver-linux-x64-standalone-server-*.tar.gz.cdx.json.sha256"
       ],
       "deploymentProfile": "standalone",
-      "runtimeTarget": "server"
-    },
-    {
-      "id": "linux-arm64-cloud-server-tar-gz",
-      "profile": "server",
-      "platform": "linux",
-      "architecture": "arm64",
-      "formats": [
-        "tar.gz"
-      ],
-      "runner": "ubuntu-24.04-arm",
-      "outputGlobs": [
-        "dist/release/sdkwork-webserver-linux-arm64-cloud-server-*.tar.gz",
-        "dist/release/sdkwork-webserver-linux-arm64-cloud-server-*.tar.gz.sha256",
-        "dist/release/sdkwork-webserver-linux-arm64-cloud-server-*.tar.gz.sigstore.json",
-        "dist/release/sdkwork-webserver-linux-arm64-cloud-server-*.tar.gz.cdx.json",
-        "dist/release/sdkwork-webserver-linux-arm64-cloud-server-*.tar.gz.cdx.json.sha256"
-      ],
-      "deploymentProfile": "cloud",
       "runtimeTarget": "server"
     },
     {

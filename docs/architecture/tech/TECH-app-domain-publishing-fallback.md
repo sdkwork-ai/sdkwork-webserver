@@ -7,7 +7,7 @@ Every user app gets automatically publishable default domains
 domains. The Web Server data plane only knows its local configuration
 (virtual hosts, website runtime bindings). When a request host matches no
 local configuration, the data plane now resolves the server through the
-**sdkwork-deployments control plane** and serves the site's latest compiled
+**sdkwork-deployments control plane** and serves the app's latest compiled
 website runtime descriptor — instead of returning 404 immediately.
 
 ## Platform domain catalog
@@ -41,12 +41,12 @@ environments use `app-<env>` so every environment is publishable):
   (`DeployService::provision_app_default_domains`): one platform DNS zone
   per suffix (`app.<suffix>`, idempotent), 14 EXACT `deploy_domain` rows per
   app (auto-`VERIFIED` because the platform owns the apex) and 14 `SERVE`
-  `deploy_site_binding` rows (first suffix canonical). Hostnames are unique
+  `deploy_app_binding` rows (first suffix canonical). Hostnames are unique
   across tenants (`uk_deploy_domain_active_hostname`); a slug claimed by
   another tenant fails provisioning with a clear conflict.
 - `DeployService::resolve_server_by_hostname(hostname, environment)`
-  resolves an ACTIVE binding to the site's latest VALID compiled revision
-  (`deploy_site_revision.descriptor_json` + `descriptor_sha256`) — the
+  resolves an ACTIVE binding to the app's latest VALID compiled revision
+  (`deploy_app_revision.descriptor_json` + `descriptor_sha256`) — the
   lookup never recompiles.
 - Repository integration tests: `tests/platform_app_domains.rs`.
 
@@ -157,7 +157,7 @@ for per-tenant / per-app billing.
 Attribution resolution:
 - website-runtime-served traffic: the outcome's route identity
   (`site_uuid`, `binding_uuid`); the control plane resolves the tenant from
-  the binding at ingest (`deploy_site_binding.tenant_id`).
+  the binding at ingest (`deploy_app_binding.tenant_id`).
 - app-domain-fallback-served traffic: the fallback resolver caches
   `tenant_id` / `app_id` / `binding_uuid` from the Deploy resolution.
 - locally configured (non-Deploy) hosts: unmanaged, attributed to tenant 0
@@ -171,7 +171,7 @@ Attribution resolution:
   `traffic.egress_bytes` (unit `BYTE`). Deduplicated on
   `(tenant_id, deduplication_key)` with a deterministic window key
   (`traffic:<window>:<dim>:<sha256 fingerprint>`).
-- `deploy_site_usage_daily` (per site + binding, `0002_usage_metering`
+- `deploy_app_usage_daily` (per site + binding, `0002_usage_metering`
   migration adds `binding_id`) and `deploy_tenant_usage_daily` (per
   tenant, new table) are rebuilt from facts by
   `POST /backend/v3/api/usage/reconcile`.
@@ -182,8 +182,12 @@ Attribution resolution:
 ## Data plane
 
 `UsageMeteringAggregator` (gateway `usage_metering.rs`) buckets requests
-per (domain, server IP, tenant, site, binding, window), flushes windows on
-`flushIntervalMs` through the configured channel and re-queues on failure.
+per (domain, server IP, tenant, site, binding, status class, window),
+flushes only fully closed windows on `flushIntervalMs` (a mid-window flush
+would split one window into two events with the same deduplication key and
+drop the second as a duplicate) and re-queues failed ingests. Deduplication
+keys scope per node, window and dimension so multi-node deployments never
+deduplicate each other's traffic.
 Channels: `embedded` (shared Deploy database via `DeployRepository`),
 `http` (`POST <endpoint>/backend/v3/api/usage/ingest` on the control
 plane). Recording points: the website delivery layer (exact outcome bytes

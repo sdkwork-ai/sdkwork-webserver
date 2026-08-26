@@ -85,6 +85,19 @@ function main() {
     console.log('[webserver-import-profile] no active import set detected; default activation is cloud');
     return;
   }
+  if (!PROFILES.includes(operation)) {
+    console.error(`[webserver-import-profile] import profile must be ${PROFILES.join(' or ')}`);
+    process.exitCode = 1;
+    return;
+  }
+  if (!existsSync(path.join(IMPORTS_ROOT, `import.conf.${operation}`))) {
+    console.error(
+      `[webserver-import-profile] import set ${operation} is not materialized under ${IMPORTS_ROOT}; ` +
+        'run the container entrypoint first (the entrypoint writes both standalone and cloud sets)',
+    );
+    process.exitCode = 1;
+    return;
+  }
   activate(operation);
 }
 

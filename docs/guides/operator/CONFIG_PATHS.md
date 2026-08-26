@@ -94,7 +94,7 @@ Override: `SDKWORK_WEBSERVER_CONFIG_FILE` → alternate TOML path.
 | H5 | `/usr/share/sdkwork/webserver/web/h5/` | `/app/share/sdkwork/webserver/web/h5/` | `…/web/h5/` | `…\web\h5\` |
 | Static | `/usr/share/sdkwork/webserver/web/static/` | `/app/share/sdkwork/webserver/web/static/` | `…/web/static/` | `…\web\static\` |
 
-Source checkout builds (not install): `apps/sdkwork-webserver-{pc,h5}/dist/{dev,test,staging,prod}/`.
+Source checkout builds (not install): `apps/sdkwork-webserver-{pc,h5}/dist/standalone/{dev,test,staging,prod}/` (standalone-only, `SDKWORK_WEBSERVER_SPEC.md` §17.4).
 Catalog example: [`deployments/webserver/app-roots.example.toml`](../../../deployments/webserver/app-roots.example.toml).
 
 Env equivalents: `SDKWORK_WEBSERVER_{PC,H5,STATIC_FALLBACK}_STATIC_ROOT`, `SDKWORK_WEBSERVER_TABLET_SURFACE`.

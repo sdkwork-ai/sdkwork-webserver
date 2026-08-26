@@ -57,7 +57,7 @@ function requiredToken(value, pattern, label) {
 function resolveArtifact(settings) {
   const deploymentProfile = requiredToken(
     settings.deploymentProfile ?? process.env.SDKWORK_DEPLOYMENT_PROFILE,
-    /^(?:standalone|cloud)$/u,
+    /^(?:standalone)$/u,
     'deployment profile',
   );
   const architecture = requiredToken(
@@ -143,7 +143,7 @@ async function main() {
   const settings = parseArgs(process.argv.slice(2));
   if (settings.help) {
     console.log(
-      'Usage: node scripts/webserver-sign.mjs <sign|verify> --deployment-profile <standalone|cloud> --architecture <x64|arm64> --version <semver>',
+      'Usage: node scripts/webserver-sign.mjs <sign|verify> --deployment-profile <standalone> --architecture <x64|arm64> --version <semver>',
     );
     return;
   }

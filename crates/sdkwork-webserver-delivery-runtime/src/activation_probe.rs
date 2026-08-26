@@ -34,26 +34,26 @@ pub enum WebsiteRuntimeActivationProbeError {
     #[error("website runtime set cannot be staged for activation: {0}")]
     RuntimeSet(#[from] WebsiteRuntimeSetError),
     #[error(
-        "Site {site_uuid} Variant {variant_uuid} has no content-resolvable activation entrypoint"
+        "Site {app_uuid} Variant {variant_uuid} has no content-resolvable activation entrypoint"
     )]
     MissingEntrypoint {
-        site_uuid: String,
+        app_uuid: String,
         variant_uuid: String,
     },
     #[error(
-        "activation probe delivery failed for Site {site_uuid} Binding {binding_uuid}: {source}"
+        "activation probe delivery failed for Site {app_uuid} Binding {binding_uuid}: {source}"
     )]
     Delivery {
-        site_uuid: String,
+        app_uuid: String,
         binding_uuid: String,
         #[source]
         source: WebsiteDeliveryError,
     },
     #[error(
-        "activation probe did not resolve the expected route for Site {site_uuid} Binding {binding_uuid}"
+        "activation probe did not resolve the expected route for Site {app_uuid} Binding {binding_uuid}"
     )]
     RouteNotResolved {
-        site_uuid: String,
+        app_uuid: String,
         binding_uuid: String,
     },
     #[error("website runtime activation probes exceeded the bounded execution deadline")]
@@ -110,7 +110,7 @@ enum ProbeExpectation {
 }
 
 struct ActivationProbeJob {
-    site_uuid: String,
+    app_uuid: String,
     binding_uuid: String,
     authority: String,
     path: String,
@@ -138,7 +138,7 @@ fn activation_probe_jobs(
                 WebsiteBindingAction::Redirect { .. } => push_probe_job(
                     &mut jobs,
                     ActivationProbeJob {
-                        site_uuid: descriptor.site_uuid.clone(),
+                        app_uuid: descriptor.app_uuid.clone(),
                         binding_uuid: binding.binding_uuid.clone(),
                         authority: probe_authority(&binding.hostname),
                         path: binding.path_prefix.clone(),
@@ -156,7 +156,7 @@ fn activation_probe_jobs(
                     let variant_uuid = forced_variant_uuid
                         .as_deref()
                         .or(default_variant_uuid.as_deref())
-                        .unwrap_or(&descriptor.site_default_variant_uuid);
+                        .unwrap_or(&descriptor.app_default_variant_uuid);
                     push_serve_probe(
                         &mut jobs,
                         descriptor,
@@ -165,7 +165,7 @@ fn activation_probe_jobs(
                         runtime_set.generation(),
                     )?;
                     covered_variants.insert(variant_uuid.to_owned());
-                    probed_variants.insert((descriptor.site_uuid.clone(), variant_uuid.to_owned()));
+                    probed_variants.insert((descriptor.app_uuid.clone(), variant_uuid.to_owned()));
                     if forced_variant_uuid.is_none() && preference_binding.is_none() {
                         preference_binding = Some(binding);
                     }
@@ -184,7 +184,7 @@ fn activation_probe_jobs(
                         runtime_set.generation(),
                     )?;
                     probed_variants
-                        .insert((descriptor.site_uuid.clone(), variant.variant_uuid.clone()));
+                        .insert((descriptor.app_uuid.clone(), variant.variant_uuid.clone()));
                 }
             }
         }
@@ -202,14 +202,14 @@ fn push_serve_probe(
 ) -> Result<(), WebsiteRuntimeActivationProbeError> {
     let mount = select_activation_mount(descriptor, variant_uuid).ok_or_else(|| {
         WebsiteRuntimeActivationProbeError::MissingEntrypoint {
-            site_uuid: descriptor.site_uuid.clone(),
+            app_uuid: descriptor.app_uuid.clone(),
             variant_uuid: variant_uuid.to_owned(),
         }
     })?;
     push_probe_job(
         jobs,
         ActivationProbeJob {
-            site_uuid: descriptor.site_uuid.clone(),
+            app_uuid: descriptor.app_uuid.clone(),
             binding_uuid: binding.binding_uuid.clone(),
             authority: probe_authority(&binding.hostname),
             path: activation_path(&binding.path_prefix, &mount.path_prefix),
@@ -316,7 +316,7 @@ async fn execute_activation_probe(
         })
         .await
         .map_err(|source| WebsiteRuntimeActivationProbeError::Delivery {
-            site_uuid: job.site_uuid.clone(),
+            app_uuid: job.app_uuid.clone(),
             binding_uuid: job.binding_uuid.clone(),
             source,
         })?;
@@ -349,7 +349,7 @@ async fn execute_activation_probe(
         Ok(())
     } else {
         Err(WebsiteRuntimeActivationProbeError::RouteNotResolved {
-            site_uuid: job.site_uuid,
+            app_uuid: job.app_uuid,
             binding_uuid: job.binding_uuid,
         })
     }

@@ -252,6 +252,7 @@ async fn route_admitted_request(
                 server_port: transport_peer.port(),
                 listener_id: state.listener_id.clone(),
                 meter: meter.clone(),
+                count_not_found: state.deploy_fallback.is_none(),
             }
         });
         let response = serve_website_request(
@@ -1353,6 +1354,11 @@ async fn serve_deploy_fallback(
             None
         }
     };
+    // App-config listeners meter every response in `route_request`; here
+    // only website listeners record (and only actually-served outcomes —
+    // a failed fallback leaves the caller's 404 unrecorded instead of
+    // inventing a phantom 5xx).
+    if state.website_delivery.is_some() && served.is_some() {
     if let Some(meter) = state.usage_meter.clone() {
         if let Some(hostname) =
             sdkwork_webserver_core::normalize_authority_host(&request.authority)
@@ -1384,6 +1390,7 @@ async fn serve_deploy_fallback(
                 status_class,
             });
         }
+    }
     }
     served.map(|outcome| super::website_delivery::outcome_response(outcome, query.as_deref()))
 }

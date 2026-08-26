@@ -1,4 +1,4 @@
-//! SaaS traffic usage metering.
+﻿//! SaaS traffic usage metering.
 //!
 //! Every served request is counted per domain (hostname) and per server IP
 //! (`transport_peer`), attributed to the serving tenant/app when known, and
@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
@@ -23,13 +23,13 @@ pub const USAGE_DIMENSION_EGRESS_BYTES: &str = "traffic.egress_bytes";
 
 /// Traffic attribution known at the data plane. `None` fields mean the
 /// request was not attributable (locally configured host without Deploy
-/// metadata); the control plane resolves tenant/site/binding from the
+/// metadata); the control plane resolves tenant/app/binding from the
 /// binding uuid when possible.
 #[derive(Clone, Debug, Default)]
 pub struct UsageAttribution {
     pub tenant_id: Option<i64>,
     pub organization_id: Option<i64>,
-    pub site_uuid: Option<String>,
+    pub app_uuid: Option<String>,
     pub binding_uuid: Option<String>,
     pub app_id: Option<String>,
     pub app_slug: Option<String>,
@@ -43,6 +43,10 @@ pub struct MeteringContext {
     pub server_port: u16,
     pub listener_id: String,
     pub meter: Arc<UsageMeteringAggregator>,
+    /// Count 404 (NotFound) outcomes in the delivery layer. False when an
+    /// app-domain fallback resolver exists: the fallback path records the
+    /// final outcome itself, so the intermediate 404 must not be counted.
+    pub count_not_found: bool,
 }
 
 /// One counted request delivered to the aggregator.
@@ -65,9 +69,10 @@ struct BucketKey {
     listener_id: String,
     tenant_id: i64,
     organization_id: i64,
-    site_uuid: String,
+    app_uuid: String,
     binding_uuid: String,
     app_id: String,
+    status_class: String,
     window_start_epoch: u64,
 }
 
@@ -81,9 +86,12 @@ struct Counters {
 /// One aggregated window ready for ingest.
 #[derive(Clone, Debug)]
 pub struct UsageWindow {
+    /// Node that observed the traffic (dedup scope: two nodes serving the
+    /// same host in the same window must not deduplicate each other).
+    pub node_uuid: String,
     pub tenant_id: i64,
     pub organization_id: i64,
-    pub site_uuid: Option<String>,
+    pub app_uuid: Option<String>,
     pub binding_uuid: Option<String>,
     pub hostname: String,
     pub server_ip: String,
@@ -102,17 +110,25 @@ impl UsageWindow {
     fn deduplication_key(&self, dimension: &str) -> String {
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
+        hasher.update(self.node_uuid.as_bytes());
+        hasher.update(b"|");
         hasher.update(self.window_start.as_bytes());
         hasher.update(b"|");
         hasher.update(self.tenant_id.to_string().as_bytes());
         hasher.update(b"|");
-        hasher.update(self.site_uuid.as_deref().unwrap_or_default().as_bytes());
+        hasher.update(self.app_uuid.as_deref().unwrap_or_default().as_bytes());
         hasher.update(b"|");
         hasher.update(self.binding_uuid.as_deref().unwrap_or_default().as_bytes());
         hasher.update(b"|");
         hasher.update(self.hostname.as_bytes());
         hasher.update(b"|");
         hasher.update(self.server_ip.as_bytes());
+        hasher.update(b"|");
+        hasher.update(self.server_port.to_string().as_bytes());
+        hasher.update(b"|");
+        hasher.update(self.listener_id.as_bytes());
+        hasher.update(b"|");
+        hasher.update(self.status_class.as_bytes());
         hasher.update(b"|");
         hasher.update(dimension.as_bytes());
         let digest = hasher.finalize();
@@ -133,7 +149,7 @@ impl UsageWindow {
 /// (`HttpUsageIngestChannel`).
 #[async_trait]
 pub trait UsageIngestChannel: Send + Sync {
-    async fn ingest(&self, windows: Vec<UsageWindow>) -> Result<(), String>;
+    async fn ingest(&self, node_uuid: &str, windows: Vec<UsageWindow>) -> Result<(), String>;
 }
 
 /// In-memory window aggregator. `record` is lock-free-ish (one mutex per
@@ -197,13 +213,14 @@ impl UsageMeteringAggregator {
             listener_id: request.listener_id.to_owned(),
             tenant_id: request.attribution.tenant_id.unwrap_or(0),
             organization_id: request.attribution.organization_id.unwrap_or(0),
-            site_uuid: request.attribution.site_uuid.clone().unwrap_or_default(),
+            app_uuid: request.attribution.app_uuid.clone().unwrap_or_default(),
             binding_uuid: request
                 .attribution
                 .binding_uuid
                 .clone()
                 .unwrap_or_default(),
             app_id: request.attribution.app_id.clone().unwrap_or_default(),
+            status_class: request.status_class.to_owned(),
             window_start_epoch,
         };
         let Ok(mut buckets) = self.buckets.lock() else {
@@ -230,12 +247,31 @@ impl UsageMeteringAggregator {
         if !self.config.enabled {
             return;
         }
+        let window_seconds = self.config.window_seconds.max(1);
+        let now_epoch = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        // Only windows that have fully closed are flushed: a mid-window flush
+        // would split one window into two events with the same deduplication
+        // key, and the second one would be dropped as a duplicate (data
+        // loss). Open windows stay bucketed for the next flush.
         let drained = {
             let Ok(mut buckets) = self.buckets.lock() else {
                 tracing::warn!("usage metering bucket lock poisoned; skipping flush");
                 return;
             };
-            std::mem::take(&mut *buckets)
+            let mut drained = HashMap::new();
+            let mut kept = HashMap::new();
+            for (key, counters) in std::mem::take(&mut *buckets) {
+                if key.window_start_epoch + window_seconds <= now_epoch {
+                    drained.insert(key, counters);
+                } else {
+                    kept.insert(key, counters);
+                }
+            }
+            *buckets = kept;
+            drained
         };
         if drained.is_empty() {
             return;
@@ -244,9 +280,10 @@ impl UsageMeteringAggregator {
         for (key, counters) in drained.iter() {
             let window_start = epoch_to_rfc3339(key.window_start_epoch);
             windows.push(UsageWindow {
+                node_uuid: self.node_uuid.clone(),
                 tenant_id: key.tenant_id,
                 organization_id: key.organization_id,
-                site_uuid: (!key.site_uuid.is_empty()).then_some(key.site_uuid.clone()),
+                app_uuid: (!key.app_uuid.is_empty()).then_some(key.app_uuid.clone()),
                 binding_uuid: (!key.binding_uuid.is_empty()).then_some(key.binding_uuid.clone()),
                 hostname: key.hostname.clone(),
                 server_ip: key.server_ip.clone(),
@@ -254,14 +291,14 @@ impl UsageMeteringAggregator {
                 listener_id: key.listener_id.clone(),
                 app_id: (!key.app_id.is_empty()).then_some(key.app_id.clone()),
                 app_slug: None,
-                status_class: String::new(),
+                status_class: key.status_class.clone(),
                 window_start,
                 requests: counters.requests,
                 ingress_bytes: counters.ingress_bytes,
                 egress_bytes: counters.egress_bytes,
             });
         }
-        match self.channel.ingest(windows).await {
+        match self.channel.ingest(&self.node_uuid, windows).await {
             Ok(()) => {
                 self.ingested_windows
                     .fetch_add(drained.len() as u64, Ordering::Relaxed);
@@ -311,7 +348,7 @@ impl UsageMeteringAggregator {
 fn epoch_to_rfc3339(epoch_seconds: u64) -> String {
     let seconds = i64::try_from(epoch_seconds).unwrap_or(0);
     let datetime = time::OffsetDateTime::from_unix_timestamp(seconds)
-        .unwrap_or_else(|_| time::OffsetDateTime::UNIX_EPOCH);
+        .unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
     datetime
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
@@ -334,7 +371,7 @@ impl EmbeddedUsageIngestChannel {
 #[cfg(feature = "management")]
 #[async_trait]
 impl UsageIngestChannel for EmbeddedUsageIngestChannel {
-    async fn ingest(&self, windows: Vec<UsageWindow>) -> Result<(), String> {
+    async fn ingest(&self, _node_uuid: &str, windows: Vec<UsageWindow>) -> Result<(), String> {
         use sdkwork_deploy_contract::{
             UsageEventAttribution, UsageEventIngestItem, USAGE_DIMENSION_TRAFFIC_INGRESS_BYTES,
             USAGE_DIMENSION_TRAFFIC_REQUESTS,
@@ -354,7 +391,7 @@ impl UsageIngestChannel for EmbeddedUsageIngestChannel {
                 listener_id: Some(window.listener_id.clone()),
                 app_id: window.app_id.clone(),
                 app_slug: window.app_slug.clone(),
-                site_uuid: window.site_uuid.clone(),
+                app_uuid: window.app_uuid.clone(),
                 binding_uuid: window.binding_uuid.clone(),
                 status_class: (!window.status_class.is_empty())
                     .then_some(window.status_class.clone()),
@@ -362,7 +399,7 @@ impl UsageIngestChannel for EmbeddedUsageIngestChannel {
             events.push(UsageEventIngestItem {
                 tenant_id: window.tenant_id,
                 organization_id: window.organization_id,
-                site_uuid: window.site_uuid.clone(),
+                app_uuid: window.app_uuid.clone(),
                 binding_uuid: window.binding_uuid.clone(),
                 period_start: window.window_start.clone(),
                 dimension: USAGE_DIMENSION_TRAFFIC_REQUESTS.to_owned(),
@@ -376,7 +413,7 @@ impl UsageIngestChannel for EmbeddedUsageIngestChannel {
                 events.push(UsageEventIngestItem {
                     tenant_id: window.tenant_id,
                     organization_id: window.organization_id,
-                    site_uuid: window.site_uuid.clone(),
+                    app_uuid: window.app_uuid.clone(),
                     binding_uuid: window.binding_uuid.clone(),
                     period_start: window.window_start.clone(),
                     dimension: USAGE_DIMENSION_TRAFFIC_INGRESS_BYTES.to_owned(),
@@ -391,7 +428,7 @@ impl UsageIngestChannel for EmbeddedUsageIngestChannel {
                 events.push(UsageEventIngestItem {
                     tenant_id: window.tenant_id,
                     organization_id: window.organization_id,
-                    site_uuid: window.site_uuid.clone(),
+                    app_uuid: window.app_uuid.clone(),
                     binding_uuid: window.binding_uuid.clone(),
                     period_start: window.window_start.clone(),
                     dimension: sdkwork_deploy_contract::USAGE_DIMENSION_TRAFFIC_EGRESS_BYTES
@@ -445,7 +482,7 @@ impl HttpUsageIngestChannel {
 
 #[async_trait]
 impl UsageIngestChannel for HttpUsageIngestChannel {
-    async fn ingest(&self, windows: Vec<UsageWindow>) -> Result<(), String> {
+    async fn ingest(&self, node_uuid: &str, windows: Vec<UsageWindow>) -> Result<(), String> {
         use sdkwork_deploy_contract::{
             IngestUsageEventsRequest, UsageEventAttribution, UsageEventIngestItem,
             USAGE_DIMENSION_TRAFFIC_INGRESS_BYTES, USAGE_DIMENSION_TRAFFIC_REQUESTS,
@@ -465,7 +502,7 @@ impl UsageIngestChannel for HttpUsageIngestChannel {
                 listener_id: Some(window.listener_id.clone()),
                 app_id: window.app_id.clone(),
                 app_slug: window.app_slug.clone(),
-                site_uuid: window.site_uuid.clone(),
+                app_uuid: window.app_uuid.clone(),
                 binding_uuid: window.binding_uuid.clone(),
                 status_class: (!window.status_class.is_empty())
                     .then_some(window.status_class.clone()),
@@ -473,7 +510,7 @@ impl UsageIngestChannel for HttpUsageIngestChannel {
             events.push(UsageEventIngestItem {
                 tenant_id: window.tenant_id,
                 organization_id: window.organization_id,
-                site_uuid: window.site_uuid.clone(),
+                app_uuid: window.app_uuid.clone(),
                 binding_uuid: window.binding_uuid.clone(),
                 period_start: window.window_start.clone(),
                 dimension: USAGE_DIMENSION_TRAFFIC_REQUESTS.to_owned(),
@@ -487,7 +524,7 @@ impl UsageIngestChannel for HttpUsageIngestChannel {
                 events.push(UsageEventIngestItem {
                     tenant_id: window.tenant_id,
                     organization_id: window.organization_id,
-                    site_uuid: window.site_uuid.clone(),
+                    app_uuid: window.app_uuid.clone(),
                     binding_uuid: window.binding_uuid.clone(),
                     period_start: window.window_start.clone(),
                     dimension: USAGE_DIMENSION_TRAFFIC_INGRESS_BYTES.to_owned(),
@@ -502,7 +539,7 @@ impl UsageIngestChannel for HttpUsageIngestChannel {
                 events.push(UsageEventIngestItem {
                     tenant_id: window.tenant_id,
                     organization_id: window.organization_id,
-                    site_uuid: window.site_uuid.clone(),
+                    app_uuid: window.app_uuid.clone(),
                     binding_uuid: window.binding_uuid.clone(),
                     period_start: window.window_start.clone(),
                     dimension: sdkwork_deploy_contract::USAGE_DIMENSION_TRAFFIC_EGRESS_BYTES
@@ -518,7 +555,7 @@ impl UsageIngestChannel for HttpUsageIngestChannel {
             }
         }
         let request = IngestUsageEventsRequest {
-            node_uuid: None,
+            node_uuid: Some(node_uuid.to_owned()),
             events,
         };
         let mut builder = self.client.post(&self.endpoint).json(&request);
@@ -551,7 +588,7 @@ mod tests {
     fn config() -> Arc<UsageMeteringConfig> {
         Arc::new(UsageMeteringConfig {
             enabled: true,
-            window_seconds: 60,
+            window_seconds: 1,
             flush_interval_ms: 30_000,
             channel: sdkwork_webserver_core::config::UsageMeteringChannel::Embedded,
         })
@@ -563,7 +600,7 @@ mod tests {
 
     #[async_trait]
     impl UsageIngestChannel for FakeChannel {
-        async fn ingest(&self, windows: Vec<UsageWindow>) -> Result<(), String> {
+        async fn ingest(&self, _node_uuid: &str, windows: Vec<UsageWindow>) -> Result<(), String> {
             self.ingested.lock().unwrap().extend(windows);
             Ok(())
         }
@@ -578,7 +615,7 @@ mod tests {
         let attribution = UsageAttribution {
             tenant_id: Some(7),
             organization_id: Some(9),
-            site_uuid: Some("site-10".to_owned()),
+            app_uuid: Some("site-10".to_owned()),
             binding_uuid: Some("binding-1".to_owned()),
             app_id: Some("app-20".to_owned()),
             app_slug: Some("shop".to_owned()),
@@ -606,6 +643,11 @@ mod tests {
             egress_bytes: 50,
             status_class: "4xx",
         });
+        // Open windows stay bucketed: a mid-window flush must not split a
+        // window into two events with the same deduplication key.
+        meter.flush().await;
+        assert_eq!(channel.ingested.lock().unwrap().len(), 0);
+        tokio::time::sleep(std::time::Duration::from_millis(1_100)).await;
         meter.flush().await;
         let windows = channel.ingested.lock().unwrap();
         assert_eq!(windows.len(), 2);
@@ -631,9 +673,10 @@ mod tests {
     #[test]
     fn deduplication_keys_are_deterministic_and_bounded() {
         let window = UsageWindow {
+            node_uuid: "node-1".to_owned(),
             tenant_id: 7,
             organization_id: 9,
-            site_uuid: Some("site-10".to_owned()),
+            app_uuid: Some("site-10".to_owned()),
             binding_uuid: Some("binding-1".to_owned()),
             hostname: "shop.app.sdkwork.com".to_owned(),
             server_ip: "10.0.0.5".to_owned(),

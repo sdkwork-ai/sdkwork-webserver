@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEPLOYMENT_CONFIG_PATH = path.join(APP_ROOT, 'etc', 'sdkwork.deployment.config.json');
 const SUPPORTED_ENVIRONMENTS = ['development', 'test', 'staging', 'production'];
-const SUPPORTED_PROFILES = ['standalone', 'cloud'];
+// sdkwork-webserver is standalone-only (SDKWORK_WEBSERVER_SPEC.md §17.4);
+const SUPPORTED_PROFILES = ['standalone'];
 const PROFILE_MATRIX = SUPPORTED_PROFILES.flatMap((profile) =>
   SUPPORTED_ENVIRONMENTS.map((environment) => `${profile}.${environment}`),
 );

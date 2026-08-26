@@ -19,7 +19,7 @@ pub enum WebsiteProviderPurpose {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WebsiteProviderRuntimeContext {
     pub tenant_scope_hash: String,
-    pub site_uuid: String,
+    pub app_uuid: String,
     pub binding_uuid: String,
     pub variant_uuid: String,
     pub mount_uuid: String,

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+﻿use std::collections::{HashMap, HashSet};
 
 use url::Host;
 
@@ -138,9 +138,9 @@ impl WebsiteRuntimeValidator {
                 .map(|mount| mount.mount_uuid.as_str()),
         );
 
-        if !variants.contains_key(descriptor.site_default_variant_uuid.as_str()) {
+        if !variants.contains_key(descriptor.app_default_variant_uuid.as_str()) {
             self.push(
-                "/siteDefaultVariantUuid",
+                "/appDefaultVariantUuid",
                 "site default Variant does not exist",
             );
         }
@@ -166,7 +166,7 @@ impl WebsiteRuntimeValidator {
         }
         for (path, value) in [
             ("/revisionUuid", descriptor.revision_uuid.as_str()),
-            ("/siteUuid", descriptor.site_uuid.as_str()),
+            ("/appUuid", descriptor.app_uuid.as_str()),
         ] {
             if !valid_opaque_id(value) {
                 self.push(path, "must be a bounded opaque identifier");

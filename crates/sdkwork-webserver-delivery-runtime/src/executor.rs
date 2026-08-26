@@ -494,7 +494,7 @@ impl OwnedSelectedRoute {
                 runtime_set_generation,
                 revision_uuid: selected.revision_uuid.to_owned(),
                 tenant_scope_hash: selected.tenant_scope_hash.to_owned(),
-                site_uuid: selected.site_uuid.to_owned(),
+                app_uuid: selected.app_uuid.to_owned(),
                 binding_uuid: selected.binding.binding_uuid.clone(),
                 variant_uuid: selected.variant.variant_uuid.clone(),
                 mount_uuid: selected.mount.mount_uuid.clone(),
@@ -529,7 +529,7 @@ impl OwnedSelectedRoute {
     ) -> WebsiteProviderRuntimeContext {
         WebsiteProviderRuntimeContext {
             tenant_scope_hash: self.identity.tenant_scope_hash.clone(),
-            site_uuid: self.identity.site_uuid.clone(),
+            app_uuid: self.identity.app_uuid.clone(),
             binding_uuid: self.identity.binding_uuid.clone(),
             variant_uuid: self.identity.variant_uuid.clone(),
             mount_uuid: self.identity.mount_uuid.clone(),

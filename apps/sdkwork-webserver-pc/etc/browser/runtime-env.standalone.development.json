@@ -14,10 +14,10 @@
     "zh-CN",
     "en-US"
   ],
+  "messagingPcUrl": "http://127.0.0.1:5184/notifications",
   "appApiBaseUrl": "/",
   "backendApiBaseUrl": "/",
   "driveAppApiBaseUrl": "/",
   "appbaseAppApiBaseUrl": "/",
-  "messagingPcUrl": "http://127.0.0.1:5184/notifications",
   "deployAppApiBaseUrl": "/"
 }

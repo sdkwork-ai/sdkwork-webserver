@@ -34,6 +34,19 @@ Do not copy root standard text into this repository. If these relative paths do 
 
 Read `sdkwork.app.config.json` for Web Server identity, registration, SDK/API inventory, release metadata, packaging capability, or app-owned capabilities. Read `etc/` for concrete environment, bind, upstream, runtime, and deployment values. The app manifest is not runtime configuration authority.
 
+## Deployment Profile (Standalone-Only)
+
+> Manual note — keep this section when AGENTS.md is regenerated.
+
+`sdkwork-webserver` is **standalone-only** (`SDKWORK_WEBSERVER_SPEC.md` §17.4) and is the **only** public reverse-proxy edge (`SDKWORK_WEBSERVER_SPEC.md` §0.1, `NGINX_SPEC.md` §0):
+
+- Stock OpenResty/nginx and `/etc/nginx` `MUST NOT` serve SDKWork public domains. Uninstall host nginx (`deployments/docker/scripts/uninstall-wsl-nginx.sh`); `install-wsl-nginx.sh` is retired and only invokes uninstall. Docker development publishes host `:80`/`:443`.
+- `sdkwork.app.config.json` declares `runtime.supportedDeploymentProfiles = ["standalone"]`; there is no cloud build, cloud package, or cloud runtime-env surface in this repository.
+- Its browser applications (`apps/sdkwork-webserver-pc`, `apps/sdkwork-webserver-h5`) build with the canonical runner at `build:pc|h5:<env>` only (no `:cloud` variants). Every SDK API base URL is the same-origin root `/` (`browserOriginMode = same-origin`); the gateway serves the SPAs and the API on one origin.
+- Release packaging (`scripts/webserver-release.mjs`, deb/rpm) produces standalone server packages only; `--deployment-profile cloud` is rejected.
+- The nginx-compatible **module import plane** (`imports.d`, `SDKWORK_WEBSERVER_SPEC.md` §17.3) is a separate concept from the webserver's own build mode: it still materializes both `standalone` and `cloud` import sets for the imported sibling modules (default active set `cloud`) so the edge startup mode can switch freely. Sidecars are inputs to the Rust data plane, not a stock nginx process.
+- All other modules under `sdkwork-space` support both `standalone` (same-origin `/`) and `cloud` (unified `api-dev.<domain>` … `api.<domain>` edge) build modes per `ENVIRONMENT_SPEC.md` §5.1.0.1 and `PNPM_SCRIPT_SPEC.md` §4.2.
+
 ## Local Dictionary Structure
 
 - `AGENTS.md`: repository agent entrypoint and relative SDKWork spec index.
@@ -45,7 +58,7 @@ Read `sdkwork.app.config.json` for Web Server identity, registration, SDK/API in
 - `.sdkwork/`: repository/application AI workspace metadata.
 - `specs/`: local application/component contracts.
 - `apis/`: Web Server-owned API contract sources.
-- `apps/`: browser application roots (`sdkwork-webserver-pc`, `sdkwork-webserver-h5`) served by the webserver process Adaptive Web console; edge nginx reverse-proxies only.
+- `apps/`: browser application roots (`sdkwork-webserver-pc`, `sdkwork-webserver-h5`) served by the webserver process Adaptive Web console; the same webserver process owns public reverse proxy (no stock nginx).
 - `crates/`: Rust service, repository, route, and API server crates.
 - `sdks/`: SDK families and generated SDK artifacts.
 - `database/`: database contract, baseline DDL, migrations, seeds, drift policy.

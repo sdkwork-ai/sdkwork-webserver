@@ -8,13 +8,13 @@
     "schemaVersion",
     "kind",
     "revisionUuid",
-    "siteUuid",
+    "appUuid",
     "tenantScopeHash",
     "environment",
     "generatedAt",
     "compilerVersion",
     "descriptorSha256",
-    "siteDefaultVariantUuid",
+    "appDefaultVariantUuid",
     "bindings",
     "variants",
     "variantRules",
@@ -35,7 +35,7 @@
     "revisionUuid": {
       "$ref": "#/$defs/opaqueId"
     },
-    "siteUuid": {
+    "appUuid": {
       "$ref": "#/$defs/opaqueId"
     },
     "tenantScopeHash": {
@@ -58,7 +58,7 @@
     "descriptorSha256": {
       "$ref": "#/$defs/sha256"
     },
-    "siteDefaultVariantUuid": {
+    "appDefaultVariantUuid": {
       "$ref": "#/$defs/opaqueId"
     },
     "bindings": {

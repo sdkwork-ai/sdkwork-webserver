@@ -14,10 +14,10 @@
     "zh-CN",
     "en-US"
   ],
+  "messagingPcUrl": "https://messaging-staging.sdkwork.com/notifications",
   "appApiBaseUrl": "/",
   "backendApiBaseUrl": "/",
   "driveAppApiBaseUrl": "/",
   "appbaseAppApiBaseUrl": "/",
-  "messagingPcUrl": "https://messaging-staging.sdkwork.com/notifications",
   "deployAppApiBaseUrl": "/"
 }

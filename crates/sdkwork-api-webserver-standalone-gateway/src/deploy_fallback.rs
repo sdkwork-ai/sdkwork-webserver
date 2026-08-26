@@ -1,4 +1,4 @@
-//! App publishing domain fallback.
+﻿//! App publishing domain fallback.
 //!
 //! When no local virtual host or website runtime binding matches a request
 //! host, the data plane resolves the server through the sdkwork-deployments
@@ -7,7 +7,7 @@
 //!
 //! Both default app domains (`<slug>.app[-<env>].<suffix>` over the
 //! configured platform suffixes) and user custom domains resolve through the
-//! same lookup (`deploy_site_binding` rows are explicit for both).
+//! same lookup (`deploy_app_binding` rows are explicit for both).
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -33,18 +33,18 @@ use sdkwork_webserver_delivery_runtime::{
 };
 use tokio::sync::Mutex;
 
-/// A resolved Deploy server: the site owning the matched hostname together
+/// A resolved Deploy server: the app owning the matched hostname together
 /// with its latest compiled website runtime descriptor.
 #[derive(Clone, Debug)]
 pub struct ResolvedDeployServer {
-    pub site_uuid: String,
-    pub site_slug: String,
+    pub app_uuid: String,
+    pub app_slug: String,
     pub hostname: String,
     pub path_prefix: String,
     pub action_type: String,
     /// Owning tenant (usage metering attribution).
     pub tenant_id: i64,
-    /// Owning app public uuid when the site belongs to an app.
+    /// Owning app public uuid when the app is attributable.
     pub app_id: Option<String>,
     /// Matched binding public uuid (per-domain usage attribution).
     pub binding_id: Option<String>,
@@ -199,6 +199,11 @@ impl DeployFallbackResolver {
         let now = Instant::now();
         let cached = self.cache.load().get(&hostname).cloned();
         let (descriptor, descriptor_sha256, attribution) = match cached {
+            // Negative cache hit: the host was recently resolved to nothing;
+            // do not hit the Deploy lookup again inside the negative TTL.
+            Some(entry) if entry.expires_at > now && entry.descriptor.is_none() => {
+                return Ok(WebsiteDeliveryOutcome::NotFound);
+            }
             Some(entry) if entry.expires_at > now => (
                 entry.descriptor.clone(),
                 entry.descriptor_sha256.clone(),
@@ -227,18 +232,18 @@ impl DeployFallbackResolver {
                             tracing::info!(
                                 hostname = %hostname,
                                 class = %class_label(&class),
-                                site_uuid = %server.site_uuid,
-                                site_slug = %server.site_slug,
+                                app_uuid = %server.app_uuid,
+                                app_slug = %server.app_slug,
                                 revision_no = server.revision_no,
                                 "app-domain fallback resolved deploy server"
                             );
                             let attribution = Some(crate::usage_metering::UsageAttribution {
                                 tenant_id: Some(server.tenant_id),
                                 organization_id: None,
-                                site_uuid: Some(server.site_uuid.clone()),
+                                app_uuid: Some(server.app_uuid.clone()),
                                 binding_uuid: server.binding_id.clone(),
                                 app_id: server.app_id.clone(),
-                                app_slug: Some(server.site_slug.clone()),
+                                app_slug: Some(server.app_slug.clone()),
                             });
                             (
                                 Some(server.descriptor_json),
@@ -278,6 +283,10 @@ impl DeployFallbackResolver {
         let Some(descriptor) = descriptor else {
             return Ok(WebsiteDeliveryOutcome::NotFound);
         };
+        // Attribution is cached for usage metering consumers
+        // (`DeployFallbackResolver::attribution`); serve itself does not
+        // consume it.
+        let _ = &attribution;
         let _guard = self.activation.lock().await;
         let compiled = match self.compile_site(descriptor, descriptor_sha256.as_deref()) {
             Ok(compiled) => compiled,
@@ -378,7 +387,7 @@ fn class_label(class: &HostClass) -> &'static str {
 }
 
 /// Embedded lookup: resolves through the shared Deploy database
-/// (`deploy_site_binding` / `deploy_site_revision`) using the Deploy
+/// (`deploy_app_binding` / `deploy_app_revision`) using the Deploy
 /// repository crate. Requires the process database connection (management
 /// feature).
 #[cfg(feature = "management")]
@@ -410,8 +419,8 @@ impl DeployServerLookup for EmbeddedDeployServerLookup {
             .ok()?;
         let resolved = resolved?;
         Some(ResolvedDeployServer {
-            site_uuid: resolved.site_uuid,
-            site_slug: resolved.site_slug,
+            app_uuid: resolved.app_uuid,
+            app_slug: resolved.app_slug,
             hostname: resolved.hostname,
             path_prefix: resolved.path_prefix,
             action_type: resolved.action_type,

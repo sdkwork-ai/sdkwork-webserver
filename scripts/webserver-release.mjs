@@ -435,8 +435,9 @@ function resolveArchitecture(settings) {
 }
 
 function resolveArtifact(settings) {
-  if (!['standalone', 'cloud'].includes(settings.deploymentProfile)) {
-    throw new Error('--deployment-profile must be standalone or cloud');
+  if (settings.deploymentProfile !== 'standalone') {
+    // sdkwork-webserver is standalone-only (SDKWORK_WEBSERVER_SPEC.md §17.4).
+    throw new Error('--deployment-profile must be standalone');
   }
   const version = resolveVersion(settings);
   const architecture = resolveArchitecture(settings);
@@ -1075,19 +1076,9 @@ function validatePackageManifest(manifestBuffer, records, order, capturedBuffers
   if (unexpectedPaths.length > 0) {
     throw new Error(`package manifest contains unsupported files: ${unexpectedPaths.join(', ')}`);
   }
-  if (expected.deploymentProfile === 'cloud' && pcPaths.length > 0) {
-    throw new Error('cloud package must not contain PC standalone static assets');
-  }
-  if (expected.deploymentProfile === 'cloud' && h5Paths.length > 0) {
-    throw new Error('cloud package must not contain H5 standalone static assets');
-  }
-  if (expected.deploymentProfile === 'cloud' && staticFallbackPaths.length > 0) {
-    throw new Error('cloud package must not contain static-fallback assets');
-  }
-  if (expected.deploymentProfile === 'cloud' && dependencyPaths.length > 0) {
-    throw new Error('cloud package must not contain standalone dependency runtime assets');
-  }
-  if (expected.deploymentProfile === 'standalone') {
+  // sdkwork-webserver is standalone-only (SDKWORK_WEBSERVER_SPEC.md §17.4):
+  // every release packages the same-origin PC/H5 bundles.
+  {
     if (pcPaths.length === 0 || pcPaths.length > MAX_PC_STATIC_FILES) {
       throw new Error(`standalone package must contain 1..=${MAX_PC_STATIC_FILES} PC files`);
     }
@@ -1290,30 +1281,18 @@ async function packageArchive(settings) {
     ], { timeoutMs: PC_BUILD_TIMEOUT_MS });
   };
 
-  if (settings.deploymentProfile === 'standalone') {
-    if (!settings.skipPcBuild) {
-      runBrowserBuild('pc');
-    }
-    if (!settings.skipH5Build) {
-      runBrowserBuild('h5');
-    }
-    pcStaticFiles = inspectPcBuildOutput(settings);
-    h5StaticFiles = inspectH5BuildOutput(settings);
-    staticFallbackFiles = inspectStaticFallbackAssets();
-    dependencyRuntimeFiles = inspectDependencyRuntimeAssets();
-  } else {
-    // Cloud server packages stay server-only (no browser assets in the tar);
-    // the cloud.production PC/H5 bundles are the CDN-publishable artifacts.
-    // Build and validate them here so one release run produces every artifact.
-    if (!settings.skipPcBuild) {
-      runBrowserBuild('pc');
-    }
-    if (!settings.skipH5Build) {
-      runBrowserBuild('h5');
-    }
-    inspectPcBuildOutput(settings);
-    inspectH5BuildOutput(settings);
+  // sdkwork-webserver is standalone-only (SDKWORK_WEBSERVER_SPEC.md §17.4):
+  // the same-origin PC/H5 bundles are always packaged into the server tar.
+  if (!settings.skipPcBuild) {
+    runBrowserBuild('pc');
   }
+  if (!settings.skipH5Build) {
+    runBrowserBuild('h5');
+  }
+  pcStaticFiles = inspectPcBuildOutput(settings);
+  h5StaticFiles = inspectH5BuildOutput(settings);
+  staticFallbackFiles = inspectStaticFallbackAssets();
+  dependencyRuntimeFiles = inspectDependencyRuntimeAssets();
   const cargoTargetRoot = resolveCargoTargetRoot();
   const stageContainer = path.join(STAGE_PARENT, `${artifactBase}-${process.pid}`);
   const stageRoot = path.join(stageContainer, 'sdkwork-webserver');
@@ -1459,7 +1438,7 @@ async function main() {
   const settings = parseArgs(process.argv.slice(2));
   if (settings.help) {
     console.log(
-      'Usage: node scripts/webserver-release.mjs <package|validate> --deployment-profile <standalone|cloud> [--architecture <x64|arm64>] [--version <semver>] [--skip-pc-build] [--skip-h5-build] [--dry-run]',
+      'Usage: node scripts/webserver-release.mjs <package|validate> --deployment-profile <standalone> [--architecture <x64|arm64>] [--version <semver>] [--skip-pc-build] [--skip-h5-build] [--dry-run]',
     );
     return;
   }

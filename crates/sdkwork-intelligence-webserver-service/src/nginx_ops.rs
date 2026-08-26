@@ -1,4 +1,4 @@
-//! Nginx deploy, validate, and reload orchestration through the edge runtime.
+﻿//! Nginx deploy, validate, and reload orchestration through the edge runtime.
 
 use std::net::IpAddr;
 
@@ -39,7 +39,7 @@ impl WebService {
         let runtime = self.edge_runtime.clone();
         let domain = domain.to_owned();
         let content = content.to_owned();
-        tokio::task::spawn_blocking(move || runtime.deploy_site_config(&domain, &content))
+        tokio::task::spawn_blocking(move || runtime.deploy_app_config(&domain, &content))
             .await
             .map_err(|error| WebServiceError::Internal(format!("join nginx deployment: {error}")))?
             .map_err(|error| WebServiceError::Internal(error.to_string()))

@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+﻿use serde::{Deserialize, Serialize};
 
 pub const WEBSITE_RUNTIME_DESCRIPTOR_KIND: &str = "sdkwork.website-runtime.descriptor";
 pub const WEBSITE_RUNTIME_SCHEMA_VERSION: &str = "sdkwork.website-runtime.v1";
@@ -9,13 +9,13 @@ pub struct WebsiteRuntimeDescriptor {
     pub schema_version: String,
     pub kind: String,
     pub revision_uuid: String,
-    pub site_uuid: String,
+    pub app_uuid: String,
     pub tenant_scope_hash: String,
     pub environment: WebsiteRuntimeEnvironment,
     pub generated_at: String,
     pub compiler_version: String,
     pub descriptor_sha256: String,
-    pub site_default_variant_uuid: String,
+    pub app_default_variant_uuid: String,
     pub bindings: Vec<WebsiteBinding>,
     pub variants: Vec<WebsiteVariant>,
     pub variant_rules: Vec<WebsiteVariantRule>,

@@ -137,8 +137,9 @@ function resolveVersion(settings) {
 }
 
 function resolveArtifact(settings) {
-  if (!['standalone', 'cloud'].includes(settings.deploymentProfile)) {
-    throw new Error('--deployment-profile must be standalone or cloud');
+  if (settings.deploymentProfile !== 'standalone') {
+    // sdkwork-webserver is standalone-only (SDKWORK_WEBSERVER_SPEC.md §17.4).
+    throw new Error('--deployment-profile must be standalone');
   }
   const architecture = settings.architecture?.trim() || process.arch;
   if (!SUPPORTED_ARCHITECTURES.has(architecture)) {
@@ -453,7 +454,7 @@ function main() {
   const settings = parseArgs(process.argv.slice(2));
   if (settings.help) {
     console.log(
-      'Usage: node scripts/webserver-sbom.mjs <generate|validate> --deployment-profile <standalone|cloud> [--architecture <x64|arm64>] [--version <semver>]',
+      'Usage: node scripts/webserver-sbom.mjs <generate|validate> --deployment-profile <standalone> [--architecture <x64|arm64>] [--version <semver>]',
     );
     return;
   }

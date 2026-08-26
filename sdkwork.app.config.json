@@ -45,8 +45,7 @@
     "defaultPlatform": "API",
     "defaultArchitecture": "x64",
     "supportedDeploymentProfiles": [
-      "standalone",
-      "cloud"
+      "standalone"
     ],
     "defaultDeploymentProfile": "standalone"
   },
@@ -101,22 +100,6 @@
           "architecture": "x64",
           "profileBinding": "fixed",
           "deploymentProfile": "standalone",
-          "runtimeTarget": "server",
-          "targetPlatform": "linux",
-          "enabled": false,
-          "metadata": {
-            "releaseBuildDeferred": true
-          }
-        },
-        {
-          "id": "linux-x64-cloud-server-tar-gz",
-          "name": "SDKWork Web Server Linux x64 Cloud",
-          "sourceType": "SCRIPT",
-          "packageFormat": "TAR_GZ",
-          "platform": "API",
-          "architecture": "x64",
-          "profileBinding": "fixed",
-          "deploymentProfile": "cloud",
           "runtimeTarget": "server",
           "targetPlatform": "linux",
           "enabled": false,
@@ -219,22 +202,6 @@
           },
           "checksumAlgorithm": "sha256",
           "checksum": "bcb27d89a982e51d52556387af5ec1cd85b29098d850c8a3afe595c0151736ef"
-        },
-        {
-          "id": "linux-arm64-cloud-server-tar-gz",
-          "name": "SDKWork Web Server Linux arm64 Cloud",
-          "sourceType": "SCRIPT",
-          "packageFormat": "TAR_GZ",
-          "platform": "API",
-          "architecture": "arm64",
-          "profileBinding": "fixed",
-          "deploymentProfile": "cloud",
-          "runtimeTarget": "server",
-          "targetPlatform": "linux",
-          "enabled": false,
-          "metadata": {
-            "releaseBuildDeferred": true
-          }
         }
       ]
     }
@@ -257,9 +224,7 @@
           "linux-ubuntu-x64-standalone-server-deb",
           "linux-ubuntu-x64-standalone-test-server-deb",
           "linux-x64-standalone-server-tar-gz",
-          "linux-x64-cloud-server-tar-gz",
-          "linux-arm64-standalone-server-tar-gz",
-          "linux-arm64-cloud-server-tar-gz"
+          "linux-arm64-standalone-server-tar-gz"
         ],
         "forceUpdate": false,
         "minSupportedVersion": "0.1.0"

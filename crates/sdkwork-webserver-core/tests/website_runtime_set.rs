@@ -1,4 +1,4 @@
-use sdkwork_webserver_core::website_runtime::{
+﻿use sdkwork_webserver_core::website_runtime::{
     compile_website_runtime_set_snapshot, website_runtime_descriptor_sha256,
     website_runtime_set_snapshot_sha256, WebsiteRequestRoutingContext, WebsiteRouteSelection,
     WebsiteRuntimeDescriptor, WebsiteRuntimeEnvironment, WebsiteRuntimeRegistry,
@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 const NODE_UUID: &str = "node-0001";
 
 fn descriptor_fixture(
-    site_uuid: &str,
+    app_uuid: &str,
     hostname: &str,
     path_prefix: &str,
     provider_resource_uuid: &str,
@@ -17,17 +17,17 @@ fn descriptor_fixture(
     json!({
         "schemaVersion": "sdkwork.website-runtime.v1",
         "kind": "sdkwork.website-runtime.descriptor",
-        "revisionUuid": format!("revision-{site_uuid}"),
-        "siteUuid": site_uuid,
+        "revisionUuid": format!("revision-{app_uuid}"),
+        "appUuid": app_uuid,
         "tenantScopeHash": "1".repeat(64),
         "environment": "production",
         "generatedAt": "2026-07-21T00:00:00Z",
         "compilerVersion": "deploy-descriptor-compiler/1",
         "descriptorSha256": "0".repeat(64),
-        "siteDefaultVariantUuid": "variant-default",
+        "appDefaultVariantUuid": "variant-default",
         "bindings": [
             {
-                "bindingUuid": format!("binding-{site_uuid}"),
+                "bindingUuid": format!("binding-{app_uuid}"),
                 "hostname": hostname,
                 "pathPrefix": path_prefix,
                 "action": {

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+﻿use std::collections::HashMap;
 
 use crate::normalize_uri_path;
 
@@ -54,7 +54,7 @@ pub enum WebsiteVariantSelectionReason {
 #[derive(Debug)]
 pub struct SelectedWebsiteRoute<'a> {
     pub revision_uuid: &'a str,
-    pub site_uuid: &'a str,
+    pub app_uuid: &'a str,
     pub tenant_scope_hash: &'a str,
     pub normalized_request_hostname: String,
     pub binding: &'a WebsiteBinding,
@@ -274,7 +274,7 @@ impl CompiledWebsiteRuntimeDescriptor {
                 let provider_relative_path = translate_mount_path(mount, &binding_relative_path);
                 Ok(Some(WebsiteRouteSelection::Serve(SelectedWebsiteRoute {
                     revision_uuid: &self.descriptor.revision_uuid,
-                    site_uuid: &self.descriptor.site_uuid,
+                    app_uuid: &self.descriptor.app_uuid,
                     tenant_scope_hash: &self.descriptor.tenant_scope_hash,
                     normalized_request_hostname: host,
                     binding,
@@ -396,7 +396,7 @@ impl CompiledWebsiteRuntimeDescriptor {
             );
         }
         (
-            self.variants[&self.descriptor.site_default_variant_uuid],
+            self.variants[&self.descriptor.app_default_variant_uuid],
             WebsiteVariantSelectionReason::SiteDefault,
         )
     }

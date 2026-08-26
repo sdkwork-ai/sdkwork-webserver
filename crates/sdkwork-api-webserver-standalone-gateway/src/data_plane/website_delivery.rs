@@ -1,4 +1,4 @@
-use std::{io, sync::Arc};
+﻿use std::{io, sync::Arc};
 
 use axum::{
     body::Body,
@@ -89,21 +89,50 @@ pub(crate) async fn serve_website_request(
     let metered_authority = request.authority.clone();
     let response = match executor.execute(request).await {
         Ok(outcome) => {
+            let count_not_found = metering
+                .as_ref()
+                .is_some_and(|context| context.count_not_found);
             if let Some(context) = &metering {
+                // NotFound outcomes are recorded only when no fallback
+                // resolver exists; with a fallback the final outcome is
+                // recorded by the fallback path and the intermediate 404
+                // must not be counted twice.
+                if !matches!(outcome, WebsiteDeliveryOutcome::NotFound) || count_not_found {
+                    context.meter.record(crate::usage_metering::MeteredRequest {
+                        hostname: &metered_authority,
+                        server_ip: context.server_ip,
+                        server_port: context.server_port,
+                        listener_id: &context.listener_id,
+                        attribution: &outcome_attribution(&outcome),
+                        ingress_bytes: request_ingress_bytes(&headers),
+                        egress_bytes: outcome_egress_bytes(&outcome),
+                        status_class: outcome_status_class(&outcome),
+                    });
+                }
+            }
+            outcome_response(outcome, query.as_deref())
+        }
+        Err(error) => {
+            if let Some(context) = &metering {
+                // Delivery-layer failures still produce served responses
+                // (503/502/…): count them as 5xx traffic without attribution.
+                let response = delivery_error_response(error);
+                let status = response.status().as_u16();
                 context.meter.record(crate::usage_metering::MeteredRequest {
                     hostname: &metered_authority,
                     server_ip: context.server_ip,
                     server_port: context.server_port,
                     listener_id: &context.listener_id,
-                    attribution: &outcome_attribution(&outcome),
+                    attribution: &crate::usage_metering::UsageAttribution::default(),
                     ingress_bytes: request_ingress_bytes(&headers),
-                    egress_bytes: outcome_egress_bytes(&outcome),
-                    status_class: outcome_status_class(&outcome),
+                    egress_bytes: 0,
+                    status_class: delivery_status_class_label(status),
                 });
+                response
+            } else {
+                delivery_error_response(error)
             }
-            outcome_response(outcome, query.as_deref())
         }
-        Err(error) => delivery_error_response(error),
     };
     finalize_response(response, &request_id, suppress_body)
 }
@@ -653,7 +682,7 @@ fn outcome_attribution(
         WebsiteDeliveryOutcome::Content(content) => crate::usage_metering::UsageAttribution {
             tenant_id: None,
             organization_id: None,
-            site_uuid: Some(content.route.site_uuid.clone()),
+            app_uuid: Some(content.route.app_uuid.clone()),
             binding_uuid: Some(content.route.binding_uuid.clone()),
             app_id: None,
             app_slug: None,
@@ -675,6 +704,15 @@ fn outcome_status_class(outcome: &WebsiteDeliveryOutcome) -> &'static str {
         WebsiteDeliveryOutcome::NotModified => "2xx",
         WebsiteDeliveryOutcome::Redirect(_) => "3xx",
         WebsiteDeliveryOutcome::NotFound => "4xx",
+    }
+}
+
+fn delivery_status_class_label(status: u16) -> &'static str {
+    match status {
+        200..=299 => "2xx",
+        300..=399 => "3xx",
+        400..=499 => "4xx",
+        _ => "5xx",
     }
 }
 
@@ -1829,13 +1867,13 @@ mod tests {
             "schemaVersion": "sdkwork.website-runtime.v1",
             "kind": "sdkwork.website-runtime.descriptor",
             "revisionUuid": "revision-0001",
-            "siteUuid": "site-0001",
+            "appUuid": "site-0001",
             "tenantScopeHash": TENANT_SCOPE_HASH,
             "environment": "production",
             "generatedAt": "2026-07-21T00:00:00Z",
             "compilerVersion": "deploy-descriptor-compiler/1",
             "descriptorSha256": "0".repeat(64),
-            "siteDefaultVariantUuid": "variant-desktop",
+            "appDefaultVariantUuid": "variant-desktop",
             "bindings": [{
                 "bindingUuid": "binding-root",
                 "hostname": "example.com",

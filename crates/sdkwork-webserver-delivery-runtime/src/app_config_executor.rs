@@ -117,19 +117,19 @@ pub struct AppConfigResourceExecutor {
     provider_registry: Arc<WebsiteProviderRegistry>,
     buffered_content_admission: Arc<Semaphore>,
     resolution_cache: Arc<WebsiteProviderResolutionCache>,
-    site_uuid: String,
+    app_uuid: String,
     tenant_scope_hash: String,
 }
 
 impl AppConfigResourceExecutor {
     pub fn new(
         provider_registry: Arc<WebsiteProviderRegistry>,
-        site_uuid: String,
+        app_uuid: String,
         tenant_scope_hash: String,
     ) -> Result<Self, WebsiteDeliveryExecutorConfigError> {
         Self::with_provider_runtime_limits(
             provider_registry,
-            site_uuid,
+            app_uuid,
             tenant_scope_hash,
             DEFAULT_PROVIDER_BUFFERED_CONTENT_BYTES,
             DEFAULT_PROVIDER_RESOLUTION_CACHE_ENTRIES,
@@ -138,7 +138,7 @@ impl AppConfigResourceExecutor {
 
     pub fn with_provider_runtime_limits(
         provider_registry: Arc<WebsiteProviderRegistry>,
-        site_uuid: String,
+        app_uuid: String,
         tenant_scope_hash: String,
         maximum_buffered_content_bytes: usize,
         maximum_resolution_cache_entries: usize,
@@ -159,7 +159,7 @@ impl AppConfigResourceExecutor {
                 maximum_resolution_cache_entries,
                 MAXIMUM_PROVIDER_RESOLUTION_CACHE_ENTRIES,
             )?),
-            site_uuid,
+            app_uuid,
             tenant_scope_hash,
         })
     }
@@ -190,7 +190,7 @@ impl AppConfigResourceExecutor {
         let identity = format!("app-config-activation-{resource_id}");
         let context = WebsiteProviderRuntimeContext {
             tenant_scope_hash: self.tenant_scope_hash.clone(),
-            site_uuid: self.site_uuid.clone(),
+            app_uuid: self.app_uuid.clone(),
             binding_uuid: format!("binding:{resource_id}"),
             variant_uuid: "default".to_owned(),
             mount_uuid: format!("route:{resource_id}"),
@@ -512,7 +512,7 @@ impl AppConfigResourceExecutor {
     ) -> WebsiteProviderRuntimeContext {
         WebsiteProviderRuntimeContext {
             tenant_scope_hash: self.tenant_scope_hash.clone(),
-            site_uuid: self.site_uuid.clone(),
+            app_uuid: self.app_uuid.clone(),
             binding_uuid: route.virtual_host_id.clone(),
             variant_uuid: "default".to_owned(),
             mount_uuid: route.route_id.clone(),
@@ -533,7 +533,7 @@ impl AppConfigResourceExecutor {
             runtime_set_generation: 0,
             revision_uuid: route.resource_id.clone(),
             tenant_scope_hash: self.tenant_scope_hash.clone(),
-            site_uuid: self.site_uuid.clone(),
+            app_uuid: self.app_uuid.clone(),
             binding_uuid: route.virtual_host_id.clone(),
             variant_uuid: "default".to_owned(),
             mount_uuid: route.route_id.clone(),

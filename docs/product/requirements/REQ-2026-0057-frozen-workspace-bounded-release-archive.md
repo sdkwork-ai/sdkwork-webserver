@@ -10,7 +10,7 @@ source: release-integrity-and-bounded-verification
 problem: A release archive could be built from an incomplete or mutable pnpm workspace and uploaded after only checking its filename or outer checksum. That does not prove dependency closure, exact package inventory, safe tar metadata, deterministic identity, per-file integrity, or bounded verifier memory, and it leaves path traversal, link, archive bomb, and OOM risks at the publication boundary.
 goals:
   - Make the application-root pnpm workspace and lockfile sufficient for a frozen release install after declared workflow dependencies are checked out.
-  - Validate every generated standalone and cloud server archive before upload through a streaming, size-bounded parser.
+  - Validate every generated standalone server archive before upload through a streaming, size-bounded parser (sdkwork-webserver is standalone-only, `SDKWORK_WEBSERVER_SPEC.md` §17.4).
   - Require an exact deterministic archive inventory, package manifest, file digest set, ownership, modes, timestamps, and outer checksum.
   - Reject unsafe, duplicate, unexpected, oversized, linked, special, or noncanonical archive entries before an artifact is trusted.
 non_goals:

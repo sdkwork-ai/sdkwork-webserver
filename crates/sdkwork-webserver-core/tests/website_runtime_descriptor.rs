@@ -11,13 +11,13 @@ fn descriptor_fixture() -> Value {
         "schemaVersion": "sdkwork.website-runtime.v1",
         "kind": "sdkwork.website-runtime.descriptor",
         "revisionUuid": "revision-0001",
-        "siteUuid": "site-0001",
+        "appUuid": "site-0001",
         "tenantScopeHash": "1".repeat(64),
         "environment": "production",
         "generatedAt": "2026-07-21T00:00:00Z",
         "compilerVersion": "deploy-descriptor-compiler/1",
         "descriptorSha256": "0".repeat(64),
-        "siteDefaultVariantUuid": "variant-desktop",
+        "appDefaultVariantUuid": "variant-desktop",
         "bindings": [
             {
                 "bindingUuid": "binding-docs",
