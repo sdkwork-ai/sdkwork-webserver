@@ -242,16 +242,9 @@ fn module_import_id_from_nginx_sidecar(path: &Path) -> Result<String, String> {
         .components()
         .map(|component| component.as_os_str().to_string_lossy().into_owned())
         .collect::<Vec<_>>();
-    for index in 0..components.len() {
-        if components[index] == "import-sidecars" {
-            if let Some(module_id) = components.get(index + 1) {
-                if !module_id.is_empty() {
-                    return Ok(module_id.clone());
-                }
-            }
-            break;
-        }
-    }
+    // High-cohesion import (SDKWORK_WEBSERVER_SPEC.md §17.3): the aggregator
+    // includes the module's own checkout sidecar, so the module id is the
+    // path segment before deployments/webserver/.
     for index in 0..components.len().saturating_sub(1) {
         if components[index] == "deployments" && components[index + 1] == "webserver" {
             if index > 0 {
@@ -1500,16 +1493,17 @@ production = "deployments/webserver/static"
     }
 
     #[test]
-    fn expands_import_conf_aggregator_for_import_sidecar_overlay() {
+    fn expands_import_conf_aggregator_for_checkout_sidecar() {
         let temp = std::env::temp_dir().join(format!(
-            "sdkwork-webserver-import-overlay-{}",
+            "sdkwork-webserver-import-checkout-{}",
             std::process::id()
         ));
         let imports_dir = temp.join("imports.d");
-        let overlay = temp.join("import-sidecars/sdkwork-im");
+        let checkout = temp.join("sdkwork-space");
+        let im_ws = checkout.join("sdkwork-im/deployments/webserver");
         std::fs::create_dir_all(&imports_dir).unwrap();
-        std::fs::create_dir_all(&overlay).unwrap();
-        let im_conf = overlay.join("nginx.standalone.development.conf");
+        std::fs::create_dir_all(&im_ws).unwrap();
+        let im_conf = im_ws.join("nginx.standalone.development.conf");
         std::fs::write(
             &im_conf,
             "user sdkwork;\nevents {}\nhttp { server { listen 80; server_name im-dev.example.com; location / { return 200; } } }\n",

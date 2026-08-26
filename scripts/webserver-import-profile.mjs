@@ -71,6 +71,9 @@ function activate(profile) {
     rmSync(activeLayoutToml, { force: true });
   }
   console.log(`[webserver-import-profile] activated import profile ${profile} under ${IMPORTS_ROOT}`);
+  console.log(
+    '[webserver-import-profile] restart the gateway data plane (serve-imports) to load the new import set',
+  );
   return profile;
 }
 

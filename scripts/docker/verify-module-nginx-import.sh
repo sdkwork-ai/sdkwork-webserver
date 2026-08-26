@@ -31,23 +31,14 @@ if docker exec "${CONTAINER}" find /etc/sdkwork/webserver/imports.d -maxdepth 1 
 fi
 
 sidecar="${CHECKOUT}/${MODULE}/deployments/webserver/nginx.${PROFILE}.${ENVIRONMENT}.conf"
-overlay="/etc/sdkwork/webserver/import-sidecars/${MODULE}/nginx.${PROFILE}.${ENVIRONMENT}.conf"
 
 docker exec "${CONTAINER}" grep -Fq "include ${sidecar};" "${import_conf}" \
-  || docker exec "${CONTAINER}" grep -Fq "include ${overlay};" "${import_conf}" \
   || fail "${import_conf} does not include ${MODULE} checkout sidecar ${sidecar}"
+docker exec "${CONTAINER}" test -f "${sidecar}" \
+  || fail "checkout sidecar missing in container: ${sidecar}"
+ok "using checkout sidecar ${sidecar} (single source of truth, SDKWORK_WEBSERVER_SPEC.md §17.3)"
 
 resolved_sidecar="${sidecar}"
-if docker exec "${CONTAINER}" grep -Fq "include ${overlay};" "${import_conf}"; then
-  resolved_sidecar="${overlay}"
-  docker exec "${CONTAINER}" test -f "${overlay}" \
-    || fail "overlay sidecar missing in container: ${overlay} (mount checkout :rw to use checkout paths)"
-  ok "using import-sidecars overlay ${overlay} (prefer checkout include ${sidecar})"
-else
-  docker exec "${CONTAINER}" test -f "${sidecar}" \
-    || fail "checkout sidecar missing in container: ${sidecar}"
-  ok "using checkout sidecar ${sidecar}"
-fi
 
 mapfile -t sample_hosts < <(
   docker exec "${CONTAINER}" sed -n 's/.*server_name[[:space:]]\+\([^;]*\);.*/\1/p' "${resolved_sidecar}" \
