@@ -50,7 +50,7 @@ const PC_RUNTIME_ENV_SOURCES = Object.freeze({
     'sdkwork-webserver-pc',
     'etc',
     'browser',
-    'runtime-env.test.json',
+    'runtime-env.standalone.test.json',
   ),
 });
 const MAX_RPM_BYTES = 768 * 1024 * 1024;
@@ -293,12 +293,12 @@ async function assembleRpmStage(settings) {
       throw new Error(`test PC runtime env source is missing: ${source}`);
     }
     writeFileSync(
-      path.join(stageContainer, 'SOURCES', 'runtime-env.test.json'),
+      path.join(stageContainer, 'SOURCES', 'runtime-env.standalone.test.json'),
       `${JSON.stringify(JSON.parse(readFileSync(source, 'utf8')), null, 2)}\n`,
       { mode: 0o644 },
     );
-    pcSource1 = 'Source1:        runtime-env.test.json';
-    pcRuntimeEnvOverride = 'install -m 0644 %{_sourcedir}/runtime-env.test.json \\\n'
+    pcSource1 = 'Source1:        runtime-env.standalone.test.json';
+    pcRuntimeEnvOverride = 'install -m 0644 %{_sourcedir}/runtime-env.standalone.test.json \\\n'
       + '  %{buildroot}/usr/share/sdkwork/webserver/web/pc/runtime-env.json';
   }
 

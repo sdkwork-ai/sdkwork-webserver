@@ -411,6 +411,7 @@ module_app_static_root_for_alias() {
   apps_root="$(module_repo_root "${module}")/apps"
   [ -d "${apps_root}" ] || return 0
   expected="${apps_root}/${module}-${surface}"
+  # Canonical layout: apps/*-{pc,h5}/dist/<profile>/<alias>/
   if [ -f "${expected}/dist/${profile}/${dist_alias}/index.html" ]; then
     printf '%s' "${expected}/dist/${profile}/${dist_alias}"
     return 0
@@ -418,6 +419,19 @@ module_app_static_root_for_alias() {
   for app in "${apps_root}"/*-"${surface}"; do
     [ -d "${app}" ] || continue
     dist="${app}/dist/${profile}/${dist_alias}"
+    if [ -f "${dist}/index.html" ]; then
+      printf '%s' "${dist}"
+      return 0
+    fi
+  done
+  # Migration fallback: legacy environment-only dist/<alias>/ (same alias only).
+  if [ -f "${expected}/dist/${dist_alias}/index.html" ]; then
+    printf '%s' "${expected}/dist/${dist_alias}"
+    return 0
+  fi
+  for app in "${apps_root}"/*-"${surface}"; do
+    [ -d "${app}" ] || continue
+    dist="${app}/dist/${dist_alias}"
     if [ -f "${dist}/index.html" ]; then
       printf '%s' "${dist}"
       return 0

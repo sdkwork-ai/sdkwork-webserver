@@ -11,6 +11,7 @@ import {
   discoverBrowserAppRoots,
   normalizeEnvironmentAlias,
 } from '../../../sdkwork-specs/tools/build-browser-client.mjs';
+import { ensureBuildAccessToken } from '../../../sdkwork-specs/tools/ensure-build-access-token.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const WORKSPACE_ROOT = path.resolve(REPO_ROOT, '..');
@@ -75,7 +76,7 @@ export function buildEnvironmentAlias(deploymentEnvironment, explicitEnvironment
   return normalizeEnvironmentAlias(alias);
 }
 
-export function buildModuleBrowser(options) {
+export async function buildModuleBrowser(options) {
   const module = String(options.module ?? '').trim();
   const deploymentProfile = String(options.deploymentProfile ?? 'standalone').trim();
   const deploymentEnvironment = String(options.deploymentEnvironment ?? 'development').trim();
@@ -90,7 +91,32 @@ export function buildModuleBrowser(options) {
   const plans = [];
 
   for (const architecture of architectures) {
-    const plan = buildBrowserClient({
+    // Seed SDKWORK_ACCESS_TOKEN before the shared build runner so both the
+    // host process and Vite credential-entry plugin see the same bootstrap
+    // credential (ENVIRONMENT_SPEC §6.1). buildBrowserClient also ensures the
+    // token; this pre-seed keeps the lifecycle environment explicit.
+    const appRoot = resolveBrowserAppRootCompat(moduleRoot, architecture).root;
+    try {
+      const token = await ensureBuildAccessToken({
+        allowTestTokenGeneration: true,
+        appRoot,
+        environment: deploymentEnvironment,
+      });
+      if (token) {
+        process.env.SDKWORK_ACCESS_TOKEN = token;
+      } else if (deploymentEnvironment === 'development' || deploymentEnvironment === 'test') {
+        console.warn(
+          `[build-module-browser] SDKWORK_ACCESS_TOKEN empty for ${module} ${architecture} ${deploymentProfile}.${deploymentEnvironment}`,
+        );
+      }
+    } catch (error) {
+      console.warn(
+        `[build-module-browser] bootstrap access token unavailable for ${module}/${architecture}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+    const plan = await buildBrowserClient({
       architecture,
       deploymentProfile,
       dryRun: options.dryRun === true,
@@ -151,9 +177,9 @@ Checkout root: ${WORKSPACE_ROOT}`);
   };
 }
 
-function main() {
+async function main() {
   const settings = parseSettings(process.argv.slice(2));
-  const result = buildModuleBrowser(settings);
+  const result = await buildModuleBrowser(settings);
   console.log(JSON.stringify(result, null, 2));
 }
 

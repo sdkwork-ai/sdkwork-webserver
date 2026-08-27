@@ -3,15 +3,15 @@
 # checkout (default profile: standalone).
 # Authority: FRONTEND_CODE_SPEC.md §7, SDKWORK_WEBSERVER_SPEC.md §17.1
 #
-# Prefer an existing dist/standalone/{dev,test,staging,prod}/index.html as the
-# seed; legacy dist/{dev,test,staging,prod}/index.html trees are accepted as
-# migration seeds and copied into the standalone profile subtree.
-# When only a legacy bare dist/index.html exists, copy it into every alias.
-# When no dist tree exists yet, seed from deployments/webserver/static so Docker
-# Adaptive Web roots resolve under apps/*-{pc,h5}/dist/standalone/<envAlias>/
-# instead of falling back to the imported static placeholder path.
-# Operators should still run pnpm build:{pc,h5}:{dev,test,staging,prod} for
-# real environment-specific bundles; this script only closes the Docker gap.
+# For each missing dist/<profile>/<alias>/ tree:
+#   1. Prefer the matching profile+alias build when present
+#   2. Else prefer the legacy dist/<alias>/ migration seed for THAT alias only
+#   3. Else seed from deployments/webserver/static (placeholder)
+#
+# Never copy one environment's build (for example prod) into another alias
+# (development/test/staging). Operators must run
+# pnpm build:{pc,h5}:{dev,test,staging,prod} for real environment-specific
+# bundles; this script only closes the Docker Adaptive Web root gap.
 set -euo pipefail
 
 CHECKOUT="${1:-${SDKWORK_SPACE_CHECKOUT_HOST_PATH:-${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}/sdkwork-space}}"
@@ -37,33 +37,21 @@ copy_seed_into_alias() {
   fi
 }
 
-resolve_seed_for_app() {
+resolve_seed_for_alias() {
   local app="$1"
   local module_dir="$2"
+  local alias="$3"
   local dist_root="${app}/dist"
   local profile_root="${dist_root}/${PROFILE}"
-  local seed=""
-  local alias
-  if [ -d "${profile_root}" ]; then
-    for alias in "${ALIASES[@]}"; do
-      if [ -f "${profile_root}/${alias}/index.html" ]; then
-        printf '%s' "${profile_root}/${alias}"
-        return 0
-      fi
-    done
+
+  if [ -f "${profile_root}/${alias}/index.html" ]; then
+    # Already materialized; caller skips.
+    return 1
   fi
-  if [ -d "${dist_root}" ]; then
-    # Migration seeds: legacy environment-only subtrees and bare dist/.
-    for alias in "${ALIASES[@]}"; do
-      if [ -f "${dist_root}/${alias}/index.html" ]; then
-        printf '%s' "${dist_root}/${alias}"
-        return 0
-      fi
-    done
-    if [ -f "${dist_root}/index.html" ]; then
-      printf '%s' "${dist_root}"
-      return 0
-    fi
+  if [ -f "${dist_root}/${alias}/index.html" ]; then
+    # Legacy environment-only subtree for this exact alias.
+    printf '%s' "${dist_root}/${alias}"
+    return 0
   fi
   if [ -f "${module_dir}/deployments/webserver/static/index.html" ]; then
     printf '%s' "${module_dir}/deployments/webserver/static"
@@ -90,13 +78,13 @@ for module_dir in "${CHECKOUT}"/sdkwork-*; do
   for app in "${apps_root}"/*-pc "${apps_root}"/*-h5; do
     [ -d "${app}" ] || continue
     dist_root="${app}/dist"
-    seed=""
-    if ! seed="$(resolve_seed_for_app "${app}" "${module_dir}")"; then
-      continue
-    fi
     for alias in "${ALIASES[@]}"; do
       dest="${dist_root}/${PROFILE}/${alias}"
       if [ -f "${dest}/index.html" ]; then
+        continue
+      fi
+      seed=""
+      if ! seed="$(resolve_seed_for_alias "${app}" "${module_dir}" "${alias}")"; then
         continue
       fi
       copy_seed_into_alias "${seed}" "${dest}"

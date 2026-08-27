@@ -1826,11 +1826,14 @@ impl<'a> Mapper<'a> {
             } else {
                 index_files.as_slice()
             };
-            let spa_fallback = effective_try_files
-                .iter()
-                .filter(|entry| entry.starts_with('/') && !entry.starts_with('$'))
-                .last()
-                .map(|entry| entry.trim_start_matches('/').to_owned());
+            let spa_fallback = match effective_try_files.last() {
+                // Only a trailing literal path is the SPA fallback; `=code`
+                // and `@named` fallbacks keep the miss behavior.
+                Some(last) if last.starts_with('/') && !last.starts_with('$') => {
+                    Some(last.trim_start_matches('/').to_owned())
+                }
+                _ => None,
+            };
             let index_files: Vec<String> = if effective_index_files.is_empty() {
                 vec!["index.html".to_owned()]
             } else {
@@ -2896,11 +2899,11 @@ fn validate_try_files(directive: &NginxDirective) -> Result<(), NginxConfigError
         ));
     }
     for entry in &entries[..entries.len() - 1] {
-        if entry != "$uri" && entry != "$uri/" {
+        if entry != "$uri" && entry != "$uri/" && !entry.starts_with('/') {
             return Err(NginxConfigError::unsupported(
                 directive,
                 format!(
-                    "try_files entry `{entry}` is not supported; the runtime executes `$uri` and `$uri/` probes with a literal fallback path"
+                    "try_files entry `{entry}` is not supported; the runtime executes `$uri` and `$uri/` probes, literal file probes, and the fallback path"
                 ),
             ));
         }
@@ -2909,6 +2912,8 @@ fn validate_try_files(directive: &NginxDirective) -> Result<(), NginxConfigError
         Some(last) if last.starts_with('/') => Ok(()),
         // Adaptive Web dispatch target (`try_files … @$surface`).
         Some(last) if last.starts_with('@') => Ok(()),
+        // nginx `=code` fallback (return the status when all probes fail).
+        Some(last) if last.starts_with('=') => Ok(()),
         Some(last) => Err(NginxConfigError::unsupported(
             directive,
             format!(
@@ -4134,9 +4139,42 @@ server {
     }
 
     #[test]
+    fn try_files_accepts_nginx_standard_probes_and_codes() {
+        // nginx-standard literal probe + `=code` fallback materialize as a
+        // static resource without a SPA fallback (miss -> 404).
+        let resources = materialize(
+            r#"
+server {
+    listen 80;
+    server_name tf.example.com;
+    location / {
+        root /srv/www;
+        try_files /__sdkwork_probe__ $uri $uri/ =404;
+    }
+}
+"#,
+        )
+        .expect("nginx-standard try_files must be accepted");
+        let static_resource = resources
+            .resources
+            .iter()
+            .find_map(|resource| match resource {
+                crate::config::ResourceConfig::Static {
+                    root, spa_fallback, ..
+                } => Some((root.clone(), spa_fallback.clone())),
+                _ => None,
+            })
+            .expect("static resource");
+        assert_eq!(static_resource.0, "/srv/www");
+        assert!(
+            static_resource.1.is_none(),
+            "=code fallback must not become a SPA fallback"
+        );
+    }
+
+    #[test]
     fn try_files_rejects_unsupported_forms() {
         for (suffix, expected) in [
-            ("=404", "try_files fallback"),
             ("@named", "try_files `@named` dispatch cannot be combined"),
             ("$1", "try_files fallback"),
         ] {
@@ -4156,7 +4194,7 @@ server {{
             .unwrap_or_else(|| panic!("{suffix} must fail closed"));
             assert!(error.to_string().contains(expected), "{suffix}: {error}");
         }
-        let error = materialize(
+        let resources = materialize(
             r#"
 server {
     listen 80;
@@ -4168,11 +4206,22 @@ server {
 }
 "#,
         )
-        .err()
-        .expect("intermediate literal try_files entries must fail closed");
-        assert!(
-            error.to_string().contains("try_files entry `/fixed.html`"),
-            "{error}"
+        .expect("literal intermediate try_files entries are nginx-standard");
+        let static_resource = resources
+            .resources
+            .iter()
+            .find_map(|resource| match resource {
+                crate::config::ResourceConfig::Static {
+                    root, spa_fallback, ..
+                } => Some((root.clone(), spa_fallback.clone())),
+                _ => None,
+            })
+            .expect("static resource");
+        assert_eq!(static_resource.0, "/srv/www");
+        assert_eq!(
+            static_resource.1.as_deref(),
+            Some("index.html"),
+            "literal fallback becomes the SPA fallback"
         );
     }
 

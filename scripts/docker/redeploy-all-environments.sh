@@ -34,7 +34,7 @@ and production compose stacks (external PostgreSQL/Redis).
 
 Options:
   --deploy-only              Skip build steps; redeploy existing image tag only
-  --skip-frontend-build      Reuse apps/*/dist/prod from the working tree
+  --skip-frontend-build      Reuse apps/*/dist/standalone/prod from the working tree
   --skip-release-build       Reuse dist/release/*.tar.gz when packaging image
   --skip-image-build         Skip docker build; compose up existing image tag
   --no-validate              Skip validate-docker-deployment.mjs before compose up
@@ -87,21 +87,31 @@ require_command() {
 }
 
 build_browser_app() {
-  local app_rel="$1"
-  local app_name="$2"
-  log "building ${app_name} standalone.production (vite)"
+  local architecture="$1"
+  local lifecycle_environment="${2:-production}"
+  local deployment_profile="${3:-standalone}"
+  log "building webserver ${architecture} ${deployment_profile}.${lifecycle_environment}"
+  # Canonical runner materializes runtime-env, ensures bootstrap access token
+  # for development/test, and writes dist/<profile>/<alias>/ (FRONTEND_CODE_SPEC §7).
   if ! (
-    cd "$repo_root/$app_rel"
-    node scripts/verify-build-sources.mjs
-    node scripts/materialize-runtime-env.mjs \
-      --deployment-profile standalone \
-      --environment production
-    pnpm exec vite build --mode standalone.production
+    cd "$repo_root"
+    node ../sdkwork-specs/tools/build-browser-client.mjs \
+      --root . \
+      --architecture "$architecture" \
+      --environment "$lifecycle_environment" \
+      --deployment-profile "$deployment_profile"
   ); then
     return 1
   fi
-  if [ ! -f "$repo_root/$app_rel/dist/prod/index.html" ]; then
-    echo "missing ${app_rel}/dist/prod/index.html after vite build" >&2
+  local env_alias
+  case "$lifecycle_environment" in
+    development) env_alias=dev ;;
+    production) env_alias=prod ;;
+    *) env_alias="$lifecycle_environment" ;;
+  esac
+  local index_path="$repo_root/apps/sdkwork-webserver-${architecture}/dist/${deployment_profile}/${env_alias}/index.html"
+  if [ ! -f "$index_path" ]; then
+    echo "missing ${index_path#$repo_root/} after vite build" >&2
     return 1
   fi
 }
@@ -115,15 +125,16 @@ build_frontend_assets() {
       (cd "$repo_root" && pnpm install --frozen-lockfile)
     fi
   fi
-  build_browser_app "apps/sdkwork-webserver-pc" "webserver-pc"
-  build_browser_app "apps/sdkwork-webserver-h5" "webserver-h5"
+  # Webserver console is standalone-only (SDKWORK_WEBSERVER_SPEC.md §17.4).
+  build_browser_app pc production standalone
+  build_browser_app h5 production standalone
 }
 
 reuse_existing_frontend_dist() {
-  local pc_index="$repo_root/apps/sdkwork-webserver-pc/dist/prod/index.html"
-  local h5_index="$repo_root/apps/sdkwork-webserver-h5/dist/prod/index.html"
+  local pc_index="$repo_root/apps/sdkwork-webserver-pc/dist/standalone/prod/index.html"
+  local h5_index="$repo_root/apps/sdkwork-webserver-h5/dist/standalone/prod/index.html"
   if [ -f "$pc_index" ] && [ -f "$h5_index" ]; then
-    log "reusing existing dist/prod from working tree (PC + H5)"
+    log "reusing existing dist/standalone/prod from working tree (PC + H5)"
     assert_no_stale_random_uuid_in_dist
     return 0
   fi
@@ -204,17 +215,18 @@ verify_health() {
 }
 
 assert_no_stale_random_uuid_in_dist() {
+  local pc_dist="$repo_root/apps/sdkwork-webserver-pc/dist/standalone/prod"
   if command -v rg >/dev/null 2>&1; then
     if rg -q 'globalThis\.crypto\.randomUUID|crypto\.randomUUID\(\)' \
-      "$repo_root/apps/sdkwork-webserver-pc/dist/prod" 2>/dev/null; then
-      echo "PC dist/prod still contains direct crypto.randomUUID calls; rebuild required" >&2
+      "$pc_dist" 2>/dev/null; then
+      echo "PC dist/standalone/prod still contains direct crypto.randomUUID calls; rebuild required" >&2
       exit 1
     fi
     return 0
   fi
   if grep -RqE 'globalThis\.crypto\.randomUUID|crypto\.randomUUID\(\)' \
-    "$repo_root/apps/sdkwork-webserver-pc/dist/prod" 2>/dev/null; then
-    echo "PC dist/prod still contains direct crypto.randomUUID calls; rebuild required" >&2
+    "$pc_dist" 2>/dev/null; then
+    echo "PC dist/standalone/prod still contains direct crypto.randomUUID calls; rebuild required" >&2
     exit 1
   fi
 }
@@ -227,7 +239,7 @@ main() {
     if [ "$skip_frontend_build" = false ]; then
       if ! build_frontend_assets; then
         if reuse_existing_frontend_dist; then
-          log "frontend vite build unavailable; continuing with existing dist/prod"
+          log "frontend vite build unavailable; continuing with existing dist/standalone/prod"
         else
           exit 1
         fi
@@ -235,7 +247,7 @@ main() {
     elif reuse_existing_frontend_dist; then
       log "skipping frontend vite builds (--skip-frontend-build)"
     else
-      echo "missing dist/prod; run vite build on the host or omit --skip-frontend-build" >&2
+      echo "missing dist/standalone/prod; run vite build on the host or omit --skip-frontend-build" >&2
       exit 1
     fi
     assert_no_stale_random_uuid_in_dist

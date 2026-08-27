@@ -55,7 +55,7 @@ const PC_RUNTIME_ENV_SOURCES = Object.freeze({
     'sdkwork-webserver-pc',
     'etc',
     'browser',
-    'runtime-env.test.json',
+    'runtime-env.standalone.test.json',
   ),
 });
 const BINARIES = [
