@@ -52,7 +52,14 @@ ensure_secret_file() {
 # A2: canonical certificate inventory (/etc/sdkwork/certs/<domain>/).
 # Operator/ACME material wins; a missing domain directory is bootstrapped
 # with a self-signed certificate so HTTPS listeners (8430) start and can be
-# replaced by real material without a restart.
+# replaced by real material without a restart. Rendered nginx.*.production.conf
+# sidecars reference the canonical ACME layout /etc/sdkwork/certs/letsencrypt/
+# <domain>/fullchain.pem (W25), so every bootstrapped domain is mirrored into
+# that layout too — never overwriting operator-provisioned files there.
+lets_encrypt_certs_root() {
+  printf '%s' "${SDKWORK_WEBSERVER_CERTS_LETS_ENCRYPT_DIR:-/etc/sdkwork/certs/letsencrypt}"
+}
+
 ensure_domain_certificate() {
   local domain="$1"
   local directory="${SDKWORK_CERTS_DIR:-/etc/sdkwork/certs}/${domain}"
@@ -60,13 +67,105 @@ ensure_domain_certificate() {
   local key="${directory}/key.pem"
   if [ -s "${cert}" ] && [ -s "${key}" ]; then
     log "certificate present: ${domain}"
-    return 0
+  else
+    ensure_directory "${directory}"
+    log "generating self-signed bootstrap certificate for ${domain} (replace under ${directory})"
+    if ! openssl req -x509 -newkey rsa:2048 -nodes \
+        -days 3650 \
+        -keyout "${key}" -out "${cert}" \
+        -subj "/CN=${domain}" \
+        -addext "subjectAltName=DNS:${domain}" 2>/dev/null \
+      && [ ! -s "${cert}" ]; then
+      # Older openssl builds reject -addext; retry without the extension and
+      # surface a visible warning instead of failing TLS bootstrap silently.
+      log "warning: openssl -addext unsupported or failed for ${domain}; retrying without SAN"
+      rm -f "${key}"
+      openssl req -x509 -newkey rsa:2048 -nodes \
+        -days 3650 \
+        -keyout "${key}" -out "${cert}" \
+        -subj "/CN=${domain}" >/dev/null 2>&1 || true
+    fi
+    if [ ! -s "${cert}" ] || [ ! -s "${key}" ]; then
+      log "warning: failed to generate bootstrap certificate for ${domain}; HTTPS listeners for it stay unserved until operator/ACME material is provisioned"
+    fi
+    chmod 0600 "${key}" 2>/dev/null || true
   fi
-  ensure_directory "${directory}"
-  log "generating self-signed bootstrap certificate for ${domain} (replace under ${directory})"
-  openssl req -x509 -newkey rsa:2048 -nodes     -days 3650     -keyout "${key}" -out "${cert}"     -subj "/CN=${domain}"     -addext "subjectAltName=DNS:${domain}" 2>/dev/null
-  chmod 0600 "${key}"
+  local le_dir le_root
+  le_root="$(lets_encrypt_certs_root)"
+  le_dir="${le_root}/${domain}"
+  if [ ! -s "${le_dir}/fullchain.pem" ] || [ ! -s "${le_dir}/privkey.pem" ]; then
+    ensure_directory "${le_dir}"
+    cp "${cert}" "${le_dir}/fullchain.pem"
+    cp "${key}" "${le_dir}/privkey.pem"
+    cp "${cert}" "${le_dir}/chain.pem"
+    chmod 0644 "${le_dir}/fullchain.pem" "${le_dir}/chain.pem"
+    chmod 0600 "${le_dir}/privkey.pem"
+    chown -R "${SERVICE_USER}:${SERVICE_USER}" "${le_dir}" 2>/dev/null || true
+  fi
   chown -R "${SERVICE_USER}:${SERVICE_USER}" "${directory}"
+}
+
+# Imported production sidecars declare `listen 443 ssl` with canonical
+# ACME-layout certificate paths (W25: /etc/sdkwork/certs/letsencrypt/<domain>/).
+# Bootstrap any missing per-domain inventory so imported HTTPS listeners can
+# start cold; operator/ACME material replaces it without config changes.
+ensure_imported_sidecar_certificates() {
+  local imports_root="${CONFIG_ROOT}/imports.d"
+  local aggregator conf src_cert domain le_dir seen="" le_root
+  le_root="$(lets_encrypt_certs_root)"
+  [ -d "${imports_root}" ] || return 0
+  for aggregator in "${imports_root}/import.conf.standalone" "${imports_root}/import.conf.cloud"; do
+    [ -f "${aggregator}" ] || continue
+    while IFS= read -r line; do
+      case "${line}" in
+        include\ *) ;;
+        *) continue ;;
+      esac
+      conf="${line#include }"
+      conf="${conf%;}"
+      [ -f "${conf}" ] || continue
+      grep -q 'listen[[:space:]][[:space:]]*443[[:space:]][[:space:]]*ssl' "${conf}" || continue
+      while IFS= read -r src_cert; do
+        [ -n "${src_cert}" ] || continue
+        # Recognize the configured ACME-layout root first (so operators who
+        # override SDKWORK_WEBSERVER_CERTS_LETS_ENCRYPT_DIR still get
+        # bootstrapping) and the stock /etc/sdkwork/certs/letsencrypt/ path
+        # second (W25).
+        if [ "${src_cert#"${le_root}"/}" != "${src_cert}" ]; then
+          domain="${src_cert#"${le_root}"/}"
+          domain="${domain%%/*}"
+        elif [ "${src_cert#*/letsencrypt/}" != "${src_cert}" ]; then
+          domain="$(printf '%s' "${src_cert}" | awk -F'/letsencrypt/' '{print $2}' | cut -d/ -f1)"
+        else
+          continue
+        fi
+        [ -n "${domain}" ] || continue
+        case ",${seen}," in
+          *,"${domain}",*) continue ;;
+        esac
+        seen="${seen:+${seen},}${domain}"
+        le_dir="$(lets_encrypt_certs_root)/${domain}"
+        if [ ! -s "${le_dir}/fullchain.pem" ] || [ ! -s "${le_dir}/privkey.pem" ]; then
+          log "bootstrapping missing sidecar certificate inventory for ${domain} (${le_dir})"
+          ensure_domain_certificate "${domain}"
+        else
+          log "sidecar certificate inventory present for ${domain}"
+        fi
+      done < <(sed -n 's/^[[:space:]]*ssl_certificate[[:space:]][[:space:]]*\([^;][^;]*\);.*/\1/p' "${conf}")
+    done < "${aggregator}"
+  done
+  # Fail-soft verification: inventory entries that are still absent after all
+  # bootstrap attempts get a loud operator-facing warning.
+  if [ -n "${seen}" ]; then
+    local domain_check le_check
+    IFS=',' read -r -a domain_checks <<< "${seen}"
+    for domain_check in "${domain_checks[@]}"; do
+      le_check="$(lets_encrypt_certs_root)/${domain_check}"
+      if [ ! -s "${le_check}/fullchain.pem" ] || [ ! -s "${le_check}/privkey.pem" ]; then
+        log "warning: certificate inventory for imported domain ${domain_check} incomplete under ${le_check}; provision operator/ACME material before exposing HTTPS"
+      fi
+    done
+  fi
 }
 
 ensure_database_secret() {
@@ -134,8 +233,7 @@ ensure_credential_entry_bootstrap_token() {
   log "provisioned development fixture credential-entry bootstrap Access-Token for ${environment}"
 }
 
-apply_primary_domain() {
-  local domain="${SDKWORK_WEBSERVER_PRIMARY_DOMAIN:-sdkwork.com}"
+apply_primary_domain() {  local domain="${SDKWORK_WEBSERVER_PRIMARY_DOMAIN:-sdkwork.com}"
   local environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
   # Role host server (APP_RUNTIME_TOPOLOGY_NAMING.md §9.2); applicationCode remains webserver.
   local host_role="server-dev"
@@ -216,6 +314,20 @@ environment_dist_alias() {
     production) printf '%s' "prod" ;;
     *) printf '%s' "dev" ;;
   esac
+}
+
+# Active import-set profile (SDKWORK_WEBSERVER_SPEC.md §17.3): both sets are
+# always materialized; this selects which aggregator activates as import.conf.
+webserver_import_profile() {
+  printf '%s' "${SDKWORK_WEBSERVER_IMPORT_PROFILE:-cloud}"
+}
+
+# PC/H5 dist variant served behind imported module hosts (§13.6 /
+# ENVIRONMENT_SPEC.md §5.1.0.1): follows the active import set so cloud-mode
+# edges serve cloud builds (unified api-edge base URLs) and standalone-mode
+# edges serve same-origin builds. Never mix one module's profile variants.
+static_source_profile() {
+  printf '%s' "${SDKWORK_WEBSERVER_STATIC_SOURCE_PROFILE:-$(webserver_import_profile)}"
 }
 
 module_repo_root() {
@@ -406,8 +518,8 @@ module_app_static_root_for_alias() {
   local module="$1"
   local surface="$2"
   local dist_alias="$3"
-  local profile apps_root expected app dist
-  profile="${SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE:-${SDKWORK_DEPLOYMENT_PROFILE:-standalone}}"
+  local profile="${4:-$(static_source_profile)}"
+  local apps_root expected app dist
   apps_root="$(module_repo_root "${module}")/apps"
   [ -d "${apps_root}" ] || return 0
   expected="${apps_root}/${module}-${surface}"
@@ -460,6 +572,10 @@ write_module_app_roots_catalog() {
   h5_test="$(module_app_static_root_for_alias "${module}" h5 test)"
   h5_staging="$(module_app_static_root_for_alias "${module}" h5 staging)"
   h5_prod="$(module_app_static_root_for_alias "${module}" h5 prod)"
+  # Adaptive Web table (SDKWORK_DEPLOY_SPEC.md §8): prefer discovered PC/H5
+  # roots over static-fallback. Fall back to the active surface root before the
+  # placeholder static directory so by_environment never collapses to
+  # static-fallback while pc_static_root / h5_static_root point at real assets.
   cat > "${catalog_root}/${module}.toml" <<EOF
 # Generated Adaptive Web catalog for imported module ${module}.
 # Authority: SDKWORK_WEBSERVER_SPEC.md §13.6 / §17.
@@ -472,16 +588,16 @@ h5_static_root = "${h5_root:-}"
 static_fallback_root = "${static_fallback}"
 
 [app_roots.pc_static_by_environment]
-development = "${pc_dev:-${static_fallback}}"
-test = "${pc_test:-${static_fallback}}"
-staging = "${pc_staging:-${static_fallback}}"
-production = "${pc_prod:-${static_fallback}}"
+development = "${pc_dev:-${pc_root:-${static_fallback}}}"
+test = "${pc_test:-${pc_root:-${static_fallback}}}"
+staging = "${pc_staging:-${pc_root:-${static_fallback}}}"
+production = "${pc_prod:-${pc_root:-${static_fallback}}}"
 
 [app_roots.h5_static_by_environment]
-development = "${h5_dev:-${static_fallback}}"
-test = "${h5_test:-${static_fallback}}"
-staging = "${h5_staging:-${static_fallback}}"
-production = "${h5_prod:-${static_fallback}}"
+development = "${h5_dev:-${h5_root:-${static_fallback}}}"
+test = "${h5_test:-${h5_root:-${static_fallback}}}"
+staging = "${h5_staging:-${h5_root:-${static_fallback}}}"
+production = "${h5_prod:-${h5_root:-${static_fallback}}}"
 
 [app_roots.static_fallback_by_environment]
 development = "${static_fallback}"
@@ -521,12 +637,21 @@ materialize_module_toml_layout() {
 
 # Prepare per-module config trees. When nginx.enabled + sidecar exist, only the
 # nginx `.conf` tree is materialized (never a competing TOML import descriptor).
+webserver_container_gateway_port() {
+  # Resolve each optional source through an explicit :-default so a bare
+  # `set -u` environment never aborts mid-expansion.
+  local port="${SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT:-}"
+  if [ -z "${port}" ]; then
+    local bind="${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_INGRESS_BIND:-}"
+    port="${bind##*:}"
+  fi
+  printf '%s' "${port:-3800}"
+}
+
 materialize_module_webserver_configs() {
   local modules_root="${CONFIG_ROOT}/modules"
   local catalog_root="${CONFIG_ROOT}/module-app-roots"
-  local module module_root dest gateway_port
-  gateway_port="${SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT:-${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_INGRESS_BIND##*:}}"
-  gateway_port="${gateway_port:-3800}"
+  local module module_root dest
   ensure_directory "${modules_root}"
   ensure_directory "${catalog_root}"
   IFS=',' read -r -a module_list <<< "${SDKWORK_SPACE_IMPORT_MODULES:-}"
@@ -543,7 +668,7 @@ materialize_module_webserver_configs() {
     if module_nginx_import_enabled "${module_root}"; then
       continue
     fi
-    materialize_module_toml_layout "${module_root}" "${dest}" "${gateway_port}"
+    materialize_module_toml_layout "${module_root}" "${dest}" "$(webserver_container_gateway_port)"
   done
   chown -R "${SERVICE_USER}:${SERVICE_USER}" "${modules_root}" 2>/dev/null || true
   chown -R "${SERVICE_USER}:${SERVICE_USER}" "${catalog_root}" 2>/dev/null || true
@@ -908,6 +1033,171 @@ prepare_module_api_gateway() {
   esac
 }
 
+# Product public edge (server-dev / server-app-dev / server-admin-dev; prod:
+# server / server-app / server-admin). Sibling discovery skips sdkwork-webserver
+# (SPEC §17), but expose.mode:api hosts MUST reverse-proxy to the process
+# AdaptiveAppShell (SPEC §11.3 / §13.6). Upstream name is unique
+# (`webserver_adaptive_shell`) so it does not collide with sibling `upstream
+# gateway` blocks. Production emits one TLS server block per registered brand
+# domain (443 ssl + 80, canonical ACME-layout certificates, W11/W25/W26); every
+# environment exposes =/healthz and =/readyz probe locations.
+product_edge_proxy_locations() {
+  cat <<'PROXYEOF'
+        location = /healthz {
+            proxy_pass http://webserver_adaptive_shell;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        location = /readyz {
+            proxy_pass http://webserver_adaptive_shell;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        location /api/ {
+            proxy_pass http://webserver_adaptive_shell;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        location / {
+            proxy_pass http://webserver_adaptive_shell;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_buffering off;
+            proxy_read_timeout 300s;
+        }
+PROXYEOF
+}
+
+materialize_product_edge_nginx_conf() {
+  local imports_root="${CONFIG_ROOT}/imports.d"
+  local environment product_root sidecar server_names mgmt_port dest
+  environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
+  mgmt_port="$(webserver_container_gateway_port)"
+  product_root="$(module_repo_root sdkwork-webserver)"
+  sidecar="${product_root}/deployments/webserver/nginx.standalone.${environment}.conf"
+  dest="${imports_root}/product-edge.nginx.conf"
+  ensure_directory "${imports_root}"
+
+  server_names=""
+  if [ -f "${sidecar}" ]; then
+    # Collect every server_name directive across ALL server blocks so
+    # multi-brand production sidecars mirror completely (one TLS block per
+    # registered brand domain), not just the first server stanza.
+    server_names="$(sed -n 's/.*server_name[[:space:]]\+\([^;]*\);.*/\1/p' "${sidecar}" | xargs)"
+  fi
+  if [ -z "${server_names}" ]; then
+    log "warning: product edge sidecar missing or has no server_name (${sidecar}); skipping product-edge import"
+    rm -f "${dest}"
+    return 1
+  fi
+
+  if [ "${environment}" = "production" ]; then
+    local lets_root domains="" host hostdom domain_names
+    lets_root="$(lets_encrypt_certs_root)"
+    for host in ${server_names}; do
+      hostdom="${host#*.}"
+      case " ${domains} " in
+        *" ${hostdom} "*) ;;
+        *) domains="${domains:+${domains} }${hostdom}" ;;
+      esac
+    done
+    {
+      cat <<HEAD
+# Generated by sdkwork-webserver-entrypoint (SDKWORK_WEBSERVER_SPEC.md §11.3 / §13.6).
+# Product Adaptive Web edge: server / server-app / server-admin hosts proxy to the
+# process AdaptiveAppShell. One TLS server block per registered brand domain;
+# certificates follow the canonical ACME layout under ${lets_root}.
+# Source server_name from ${sidecar}
+user sdkwork;
+worker_processes auto;
+pid /run/sdkwork/webserver/product-edge.pid;
+error_log /var/log/sdkwork/webserver/webserver/error.log warn;
+events {
+    worker_connections 1024;
+}
+http {
+    sendfile on;
+    keepalive_timeout 75;
+    client_max_body_size 1100m;
+    server_tokens off;
+    gzip on;
+    upstream webserver_adaptive_shell {
+        least_conn;
+        keepalive 32;
+        server 127.0.0.1:${mgmt_port};
+    }
+HEAD
+      for hostdom in ${domains}; do
+        domain_names=""
+        for host in ${server_names}; do
+          if [ "${host#*.}" = "${hostdom}" ]; then
+            domain_names="${domain_names:+${domain_names} }${host}"
+          fi
+        done
+        cat <<TLSBLOCK
+    server {
+        listen 443 ssl;
+        listen 80;
+        server_name ${domain_names};
+        ssl_certificate ${lets_root}/${hostdom}/fullchain.pem;
+        ssl_certificate_key ${lets_root}/${hostdom}/privkey.pem;
+        ssl_trusted_certificate ${lets_root}/${hostdom}/chain.pem;
+        ssl_stapling on;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_prefer_server_ciphers on;
+        ssl_session_cache shared:SSL:10m;
+TLSBLOCK
+        product_edge_proxy_locations
+        printf '    }\n'
+      done
+      printf '}\n'
+    } > "${dest}"
+    log "materialized product Adaptive Web edge -> ${dest} (production TLS over ${domains}, upstream 127.0.0.1:${mgmt_port})"
+  else
+    cat > "${dest}" <<PLAINHEAD
+# Generated by sdkwork-webserver-entrypoint (SDKWORK_WEBSERVER_SPEC.md §11.3 / §13.6).
+# Product Adaptive Web edge: proxy server-* hosts to process AdaptiveAppShell.
+# Source server_name from ${sidecar}
+user sdkwork;
+worker_processes auto;
+pid /run/sdkwork/webserver/product-edge.pid;
+error_log /var/log/sdkwork/webserver/webserver/error.log warn;
+events {
+    worker_connections 1024;
+}
+http {
+    sendfile on;
+    keepalive_timeout 75;
+    client_max_body_size 1100m;
+    server_tokens off;
+    gzip on;
+    upstream webserver_adaptive_shell {
+        least_conn;
+        keepalive 32;
+        server 127.0.0.1:${mgmt_port};
+    }
+    server {
+        listen 80;
+        server_name ${server_names};
+PLAINHEAD
+    product_edge_proxy_locations >> "${dest}"
+    printf '    }\n}\n' >> "${dest}"
+    log "materialized product Adaptive Web edge -> ${dest} (http, upstream 127.0.0.1:${mgmt_port})"
+  fi
+
+  chown "${SERVICE_USER}:${SERVICE_USER}" "${dest}" 2>/dev/null || true
+  chmod 0644 "${dest}" 2>/dev/null || true
+  return 0
+}
+
 # Write imports.d/ import sets (SDKWORK_WEBSERVER_SPEC.md §17.3): both the
 # standalone and cloud aggregators (import.conf.<profile>) plus optional
 # per-profile layout-imports.<profile>.toml for modules without nginx sidecars.
@@ -918,15 +1208,18 @@ materialize_module_import_files() {
   local modules_root="${CONFIG_ROOT}/modules"
   local environment active_profile import_profile
   local module module_root nginx_conf import_conf layout_toml sidecar_path
-  local include_count layout_count
+  local include_count layout_count product_edge
   environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
-  active_profile="${SDKWORK_WEBSERVER_IMPORT_PROFILE:-cloud}"
+  active_profile="$(webserver_import_profile)"
+  product_edge="${imports_root}/product-edge.nginx.conf"
 
   ensure_directory "${imports_root}"
   shopt -s nullglob
   rm -f "${imports_root}"/*.conf "${imports_root}"/*.toml 2>/dev/null || true
   find "${imports_root}" -maxdepth 1 -type l -delete 2>/dev/null || true
   shopt -u nullglob
+
+  materialize_product_edge_nginx_conf || true
 
   for import_profile in standalone cloud; do
     import_conf="${imports_root}/import.conf.${import_profile}"
@@ -941,6 +1234,14 @@ materialize_module_import_files() {
 #   /opt/deploy/sdkwork-space/<module>/deployments/webserver/nginx.${import_profile}.${environment}.conf
 # Lifecycle environment: ${environment}  Import profile: ${import_profile}
 EOF
+
+    # Product edge first so server-dev.* matches AdaptiveAppShell before the
+    # sibling default_server (otherwise unmatched hosts hit static-fallback).
+    if [ -f "${product_edge}" ]; then
+      printf 'include %s;\n' "${product_edge}" >> "${import_conf}"
+      include_count=$((include_count + 1))
+      log "product edge nginx include -> ${product_edge}"
+    fi
 
     cat > "${layout_toml}" <<EOF
 # Generated by sdkwork-webserver-entrypoint for layout v3 module imports (${import_profile}).
@@ -1000,6 +1301,11 @@ EOF
     fi
   done
 
+  # Imported web modules serve PC/H5 through their sidecar @pc/@h5 named
+  # locations; point those package roots at the checkout dist trees so the
+  # data plane actually finds sibling SPA assets (SPEC §13.6 / §17).
+  materialize_module_web_static_roots
+
   activate_import_profile "${active_profile}"
 }
 
@@ -1035,36 +1341,90 @@ activate_import_profile() {
 module_app_static_root() {
   local module="$1"
   local surface="$2"
-  local environment profile dist_alias apps_root expected app dist
+  local environment dist_alias
   environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
-  profile="${SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE:-${SDKWORK_DEPLOYMENT_PROFILE:-standalone}}"
   dist_alias="$(environment_dist_alias "${environment}")"
-  apps_root="$(module_repo_root "${module}")/apps"
-  [ -d "${apps_root}" ] || return 0
-  # FRONTEND_CODE_SPEC.md §7 / WEBSERVER_SPEC.md §17: apps/*-{pc,h5}/dist/<profile>/<alias>/
-  expected="${apps_root}/${module}-${surface}"
-  if [ -f "${expected}/dist/${profile}/${dist_alias}/index.html" ]; then
-    printf '%s' "${expected}/dist/${profile}/${dist_alias}"
-    return 0
-  fi
-  for app in "${apps_root}"/*-"${surface}"; do
-    [ -d "${app}" ] || continue
-    dist="${app}/dist/${profile}/${dist_alias}"
-    if [ -f "${dist}/index.html" ]; then
-      printf '%s' "${dist}"
-      return 0
+  module_app_static_root_for_alias "${module}" "${surface}" "${dist_alias}" "$(static_source_profile)"
+}
+
+# Extract the Adaptive Web named-location root a sidecar declares for @pc/@h5
+# (SDKWORK_DEPLOY_SPEC.md §8.1 emission contract), e.g.
+# /usr/share/sdkwork/im/web/pc. Returns non-zero when absent.
+module_adaptive_named_root() {
+  local sidecar="$1"
+  local surface="$2"
+  [ -f "${sidecar}" ] || return 1
+  local root
+  root="$(sed -n "/^[[:space:]]*location @${surface}[[:space:]]*{/,/^[[:space:]]*}/p" "${sidecar}" \
+    | sed -n 's/^[[:space:]]*root[[:space:]]\+\([^;[:space:]]*\);.*/\1/p' \
+    | head -1)"
+  [ -n "${root}" ] || return 1
+  printf '%s' "${root}"
+}
+
+# Materialize the container-side Adaptive Web roots every imported module's
+# named locations dispatch to (usually /usr/share/sdkwork/<code>/web/{pc,h5}).
+# Host-based vhosting and UA split resolve in the data plane, but nothing in
+# the image owns those package paths — without this step sibling PC/H5 SPA
+# surfaces 404 (SDKWORK_WEBSERVER_SPEC.md §13.6 / §17). Each root is symlinked
+# to the active static-source profile dist tree; existing non-symlink content
+# is never overwritten. Idempotent; safe to re-run on reload.
+materialize_module_web_static_roots() {
+  local adaptive_base="${SDKWORK_WEBSERVER_MODULE_WEB_ROOT:-/usr/share/sdkwork}"
+  local environment dist_alias source_profile
+  local modules_list module module_root conf profile surface
+  local root src parent seen_roots
+  environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
+  dist_alias="$(environment_dist_alias "${environment}")"
+  source_profile="$(static_source_profile)"
+  ensure_directory "${adaptive_base}"
+  seen_roots=""
+  IFS=',' read -r -a modules_list <<< "${SDKWORK_SPACE_IMPORT_MODULES:-}"
+  for module in "${modules_list[@]}"; do
+    module="$(printf '%s' "${module}" | xargs)"
+    [ -z "${module}" ] && continue
+    module_root="$(module_repo_root "${module}")"
+    if ! module_webserver_enabled "${module_root}"; then
+      continue
     fi
+    # Both profile sets coexist (§17.3); Adaptive Web roots are identical
+    # across them, so process whichever confs exist exactly once per path.
+    for profile in standalone cloud; do
+      conf="$(module_nginx_sidecar_abs_path "${module_root}" "${profile}")"
+      [ -f "${conf}" ] || continue
+      for surface in pc h5; do
+        if ! root="$(module_adaptive_named_root "${conf}" "${surface}")"; then
+          continue
+        fi
+        case "${root}" in
+          "${adaptive_base}"/*) ;;
+          *) log "warning: ${module} ${profile} ${surface} root outside ${adaptive_base}: ${root}; skipped" ; continue ;;
+        esac
+        case ",${seen_roots}," in
+          *,"${root}",*) continue ;;
+        esac
+        seen_roots="${seen_roots:+${seen_roots},}${root}"
+        src="$(module_app_static_root_for_alias "${module}" "${surface}" "${dist_alias}" "${source_profile}")"
+        if [ -z "${src}" ]; then
+          log "warning: ${module} ${surface}: no apps/*-${surface}/dist/${source_profile}/${dist_alias} build under ${module_root}; ${root} stays unserved (build with: pnpm --dir ${module} build:${surface}:${dist_alias}:${source_profile})"
+          continue
+        fi
+        if [ -L "${root}" ]; then
+          if [ "$(readlink -f "${root}")" = "$(readlink -f "${src}")" ]; then
+            continue
+          fi
+        elif [ -e "${root}" ]; then
+          log "warning: refusing to replace non-symlink content at ${root} (${module} ${surface}); remove it manually to re-point"
+          continue
+        fi
+        parent="$(dirname "${root}")"
+        mkdir -p "${parent}"
+        chown "${SERVICE_USER}:${SERVICE_USER}" "${parent}" 2>/dev/null || true
+        ln -sfn "${src}" "${root}"
+        log "linked ${root} -> ${src#${module_root}/} (${module} ${surface}, ${source_profile}/${dist_alias})"
+      done
+    done
   done
-  # Migration fallback: legacy environment-only dist/<alias>/ subtrees.
-  for app in "${apps_root}"/*-"${surface}"; do
-    [ -d "${app}" ] || continue
-    dist="${app}/dist/${dist_alias}"
-    if [ -f "${dist}/index.html" ]; then
-      printf '%s' "${dist}"
-      return 0
-    fi
-  done
-  return 0
 }
 
 # Seed a readable SPA shell when module static/ (or Docker copy) has no
@@ -1420,6 +1780,7 @@ main() {
   clone_sdkwork_space_modules
   materialize_module_webserver_configs
   materialize_module_import_files
+  ensure_imported_sidecar_certificates || true
   for cert_domain in ${SDKWORK_WEBSERVER_CERT_DOMAINS:-sdkwork.com app.sdkwork.com}; do
     ensure_domain_certificate "${cert_domain}"
   done

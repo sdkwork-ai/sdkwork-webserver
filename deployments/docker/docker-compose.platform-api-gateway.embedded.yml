@@ -1,6 +1,11 @@
 # Optional overlay for embedded/profiled stacks (docker-compose.yml).
 # Standalone per-environment files use docker-compose.platform-api-gateway.yml.
 #
+# Imported cloud-mode sidecars dial the canonical upstream
+# `sdkwork-api-cloud-gateway:8080` checkout-direct (§17.3); the gateway
+# container therefore binds SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT
+# (default 8080) behind that DNS alias.
+#
 # Usage:
 #   docker compose \
 #     -f deployments/docker/docker-compose.yml \
@@ -21,7 +26,7 @@ x-platform-api-gateway-healthcheck: &platform-api-gateway-healthcheck
     test:
       [
         "CMD-SHELL",
-        "curl -fsS http://127.0.0.1:3900/readyz >/dev/null 2>&1 || exit 1",
+        "curl -fsS http://127.0.0.1:${SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT:-8080}/readyz >/dev/null 2>&1 || exit 1",
       ]
     interval: 15s
     timeout: 5s
@@ -31,7 +36,7 @@ x-platform-api-gateway-healthcheck: &platform-api-gateway-healthcheck
 x-platform-api-gateway-common-env: &platform-api-gateway-common-env
   SDKWORK_API_CLOUD_GATEWAY_DEPLOYMENT_PROFILE: standalone
   SDKWORK_API_CLOUD_GATEWAY_RUNTIME_TARGET: container
-  SDKWORK_API_CLOUD_GATEWAY_BIND: 0.0.0.0:3900
+  SDKWORK_API_CLOUD_GATEWAY_BIND: 0.0.0.0:${SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT:-8080}
   SDKWORK_API_CLOUD_GATEWAY_MIGRATE_ON_START: ${SDKWORK_MODULE_API_GATEWAY_MIGRATE_ON_START:-true}
   SDKWORK_DATABASE_AUTO_MIGRATE: "false"
   SDKWORK_DATABASE_ENGINE: postgresql
@@ -76,7 +81,7 @@ x-platform-knowledgebase-rpc: &platform-knowledgebase-rpc
 x-platform-api-gateway-webserver-env: &platform-api-gateway-webserver-env
   SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT: docker
   SDKWORK_MODULE_API_GATEWAY_HOST: sdkwork-api-cloud-gateway
-  SDKWORK_MODULE_API_GATEWAY_PORT: "3900"
+  SDKWORK_MODULE_API_GATEWAY_PORT: "${SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT:-8080}"
 
 services:
   platform-api-gateway-development:
@@ -84,7 +89,7 @@ services:
     profiles: [development]
     restart: unless-stopped
     ports:
-      - "${SDKWORK_MODULE_API_GATEWAY_DEV_HOST_PORT:-13900}:3900"
+      - "${SDKWORK_MODULE_API_GATEWAY_DEV_HOST_PORT:-13900}:${SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT:-8080}"
     environment:
       <<: *platform-api-gateway-common-env
       SDKWORK_API_CLOUD_GATEWAY_ENVIRONMENT: development
@@ -146,7 +151,7 @@ services:
     profiles: [test]
     restart: unless-stopped
     ports:
-      - "${SDKWORK_MODULE_API_GATEWAY_TEST_HOST_PORT:-18900}:3900"
+      - "${SDKWORK_MODULE_API_GATEWAY_TEST_HOST_PORT:-18900}:${SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT:-8080}"
     environment:
       <<: *platform-api-gateway-common-env
       SDKWORK_API_CLOUD_GATEWAY_ENVIRONMENT: test
@@ -196,7 +201,7 @@ services:
     profiles: [production]
     restart: unless-stopped
     ports:
-      - "${SDKWORK_MODULE_API_GATEWAY_PROD_HOST_PORT:-18090}:3900"
+      - "${SDKWORK_MODULE_API_GATEWAY_PROD_HOST_PORT:-18090}:${SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT:-8080}"
     environment:
       <<: *platform-api-gateway-common-env
       SDKWORK_API_CLOUD_GATEWAY_ENVIRONMENT: production

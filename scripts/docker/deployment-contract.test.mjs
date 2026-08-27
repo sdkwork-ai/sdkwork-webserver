@@ -93,13 +93,16 @@ test('space clone helper script exists', () => {
   assert.match(readFileSync(script, 'utf8'), /materialize-space-dist-aliases\.sh/u);
 });
 
-test('entrypoint materializes full reverse-proxy for platform API plane hosts', () => {
+test('entrypoint imports the platform API gateway sidecar for api*.brand hosts', () => {
   const entrypoint = readFileSync(
     path.join(appRoot, 'deployments', 'docker', 'scripts', 'entrypoint-standalone.sh'),
     'utf8',
   );
   assert.match(entrypoint, /is_platform_api_gateway_module/u);
-  assert.match(entrypoint, /write_platform_api_gateway_locations_docker/u);
+  // Checkout-direct import (§17.3): api*.brand reverse proxy comes from the
+  // sibling module's own cloud sidecar, never from entrypoint-rewritten conf.
+  assert.match(entrypoint, /ensure_platform_api_gateway_module_checkout/u);
+  assert.match(entrypoint, /ensure_platform_api_gateway_import_listed/u);
   assert.match(entrypoint, /api-cloud-gateway\) printf '%s' "api"/u);
   assert.match(entrypoint, /api-dev\.\$\{brand\}/u);
 });
@@ -134,7 +137,7 @@ test('entrypoint ensures platform API plane import and does not require gateway 
     'utf8',
   );
   assert.match(entrypoint, /ensure_platform_api_gateway_import_listed/u);
-  assert.match(entrypoint, /write_platform_api_gateway_locations_docker/u);
+  assert.match(entrypoint, /discover_module_api_gateway_allowed_hosts/u);
   assert.match(entrypoint, /SDKWORK_MODULE_API_GATEWAY_REQUIRED:-false/u);
   assert.match(entrypoint, /not waiting/u);
 });
@@ -154,24 +157,47 @@ test('host nginx uninstall script exists and install-wsl-nginx is retired', () =
   assert.match(readFileSync(install, 'utf8'), /uninstall-wsl-nginx\.sh/u);
 });
 
-test('entrypoint rewrites module nginx upstream gateway to platform API gateway', () => {
+test('entrypoint includes module nginx sidecars checkout-direct without rewriting', () => {
   const entrypoint = readFileSync(
     path.join(appRoot, 'deployments', 'docker', 'scripts', 'entrypoint-standalone.sh'),
     'utf8',
   );
+  // §17.3: sibling sidecars stay the single source of truth; the aggregator
+  // includes each checkout conf directly and never sed-rewrites upstreams.
+  assert.match(entrypoint, /module_nginx_sidecar_abs_path/u);
+  assert.match(entrypoint, /High-cohesion import: the module's own checkout sidecar/u);
+  assert.doesNotMatch(entrypoint, /rewrite_module_gateway_upstream/u);
   assert.match(entrypoint, /SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT/u);
-  assert.match(entrypoint, /rewrite_module_gateway_upstream/u);
   assert.match(entrypoint, /prepare_module_api_gateway/u);
   assert.match(entrypoint, /start_bundled_module_api_gateway/u);
   assert.match(entrypoint, /sdkwork-api-cloud-gateway/u);
 });
 
-test('platform API gateway docker overlay and env examples document deployment modes', () => {
+test('platform API gateway overlays align with the canonical sibling upstream port', () => {
   const overlay = readFileSync(
     path.join(appRoot, 'deployments', 'docker', 'docker-compose.platform-api-gateway.yml'),
     'utf8',
   );
-  assert.match(overlay, /sdkwork-api-cloud-gateway/u);
+  const embedded = readFileSync(
+    path.join(appRoot, 'deployments', 'docker', 'docker-compose.platform-api-gateway.embedded.yml'),
+    'utf8',
+  );
+  // Cloud-mode sidecars dial sdkwork-api-cloud-gateway:8080 checkout-direct;
+  // the container must answer on that port (§17.3).
+  for (const compose of [overlay, embedded]) {
+    assert.match(compose, /SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT:-8080/u);
+    assert.match(compose, /SDKWORK_API_CLOUD_GATEWAY_BIND: 0\.0\.0\.0:\$\{SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT:-8080\}/u);
+  }
+  assert.match(overlay, /aliases:\s*\n\s*- sdkwork-api-cloud-gateway/u);
+  // Attach mode documents the alias + declared-port requirement.
+  for (const name of [
+    'docker-compose.platform-api-gateway-attach.yml',
+    'docker-compose.platform-api-gateway-attach.embedded.yml',
+  ]) {
+    const attach = readFileSync(path.join(appRoot, 'deployments', 'docker', name), 'utf8');
+    assert.match(attach, /SDKWORK_MODULE_API_GATEWAY_PORT:-8080/u);
+    assert.match(attach, /sdkwork-api-cloud-gateway:8080/u);
+  }
   assert.match(overlay, /platform-api-gateway/u);
   assert.match(overlay, /SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT: docker/u);
   for (const environment of environments) {
@@ -180,7 +206,7 @@ test('platform API gateway docker overlay and env examples document deployment m
       'utf8',
     );
     assert.match(envExample, /SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=docker/u);
-    assert.match(envExample, /SDKWORK_MODULE_API_GATEWAY_PORT=3900/u);
+    assert.match(envExample, /SDKWORK_MODULE_API_GATEWAY_PORT=8080/u);
   }
 });
 
@@ -206,10 +232,14 @@ test('entrypoint discovers sdkwork-space modules and writes imports', () => {
   assert.match(entrypoint, /\[\[webserver\.imports\]\]/u);
   assert.match(entrypoint, /materialize_module_webserver_configs/u);
   assert.match(entrypoint, /module-app-roots/u);
+  assert.match(entrypoint, /materialize_product_edge_nginx_conf/u);
+  assert.match(entrypoint, /webserver_adaptive_shell/u);
+  assert.match(entrypoint, /product-edge\.nginx\.conf/u);
   assert.match(entrypoint, /sdkwork-ai\/sdkwork-space/u);
   assert.match(entrypoint, /environment_dist_alias/u);
   assert.match(entrypoint, /dist\/\$\{dist_alias\}/u);
-  assert.match(entrypoint, /adaptive-web\.named-locations\.docker\.conf/u);
+  // Adaptive Web by_environment prefers discovered PC/H5 before static-fallback.
+  assert.match(entrypoint, /pc_dev:-\$\{pc_root:-\$\{static_fallback\}\}/u);
   // imports.d/import.conf aggregates checkout nginx sidecars; layout-imports.toml
   // covers layout v3 modules without nginx sidecars.
   assert.match(entrypoint, /imports\.d\/import\.conf/u);
@@ -223,6 +253,50 @@ test('entrypoint discovers sdkwork-space modules and writes imports', () => {
   assert.match(entrypoint, /build-module-browser\.mjs/u);
   assert.match(entrypoint, /--architecture/u);
   assert.match(entrypoint, /reload-module-static/u);
+});
+
+test('entrypoint materializes sibling Adaptive Web static roots in-container', () => {
+  const entrypoint = readFileSync(
+    path.join(appRoot, 'deployments', 'docker', 'scripts', 'entrypoint-standalone.sh'),
+    'utf8',
+  );
+  // §13.6/§17: sidecar @pc/@h5 named locations dispatch to package roots that
+  // the image does not own; the entrypoint links them to checkout dist trees.
+  assert.match(entrypoint, /materialize_module_web_static_roots/u);
+  assert.match(entrypoint, /module_adaptive_named_root/u);
+  assert.match(entrypoint, /location @\$\{surface\}/u);
+  assert.match(entrypoint, /SDKWORK_WEBSERVER_MODULE_WEB_ROOT:-\/usr\/share\/sdkwork/u);
+  assert.match(entrypoint, /ln -sfn "\$\{src\}" "\$\{root\}"/u);
+  // Non-symlink content is never replaced (fail-safe materialization).
+  assert.match(entrypoint, /refusing to replace non-symlink content/u);
+  // Serving profile follows the active import set unless explicitly pinned.
+  assert.match(entrypoint, /SDKWORK_WEBSERVER_STATIC_SOURCE_PROFILE:-\$\(webserver_import_profile\)/u);
+});
+
+test('imported sidecar TLS certificates bootstrap into the canonical ACME layout', () => {
+  const entrypoint = readFileSync(
+    path.join(appRoot, 'deployments', 'docker', 'scripts', 'entrypoint-standalone.sh'),
+    'utf8',
+  );
+  assert.match(entrypoint, /ensure_imported_sidecar_certificates \|\| true/u);
+  assert.match(entrypoint, /lets_encrypt_certs_root/u);
+  assert.match(entrypoint, /SDKWORK_WEBSERVER_CERTS_LETS_ENCRYPT_DIR:-\/etc\/sdkwork\/certs\/letsencrypt/u);
+  assert.match(entrypoint, /fullchain\.pem/u);
+  assert.match(entrypoint, /privkey\.pem/u);
+});
+
+test('product edge emits production TLS blocks with health probe locations', () => {
+  const entrypoint = readFileSync(
+    path.join(appRoot, 'deployments', 'docker', 'scripts', 'entrypoint-standalone.sh'),
+    'utf8',
+  );
+  // Production: one TLS server block per brand domain (W11/W25/W26).
+  assert.match(entrypoint, /listen 443 ssl;/u);
+  assert.match(entrypoint, /ssl_protocols TLSv1\.2 TLSv1\.3;/u);
+  assert.match(entrypoint, /ssl_certificate \$\{lets_root\}\/\$\{hostdom\}\/fullchain\.pem;/u);
+  // Every environment: health/ready probes terminate on this edge.
+  assert.match(entrypoint, /location = \/healthz \{/u);
+  assert.match(entrypoint, /location = \/readyz \{/u);
 });
 
 test('standalone image and compose publish public data plane on 80/443', () => {

@@ -263,14 +263,14 @@ importers:
   ../sdkwork-drive/sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-typescript:
     dependencies:
       '@sdkwork/iam-app-sdk':
-        specifier: workspace:*
-        version: link:../../../../sdkwork-iam/sdks/sdkwork-iam-app-sdk/sdkwork-iam-app-sdk-typescript
+        specifier: ^0.1.4
+        version: 0.1.4
       '@sdkwork/sdk-common':
         specifier: workspace:*
         version: link:../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
       '@sdkwork/utils':
-        specifier: workspace:*
-        version: link:../../../../sdkwork-utils/packages/sdkwork-utils-typescript
+        specifier: ^0.11.0
+        version: 0.11.0
     devDependencies:
       typescript:
         specifier: ^5.8.2
@@ -544,6 +544,9 @@ importers:
       '@sdkwork/sdk-common':
         specifier: workspace:*
         version: link:../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      '@sdkwork/utils':
+        specifier: ^0.11.0
+        version: 0.11.0
 
   ../sdkwork-mcp/apps/sdkwork-mcp-pc/packages/sdkwork-mcp-pc-admin:
     dependencies:
@@ -631,12 +634,18 @@ importers:
       '@sdkwork/sdk-common':
         specifier: workspace:*
         version: link:../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      '@sdkwork/utils':
+        specifier: ^0.11.0
+        version: 0.11.0
 
   ../sdkwork-mcp/sdks/sdkwork-mcp-backend-sdk/sdkwork-mcp-backend-sdk-typescript:
     dependencies:
       '@sdkwork/sdk-common':
         specifier: workspace:*
         version: link:../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      '@sdkwork/utils':
+        specifier: ^0.11.0
+        version: 0.11.0
 
   ../sdkwork-sdk-commons/sdkwork-sdk-common-typescript:
     dependencies:
@@ -1490,6 +1499,9 @@ importers:
       '@sdkwork/sdk-common':
         specifier: workspace:*
         version: link:../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      '@sdkwork/utils':
+        specifier: ^0.11.0
+        version: 0.11.0
     devDependencies:
       rollup:
         specifier: ^4.0.0
@@ -2928,6 +2940,9 @@ packages:
     peerDependenciesMeta:
       '@sdkwork/iam-app-sdk':
         optional: true
+
+  '@sdkwork/iam-app-sdk@0.1.4':
+    resolution: {integrity: sha512-1JOFZLE4GahQONeu03BP/6hGKyfl6PtSurdApXf4aKmXyBWJiXHyx4jhpqX6m9ab7z1hVb7tS+MDRF4biw+GIw==}
 
   '@sdkwork/utils@0.11.0':
     resolution: {integrity: sha512-GTW9LPBkrNy3jdzbnEGzLd1wRYZly5NNkXt2W0ZZElmsbAfkEIi9oFa1O4+E9lSDwsYRkHjNvzeAb8waacVTow==}
@@ -6194,6 +6209,11 @@ snapshots:
       - '@types/node'
 
   '@sdkwork/drive-app-sdk@0.1.2':
+    dependencies:
+      '@sdkwork/sdk-common': link:../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      '@sdkwork/utils': 0.11.0
+
+  '@sdkwork/iam-app-sdk@0.1.4':
     dependencies:
       '@sdkwork/sdk-common': link:../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
       '@sdkwork/utils': 0.11.0

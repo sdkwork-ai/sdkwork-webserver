@@ -244,6 +244,39 @@ Space clone defaults: host path `SDKWORK_SPACE_HOST_PATH=/opt/deploy` bind-mount
 
 Base domain: `sdkwork.com` only (registered in topology `cloudPublicHosts`).
 
+## Module Static Resources And Import Profile Operations
+
+**All public static resources terminate on this webserver data plane.** Sibling
+modules stay independent (their checkout `deployments/webserver/` tree is the
+single source of truth, included checkout-direct per §17.3), while PC/H5 pages
+are served by this container:
+
+- Adaptive split: sidecar `@pc`/`@h5` named locations dispatch by request
+  headers/UA (`Sec-CH-UA-Mobile: ?1`, tablet-`iPad` before the mobile regex,
+  desktop -> pc) - identical rules for every imported module and for this
+  console (`[app_roots] tablet_surface`). `tablet_surface = h5` sends tablets
+  to the H5 build.
+- In-container materialization: the entrypoint links each discovered root
+  (usually `/usr/share/sdkwork/<code>/web/{pc,h5}`) to the matching
+  `apps/*-{pc,h5}/dist/<profile>/<envAlias>` checkout tree. Override the base
+  with `SDKWORK_WEBSERVER_MODULE_WEB_ROOT`. Missing builds log a warning naming
+  the build command - nothing is invented (SPEC §13.3).
+- Dist variant follows the active import set: cloud imports serve
+  `dist/cloud/<alias>`; standalone imports serve `dist/standalone/<alias>`.
+  Pin with `SDKWORK_WEBSERVER_STATIC_SOURCE_PROFILE=<standalone|cloud>`.
+- Import set switch: `SDKWORK_WEBSERVER_IMPORT_PROFILE` at start (default
+  `cloud`), or after boot run
+  `node scripts/webserver-import-profile.mjs <standalone|cloud>` then restart
+  `serve-imports`.
+- Platform API plane: cloud-mode sidecars dial the canonical upstream
+  `sdkwork-api-cloud-gateway:8080` - the gateway container binds
+  `SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT` (default 8080); module env files
+  keep `SDKWORK_MODULE_API_GATEWAY_PORT=8080` aligned.
+- TLS: production product edge emits one 443 ssl block per brand domain from
+  `/etc/sdkwork/certs/letsencrypt/<domain>/` (W25). Missing inventories are
+  bootstrapped self-signed at startup (ACME/operator material replaces them);
+  override that root with `SDKWORK_WEBSERVER_CERTS_LETS_ENCRYPT_DIR`.
+
 ## Cloud Website Image
 
 See `Dockerfile` for the Kubernetes website data-plane image contract.

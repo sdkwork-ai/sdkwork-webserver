@@ -3,13 +3,18 @@
 #
 # Used by scripts/docker/compose.mjs when SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK
 # is set. Standalone per-env deploys use docker-compose.platform-api-gateway-attach.yml.
+#
+# Imported cloud-mode sidecars dial sdkwork-api-cloud-gateway:8080
+# checkout-direct (§17.3): the attached gateway must carry that network alias
+# and serve on the declared port, so SDKWORK_MODULE_API_GATEWAY_PORT defaults
+# to 8080 here.
 
 services:
   webserver-development:
     environment:
       SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT: docker
       SDKWORK_MODULE_API_GATEWAY_HOST: ${SDKWORK_MODULE_API_GATEWAY_HOST:-gateway}
-      SDKWORK_MODULE_API_GATEWAY_PORT: ${SDKWORK_MODULE_API_GATEWAY_PORT:-3900}
+      SDKWORK_MODULE_API_GATEWAY_PORT: ${SDKWORK_MODULE_API_GATEWAY_PORT:-8080}
     networks:
       default: {}
       platform_api_gateway_attach: {}
@@ -18,7 +23,7 @@ services:
     environment:
       SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT: docker
       SDKWORK_MODULE_API_GATEWAY_HOST: ${SDKWORK_MODULE_API_GATEWAY_HOST:-gateway}
-      SDKWORK_MODULE_API_GATEWAY_PORT: ${SDKWORK_MODULE_API_GATEWAY_PORT:-3900}
+      SDKWORK_MODULE_API_GATEWAY_PORT: ${SDKWORK_MODULE_API_GATEWAY_PORT:-8080}
     networks:
       default: {}
       platform_api_gateway_attach: {}
@@ -27,7 +32,7 @@ services:
     environment:
       SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT: docker
       SDKWORK_MODULE_API_GATEWAY_HOST: ${SDKWORK_MODULE_API_GATEWAY_HOST:-gateway}
-      SDKWORK_MODULE_API_GATEWAY_PORT: ${SDKWORK_MODULE_API_GATEWAY_PORT:-3900}
+      SDKWORK_MODULE_API_GATEWAY_PORT: ${SDKWORK_MODULE_API_GATEWAY_PORT:-8080}
     networks:
       default: {}
       platform_api_gateway_attach: {}

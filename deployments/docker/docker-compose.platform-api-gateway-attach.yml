@@ -7,7 +7,15 @@
 # Required env:
 #   SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK=<docker network name>
 #   SDKWORK_MODULE_API_GATEWAY_HOST=gateway   # service DNS on that network
-#   SDKWORK_MODULE_API_GATEWAY_PORT=3900
+#   SDKWORK_MODULE_API_GATEWAY_PORT=8080
+#
+# Imported cloud-mode sidecars dial the canonical upstream name and port
+# `sdkwork-api-cloud-gateway:8080` checkout-direct (§17.3, never rewritten).
+# The attached gateway deployment MUST therefore (a) be reachable on the
+# network under an alias `sdkwork-api-cloud-gateway`
+# (`docker network connect --alias sdkwork-api-cloud-gateway <net> <gateway>`)
+# and (b) answer on the port its sidecars declare — align
+# SDKWORK_MODULE_API_GATEWAY_PORT with that port before deploying.
 #
 # Usage:
 #   docker compose \
@@ -23,7 +31,7 @@ services:
     environment:
       SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT: docker
       SDKWORK_MODULE_API_GATEWAY_HOST: ${SDKWORK_MODULE_API_GATEWAY_HOST:-gateway}
-      SDKWORK_MODULE_API_GATEWAY_PORT: ${SDKWORK_MODULE_API_GATEWAY_PORT:-3900}
+      SDKWORK_MODULE_API_GATEWAY_PORT: ${SDKWORK_MODULE_API_GATEWAY_PORT:-8080}
       # Prefer DB/Redis on the attached gateway compose network when operators
       # point WEBSERVER_*_HOST at postgres/redis service names.
       SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-postgres}

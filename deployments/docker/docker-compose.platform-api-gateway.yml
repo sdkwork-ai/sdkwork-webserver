@@ -3,9 +3,13 @@
 # Use with standalone per-environment compose files:
 #   docker-compose.development.yml / .test.yml / .production.yml
 #
-# Module nginx sidecars and the platform API plane (api*.brand) proxy to
-# upstream `gateway`. The webserver entrypoint rewrites that upstream to
-# sdkwork-api-cloud-gateway:<port> when SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=docker.
+# Module nginx sidecars are included checkout-direct (SDKWORK_WEBSERVER_SPEC.md
+# §17.3, never copied or rewritten under /etc), and every cloud-mode sidecar
+# dials the canonical container-resolvable upstream
+# `sdkwork-api-cloud-gateway:8080`. This overlay therefore binds the gateway
+# container on SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT (default 8080) behind
+# that DNS alias; SDKWORK_MODULE_API_GATEWAY_HOST_PORT only changes the
+# host-side published port.
 #
 # Usage:
 #   docker compose \
@@ -33,7 +37,7 @@ x-platform-api-gateway-healthcheck: &platform-api-gateway-healthcheck
     test:
       [
         "CMD-SHELL",
-        "curl -fsS http://127.0.0.1:3900/readyz >/dev/null 2>&1 || exit 1",
+        "curl -fsS http://127.0.0.1:${SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT:-8080}/readyz >/dev/null 2>&1 || exit 1",
       ]
     interval: 15s
     timeout: 5s
@@ -43,7 +47,7 @@ x-platform-api-gateway-healthcheck: &platform-api-gateway-healthcheck
 x-platform-api-gateway-common-env: &platform-api-gateway-common-env
   SDKWORK_API_CLOUD_GATEWAY_DEPLOYMENT_PROFILE: standalone
   SDKWORK_API_CLOUD_GATEWAY_RUNTIME_TARGET: container
-  SDKWORK_API_CLOUD_GATEWAY_BIND: 0.0.0.0:3900
+  SDKWORK_API_CLOUD_GATEWAY_BIND: 0.0.0.0:${SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT:-8080}
   SDKWORK_API_CLOUD_GATEWAY_MIGRATE_ON_START: ${SDKWORK_MODULE_API_GATEWAY_MIGRATE_ON_START:-true}
   # Required by embedded web-internal-api assembly inside the cloud gateway.
   SDKWORK_WEBSERVER_SNOWFLAKE_NODE_ID: ${SDKWORK_MODULE_API_GATEWAY_SNOWFLAKE_NODE_ID:-${SDKWORK_WEBSERVER_SNOWFLAKE_NODE_ID:-2}}
@@ -108,9 +112,9 @@ services:
     <<: [*platform-api-gateway-image, *platform-api-gateway-network, *platform-api-gateway-healthcheck, *platform-api-gateway-volumes]
     restart: unless-stopped
     ports:
-      - "${SDKWORK_MODULE_API_GATEWAY_HOST_PORT:-13900}:3900"
+      - "${SDKWORK_MODULE_API_GATEWAY_HOST_PORT:-13900}:${SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT:-8080}"
     expose:
-      - "3900"
+      - "${SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT:-8080}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -177,7 +181,7 @@ services:
     environment:
       SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT: docker
       SDKWORK_MODULE_API_GATEWAY_HOST: sdkwork-api-cloud-gateway
-      SDKWORK_MODULE_API_GATEWAY_PORT: "3900"
+      SDKWORK_MODULE_API_GATEWAY_PORT: "${SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT:-8080}"
 
 volumes:
   platform-api-gateway-data:
