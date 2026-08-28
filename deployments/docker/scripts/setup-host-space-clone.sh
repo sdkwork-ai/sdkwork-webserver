@@ -15,6 +15,14 @@ log() {
 
 link_local_checkout() {
   if [ -z "${LOCAL_PATH}" ]; then
+    for candidate in /mnt/e/sdkwork-space /mnt/c/sdkwork-space; do
+      if [ -d "${candidate}/.git" ] || [ -d "${candidate}/sdkwork-webserver" ]; then
+        LOCAL_PATH="${candidate}"
+        break
+      fi
+    done
+  fi
+  if [ -z "${LOCAL_PATH}" ]; then
     return 1
   fi
   if [ ! -d "${LOCAL_PATH}" ]; then
@@ -22,11 +30,18 @@ link_local_checkout() {
     return 1
   fi
   install -d -m 0755 "${SPACE_ROOT}"
-  if [ -e "${CHECKOUT}" ] && [ ! -L "${CHECKOUT}" ]; then
-    log "warning: ${CHECKOUT} exists and is not a symlink; keeping existing tree"
-    return 0
+  if [ -L "${CHECKOUT}" ]; then
+    current_target="$(readlink -f "${CHECKOUT}" 2>/dev/null || readlink "${CHECKOUT}")"
+    local_target="$(readlink -f "${LOCAL_PATH}" 2>/dev/null || readlink "${LOCAL_PATH}")"
+    if [ "${current_target}" = "${local_target}" ]; then
+      log "linked ${CHECKOUT} -> ${LOCAL_PATH}"
+      return 0
+    fi
+    rm -f "${CHECKOUT}"
+  elif [ -e "${CHECKOUT}" ]; then
+    log "replacing ${CHECKOUT} with symlink to ${LOCAL_PATH}"
+    rm -rf "${CHECKOUT}"
   fi
-  rm -f "${CHECKOUT}"
   ln -sfn "${LOCAL_PATH}" "${CHECKOUT}"
   log "linked ${CHECKOUT} -> ${LOCAL_PATH}"
   return 0
@@ -75,9 +90,12 @@ main() {
       fi
     else
       log "updating ${CHECKOUT}"
-      git -C "${CHECKOUT}" fetch origin
-      git -C "${CHECKOUT}" pull --ff-only
-      sync_submodules
+      if ! git -C "${CHECKOUT}" fetch origin --quiet 2>/dev/null; then
+        log "warning: git fetch failed; continuing with existing checkout"
+      elif ! git -C "${CHECKOUT}" pull --ff-only --quiet 2>/dev/null; then
+        log "warning: git pull failed; continuing with existing checkout"
+      fi
+      sync_submodules || log "warning: submodule sync failed; continuing"
     fi
   fi
   log "space checkout ready at ${CHECKOUT}"

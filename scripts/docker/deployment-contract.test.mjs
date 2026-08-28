@@ -234,7 +234,7 @@ test('entrypoint discovers sdkwork-space modules and writes imports', () => {
   assert.match(entrypoint, /module-app-roots/u);
   assert.match(entrypoint, /materialize_product_edge_nginx_conf/u);
   assert.match(entrypoint, /webserver_adaptive_shell/u);
-  assert.match(entrypoint, /product-edge\.nginx\.conf/u);
+  assert.match(entrypoint, /product-edge-nginx\.conf/u);
   assert.match(entrypoint, /sdkwork-ai\/sdkwork-space/u);
   assert.match(entrypoint, /environment_dist_alias/u);
   assert.match(entrypoint, /dist\/\$\{dist_alias\}/u);

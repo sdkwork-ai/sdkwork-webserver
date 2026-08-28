@@ -1083,7 +1083,7 @@ materialize_product_edge_nginx_conf() {
   mgmt_port="$(webserver_container_gateway_port)"
   product_root="$(module_repo_root sdkwork-webserver)"
   sidecar="${product_root}/deployments/webserver/nginx.standalone.${environment}.conf"
-  dest="${imports_root}/product-edge.nginx.conf"
+  dest="${imports_root}/product-edge-nginx.conf"
   ensure_directory "${imports_root}"
 
   server_names=""
@@ -1211,7 +1211,7 @@ materialize_module_import_files() {
   local include_count layout_count product_edge
   environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
   active_profile="$(webserver_import_profile)"
-  product_edge="${imports_root}/product-edge.nginx.conf"
+  product_edge="${imports_root}/product-edge-nginx.conf"
 
   ensure_directory "${imports_root}"
   shopt -s nullglob

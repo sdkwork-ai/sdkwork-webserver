@@ -3,6 +3,10 @@
 # and verify passwordless Redis before external-mode docker compose deployment.
 set -euo pipefail
 
+script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+# shellcheck source=ensure-host-redis.sh
+source "$script_dir/ensure-host-redis.sh"
+
 log() {
   echo "[sdkwork-webserver-external-deps] $*"
 }
@@ -46,6 +50,44 @@ EOSQL
   log "provisioned db=${db} user=${user} schema=${db}"
 }
 
+ensure_postgresql_running() {
+  if ! command -v psql >/dev/null 2>&1; then
+    log "installing postgresql"
+    apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq postgresql
+  fi
+
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl enable postgresql 2>/dev/null || true
+    systemctl start postgresql 2>/dev/null || service postgresql start
+  else
+    service postgresql start
+  fi
+}
+
+ensure_pg_listen_addresses() {
+  local pgconf
+  pgconf="$(sudo -u postgres psql -tAc "SHOW config_file;" 2>/dev/null | tr -d '[:space:]')"
+  if [ -z "${pgconf}" ] || [ ! -f "${pgconf}" ]; then
+    log "warning: could not resolve postgresql.conf"
+    return 0
+  fi
+
+  if grep -qE "^[[:space:]]*listen_addresses[[:space:]=]+'?\*'?" "${pgconf}"; then
+    log "postgresql already listens on all interfaces"
+    return 0
+  fi
+
+  if grep -qE "^[[:space:]]*#?[[:space:]]*listen_addresses[[:space:]=]" "${pgconf}"; then
+    sed -i -E "s|^[[:space:]]*#?[[:space:]]*listen_addresses[[:space:]=]+.*|listen_addresses = '*'|" "${pgconf}"
+  else
+    echo "listen_addresses = '*'" >> "${pgconf}"
+  fi
+
+  systemctl reload postgresql || service postgresql reload
+  log "updated ${pgconf}: listen_addresses='*'"
+}
+
 ensure_pg_hba_docker_access() {
   local hba_file
   hba_file="$(sudo -u postgres psql -tAc "SHOW hba_file;" | tr -d '[:space:]')"
@@ -69,22 +111,13 @@ ensure_pg_hba_docker_access() {
 
 main() {
   require_root
+  ensure_postgresql_running
+  ensure_pg_listen_addresses
   create_identity "sdkwork_ai_dev" "sdkwork_ai_dev" "sdkworkdev123"
   create_identity "sdkwork_ai_test" "sdkwork_ai_test" "sdkworktest123"
   create_identity "sdkwork_ai_prod" "sdkwork_ai_prod" "sdkworkprod123"
   ensure_pg_hba_docker_access
-
-  if ! redis-cli ping >/dev/null 2>&1; then
-    log "error: host Redis is not reachable on 127.0.0.1:6379"
-    exit 1
-  fi
-  if redis-cli CONFIG GET requirepass 2>/dev/null | grep -qv '^$'; then
-    local requirepass
-    requirepass="$(redis-cli CONFIG GET requirepass 2>/dev/null | tail -1 || true)"
-    if [ -n "${requirepass}" ]; then
-      log "warning: host Redis requirepass is set; external mode expects passwordless Redis"
-    fi
-  fi
+  ensure_host_redis
   log "host PostgreSQL and Redis are ready for external docker deployment"
 }
 
