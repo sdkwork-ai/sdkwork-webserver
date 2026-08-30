@@ -114,6 +114,13 @@
     "rust": "stable"
   },
   "lifecycle": {
+    "preflight": [
+      {
+        "name": "Install native build dependencies",
+        "shell": "pwsh",
+        "run": "sudo apt-get update && sudo apt-get install -y cmake clang nasm pkg-config libssl-dev"
+      }
+    ],
     "install": [
       {
         "name": "Install locked pnpm workspace",
