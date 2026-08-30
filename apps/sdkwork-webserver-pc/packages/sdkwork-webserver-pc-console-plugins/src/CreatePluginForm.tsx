@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
-import type { SdkworkDriveAppClient } from "@sdkwork/drive-app-sdk";
+import type { SdkworkDriveAppClient } from "@sdkwork/webserver-pc-console-core";
 import {
   isValidApplicationGitRepositoryUrl,
   normalizeApplicationGitRepositoryUrl,

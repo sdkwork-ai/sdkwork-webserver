@@ -8,6 +8,10 @@ import {
 } from "@sdkwork/web-backend-sdk";
 import type { AuthTokenManager } from "@sdkwork/sdk-common";
 import { createContext, useContext, type ReactNode } from "react";
+import { createDriveAppClient, type SdkworkDriveAppClient } from "@sdkwork/drive-app-sdk";
+
+export type { SdkworkDriveAppClient };
+export { createDriveAppClient };
 
 export type WebserverAdminSdkClient = SdkworkBackendClient;
 const Context = createContext<WebserverAdminSdkClient | null>(null);

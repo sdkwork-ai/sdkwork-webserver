@@ -1,0 +1,173 @@
+# SDKWork Web Server — unified install-image bundle composition.
+#
+# One image, any environment, N instances per environment (DEPLOYMENT_SPEC.md
+# §6 / PNPM_SCRIPT_SPEC.md §4.4). This file is environment-neutral: deploy.sh
+# (or an equivalent operator runtime) supplies SDKWORK_WEBSERVER_ENVIRONMENT,
+# the per-instance management port, the image tag, and the shared network and
+# volumes named below (created once per environment).
+#
+# Layout:
+#   deps project:     docker compose -p sdkwork-webserver-<env>-deps \
+#                       --env-file env/<env>.env --profile deps up -d
+#   instance project: docker compose -p sdkwork-webserver-<env>-i<i> \
+#                       --env-file env/<env>.env --profile instance \
+#                       [-f docker-compose.bundle-edge.yml] up -d
+#   Instance 1 additionally applies docker-compose.bundle-edge.yml (80/443).
+#
+# Values marked `:?required` MUST come from the --env-file or process env.
+
+x-webserver-common: &webserver-common
+  image: registry.sdkwork.com/apps/sdkwork-webserver-standalone:${SDKWORK_WEBSERVER_IMAGE_TAG:-0.1.0}
+  restart: unless-stopped
+  cap_add:
+    - NET_BIND_SERVICE
+  # Resolves the host for SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=external
+  # (gateway sibling containers publish host ports 3910-3913).
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  networks:
+    - sdkwork
+  environment:
+    SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT: "3800"
+    SDKWORK_WEBSERVER_ENVIRONMENT: ${SDKWORK_WEBSERVER_ENVIRONMENT:?required}
+    SDKWORK_WEBSERVER_PROFILE_ID: ${SDKWORK_WEBSERVER_PROFILE_ID:-standalone.${SDKWORK_WEBSERVER_ENVIRONMENT}}
+    # Unique per instance (deploy.sh sets standalone-<env>-i<index>).
+    SDKWORK_WEBSERVER_NODE_UUID: ${SDKWORK_WEBSERVER_NODE_UUID:-}
+    SDKWORK_WEBSERVER_PRIMARY_DOMAIN: ${SDKWORK_WEBSERVER_PRIMARY_DOMAIN:-sdkwork.com}
+    SDKWORK_WEBSERVER_PUBLIC_SCHEME: ${SDKWORK_WEBSERVER_PUBLIC_SCHEME:-http}
+    SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_CORS_ALLOWED_ORIGINS:-}
+    SDKWORK_WEBSERVER_APPLICATION_PUBLIC_HTTP_URL: ${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_HTTP_URL:-}
+    SDKWORK_WEBSERVER_APPLICATION_APP_HTTP_URL: ${SDKWORK_WEBSERVER_APPLICATION_APP_HTTP_URL:-}
+    SDKWORK_WEBSERVER_APPLICATION_BACKEND_HTTP_URL: ${SDKWORK_WEBSERVER_APPLICATION_BACKEND_HTTP_URL:-}
+    SDKWORK_WEBSERVER_APPLICATION_PUBLIC_INGRESS_BIND: ${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_INGRESS_BIND:-0.0.0.0:3800}
+    SDKWORK_WEBSERVER_DATA_PLANE_OPERATIONS_BIND: ${SDKWORK_WEBSERVER_DATA_PLANE_OPERATIONS_BIND:-127.0.0.1:3901}
+    SDKWORK_WEBSERVER_ACME_PROFILE: ${SDKWORK_WEBSERVER_ACME_PROFILE:-staging}
+    SDKWORK_WEBSERVER_ACME_DIRECTORY_URL: ${SDKWORK_WEBSERVER_ACME_DIRECTORY_URL:-}
+    SDKWORK_WEBSERVER_ACME_CONTACT_EMAIL: ${SDKWORK_WEBSERVER_ACME_CONTACT_EMAIL:-admin@localhost}
+    # Module /api/ proxy: bundled (in-container process; the unified image
+    # ships the gateway install tree) by default so the bundle is
+    # self-contained. Override to docker/external via the env file.
+    SDKWORK_WEBSERVER_IMPORT_PROFILE: ${SDKWORK_WEBSERVER_IMPORT_PROFILE:-cloud}
+    # Module-imports data plane: identity 80/443 (leave empty; set only when
+    # remapping is required). SDKWORK_WEBSERVER_SPEC.md §17.3.
+    SDKWORK_WEBSERVER_IMPORT_LISTENER_PORTS: ${SDKWORK_WEBSERVER_IMPORT_LISTENER_PORTS:-}
+    SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT: ${SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT:-bundled}
+    SDKWORK_MODULE_API_GATEWAY_HOST: ${SDKWORK_MODULE_API_GATEWAY_HOST:-}
+    SDKWORK_MODULE_API_GATEWAY_PORT: ${SDKWORK_MODULE_API_GATEWAY_PORT:-3900}
+    SDKWORK_MODULE_API_GATEWAY_REQUIRED: ${SDKWORK_MODULE_API_GATEWAY_REQUIRED:-false}
+    SDKWORK_MODULE_API_GATEWAY_MIGRATE_ON_START: ${SDKWORK_MODULE_API_GATEWAY_MIGRATE_ON_START:-true}
+    # Space clone + module imports (shared host bind mount).
+    SDKWORK_SPACE_ROOT: ${SDKWORK_SPACE_ROOT:-/opt/deploy}
+    SDKWORK_SPACE_HOST_PATH: ${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}
+    SDKWORK_SPACE_CLONE_URL: ${SDKWORK_SPACE_CLONE_URL:-https://github.com/sdkwork-ai/sdkwork-space.git}
+    SDKWORK_SPACE_CLONE_PULL: ${SDKWORK_SPACE_CLONE_PULL:-true}
+    SDKWORK_SPACE_AUTO_DISCOVER: ${SDKWORK_SPACE_AUTO_DISCOVER:-true}
+    SDKWORK_SPACE_MODULES: ${SDKWORK_SPACE_MODULES:-}
+    SDKWORK_WEBSERVER_MODULE_IMPORT_REQUIRED: ${SDKWORK_WEBSERVER_MODULE_IMPORT_REQUIRED:-false}
+    SDKWORK_WEBSERVER_MODULE_IMPORT_PROBE_UPSTREAMS: ${SDKWORK_WEBSERVER_MODULE_IMPORT_PROBE_UPSTREAMS:-false}
+    SDKWORK_DEPLOY_SANDBOX_KEY: ${SDKWORK_DEPLOY_SANDBOX_KEY:-deploy.local.opt_deploy}
+    SDKWORK_DEPLOY_SANDBOX_ROOT: ${SDKWORK_DEPLOY_SANDBOX_ROOT:-/opt/deploy}
+    # Database + Redis (per-environment values from the env file).
+    SDKWORK_DATABASE_ENGINE: postgresql
+    SDKWORK_DATABASE_HOST: ${SDKWORK_DATABASE_HOST:-postgres}
+    SDKWORK_DATABASE_PORT: ${SDKWORK_DATABASE_PORT:-5432}
+    SDKWORK_DATABASE_NAME: ${SDKWORK_DATABASE_NAME:-sdkwork_ai_dev}
+    SDKWORK_DATABASE_SCHEMA: ${SDKWORK_DATABASE_SCHEMA:-${SDKWORK_DATABASE_NAME:-sdkwork_ai_dev}}
+    SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC: ${SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC:-false}
+    SDKWORK_DATABASE_USERNAME: ${SDKWORK_DATABASE_USERNAME:-sdkwork_ai_dev}
+    SDKWORK_DATABASE_PASSWORD: ${SDKWORK_DATABASE_PASSWORD:-}
+    SDKWORK_DATABASE_SSL_MODE: ${SDKWORK_DATABASE_SSL_MODE:-disable}
+    SDKWORK_DATABASE_MAX_CONNECTIONS: ${SDKWORK_DATABASE_MAX_CONNECTIONS:-10}
+    SDKWORK_WEBSERVER_REDIS_ENABLED: "true"
+    SDKWORK_WEBSERVER_REDIS_HOST: ${SDKWORK_WEBSERVER_REDIS_HOST:-redis}
+    SDKWORK_WEBSERVER_REDIS_PORT: ${SDKWORK_WEBSERVER_REDIS_PORT:-6379}
+    SDKWORK_WEBSERVER_REDIS_DATABASE: ${SDKWORK_WEBSERVER_REDIS_DATABASE:-0}
+    SDKWORK_WEBSERVER_REDIS_TLS: ${SDKWORK_WEBSERVER_REDIS_TLS:-false}
+    SDKWORK_WEBSERVER_REDIS_PASSWORD: ${SDKWORK_WEBSERVER_REDIS_PASSWORD:-}
+    SDKWORK_WEBSERVER_CERT_WORKER_ID: ${SDKWORK_WEBSERVER_CERT_WORKER_ID:-certificate-worker-0}
+    RUST_LOG: ${RUST_LOG:-info}
+  volumes:
+    # SDKWORK_WEBSERVER_SPEC.md §17: the space root is read-only; the checkout
+    # subtree is a read-write overlay so the entrypoint can clone/pull into it.
+    - ${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}:/opt/deploy:ro
+    - ${SDKWORK_SPACE_CHECKOUT_HOST_PATH:-${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}/sdkwork-space}:/opt/deploy/sdkwork-space:rw
+    - webserver-secrets:/etc/sdkwork/webserver/secrets
+    - webserver-data:/var/lib/sdkwork/webserver
+  healthcheck:
+    test:
+      [
+        "CMD-SHELL",
+        "curl -fsS http://127.0.0.1:$${SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT:-3800}/healthz || exit 1",
+      ]
+    interval: 15s
+    timeout: 5s
+    retries: 8
+    start_period: 120s
+
+services:
+  # Embedded dependencies (default). Skip with --external and supply
+  # SDKWORK_DATABASE_HOST / SDKWORK_WEBSERVER_REDIS_HOST via the env file.
+  postgres:
+    image: postgres:16-alpine
+    profiles: [deps]
+    restart: unless-stopped
+    command: ["postgres", "-c", "max_connections=${PG_MAX_CONNECTIONS:-200}"]
+    networks:
+      - sdkwork
+    environment:
+      POSTGRES_USER: ${WEBSERVER_POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${WEBSERVER_POSTGRES_PASSWORD:?WEBSERVER_POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${WEBSERVER_POSTGRES_DB:-postgres}
+    volumes:
+      - webserver-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${WEBSERVER_POSTGRES_USER:-postgres} -d ${WEBSERVER_POSTGRES_DB:-postgres}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:8-alpine
+    profiles: [deps]
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks:
+      - sdkwork
+    volumes:
+      - webserver-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # One webserver instance. deploy.sh runs each instance as its own compose
+  # project so N instances coexist without fixed container_name collisions.
+  webserver:
+    <<: *webserver-common
+    profiles: [instance]
+    ports:
+      - "${SDKWORK_WEBSERVER_MGMT_HOST_PORT:?required}:3800"
+
+networks:
+  sdkwork:
+    name: sdkwork-webserver-${SDKWORK_WEBSERVER_ENVIRONMENT:?required}
+    external: true
+
+volumes:
+  webserver-secrets:
+    name: sdkwork-webserver-${SDKWORK_WEBSERVER_ENVIRONMENT:?required}-secrets
+    external: true
+  webserver-data:
+    name: sdkwork-webserver-${SDKWORK_WEBSERVER_ENVIRONMENT:?required}-data
+    external: true
+  webserver-postgres-data:
+    name: sdkwork-webserver-${SDKWORK_WEBSERVER_ENVIRONMENT:?required}-postgres-data
+    external: true
+  webserver-redis-data:
+    name: sdkwork-webserver-${SDKWORK_WEBSERVER_ENVIRONMENT:?required}-redis-data
+    external: true

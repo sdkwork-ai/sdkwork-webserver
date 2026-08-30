@@ -1,4 +1,4 @@
-﻿//! App publishing domain fallback.
+//! App publishing domain fallback.
 //!
 //! When no local virtual host or website runtime binding matches a request
 //! host, the data plane resolves the server through the sdkwork-deployments
@@ -392,13 +392,13 @@ fn class_label(class: &HostClass) -> &'static str {
 /// feature).
 #[cfg(feature = "management")]
 pub struct EmbeddedDeployServerLookup {
-    repository: sdkwork_intelligence_deploy_repository_sqlx::DeployRepository,
+    repository: sdkwork_api_webserver_assembly::DeployRepository,
 }
 
 #[cfg(feature = "management")]
 impl EmbeddedDeployServerLookup {
     pub fn new(
-        repository: sdkwork_intelligence_deploy_repository_sqlx::DeployRepository,
+        repository: sdkwork_api_webserver_assembly::DeployRepository,
     ) -> Self {
         Self { repository }
     }

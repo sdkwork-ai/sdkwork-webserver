@@ -3,7 +3,7 @@ import {
   MyPluginsPage,
   PluginsLocaleProvider,
 } from "@sdkwork/webserver-pc-console-plugins";
-import { createDriveAppClient } from "@sdkwork/drive-app-sdk";
+import { createDriveAppClient } from "@sdkwork/webserver-pc-admin-core";
 import { useMemo } from "react";
 
 /** Compatible with IAM session-auth boundary attachment (dual-token clients). */

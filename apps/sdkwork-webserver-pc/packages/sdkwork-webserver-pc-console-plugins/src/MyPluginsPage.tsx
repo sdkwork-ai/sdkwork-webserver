@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { SdkworkDriveAppClient } from "@sdkwork/drive-app-sdk";
+import type { SdkworkDriveAppClient } from "@sdkwork/webserver-pc-console-core";
 import { CreatePluginForm } from "./CreatePluginForm.tsx";
 import { EditPluginForm } from "./EditPluginForm.tsx";
 import { usePluginsT } from "./locale.tsx";

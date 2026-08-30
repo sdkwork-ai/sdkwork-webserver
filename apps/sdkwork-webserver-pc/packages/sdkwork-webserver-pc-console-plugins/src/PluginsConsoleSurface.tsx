@@ -1,5 +1,5 @@
 import type { AuthTokenManager } from "@sdkwork/sdk-common";
-import { createDriveAppClient } from "@sdkwork/drive-app-sdk";
+import { createDriveAppClient } from "@sdkwork/webserver-pc-console-core";
 import { useMemo } from "react";
 import { PluginsLocaleProvider } from "./locale.tsx";
 import { MyPluginsPage } from "./MyPluginsPage.tsx";

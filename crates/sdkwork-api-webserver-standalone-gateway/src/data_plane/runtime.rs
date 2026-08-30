@@ -224,7 +224,7 @@ fn build_resolution_chain(
     });
     #[cfg(feature = "management")]
     let database = if config.database {
-        sdkwork_intelligence_webserver_repository_sqlx::resolution_cache_from_shared_pool()
+        sdkwork_api_webserver_assembly::resolution_cache_from_shared_pool()
     } else {
         None
     };

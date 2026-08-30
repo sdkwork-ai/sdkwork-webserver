@@ -61,7 +61,12 @@
       {"name": "skillsDatabaseLifecycle", "export": "sdkwork_api_skills_assembly::bootstrap_database_from_env", "provider": "sdkwork-api-skills-assembly"},
       {"name": "mcpDatabaseLifecycle", "export": "sdkwork_api_mcp_assembly::bootstrap_database_from_env", "provider": "sdkwork-api-mcp-assembly"}
     ],
-    "runtimeEntrypoints": [],
+    "runtimeEntrypoints": [
+      "sdkwork_api_webserver_assembly::assemble_api_router",
+      "sdkwork_api_webserver_assembly::assemble_business_routes",
+      "sdkwork_api_webserver_assembly::migrate_database_from_env",
+      "sdkwork_api_webserver_assembly::seed_space_repository"
+    ],
     "routeManifest": "assembly-manifest.json",
     "sdkClients": [],
     "sdkDependencies": [],

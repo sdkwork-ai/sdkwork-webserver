@@ -159,6 +159,8 @@ zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2
 
 # Production binaries benefit from LTO and a single codegen unit; panic=unwind
 # keeps a panicked Tokio task from terminating the long-running process.
+sdkwork_intelligence_deploy_repository_sqlx = { path = "../sdkwork-deployments/crates/sdkwork-intelligence-deploy-repository-sqlx", package = "sdkwork-intelligence-deploy-repository-sqlx" }
+sdkwork_deploy_contract = { path = "../sdkwork-deployments/crates/sdkwork-deploy-contract", package = "sdkwork-deploy-contract" }
 [profile.release]
 opt-level = 3
 lto = "thin"

@@ -17,7 +17,8 @@ paths:
       operationId: applications.list
       summary: List managed applications
       x-sdkwork-pagination-mode: offset
-      tags: [application]
+      tags:
+      - application
       security:
       - AuthToken: []
         AccessToken: []
@@ -34,7 +35,9 @@ paths:
         in: query
         schema:
           type: string
-          enum: [WEB, API]
+          enum:
+          - WEB
+          - API
       - name: site_type
         in: query
         schema:
@@ -64,7 +67,9 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [items, pageInfo]
+                      required:
+                      - items
+                      - pageInfo
                       properties:
                         items:
                           type: array
@@ -75,7 +80,8 @@ paths:
     post:
       operationId: applications.create
       summary: Create a managed application
-      tags: [application]
+      tags:
+      - application
       security:
       - AuthToken: []
         AccessToken: []
@@ -86,7 +92,7 @@ paths:
       x-sdkwork-permission: web.sites.write
       x-sdkwork-idempotent: true
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-sdkwork-owner: sdkwork-web
       requestBody:
         required: true
@@ -106,7 +112,8 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/ApplicationResponse'
@@ -116,7 +123,8 @@ paths:
     get:
       operationId: applications.retrieve
       summary: Retrieve a managed application
-      tags: [application]
+      tags:
+      - application
       security:
       - AuthToken: []
         AccessToken: []
@@ -138,16 +146,19 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/ApplicationResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+      parameters: []
     patch:
       operationId: applications.update
       summary: Update a managed application
-      tags: [application]
+      tags:
+      - application
       security:
       - AuthToken: []
         AccessToken: []
@@ -158,7 +169,7 @@ paths:
       x-sdkwork-permission: web.sites.write
       x-sdkwork-idempotent: true
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-sdkwork-owner: sdkwork-web
       requestBody:
         required: true
@@ -178,7 +189,8 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/ApplicationResponse'
@@ -187,7 +199,8 @@ paths:
     delete:
       operationId: applications.delete
       summary: Delete a managed application
-      tags: [application]
+      tags:
+      - application
       security:
       - AuthToken: []
         AccessToken: []
@@ -198,7 +211,7 @@ paths:
       x-sdkwork-permission: web.sites.write
       x-sdkwork-idempotent: true
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-web
       responses:
@@ -212,7 +225,8 @@ paths:
     post:
       operationId: applications.activate
       summary: Activate a managed application
-      tags: [application]
+      tags:
+      - application
       security:
       - AuthToken: []
         AccessToken: []
@@ -223,7 +237,7 @@ paths:
       x-sdkwork-permission: web.sites.write
       x-sdkwork-idempotent: true
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-web
       responses:
@@ -238,7 +252,8 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/ApplicationResponse'
@@ -250,7 +265,8 @@ paths:
     post:
       operationId: applications.pause
       summary: Pause a managed application
-      tags: [application]
+      tags:
+      - application
       security:
       - AuthToken: []
         AccessToken: []
@@ -261,7 +277,7 @@ paths:
       x-sdkwork-permission: web.sites.write
       x-sdkwork-idempotent: true
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-web
       responses:
@@ -276,7 +292,8 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/ApplicationResponse'
@@ -289,7 +306,8 @@ paths:
       operationId: applications.domains.list
       summary: List application domains
       x-sdkwork-pagination-mode: offset
-      tags: [applicationDomain]
+      tags:
+      - applicationDomain
       security:
       - AuthToken: []
         AccessToken: []
@@ -314,7 +332,9 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [items, pageInfo]
+                      required:
+                      - items
+                      - pageInfo
                       properties:
                         items:
                           type: array
@@ -325,7 +345,8 @@ paths:
     post:
       operationId: applications.domains.create
       summary: Bind a public domain to an application
-      tags: [applicationDomain]
+      tags:
+      - applicationDomain
       security:
       - AuthToken: []
         AccessToken: []
@@ -336,7 +357,7 @@ paths:
       x-sdkwork-permission: web.sites.write
       x-sdkwork-idempotent: true
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-sdkwork-owner: sdkwork-web
       requestBody:
         required: true
@@ -356,7 +377,8 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/ApplicationDomainResponse'
@@ -367,7 +389,8 @@ paths:
     delete:
       operationId: applications.domains.delete
       summary: Unbind an application public domain
-      tags: [applicationDomain]
+      tags:
+      - applicationDomain
       security:
       - AuthToken: []
         AccessToken: []
@@ -378,7 +401,7 @@ paths:
       x-sdkwork-permission: web.sites.write
       x-sdkwork-idempotent: true
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-web
       responses:
@@ -393,7 +416,8 @@ paths:
     post:
       operationId: applications.domains.verify
       summary: Create or check an application-domain ownership challenge
-      tags: [applicationDomain]
+      tags:
+      - applicationDomain
       security:
       - AuthToken: []
         AccessToken: []
@@ -404,11 +428,12 @@ paths:
       x-sdkwork-permission: web.sites.write
       x-sdkwork-idempotent: true
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-sdkwork-owner: sdkwork-web
       responses:
         '200':
-          description: Domain ownership challenge and latest external observation returned successfully.
+          description: Domain ownership challenge and latest external observation
+            returned successfully.
           content:
             application/json:
               schema:
@@ -418,20 +443,23 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/DomainVerifyResponse'
   /backend/v3/api/applications/{applicationId}/domains/{domainId}/listener_certificate_bindings:
     parameters:
-      - $ref: '#/components/parameters/ApplicationIdParam'
-      - $ref: '#/components/parameters/DomainIdParam'
+    - $ref: '#/components/parameters/ApplicationIdParam'
+    - $ref: '#/components/parameters/DomainIdParam'
     get:
       operationId: applications.domains.listenerCertificateBindings.list
       summary: List certificates active on an application domain listener
-      description: Returns an offset-paginated P1 list ordered by default status, priority, and stable binding id.
+      description: Returns an offset-paginated P1 list ordered by default status,
+        priority, and stable binding id.
       x-sdkwork-pagination-mode: offset
-      tags: [certificate]
+      tags:
+      - certificate
       security:
       - AuthToken: []
         AccessToken: []
@@ -442,8 +470,8 @@ paths:
       x-sdkwork-permission: web.certificates.read
       x-sdkwork-owner: sdkwork-web
       parameters:
-        - $ref: '#/components/parameters/PageParam'
-        - $ref: '#/components/parameters/PageSizeParam'
+      - $ref: '#/components/parameters/PageParam'
+      - $ref: '#/components/parameters/PageSizeParam'
       responses:
         '200':
           description: Listener certificate bindings returned successfully.
@@ -453,12 +481,15 @@ paths:
                 allOf:
                 - $ref: '#/components/schemas/SdkWorkApiResponse'
                 - type: object
-                  required: [data]
+                  required:
+                  - data
                   properties:
                     data:
                       type: object
                       additionalProperties: false
-                      required: [items, pageInfo]
+                      required:
+                      - items
+                      - pageInfo
                       properties:
                         items:
                           type: array
@@ -471,7 +502,8 @@ paths:
     post:
       operationId: applications.domains.listenerCertificateBindings.create
       summary: Bind a certificate version to an application domain listener
-      tags: [certificate]
+      tags:
+      - certificate
       security:
       - AuthToken: []
         AccessToken: []
@@ -484,7 +516,7 @@ paths:
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-web
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -500,12 +532,14 @@ paths:
                 allOf:
                 - $ref: '#/components/schemas/SdkWorkApiResponse'
                 - type: object
-                  required: [data]
+                  required:
+                  - data
                   properties:
                     data:
                       type: object
                       additionalProperties: false
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/ListenerCertificateBindingResponse'
@@ -517,13 +551,14 @@ paths:
           $ref: '#/components/responses/Conflict'
   /backend/v3/api/applications/{applicationId}/domains/{domainId}/listener_certificate_bindings/{bindingId}:
     parameters:
-      - $ref: '#/components/parameters/ApplicationIdParam'
-      - $ref: '#/components/parameters/DomainIdParam'
-      - $ref: '#/components/parameters/ListenerCertificateBindingIdParam'
+    - $ref: '#/components/parameters/ApplicationIdParam'
+    - $ref: '#/components/parameters/DomainIdParam'
+    - $ref: '#/components/parameters/ListenerCertificateBindingIdParam'
     delete:
       operationId: applications.domains.listenerCertificateBindings.delete
       summary: Remove a certificate from an application domain listener
-      tags: [certificate]
+      tags:
+      - certificate
       security:
       - AuthToken: []
         AccessToken: []
@@ -536,7 +571,7 @@ paths:
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-web
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '204':
           description: Listener certificate binding removed successfully.
@@ -547,7 +582,8 @@ paths:
       operationId: rootDomains.list
       summary: List tenant root-domain Zones
       x-sdkwork-pagination-mode: offset
-      tags: [domain]
+      tags:
+      - domain
       security:
       - AuthToken: []
         AccessToken: []
@@ -583,7 +619,9 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [items, pageInfo]
+                      required:
+                      - items
+                      - pageInfo
                       properties:
                         items:
                           type: array
@@ -594,7 +632,8 @@ paths:
     post:
       operationId: rootDomains.create
       summary: Define a tenant root-domain Zone
-      tags: [domain]
+      tags:
+      - domain
       security:
       - AuthToken: []
         AccessToken: []
@@ -606,7 +645,7 @@ paths:
       x-sdkwork-idempotent: true
       x-sdkwork-owner: sdkwork-web
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -625,7 +664,8 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/RootDomainResponse'
@@ -635,11 +675,12 @@ paths:
           $ref: '#/components/responses/ValidationError'
   /backend/v3/api/root_domains/{rootDomainId}:
     parameters:
-      - $ref: '#/components/parameters/RootDomainIdParam'
+    - $ref: '#/components/parameters/RootDomainIdParam'
     get:
       operationId: rootDomains.retrieve
       summary: Retrieve a tenant root-domain Zone
-      tags: [domain]
+      tags:
+      - domain
       security:
       - AuthToken: []
         AccessToken: []
@@ -661,16 +702,19 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/RootDomainResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+      parameters: []
     delete:
       operationId: rootDomains.delete
       summary: Delete an empty tenant root-domain Zone
-      tags: [domain]
+      tags:
+      - domain
       security:
       - AuthToken: []
         AccessToken: []
@@ -683,7 +727,7 @@ paths:
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-web
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '204':
           description: Tenant root-domain Zone deleted successfully.
@@ -693,12 +737,13 @@ paths:
           $ref: '#/components/responses/Conflict'
   /backend/v3/api/root_domains/{rootDomainId}/subdomains:
     parameters:
-      - $ref: '#/components/parameters/RootDomainIdParam'
+    - $ref: '#/components/parameters/RootDomainIdParam'
     get:
       operationId: rootDomains.subdomains.list
       summary: List publishable hostnames in a root-domain Zone
       x-sdkwork-pagination-mode: offset
-      tags: [domain]
+      tags:
+      - domain
       security:
       - AuthToken: []
         AccessToken: []
@@ -723,7 +768,9 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [items, pageInfo]
+                      required:
+                      - items
+                      - pageInfo
                       properties:
                         items:
                           type: array
@@ -736,7 +783,8 @@ paths:
     post:
       operationId: rootDomains.subdomains.create
       summary: Add a publishable hostname to a root-domain Zone
-      tags: [domain]
+      tags:
+      - domain
       security:
       - AuthToken: []
         AccessToken: []
@@ -748,7 +796,7 @@ paths:
       x-sdkwork-idempotent: true
       x-sdkwork-owner: sdkwork-web
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -767,7 +815,8 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/ApplicationDomainResponse'
@@ -782,7 +831,8 @@ paths:
       operationId: domains.list
       summary: List tenant custom domain assets
       x-sdkwork-pagination-mode: offset
-      tags: [domain]
+      tags:
+      - domain
       security:
       - AuthToken: []
         AccessToken: []
@@ -807,7 +857,9 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [items, pageInfo]
+                      required:
+                      - items
+                      - pageInfo
                       properties:
                         items:
                           type: array
@@ -818,7 +870,8 @@ paths:
     post:
       operationId: domains.create
       summary: Register a tenant custom domain asset
-      tags: [domain]
+      tags:
+      - domain
       security:
       - AuthToken: []
         AccessToken: []
@@ -830,7 +883,7 @@ paths:
       x-sdkwork-idempotent: true
       x-sdkwork-owner: sdkwork-web
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -849,7 +902,8 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/ApplicationDomainResponse'
@@ -863,7 +917,8 @@ paths:
     delete:
       operationId: domains.delete
       summary: Delete an unbound tenant custom domain asset
-      tags: [domain]
+      tags:
+      - domain
       security:
       - AuthToken: []
         AccessToken: []
@@ -876,7 +931,7 @@ paths:
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-web
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '204':
           description: Tenant custom domain asset deleted successfully.
@@ -890,7 +945,8 @@ paths:
     post:
       operationId: domains.verify
       summary: Create or check a tenant custom-domain ownership challenge
-      tags: [domain]
+      tags:
+      - domain
       security:
       - AuthToken: []
         AccessToken: []
@@ -902,10 +958,11 @@ paths:
       x-sdkwork-idempotent: true
       x-sdkwork-owner: sdkwork-web
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '200':
-          description: Domain ownership challenge and latest external observation returned successfully.
+          description: Domain ownership challenge and latest external observation
+            returned successfully.
           content:
             application/json:
               schema:
@@ -915,7 +972,8 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/DomainVerifyResponse'
@@ -927,7 +985,8 @@ paths:
     put:
       operationId: domains.applicationBinding.update
       summary: Bind a tenant custom domain to an application
-      tags: [domain]
+      tags:
+      - domain
       security:
       - AuthToken: []
         AccessToken: []
@@ -940,7 +999,7 @@ paths:
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-web
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -959,7 +1018,8 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/ApplicationDomainResponse'
@@ -972,7 +1032,8 @@ paths:
     delete:
       operationId: domains.applicationBinding.delete
       summary: Unbind a tenant custom domain from its application
-      tags: [domain]
+      tags:
+      - domain
       security:
       - AuthToken: []
         AccessToken: []
@@ -985,7 +1046,7 @@ paths:
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-web
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '204':
           description: Tenant custom domain application binding deleted successfully.
@@ -998,7 +1059,8 @@ paths:
       operationId: applications.sourceVersions.list
       summary: List immutable application source versions
       x-sdkwork-pagination-mode: cursor
-      tags: [applicationSourceVersion]
+      tags:
+      - applicationSourceVersion
       security:
       - AuthToken: []
         AccessToken: []
@@ -1020,11 +1082,14 @@ paths:
                 allOf:
                 - $ref: '#/components/schemas/SdkWorkApiResponse'
                 - type: object
-                  required: [data]
+                  required:
+                  - data
                   properties:
                     data:
                       type: object
-                      required: [items, pageInfo]
+                      required:
+                      - items
+                      - pageInfo
                       properties:
                         items:
                           type: array
@@ -1035,7 +1100,8 @@ paths:
     post:
       operationId: applications.sourceVersions.create
       summary: Register an immutable Drive-backed application source version
-      tags: [applicationSourceVersion]
+      tags:
+      - applicationSourceVersion
       security:
       - AuthToken: []
         AccessToken: []
@@ -1047,7 +1113,7 @@ paths:
       x-sdkwork-idempotent: true
       x-sdkwork-owner: sdkwork-web
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -1063,11 +1129,13 @@ paths:
                 allOf:
                 - $ref: '#/components/schemas/SdkWorkApiResponse'
                 - type: object
-                  required: [data]
+                  required:
+                  - data
                   properties:
                     data:
                       type: object
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/ApplicationSourceVersionResponse'
@@ -1081,7 +1149,8 @@ paths:
     post:
       operationId: applications.sourceVersions.gitImport.create
       summary: Import an immutable application source version from a public Git repository
-      tags: [applicationSourceVersion]
+      tags:
+      - applicationSourceVersion
       security:
       - AuthToken: []
         AccessToken: []
@@ -1094,7 +1163,7 @@ paths:
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-web
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -1110,11 +1179,13 @@ paths:
                 allOf:
                 - $ref: '#/components/schemas/SdkWorkApiResponse'
                 - type: object
-                  required: [data]
+                  required:
+                  - data
                   properties:
                     data:
                       type: object
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/ApplicationSourceVersionResponse'
@@ -1127,7 +1198,8 @@ paths:
     get:
       operationId: applications.sourceVersions.retrieve
       summary: Retrieve an application source version
-      tags: [applicationSourceVersion]
+      tags:
+      - applicationSourceVersion
       security:
       - AuthToken: []
         AccessToken: []
@@ -1146,23 +1218,27 @@ paths:
                 allOf:
                 - $ref: '#/components/schemas/SdkWorkApiResponse'
                 - type: object
-                  required: [data]
+                  required:
+                  - data
                   properties:
                     data:
                       type: object
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/ApplicationSourceVersionResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+      parameters: []
   /backend/v3/api/applications/{applicationId}/deployments:
     parameters:
     - $ref: '#/components/parameters/ApplicationIdParam'
     get:
       operationId: applications.deployments.list
       summary: List application deployments
-      tags: [applicationDeployment]
+      tags:
+      - applicationDeployment
       security:
       - AuthToken: []
         AccessToken: []
@@ -1194,7 +1270,9 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [items, pageInfo]
+                      required:
+                      - items
+                      - pageInfo
                       properties:
                         items:
                           type: array
@@ -1205,7 +1283,8 @@ paths:
     post:
       operationId: applications.deployments.create
       summary: Deploy an application
-      tags: [applicationDeployment]
+      tags:
+      - applicationDeployment
       security:
       - AuthToken: []
         AccessToken: []
@@ -1216,7 +1295,7 @@ paths:
       x-sdkwork-permission: web.sites.write
       x-sdkwork-idempotent: true
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-web
       requestBody:
@@ -1237,7 +1316,8 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/ApplicationDeploymentResponse'
@@ -1248,7 +1328,8 @@ paths:
     post:
       operationId: applications.deployments.rollback
       summary: Restore a managed application from an immutable successful version
-      tags: [applicationDeployment]
+      tags:
+      - applicationDeployment
       security:
       - AuthToken: []
         AccessToken: []
@@ -1259,7 +1340,7 @@ paths:
       x-sdkwork-permission: web.sites.write
       x-sdkwork-idempotent: true
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-web
       responses:
@@ -1274,7 +1355,8 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/ApplicationDeploymentResponse'
@@ -1285,7 +1367,8 @@ paths:
       operationId: certificates.list
       summary: List canonical certificates
       x-sdkwork-pagination-mode: offset
-      tags: [certificate]
+      tags:
+      - certificate
       security:
       - AuthToken: []
         AccessToken: []
@@ -1301,7 +1384,8 @@ paths:
       - name: domain_id
         in: query
         required: false
-        description: Limit certificates to those whose SAN identifiers cover this domain.
+        description: Limit certificates to those whose SAN identifiers cover this
+          domain.
         schema:
           type: string
           format: uuid
@@ -1317,7 +1401,9 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [items, pageInfo]
+                      required:
+                      - items
+                      - pageInfo
                       properties:
                         items:
                           type: array
@@ -1329,7 +1415,8 @@ paths:
     post:
       operationId: certificates.issue
       summary: Issue a canonical certificate
-      tags: [certificate]
+      tags:
+      - certificate
       security:
       - AuthToken: []
         AccessToken: []
@@ -1340,7 +1427,7 @@ paths:
       x-sdkwork-permission: web.certificates.write
       x-sdkwork-idempotent: true
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-web
       requestBody:
@@ -1358,7 +1445,8 @@ paths:
                 allOf:
                 - $ref: '#/components/schemas/SdkWorkApiResponse'
                 - type: object
-                  required: [data]
+                  required:
+                  - data
                   properties:
                     data:
                       $ref: '#/components/schemas/SdkWorkAsyncData'
@@ -1372,7 +1460,8 @@ paths:
     get:
       operationId: certificates.operations.retrieve
       summary: Retrieve a certificate operation
-      tags: [certificate]
+      tags:
+      - certificate
       security:
       - AuthToken: []
         AccessToken: []
@@ -1391,24 +1480,28 @@ paths:
                 allOf:
                 - $ref: '#/components/schemas/SdkWorkApiResponse'
                 - type: object
-                  required: [data]
+                  required:
+                  - data
                   properties:
                     data:
                       type: object
                       additionalProperties: false
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/CertificateOperationResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+      parameters: []
   /backend/v3/api/certificates/{certificateId}:
     parameters:
     - $ref: '#/components/parameters/CertificateIdParam'
     put:
       operationId: certificates.update
       summary: Update certificate automatic renewal policy
-      tags: [certificate]
+      tags:
+      - certificate
       security:
       - AuthToken: []
         AccessToken: []
@@ -1419,7 +1512,7 @@ paths:
       x-sdkwork-permission: web.certificates.write
       x-sdkwork-idempotent: true
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-sdkwork-owner: sdkwork-web
       requestBody:
         required: true
@@ -1439,14 +1532,16 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [item]
+                      required:
+                      - item
                       properties:
                         item:
                           $ref: '#/components/schemas/CertificateResponse'
     delete:
       operationId: certificates.delete
       summary: Soft-delete a certificate and release its domain identifiers
-      tags: [certificate]
+      tags:
+      - certificate
       security:
       - AuthToken: []
         AccessToken: []
@@ -1458,22 +1553,23 @@ paths:
       x-sdkwork-idempotent: true
       x-sdkwork-rate-limit-tier: auth-critical
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-sdkwork-owner: sdkwork-web
       responses:
         '204':
           description: Certificate deleted successfully.
-        '409':
-          $ref: '#/components/responses/Conflict'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /backend/v3/api/certificates/{certificateId}/renew:
     parameters:
     - $ref: '#/components/parameters/CertificateIdParam'
     post:
       operationId: certificates.renew
       summary: Renew a canonical certificate now
-      tags: [certificate]
+      tags:
+      - certificate
       security:
       - AuthToken: []
         AccessToken: []
@@ -1484,7 +1580,7 @@ paths:
       x-sdkwork-permission: web.certificates.write
       x-sdkwork-idempotent: true
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-web
       responses:
@@ -1496,7 +1592,8 @@ paths:
                 allOf:
                 - $ref: '#/components/schemas/SdkWorkApiResponse'
                 - type: object
-                  required: [data]
+                  required:
+                  - data
                   properties:
                     data:
                       $ref: '#/components/schemas/SdkWorkAsyncData'
@@ -1510,7 +1607,8 @@ paths:
     post:
       operationId: certificates.revoke
       summary: Revoke a canonical certificate
-      tags: [certificate]
+      tags:
+      - certificate
       security:
       - AuthToken: []
         AccessToken: []
@@ -1521,7 +1619,7 @@ paths:
       x-sdkwork-permission: web.certificates.write
       x-sdkwork-idempotent: true
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-web
       requestBody:
@@ -1539,7 +1637,8 @@ paths:
                 allOf:
                 - $ref: '#/components/schemas/SdkWorkApiResponse'
                 - type: object
-                  required: [data]
+                  required:
+                  - data
                   properties:
                     data:
                       $ref: '#/components/schemas/CertificateResponse'
@@ -1554,7 +1653,8 @@ paths:
       operationId: certificates.distribution.list
       summary: List certificate manifest convergence by server
       x-sdkwork-pagination-mode: offset
-      tags: [certificateDistribution]
+      tags:
+      - certificateDistribution
       security:
       - AuthToken: []
         AccessToken: []
@@ -1579,7 +1679,9 @@ paths:
                   properties:
                     data:
                       type: object
-                      required: [items, pageInfo]
+                      required:
+                      - items
+                      - pageInfo
                       properties:
                         items:
                           type: array
@@ -1664,7 +1766,7 @@ paths:
       x-sdkwork-permission: web.nginx.write
       x-sdkwork-idempotent: true
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-sdkwork-owner: sdkwork-web
       requestBody:
         required: true
@@ -1734,6 +1836,7 @@ paths:
                           $ref: '#/components/schemas/NginxConfigResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+      parameters: []
     put:
       operationId: configs.update
       summary: Update an Nginx configuration
@@ -1749,7 +1852,7 @@ paths:
       x-sdkwork-permission: web.nginx.write
       x-sdkwork-idempotent: true
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-sdkwork-owner: sdkwork-web
       requestBody:
         required: true
@@ -1819,6 +1922,7 @@ paths:
                       properties:
                         item:
                           $ref: '#/components/schemas/NginxValidateResponse'
+      parameters: []
   /backend/v3/api/nginx/etc/{configId}/deploy:
     parameters:
     - name: configId
@@ -1842,7 +1946,7 @@ paths:
       x-sdkwork-permission: web.nginx.write
       x-sdkwork-idempotent: true
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-sdkwork-owner: sdkwork-web
       x-sdkwork-rate-limit-tier: auth-critical
       responses:
@@ -1882,7 +1986,7 @@ paths:
       x-sdkwork-permission: web.nginx.write
       x-sdkwork-idempotent: true
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-sdkwork-owner: sdkwork-web
       responses:
         '200':
@@ -1937,6 +2041,7 @@ paths:
                       properties:
                         item:
                           $ref: '#/components/schemas/NginxStatusResponse'
+      parameters: []
   /backend/v3/api/servers:
     get:
       operationId: servers.list
@@ -1996,7 +2101,7 @@ paths:
       x-sdkwork-permission: web.servers.write
       x-sdkwork-idempotent: true
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-sdkwork-owner: sdkwork-web
       x-sdkwork-rate-limit-tier: auth-critical
       requestBody:
@@ -2061,9 +2166,10 @@ paths:
                           type: array
                           items:
                             $ref: '#/components/schemas/ServerFilesNode'
+      parameters: []
   /backend/v3/api/server-files/nodes/{nodeId}/browse:
     get:
-      operationId: serverFiles.node.browse
+      operationId: serverFiles.node.list
       summary: Browse a deployment node directory
       tags:
       - server-files
@@ -2085,7 +2191,8 @@ paths:
       - name: path
         in: query
         required: true
-        description: Absolute path to browse, resolved strictly inside the node filesystem root.
+        description: Absolute path to browse, resolved strictly inside the node filesystem
+          root.
         schema:
           type: string
       responses:
@@ -2104,7 +2211,7 @@ paths:
                       $ref: '#/components/schemas/ServerDirectoryListing'
   /backend/v3/api/server-files/nodes/{nodeId}/read:
     get:
-      operationId: serverFiles.node.read
+      operationId: serverFiles.node.list
       summary: Read a text file on a deployment node
       tags:
       - server-files
@@ -2183,7 +2290,7 @@ paths:
                     data:
                       $ref: '#/components/schemas/ServerProjectOperations'
     post:
-      operationId: serverFiles.node.operations.run
+      operationId: serverFiles.node.operations.create
       summary: Run a project operation on a deployment node
       tags:
       - server-files
@@ -2209,7 +2316,7 @@ paths:
             schema:
               $ref: '#/components/schemas/ServerRunOperationRequest'
       responses:
-        '200':
+        '201':
           description: Project operation result returned successfully.
           content:
             application/json:
@@ -2265,6 +2372,7 @@ paths:
                           $ref: '#/components/schemas/AgentHeartbeatResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+      parameters: []
   /backend/v3/api/agent/sync:
     get:
       operationId: retrieve
@@ -2476,7 +2584,8 @@ components:
     CursorParam:
       name: cursor
       in: query
-      description: Opaque keyset continuation token for cursor-paginated operations; must not be combined with page.
+      description: Opaque keyset continuation token for cursor-paginated operations;
+        must not be combined with page.
       schema:
         type: string
         minLength: 1
@@ -2485,7 +2594,7 @@ components:
     Int64String:
       type: string
       format: int64
-      pattern: '^[0-9]+$'
+      pattern: ^[0-9]+$
       x-sdkwork-int64-string: true
       x-sdkwork-rust-type: i64
     ProblemDetail:
@@ -2564,27 +2673,45 @@ components:
     MediaChecksum:
       type: object
       additionalProperties: false
-      required: [algorithm, value]
+      required:
+      - algorithm
+      - value
       properties:
         algorithm:
           type: string
-          enum: [sha256]
+          enum:
+          - sha256
         value:
           type: string
-          pattern: '^[a-f0-9]{64}$'
+          pattern: ^[a-f0-9]{64}$
     MediaResource:
       type: object
       additionalProperties: false
-      required: [kind, source]
+      required:
+      - kind
+      - source
       properties:
         id:
           type: string
         kind:
           type: string
-          enum: [image, video, audio, voice, document, archive, model, other]
+          enum:
+          - image
+          - video
+          - audio
+          - voice
+          - document
+          - archive
+          - model
+          - other
         source:
           type: string
-          enum: [drive, external_url, data_url, provider_asset, generated]
+          enum:
+          - drive
+          - external_url
+          - data_url
+          - provider_asset
+          - generated
         url:
           type: string
           format: uri
@@ -2604,7 +2731,7 @@ components:
           maxLength: 256
         sizeBytes:
           type: string
-          pattern: '^[0-9]+$'
+          pattern: ^[0-9]+$
         checksum:
           $ref: '#/components/schemas/MediaChecksum'
         width:
@@ -2627,13 +2754,36 @@ components:
           additionalProperties: true
     AppKind:
       type: string
-      enum: [STATIC_WEB, SPA_WEB, API_SERVICE, WECHAT_MINIPROGRAM, DOUYIN_MINIPROGRAM, IOS_APP, ANDROID_APP, HARMONYOS_APP]
+      enum:
+      - STATIC_WEB
+      - SPA_WEB
+      - API_SERVICE
+      - WECHAT_MINIPROGRAM
+      - DOUYIN_MINIPROGRAM
+      - IOS_APP
+      - ANDROID_APP
+      - HARMONYOS_APP
     Platform:
       type: string
-      enum: [WEB, API, WECHAT, DOUYIN, IOS, ANDROID, HARMONYOS]
+      enum:
+      - WEB
+      - API
+      - WECHAT
+      - DOUYIN
+      - IOS
+      - ANDROID
+      - HARMONYOS
     TechStack:
       type: string
-      enum: [FLUTTER, NATIVE, UNI_APP, NODE, RUST, GO, JAVA, OTHER]
+      enum:
+      - FLUTTER
+      - NATIVE
+      - UNI_APP
+      - NODE
+      - RUST
+      - GO
+      - JAVA
+      - OTHER
     PlatformTargetResponse:
       type: object
       properties:
@@ -2671,7 +2821,9 @@ components:
           format: date-time
     CreatePlatformTargetRequest:
       type: object
-      required: [targetKey, platform]
+      required:
+      - targetKey
+      - platform
       properties:
         targetKey:
           type: string
@@ -2703,7 +2855,11 @@ components:
           type: array
           items:
             type: string
-            enum: [stable, beta, alpha, qa]
+            enum:
+            - stable
+            - beta
+            - alpha
+            - qa
           maxItems: 8
     ApplicationStoreListing:
       type: object
@@ -2758,7 +2914,9 @@ components:
     CreateApplicationRequest:
       type: object
       additionalProperties: false
-      required: [name, appKind]
+      required:
+      - name
+      - appKind
       properties:
         name:
           type: string
@@ -2768,12 +2926,12 @@ components:
           type: string
           minLength: 1
           maxLength: 100
-          pattern: '^[a-z0-9][a-z0-9-]*[a-z0-9]$'
+          pattern: ^[a-z0-9][a-z0-9-]*[a-z0-9]$
         description:
           type: string
           maxLength: 500
         appKind:
-          $ref: '#/components/schemas/AppKind' 
+          $ref: '#/components/schemas/AppKind'
         runtimeConfig:
           type: object
           additionalProperties: true
@@ -2798,7 +2956,15 @@ components:
     ApplicationResponse:
       type: object
       additionalProperties: false
-      required: [id, name, slug, applicationType, siteType, status, createdAt, updatedAt]
+      required:
+      - id
+      - name
+      - slug
+      - applicationType
+      - siteType
+      - status
+      - createdAt
+      - updatedAt
       properties:
         id:
           type: string
@@ -2810,7 +2976,7 @@ components:
         description:
           type: string
         appKind:
-          $ref: '#/components/schemas/AppKind' 
+          $ref: '#/components/schemas/AppKind'
         siteType:
           type: integer
           minimum: 1
@@ -2833,7 +2999,8 @@ components:
     CreateApplicationDomainRequest:
       type: object
       additionalProperties: false
-      required: [hostname]
+      required:
+      - hostname
       properties:
         hostname:
           type: string
@@ -2847,11 +3014,15 @@ components:
           default: true
         sslProvider:
           type: string
-          enum: [letsencrypt, custom, none]
+          enum:
+          - letsencrypt
+          - custom
+          - none
     CreateManagedDomainRequest:
       type: object
       additionalProperties: false
-      required: [hostname]
+      required:
+      - hostname
       properties:
         hostname:
           type: string
@@ -2868,11 +3039,15 @@ components:
           default: true
         sslProvider:
           type: string
-          enum: [letsencrypt, custom, none]
+          enum:
+          - letsencrypt
+          - custom
+          - none
     CreateRootDomainRequest:
       type: object
       additionalProperties: false
-      required: [hostname]
+      required:
+      - hostname
       properties:
         hostname:
           type: string
@@ -2881,7 +3056,8 @@ components:
     CreateRootDomainHostnameRequest:
       type: object
       additionalProperties: false
-      required: [recordName]
+      required:
+      - recordName
       properties:
         recordName:
           type: string
@@ -2899,7 +3075,10 @@ components:
           default: true
         sslProvider:
           type: string
-          enum: [letsencrypt, custom, none]
+          enum:
+          - letsencrypt
+          - custom
+          - none
     RootDomainResponse:
       type: object
       additionalProperties: false
@@ -2943,7 +3122,11 @@ components:
     DomainDeploymentResponse:
       type: object
       additionalProperties: false
-      required: [id, status, environment, createdAt]
+      required:
+      - id
+      - status
+      - environment
+      - createdAt
       properties:
         id:
           type: string
@@ -2965,7 +3148,8 @@ components:
     UpdateDomainApplicationBindingRequest:
       type: object
       additionalProperties: false
-      required: [applicationId]
+      required:
+      - applicationId
       properties:
         applicationId:
           type: string
@@ -2976,7 +3160,15 @@ components:
     ApplicationDomainResponse:
       type: object
       additionalProperties: false
-      required: [id, hostname, certificateCount, isPrimary, isVerified, sslEnabled, status, createdAt]
+      required:
+      - id
+      - hostname
+      - certificateCount
+      - isPrimary
+      - isVerified
+      - sslEnabled
+      - status
+      - createdAt
       properties:
         id:
           type: string
@@ -2996,7 +3188,7 @@ components:
         certificateCount:
           type: string
           format: int64
-          pattern: '^[0-9]+$'
+          pattern: ^[0-9]+$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
         isPrimary:
@@ -3020,16 +3212,28 @@ components:
     DomainVerifyResponse:
       type: object
       additionalProperties: false
-      required: [verified, status, method, recordName, recordValue, attemptCount, expiresAt]
+      required:
+      - verified
+      - status
+      - method
+      - recordName
+      - recordValue
+      - attemptCount
+      - expiresAt
       properties:
         verified:
           type: boolean
         status:
           type: string
-          enum: [PENDING, VERIFIED, FAILED, EXPIRED]
+          enum:
+          - PENDING
+          - VERIFIED
+          - FAILED
+          - EXPIRED
         method:
           type: string
-          enum: [DNS_TXT]
+          enum:
+          - DNS_TXT
         recordName:
           type: string
           minLength: 1
@@ -3055,11 +3259,15 @@ components:
           type: string
           minLength: 1
           maxLength: 64
-          pattern: '^[A-Z0-9_]+$'
+          pattern: ^[A-Z0-9_]+$
     ApplicationSourceVersionConfigSnapshot:
       type: object
       additionalProperties: false
-      required: [appConfigPath, deploymentConfigPath, appConfigDetected, deploymentConfigDetected]
+      required:
+      - appConfigPath
+      - deploymentConfigPath
+      - appConfigDetected
+      - deploymentConfigDetected
       properties:
         appConfigPath:
           type: string
@@ -3074,7 +3282,12 @@ components:
     CreateApplicationSourceVersionRequest:
       type: object
       additionalProperties: false
-      required: [versionTag, sourceType, artifactDriveUri, artifactSize, artifactHash]
+      required:
+      - versionTag
+      - sourceType
+      - artifactDriveUri
+      - artifactSize
+      - artifactHash
       properties:
         versionTag:
           type: string
@@ -3082,7 +3295,9 @@ components:
           maxLength: 100
         sourceType:
           type: string
-          enum: [ARCHIVE, DIRECTORY]
+          enum:
+          - ARCHIVE
+          - DIRECTORY
         sourceRef:
           type: string
           minLength: 1
@@ -3091,26 +3306,28 @@ components:
           type: string
           minLength: 7
           maxLength: 64
-          pattern: '^[a-f0-9]{7,64}$'
+          pattern: ^[a-f0-9]{7,64}$
         artifactDriveUri:
           type: string
           maxLength: 500
-          pattern: '^drive://spaces/[^/?#]+/nodes/[^/?#]+$'
+          pattern: ^drive://spaces/[^/?#]+/nodes/[^/?#]+$
         artifactSize:
           type: string
           format: int64
-          pattern: '^[1-9][0-9]*$'
+          pattern: ^[1-9][0-9]*$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
         artifactHash:
           type: string
-          pattern: '^[a-f0-9]{64}$'
+          pattern: ^[a-f0-9]{64}$
         configSnapshot:
           $ref: '#/components/schemas/ApplicationSourceVersionConfigSnapshot'
     ImportApplicationGitSourceVersionRequest:
       type: object
       additionalProperties: false
-      required: [versionTag, repositoryUrl]
+      required:
+      - versionTag
+      - repositoryUrl
       properties:
         versionTag:
           type: string
@@ -3128,7 +3345,18 @@ components:
     ApplicationSourceVersionResponse:
       type: object
       additionalProperties: false
-      required: [id, siteId, versionTag, sourceType, artifactDriveUri, artifactSize, artifactHash, configSnapshot, status, retained, createdAt]
+      required:
+      - id
+      - siteId
+      - versionTag
+      - sourceType
+      - artifactDriveUri
+      - artifactSize
+      - artifactHash
+      - configSnapshot
+      - status
+      - retained
+      - createdAt
       properties:
         id:
           type: string
@@ -3140,28 +3368,35 @@ components:
           type: string
         sourceType:
           type: string
-          enum: [ARCHIVE, DIRECTORY, GIT]
+          enum:
+          - ARCHIVE
+          - DIRECTORY
+          - GIT
         sourceRef:
           type: string
         commitHash:
           type: string
         artifactDriveUri:
           type: string
-          pattern: '^drive://spaces/[^/?#]+/nodes/[^/?#]+$'
+          pattern: ^drive://spaces/[^/?#]+/nodes/[^/?#]+$
         artifactSize:
           type: string
           format: int64
-          pattern: '^[1-9][0-9]*$'
+          pattern: ^[1-9][0-9]*$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
         artifactHash:
           type: string
-          pattern: '^[a-f0-9]{64}$'
+          pattern: ^[a-f0-9]{64}$
         configSnapshot:
           $ref: '#/components/schemas/ApplicationSourceVersionConfigSnapshot'
         status:
           type: integer
-          enum: [0, 1, 2, 3]
+          enum:
+          - 0
+          - 1
+          - 2
+          - 3
         retained:
           type: boolean
         createdAt:
@@ -3170,23 +3405,32 @@ components:
     CreateApplicationDeploymentRequest:
       type: object
       additionalProperties: false
-      description: >-
-        Deployment source command. Git deployments (deployType 2) require an HTTPS sourceRef and
-        may omit artifact fields. Other deployment types require artifactDriveUri, artifactSize,
-        and artifactHash together.
+      description: Deployment source command. Git deployments (deployType 2) require
+        an HTTPS sourceRef and may omit artifact fields. Other deployment types require
+        artifactDriveUri, artifactSize, and artifactHash together.
       properties:
         sourceVersionId:
           type: string
           format: uuid
-          description: Ready, retained application source version selected for this release.
+          description: Ready, retained application source version selected for this
+            release.
         deployType:
           type: integer
-          enum: [1, 2, 3, 4]
+          enum:
+          - 1
+          - 2
+          - 3
+          - 4
           default: 1
-          description: 1 for a stored package, 2 for a Git repository, 3 for CI/CD, or 4 for API delivery.
+          description: 1 for a stored package, 2 for a Git repository, 3 for CI/CD,
+            or 4 for API delivery.
         environment:
           type: string
-          enum: [development, test, staging, production]
+          enum:
+          - development
+          - test
+          - staging
+          - production
           default: production
         versionTag:
           type: string
@@ -3196,31 +3440,39 @@ components:
           type: string
           minLength: 7
           maxLength: 64
-          pattern: '^[a-f0-9]{7,64}$'
+          pattern: ^[a-f0-9]{7,64}$
         sourceRef:
           type: string
           minLength: 1
           maxLength: 500
-          description: HTTPS Git repository URL when deployType is 2. Credentials, query parameters, and fragments are forbidden.
+          description: HTTPS Git repository URL when deployType is 2. Credentials,
+            query parameters, and fragments are forbidden.
         artifactDriveUri:
           type: string
           maxLength: 500
-          pattern: '^drive://spaces/[^/?#]+/nodes/[^/?#]+$'
-          description: Stable Drive resource identity for package deployments. Signed delivery URLs are forbidden.
+          pattern: ^drive://spaces/[^/?#]+/nodes/[^/?#]+$
+          description: Stable Drive resource identity for package deployments. Signed
+            delivery URLs are forbidden.
         artifactSize:
           type: string
           format: int64
-          pattern: '^[1-9][0-9]*$'
+          pattern: ^[1-9][0-9]*$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
         artifactHash:
           type: string
-          pattern: '^[a-f0-9]{64}$'
+          pattern: ^[a-f0-9]{64}$
           description: Lowercase SHA-256 hexadecimal digest of the uploaded package.
     ApplicationDeploymentResponse:
       type: object
       additionalProperties: false
-      required: [id, siteId, status, deployType, environment, createdAt]
+      required:
+      - id
+      - siteId
+      - status
+      - deployType
+      - environment
+      - createdAt
       properties:
         id:
           type: string
@@ -3237,7 +3489,11 @@ components:
           type: integer
         environment:
           type: string
-          enum: [development, test, staging, production]
+          enum:
+          - development
+          - test
+          - staging
+          - production
         versionTag:
           type: string
         commitHash:
@@ -3247,19 +3503,20 @@ components:
         rollbackFromDeploymentId:
           type: string
           format: uuid
-          description: Immutable successful deployment selected as this restore command's source.
+          description: Immutable successful deployment selected as this restore command's
+            source.
         artifactDriveUri:
           type: string
-          pattern: '^drive://spaces/[^/?#]+/nodes/[^/?#]+$'
+          pattern: ^drive://spaces/[^/?#]+/nodes/[^/?#]+$
         artifactSize:
           type: string
           format: int64
-          pattern: '^[1-9][0-9]*$'
+          pattern: ^[1-9][0-9]*$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
         artifactHash:
           type: string
-          pattern: '^[a-f0-9]{64}$'
+          pattern: ^[a-f0-9]{64}$
         startedAt:
           type: string
           format: date-time
@@ -3269,7 +3526,7 @@ components:
         durationMs:
           type: string
           format: int64
-          pattern: '^[0-9]+$'
+          pattern: ^[0-9]+$
           x-sdkwork-int64-string: true
           x-sdkwork-rust-type: i64
         createdAt:
@@ -3278,24 +3535,32 @@ components:
     IssueCertificateRequest:
       type: object
       additionalProperties: false
-      required: [domainIds, certType]
+      required:
+      - domainIds
+      - certType
       properties:
         domainIds:
           type: array
           minItems: 1
           maxItems: 8
           uniqueItems: true
-          description: Ordered exact or wildcard domain identifiers included in the certificate SAN extension.
+          description: Ordered exact or wildcard domain identifiers included in the
+            certificate SAN extension.
           items:
             type: string
             format: uuid
         certType:
           type: integer
-          enum: [1, 3]
-          description: 1=Let's Encrypt, 3=self-signed. Custom import is a separate future workflow.
+          enum:
+          - 1
+          - 3
+          description: 1=Let's Encrypt, 3=self-signed. Custom import is a separate
+            future workflow.
         keyAlgorithm:
           type: string
-          enum: [ECDSA, RSA]
+          enum:
+          - ECDSA
+          - RSA
           default: ECDSA
         autoRenew:
           type: boolean
@@ -3303,7 +3568,11 @@ components:
     CertificateIdentifierResponse:
       type: object
       additionalProperties: false
-      required: [domainId, hostname, identifierType, position]
+      required:
+      - domainId
+      - hostname
+      - identifierType
+      - position
       properties:
         domainId:
           type: string
@@ -3314,7 +3583,9 @@ components:
           maxLength: 253
         identifierType:
           type: string
-          enum: [EXACT, WILDCARD]
+          enum:
+          - EXACT
+          - WILDCARD
         position:
           type: integer
           minimum: 0
@@ -3322,14 +3593,21 @@ components:
     UpdateCertificateRequest:
       type: object
       additionalProperties: false
-      required: [autoRenew]
+      required:
+      - autoRenew
       properties:
         autoRenew:
           type: boolean
     CertificateResponse:
       type: object
       additionalProperties: false
-      required: [id, certName, identifiers, keyAlgorithm, status, createdAt]
+      required:
+      - id
+      - certName
+      - identifiers
+      - keyAlgorithm
+      - status
+      - createdAt
       properties:
         id:
           type: string
@@ -3348,10 +3626,12 @@ components:
           type: string
         fingerprint:
           type: string
-          pattern: '^[a-f0-9]{64}$'
+          pattern: ^[a-f0-9]{64}$
         keyAlgorithm:
           type: string
-          enum: [ECDSA, RSA]
+          enum:
+          - ECDSA
+          - RSA
         notBefore:
           type: string
           format: date-time
@@ -3362,28 +3642,51 @@ components:
           type: boolean
         renewalStatus:
           type: string
-          enum: [IDLE, RENEWING, PENDING, FAILED]
+          enum:
+          - IDLE
+          - RENEWING
+          - PENDING
+          - FAILED
         status:
           type: string
-          enum: [PENDING, ISSUED, FAILED, EXPIRED, REVOKED, ARCHIVED]
+          enum:
+          - PENDING
+          - ISSUED
+          - FAILED
+          - EXPIRED
+          - REVOKED
+          - ARCHIVED
         createdAt:
           type: string
           format: date-time
     RevokeCertificateRequest:
       type: object
-      required: [reason]
+      required:
+      - reason
       additionalProperties: false
       properties:
         reason:
           type: string
-          enum: [keyCompromise, affiliationChanged, superseded, cessationOfOperation, privilegeWithdrawn]
+          enum:
+          - keyCompromise
+          - affiliationChanged
+          - superseded
+          - cessationOfOperation
+          - privilegeWithdrawn
           description: RFC 5280 section 5.3.1 revocation reason.
-
-
     CertificateOperationResponse:
       type: object
       additionalProperties: false
-      required: [id, certificateId, operationType, status, attemptCount, maxAttempts, nextAttemptAt, createdAt, updatedAt]
+      required:
+      - id
+      - certificateId
+      - operationType
+      - status
+      - attemptCount
+      - maxAttempts
+      - nextAttemptAt
+      - createdAt
+      - updatedAt
       properties:
         id:
           type: string
@@ -3393,10 +3696,16 @@ components:
           format: uuid
         operationType:
           type: string
-          enum: [ISSUE, RENEW]
+          enum:
+          - ISSUE
+          - RENEW
         status:
           type: string
-          enum: [PENDING, RUNNING, SUCCEEDED, FAILED]
+          enum:
+          - PENDING
+          - RUNNING
+          - SUCCEEDED
+          - FAILED
         attemptCount:
           type: integer
           minimum: 0
@@ -3408,7 +3717,7 @@ components:
           format: date-time
         failureCode:
           type: string
-          pattern: '^[A-Z0-9_]{1,64}$'
+          pattern: ^[A-Z0-9_]{1,64}$
         createdAt:
           type: string
           format: date-time
@@ -3421,7 +3730,8 @@ components:
     CreateListenerCertificateBindingRequest:
       type: object
       additionalProperties: false
-      required: [certificateId]
+      required:
+      - certificateId
       properties:
         certificateId:
           type: string
@@ -3429,7 +3739,8 @@ components:
         certificateVersionId:
           type: string
           format: uuid
-          description: Immutable certificate version. Omit to bind the certificate's current active version.
+          description: Immutable certificate version. Omit to bind the certificate's
+            current active version.
         priority:
           type: integer
           minimum: 0
@@ -3441,7 +3752,19 @@ components:
     ListenerCertificateBindingResponse:
       type: object
       additionalProperties: false
-      required: [id, siteId, domainId, certificateId, desiredCertificateVersionId, desiredCertificate, keyAlgorithm, priority, isDefault, status, createdAt, updatedAt]
+      required:
+      - id
+      - siteId
+      - domainId
+      - certificateId
+      - desiredCertificateVersionId
+      - desiredCertificate
+      - keyAlgorithm
+      - priority
+      - isDefault
+      - status
+      - createdAt
+      - updatedAt
       properties:
         id:
           type: string
@@ -3467,7 +3790,9 @@ components:
           $ref: '#/components/schemas/ListenerCertificateSummaryResponse'
         keyAlgorithm:
           type: string
-          enum: [ECDSA, RSA]
+          enum:
+          - ECDSA
+          - RSA
         priority:
           type: integer
           minimum: 0
@@ -3476,9 +3801,17 @@ components:
           type: boolean
         status:
           type: string
-          enum: [PENDING, DEPLOYING, ACTIVE, PAUSED, FAILED, ARCHIVED]
+          enum:
+          - PENDING
+          - DEPLOYING
+          - ACTIVE
+          - PAUSED
+          - FAILED
+          - ARCHIVED
         activatedAt:
-          type: [string, 'null']
+          type:
+          - string
+          - 'null'
           format: date-time
         createdAt:
           type: string
@@ -3489,7 +3822,10 @@ components:
     ListenerCertificateSummaryResponse:
       type: object
       additionalProperties: false
-      required: [certName, identifiers, status]
+      required:
+      - certName
+      - identifiers
+      - status
       properties:
         certName:
           type: string
@@ -3503,17 +3839,28 @@ components:
           type: string
         fingerprint:
           type: string
-          pattern: '^[a-f0-9]{64}$'
+          pattern: ^[a-f0-9]{64}$
         notAfter:
           type: string
           format: date-time
         status:
           type: string
-          enum: [PENDING, ISSUED, FAILED, EXPIRED, REVOKED, ARCHIVED]
+          enum:
+          - PENDING
+          - ISSUED
+          - FAILED
+          - EXPIRED
+          - REVOKED
+          - ARCHIVED
     CertificateDistributionResponse:
       type: object
       additionalProperties: false
-      required: [serverId, serverName, host, desiredSyncVersion, status]
+      required:
+      - serverId
+      - serverName
+      - host
+      - desiredSyncVersion
+      - status
       properties:
         serverId:
           type: string
@@ -3524,13 +3871,17 @@ components:
           type: string
         desiredSyncVersion:
           type: string
-          pattern: '^sv1:[a-f0-9]{64}$'
+          pattern: ^sv1:[a-f0-9]{64}$
         appliedSyncVersion:
           type: string
-          pattern: '^sv1:[a-f0-9]{64}$'
+          pattern: ^sv1:[a-f0-9]{64}$
         status:
           type: string
-          enum: [SYNCED, PENDING, OFFLINE, UNASSIGNED]
+          enum:
+          - SYNCED
+          - PENDING
+          - OFFLINE
+          - UNASSIGNED
         lastHeartbeatAt:
           type: string
           format: date-time
@@ -3662,8 +4013,9 @@ components:
           type: string
           minLength: 64
           maxLength: 64
-          pattern: '^[a-f0-9]{64}$'
-          description: Irreversible tenant scope bound to runtime-set delivery for this node.
+          pattern: ^[a-f0-9]{64}$
+          description: Irreversible tenant scope bound to runtime-set delivery for
+            this node.
         sshPort:
           type: integer
           minimum: 1
@@ -3691,7 +4043,7 @@ components:
           type: string
           minLength: 64
           maxLength: 64
-          pattern: '^[a-f0-9]{64}$'
+          pattern: ^[a-f0-9]{64}$
         sshPort:
           type: integer
         status:
@@ -3782,8 +4134,9 @@ components:
         path:
           type: string
         size:
-          type: integer
+          type: string
           format: int64
+          x-sdkwork-int64-string: true
         projectType:
           type: string
           enum:
@@ -3813,8 +4166,9 @@ components:
           type: string
           description: Decoded text content, bounded by the node read size limit.
         size:
-          type: integer
+          type: string
           format: int64
+          x-sdkwork-int64-string: true
     ServerProjectOperations:
       type: object
       additionalProperties: false
@@ -3916,7 +4270,8 @@ components:
         lastSyncVersion:
           type: string
           pattern: ^sv1:[a-f0-9]{64}$
-          description: Last successfully applied syncVersion reported by the edge agent.
+          description: Last successfully applied syncVersion reported by the edge
+            agent.
         certificateObservations:
           type: array
           maxItems: 2048
@@ -3926,7 +4281,12 @@ components:
     AgentCertificateObservation:
       type: object
       additionalProperties: false
-      required: [certificateId, fingerprint, syncVersion, state, observedAt]
+      required:
+      - certificateId
+      - fingerprint
+      - syncVersion
+      - state
+      - observedAt
       properties:
         certificateId:
           type: string
@@ -3939,7 +4299,11 @@ components:
           pattern: ^sv1:[a-f0-9]{64}$
         state:
           type: string
-          enum: [STAGED, ACTIVE, SERVED, FAILED]
+          enum:
+          - STAGED
+          - ACTIVE
+          - SERVED
+          - FAILED
         observedAt:
           type: string
           format: date-time
@@ -3948,7 +4312,10 @@ components:
           pattern: ^[A-Z0-9][A-Z0-9_.-]{0,63}$
     AgentHeartbeatResponse:
       type: object
-      required: [serverId, status, acknowledgedAt]
+      required:
+      - serverId
+      - status
+      - acknowledgedAt
       properties:
         serverId:
           type: string
@@ -3960,7 +4327,12 @@ components:
           format: date-time
     AgentSyncResponse:
       type: object
-      required: [serverId, syncVersion, unchanged, nginxConfigs, certificates]
+      required:
+      - serverId
+      - syncVersion
+      - unchanged
+      - nginxConfigs
+      - certificates
       properties:
         serverId:
           type: string
@@ -3984,7 +4356,12 @@ components:
             $ref: '#/components/schemas/AgentCertificateBundle'
     AgentNginxConfigBundle:
       type: object
-      required: [configId, domain, configContent, fingerprint, version]
+      required:
+      - configId
+      - domain
+      - configContent
+      - fingerprint
+      - version
       properties:
         configId:
           type: string
@@ -4010,7 +4387,13 @@ components:
             loss.
     AgentCertificateBundle:
       type: object
-      required: [certificateId, certName, fingerprint, hostnames, fullchainPem, privkeyPem]
+      required:
+      - certificateId
+      - certName
+      - fingerprint
+      - hostnames
+      - fullchainPem
+      - privkeyPem
       properties:
         certificateId:
           type: string
@@ -4073,9 +4456,7 @@ components:
         targetType:
           type: string
         targetId:
-          type:
-            - string
-            - 'null'
+          type: string
           format: int64
           pattern: ^-?[0-9]+$
           x-sdkwork-int64-string: true
@@ -4084,12 +4465,12 @@ components:
             loss. Null when the audit action has no specific numeric target.
         targetUuid:
           type:
-            - string
-            - 'null'
+          - string
+          - 'null'
         ipAddress:
           type:
-            - string
-            - 'null'
+          - string
+          - 'null'
         changes:
           type: object
         createdAt:
@@ -4172,7 +4553,10 @@ components:
     SdkWorkAsyncData:
       type: object
       additionalProperties: false
-      required: [accepted, operationId, status]
+      required:
+      - accepted
+      - operationId
+      - status
       properties:
         accepted:
           type: boolean
@@ -4182,7 +4566,12 @@ components:
           format: uuid
         status:
           type: string
-          enum: [pending, running, succeeded, failed, cancelled]
+          enum:
+          - pending
+          - running
+          - succeeded
+          - failed
+          - cancelled
         pollUrl:
           type: string
           format: uri-reference

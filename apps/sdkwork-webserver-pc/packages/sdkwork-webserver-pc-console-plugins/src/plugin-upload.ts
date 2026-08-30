@@ -1,6 +1,6 @@
 import { Sha256Hasher } from "@sdkwork/utils/crypto";
 import { hexEncode } from "@sdkwork/utils/encoding";
-import type { SdkworkDriveAppClient } from "@sdkwork/drive-app-sdk";
+import type { SdkworkDriveAppClient } from "@sdkwork/webserver-pc-console-core";
 
 export interface PluginArchiveUploadResult {
   artifactRef: string;

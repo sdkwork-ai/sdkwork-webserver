@@ -16,8 +16,7 @@ management = [
   "dep:sdkwork-web-contract",
   "dep:sdkwork-web-store-sqlx",
   "dep:sdkwork-webserver-http-host",
-  "dep:sdkwork-intelligence-webserver-repository-sqlx",
-  "dep:sdkwork-intelligence-deploy-repository-sqlx",
+  "dep:sdkwork-api-deployments-assembly",
 ]
 
 [lib]
@@ -80,9 +79,8 @@ woothee.workspace = true
 zeroize.workspace = true
 sdkwork-database-sqlx = { workspace = true, optional = true }
 sdkwork-webserver-http-host = { workspace = true, optional = true }
-sdkwork-intelligence-webserver-repository-sqlx = { workspace = true, optional = true }
-sdkwork-intelligence-deploy-repository-sqlx = { path = "../../../sdkwork-deployments/crates/sdkwork-intelligence-deploy-repository-sqlx", optional = true }
-sdkwork-deploy-contract = { path = "../../../sdkwork-deployments/crates/sdkwork-deploy-contract" }
+sdkwork-api-deployments-assembly = { workspace = true, optional = true }
+sdkwork_deploy_contract = { workspace = true }
 sdkwork-webserver-core.workspace = true
 sdkwork-webserver-resolver-cache = { workspace = true, features = ["redis"] }
 sdkwork-webserver-contract.workspace = true

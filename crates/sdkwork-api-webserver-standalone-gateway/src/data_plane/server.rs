@@ -841,7 +841,7 @@ fn build_usage_meter(
                 };
                 let sdkwork_database_sqlx::DatabasePool::Postgres(pool, _) = pool;
                 Arc::new(crate::usage_metering::EmbeddedUsageIngestChannel::new(
-                    sdkwork_intelligence_deploy_repository_sqlx::DeployRepository::new_lookup(pool),
+                    sdkwork_api_webserver_assembly::DeployRepository::new_lookup(pool),
                 ))
             }
             #[cfg(not(feature = "management"))]

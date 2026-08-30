@@ -34,6 +34,9 @@ import {
 } from "@sdkwork/web-app-sdk";
 import { createContext, useContext, type ReactNode } from "react";
 
+export type { SdkworkDriveAppClient };
+export { createDriveAppClient };
+
 export type WebserverConsoleSdkClient = SdkworkWebAppClient;
 
 export interface WebserverConsoleSdkClients {

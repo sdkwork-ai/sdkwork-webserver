@@ -1,0 +1,9 @@
+# Instance-1 edge overlay for the unified install bundle (PNPM_SCRIPT_SPEC.md
+# §4.4). Compose merges port lists, so applying this file on top of
+# docker-compose.bundle.yml additionally publishes the import-plane 80/443
+# host ports. Only instance 1 applies this overlay (DEPLOYMENT_SPEC.md §6).
+services:
+  webserver:
+    ports:
+      - "${SDKWORK_WEBSERVER_IMPORT_HTTP_HOST_PORT:-80}:80"
+      - "${SDKWORK_WEBSERVER_IMPORT_HTTPS_HOST_PORT:-443}:443"

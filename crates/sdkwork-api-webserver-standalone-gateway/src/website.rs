@@ -2601,7 +2601,7 @@ fn build_deploy_fallback(
     // single-variant in this build (bootstrap installs postgres pools only).
     let sdkwork_database_sqlx::DatabasePool::Postgres(pool, _) = pool;
     let lookup = std::sync::Arc::new(crate::deploy_fallback::EmbeddedDeployServerLookup::new(
-        sdkwork_intelligence_deploy_repository_sqlx::DeployRepository::new_lookup(pool),
+        sdkwork_api_webserver_assembly::DeployRepository::new_lookup(pool),
     ));
     Some(std::sync::Arc::new(crate::deploy_fallback::DeployFallbackResolver::new(
         std::sync::Arc::new(config.clone()),

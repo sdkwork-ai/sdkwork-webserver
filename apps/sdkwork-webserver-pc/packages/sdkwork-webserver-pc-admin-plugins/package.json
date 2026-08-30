@@ -12,7 +12,7 @@
     }
   },
   "dependencies": {
-    "@sdkwork/drive-app-sdk": "workspace:*",
+    "@sdkwork/webserver-pc-admin-core": "workspace:*",
     "@sdkwork/webserver-pc-console-plugins": "workspace:*",
     "@sdkwork/webserver-pc-commons": "workspace:*",
     "@sdkwork/sdk-common": "workspace:*",

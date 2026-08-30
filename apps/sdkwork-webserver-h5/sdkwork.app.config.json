@@ -13,7 +13,12 @@
     "termsOfServiceUrl": "https://sdkwork.com/terms",
     "appType": "APP_REACT",
     "versionSource": "package.json",
-    "identifiers": { "packageName": null, "bundleId": null, "desktopAppId": null, "containerImage": null }
+    "identifiers": {
+      "packageName": null,
+      "bundleId": null,
+      "desktopAppId": null,
+      "containerImage": null
+    }
   },
   "backend": {
     "profileKey": "backend-root-admin",
@@ -23,30 +28,208 @@
     "appId": "sdkwork-webserver-h5",
     "tenantId": "100001",
     "organizationId": "0",
-    "accessTokenPermissionScope": ["web.applications.read", "web.servers.read", "web.auditLogs.read"]
+    "accessTokenPermissionScope": [
+      "web.applications.read",
+      "web.servers.read",
+      "web.auditLogs.read"
+    ]
   },
   "runtime": {
     "family": "mobile",
     "framework": "react-h5",
-    "runtimes": ["H5", "BROWSER"],
-    "deliveryModes": ["WEB_URL"],
+    "runtimes": [
+      "H5",
+      "BROWSER"
+    ],
+    "deliveryModes": [
+      "WEB_URL"
+    ],
     "defaultPlatform": "H5",
     "defaultArchitecture": "universal",
-    "supportedDeploymentProfiles": ["standalone", "cloud"],
+    "supportedDeploymentProfiles": [
+      "standalone",
+      "cloud"
+    ],
     "defaultDeploymentProfile": "standalone"
+  },
+  "media": {
+    "icons": {
+      "primary": {
+        "id": "sdkwork-webserver-h5-primary-icon",
+        "type": "ICON",
+        "purpose": "PRIMARY",
+        "url": "https://cdn.sdkwork.com/apps/sdkwork-webserver-h5/assets/icon-1024.png",
+        "platform": "APP",
+        "locale": "en-US",
+        "width": 1024,
+        "height": 1024,
+        "format": "PNG",
+        "fileSizeBytes": 524288,
+        "alphaChannel": false,
+        "sortOrder": 0,
+        "enabled": true,
+        "metadata": {
+          "generatedPlaceholder": true
+        }
+      },
+      "platform": [],
+      "metadata": {
+        "generatedPlaceholder": true
+      }
+    },
+    "screenshots": [
+      {
+        "id": "sdkwork-webserver-h5-web-screenshot",
+        "type": "SCREENSHOT",
+        "purpose": "CATALOG_SCREENSHOT",
+        "url": "https://cdn.sdkwork.com/apps/sdkwork-webserver-h5/media/web-screenshot.png",
+        "platform": "WEB",
+        "locale": "en-US",
+        "deviceClass": "BROWSER",
+        "displayType": "WEB_DESKTOP",
+        "width": 1920,
+        "height": 1080,
+        "format": "PNG",
+        "fileSizeBytes": 1048576,
+        "alphaChannel": false,
+        "caption": "SDKWork Web Server product screenshot.",
+        "sortOrder": 0,
+        "enabled": true,
+        "metadata": {
+          "generatedPlaceholder": true,
+          "altText": "SDKWork Web Server app screenshot."
+        }
+      }
+    ],
+    "previews": [
+      {
+        "id": "sdkwork-webserver-h5-catalog-preview",
+        "type": "PREVIEW_IMAGE",
+        "purpose": "CATALOG_PREVIEW",
+        "url": "https://cdn.sdkwork.com/apps/sdkwork-webserver-h5/media/preview-cover.png",
+        "platform": "WEB",
+        "locale": "en-US",
+        "width": 1600,
+        "height": 900,
+        "format": "PNG",
+        "fileSizeBytes": 786432,
+        "alphaChannel": false,
+        "caption": "SDKWork Web Server preview.",
+        "sortOrder": 0,
+        "enabled": true,
+        "metadata": {
+          "generatedPlaceholder": true,
+          "altText": "SDKWork Web Server preview cover."
+        }
+      }
+    ],
+    "metadata": {
+      "assetVersion": "0.1.0",
+      "defaultLocale": "en-US"
+    }
   },
   "publish": {
     "status": "DRAFT",
-    "platforms": ["H5"],
-    "installPlatforms": ["H5"],
+    "platforms": [
+      "H5"
+    ],
+    "installPlatforms": [
+      "H5"
+    ],
     "config": {
       "workspaceRoot": "apps/sdkwork-webserver-h5",
       "framework": "react-h5",
       "managedBy": "sdkwork-webserver"
+    },
+    "defaultPackageId": "linux-x64-standalone-server-tar-gz",
+    "installSkill": {
+      "name": "sdkwork-skills-app"
+    },
+    "stores": [],
+    "storeUrl": "https://sdkwork.com/apps/sdkwork-webserver-h5"
+  },
+  "artifacts": {
+    "installConfig": {
+      "defaultPackageId": "linux-x64-standalone-server-tar-gz",
+      "installCommand": "sdkwork install sdkwork-webserver-h5",
+      "launchCommand": "sdkwork open sdkwork-webserver-h5",
+      "uninstallCommand": "sdkwork uninstall sdkwork-webserver-h5",
+      "packages": [
+        {
+          "id": "linux-x64-standalone-server-tar-gz",
+          "name": "Sdkwork Webserver H5 standalone server archive",
+          "sourceType": "BINARY_URL",
+          "packageFormat": "TAR_GZ",
+          "platform": "API",
+          "url": "https://cdn.sdkwork.com/apps/sdkwork-webserver-h5/STABLE/0.1.0/linux-x64-standalone-server-tar-gz-0.1.0.tar.gz",
+          "architecture": "x64",
+          "checksumAlgorithm": "SHA-256",
+          "checksum": "07a9b771cdf406b9c7e00290cae849ba5b8c643ccee93773cd8215b4f9658fbb",
+          "deploymentProfile": "standalone",
+          "runtimeTarget": "server",
+          "profileBinding": "fixed",
+          "enabled": true,
+          "metadata": {
+            "releaseBuildDeferred": false
+          }
+        },
+        {
+          "id": "linux-x64-cloud-server-tar-gz",
+          "name": "Sdkwork Webserver H5 cloud server archive",
+          "sourceType": "BINARY_URL",
+          "packageFormat": "TAR_GZ",
+          "platform": "API",
+          "url": "https://cdn.sdkwork.com/apps/sdkwork-webserver-h5/STABLE/0.1.0/linux-x64-cloud-server-tar-gz-0.1.0.tar.gz",
+          "architecture": "x64",
+          "checksumAlgorithm": "SHA-256",
+          "checksum": "47b7b9539570468daca5b2ec2b1c454088913bf3be5267e96fb7e0aa549b4f10",
+          "deploymentProfile": "cloud",
+          "runtimeTarget": "server",
+          "profileBinding": "fixed",
+          "enabled": true,
+          "metadata": {
+            "releaseBuildDeferred": false
+          }
+        }
+      ]
     }
   },
-  "release": { "currentVersion": "0.1.0", "defaultChannel": "DEV", "latest": { "DEV": "0.1.0" } },
-  "security": { "checksumRequired": true, "signatureRequired": true, "sbomRequired": true },
+  "release": {
+    "currentVersion": "0.1.0",
+    "defaultChannel": "DEV",
+    "latest": {
+      "STABLE": "0.1.0",
+      "DEV": "0.1.0"
+    },
+    "notes": [
+      {
+        "version": "0.1.0",
+        "releaseChannel": "DEV",
+        "title": "SDKWork Web Server 0.1.0",
+        "summary": "SDKWork Web Server initialized standard release.",
+        "content": "Initial SDKWork App Standard v3 manifest for SDKWork Web Server.",
+        "highlights": [
+          "SDKWork App Standard v3 configuration initialized",
+          "platform_app projection metadata standardized",
+          "Download package matrix normalized"
+        ],
+        "packageIds": [
+          "linux-x64-standalone-server-tar-gz",
+          "linux-x64-cloud-server-tar-gz"
+        ],
+        "publishedAt": "2026-05-07T00:00:00Z",
+        "current": true,
+        "forceUpdate": false,
+        "minSupportedVersion": "0.1.0",
+        "metadata": {}
+      }
+    ]
+  },
+  "security": {
+    "checksumRequired": true,
+    "signatureRequired": true,
+    "sbomRequired": true
+  },
   "metadata": {
     "standardOwner": "sdkwork-platform",
     "component": "sdkwork-webserver-h5",

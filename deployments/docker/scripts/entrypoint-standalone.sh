@@ -1572,7 +1572,11 @@ runtime_snapshot_file = "${SDKWORK_WEBSERVER_TLS_RUNTIME_SNAPSHOT_FILE:-/var/lib
 snapshot_alpn = "${SDKWORK_WEBSERVER_TLS_SNAPSHOT_ALPN:-h2,http/1.1}"
 
 [node]
-uuid = "${SDKWORK_WEBSERVER_NODE_UUID:-standalone-${environment}-node}"
+# Multi-instance safe default (DEPLOYMENT_SPEC.md §6): the container hostname
+# is unique per instance, so scaled instances never share one node identity.
+# Operators override with SDKWORK_WEBSERVER_NODE_UUID (bundle deploy.sh sets
+# standalone-<environment>-i<index>).
+uuid = "${SDKWORK_WEBSERVER_NODE_UUID:-standalone-${environment}-${HOSTNAME:-node}}"
 
 [region]
 region_code = "${SDKWORK_WEBSERVER_REGION_CODE:-cn}"

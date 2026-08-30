@@ -12,9 +12,9 @@
     }
   },
   "dependencies": {
-    "@sdkwork/drive-app-sdk": "workspace:*",
     "@sdkwork/sdk-common": "workspace:*",
     "@sdkwork/utils": "workspace:*",
+    "@sdkwork/webserver-pc-console-core": "workspace:*",
     "@sdkwork/webserver-pc-commons": "workspace:*",
     "react": "catalog:",
     "react-router-dom": "^7.15.0"

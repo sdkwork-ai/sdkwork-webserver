@@ -13,6 +13,11 @@ dist/
 .tmp/
 tmp/
 *.log
+.workbuddy/
+.mimocode/
+.cursor/
+tmp-backup/
+__pycache__/
 *.tsbuildinfo
 *.db
 *.sqlite

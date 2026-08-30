@@ -20,6 +20,7 @@ thiserror.workspace = true
 tracing.workspace = true
 sdkwork-intelligence-webserver-repository-sqlx.workspace = true
 sdkwork-intelligence-webserver-service.workspace = true
+sdkwork_intelligence_deploy_repository_sqlx = { workspace = true }
 sdkwork-webserver-contract.workspace = true
 sdkwork-webserver-database-host.workspace = true
 sdkwork-web-contract.workspace = true

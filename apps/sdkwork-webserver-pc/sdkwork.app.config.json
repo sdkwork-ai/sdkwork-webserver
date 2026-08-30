@@ -13,7 +13,12 @@
     "termsOfServiceUrl": "https://sdkwork.com/terms",
     "appType": "APP_REACT",
     "versionSource": "package.json",
-    "identifiers": { "packageName": null, "bundleId": null, "desktopAppId": null, "containerImage": null }
+    "identifiers": {
+      "packageName": null,
+      "bundleId": null,
+      "desktopAppId": null,
+      "containerImage": null
+    }
   },
   "backend": {
     "profileKey": "backend-root-admin",
@@ -23,11 +28,217 @@
     "appId": "sdkwork-webserver-pc",
     "tenantId": "100001",
     "organizationId": "0",
-    "accessTokenPermissionScope": ["web.applications.read", "web.applications.write", "web.certificates.read", "web.certificates.write", "web.nginx.write", "web.servers.read", "web.servers.write", "web.auditLogs.read"]
+    "accessTokenPermissionScope": [
+      "web.applications.read",
+      "web.applications.write",
+      "web.certificates.read",
+      "web.certificates.write",
+      "web.nginx.write",
+      "web.servers.read",
+      "web.servers.write",
+      "web.auditLogs.read"
+    ]
   },
-  "runtime": { "family": "web", "framework": "react", "runtimes": ["WEB", "BROWSER"], "deliveryModes": ["WEB_URL"], "defaultPlatform": "WEB", "defaultArchitecture": "universal", "supportedDeploymentProfiles": ["standalone", "cloud"], "defaultDeploymentProfile": "standalone" },
-  "publish": { "status": "DRAFT", "platforms": ["WEB"], "installPlatforms": ["WEB"], "config": { "workspaceRoot": "apps/sdkwork-webserver-pc", "framework": "react", "managedBy": "sdkwork-webserver" } },
-  "release": { "currentVersion": "0.1.0", "defaultChannel": "DEV", "latest": { "DEV": "0.1.0" } },
-  "security": { "checksumRequired": true, "signatureRequired": true, "sbomRequired": true },
-  "metadata": { "standardOwner": "sdkwork-platform", "component": "sdkwork-webserver-pc", "surface": "pc", "deploymentConfig": "etc/sdkwork.deployment.config.json" }
+  "runtime": {
+    "family": "web",
+    "framework": "react",
+    "runtimes": [
+      "WEB",
+      "BROWSER"
+    ],
+    "deliveryModes": [
+      "WEB_URL"
+    ],
+    "defaultPlatform": "WEB",
+    "defaultArchitecture": "universal",
+    "supportedDeploymentProfiles": [
+      "standalone",
+      "cloud"
+    ],
+    "defaultDeploymentProfile": "standalone"
+  },
+  "media": {
+    "icons": {
+      "primary": {
+        "id": "sdkwork-webserver-pc-primary-icon",
+        "type": "ICON",
+        "purpose": "PRIMARY",
+        "url": "https://cdn.sdkwork.com/apps/sdkwork-webserver-pc/assets/icon-1024.png",
+        "platform": "APP",
+        "locale": "en-US",
+        "width": 1024,
+        "height": 1024,
+        "format": "PNG",
+        "fileSizeBytes": 524288,
+        "alphaChannel": false,
+        "sortOrder": 0,
+        "enabled": true,
+        "metadata": {
+          "generatedPlaceholder": true
+        }
+      },
+      "platform": [],
+      "metadata": {
+        "generatedPlaceholder": true
+      }
+    },
+    "screenshots": [
+      {
+        "id": "sdkwork-webserver-pc-web-screenshot",
+        "type": "SCREENSHOT",
+        "purpose": "CATALOG_SCREENSHOT",
+        "url": "https://cdn.sdkwork.com/apps/sdkwork-webserver-pc/media/web-screenshot.png",
+        "platform": "WEB",
+        "locale": "en-US",
+        "deviceClass": "BROWSER",
+        "displayType": "WEB_DESKTOP",
+        "width": 1920,
+        "height": 1080,
+        "format": "PNG",
+        "fileSizeBytes": 1048576,
+        "alphaChannel": false,
+        "caption": "SDKWork Web Server product screenshot.",
+        "sortOrder": 0,
+        "enabled": true,
+        "metadata": {
+          "generatedPlaceholder": true,
+          "altText": "SDKWork Web Server app screenshot."
+        }
+      }
+    ],
+    "previews": [
+      {
+        "id": "sdkwork-webserver-pc-catalog-preview",
+        "type": "PREVIEW_IMAGE",
+        "purpose": "CATALOG_PREVIEW",
+        "url": "https://cdn.sdkwork.com/apps/sdkwork-webserver-pc/media/preview-cover.png",
+        "platform": "WEB",
+        "locale": "en-US",
+        "width": 1600,
+        "height": 900,
+        "format": "PNG",
+        "fileSizeBytes": 786432,
+        "alphaChannel": false,
+        "caption": "SDKWork Web Server preview.",
+        "sortOrder": 0,
+        "enabled": true,
+        "metadata": {
+          "generatedPlaceholder": true,
+          "altText": "SDKWork Web Server preview cover."
+        }
+      }
+    ],
+    "metadata": {
+      "assetVersion": "0.1.0",
+      "defaultLocale": "en-US"
+    }
+  },
+  "publish": {
+    "status": "DRAFT",
+    "platforms": [
+      "WEB"
+    ],
+    "installPlatforms": [
+      "WEB"
+    ],
+    "config": {
+      "workspaceRoot": "apps/sdkwork-webserver-pc",
+      "framework": "react",
+      "managedBy": "sdkwork-webserver"
+    },
+    "defaultPackageId": "linux-x64-standalone-server-tar-gz",
+    "installSkill": {
+      "name": "sdkwork-skills-app"
+    },
+    "stores": [],
+    "storeUrl": "https://sdkwork.com/apps/sdkwork-webserver-pc"
+  },
+  "artifacts": {
+    "installConfig": {
+      "defaultPackageId": "linux-x64-standalone-server-tar-gz",
+      "installCommand": "sdkwork install sdkwork-webserver-pc",
+      "launchCommand": "sdkwork open sdkwork-webserver-pc",
+      "uninstallCommand": "sdkwork uninstall sdkwork-webserver-pc",
+      "packages": [
+        {
+          "id": "linux-x64-standalone-server-tar-gz",
+          "name": "Sdkwork Webserver Pc standalone server archive",
+          "sourceType": "BINARY_URL",
+          "packageFormat": "TAR_GZ",
+          "platform": "API",
+          "url": "https://cdn.sdkwork.com/apps/sdkwork-webserver-pc/STABLE/0.1.0/linux-x64-standalone-server-tar-gz-0.1.0.tar.gz",
+          "architecture": "x64",
+          "checksumAlgorithm": "SHA-256",
+          "checksum": "47ab0da6ee8264a028f8c277ae12a2238e50954c094955e11213cde81c18233f",
+          "deploymentProfile": "standalone",
+          "runtimeTarget": "server",
+          "profileBinding": "fixed",
+          "enabled": true,
+          "metadata": {
+            "releaseBuildDeferred": false
+          }
+        },
+        {
+          "id": "linux-x64-cloud-server-tar-gz",
+          "name": "Sdkwork Webserver Pc cloud server archive",
+          "sourceType": "BINARY_URL",
+          "packageFormat": "TAR_GZ",
+          "platform": "API",
+          "url": "https://cdn.sdkwork.com/apps/sdkwork-webserver-pc/STABLE/0.1.0/linux-x64-cloud-server-tar-gz-0.1.0.tar.gz",
+          "architecture": "x64",
+          "checksumAlgorithm": "SHA-256",
+          "checksum": "cb00410fbae6a4ee0f0460a6283acf918c20a9ab8d596ad788107d170fc3d165",
+          "deploymentProfile": "cloud",
+          "runtimeTarget": "server",
+          "profileBinding": "fixed",
+          "enabled": true,
+          "metadata": {
+            "releaseBuildDeferred": false
+          }
+        }
+      ]
+    }
+  },
+  "release": {
+    "currentVersion": "0.1.0",
+    "defaultChannel": "DEV",
+    "latest": {
+      "STABLE": "0.1.0",
+      "DEV": "0.1.0"
+    },
+    "notes": [
+      {
+        "version": "0.1.0",
+        "releaseChannel": "DEV",
+        "title": "SDKWork Web Server 0.1.0",
+        "summary": "SDKWork Web Server initialized standard release.",
+        "content": "Initial SDKWork App Standard v3 manifest for SDKWork Web Server.",
+        "highlights": [
+          "SDKWork App Standard v3 configuration initialized",
+          "platform_app projection metadata standardized",
+          "Download package matrix normalized"
+        ],
+        "packageIds": [
+          "linux-x64-standalone-server-tar-gz",
+          "linux-x64-cloud-server-tar-gz"
+        ],
+        "publishedAt": "2026-05-07T00:00:00Z",
+        "current": true,
+        "forceUpdate": false,
+        "minSupportedVersion": "0.1.0",
+        "metadata": {}
+      }
+    ]
+  },
+  "security": {
+    "checksumRequired": true,
+    "signatureRequired": true,
+    "sbomRequired": true
+  },
+  "metadata": {
+    "standardOwner": "sdkwork-platform",
+    "component": "sdkwork-webserver-pc",
+    "surface": "pc",
+    "deploymentConfig": "etc/sdkwork.deployment.config.json"
+  }
 }

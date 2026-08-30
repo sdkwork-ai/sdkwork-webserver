@@ -607,6 +607,21 @@
             "runtimeRootEnv": "SDKWORK_WEBSERVER_H5_STATIC_ROOT",
             "mountPath": "/",
             "spaFallback": "/index.html"
+          },
+          {
+            "id": "webserver-static-v1",
+            "applicationRoot": "apps/sdkwork-webserver-pc",
+            "clientArchitectures": [
+              "h5"
+            ],
+            "originMode": "same-origin",
+            "deliveryMode": "gateway-static",
+            "apiSurfaceId": "application.public-ingress",
+            "hostProcessId": "application.public-ingress",
+            "buildOutput": "apps/sdkwork-webserver-pc/dist",
+            "runtimeRootEnv": "SDKWORK_WEBSERVER_PC_STATIC_ROOT",
+            "mountPath": "/",
+            "spaFallback": "/index.html"
           }
         ],
         "healthSurfaces": [
@@ -661,7 +676,8 @@
       },
       "standalone.demo": {
         "processes": [],
-        "healthSurfaces": []
+        "healthSurfaces": [],
+        "browserDeliveries": []
       }
     }
   },

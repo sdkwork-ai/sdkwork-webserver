@@ -1,4 +1,4 @@
-﻿//! SaaS traffic usage metering.
+//! SaaS traffic usage metering.
 //!
 //! Every served request is counted per domain (hostname) and per server IP
 //! (`transport_peer`), attributed to the serving tenant/app when known, and
@@ -358,12 +358,12 @@ fn epoch_to_rfc3339(epoch_seconds: u64) -> String {
 /// the Deploy repository (management feature).
 #[cfg(feature = "management")]
 pub struct EmbeddedUsageIngestChannel {
-    repository: sdkwork_intelligence_deploy_repository_sqlx::DeployRepository,
+    repository: sdkwork_api_webserver_assembly::DeployRepository,
 }
 
 #[cfg(feature = "management")]
 impl EmbeddedUsageIngestChannel {
-    pub fn new(repository: sdkwork_intelligence_deploy_repository_sqlx::DeployRepository) -> Self {
+    pub fn new(repository: sdkwork_api_webserver_assembly::DeployRepository) -> Self {
         Self { repository }
     }
 }
