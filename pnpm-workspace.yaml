@@ -157,3 +157,8 @@ catalog:
   vite-plugin-dts: ^4.5.4
   vitest: ^4.1.8
   zustand: ^5.0.12
+
+# pnpm 10 ignores dependency build scripts by default; esbuild needs its
+# postinstall to materialize the platform binary, otherwise vite builds fail.
+onlyBuiltDependencies:
+  - esbuild

@@ -78,6 +78,18 @@
       "tokenSecret": "SDKWORK_RELEASE_TOKEN"
     },
     {
+      "id": "sdkwork-knowledgebase",
+      "repository": "sdkwork-ai/sdkwork-knowledgebase",
+      "refInput": "SDKWORK_KNOWLEDGEBASE_REF",
+      "tokenSecret": "SDKWORK_RELEASE_TOKEN"
+    },
+    {
+      "id": "sdkwork-id",
+      "repository": "sdkwork-ai/sdkwork-id",
+      "refInput": "SDKWORK_ID_REF",
+      "tokenSecret": "SDKWORK_RELEASE_TOKEN"
+    },
+    {
       "id": "sdkwork-drive",
       "repository": "sdkwork-ai/sdkwork-drive",
       "refInput": "SDKWORK_DRIVE_REF",
@@ -114,6 +126,11 @@
         "name": "Build web API server",
         "shell": "pwsh",
         "run": "node scripts/build.mjs --release"
+      },
+      {
+        "name": "Build workspace JS library packages (PC/H5 dependency chain)",
+        "shell": "pwsh",
+        "run": "pnpm --filter \"@sdkwork/webserver-pc^...\" run --if-present build && pnpm --filter \"@sdkwork/webserver-h5^...\" run --if-present build"
       }
     ],
     "package": [
@@ -253,7 +270,7 @@
       "runtimeTarget": "server"
     },
     {
-      "id": "linux-ubuntu-x64-standalone-test-server-deb",
+      "id": "linux-ubuntu-x64-standalone-server-test-deb",
       "profile": "server",
       "platform": "linux",
       "architecture": "x64",
@@ -262,6 +279,7 @@
       ],
       "distribution": "ubuntu",
       "environment": "test",
+      "variant": "test",
       "runner": "ubuntu-24.04",
       "outputGlobs": [
         "dist/installers/sdkwork-webserver-test_*.deb",
@@ -289,7 +307,7 @@
       "runtimeTarget": "server"
     },
     {
-      "id": "linux-rhel-x64-standalone-test-server-rpm",
+      "id": "linux-rhel-x64-standalone-server-test-rpm",
       "profile": "server",
       "platform": "linux",
       "architecture": "x64",
@@ -298,6 +316,7 @@
       ],
       "distribution": "rhel",
       "environment": "test",
+      "variant": "test",
       "runner": "ubuntu-24.04",
       "outputGlobs": [
         "dist/installers/sdkwork-webserver-test-*.rpm",
@@ -314,7 +333,7 @@
   },
   "publish": {
     "workflowArtifact": true,
-    "githubRelease": false,
+    "githubRelease": true,
     "retentionDays": 30
   }
 }

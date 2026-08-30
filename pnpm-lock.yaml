@@ -598,6 +598,9 @@ importers:
       '@sdkwork/mcp-pc-core':
         specifier: workspace:*
         version: link:../sdkwork-mcp-pc-core
+      '@sdkwork/utils':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-utils/packages/sdkwork-utils-typescript
       react:
         specifier: ^19.1.0
         version: 19.2.4
@@ -704,6 +707,9 @@ importers:
       '@sdkwork/skills-pc-commons':
         specifier: workspace:*
         version: link:../sdkwork-skills-pc-commons
+      '@sdkwork/skills-pc-core':
+        specifier: workspace:*
+        version: link:../sdkwork-skills-pc-core
       '@sdkwork/utils':
         specifier: workspace:*
         version: link:../../../../../sdkwork-utils/packages/sdkwork-utils-typescript
