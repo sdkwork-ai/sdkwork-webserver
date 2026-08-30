@@ -97,7 +97,7 @@ jobs:
       architecture: ${{ github.event.inputs.architecture || 'all' }}
       profile: ${{ github.event.inputs.profile || 'all' }}
       format: ${{ github.event.inputs.format || 'all' }}
-      publish_release: ${{ github.event_name == 'release' || startsWith(github.ref, 'refs/tags/') }}
+      publish_release: ${{ github.event_name == 'release' }}
       upload_artifact: true
       deploy: ${{ github.event.inputs.deploy == 'true' || github.event_name == 'release' }}
       retention_days: 30

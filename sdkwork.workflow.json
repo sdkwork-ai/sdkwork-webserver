@@ -119,6 +119,11 @@
         "name": "Install native build dependencies",
         "shell": "pwsh",
         "run": "sudo apt-get update && sudo apt-get install -y cmake clang nasm pkg-config libssl-dev"
+      },
+      {
+        "name": "Ensure rust toolchain on PATH",
+        "shell": "bash",
+        "run": "echo \"$HOME/.cargo/bin\" >> \"$GITHUB_PATH\"; export PATH=\"$HOME/.cargo/bin:$PATH\"; { echo '### toolchain diagnose'; echo 'node:'; which node; echo 'pnpm:'; which pnpm; echo 'cargo:'; which cargo || echo CARGO_NOT_ON_PATH; echo 'cargo dir:'; ls \"$HOME/.cargo/bin\" 2>/dev/null | head -8 || echo NO_CARGO_DIR; echo 'rustc:'; which rustc || echo RUSTC_NOT_ON_PATH; echo 'cargo version:'; cargo --version 2>&1 || echo CARGO_VERSION_FAIL; } | tee -a \"$GITHUB_STEP_SUMMARY\""
       }
     ],
     "install": [
