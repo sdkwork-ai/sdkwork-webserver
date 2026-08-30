@@ -2,6 +2,7 @@
 
 import { spawnSync } from 'node:child_process';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -134,6 +135,9 @@ function copyTree(source, target) {
     } else {
       mkdirSync(path.dirname(current.to), { recursive: true });
       writeFileSync(current.to, readFileSync(current.from));
+      // Preserve POSIX modes (executable bits on release binaries); plain
+      // writeFileSync would strip them and break container startup.
+      chmodSync(current.to, statSync(current.from).mode & 0o777);
     }
   }
 }

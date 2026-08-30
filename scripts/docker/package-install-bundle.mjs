@@ -227,6 +227,7 @@ async function main() {
   rmSync(bundleDir, { recursive: true, force: true });
   mkdirSync(path.join(bundleDir, 'compose'), { recursive: true });
   mkdirSync(path.join(bundleDir, 'env'), { recursive: true });
+  copyDir(path.join(DOCKER_ROOT, 'postgres', 'init'), path.join(bundleDir, 'postgres', 'init'));
 
   console.log(`saving image ${ref} (gzip, this can take several minutes)...`);
   const imageTgz = path.join(bundleDir, 'image.tar.gz');
@@ -246,6 +247,10 @@ async function main() {
   copyFileSync(
     path.join(DOCKER_ROOT, 'docker-compose.bundle-edge.yml'),
     path.join(bundleDir, 'compose', 'docker-compose.bundle-edge.yml'),
+  );
+  copyFileSync(
+    path.join(DOCKER_ROOT, 'docker-compose.bundle-gateway.yml'),
+    path.join(bundleDir, 'compose', 'docker-compose.bundle-gateway.yml'),
   );
   for (const environment of DEFAULT_ENVIRONMENTS) {
     copyFileSync(

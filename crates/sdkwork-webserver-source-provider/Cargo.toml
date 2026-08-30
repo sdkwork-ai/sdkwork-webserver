@@ -21,4 +21,3 @@ url.workspace = true
 zip.workspace = true
 
 [dev-dependencies]
-tokio.workspace = true

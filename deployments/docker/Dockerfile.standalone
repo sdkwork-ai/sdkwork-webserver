@@ -45,7 +45,9 @@ RUN chmod 0755 /usr/local/bin/sdkwork-webserver-entrypoint \
 # staged by scripts/docker/build-standalone-image.mjs from sdkwork-api-cloud-gateway
 # dist/container-image-build. Omit with --skip-platform-gateway when using docker mode.
 COPY --chown=10001:10001 opt/sdkwork/api-gateway /opt/sdkwork/api-gateway
-RUN if [ -f /app/bin/sdkwork-api-cloud-gateway ]; then chmod 0755 /app/bin/sdkwork-api-cloud-gateway; fi \
+# Defensive: release binaries must stay executable even if staging lost modes.
+RUN if [ -d /app/bin ]; then chmod 0755 /app/bin/* 2>/dev/null || true; fi \
+    && if [ -f /app/bin/sdkwork-api-cloud-gateway ]; then chmod 0755 /app/bin/sdkwork-api-cloud-gateway; fi \
     && if [ -d /opt/sdkwork/api-gateway/bin ]; then chmod 0755 /opt/sdkwork/api-gateway/bin/* 2>/dev/null || true; fi \
     && if [ -f /opt/sdkwork/api-gateway/container/knowledgebase-rpc-entrypoint ]; then \
          chmod 0755 /opt/sdkwork/api-gateway/container/knowledgebase-rpc-entrypoint; fi

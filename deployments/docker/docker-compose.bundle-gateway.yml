@@ -1,0 +1,173 @@
+# Gateway sibling for the unified install bundle (SDKWORK_WEBSERVER_SPEC.md
+# §17.3 / §8.1). Imported cloud-mode sidecars dial the canonical upstream
+# `sdkwork-api-cloud-gateway:8080`; this container binds
+# SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT (default 8080) behind that DNS
+# alias on the shared per-environment network. Runs as its own compose project
+# sdkwork-webserver-<env>-gateway (managed by deploy.sh).
+#
+# The environment block is generated from the canonical gateway repository
+# docker-compose.yml (docker compose config --format json) so sibling modules
+# and embedded routers receive the complete SDKWORK_* matrix. Database URL is
+# interpolated from the deployment env file; bind follows the upstream port.
+services:
+  gateway:
+    image: ${SDKWORK_MODULE_API_GATEWAY_IMAGE:-sdkwork-api-cloud-gateway:local}
+    restart: unless-stopped
+    depends_on:
+      knowledgebase-rpc:
+        condition: service_started
+    networks:
+      sdkwork:
+        aliases:
+          - sdkwork-api-cloud-gateway
+    environment:
+      SDKWORK_API_CLOUD_GATEWAY_BIND: 0.0.0.0:${SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT:-8080}
+      SDKWORK_DATABASE_URL: postgresql://${SDKWORK_DATABASE_USERNAME:-sdkwork_ai_dev}:${SDKWORK_DATABASE_PASSWORD:-sdkworkdev123}@${SDKWORK_DATABASE_HOST:-postgres}:${SDKWORK_DATABASE_PORT:-5432}/${SDKWORK_DATABASE_NAME:-sdkwork_ai_dev}?sslmode=${SDKWORK_DATABASE_SSL_MODE:-disable}&options=-c%20search_path%3D${SDKWORK_DATABASE_SCHEMA:-${SDKWORK_DATABASE_NAME:-sdkwork_ai_dev}},public
+      IMAGE_DRIVE_OBJECT_STORE_ROOT: /var/lib/sdkwork/api-gateway/image-drive-objects
+      RUST_LOG: info
+      SDKWORK_API_CLOUD_GATEWAY_ALLOWED_HOSTS: ''
+      SDKWORK_API_CLOUD_GATEWAY_DEPLOYMENT_PROFILE: standalone
+      SDKWORK_API_CLOUD_GATEWAY_ENVIRONMENT: ${SDKWORK_WEBSERVER_ENVIRONMENT:?required}
+      SDKWORK_API_CLOUD_GATEWAY_IAM_ALLOWED_AUDIENCES: sdkwork-api-cloud-gateway
+      SDKWORK_API_CLOUD_GATEWAY_MIGRATE_ON_START: true
+      SDKWORK_API_CLOUD_GATEWAY_POSTGRES_CA_FILE: ''
+      SDKWORK_API_CLOUD_GATEWAY_PROFILE_ID: standalone.${SDKWORK_WEBSERVER_ENVIRONMENT:?required}
+      SDKWORK_API_CLOUD_GATEWAY_PROVISION_IAM_SIGNING_MASTER_SECRET: true
+      SDKWORK_API_CLOUD_GATEWAY_PROVISION_PAYMENT_CREDENTIAL_KEY: true
+      SDKWORK_API_CLOUD_GATEWAY_RUNTIME_TARGET: container
+      SDKWORK_API_CLOUD_GATEWAY_WEB_REDIS_URL: redis://redis:6379/2
+      SDKWORK_CLOUDROUTER_API_KEY_PEPPER: cloudrouter-local-dev-pepper-change-me
+      SDKWORK_CLOUDROUTER_APP_SESSION_SECRET: cloudrouter-local-dev-app-session-change-me
+      SDKWORK_CLOUDROUTER_INTERNAL_GATEWAY_SIGNING_SECRET: cloudrouter-local-dev-signing-secret-change-me
+      SDKWORK_CLOUDROUTER_OPEN_API_BASE_URL: http://127.0.0.1:3900
+      SDKWORK_CLOUDROUTER_PAYMENT_WEBHOOK_SECRET: cloudrouter-local-dev-payment-webhook-change-me
+      SDKWORK_CLOUDROUTER_REDIS_DATABASE: 0
+      SDKWORK_CLOUDROUTER_REDIS_ENABLED: true
+      SDKWORK_CLOUDROUTER_REDIS_HOST: redis
+      SDKWORK_CLOUDROUTER_REDIS_KEY_PREFIX: cloudrouter
+      SDKWORK_CLOUDROUTER_REDIS_MAX_CONNECTIONS: 50
+      SDKWORK_CLOUDROUTER_REDIS_PASSWORD: ''
+      SDKWORK_CLOUDROUTER_REDIS_PASSWORD_FILE: ''
+      SDKWORK_CLOUDROUTER_REDIS_PORT: 6379
+      SDKWORK_CLOUDROUTER_REDIS_TLS: false
+      SDKWORK_CLOUDROUTER_REDIS_USERNAME: ''
+      SDKWORK_CLOUDROUTER_TRUSTED_SUBJECT_SECRET: cloudrouter-local-dev-trusted-subject-change-me
+      SDKWORK_CLOUDROUTER_UPSTREAM_CREDENTIAL_KEY_RING: '{"activeKeyId":"local-dev-key-ring-001","activeKey":"dyfeQDB++uTwSSRGuRju9yHE8iX3wTH+ySmqpjimX6w=","fingerprintKey":"kg/5KOatnHH9XgtbCS16VkjUEQoohdS5miD2U5GhtBc=","decryptionKeys":[]}'
+      SDKWORK_CORS_ALLOWED_ORIGINS: 'http://api-dev.sdkwork.com,http://api-dev.birdcoder.com,http://api-dev.dtupay.com,http://localhost:3910,http://127.0.0.1:3910,app://dsh,app://birdcoder,app://sdkwork,app://dtupay,tauri://localhost,https://servicewechat.com'
+      SDKWORK_DATABASE_ACQUIRE_TIMEOUT: 30
+      SDKWORK_DATABASE_AUTO_MIGRATE: false
+      SDKWORK_DATABASE_ENGINE: postgresql
+      SDKWORK_DATABASE_HOST: postgres
+      SDKWORK_DATABASE_IDLE_TIMEOUT: 600
+      SDKWORK_DATABASE_MAX_CONNECTIONS: 50
+      SDKWORK_DATABASE_MAX_LIFETIME: 1800
+      SDKWORK_DATABASE_MIN_CONNECTIONS: 5
+      SDKWORK_DATABASE_NAME: sdkwork_ai_prod
+      SDKWORK_DATABASE_PASSWORD: sdkwork_ai_prod
+      SDKWORK_DATABASE_PORT: 5432
+      SDKWORK_DATABASE_SCHEMA: sdkwork_ai_dev
+      SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC: false
+      SDKWORK_DATABASE_SSL_MODE: disable
+      SDKWORK_DATABASE_TEMPORARY_ANY_POOL_EXCEPTION: true
+      SDKWORK_DATABASE_TEMPORARY_DRIVER_POOL_COUNT: 2
+      SDKWORK_DATABASE_USERNAME: sdkwork_ai_prod
+      SDKWORK_DEPLOY_SANDBOX_ROOT: /var/lib/sdkwork/api-gateway/deploy-sandbox
+      SDKWORK_ENVIRONMENT: development
+      SDKWORK_IAM_SIGNING_MASTER_SECRET_FILE: /run/secrets/sdkwork/api-gateway/iam-signing-master.key
+      SDKWORK_IM_ALLOW_ALL_PRINCIPALS: false
+      SDKWORK_IM_ENVIRONMENT: development
+      SDKWORK_IM_GROUP_KNOWLEDGEBASE_LAUNCH_TICKET_SECRET_FILE: /run/secrets/sdkwork/api-gateway/knowledgebase-rpc/im-launch-ticket.key
+      SDKWORK_IM_ID_NODE_ID: 2
+      SDKWORK_IM_KNOWLEDGEBASE_RPC_CLIENT_CALLER_CONTEXT_SIGNING_KEY_FILE: /run/secrets/sdkwork/api-gateway/knowledgebase-rpc/caller-context.key
+      SDKWORK_IM_KNOWLEDGEBASE_RPC_CLIENT_CA_CERT_PATH: /run/secrets/sdkwork/api-gateway/knowledgebase-rpc/ca.crt
+      SDKWORK_IM_KNOWLEDGEBASE_RPC_CLIENT_CERT_PATH: /run/secrets/sdkwork/api-gateway/knowledgebase-rpc/client.crt
+      SDKWORK_IM_KNOWLEDGEBASE_RPC_CLIENT_CREDENTIAL_TTL_SECONDS: 60
+      SDKWORK_IM_KNOWLEDGEBASE_RPC_CLIENT_ENDPOINT: https://knowledgebase-rpc:50054
+      SDKWORK_IM_KNOWLEDGEBASE_RPC_CLIENT_KEY_PATH: /run/secrets/sdkwork/api-gateway/knowledgebase-rpc/client.key
+      SDKWORK_IM_KNOWLEDGEBASE_RPC_CLIENT_TIMEOUT_MS: 5000
+      SDKWORK_IM_KNOWLEDGEBASE_RPC_CLIENT_TLS_DOMAIN: knowledgebase.local
+      SDKWORK_IM_PRINCIPAL_DIRECTORY: postgres
+      SDKWORK_KNOWLEDGEBASE_DEPLOYMENT_PROFILE: standalone
+      SDKWORK_KNOWLEDGEBASE_ENVIRONMENT: development
+      SDKWORK_KNOWLEDGEBASE_ORGANIZATION_ID: 1
+      SDKWORK_KNOWLEDGEBASE_SECRETS_ENCRYPTION_KEY_FILE: /run/secrets/sdkwork/api-gateway/knowledgebase-rpc/knowledgebase-secrets.key
+      SDKWORK_KNOWLEDGEBASE_TENANT_ID: 100001
+      SDKWORK_PAYMENT_CREDENTIAL_MASTER_KEY_FILE: /run/secrets/sdkwork/api-gateway/payment-credential-master.key
+      SDKWORK_RTC_HYDRATE_ORGANIZATION_ID: 0
+      SDKWORK_RTC_HYDRATE_TENANT_ID: 100001
+      SDKWORK_RTC_STATE_REDIS_URL: redis://redis:6379/1
+      SDKWORK_SECRETS_DIR: /run/secrets/sdkwork/api-gateway
+      SDKWORK_VAULT_ADDR: ''
+      SDKWORK_VAULT_MOUNT: secret
+      SDKWORK_VAULT_NAMESPACE: ''
+      SDKWORK_VAULT_TOKEN: ''
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+      VOICE_DRIVE_OBJECT_STORE_ROOT: /var/lib/sdkwork/api-gateway/voice-drive-objects
+    volumes:
+      - gateway-data:/var/lib/sdkwork/api-gateway
+      - gateway-secrets:/run/secrets/sdkwork/api-gateway
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://127.0.0.1:${SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT:-8080}/readyz >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 240s
+
+  # Knowledgebase RPC sidecar (canonical gateway compose): provisions the
+  # mTLS secrets under the shared gateway-secrets volume that the gateway
+  # consumes for the IM Knowledgebase RPC client.
+  knowledgebase-rpc:
+    image: ${SDKWORK_MODULE_API_GATEWAY_IMAGE:-sdkwork-api-cloud-gateway:local}
+    entrypoint: ["/opt/sdkwork/api-gateway/container/knowledgebase-rpc-entrypoint"]
+    restart: unless-stopped
+    networks:
+      sdkwork:
+        aliases:
+          - knowledgebase-rpc
+    environment:
+      SDKWORK_KNOWLEDGEBASE_ENVIRONMENT: ${SDKWORK_WEBSERVER_ENVIRONMENT:?required}
+      SDKWORK_KNOWLEDGEBASE_DEPLOYMENT_PROFILE: standalone
+      SDKWORK_KNOWLEDGEBASE_RPC_ENABLED: "true"
+      SDKWORK_KNOWLEDGEBASE_RPC_BIND_ADDR: 0.0.0.0:50054
+      SDKWORK_KNOWLEDGEBASE_RPC_TLS_ENABLED: "true"
+      SDKWORK_KNOWLEDGEBASE_RPC_MTLS_ENABLED: "true"
+      SDKWORK_KNOWLEDGEBASE_RPC_HEALTH_ENABLED: "true"
+      SDKWORK_KNOWLEDGEBASE_RPC_SERVER_CERT_PATH: /run/secrets/sdkwork/api-gateway/knowledgebase-rpc/server.crt
+      SDKWORK_KNOWLEDGEBASE_RPC_SERVER_KEY_PATH: /run/secrets/sdkwork/api-gateway/knowledgebase-rpc/server.key
+      SDKWORK_KNOWLEDGEBASE_RPC_CLIENT_CA_CERTIFICATE_PATH: /run/secrets/sdkwork/api-gateway/knowledgebase-rpc/ca.crt
+      SDKWORK_KNOWLEDGEBASE_RPC_SPIFFE_TRUST_DOMAIN: sdkwork.internal
+      SDKWORK_KNOWLEDGEBASE_RPC_IM_CALLER_CONTEXT_SIGNING_KEY_FILE: /run/secrets/sdkwork/api-gateway/knowledgebase-rpc/caller-context.key
+      SDKWORK_KNOWLEDGEBASE_DRIVE_STORAGE_ROOT: /var/lib/sdkwork/api-gateway/knowledgebase-drive
+      SDKWORK_KNOWLEDGEBASE_OPERATOR_ID: sdkwork-knowledgebase
+      SDKWORK_KNOWLEDGEBASE_ACTOR_ID: 1
+      SDKWORK_KNOWLEDGEBASE_TENANT_ID: 100001
+      SDKWORK_KNOWLEDGEBASE_ORGANIZATION_ID: 1
+      SDKWORK_DATABASE_URL: postgresql://${SDKWORK_DATABASE_USERNAME:-sdkwork_ai_dev}:${SDKWORK_DATABASE_PASSWORD:-sdkworkdev123}@${SDKWORK_DATABASE_HOST:-postgres}:${SDKWORK_DATABASE_PORT:-5432}/${SDKWORK_DATABASE_NAME:-sdkwork_ai_dev}?sslmode=${SDKWORK_DATABASE_SSL_MODE:-disable}&options=-c%20search_path%3D${SDKWORK_DATABASE_SCHEMA:-${SDKWORK_DATABASE_NAME:-sdkwork_ai_dev}},public
+      SDKWORK_API_CLOUD_GATEWAY_PROVISION_KNOWLEDGEBASE_RPC_SECRETS: "true"
+      RUST_LOG: ${RUST_LOG:-info}
+    volumes:
+      - gateway-data:/var/lib/sdkwork/api-gateway
+      - gateway-secrets:/run/secrets/sdkwork/api-gateway
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/127.0.0.1/50054'"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 30s
+
+networks:
+  sdkwork:
+    name: sdkwork-webserver-${SDKWORK_WEBSERVER_ENVIRONMENT:?required}
+    external: true
+
+volumes:
+  gateway-data:
+    name: sdkwork-webserver-${SDKWORK_WEBSERVER_ENVIRONMENT:?required}-gateway-data
+    external: true
+  gateway-secrets:
+    name: sdkwork-webserver-${SDKWORK_WEBSERVER_ENVIRONMENT:?required}-gateway-secrets
+    external: true

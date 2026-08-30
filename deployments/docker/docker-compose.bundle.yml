@@ -51,7 +51,10 @@ x-webserver-common: &webserver-common
     # Module-imports data plane: identity 80/443 (leave empty; set only when
     # remapping is required). SDKWORK_WEBSERVER_SPEC.md §17.3.
     SDKWORK_WEBSERVER_IMPORT_LISTENER_PORTS: ${SDKWORK_WEBSERVER_IMPORT_LISTENER_PORTS:-}
-    SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT: ${SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT:-bundled}
+    # Module /api/ proxy: docker (gateway sibling via docker-compose.bundle-gateway.yml,
+    # canonical default per SDKWORK_WEBSERVER_SPEC.md §17.3), bundled (in-container
+    # process), or external (operator endpoint). The webserver does not block on it.
+    SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT: ${SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT:-docker}
     SDKWORK_MODULE_API_GATEWAY_HOST: ${SDKWORK_MODULE_API_GATEWAY_HOST:-}
     SDKWORK_MODULE_API_GATEWAY_PORT: ${SDKWORK_MODULE_API_GATEWAY_PORT:-3900}
     SDKWORK_MODULE_API_GATEWAY_REQUIRED: ${SDKWORK_MODULE_API_GATEWAY_REQUIRED:-false}
@@ -108,7 +111,9 @@ services:
   # Embedded dependencies (default). Skip with --external and supply
   # SDKWORK_DATABASE_HOST / SDKWORK_WEBSERVER_REDIS_HOST via the env file.
   postgres:
-    image: postgres:16-alpine
+    # pgvector image: gateway knowledgebase schemas require the vector
+    # extension (canonical gateway compose uses pgvector/pgvector:pg18).
+    image: pgvector/pgvector:pg16
     profiles: [deps]
     restart: unless-stopped
     command: ["postgres", "-c", "max_connections=${PG_MAX_CONNECTIONS:-200}"]
@@ -118,8 +123,20 @@ services:
       POSTGRES_USER: ${WEBSERVER_POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${WEBSERVER_POSTGRES_PASSWORD:?WEBSERVER_POSTGRES_PASSWORD must be set}
       POSTGRES_DB: ${WEBSERVER_POSTGRES_DB:-postgres}
+      # Workspace identities provisioned by ./postgres/init (ENVIRONMENT_SPEC
+      # §7.1) — must match the SDKWORK_DATABASE_* values the webserver uses.
+      WEBSERVER_POSTGRES_DEV_DB: ${WEBSERVER_POSTGRES_DEV_DB:-sdkwork_ai_dev}
+      WEBSERVER_POSTGRES_DEV_USER: ${WEBSERVER_POSTGRES_DEV_USER:-sdkwork_ai_dev}
+      WEBSERVER_POSTGRES_DEV_PASSWORD: ${WEBSERVER_POSTGRES_DEV_PASSWORD:-sdkworkdev123}
+      WEBSERVER_POSTGRES_TEST_DB: ${WEBSERVER_POSTGRES_TEST_DB:-sdkwork_ai_test}
+      WEBSERVER_POSTGRES_TEST_USER: ${WEBSERVER_POSTGRES_TEST_USER:-sdkwork_ai_test}
+      WEBSERVER_POSTGRES_TEST_PASSWORD: ${WEBSERVER_POSTGRES_TEST_PASSWORD:-sdkworktest123}
+      WEBSERVER_POSTGRES_PROD_DB: ${WEBSERVER_POSTGRES_PROD_DB:-sdkwork_ai_prod}
+      WEBSERVER_POSTGRES_PROD_USER: ${WEBSERVER_POSTGRES_PROD_USER:-sdkwork_ai_prod}
+      WEBSERVER_POSTGRES_PROD_PASSWORD: ${WEBSERVER_POSTGRES_PROD_PASSWORD:-sdkworkprod123}
     volumes:
       - webserver-postgres-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test:
         [
