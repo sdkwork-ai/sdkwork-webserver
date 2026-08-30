@@ -137,7 +137,7 @@
       {
         "name": "Build web API server",
         "shell": "bash",
-        "run": "export PATH=\"$HOME/.cargo/bin:/usr/local/cargo/bin:$PATH\"; cargo --version; node scripts/build.mjs --release"
+        "run": "set -x; pwd; git rev-parse --show-toplevel; ls -la scripts/build.mjs scripts/lib/build-source-integrity.mjs; export PATH=\"$HOME/.cargo/bin:/usr/local/cargo/bin:$PATH\"; cargo --version; node scripts/build.mjs --release"
       },
       {
         "name": "Build workspace JS library packages (PC/H5 dependency chain)",
