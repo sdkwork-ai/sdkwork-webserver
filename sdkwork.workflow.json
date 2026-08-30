@@ -136,8 +136,8 @@
     "build": [
       {
         "name": "Build web API server",
-        "shell": "pwsh",
-        "run": "node scripts/build.mjs --release"
+        "shell": "bash",
+        "run": "set -x; export PATH=\"$HOME/.cargo/bin:$PATH\"; cargo --version 2>&1; node scripts/build.mjs --release 2>&1 | tee -a \"$GITHUB_STEP_SUMMARY\"; exit ${PIPESTATUS[0]}"
       },
       {
         "name": "Build workspace JS library packages (PC/H5 dependency chain)",
