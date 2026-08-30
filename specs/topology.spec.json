@@ -9,8 +9,7 @@
   "vocabulary": {
     "deploymentProfile": {
       "allowed": [
-        "standalone",
-        "cloud"
+        "standalone"
       ]
     },
     "environment": {
@@ -18,33 +17,29 @@
         "development",
         "test",
         "staging",
-        "production"
+        "production",
+        "demo"
       ]
     }
   },
   "defaults": {
     "developmentProfileId": "standalone.development",
-    "productionProfileId": "cloud.production",
+    "productionProfileId": "standalone.production",
     "gatewayBind": "127.0.0.1:3800",
     "desktopBuildProfileId": "standalone.production"
   },
   "profileFiles": {
-    "cloud.development": "etc/topology/cloud.development.env",
-    "cloud.production": "etc/topology/cloud.production.env",
     "standalone.development": "etc/topology/standalone.development.env",
     "standalone.test": "etc/topology/standalone.test.env",
     "standalone.production": "etc/topology/standalone.production.env",
     "standalone.staging": "etc/topology/standalone.staging.env",
-    "cloud.test": "etc/topology/cloud.test.env",
-    "cloud.staging": "etc/topology/cloud.staging.env"
+    "standalone.demo": "etc/topology/standalone.demo.env"
   },
   "envKeys": {
     "deploymentProfile": "SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE",
     "environment": "SDKWORK_WEBSERVER_ENVIRONMENT",
     "profileId": "SDKWORK_WEBSERVER_PROFILE_ID",
-    "standaloneGatewayBind": "SDKWORK_WEBSERVER_APPLICATION_PUBLIC_INGRESS_BIND",
-    "apiGatewayBaseUrl": "SDKWORK_WEBSERVER_PLATFORM_API_GATEWAY_HTTP_URL",
-    "clientApiGatewayBaseUrl": "VITE_SDKWORK_WEBSERVER_PLATFORM_API_GATEWAY_HTTP_URL"
+    "standaloneGatewayBind": "SDKWORK_WEBSERVER_APPLICATION_PUBLIC_INGRESS_BIND"
   },
   "surfaces": {
     "application.public-ingress": {
@@ -80,14 +75,6 @@
         "http"
       ],
       "httpUrlEnv": "SDKWORK_WEBSERVER_WEBSITE_DELIVERY_HTTP_URL"
-    },
-    "platform.api-gateway": {
-      "connectivityPlane": "platform",
-      "protocols": [
-        "http"
-      ],
-      "httpUrlEnv": "SDKWORK_WEBSERVER_PLATFORM_API_GATEWAY_HTTP_URL",
-      "clientHttpEnv": "VITE_SDKWORK_WEBSERVER_PLATFORM_API_GATEWAY_HTTP_URL"
     },
     "dependency.deploy-app-api": {
       "connectivityPlane": "dependency",
@@ -243,6 +230,24 @@
             "server-staging.86offer.com",
             "server-staging.86offer.cn"
           ]
+        },
+        "demo": {
+          "httpHosts": [
+            "server-demo.sdkwork.com",
+            "server-demo.birdcoder.com",
+            "server-demo.dtupay.com",
+            "server-demo.sdkwork.cn",
+            "server-demo.birdcoder.cn",
+            "server-demo.dtupay.cn",
+            "server-demo.skubc.com",
+            "server-demo.skubc.cn",
+            "server-demo.zowalk.com",
+            "server-demo.zowalk.cn",
+            "server-demo.offer86.com",
+            "server-demo.offer86.cn",
+            "server-demo.86offer.com",
+            "server-demo.86offer.cn"
+          ]
         }
       },
       "httpHosts": [
@@ -317,6 +322,24 @@
             "server-app-staging.offer86.cn",
             "server-app-staging.86offer.com",
             "server-app-staging.86offer.cn"
+          ]
+        },
+        "demo": {
+          "httpHosts": [
+            "server-app-demo.sdkwork.com",
+            "server-app-demo.birdcoder.com",
+            "server-app-demo.dtupay.com",
+            "server-app-demo.sdkwork.cn",
+            "server-app-demo.birdcoder.cn",
+            "server-app-demo.dtupay.cn",
+            "server-app-demo.skubc.com",
+            "server-app-demo.skubc.cn",
+            "server-app-demo.zowalk.com",
+            "server-app-demo.zowalk.cn",
+            "server-app-demo.offer86.com",
+            "server-app-demo.offer86.cn",
+            "server-app-demo.86offer.com",
+            "server-app-demo.86offer.cn"
           ]
         }
       },
@@ -393,6 +416,24 @@
             "server-admin-staging.86offer.com",
             "server-admin-staging.86offer.cn"
           ]
+        },
+        "demo": {
+          "httpHosts": [
+            "server-admin-demo.sdkwork.com",
+            "server-admin-demo.birdcoder.com",
+            "server-admin-demo.dtupay.com",
+            "server-admin-demo.sdkwork.cn",
+            "server-admin-demo.birdcoder.cn",
+            "server-admin-demo.dtupay.cn",
+            "server-admin-demo.skubc.com",
+            "server-admin-demo.skubc.cn",
+            "server-admin-demo.zowalk.com",
+            "server-admin-demo.zowalk.cn",
+            "server-admin-demo.offer86.com",
+            "server-admin-demo.offer86.cn",
+            "server-admin-demo.86offer.com",
+            "server-admin-demo.86offer.cn"
+          ]
         }
       },
       "httpHosts": [
@@ -410,81 +451,6 @@
         "server-admin.offer86.cn",
         "server-admin.86offer.com",
         "server-admin.86offer.cn"
-      ]
-    },
-    "platform.api-gateway": {
-      "httpHost": "api.sdkwork.com",
-      "environments": {
-        "development": {
-          "httpHosts": [
-            "api-dev.sdkwork.com",
-            "api-dev.birdcoder.com",
-            "api-dev.dtupay.com",
-            "api-dev.sdkwork.cn",
-            "api-dev.birdcoder.cn",
-            "api-dev.dtupay.cn",
-            "api-dev.skubc.com",
-            "api-dev.skubc.cn",
-            "api-dev.zowalk.com",
-            "api-dev.zowalk.cn",
-            "api-dev.offer86.com",
-            "api-dev.offer86.cn",
-            "api-dev.86offer.com",
-            "api-dev.86offer.cn"
-          ]
-        },
-        "test": {
-          "httpHosts": [
-            "api-test.sdkwork.com",
-            "api-test.birdcoder.com",
-            "api-test.dtupay.com",
-            "api-test.sdkwork.cn",
-            "api-test.birdcoder.cn",
-            "api-test.dtupay.cn",
-            "api-test.skubc.com",
-            "api-test.skubc.cn",
-            "api-test.zowalk.com",
-            "api-test.zowalk.cn",
-            "api-test.offer86.com",
-            "api-test.offer86.cn",
-            "api-test.86offer.com",
-            "api-test.86offer.cn"
-          ]
-        },
-        "staging": {
-          "httpHosts": [
-            "api-staging.sdkwork.com",
-            "api-staging.birdcoder.com",
-            "api-staging.dtupay.com",
-            "api-staging.sdkwork.cn",
-            "api-staging.birdcoder.cn",
-            "api-staging.dtupay.cn",
-            "api-staging.skubc.com",
-            "api-staging.skubc.cn",
-            "api-staging.zowalk.com",
-            "api-staging.zowalk.cn",
-            "api-staging.offer86.com",
-            "api-staging.offer86.cn",
-            "api-staging.86offer.com",
-            "api-staging.86offer.cn"
-          ]
-        }
-      },
-      "httpHosts": [
-        "api.sdkwork.com",
-        "api.birdcoder.com",
-        "api.dtupay.com",
-        "api.sdkwork.cn",
-        "api.birdcoder.cn",
-        "api.dtupay.cn",
-        "api.skubc.com",
-        "api.skubc.cn",
-        "api.zowalk.com",
-        "api.zowalk.cn",
-        "api.offer86.com",
-        "api.offer86.cn",
-        "api.86offer.com",
-        "api.86offer.cn"
       ]
     }
   },
@@ -553,82 +519,6 @@
         ],
         "healthSurfaces": [
           "application.public-ingress"
-        ]
-      },
-      "cloud.development": {
-        "processes": [
-          {
-            "id": "application.node-daemon",
-            "crate": "sdkwork-web-agent",
-            "binary": "sdkwork-web-node-daemon",
-            "required": true,
-            "role": "client"
-          },
-          {
-            "id": "webserver-browser",
-            "role": "client",
-            "applicationRoot": "apps/sdkwork-webserver-pc",
-            "bindEnv": "SDKWORK_WEBSERVER_WEB_DEV_INGRESS_BIND",
-            "runtimeTargets": [
-              "browser"
-            ],
-            "clientArchitectures": [
-              "pc-web",
-              "h5"
-            ],
-            "required": true
-          }
-        ],
-        "browserDeliveries": [
-          {
-            "id": "webserver-adaptive-web",
-            "applicationRoot": "apps/sdkwork-webserver-pc",
-            "clientArchitectures": [
-              "pc-web",
-              "h5"
-            ],
-            "originMode": "same-origin",
-            "deliveryMode": "dev-server-proxy",
-            "apiSurfaceId": "application.public-ingress",
-            "clientProcessId": "webserver-browser",
-            "preserveCanonicalPaths": true,
-            "tabletArchitecture": "pc-web",
-            "renderers": {
-              "pc-web": {
-                "applicationRoot": "apps/sdkwork-webserver-pc",
-                "script": "_sdkwork:dev:cloud",
-                "defaultPort": 5184,
-                "portEnv": "SDKWORK_WEBSERVER_PC_INTERNAL_DEV_PORT"
-              },
-              "h5": {
-                "applicationRoot": "apps/sdkwork-webserver-h5",
-                "script": "_sdkwork:dev:cloud",
-                "defaultPort": 5185,
-                "portEnv": "SDKWORK_WEBSERVER_H5_INTERNAL_DEV_PORT"
-              }
-            }
-          }
-        ],
-        "healthSurfaces": [
-          "application.public-ingress",
-          "platform.api-gateway"
-        ]
-      },
-      "cloud.production": {
-        "processes": [
-          {
-            "id": "edge.website-delivery",
-            "crate": "sdkwork-webserver-website-delivery-edge-runtime",
-            "binary": "sdkwork-webserver-website-delivery-edge-runtime",
-            "required": true,
-            "role": "edge-runtime",
-            "script": "_sdkwork:runtime:website-data-plane",
-            "decisionRef": "docs/architecture/decisions/ADR-20260721-compiled-website-runtime-descriptor.md"
-          }
-        ],
-        "healthSurfaces": [
-          "edge.website-delivery",
-          "platform.api-gateway"
         ]
       },
       "standalone.test": {
@@ -769,81 +659,9 @@
           "application.public-ingress"
         ]
       },
-      "cloud.test": {
-        "processes": [
-          {
-            "id": "application.node-daemon",
-            "crate": "sdkwork-web-agent",
-            "binary": "sdkwork-web-node-daemon",
-            "required": true,
-            "role": "client"
-          },
-          {
-            "id": "webserver-browser",
-            "role": "client",
-            "applicationRoot": "apps/sdkwork-webserver-pc",
-            "bindEnv": "SDKWORK_WEBSERVER_WEB_DEV_INGRESS_BIND",
-            "runtimeTargets": [
-              "browser"
-            ],
-            "clientArchitectures": [
-              "pc-web",
-              "h5"
-            ],
-            "required": true
-          }
-        ],
-        "browserDeliveries": [
-          {
-            "id": "webserver-adaptive-web",
-            "applicationRoot": "apps/sdkwork-webserver-pc",
-            "clientArchitectures": [
-              "pc-web",
-              "h5"
-            ],
-            "originMode": "same-origin",
-            "deliveryMode": "dev-server-proxy",
-            "apiSurfaceId": "application.public-ingress",
-            "clientProcessId": "webserver-browser",
-            "preserveCanonicalPaths": true,
-            "tabletArchitecture": "pc-web",
-            "renderers": {
-              "pc-web": {
-                "applicationRoot": "apps/sdkwork-webserver-pc",
-                "script": "_sdkwork:dev:cloud",
-                "defaultPort": 5184,
-                "portEnv": "SDKWORK_WEBSERVER_PC_INTERNAL_DEV_PORT"
-              },
-              "h5": {
-                "applicationRoot": "apps/sdkwork-webserver-h5",
-                "script": "_sdkwork:dev:cloud",
-                "defaultPort": 5185,
-                "portEnv": "SDKWORK_WEBSERVER_H5_INTERNAL_DEV_PORT"
-              }
-            }
-          }
-        ],
-        "healthSurfaces": [
-          "application.public-ingress",
-          "platform.api-gateway"
-        ]
-      },
-      "cloud.staging": {
-        "processes": [
-          {
-            "id": "edge.website-delivery",
-            "crate": "sdkwork-webserver-website-delivery-edge-runtime",
-            "binary": "sdkwork-webserver-website-delivery-edge-runtime",
-            "required": true,
-            "role": "edge-runtime",
-            "script": "_sdkwork:runtime:website-data-plane",
-            "decisionRef": "docs/architecture/decisions/ADR-20260721-compiled-website-runtime-descriptor.md"
-          }
-        ],
-        "healthSurfaces": [
-          "edge.website-delivery",
-          "platform.api-gateway"
-        ]
+      "standalone.demo": {
+        "processes": [],
+        "healthSurfaces": []
       }
     }
   },
