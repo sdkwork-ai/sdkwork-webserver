@@ -88,6 +88,12 @@ x-webserver-common: &webserver-common
     SDKWORK_WEBSERVER_REDIS_TLS: ${SDKWORK_WEBSERVER_REDIS_TLS:-false}
     SDKWORK_WEBSERVER_REDIS_PASSWORD: ${SDKWORK_WEBSERVER_REDIS_PASSWORD:-}
     SDKWORK_WEBSERVER_CERT_WORKER_ID: ${SDKWORK_WEBSERVER_CERT_WORKER_ID:-certificate-worker-0}
+    # Adaptive Web static roots (SDKWORK_WEBSERVER_SPEC.md §13.6): the webserver
+    # process serves its own standalone build from the checkout when overridden,
+    # falling back to the bundled image roots.
+    SDKWORK_WEBSERVER_PC_STATIC_ROOT: ${SDKWORK_WEBSERVER_PC_STATIC_ROOT:-/app/share/sdkwork/webserver/web/pc}
+    SDKWORK_WEBSERVER_H5_STATIC_ROOT: ${SDKWORK_WEBSERVER_H5_STATIC_ROOT:-/app/share/sdkwork/webserver/web/h5}
+    SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT: ${SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT:-/app/share/sdkwork/webserver/web/static}
     RUST_LOG: ${RUST_LOG:-info}
   volumes:
     # SDKWORK_WEBSERVER_SPEC.md §17: the space root is read-only; the checkout
