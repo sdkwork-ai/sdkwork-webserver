@@ -474,6 +474,39 @@ test('unified install bundle ships every lifecycle environment (DEPLOYMENT_SPEC 
   );
   assert.match(deployScript, /development\|test\|staging\|production/u);
 
+  // Port-resolution case matrix must cover every accepted environment
+  // (DEPLOYMENT_SPEC §6 bundle deploy port-key contract): a missing branch
+  // leaves PORT_BASE unset and fails under `set -u` mid-deploy.
+  for (const [environment, keys] of Object.entries({
+    development: [
+      'SDKWORK_WEBSERVER_DEV_HOST_PORT',
+      'SDKWORK_WEBSERVER_DEV_IMPORT_HTTP_HOST_PORT',
+      'SDKWORK_WEBSERVER_DEV_HTTPS_HOST_PORT',
+    ],
+    test: [
+      'SDKWORK_WEBSERVER_TEST_HOST_PORT',
+      'SDKWORK_WEBSERVER_TEST_IMPORT_HTTP_HOST_PORT',
+      'SDKWORK_WEBSERVER_TEST_HTTPS_HOST_PORT',
+    ],
+    staging: [
+      'SDKWORK_WEBSERVER_STAGING_HOST_PORT',
+      'SDKWORK_WEBSERVER_STAGING_IMPORT_HTTP_HOST_PORT',
+      'SDKWORK_WEBSERVER_STAGING_HTTPS_HOST_PORT',
+    ],
+    production: [
+      'SDKWORK_WEBSERVER_PROD_HOST_PORT',
+      'SDKWORK_WEBSERVER_PROD_IMPORT_HTTP_HOST_PORT',
+      'SDKWORK_WEBSERVER_PROD_HTTPS_HOST_PORT',
+    ],
+  })) {
+    for (const key of keys) {
+      assert.ok(
+        deployScript.includes(`env_key ${key}`),
+        `deploy.sh must resolve ${key} for environment ${environment}`,
+      );
+    }
+  }
+
   const installer = readFileSync(
     path.join(appRoot, 'scripts', 'docker', 'package-install-bundle.mjs'),
     'utf8',
