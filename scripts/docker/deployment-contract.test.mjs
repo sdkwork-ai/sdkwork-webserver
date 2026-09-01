@@ -465,6 +465,32 @@ test('drive delivery cache mount and env contract is complete (DRIVE_SPEC §17)'
   }
 });
 
+test('unified install bundle ships every lifecycle environment (DEPLOYMENT_SPEC §2/§6)', () => {
+  // deploy.sh accepts all four environments; the installer copies each
+  // env example into the bundle so operators never hand-craft one.
+  const deployScript = readFileSync(
+    path.join(appRoot, 'deployments', 'docker', 'bundle', 'deploy.sh'),
+    'utf8',
+  );
+  assert.match(deployScript, /development\|test\|staging\|production/u);
+
+  const installer = readFileSync(
+    path.join(appRoot, 'scripts', 'docker', 'package-install-bundle.mjs'),
+    'utf8',
+  );
+  assert.match(
+    installer,
+    /DEFAULT_ENVIRONMENTS = \['development', 'test', 'staging', 'production'\]/u,
+  );
+  for (const environment of environments) {
+    assert.equal(
+      existsSync(path.join(appRoot, 'deployments', 'docker', 'env', `${environment}.env.example`)),
+      true,
+      `${environment}.env.example must exist for bundle shipping`,
+    );
+  }
+});
+
 test('every environment CORS allowlist covers registered client origins (WEB_FRAMEWORK_SPEC §12)', () => {
   // Desktop WebView custom schemes and the mini program runtime are first-party
   // client origins: every environment's default SDKWORK_CORS_ALLOWED_ORIGINS

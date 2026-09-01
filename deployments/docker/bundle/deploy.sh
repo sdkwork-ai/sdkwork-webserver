@@ -10,7 +10,7 @@
 #   repo:    ../docker-compose.bundle.yml      + ../env/
 #
 # Usage:
-#   deploy.sh --environment <development|test|production> [options]
+#   deploy.sh --environment <development|test|staging|production> [options]
 #     --replicas <N>     instances to run (default 1; every env supports N)
 #     --external         skip embedded postgres/redis (use env-file hosts)
 #     --image-tag <tag>  override SDKWORK_WEBSERVER_IMAGE_TAG
@@ -83,10 +83,10 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-[ -n "${ENVIRONMENT}" ] || die "--environment is required (development|test|production)"
+[ -n "${ENVIRONMENT}" ] || die "--environment is required (development|test|staging|production)"
 case "${ENVIRONMENT}" in
-  development|test|production) ;;
-  *) die "unsupported environment: ${ENVIRONMENT} (development|test|production)" ;;
+  development|test|staging|production) ;;
+  *) die "unsupported environment: ${ENVIRONMENT} (development|test|staging|production)" ;;
 esac
 command -v docker >/dev/null 2>&1 || die "docker is required"
 docker compose version >/dev/null 2>&1 || die "docker compose plugin is required (docker-compose-plugin)"

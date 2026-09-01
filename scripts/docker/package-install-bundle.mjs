@@ -36,7 +36,9 @@ import { createGzip } from 'node:zlib';
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DOCKER_ROOT = path.join(REPO_ROOT, 'deployments', 'docker');
 const DEFAULT_OUTPUT_ROOT = path.join(REPO_ROOT, 'dist', 'docker-install');
-const DEFAULT_ENVIRONMENTS = ['development', 'test', 'production'];
+// staging is a first-class deployment environment (DEPLOYMENT_SPEC §2) and
+// ships in the bundle so production-like rehearsal uses the same installer.
+const DEFAULT_ENVIRONMENTS = ['development', 'test', 'staging', 'production'];
 
 function appVersion() {
   const manifest = JSON.parse(
