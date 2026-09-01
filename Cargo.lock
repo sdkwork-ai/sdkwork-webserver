@@ -4178,7 +4178,6 @@ dependencies = [
  "serde_json",
  "sqlx",
  "thiserror 2.0.19",
- "tokio",
 ]
 
 [[package]]
@@ -4219,7 +4218,6 @@ dependencies = [
  "serde_json",
  "sqlx",
  "thiserror 2.0.19",
- "tokio",
  "tracing",
 ]
 
@@ -5571,12 +5569,15 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "hex",
  "sdkwork-drive-internal-sdk-generated-rust",
  "sdkwork-webserver-contract",
  "sdkwork-webserver-core",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

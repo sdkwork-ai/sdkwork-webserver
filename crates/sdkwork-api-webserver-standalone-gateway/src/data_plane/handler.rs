@@ -30,7 +30,7 @@ use super::{
     limit_conn::LimitConnDecision,
     limit_req::LimitReqDecision,
     metrics::RequestRejection,
-    proxy::{proxy_request, request_body_timeout_response, text_response},
+    proxy::{request_body_timeout_response, text_response},
     proxy_body::RequestBodyFailure,
     proxy_protocol::DownstreamConnectionInfo,
     real_ip::resolve_client_ip,

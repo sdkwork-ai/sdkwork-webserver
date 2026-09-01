@@ -17,7 +17,11 @@ use sdkwork_webserver_contract::provider::{
 use sdkwork_webserver_core::website_runtime::{ProviderResourceReference, WebsiteProviderType};
 use serde::{Deserialize, Serialize};
 
-use crate::{sdk::DriveWebsiteSdkClientResolver, stream::BoundedDriveContentStream};
+use crate::{
+    cache::{cache_key, DriveContentCache},
+    sdk::DriveWebsiteSdkClientResolver,
+    stream::BoundedDriveContentStream,
+};
 
 pub const DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION: &str = "drive.website-root.v1";
 pub const MAXIMUM_DRIVE_CONTENT_BYTES: u64 = 256 * 1024 * 1024;
@@ -30,6 +34,7 @@ pub struct DriveWebsiteProvider {
     clients: Arc<dyn DriveWebsiteSdkClientResolver>,
     maximum_content_bytes: u64,
     timeout_cap_ms: u64,
+    cache: Option<Arc<DriveContentCache>>,
 }
 
 impl DriveWebsiteProvider {
@@ -38,6 +43,21 @@ impl DriveWebsiteProvider {
             clients,
             maximum_content_bytes: MAXIMUM_DRIVE_CONTENT_BYTES,
             timeout_cap_ms: DEFAULT_PROVIDER_TIMEOUT_CAP_MS,
+            cache: None,
+        }
+    }
+
+    /// Provider with the local delivery cache bound (DRIVE_SPEC.md §17).
+    /// `cache: None` keeps pure streaming behavior.
+    pub fn with_cache(
+        clients: Arc<dyn DriveWebsiteSdkClientResolver>,
+        cache: Option<Arc<DriveContentCache>>,
+    ) -> Self {
+        Self {
+            clients,
+            maximum_content_bytes: MAXIMUM_DRIVE_CONTENT_BYTES,
+            timeout_cap_ms: DEFAULT_PROVIDER_TIMEOUT_CAP_MS,
+            cache,
         }
     }
 
@@ -58,6 +78,7 @@ impl DriveWebsiteProvider {
             clients,
             maximum_content_bytes,
             timeout_cap_ms,
+            cache: None,
         })
     }
 
@@ -192,6 +213,43 @@ impl WebsiteStaticContentProvider for DriveWebsiteProvider {
             return Err(provider_error(WebsiteProviderErrorKind::NotModified));
         }
         let selected_range = select_range(request.range, &request.conditions, &metadata)?;
+        // Local delivery cache (DRIVE_SPEC.md §17): upstream resolution and
+        // conditional semantics above stay authoritative; only the immutable
+        // byte payload is cached, keyed by the pinned node version.
+        let cache_key = self.cache.as_ref().map(|_| {
+            cache_key(
+                &request.context.tenant_scope_hash,
+                &request.provider.provider_resource_uuid,
+                &resolution.logical_node_version_id,
+            )
+        });
+        if let (Some(cache), Some(key)) = (self.cache.as_ref(), cache_key.as_ref()) {
+            match selected_range {
+                None => {
+                    if let Some(stream) = cache.open_cached(key, metadata.content_length).await {
+                        return Ok(OpenedWebsiteContent {
+                            stream: Box::new(stream),
+                            content_length: metadata.content_length,
+                            content_range: None,
+                        });
+                    }
+                }
+                Some(range) => {
+                    // Full object cached: serve ranges straight from disk.
+                    if let Some(stream) = cache
+                        .open_cached_range(key, range.start, range.end_inclusive)
+                        .await
+                    {
+                        let length = range.end_inclusive - range.start + 1;
+                        return Ok(OpenedWebsiteContent {
+                            stream: Box::new(stream),
+                            content_length: length,
+                            content_range: Some(range),
+                        });
+                    }
+                }
+            }
+        }
         let range_header =
             selected_range.map(|range| format!("bytes={}-{}", range.start, range.end_inclusive));
         // Streaming retrieval: the immutable object is forwarded in bounded
@@ -218,8 +276,21 @@ impl WebsiteStaticContentProvider for DriveWebsiteProvider {
         let expected_length = selected_range.map_or(metadata.content_length, |range| {
             range.end_inclusive - range.start + 1
         });
+        let bounded = BoundedDriveContentStream::new(stream, expected_length);
+        // Only full-object fills are recorded; partial range responses never
+        // enter the cache (they are derivable from a cached full object).
+        if let (Some(cache), Some(key)) = (self.cache.as_ref(), cache_key) {
+            if selected_range.is_none() {
+                let stream = cache.fill_stream(key, bounded);
+                return Ok(OpenedWebsiteContent {
+                    stream: Box::new(stream),
+                    content_length: expected_length,
+                    content_range: None,
+                });
+            }
+        }
         Ok(OpenedWebsiteContent {
-            stream: Box::new(BoundedDriveContentStream::new(stream, expected_length)),
+            stream: Box::new(bounded),
             content_length: expected_length,
             content_range: selected_range,
         })

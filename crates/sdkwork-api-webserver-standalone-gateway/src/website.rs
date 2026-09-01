@@ -993,7 +993,13 @@ fn build_drive_provider(
         FixedDriveWebsiteSdkClientResolver::new(tenant_scope_hash, drive_client)
             .map_err(WebsiteDataPlaneBootstrapError::ProviderConfig)?,
     );
-    Ok(Some(Arc::new(DriveWebsiteProvider::new(resolver))))
+    // Local delivery cache (DRIVE_SPEC.md §17): binds when
+    // SDKWORK_DRIVE_WEBSITE_CACHE_* is configured (containers set the shared
+    // /opt/deploy/drive root); otherwise pure streaming behavior is kept.
+    let cache = sdkwork_webserver_drive_provider::DriveContentCache::from_env();
+    Ok(Some(Arc::new(DriveWebsiteProvider::with_cache(
+        resolver, cache,
+    ))))
 }
 
 /// Assembles the provider executor for `drive` and `knowledgebase` resources

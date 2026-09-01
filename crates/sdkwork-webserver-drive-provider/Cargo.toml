@@ -6,9 +6,12 @@ edition.workspace = true
 [dependencies]
 async-trait.workspace = true
 chrono.workspace = true
+hex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 tokio = { workspace = true, features = ["time"] }
+tracing.workspace = true
 sdkwork-drive-internal-sdk.workspace = true
 sdkwork-webserver-contract.workspace = true
 sdkwork-webserver-core.workspace = true

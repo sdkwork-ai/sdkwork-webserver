@@ -23,7 +23,7 @@ pub(crate) mod policy;
 pub(crate) use backend::{CacheBackend, MemoryCacheBackend};
 pub(crate) use entry::{decide_cacheability, CacheDecision, CachedResponse, ResponseMetadata};
 pub(crate) use key::{parse_vary_header, CacheKey};
-pub(crate) use policy::{freshness_for, Freshness};
+pub(crate) use policy::freshness_for;
 
 use std::{
     path::PathBuf,
