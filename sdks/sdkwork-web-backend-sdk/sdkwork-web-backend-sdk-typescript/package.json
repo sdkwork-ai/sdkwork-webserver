@@ -1,6 +1,6 @@
 {
   "name": "@sdkwork/web-backend-sdk",
-  "version": "0.1.4",
+  "version": "0.1.6",
   "description": "SDKWork sdkwork-web-backend-sdk composed consumer facade.",
   "type": "module",
   "private": false,
@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "rollup": "^4.0.0",
-    "typescript": "catalog:"
+    "typescript": "^5.0.0"
   },
   "publishConfig": {
     "access": "public",

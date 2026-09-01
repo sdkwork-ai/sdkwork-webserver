@@ -558,3 +558,47 @@ test('every environment CORS allowlist covers registered client origins (WEB_FRA
     );
   }
 });
+
+test('release smoke is hermetic against host runtime config (RUNTIME_DIRECTORY_SPEC §4.1)', () => {
+  // Packaged binaries fall back to the host canonical config
+  // (/etc/sdkwork/webserver/config.toml) when SDKWORK_WEBSERVER_CONFIG_FILE is
+  // unset. On a host that already carries a native install of another
+  // environment, that file injects its [database]/[ingress]/[app_roots] values
+  // into the process and makes the release verification non-reproducible
+  // (observed: schema "sdkwork_ai_test" overriding a dev database URL). The
+  // smoke must always pin a self-owned config file.
+  const smoke = readFileSync(path.join(appRoot, 'scripts', 'webserver-release-smoke.mjs'), 'utf8');
+
+  assert.match(
+    smoke,
+    /const HERMETIC_RUNTIME_CONFIG = `/u,
+    'release smoke must declare a hermetic runtime config template',
+  );
+  assert.match(
+    smoke,
+    /SDKWORK_WEBSERVER_CONFIG_FILE: runtimeConfigFile/u,
+    'standaloneManagementEnv must pin SDKWORK_WEBSERVER_CONFIG_FILE',
+  );
+  assert.match(
+    smoke,
+    /function writeHermeticRuntimeConfig\(/u,
+    'release smoke must write its own runtime config file',
+  );
+  assert.match(
+    smoke,
+    /function hermeticEnv\(/u,
+    'release smoke must build a hermetic env for every packaged invocation',
+  );
+
+  // The hermetic config declares the profile only: any [database] section would
+  // re-introduce exactly the cross-environment override it exists to prevent.
+  const template = smoke.slice(
+    smoke.indexOf('const HERMETIC_RUNTIME_CONFIG = `') + 'const HERMETIC_RUNTIME_CONFIG = `'.length,
+  );
+  const body = template.slice(0, template.indexOf('`;'));
+  assert.doesNotMatch(body, /^\s*\[database\]/mu, 'hermetic config must not declare [database]');
+  assert.doesNotMatch(body, /^\s*\[app_roots\]/mu, 'hermetic config must not declare [app_roots]');
+  assert.doesNotMatch(body, /^\s*\[ingress\]/mu, 'hermetic config must not declare [ingress]');
+  assert.match(body, /^\[profile\]/mu, 'hermetic config must declare [profile]');
+  assert.match(body, /environment = "production"/u, 'hermetic config pins the production profile');
+});

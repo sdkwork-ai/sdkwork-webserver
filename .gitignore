@@ -95,3 +95,8 @@ Thumbs.db
 
 # Added during safe-commit pass: exclude runtime hot-reload env scratch
 .sdkwork/runtime-env*.json
+
+# Local artifacts and build output (do not commit)
+node_modules.bak.*/
+_tmp_*
+sdks/*/*/package-lock.json

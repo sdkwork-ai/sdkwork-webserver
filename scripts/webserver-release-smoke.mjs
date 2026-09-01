@@ -3,6 +3,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -55,6 +56,22 @@ const EXPECTED_BINARIES = [
   'sdkwork-web-agent',
   'sdkwork-webserver-certificate-worker',
 ];
+// The packaged binaries fall back to the host canonical runtime config
+// (`/etc/sdkwork/webserver/config.toml`, RUNTIME_DIRECTORY_SPEC §4.1) whenever
+// SDKWORK_WEBSERVER_CONFIG_FILE is unset. A host that already carries a native
+// install of another environment then injects that environment's
+// [database]/[ingress]/[app_roots] values into the process, which silently
+// corrupts the verification. The smoke therefore pins a self-owned config file
+// that declares the profile only and leaves every other value to the env.
+const HERMETIC_RUNTIME_CONFIG = `# sdkwork-webserver release smoke hermetic runtime configuration.
+# Declares the process profile and nothing else: every other value is supplied
+# by the smoke environment so the verification never depends on host state.
+[profile]
+deployment_profile = "standalone"
+environment = "production"
+profile_id = "standalone.production"
+node_id = 0
+`;
 
 function parseArgs(argv) {
   const settings = {
@@ -330,7 +347,7 @@ function assertUnauthenticatedOwnerRoute(response, expected, label) {
   }
 }
 
-function standaloneManagementEnv(packageRoot, port) {
+function standaloneManagementEnv(packageRoot, port, runtimeConfigFile) {
   const iamRoot = path.join(packageRoot, ...STANDALONE_IAM_ROOT.split('/'));
   const driveRoot = path.join(packageRoot, ...STANDALONE_DRIVE_ROOT.split('/'));
   const databaseEnv = canonicalizeWorkspaceDatabaseEnv(
@@ -339,6 +356,7 @@ function standaloneManagementEnv(packageRoot, port) {
   return {
     ...databaseEnv,
     ...IAM_APPLICATION_BOOTSTRAP_ENV,
+    SDKWORK_WEBSERVER_CONFIG_FILE: runtimeConfigFile,
     RUST_LOG: 'info',
     SDKWORK_APP_ROOT: packageRoot,
     SDKWORK_WEBSERVER_APP_ROOT: packageRoot,
@@ -363,18 +381,28 @@ function standaloneManagementEnv(packageRoot, port) {
     SDKWORK_DATABASE_AUTO_MIGRATE: 'true',
     SDKWORK_WEBSERVER_SECRET_ENCRYPTION_KEY:
       'sdkwork-release-smoke-web-secret-encryption-key-2026',
+    // `production` is a production-like environment: the certificate issuer
+    // requires a durable ACME account store and a contact address, and refuses
+    // to start without them. The smoke keeps both under its own temporary root.
     SDKWORK_WEBSERVER_ACME_PROFILE: 'staging',
     SDKWORK_WEBSERVER_ACME_CONTACT_EMAIL: 'release-smoke@example.invalid',
+    SDKWORK_WEBSERVER_ACME_ACCOUNT_ROOT: path.join(packageRoot, '..', 'smoke-acme-accounts'),
+    SDKWORK_WEBSERVER_ACME_WEBROOT: path.join(packageRoot, '..', 'smoke-acme-webroot'),
     SDKWORK_DRIVE_DOWNLOAD_TOKEN_HMAC_SECRET:
       'sdkwork-release-smoke-drive-download-token-secret-2026',
   };
 }
 
-async function verifyStandaloneSameOriginIngress({ gateway, packageRoot, temporaryRoot }) {
+async function verifyStandaloneSameOriginIngress({
+  gateway,
+  packageRoot,
+  temporaryRoot,
+  runtimeConfigFile,
+}) {
   const port = await reservePort();
   const child = spawn(gateway, ['serve-management'], {
     cwd: temporaryRoot,
-    env: standaloneManagementEnv(packageRoot, port),
+    env: standaloneManagementEnv(packageRoot, port, runtimeConfigFile),
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
@@ -493,6 +521,18 @@ async function verifyStandaloneSameOriginIngress({ gateway, packageRoot, tempora
     }
     throw error;
   }
+}
+
+function hermeticEnv(runtimeConfigFile) {
+  return { ...process.env, SDKWORK_WEBSERVER_CONFIG_FILE: runtimeConfigFile };
+}
+
+function writeHermeticRuntimeConfig(temporaryRoot) {
+  const directory = path.join(temporaryRoot, 'smoke-config');
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const file = path.join(directory, 'config.toml');
+  writeFileSync(file, HERMETIC_RUNTIME_CONFIG, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+  return file;
 }
 
 function waitForExit(child, timeoutMs) {
@@ -631,6 +671,7 @@ async function smoke(settings) {
       }
     }
 
+    const runtimeConfigFile = writeHermeticRuntimeConfig(temporaryRoot);
     const gateway = path.join(binRoot, 'sdkwork-api-webserver-standalone-gateway');
     const websiteEdgeRuntime = path.join(
       binRoot,
@@ -643,10 +684,16 @@ async function smoke(settings) {
       'data-plane',
       'website.cloud.config.json',
     );
-    run(gateway, ['--help'], { cwd: packageRoot });
-    run(websiteEdgeRuntime, ['--help'], { cwd: packageRoot });
-    run(gateway, ['validate', packagedExample], { cwd: packageRoot });
-    run(websiteEdgeRuntime, ['validate', packagedWebsiteHostConfig], { cwd: packageRoot });
+    run(gateway, ['--help'], { cwd: packageRoot, env: hermeticEnv(runtimeConfigFile) });
+    run(websiteEdgeRuntime, ['--help'], { cwd: packageRoot, env: hermeticEnv(runtimeConfigFile) });
+    run(gateway, ['validate', packagedExample], {
+      cwd: packageRoot,
+      env: hermeticEnv(runtimeConfigFile),
+    });
+    run(websiteEdgeRuntime, ['validate', packagedWebsiteHostConfig], {
+      cwd: packageRoot,
+      env: hermeticEnv(runtimeConfigFile),
+    });
     const pcStaticRoot = path.join(packageRoot, 'share', 'sdkwork', 'webserver-pc');
     const h5StaticRoot = path.join(packageRoot, 'share', 'sdkwork', 'webserver-h5');
     const staticFallbackRoot = path.join(packageRoot, 'share', 'sdkwork', 'webserver-static');
@@ -674,7 +721,7 @@ async function smoke(settings) {
       run(gateway, ['validate-app-shell'], {
         cwd: packageRoot,
         env: {
-          ...process.env,
+          ...hermeticEnv(runtimeConfigFile),
           SDKWORK_DEPLOYMENT_PROFILE: 'standalone',
           SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE: 'standalone',
           SDKWORK_WEBSERVER_ENVIRONMENT: 'production',
@@ -687,6 +734,7 @@ async function smoke(settings) {
         gateway,
         packageRoot,
         temporaryRoot,
+        runtimeConfigFile,
       });
     } else {
       throw new Error('--deployment-profile must be standalone (sdkwork-webserver is standalone-only)');
@@ -732,12 +780,15 @@ async function smoke(settings) {
       flag: 'wx',
       mode: 0o600,
     });
-    run(gateway, ['validate', smokeConfigPath], { cwd: packageRoot });
+    run(gateway, ['validate', smokeConfigPath], {
+      cwd: packageRoot,
+      env: hermeticEnv(runtimeConfigFile),
+    });
 
     child = spawn(gateway, ['data-plane', smokeConfigPath], {
       cwd: packageRoot,
       env: {
-        ...process.env,
+        ...hermeticEnv(runtimeConfigFile),
         RUST_LOG: 'info',
         SDKWORK_WEBSERVER_ENVIRONMENT: 'test',
         SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE: settings.deploymentProfile,

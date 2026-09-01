@@ -262,6 +262,9 @@ apply_primary_domain() {  local domain="${SDKWORK_WEBSERVER_PRIMARY_DOMAIN:-sdkw
   local host_role="server-dev"
   if [ "${environment}" = "test" ]; then
     host_role="server-test"
+  elif [ "${environment}" = "staging" ]; then
+    # APP_RUNTIME_TOPOLOGY_NAMING §9: staging uses the -staging suffix.
+    host_role="server-staging"
   elif [ "${environment}" = "production" ]; then
     host_role="server"
   fi
@@ -279,6 +282,36 @@ apply_primary_domain() {  local domain="${SDKWORK_WEBSERVER_PRIMARY_DOMAIN:-sdkw
   export SDKWORK_WEBSERVER_APPLICATION_APP_HTTP_URL="${SDKWORK_WEBSERVER_APPLICATION_APP_HTTP_URL:-${public_url}}"
   export SDKWORK_WEBSERVER_APPLICATION_BACKEND_HTTP_URL="${SDKWORK_WEBSERVER_APPLICATION_BACKEND_HTTP_URL:-${public_url}}"
   export SDKWORK_CORS_ALLOWED_ORIGINS="${SDKWORK_CORS_ALLOWED_ORIGINS:-$(default_docker_cors_allowed_origins "${scheme}" "${host_port}" "${domain}" "${environment}")}"
+  apply_certificate_issuer_defaults "${environment}" "${domain}"
+}
+
+# Durable ACME account credentials are REQUIRED in every production-like
+# environment (test/staging/production: see runtime_env.rs
+# web_is_production_like_environment). Without a default the gateway refuses to
+# start, so an operator who copies a template without the block gets a dead
+# container instead of a running edge. The account root lives under
+# /var/lib/sdkwork/webserver, which every compose layout mounts from a
+# per-environment persistent volume (shared by all instances of the unified
+# install bundle) so the ACME account identity — and therefore the CA
+# account-creation rate limit — survives container recreation.
+apply_certificate_issuer_defaults() {
+  local environment="$1"
+  local domain="$2"
+  local account_root="/var/lib/sdkwork/webserver/acme-accounts"
+  local webroot="/var/lib/sdkwork/webserver/acme-webroot"
+  local contact_email="${SDKWORK_WEBSERVER_ACME_CONTACT_EMAIL:-}"
+  export SDKWORK_WEBSERVER_ACME_ACCOUNT_ROOT="${SDKWORK_WEBSERVER_ACME_ACCOUNT_ROOT:-${account_root}}"
+  export SDKWORK_WEBSERVER_ACME_WEBROOT="${SDKWORK_WEBSERVER_ACME_WEBROOT:-${webroot}}"
+  if [ -z "${contact_email}" ]; then
+    contact_email="admin@${domain}"
+    export SDKWORK_WEBSERVER_ACME_CONTACT_EMAIL="${contact_email}"
+    case "${environment}" in
+      test | staging | production)
+        log "warning: SDKWORK_WEBSERVER_ACME_CONTACT_EMAIL is unset; defaulting to ${contact_email} (set a real operations mailbox before issuing certificates)"
+        ;;
+    esac
+  fi
+  mkdir -p "${SDKWORK_WEBSERVER_ACME_ACCOUNT_ROOT}" "${SDKWORK_WEBSERVER_ACME_WEBROOT}" 2>/dev/null || true
 }
 
 host_http_port_for_environment() {
