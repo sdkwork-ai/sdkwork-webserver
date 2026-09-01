@@ -40,7 +40,8 @@ RUN chmod 0755 /usr/local/bin/sdkwork-webserver-entrypoint \
         /var/lib/sdkwork/webserver/tls-materials \
         /var/lib/sdkwork/api-gateway \
         /opt/deploy \
-    && chown sdkwork:sdkwork /opt/deploy
+        /opt/deploy/drive \
+    && chown sdkwork:sdkwork /opt/deploy /opt/deploy/drive
 # Bundled module API gateway (SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=bundled):
 # staged by scripts/docker/build-standalone-image.mjs from sdkwork-api-cloud-gateway
 # dist/container-image-build. Omit with --skip-platform-gateway when using docker mode.
@@ -85,7 +86,15 @@ ENV SDKWORK_WEBSERVER_APP_ROOT=/app \
     SDKWORK_SPACE_CLONE_URL=https://github.com/sdkwork-ai/sdkwork-space.git \
     SDKWORK_SPACE_CLONE_PULL=true \
     SDKWORK_DEPLOY_SANDBOX_KEY=deploy.local.opt_deploy \
-    SDKWORK_DEPLOY_SANDBOX_ROOT=/opt/deploy
+    SDKWORK_DEPLOY_SANDBOX_ROOT=/opt/deploy \
+    # Drive delivery cache (DEPLOYMENT_SPEC.md shared host directories):
+    # /opt/deploy/drive is bind-mounted from the host so every webserver
+    # instance shares one LRU website content cache. The cache layer disables
+    # itself when the root is unwritable.
+    SDKWORK_DRIVE_WEBSITE_CACHE_ENABLED=true \
+    SDKWORK_DRIVE_WEBSITE_CACHE_ROOT=/opt/deploy/drive/website-cache \
+    SDKWORK_DRIVE_WEBSITE_CACHE_MAX_TOTAL_BYTES=8589934592 \
+    SDKWORK_DRIVE_WEBSITE_CACHE_MAX_ENTRIES=100000
 
 EXPOSE 80 443 3800
 

@@ -11,9 +11,9 @@ import {
 } from './validate-docker-deployment.mjs';
 
 const appRoot = path.resolve('.');
-const environments = ['development', 'test', 'production'];
+const environments = ['development', 'test', 'staging', 'production'];
 const baseDomains = ['sdkwork.com'];
-const suffixes = { development: 'dev', test: 'test', production: '' };
+const suffixes = { development: 'dev', test: 'test', staging: 'staging', production: '' };
 
 function expectedHosts(environment) {
   const role = suffixes[environment] ? `server-${suffixes[environment]}` : 'server';
@@ -117,6 +117,7 @@ test('module API gateway defaults to docker sibling deployment', () => {
     'docker-compose.yml',
     'docker-compose.development.yml',
     'docker-compose.test.yml',
+    'docker-compose.staging.yml',
     'docker-compose.production.yml',
   ]) {
     const compose = readFileSync(path.join(appRoot, 'deployments', 'docker', file), 'utf8');
@@ -215,6 +216,7 @@ test('docker compose files expose module API gateway deployment env', () => {
     'docker-compose.yml',
     'docker-compose.development.yml',
     'docker-compose.test.yml',
+    'docker-compose.staging.yml',
     'docker-compose.production.yml',
   ]) {
     const compose = readFileSync(path.join(appRoot, 'deployments', 'docker', file), 'utf8');
@@ -317,6 +319,7 @@ test('standalone image and compose publish public data plane on 80/443', () => {
     'docker-compose.yml',
     'docker-compose.development.yml',
     'docker-compose.test.yml',
+    'docker-compose.staging.yml',
     'docker-compose.production.yml',
   ]) {
     const compose = readFileSync(path.join(appRoot, 'deployments', 'docker', file), 'utf8');
@@ -366,6 +369,7 @@ test('module space import auto-discovery is the docker default', () => {
     'docker-compose.yml',
     'docker-compose.development.yml',
     'docker-compose.test.yml',
+    'docker-compose.staging.yml',
     'docker-compose.production.yml',
   ]) {
     const compose = readFileSync(path.join(appRoot, 'deployments', 'docker', file), 'utf8');
@@ -376,7 +380,7 @@ test('module space import auto-discovery is the docker default', () => {
       /\$\{SDKWORK_SPACE_CHECKOUT_HOST_PATH:-\$\{SDKWORK_SPACE_HOST_PATH:-\/opt\/deploy\}\/sdkwork-space\}:\/opt\/deploy\/sdkwork-space:rw/u,
     );
   }
-  for (const environment of ['development', 'test', 'production']) {
+  for (const environment of ['development', 'test', 'staging', 'production']) {
     const envExample = readFileSync(
       path.join(appRoot, 'deployments', 'docker', 'env', `${environment}.env.example`),
       'utf8',
@@ -389,5 +393,137 @@ test('module space import auto-discovery is the docker default', () => {
     assert.match(envFile, /SDKWORK_SPACE_AUTO_DISCOVER=true/u);
     assert.match(envFile, /SDKWORK_SPACE_MODULES=\s*$/m);
     assert.match(envFile, /SDKWORK_SPACE_CHECKOUT_HOST_PATH=\/opt\/deploy\/sdkwork-space/u);
+  }
+});
+
+test('drive delivery cache mount and env contract is complete (DRIVE_SPEC §17)', () => {
+  // Dockerfile: /opt/deploy/drive exists, is owned, and carries cache defaults.
+  const dockerfile = readFileSync(
+    path.join(appRoot, 'deployments', 'docker', 'Dockerfile.standalone'),
+    'utf8',
+  );
+  assert.match(dockerfile, /^\s*\/opt\/deploy\/drive \\/mu);
+  assert.match(dockerfile, /chown sdkwork:sdkwork \/opt\/deploy \/opt\/deploy\/drive/u);
+  assert.match(dockerfile, /SDKWORK_DRIVE_WEBSITE_CACHE_ROOT=\/opt\/deploy\/drive\/website-cache/u);
+  assert.match(dockerfile, /SDKWORK_DRIVE_WEBSITE_CACHE_MAX_TOTAL_BYTES=8589934592/u);
+  assert.match(dockerfile, /SDKWORK_DRIVE_WEBSITE_CACHE_MAX_ENTRIES=100000/u);
+
+  // Entrypoint: shared cache root bootstrap is fail-safe (warn, never fail).
+  const entrypoint = readFileSync(
+    path.join(appRoot, 'deployments', 'docker', 'scripts', 'entrypoint-standalone.sh'),
+    'utf8',
+  );
+  assert.match(entrypoint, /ensure_drive_delivery_cache_root/u);
+  assert.match(entrypoint, /\/opt\/deploy\/drive\/website-cache/u);
+
+  // Every compose layout binds the shared host mount and per-env cache vars.
+  const perEnvironment = {
+    'docker-compose.yml': /SDKWORK_DRIVE_WEBSITE_CACHE_ENVIRONMENT:\s*(development|test|staging|production)/u,
+    'docker-compose.development.yml': /SDKWORK_DRIVE_WEBSITE_CACHE_ENVIRONMENT:\s*development/u,
+    'docker-compose.test.yml': /SDKWORK_DRIVE_WEBSITE_CACHE_ENVIRONMENT:\s*test/u,
+    'docker-compose.staging.yml': /SDKWORK_DRIVE_WEBSITE_CACHE_ENVIRONMENT:\s*staging/u,
+    'docker-compose.production.yml': /SDKWORK_DRIVE_WEBSITE_CACHE_ENVIRONMENT:\s*production/u,
+  };
+  for (const [file, environmentPattern] of Object.entries(perEnvironment)) {
+    const compose = readFileSync(path.join(appRoot, 'deployments', 'docker', file), 'utf8');
+    assert.match(compose, /\$\{SDKWORK_DRIVE_CACHE_HOST_PATH:-\/opt\/deploy\/drive\}:\/opt\/deploy\/drive:rw/u);
+    assert.match(compose, /SDKWORK_DRIVE_WEBSITE_CACHE_ENABLED/u);
+    assert.match(compose, /SDKWORK_DRIVE_WEBSITE_CACHE_ROOT/u);
+    assert.match(compose, /SDKWORK_DRIVE_WEBSITE_CACHE_MAX_TOTAL_BYTES/u);
+    assert.match(compose, /SDKWORK_DRIVE_WEBSITE_CACHE_MAX_ENTRIES/u);
+    assert.match(compose, environmentPattern);
+  }
+
+  // Multi-instance bundle compose (DEPLOYMENT_SPEC.md §6) is environment
+  // neutral: it must bind the same shared cache mount and cache bounds, and
+  // must NOT pin the environment segment (the runtime falls back to
+  // SDKWORK_WEBSERVER_ENVIRONMENT per instance).
+  const bundleCompose = readFileSync(
+    path.join(appRoot, 'deployments', 'docker', 'docker-compose.bundle.yml'),
+    'utf8',
+  );
+  assert.match(bundleCompose, /\$\{SDKWORK_DRIVE_CACHE_HOST_PATH:-\/opt\/deploy\/drive\}:\/opt\/deploy\/drive:rw/u);
+  assert.match(bundleCompose, /SDKWORK_DRIVE_WEBSITE_CACHE_ENABLED/u);
+  assert.match(bundleCompose, /SDKWORK_DRIVE_WEBSITE_CACHE_ROOT/u);
+  assert.match(bundleCompose, /SDKWORK_DRIVE_WEBSITE_CACHE_MAX_TOTAL_BYTES/u);
+  assert.match(bundleCompose, /SDKWORK_DRIVE_WEBSITE_CACHE_MAX_ENTRIES/u);
+  assert.doesNotMatch(bundleCompose, /SDKWORK_DRIVE_WEBSITE_CACHE_ENVIRONMENT/u);
+
+  // Env examples document the deployment inputs for every lifecycle env.
+  for (const environment of environments) {
+    const envExample = readFileSync(
+      path.join(appRoot, 'deployments', 'docker', 'env', `${environment}.env.example`),
+      'utf8',
+    );
+    assert.match(envExample, /SDKWORK_DRIVE_WEBSITE_CACHE_ENABLED=/u);
+    assert.match(envExample, /SDKWORK_DRIVE_CACHE_HOST_PATH=\/opt\/deploy\/drive/u);
+  }
+});
+
+test('every environment CORS allowlist covers registered client origins (WEB_FRAMEWORK_SPEC §12)', () => {
+  // Desktop WebView custom schemes and the mini program runtime are first-party
+  // client origins: every environment's default SDKWORK_CORS_ALLOWED_ORIGINS
+  // must include them so desktop shells and mini programs never fail CORS.
+  const registeredOrigins = [
+    'app://dsh',
+    'app://birdcoder',
+    'app://sdkwork',
+    'app://dtupay',
+    'tauri://localhost',
+    'https://servicewechat.com',
+  ];
+
+  const composeDefaults = {
+    'docker-compose.yml': 4,
+    'docker-compose.development.yml': 1,
+    'docker-compose.test.yml': 1,
+    'docker-compose.staging.yml': 1,
+    'docker-compose.production.yml': 1,
+  };
+  for (const [file, expectedCount] of Object.entries(composeDefaults)) {
+    const compose = readFileSync(path.join(appRoot, 'deployments', 'docker', file), 'utf8');
+    const defaults = [...compose.matchAll(/SDKWORK_CORS_ALLOWED_ORIGINS:\s*\$\{SDKWORK_CORS_ALLOWED_ORIGINS:-([^}]*)\}/gu)];
+    assert.strictEqual(
+      defaults.length,
+      expectedCount,
+      `${file} must carry ${expectedCount} CORS default(s)`,
+    );
+    for (const [, value] of defaults) {
+      for (const origin of registeredOrigins) {
+        assert.ok(
+          value.split(',').map((entry) => entry.trim()).includes(origin),
+          `${file} CORS default must include registered client origin ${origin}`,
+        );
+      }
+    }
+  }
+
+  for (const environment of environments) {
+    for (const fileName of [`${environment}.env.example`, `${environment}.env`]) {
+      const file = path.join(appRoot, 'deployments', 'docker', 'env', fileName);
+      const parsed = parseDotEnv(readFileSync(file, 'utf8'));
+      const origins = String(parsed.SDKWORK_CORS_ALLOWED_ORIGINS ?? '')
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+      for (const origin of registeredOrigins) {
+        assert.ok(
+          origins.includes(origin),
+          `${fileName} SDKWORK_CORS_ALLOWED_ORIGINS must include ${origin}`,
+        );
+      }
+    }
+  }
+
+  // Entrypoint fallback defaults (no env file at all) also carry the origins.
+  const entrypoint = readFileSync(
+    path.join(appRoot, 'deployments', 'docker', 'scripts', 'entrypoint-standalone.sh'),
+    'utf8',
+  );
+  for (const origin of registeredOrigins) {
+    assert.ok(
+      entrypoint.includes(origin),
+      `entrypoint default_docker_cors_allowed_origins must include ${origin}`,
+    );
   }
 });

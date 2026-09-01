@@ -1,5 +1,17 @@
 #!/usr/bin/env node
 
+// Single compose entry point for every sdkwork-webserver Docker stack
+// (PNPM_SCRIPT_SPEC.md §4.2 / DEPLOYMENT_SPEC.md §7: one reusable driver,
+// thin wrappers only). Both pnpm scripts and shell deploy scripts route
+// through this file; layouts differ only in the compose file set:
+//
+// - embedded (default): deployments/docker/docker-compose.yml with compose
+//   profiles (development/test/production) plus built-in postgres/redis and
+//   the embedded platform-api-gateway overlay.
+// - external: deployments/docker/docker-compose.<environment>.yml (one file
+//   per lifecycle environment) with external PostgreSQL/Redis and the
+//   standalone platform-api-gateway overlay.
+
 import { spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -20,13 +32,28 @@ const COMPOSE_PLATFORM_GATEWAY_EMBEDDED_FILE = path.join(
   DOCKER_ROOT,
   'docker-compose.platform-api-gateway.embedded.yml',
 );
+const COMPOSE_PLATFORM_GATEWAY_ATTACH_FILE = path.join(
+  DOCKER_ROOT,
+  'docker-compose.platform-api-gateway-attach.yml',
+);
+const COMPOSE_PLATFORM_GATEWAY_ATTACH_EMBEDDED_FILE = path.join(
+  DOCKER_ROOT,
+  'docker-compose.platform-api-gateway-attach.embedded.yml',
+);
 
 const VALID_ENVIRONMENTS = ['development', 'test', 'production'];
+// staging is a first-class deployment environment (DEPLOYMENT_SPEC §2,
+// "production-like rehearsal") with its own compose file and env file, but it
+// is excluded from `all`/`--shared` sweeps: those target the local
+// dev/test/production trio on one host.
+const DEPLOYABLE_ENVIRONMENTS = [...VALID_ENVIRONMENTS, 'staging'];
+const VALID_LAYOUTS = ['embedded', 'external'];
 
 function parseArgs(argv) {
   const settings = {
     command: 'up',
     environment: 'development',
+    layout: 'embedded',
     detach: true,
     external: false,
     shared: false,
@@ -38,10 +65,15 @@ function parseArgs(argv) {
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (argument === 'up' || argument === 'down' || argument === 'ps' || argument === 'logs') {
+    if (argument === 'up' || argument === 'down' || argument === 'ps' || argument === 'logs' || argument === 'pull') {
       settings.command = argument;
     } else if (argument === '--environment') {
       settings.environment = argv[++index];
+    } else if (argument === '--layout') {
+      settings.layout = argv[++index];
+      if (!VALID_LAYOUTS.includes(settings.layout)) {
+        throw new Error(`--layout must be ${VALID_LAYOUTS.join(', ')}`);
+      }
     } else if (argument === '--external') {
       settings.external = true;
     } else if (argument === '--shared') {
@@ -66,11 +98,17 @@ function parseArgs(argv) {
 }
 
 function printHelp() {
-  console.log(`Usage: node scripts/docker/compose.mjs <up|down|ps|logs> [options]
+  console.log(`Usage: node scripts/docker/compose.mjs <up|down|ps|logs|pull> [options]
 
 Options:
-  --environment <development|test|production|all>   Default: development
-  --external                                      External PostgreSQL/Redis mode
+  --environment <development|test|staging|production|all>   Default: development
+                                                  (all sweeps development, test,
+                                                  and production)
+  --layout <embedded|external>                    embedded: docker-compose.yml
+                                                  with profiles; external: one
+                                                  docker-compose.<env>.yml per
+                                                  environment. Default: embedded
+  --external                                      External PostgreSQL/Redis mode (embedded layout)
   --shared                                        All profiles in one project (embedded only)
   --platform-api-gateway-docker                   Add platform-api-gateway sibling container overlay
   --validate                                      Validate env before compose up
@@ -122,35 +160,77 @@ function usesPlatformGatewayDockerOverlay(settings, envFile) {
   return String(env.SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT ?? 'docker').trim() === 'docker';
 }
 
-function composeArgs(settings, envFile, project, profiles) {
+/** Compose file set for one layout + environment. */
+function composeFiles(settings, envFile, environment) {
+  const files = [];
+  if (settings.layout === 'external') {
+    files.push(path.join(DOCKER_ROOT, `docker-compose.${environment}.yml`));
+    if (usesPlatformGatewayAttachOverlay(envFile)) {
+      files.push(COMPOSE_PLATFORM_GATEWAY_ATTACH_FILE);
+    } else if (usesPlatformGatewayDockerOverlay(settings, envFile)) {
+      files.push(COMPOSE_PLATFORM_GATEWAY_FILE);
+    }
+    return files;
+  }
+  files.push(COMPOSE_FILE);
+  if (settings.external) {
+    files.push(COMPOSE_EXTERNAL_FILE);
+  }
+  if (usesPlatformGatewayAttachOverlay(envFile)) {
+    files.push(COMPOSE_PLATFORM_GATEWAY_ATTACH_EMBEDDED_FILE);
+  } else if (usesPlatformGatewayDockerOverlay(settings, envFile)) {
+    // compose.mjs drives docker-compose.yml (embedded/profiled); use the
+    // embedded overlay. Standalone per-env deploys use the external layout.
+    files.push(
+      existsSync(COMPOSE_PLATFORM_GATEWAY_EMBEDDED_FILE)
+        ? COMPOSE_PLATFORM_GATEWAY_EMBEDDED_FILE
+        : COMPOSE_PLATFORM_GATEWAY_FILE,
+    );
+  }
+  return files;
+}
+
+function composeArgs(settings, envFile, project, profiles, environment) {
   const args = [
     'compose',
     '--env-file',
     envFile,
     '-p',
     project,
-    '-f',
-    COMPOSE_FILE,
   ];
-  if (settings.external) {
-    args.push('-f', COMPOSE_EXTERNAL_FILE);
+  for (const file of composeFiles(settings, envFile, environment)) {
+    args.push('-f', file);
   }
-  if (usesPlatformGatewayAttachOverlay(envFile)) {
-    args.push(
-      '-f',
-      path.join(DOCKER_ROOT, 'docker-compose.platform-api-gateway-attach.embedded.yml'),
-    );
-  } else if (usesPlatformGatewayDockerOverlay(settings, envFile)) {
-    // compose.mjs drives docker-compose.yml (embedded/profiled); use the
-    // embedded overlay. Standalone per-env deploys use deploy-docker-environment.sh
-    // with docker-compose.platform-api-gateway.yml.
-    const embedded = COMPOSE_PLATFORM_GATEWAY_EMBEDDED_FILE;
-    args.push('-f', existsSync(embedded) ? embedded : COMPOSE_PLATFORM_GATEWAY_FILE);
-  }
-  for (const profile of profiles) {
-    args.push('--profile', profile);
+  // External layout compose files carry no profiles; embedded files select
+  // services through them.
+  if (settings.layout === 'embedded') {
+    for (const profile of profiles) {
+      args.push('--profile', profile);
+    }
   }
   return args;
+}
+
+function validateEnvironmentFile(settings, envFile, mode) {
+  run('node', [
+    path.join(REPO_ROOT, 'scripts', 'docker', 'validate-docker-deployment.mjs'),
+    '--env-file',
+    envFile,
+    '--mode',
+    mode,
+  ]);
+}
+
+function runCompose(settings, envFile, project, profiles, environment) {
+  const args = composeArgs(settings, envFile, project, profiles, environment);
+  args.push(settings.command);
+  if (settings.command === 'up' && settings.detach) {
+    args.push('-d');
+  }
+  console.log(`docker ${args.join(' ')}`);
+  if (!settings.dryRun) {
+    run('docker', args);
+  }
 }
 
 function main() {
@@ -159,68 +239,39 @@ function main() {
     printHelp();
     return;
   }
-  if (settings.environment !== 'all' && !VALID_ENVIRONMENTS.includes(settings.environment)) {
-    throw new Error(`--environment must be ${VALID_ENVIRONMENTS.join(', ')} or all`);
+  if (settings.environment !== 'all' && !DEPLOYABLE_ENVIRONMENTS.includes(settings.environment)) {
+    throw new Error(`--environment must be ${DEPLOYABLE_ENVIRONMENTS.join(', ')} or all`);
+  }
+  if (settings.shared && (settings.external || settings.environment !== 'all' || settings.layout !== 'embedded')) {
+    throw new Error('--shared requires embedded mode with --environment all');
   }
 
   const targets = settings.environment === 'all'
     ? VALID_ENVIRONMENTS
     : [settings.environment];
 
-  if (settings.shared && (settings.external || settings.environment !== 'all')) {
-    throw new Error('--shared requires embedded mode with --environment all');
-  }
-
   if (settings.shared) {
     const envFile = settings.envFile ?? ensureEnvFile('development');
     if (settings.validate && settings.command === 'up') {
       for (const environment of VALID_ENVIRONMENTS) {
-        run('node', [
-          path.join(REPO_ROOT, 'scripts', 'docker', 'validate-docker-deployment.mjs'),
-          '--env-file',
-          settings.envFile ?? ensureEnvFile(environment),
-          '--mode',
-          'embedded',
-        ]);
+        validateEnvironmentFile(settings, settings.envFile ?? ensureEnvFile(environment), 'embedded');
       }
     }
-    const args = composeArgs(settings, envFile, 'sdkwork-webserver-shared', VALID_ENVIRONMENTS);
-    args.push(settings.command);
-    if (settings.command === 'up' && settings.detach) {
-      args.push('-d');
-    }
-    console.log(`docker ${args.join(' ')}`);
-    if (!settings.dryRun) {
-      run('docker', args);
-    }
+    runCompose(settings, envFile, 'sdkwork-webserver-shared', VALID_ENVIRONMENTS, 'development');
     return;
   }
 
   for (const environment of targets) {
     const envFile = settings.envFile ?? ensureEnvFile(environment);
     if (settings.validate && settings.command === 'up') {
-      run('node', [
-        path.join(REPO_ROOT, 'scripts', 'docker', 'validate-docker-deployment.mjs'),
-        '--env-file',
+      validateEnvironmentFile(
+        settings,
         envFile,
-        '--mode',
-        settings.external ? 'external' : 'embedded',
-      ]);
+        // External layout stacks run against host-managed PostgreSQL/Redis.
+        settings.layout === 'external' || settings.external ? 'external' : 'embedded',
+      );
     }
-    const args = composeArgs(
-      settings,
-      envFile,
-      `sdkwork-webserver-${environment}`,
-      [environment],
-    );
-    args.push(settings.command);
-    if (settings.command === 'up' && settings.detach) {
-      args.push('-d');
-    }
-    console.log(`docker ${args.join(' ')}`);
-    if (!settings.dryRun) {
-      run('docker', args);
-    }
+    runCompose(settings, envFile, `sdkwork-webserver-${environment}`, [environment], environment);
   }
 }
 

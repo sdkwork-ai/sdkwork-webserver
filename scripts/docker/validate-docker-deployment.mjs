@@ -10,17 +10,19 @@ import { fileURLToPath } from 'node:url';
 import { parseDotEnv } from '../../../sdkwork-specs/tools/postgres/postgres-config.mjs';
 
 const BASE_DOMAINS = ['sdkwork.com'];
-const ENVIRONMENTS = ['development', 'test', 'production'];
+const ENVIRONMENTS = ['development', 'test', 'staging', 'production'];
 const DEPENDENCY_MODES = ['embedded', 'external'];
 const MODULE_API_GATEWAY_DEPLOYMENTS = ['bundled', 'docker', 'external'];
 const DATABASE_IDENTITIES = {
   development: 'sdkwork_ai_dev',
   test: 'sdkwork_ai_test',
+  staging: 'sdkwork_ai_staging',
   production: 'sdkwork_ai_prod',
 };
 const ENVIRONMENT_SUFFIX = {
   development: 'dev',
   test: 'test',
+  staging: 'staging',
   production: '',
 };
 const POSTGRES_KEYS = {
@@ -33,6 +35,11 @@ const POSTGRES_KEYS = {
     db: 'WEBSERVER_POSTGRES_TEST_DB',
     user: 'WEBSERVER_POSTGRES_TEST_USER',
     password: 'WEBSERVER_POSTGRES_TEST_PASSWORD',
+  },
+  staging: {
+    db: 'WEBSERVER_POSTGRES_STAGING_DB',
+    user: 'WEBSERVER_POSTGRES_STAGING_USER',
+    password: 'WEBSERVER_POSTGRES_STAGING_PASSWORD',
   },
   production: {
     db: 'WEBSERVER_POSTGRES_PROD_DB',

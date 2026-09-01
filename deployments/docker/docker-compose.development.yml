@@ -59,7 +59,7 @@ services:
       SDKWORK_MODULE_API_GATEWAY_INSTALL_ROOT: ${SDKWORK_MODULE_API_GATEWAY_INSTALL_ROOT:-/opt/sdkwork/api-gateway}
       SDKWORK_DEPLOY_SANDBOX_KEY: ${SDKWORK_DEPLOY_SANDBOX_KEY:-deploy.local.opt_deploy}
       SDKWORK_DEPLOY_SANDBOX_ROOT: ${SDKWORK_DEPLOY_SANDBOX_ROOT:-/opt/deploy}
-      SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_CORS_ALLOWED_ORIGINS:-http://server-dev.sdkwork.com,http://localhost:13800,http://127.0.0.1:13800}
+      SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_CORS_ALLOWED_ORIGINS:-http://server-dev.sdkwork.com,http://localhost:13800,http://127.0.0.1:13800,app://dsh,app://birdcoder,app://sdkwork,app://dtupay,tauri://localhost,https://servicewechat.com}
       SDKWORK_DATABASE_ENGINE: postgresql
       SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-host.docker.internal}
       SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
@@ -76,6 +76,12 @@ services:
       SDKWORK_WEBSERVER_REDIS_DATABASE: "0"
       SDKWORK_WEBSERVER_REDIS_TLS: ${WEBSERVER_REDIS_TLS:-false}
       SDKWORK_WEBSERVER_REDIS_PASSWORD: ${WEBSERVER_REDIS_PASSWORD:-}
+      # Drive delivery cache (shared host directory, LRU website content cache).
+      SDKWORK_DRIVE_WEBSITE_CACHE_ENABLED: ${SDKWORK_DRIVE_WEBSITE_CACHE_ENABLED:-true}
+      SDKWORK_DRIVE_WEBSITE_CACHE_ROOT: ${SDKWORK_DRIVE_WEBSITE_CACHE_ROOT:-/opt/deploy/drive/website-cache}
+      SDKWORK_DRIVE_WEBSITE_CACHE_ENVIRONMENT: development
+      SDKWORK_DRIVE_WEBSITE_CACHE_MAX_TOTAL_BYTES: ${SDKWORK_DRIVE_WEBSITE_CACHE_MAX_TOTAL_BYTES:-8589934592}
+      SDKWORK_DRIVE_WEBSITE_CACHE_MAX_ENTRIES: ${SDKWORK_DRIVE_WEBSITE_CACHE_MAX_ENTRIES:-100000}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -91,6 +97,7 @@ services:
     volumes:
       - webserver-secrets-development:/etc/sdkwork/webserver/secrets
       - webserver-data-development:/var/lib/sdkwork/webserver
+      - ${SDKWORK_DRIVE_CACHE_HOST_PATH:-/opt/deploy/drive}:/opt/deploy/drive:rw
       - ${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}:/opt/deploy:ro
       # Writable: entrypoint materializes docker nginx sidecars in checkout
       # (imports.d/import.conf includes .../deployments/webserver/nginx.*.<env>.conf).

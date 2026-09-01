@@ -29,10 +29,16 @@ const CLOUD_GATEWAY_BUILD_SCRIPT = path.join(
 );
 const CLOUD_GATEWAY_INSTALL_DIR = path.join(CLOUD_GATEWAY_ROOT, 'dist', 'container-image-build');
 const CLOUD_GATEWAY_BINARY_NAME = 'sdkwork-api-cloud-gateway';
+// Sibling module databases staged into the image so the standalone image is
+// self-contained: compose overlays mount the same directories from workspace
+// checkouts, but the image itself must serve every declared module app root.
+// Mirrors DEPENDENCY_RUNTIME_ASSETS in scripts/webserver-release.mjs.
 const EMBEDDED_MODULE_DATABASES = [
   { repo: 'sdkwork-skills', shareName: 'skills' },
   { repo: 'sdkwork-mcp', shareName: 'mcp' },
+  { repo: 'sdkwork-deployments', shareName: 'deploy' },
 ];
+const SUPPORTED_ENVIRONMENTS = ['development', 'test', 'staging', 'production'];
 
 function appVersion() {
   const manifest = JSON.parse(
@@ -48,6 +54,12 @@ function appVersion() {
 function parseArgs(argv) {
   const settings = {
     architecture: 'x64',
+    // Lifecycle environment of the static bundle packaged into the image.
+    // Default is the production (线上) bundle; the container entrypoint
+    // rewrites runtime-env.json per active environment at startup, and the
+    // environment-agnostic image plus per-environment env files remain the
+    // release contract (ENVIRONMENT_SPEC.md §5.1.0.1).
+    environment: 'production',
     version: appVersion(),
     tag: undefined,
     skipReleaseBuild: false,
@@ -60,6 +72,13 @@ function parseArgs(argv) {
     const argument = argv[index];
     if (argument === '--architecture') {
       settings.architecture = argv[++index];
+    } else if (argument === '--environment') {
+      settings.environment = argv[++index];
+      if (!SUPPORTED_ENVIRONMENTS.includes(settings.environment)) {
+        throw new Error(
+          `--environment must be ${SUPPORTED_ENVIRONMENTS.join(', ')}`,
+        );
+      }
     } else if (argument === '--version') {
       settings.version = argv[++index];
     } else if (argument === '--tag') {
@@ -89,6 +108,9 @@ Build the standalone gateway container image from the verified release archive.
 
 Options:
   --architecture <x64|arm64>   Default: x64
+  --environment <env>          Lifecycle environment of the packaged static
+                               bundle (development|test|staging|production).
+                               Default: production
   --version <semver>           Default: sdkwork.app.config.json release.currentVersion
   --tag <image-tag>            Default: release version
   --skip-release-build         Do not invoke release packaging when the archive is missing
@@ -214,6 +236,8 @@ async function ensureReleaseArchive(settings) {
     'standalone',
     '--architecture',
     settings.architecture,
+    '--environment',
+    settings.environment,
     '--version',
     settings.version,
   ]);
@@ -283,6 +307,7 @@ async function main() {
     STAGE_ROOT,
   ];
   console.log(`release archive: ${plan.archive}`);
+  console.log(`static bundle environment: ${settings.environment}`);
   console.log(`docker context: ${STAGE_ROOT}`);
   console.log(`image tag: ${plan.image}`);
   if (plan.platformGateway) {
@@ -294,7 +319,9 @@ async function main() {
     console.log(`docker ${buildArgs.join(' ')}`);
     return;
   }
-  run('docker', buildArgs.filter((arg) => arg !== '--pull'));
+  // The executed command must match the printed plan exactly: `--pull` stays
+  // in buildArgs so dry-run output and the real build can never diverge.
+  run('docker', buildArgs);
   console.log(`built ${plan.image}`);
 }
 

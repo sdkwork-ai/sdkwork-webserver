@@ -70,6 +70,15 @@ x-webserver-common: &webserver-common
     SDKWORK_WEBSERVER_MODULE_IMPORT_PROBE_UPSTREAMS: ${SDKWORK_WEBSERVER_MODULE_IMPORT_PROBE_UPSTREAMS:-false}
     SDKWORK_DEPLOY_SANDBOX_KEY: ${SDKWORK_DEPLOY_SANDBOX_KEY:-deploy.local.opt_deploy}
     SDKWORK_DEPLOY_SANDBOX_ROOT: ${SDKWORK_DEPLOY_SANDBOX_ROOT:-/opt/deploy}
+    # Drive website content LRU cache (DRIVE_SPEC.md §17 / DEPLOYMENT_SPEC.md):
+    # every instance bind-mounts the same host directory so multi-instance
+    # deployments share one cache. The cache environment segment falls back to
+    # SDKWORK_WEBSERVER_ENVIRONMENT (set above) at runtime; this file stays
+    # environment neutral and must not pin the segment variable.
+    SDKWORK_DRIVE_WEBSITE_CACHE_ENABLED: ${SDKWORK_DRIVE_WEBSITE_CACHE_ENABLED:-true}
+    SDKWORK_DRIVE_WEBSITE_CACHE_ROOT: ${SDKWORK_DRIVE_WEBSITE_CACHE_ROOT:-/opt/deploy/drive/website-cache}
+    SDKWORK_DRIVE_WEBSITE_CACHE_MAX_TOTAL_BYTES: ${SDKWORK_DRIVE_WEBSITE_CACHE_MAX_TOTAL_BYTES:-8589934592}
+    SDKWORK_DRIVE_WEBSITE_CACHE_MAX_ENTRIES: ${SDKWORK_DRIVE_WEBSITE_CACHE_MAX_ENTRIES:-100000}
     # Database + Redis (per-environment values from the env file).
     SDKWORK_DATABASE_ENGINE: postgresql
     SDKWORK_DATABASE_HOST: ${SDKWORK_DATABASE_HOST:-postgres}
@@ -100,6 +109,9 @@ x-webserver-common: &webserver-common
     # subtree is a read-write overlay so the entrypoint can clone/pull into it.
     - ${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}:/opt/deploy:ro
     - ${SDKWORK_SPACE_CHECKOUT_HOST_PATH:-${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}/sdkwork-space}:/opt/deploy/sdkwork-space:rw
+    # Shared Drive delivery cache (DRIVE_SPEC.md §17): writable host bind mount
+    # so all instances of all environments converge on one LRU disk cache.
+    - ${SDKWORK_DRIVE_CACHE_HOST_PATH:-/opt/deploy/drive}:/opt/deploy/drive:rw
     - webserver-secrets:/etc/sdkwork/webserver/secrets
     - webserver-data:/var/lib/sdkwork/webserver
   healthcheck:

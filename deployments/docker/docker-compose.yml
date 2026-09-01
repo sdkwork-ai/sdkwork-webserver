@@ -49,10 +49,18 @@ x-webserver-common: &webserver-common
     SDKWORK_MODULE_API_GATEWAY_INSTALL_ROOT: ${SDKWORK_MODULE_API_GATEWAY_INSTALL_ROOT:-/opt/sdkwork/api-gateway}
     SDKWORK_DEPLOY_SANDBOX_KEY: ${SDKWORK_DEPLOY_SANDBOX_KEY:-deploy.local.opt_deploy}
     SDKWORK_DEPLOY_SANDBOX_ROOT: ${SDKWORK_DEPLOY_SANDBOX_ROOT:-/opt/deploy}
+    # Drive delivery cache (shared host directory, LRU website content cache):
+    # entries are immutable and content-addressed so all instances on the host
+    # share one cache under /opt/deploy/drive (DEPLOYMENT_SPEC.md).
+    SDKWORK_DRIVE_WEBSITE_CACHE_ENABLED: ${SDKWORK_DRIVE_WEBSITE_CACHE_ENABLED:-true}
+    SDKWORK_DRIVE_WEBSITE_CACHE_ROOT: ${SDKWORK_DRIVE_WEBSITE_CACHE_ROOT:-/opt/deploy/drive/website-cache}
+    SDKWORK_DRIVE_WEBSITE_CACHE_MAX_TOTAL_BYTES: ${SDKWORK_DRIVE_WEBSITE_CACHE_MAX_TOTAL_BYTES:-8589934592}
+    SDKWORK_DRIVE_WEBSITE_CACHE_MAX_ENTRIES: ${SDKWORK_DRIVE_WEBSITE_CACHE_MAX_ENTRIES:-100000}
   volumes:
     - ${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}:/opt/deploy:ro
     - ${SDKWORK_SPACE_CHECKOUT_HOST_PATH:-${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}/sdkwork-space}:/opt/deploy/sdkwork-space:rw
     - ${SDKWORK_MODULE_API_GATEWAY_CHECKOUT_HOST_PATH:-../../../sdkwork-api-cloud-gateway}:/opt/deploy/sdkwork-space/sdkwork-api-cloud-gateway:ro
+    - ${SDKWORK_DRIVE_CACHE_HOST_PATH:-/opt/deploy/drive}:/opt/deploy/drive:rw
     - ./scripts/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
   healthcheck:
     test:
@@ -68,7 +76,7 @@ x-webserver-common: &webserver-common
 services:
   postgres:
     image: postgres:16-alpine
-    profiles: [development, test, production]
+    profiles: [development, test, staging, production]
     restart: unless-stopped
     command: ["postgres", "-c", "max_connections=${PG_MAX_CONNECTIONS:-200}"]
     environment:
@@ -81,6 +89,9 @@ services:
       WEBSERVER_POSTGRES_TEST_DB: ${WEBSERVER_POSTGRES_TEST_DB:-sdkwork_ai_test}
       WEBSERVER_POSTGRES_TEST_USER: ${WEBSERVER_POSTGRES_TEST_USER:-sdkwork_ai_test}
       WEBSERVER_POSTGRES_TEST_PASSWORD: ${WEBSERVER_POSTGRES_TEST_PASSWORD:-sdkworktest123}
+      WEBSERVER_POSTGRES_STAGING_DB: ${WEBSERVER_POSTGRES_STAGING_DB:-sdkwork_ai_staging}
+      WEBSERVER_POSTGRES_STAGING_USER: ${WEBSERVER_POSTGRES_STAGING_USER:-sdkwork_ai_staging}
+      WEBSERVER_POSTGRES_STAGING_PASSWORD: ${WEBSERVER_POSTGRES_STAGING_PASSWORD:-sdkworkstaging123}
       WEBSERVER_POSTGRES_PROD_DB: ${WEBSERVER_POSTGRES_PROD_DB:-sdkwork_ai_prod}
       WEBSERVER_POSTGRES_PROD_USER: ${WEBSERVER_POSTGRES_PROD_USER:-sdkwork_ai_prod}
       WEBSERVER_POSTGRES_PROD_PASSWORD: ${WEBSERVER_POSTGRES_PROD_PASSWORD:-sdkworkprod123}
@@ -99,7 +110,7 @@ services:
 
   redis:
     image: redis:8-alpine
-    profiles: [development, test, production]
+    profiles: [development, test, staging, production]
     restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     volumes:
@@ -125,12 +136,13 @@ services:
       SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT: "3800"
       SDKWORK_WEBSERVER_ENVIRONMENT: development
       SDKWORK_WEBSERVER_PROFILE_ID: standalone.development
+      SDKWORK_DRIVE_WEBSITE_CACHE_ENVIRONMENT: development
       # Skills database host convention expects:
       #   <SDKWORK_SKILLS_APP_ROOT>/database/database.manifest.json
       # We mount only /app/share/sdkwork/skills/database, so set app root
       # to /app/share/sdkwork/skills to match that path convention.
       SDKWORK_SKILLS_APP_ROOT: /app/share/sdkwork/skills
-      SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_CORS_ALLOWED_ORIGINS:-http://server-dev.sdkwork.com}
+      SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_CORS_ALLOWED_ORIGINS:-http://server-dev.sdkwork.com,app://dsh,app://birdcoder,app://sdkwork,app://dtupay,tauri://localhost,https://servicewechat.com}
       SDKWORK_DATABASE_ENGINE: postgresql
       SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-postgres}
       SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
@@ -150,6 +162,7 @@ services:
     volumes:
       - webserver-secrets-development:/etc/sdkwork/webserver/secrets
       - webserver-data-development:/var/lib/sdkwork/webserver
+      - ${SDKWORK_DRIVE_CACHE_HOST_PATH:-/opt/deploy/drive}:/opt/deploy/drive:rw
       - ../../../sdkwork-skills/database:/app/share/sdkwork/skills/database:ro
       - ../../../sdkwork-mcp/database:/app/share/sdkwork/mcp/database:ro
       - ../../../sdkwork-deployments/database:/app/share/sdkwork/deploy/database:ro
@@ -169,8 +182,9 @@ services:
       SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT: "3800"
       SDKWORK_WEBSERVER_ENVIRONMENT: test
       SDKWORK_WEBSERVER_PROFILE_ID: standalone.test
+      SDKWORK_DRIVE_WEBSITE_CACHE_ENVIRONMENT: test
       SDKWORK_SKILLS_APP_ROOT: /app/share/sdkwork/skills
-      SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_CORS_ALLOWED_ORIGINS:-http://server-test.sdkwork.com}
+      SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_CORS_ALLOWED_ORIGINS:-http://server-test.sdkwork.com,app://dsh,app://birdcoder,app://sdkwork,app://dtupay,tauri://localhost,https://servicewechat.com}
       SDKWORK_DATABASE_ENGINE: postgresql
       SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-postgres}
       SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
@@ -190,6 +204,49 @@ services:
     volumes:
       - webserver-secrets-test:/etc/sdkwork/webserver/secrets
       - webserver-data-test:/var/lib/sdkwork/webserver
+      - ${SDKWORK_DRIVE_CACHE_HOST_PATH:-/opt/deploy/drive}:/opt/deploy/drive:rw
+      - ../../../sdkwork-skills/database:/app/share/sdkwork/skills/database:ro
+      - ../../../sdkwork-mcp/database:/app/share/sdkwork/mcp/database:ro
+      - ../../../sdkwork-deployments/database:/app/share/sdkwork/deploy/database:ro
+
+  webserver-staging:
+    <<: *webserver-common
+    profiles: [staging]
+    container_name: sdkwork-webserver-staging
+    ports:
+      - "${SDKWORK_WEBSERVER_STAGING_HOST_PORT:-18081}:3800"
+      - "${SDKWORK_WEBSERVER_STAGING_IMPORT_HTTP_HOST_PORT:-18099}:80"
+      - "${SDKWORK_WEBSERVER_STAGING_HTTPS_HOST_PORT:-38431}:443"
+    env_file:
+      - path: env/staging.env
+        required: false
+    environment:
+      SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT: "3800"
+      SDKWORK_WEBSERVER_ENVIRONMENT: staging
+      SDKWORK_WEBSERVER_PROFILE_ID: standalone.staging
+      SDKWORK_DRIVE_WEBSITE_CACHE_ENVIRONMENT: staging
+      SDKWORK_SKILLS_APP_ROOT: /app/share/sdkwork/skills
+      SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_CORS_ALLOWED_ORIGINS:-http://server-staging.sdkwork.com,app://dsh,app://birdcoder,app://sdkwork,app://dtupay,tauri://localhost,https://servicewechat.com}
+      SDKWORK_DATABASE_ENGINE: postgresql
+      SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-postgres}
+      SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
+      SDKWORK_DATABASE_NAME: ${WEBSERVER_POSTGRES_STAGING_DB:-sdkwork_ai_staging}
+      SDKWORK_DATABASE_SCHEMA: ${WEBSERVER_POSTGRES_STAGING_DB:-sdkwork_ai_staging}
+      SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC: "false"
+      SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_STAGING_USER:-sdkwork_ai_staging}
+      SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_STAGING_PASSWORD:-sdkworkstaging123}
+      SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-disable}
+      SDKWORK_DATABASE_MAX_CONNECTIONS: "20"
+      SDKWORK_WEBSERVER_REDIS_ENABLED: "true"
+      SDKWORK_WEBSERVER_REDIS_HOST: ${WEBSERVER_REDIS_HOST:-redis}
+      SDKWORK_WEBSERVER_REDIS_PORT: ${WEBSERVER_REDIS_PORT:-6379}
+      SDKWORK_WEBSERVER_REDIS_DATABASE: "3"
+      SDKWORK_WEBSERVER_REDIS_TLS: ${WEBSERVER_REDIS_TLS:-false}
+      SDKWORK_WEBSERVER_REDIS_PASSWORD: ${WEBSERVER_REDIS_PASSWORD:-}
+    volumes:
+      - webserver-secrets-staging:/etc/sdkwork/webserver/secrets
+      - webserver-data-staging:/var/lib/sdkwork/webserver
+      - ${SDKWORK_DRIVE_CACHE_HOST_PATH:-/opt/deploy/drive}:/opt/deploy/drive:rw
       - ../../../sdkwork-skills/database:/app/share/sdkwork/skills/database:ro
       - ../../../sdkwork-mcp/database:/app/share/sdkwork/mcp/database:ro
       - ../../../sdkwork-deployments/database:/app/share/sdkwork/deploy/database:ro
@@ -209,8 +266,9 @@ services:
       SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT: "3800"
       SDKWORK_WEBSERVER_ENVIRONMENT: production
       SDKWORK_WEBSERVER_PROFILE_ID: standalone.production
+      SDKWORK_DRIVE_WEBSITE_CACHE_ENVIRONMENT: production
       SDKWORK_SKILLS_APP_ROOT: /app/share/sdkwork/skills
-      SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_CORS_ALLOWED_ORIGINS:-http://server.sdkwork.com}
+      SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_CORS_ALLOWED_ORIGINS:-http://server.sdkwork.com,app://dsh,app://birdcoder,app://sdkwork,app://dtupay,tauri://localhost,https://servicewechat.com}
       SDKWORK_DATABASE_ENGINE: postgresql
       SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-postgres}
       SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
@@ -230,6 +288,7 @@ services:
     volumes:
       - webserver-secrets-production:/etc/sdkwork/webserver/secrets
       - webserver-data-production:/var/lib/sdkwork/webserver
+      - ${SDKWORK_DRIVE_CACHE_HOST_PATH:-/opt/deploy/drive}:/opt/deploy/drive:rw
       - ../../../sdkwork-skills/database:/app/share/sdkwork/skills/database:ro
       - ../../../sdkwork-mcp/database:/app/share/sdkwork/mcp/database:ro
       - ../../../sdkwork-deployments/database:/app/share/sdkwork/deploy/database:ro
@@ -239,7 +298,9 @@ volumes:
   webserver-redis-data:
   webserver-secrets-development:
   webserver-secrets-test:
+  webserver-secrets-staging:
   webserver-secrets-production:
   webserver-data-development:
   webserver-data-test:
+  webserver-data-staging:
   webserver-data-production:

@@ -38,6 +38,29 @@ ensure_writable_directory() {
   ensure_directory "${dir}"
 }
 
+# /opt/deploy/drive is the host-shared Drive delivery cache root
+# (DEPLOYMENT_SPEC.md container shared directories): the LRU website content
+# cache writes immutable, content-addressed entries there so every webserver
+# instance on the host shares one disk cache. The mount may be read-only or
+# unwritable on some hosts; in that case the Rust cache layer disables itself
+# and content keeps streaming from the Drive facade, so this only pre-creates
+# the directory when the host path is writable.
+ensure_drive_delivery_cache_root() {
+  local cache_root="${SDKWORK_DRIVE_WEBSITE_CACHE_ROOT:-/opt/deploy/drive/website-cache}"
+  if [ -d "${cache_root}" ]; then
+    log "drive delivery cache root present: ${cache_root}"
+    return 0
+  fi
+  if ! touch "${cache_root%/*}/.sdkwork-write-test" 2>/dev/null; then
+    log "warning: ${cache_root%/*} is not writable; drive delivery cache stays disabled"
+    return 0
+  fi
+  rm -f "${cache_root%/*}/.sdkwork-write-test"
+  ensure_directory "${cache_root}"
+  chown -R "${SERVICE_USER}:${SERVICE_USER}" "${cache_root%/*}" 2>/dev/null || true
+  log "created drive delivery cache root: ${cache_root}"
+}
+
 ensure_secret_file() {
   local name="$1"
   local file="${SECRETS_ROOT}/${name}"
@@ -262,6 +285,7 @@ host_http_port_for_environment() {
   case "${SDKWORK_WEBSERVER_ENVIRONMENT:-development}" in
     development) printf '%s' "${SDKWORK_WEBSERVER_DEV_HOST_PORT:-13800}" ;;
     test) printf '%s' "${SDKWORK_WEBSERVER_TEST_HOST_PORT:-18888}" ;;
+    staging) printf '%s' "${SDKWORK_WEBSERVER_STAGING_HOST_PORT:-18081}" ;;
     production) printf '%s' "${SDKWORK_WEBSERVER_PROD_HOST_PORT:-18080}" ;;
     *) printf '%s' "${SDKWORK_WEBSERVER_DEV_HOST_PORT:-13800}" ;;
   esac
@@ -281,6 +305,9 @@ default_docker_cors_allowed_origins() {
     test)
       hosts="server-test.${domain} server-app-test.${domain} server-admin-test.${domain}"
       ;;
+    staging)
+      hosts="server-staging.${domain} server-app-staging.${domain} server-admin-staging.${domain}"
+      ;;
     production)
       hosts="server.${domain} server-app.${domain} server-admin.${domain} ${domain} app.${domain}"
       ;;
@@ -293,6 +320,9 @@ default_docker_cors_allowed_origins() {
     origins="${origins},${scheme}://${host}"
   done
   origins="${origins},${scheme}://localhost:${host_port},${scheme}://127.0.0.1:${host_port}"
+  # Registered desktop WebView custom schemes and mini program runtimes
+  # (WEB_FRAMEWORK_SPEC §12): first-party client origins are always allowed.
+  origins="${origins},app://dsh,app://birdcoder,app://sdkwork,app://dtupay,tauri://localhost,https://servicewechat.com"
   printf '%s' "${origins}"
 }
 
@@ -478,11 +508,16 @@ clone_sdkwork_space_modules() {
   fi
 
   clone_url="${SDKWORK_SPACE_CLONE_URL:-https://github.com/sdkwork-ai/sdkwork-space.git}"
-  if [ -d "${checkout}" ] && [ -n "$(ls -A "${checkout}" 2>/dev/null || true)" ]; then
-    log "using existing space checkout at ${checkout}"
-  elif [ -n "${clone_url}" ] && [ ! -d "${checkout}" ]; then
+  # Branch order is exhaustive and reachable: an existing git checkout is
+  # pulled (honoring SDKWORK_SPACE_CLONE_PULL), a non-git non-empty directory
+  # is kept as-is, and a missing OR empty directory is cloned fresh. The
+  # previous chain never updated an existing checkout and never cloned into an
+  # empty pre-created mount point.
+  if [ -d "${checkout}/.git" ]; then
     clone_or_update_git_repo "${clone_url}" "${checkout}" || true
-  elif [ -d "${checkout}/.git" ] && [ -n "${clone_url}" ]; then
+  elif [ -d "${checkout}" ] && [ -n "$(ls -A "${checkout}" 2>/dev/null || true)" ]; then
+    log "using existing non-git space checkout at ${checkout}"
+  elif [ -n "${clone_url}" ]; then
     clone_or_update_git_repo "${clone_url}" "${checkout}" || true
   fi
 
@@ -1789,6 +1824,7 @@ main() {
     ensure_domain_certificate "${cert_domain}"
   done
   ensure_database_secret
+  ensure_drive_delivery_cache_root
   for secret_name in encryption-key deploy-encryption-key \
     drive-internal-api-ingress-token knowledgebase-internal-api-ingress-token \
     web-internal-api-ingress-token; do
