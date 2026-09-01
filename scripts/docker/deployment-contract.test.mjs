@@ -172,6 +172,11 @@ test('entrypoint includes module nginx sidecars checkout-direct without rewritin
   assert.match(entrypoint, /prepare_module_api_gateway/u);
   assert.match(entrypoint, /start_bundled_module_api_gateway/u);
   assert.match(entrypoint, /sdkwork-api-cloud-gateway/u);
+  // Every environment branch the entrypoint can take must be explicit: the
+  // platform API host allowlist and CORS defaults cover dev/test/staging/prod
+  // (APP_RUNTIME_TOPOLOGY_NAMING §9 — api-dev/api-test/api-staging/api).
+  assert.match(entrypoint, /api-staging\.\$\{brand\}/u);
+  assert.match(entrypoint, /server-staging\.\$\{domain\}/u);
 });
 
 test('platform API gateway overlays align with the canonical sibling upstream port', () => {

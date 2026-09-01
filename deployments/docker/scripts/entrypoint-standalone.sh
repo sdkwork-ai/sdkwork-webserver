@@ -826,6 +826,13 @@ discover_module_api_gateway_allowed_hosts() {
         api_hosts="${api_hosts:+${api_hosts},}api-test.${brand}"
       done
       ;;
+    staging)
+      # APP_RUNTIME_TOPOLOGY_NAMING §9: staging uses the -staging suffix
+      # (api-staging.<brand>), mirroring api-dev/api-test/api.
+      for brand in ${brands}; do
+        api_hosts="${api_hosts:+${api_hosts},}api-staging.${brand}"
+      done
+      ;;
     production)
       for brand in ${brands}; do
         api_hosts="${api_hosts:+${api_hosts},}api.${brand}"
