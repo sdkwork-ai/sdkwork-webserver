@@ -146,6 +146,12 @@ fn web_security_policy(
             policy.cors.allowed_origins.push(origin);
         }
     }
+    // Registered desktop WebView custom schemes (`app://dsh` …) and mini
+    // program runtimes (`https://servicewechat.com`) are merged into every
+    // environment, production included: those clients are first-party and
+    // their origins are canonical (WEB_FRAMEWORK_SPEC §12), so deployments
+    // never need to repeat them in SDKWORK_CORS_ALLOWED_ORIGINS.
+    policy.cors = policy.cors.with_registered_sdkwork_client_origins();
     if matches!(environment, WebEnvironment::Prod) {
         policy
             .cors
@@ -323,5 +329,35 @@ mod tests {
             .cors
             .validate_origin_value("javascript:alert(1)")
             .expect_err("unregistered custom scheme");
+    }
+
+    #[test]
+    fn production_policy_merges_registered_client_origins_without_configuration() {
+        let policy = web_security_policy(
+            &WebEnvironment::Prod,
+            vec!["https://server.sdkwork.com".to_owned()],
+        )
+        .expect("production policy");
+        for origin in [
+            "app://dsh",
+            "app://birdcoder",
+            "app://sdkwork",
+            "app://dtupay",
+            "tauri://localhost",
+            "https://servicewechat.com",
+        ] {
+            policy
+                .cors
+                .validate_origin_value(origin)
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "registered client origin {origin} must be merged in production: {error}"
+                    )
+                });
+        }
+        policy
+            .cors
+            .validate_origin_value("app://unregistered")
+            .expect_err("unregistered custom scheme stays denied");
     }
 }
