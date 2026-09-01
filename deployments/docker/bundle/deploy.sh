@@ -130,6 +130,11 @@ case "${ENVIRONMENT}" in
     EDGE_HTTP="$(env_key SDKWORK_WEBSERVER_TEST_IMPORT_HTTP_HOST_PORT)";  EDGE_HTTP="${EDGE_HTTP:-18898}"
     EDGE_HTTPS="$(env_key SDKWORK_WEBSERVER_TEST_HTTPS_HOST_PORT)";  EDGE_HTTPS="${EDGE_HTTPS:-28430}"
     ;;
+  staging)
+    PORT_BASE="$(env_key SDKWORK_WEBSERVER_STAGING_HOST_PORT)";  PORT_BASE="${PORT_BASE:-18081}"
+    EDGE_HTTP="$(env_key SDKWORK_WEBSERVER_STAGING_IMPORT_HTTP_HOST_PORT)";  EDGE_HTTP="${EDGE_HTTP:-18099}"
+    EDGE_HTTPS="$(env_key SDKWORK_WEBSERVER_STAGING_HTTPS_HOST_PORT)";  EDGE_HTTPS="${EDGE_HTTPS:-38431}"
+    ;;
   production)
     PORT_BASE="$(env_key SDKWORK_WEBSERVER_PROD_HOST_PORT)";  PORT_BASE="${PORT_BASE:-18080}"
     EDGE_HTTP="$(env_key SDKWORK_WEBSERVER_PROD_IMPORT_HTTP_HOST_PORT)";  EDGE_HTTP="${EDGE_HTTP:-18098}"
@@ -247,15 +252,25 @@ export_instance_env() {
 # file (later --env-file wins in compose), so each instance can carry its own
 # domain (SDKWORK_WEBSERVER_PRIMARY_DOMAIN), clone URL, TLS/ACME profile, or
 # any other deployment input.
-instance_env_args() {
+instance_env_files() {
   local index="$1"
   local override="${ENV_DIR}/${ENVIRONMENT}.i${index}.env"
   if [ -f "${override}" ]; then
     info "instance ${index} config override: ${override}" >&2
-    printf '%s' "--env-file ${ENV_FILE} --env-file ${override}"
+    printf '%s\n' "${ENV_FILE}" "${override}"
   else
-    printf '%s' "--env-file ${ENV_FILE}"
+    printf '%s\n' "${ENV_FILE}"
   fi
+}
+
+# Populates INSTANCE_ENV_FILE_ARGS with one quoted `--env-file <path>` option
+# per file so compose commands never word-split paths containing spaces.
+set_instance_env_file_args() {
+  local index="$1" file
+  INSTANCE_ENV_FILE_ARGS=()
+  while IFS= read -r file; do
+    INSTANCE_ENV_FILE_ARGS+=(--env-file "${file}")
+  done < <(instance_env_files "${index}")
 }
 
 start_instance() {
@@ -263,7 +278,8 @@ start_instance() {
   local project="sdkwork-webserver-${ENVIRONMENT}-i${index}"
   # Shell env wins over the --env-file in compose; these are per-instance inputs.
   export_instance_env "${index}"
-  local args=(-p "${project}" ${INSTANCE_ENV_ARGS[$index]} -f "${COMPOSE_FILE}")
+  set_instance_env_file_args "${index}"
+  local args=(-p "${project}" "${INSTANCE_ENV_FILE_ARGS[@]}" -f "${COMPOSE_FILE}")
   if [ "${index}" = "1" ] && [ -f "${COMPOSE_EDGE_FILE}" ]; then
     args+=(-f "${COMPOSE_EDGE_FILE}")
     export SDKWORK_WEBSERVER_IMPORT_HTTP_HOST_PORT="${EDGE_HTTP}"
@@ -306,7 +322,7 @@ apply() {
   # before the remaining instances start (DEPLOYMENT_SPEC.md §6).
   local index
   for index in $(seq 1 "${REPLICAS}"); do
-    INSTANCE_ENV_ARGS[$index]="$(instance_env_args "${index}")"
+    set_instance_env_file_args "${index}"
     start_instance "${index}"
     wait_container_healthy "sdkwork-webserver-${ENVIRONMENT}-i${index}" webserver "${HEALTH_TIMEOUT}" \
       || die "webserver instance ${index} failed readiness"
@@ -322,8 +338,8 @@ down() {
   local index
   for index in $(seq 1 "${REPLICAS}"); do
     export_instance_env "${index}"
-    INSTANCE_ENV_ARGS[$index]="$(instance_env_args "${index}")"
-    run docker compose -p "sdkwork-webserver-${ENVIRONMENT}-i${index}" ${INSTANCE_ENV_ARGS[$index]} \
+    set_instance_env_file_args "${index}"
+    run docker compose -p "sdkwork-webserver-${ENVIRONMENT}-i${index}" "${INSTANCE_ENV_FILE_ARGS[@]}" \
       -f "${COMPOSE_FILE}" --profile instance down
   done
   if [ "${EXTERNAL}" != "1" ]; then
@@ -351,9 +367,9 @@ ps() {
   local index
   for index in $(seq 1 "${REPLICAS}"); do
     export_instance_env "${index}"
-    INSTANCE_ENV_ARGS[$index]="$(instance_env_args "${index}")"
+    set_instance_env_file_args "${index}"
     info "instance ${index}:"
-    docker compose -p "sdkwork-webserver-${ENVIRONMENT}-i${index}" ${INSTANCE_ENV_ARGS[$index]} \
+    docker compose -p "sdkwork-webserver-${ENVIRONMENT}-i${index}" "${INSTANCE_ENV_FILE_ARGS[@]}" \
       -f "${COMPOSE_FILE}" --profile instance ps
   done
   if [ "${EXTERNAL}" != "1" ]; then
@@ -367,8 +383,8 @@ logs() {
   local index="${LOG_INSTANCE:-1}"
   case "${index}" in ''|*[!0-9]*) die "--logs expects an instance number" ;; esac
   export_instance_env "${index}"
-  INSTANCE_ENV_ARGS[$index]="$(instance_env_args "${index}")"
-  docker compose -p "sdkwork-webserver-${ENVIRONMENT}-i${index}" ${INSTANCE_ENV_ARGS[$index]} \
+  set_instance_env_file_args "${index}"
+  docker compose -p "sdkwork-webserver-${ENVIRONMENT}-i${index}" "${INSTANCE_ENV_FILE_ARGS[@]}" \
     -f "${COMPOSE_FILE}" --profile instance logs -f --tail 200 webserver
 }
 
