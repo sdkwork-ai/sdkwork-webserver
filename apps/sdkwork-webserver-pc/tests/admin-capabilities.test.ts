@@ -52,7 +52,17 @@ describe("admin application capability", () => {
       sourceInputMode: "archive",
     });
     expect(listApplications).toHaveBeenCalledWith({ page: 1, pageSize: 20, keyword: "api" });
-    expect(createApplication).toHaveBeenCalledWith(expect.objectContaining({ name: "API", applicationType: "API", siteType: 6 }), { idempotencyKey: "application-create-1" });
+    expect(createApplication).toHaveBeenCalledWith(expect.objectContaining({
+      name: "API",
+      appKind: "API_SERVICE",
+      runtimeConfig: expect.objectContaining({
+        appConfigPath: "sdkwork.app.config.json",
+        deploymentConfigPath: "etc/sdkwork.deployment.config.json",
+        publicRoot: "dist",
+        sourceVersionRetentionLimit: 5,
+        spaFallback: "index.html",
+      }),
+    }), { idempotencyKey: "application-create-1" });
     expect(sourceStorage.store).toHaveBeenCalledWith(expect.objectContaining({ applicationId: "app-1" }));
     expect(createSourceVersion).toHaveBeenCalledWith("app-1", expect.objectContaining({
       artifactDriveUri: "drive://spaces/releases/nodes/node-1",

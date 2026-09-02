@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "@sdkwork/webserver-app-sdk",
+    "displayName": "SDKWork Web App SDK TypeScript Facade",
+    "version": "0.1.0",
+    "type": "typescript-sdk-facade",
+    "root": "sdks/sdkwork-webserver-app-sdk/sdkwork-webserver-app-sdk-typescript",
+    "domain": "web",
+    "capability": "web",
+    "surface": "app",
+    "languages": ["typescript"],
+    "generated": false,
+    "status": "active",
+    "manifests": ["package.json", "tsconfig.json", "specs/component.spec.json"]
+  },
+  "canonicalSpecs": [
+    {"file": "SDK_SPEC.md", "path": "../../../../sdkwork-specs/SDK_SPEC.md", "purpose": "Consumer facade and generated transport boundary."},
+    {"file": "SDK_WORKSPACE_GENERATION_SPEC.md", "path": "../../../../sdkwork-specs/SDK_WORKSPACE_GENERATION_SPEC.md", "purpose": "TypeScript SDK workspace and output placement."},
+    {"file": "APP_SDK_INTEGRATION_SPEC.md", "path": "../../../../sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md", "purpose": "App SDK consumer import and injection rules."},
+    {"file": "COMPONENT_SPEC.md", "path": "../../../../sdkwork-specs/COMPONENT_SPEC.md", "purpose": "Component-local contract requirements."},
+    {"file": "TYPESCRIPT_CODE_SPEC.md", "path": "../../../../sdkwork-specs/TYPESCRIPT_CODE_SPEC.md", "purpose": "Strict TypeScript package rules."},
+    {"file": "TEST_SPEC.md", "path": "../../../../sdkwork-specs/TEST_SPEC.md", "purpose": "Build and type-check verification."}
+  ],
+  "contracts": {
+    "layerRole": "sdk-facade",
+    "publicExports": ["src/index.ts"],
+    "providedPorts": [],
+    "requiredPorts": [],
+    "runtimeEntrypoints": ["package.json#exports."],
+    "routeManifest": null,
+    "sdkClients": [],
+    "sdkDependencies": [],
+    "dependencyApiExports": [],
+    "dependencyApiSurfaces": [],
+    "events": [],
+    "configKeys": []
+  },
+  "verification": {
+    "commands": ["pnpm --filter @sdkwork/webserver-app-sdk build"]
+  }
+}

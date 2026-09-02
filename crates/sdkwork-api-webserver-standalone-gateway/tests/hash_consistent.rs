@@ -4,9 +4,9 @@
 
 use std::{fs, net::TcpListener, path::PathBuf, sync::Arc, time::Duration};
 
-use serde_json::{json, Value};
 use sdkwork_api_webserver_standalone_gateway::run_data_plane_until;
 use sdkwork_webserver_core::load_and_compile_webserver_config;
+use serde_json::{json, Value};
 use tokio::sync::oneshot;
 
 fn free_port() -> u16 {
@@ -82,7 +82,11 @@ fn write_config(port: u16, upstreams: Vec<Value>) -> PathBuf {
         "upstreams": upstreams
     });
     let path = directory.join("config.json");
-    fs::write(&path, serde_json::to_vec_pretty(&config).expect("serialize")).expect("write");
+    fs::write(
+        &path,
+        serde_json::to_vec_pretty(&config).expect("serialize"),
+    )
+    .expect("write");
     path
 }
 
@@ -113,7 +117,12 @@ async fn spawn_data_plane(
 async fn wait_ready(client: &reqwest::Client, url: &str) {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     loop {
-        match client.get(url).header("host", "hash.localhost").send().await {
+        match client
+            .get(url)
+            .header("host", "hash.localhost")
+            .send()
+            .await
+        {
             Ok(_) => return,
             Err(_) if tokio::time::Instant::now() < deadline => {
                 tokio::time::sleep(Duration::from_millis(25)).await;
@@ -148,7 +157,11 @@ async fn consistent_hash_pins_keys_to_targets_and_survives_scale_down() {
 
     let config_path = write_config(
         port,
-        vec![hash_upstream(vec![target(target_a), target(target_b), target(target_c)])],
+        vec![hash_upstream(vec![
+            target(target_a),
+            target(target_b),
+            target(target_c),
+        ])],
     );
     let (shutdown_tx, task) = spawn_data_plane(&config_path).await;
     let client = reqwest::Client::builder()

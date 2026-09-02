@@ -1,0 +1,23 @@
+[workspace]
+
+[package]
+name = "sdkwork-webserver-internal-sdk-generated-rust"
+version = "1.0.0"
+edition = "2021"
+description = "sdkwork-webserver-internal-sdk SDK"
+license = "MIT"
+authors = ["SDKWork Team"]
+
+[lib]
+name = "sdkwork_webserver_internal_sdk_generated_rust"
+path = "src/lib.rs"
+
+[dependencies]
+reqwest = { version = "0.13", default-features = false, features = ["form", "json", "multipart", "query", "rustls"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+http = "1.0"
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }

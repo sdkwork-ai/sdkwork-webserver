@@ -17,12 +17,12 @@ use crate::config::{WebServerAppConfig, WebServerConfigError};
 use crate::config_paths::{
     canonical_runtime_config_path, runtime_config_override_from_env, RUNTIME_CONFIG_FILE_ENV,
 };
-use crate::nginx::parse_nginx_config;
 use crate::module_imports::{
     is_nginx_conf_path, load_module_import_app_config, merge_import_specs, validate_imports,
     WebserverImportEntry, WebserverModuleImport,
 };
 use crate::nginx::merge_nginx_apps;
+use crate::nginx::parse_nginx_config;
 
 /// Resolves the runtime TOML path: explicit override, then the canonical
 /// system config directory. `None` when the canonical file does not exist
@@ -163,7 +163,12 @@ pub fn expand_webserver_import_includes(
         .parent()
         .unwrap_or_else(|| Path::new("/"))
         .to_path_buf();
-    for pattern in section.include.iter().map(|p| p.trim()).filter(|p| !p.is_empty()) {
+    for pattern in section
+        .include
+        .iter()
+        .map(|p| p.trim())
+        .filter(|p| !p.is_empty())
+    {
         for path in resolve_include_paths(&base, pattern)? {
             if path.extension().and_then(|value| value.to_str()) == Some("conf") {
                 if is_import_aggregator_conf(&path) {
@@ -232,9 +237,7 @@ fn import_id_from_include_path(path: &Path) -> Result<String, String> {
 }
 
 fn is_import_aggregator_conf(path: &Path) -> bool {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        == Some("import.conf")
+    path.file_name().and_then(|name| name.to_str()) == Some("import.conf")
 }
 
 fn module_import_id_from_nginx_sidecar(path: &Path) -> Result<String, String> {
@@ -259,21 +262,11 @@ fn module_import_id_from_nginx_sidecar(path: &Path) -> Result<String, String> {
     import_id_from_include_path(path)
 }
 
-fn expand_import_aggregator_conf(
-    aggregator: &Path,
-) -> Result<Vec<WebserverImportEntry>, String> {
-    let text = std::fs::read_to_string(aggregator).map_err(|error| {
-        format!(
-            "read import aggregator {}: {error}",
-            aggregator.display()
-        )
-    })?;
-    let parsed = parse_nginx_config(&text, aggregator).map_err(|error| {
-        format!(
-            "parse import aggregator {}: {error}",
-            aggregator.display()
-        )
-    })?;
+fn expand_import_aggregator_conf(aggregator: &Path) -> Result<Vec<WebserverImportEntry>, String> {
+    let text = std::fs::read_to_string(aggregator)
+        .map_err(|error| format!("read import aggregator {}: {error}", aggregator.display()))?;
+    let parsed = parse_nginx_config(&text, aggregator)
+        .map_err(|error| format!("parse import aggregator {}: {error}", aggregator.display()))?;
     let base = aggregator.parent().unwrap_or_else(|| Path::new("/"));
     let mut entries = Vec::new();
     for directive in parsed {
@@ -562,8 +555,7 @@ pub fn ensure_import_bootstrap_certificates(
             server_names.push(certificate.id.clone());
             server_names.push(wildcard);
         }
-        let (certificate_pem, private_key_pem) =
-            generate_self_signed_placeholder(&server_names)?;
+        let (certificate_pem, private_key_pem) = generate_self_signed_placeholder(&server_names)?;
         if let Some(parent) = certificate_path.parent() {
             std::fs::create_dir_all(parent).map_err(|error| {
                 format!(
@@ -586,9 +578,9 @@ pub fn ensure_import_bootstrap_certificates(
 
 fn resolve_certificate_file_path(base: &Path, configured: &str) -> Result<PathBuf, String> {
     if let Some(rest) = configured.strip_prefix(crate::config_paths::CERTS_URI_SCHEME) {
-        let (domain, file) = rest.split_once('/').ok_or_else(|| {
-            format!("`{configured}` must be certs://<domain>/<file>")
-        })?;
+        let (domain, file) = rest
+            .split_once('/')
+            .ok_or_else(|| format!("`{configured}` must be certs://<domain>/<file>"))?;
         let directory = crate::config_paths::canonical_certificate_domain_directory(domain)?;
         return Ok(directory.join(file));
     }
@@ -610,9 +602,7 @@ fn write_private_certificate_file(path: &Path, content: &[u8]) -> Result<(), Str
     Ok(())
 }
 
-fn generate_self_signed_placeholder(
-    hostnames: &[String],
-) -> Result<(String, String), String> {
+fn generate_self_signed_placeholder(hostnames: &[String]) -> Result<(String, String), String> {
     use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair, PKCS_ECDSA_P256_SHA256};
     let primary = hostnames
         .first()
@@ -621,9 +611,7 @@ fn generate_self_signed_placeholder(
     let mut params = CertificateParams::new(hostnames.to_vec())
         .map_err(|error| format!("certificate parameters: {error}"))?;
     params.distinguished_name = DistinguishedName::new();
-    params
-        .distinguished_name
-        .push(DnType::CommonName, &primary);
+    params.distinguished_name.push(DnType::CommonName, &primary);
     let key_pair = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256)
         .map_err(|error| format!("generate placeholder key: {error}"))?;
     let certified = params
@@ -650,7 +638,11 @@ fn apply_import_listener_port_map_to_app(app: &mut WebServerAppConfig) -> Result
                     listener.bind = format!("{host}:{actual}");
                 }
             }
-        } else if listener.bind.chars().all(|character| character.is_ascii_digit()) {
+        } else if listener
+            .bind
+            .chars()
+            .all(|character| character.is_ascii_digit())
+        {
             listener.bind = actual.to_string();
         }
     }
@@ -662,7 +654,11 @@ fn parse_import_listener_port_map() -> Result<HashMap<u16, u16>, String> {
         return Ok(HashMap::new());
     };
     let mut map = HashMap::new();
-    for pair in raw.split(',').map(str::trim).filter(|pair| !pair.is_empty()) {
+    for pair in raw
+        .split(',')
+        .map(str::trim)
+        .filter(|pair| !pair.is_empty())
+    {
         let Some((declared, actual)) = pair.split_once('=') else {
             return Err(format!(
                 "{IMPORT_LISTENER_PORTS_ENV} expects `declared=actual` port pairs, got `{pair}`"
@@ -805,14 +801,18 @@ impl AppRootsSection {
         if let Some(value) = &self.mcp_app_root {
             set_env("SDKWORK_MCP_APP_ROOT", value);
         }
-        if let Some(value) =
-            resolve_static_root_value(&self.pc_static_root, &self.pc_static_by_environment, environment)
-        {
+        if let Some(value) = resolve_static_root_value(
+            &self.pc_static_root,
+            &self.pc_static_by_environment,
+            environment,
+        ) {
             set_env("SDKWORK_WEBSERVER_PC_STATIC_ROOT", &value);
         }
-        if let Some(value) =
-            resolve_static_root_value(&self.h5_static_root, &self.h5_static_by_environment, environment)
-        {
+        if let Some(value) = resolve_static_root_value(
+            &self.h5_static_root,
+            &self.h5_static_by_environment,
+            environment,
+        ) {
             set_env("SDKWORK_WEBSERVER_H5_STATIC_ROOT", &value);
         }
         if let Some(value) = resolve_static_root_value(
@@ -1158,7 +1158,8 @@ mod tests {
         std::env::set_var(RUNTIME_CONFIG_FILE_ENV_LEGACY, &path);
         let error = resolve_runtime_config_path().expect_err("legacy env must fail closed");
         assert!(
-            error.contains(RUNTIME_CONFIG_FILE_ENV_LEGACY) && error.contains(RUNTIME_CONFIG_FILE_ENV),
+            error.contains(RUNTIME_CONFIG_FILE_ENV_LEGACY)
+                && error.contains(RUNTIME_CONFIG_FILE_ENV),
             "unexpected diagnostic: {error}"
         );
         std::env::remove_var(RUNTIME_CONFIG_FILE_ENV_LEGACY);
@@ -1321,7 +1322,8 @@ production = "deployments/webserver/static"
         );
         // Every lifecycle environment resolves its own roots from the catalog;
         // the active environment is the config's `[profile] environment` and
-        // dist directories use the standard aliases (dev/test/staging/prod).
+        // dist directories use the standard aliases (dev/test/staging/prod)
+        // under the standalone profile segment.
         for environment in ["development", "test", "staging", "production"] {
             let dist_alias = match environment {
                 "development" => "dev",
@@ -1334,7 +1336,9 @@ production = "deployments/webserver/static"
                     &config.app_roots.pc_static_by_environment,
                     Some(environment),
                 ),
-                Some(format!("apps/sdkwork-webserver-pc/dist/{dist_alias}"))
+                Some(format!(
+                    "apps/sdkwork-webserver-pc/dist/standalone/{dist_alias}"
+                ))
             );
             assert_eq!(
                 resolve_static_root_value(
@@ -1342,7 +1346,9 @@ production = "deployments/webserver/static"
                     &config.app_roots.h5_static_by_environment,
                     Some(environment),
                 ),
-                Some(format!("apps/sdkwork-webserver-h5/dist/{dist_alias}"))
+                Some(format!(
+                    "apps/sdkwork-webserver-h5/dist/standalone/{dist_alias}"
+                ))
             );
         }
         // An explicit root wins over the environment catalog.
@@ -1366,7 +1372,12 @@ production = "deployments/webserver/static"
         let _ = std::fs::remove_file(&path);
     }
 
-    fn write_import_file(dir: &std::path::Path, name: &str, id: &str, path: &str) -> std::path::PathBuf {
+    fn write_import_file(
+        dir: &std::path::Path,
+        name: &str,
+        id: &str,
+        path: &str,
+    ) -> std::path::PathBuf {
         let file = dir.join(name);
         std::fs::write(
             &file,
@@ -1409,10 +1420,8 @@ production = "deployments/webserver/static"
 
     #[test]
     fn expands_webserver_include_glob_after_inline_imports() {
-        let temp = std::env::temp_dir().join(format!(
-            "sdkwork-webserver-include-{}",
-            std::process::id()
-        ));
+        let temp =
+            std::env::temp_dir().join(format!("sdkwork-webserver-include-{}", std::process::id()));
         let imports_dir = temp.join("imports.d");
         std::fs::create_dir_all(&imports_dir).unwrap();
         let config_path = temp.join("config.toml");
@@ -1472,9 +1481,13 @@ production = "deployments/webserver/static"
             "user sdkwork;\nevents {}\nhttp { server { listen 80; server_name im-dev.example.com; location / { return 200; } } }\n",
         )
         .unwrap();
+        // nginx applies the `\t`/`\r`/`\n` escape table to unquoted tokens
+        // (ngx_conf_read_token), so a raw Windows path like `...\nginx.conf`
+        // is invalid conf content: generators must emit forward slashes.
+        let im_conf_pattern = im_conf.to_string_lossy().replace('\\', "/");
         std::fs::write(
             imports_dir.join("import.conf"),
-            format!("include {};\n", im_conf.display()),
+            format!("include {im_conf_pattern};\n"),
         )
         .unwrap();
         let config_path = temp.join("config.toml");
@@ -1488,7 +1501,7 @@ production = "deployments/webserver/static"
             expand_webserver_import_includes(&config_path, &config.webserver).expect("expand");
         assert_eq!(expanded.len(), 1);
         assert_eq!(expanded[0].id, "sdkwork-im");
-        assert_eq!(expanded[0].path, im_conf.to_string_lossy());
+        assert_eq!(expanded[0].path, im_conf_pattern);
         let _ = std::fs::remove_dir_all(&temp);
     }
 
@@ -1509,9 +1522,12 @@ production = "deployments/webserver/static"
             "user sdkwork;\nevents {}\nhttp { server { listen 80; server_name im-dev.example.com; location / { return 200; } } }\n",
         )
         .unwrap();
+        // Forward slashes only: see the note in
+        // expands_import_conf_aggregator_into_module_sidecars.
+        let im_conf_pattern = im_conf.to_string_lossy().replace('\\', "/");
         std::fs::write(
             imports_dir.join("import.conf"),
-            format!("include {};\n", im_conf.display()),
+            format!("include {im_conf_pattern};\n"),
         )
         .unwrap();
         let config_path = temp.join("config.toml");
@@ -1544,7 +1560,10 @@ production = "deployments/webserver/static"
         let config = parse_runtime_toml_config(&config_path).expect("config must parse");
         let error = expand_webserver_import_includes(&config_path, &config.webserver)
             .expect_err("missing explicit include must fail closed");
-        assert!(error.contains("missing file"), "unexpected diagnostic: {error}");
+        assert!(
+            error.contains("missing file"),
+            "unexpected diagnostic: {error}"
+        );
         let _ = std::fs::remove_dir_all(&temp);
     }
 
@@ -1614,7 +1633,11 @@ production = "deployments/webserver/static"
         assert!(!glob_match("a*b", "ac"));
     }
 
-    fn certificate_fixture(id: &str, server_names: Vec<String>, base: &std::path::Path) -> crate::config::CertificateConfig {
+    fn certificate_fixture(
+        id: &str,
+        server_names: Vec<String>,
+        base: &std::path::Path,
+    ) -> crate::config::CertificateConfig {
         crate::config::CertificateConfig {
             id: id.to_owned(),
             server_names,
@@ -1676,7 +1699,9 @@ production = "deployments/webserver/static"
         // plane integration).
         let pem = std::fs::read_to_string(&cert_path).unwrap();
         assert!(pem.contains("BEGIN CERTIFICATE"));
-        assert!(std::fs::read_to_string(&key_path).unwrap().contains("BEGIN PRIVATE KEY"));
+        assert!(std::fs::read_to_string(&key_path)
+            .unwrap()
+            .contains("BEGIN PRIVATE KEY"));
         let _ = std::fs::remove_dir_all(&temp);
     }
 
@@ -1728,4 +1753,3 @@ production = "deployments/webserver/static"
         let _ = std::fs::remove_dir_all(&temp);
     }
 }
-

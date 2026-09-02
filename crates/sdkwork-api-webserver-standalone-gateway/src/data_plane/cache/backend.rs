@@ -48,7 +48,10 @@ impl MemoryCacheBackend {
 
 impl CacheBackend for MemoryCacheBackend {
     fn get(&self, key: &super::key::CacheKey) -> Option<CachedResponse> {
-        let mut inner = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let index = *inner.entries.get(key)?;
         let entry = &mut inner.order[index];
         entry.last_used = Instant::now();
@@ -56,7 +59,10 @@ impl CacheBackend for MemoryCacheBackend {
     }
 
     fn insert(&self, key: super::key::CacheKey, entry: CachedResponse) {
-        let mut inner = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if let Some(&index) = inner.entries.get(&key) {
             inner.order[index].value = entry;
             inner.order[index].last_used = Instant::now();
@@ -94,7 +100,10 @@ impl CacheBackend for MemoryCacheBackend {
     }
 
     fn remove(&self, key: &super::key::CacheKey) {
-        let mut inner = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if let Some(index) = inner.entries.remove(key) {
             inner.order.swap_remove(index);
             let keys = inner

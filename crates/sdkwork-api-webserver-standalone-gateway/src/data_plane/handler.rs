@@ -246,15 +246,17 @@ async fn route_admitted_request(
         let query = request.uri().query().map(str::to_owned);
         let delivery_method = request.method().clone();
         let delivery_headers = request.headers().clone();
-        let metering = state.usage_meter.as_ref().map(|meter| {
-            crate::usage_metering::MeteringContext {
-                server_ip: transport_peer.ip(),
-                server_port: transport_peer.port(),
-                listener_id: state.listener_id.clone(),
-                meter: meter.clone(),
-                count_not_found: state.deploy_fallback.is_none(),
-            }
-        });
+        let metering =
+            state
+                .usage_meter
+                .as_ref()
+                .map(|meter| crate::usage_metering::MeteringContext {
+                    server_ip: transport_peer.ip(),
+                    server_port: transport_peer.port(),
+                    listener_id: state.listener_id.clone(),
+                    meter: meter.clone(),
+                    count_not_found: state.deploy_fallback.is_none(),
+                });
         let response = serve_website_request(
             executor,
             scheme.website_delivery_scheme(),
@@ -340,11 +342,15 @@ async fn route_admitted_request(
         }
         let query = request.uri().query();
         match apply_rewrites(&path, query, &candidate.route.rewrite) {
-            Ok(RewriteOutcome::Continue { path: next_path, .. }) => {
+            Ok(RewriteOutcome::Continue {
+                path: next_path, ..
+            }) => {
                 path = next_path;
                 break candidate;
             }
-            Ok(RewriteOutcome::Reselect { path: next_path, .. }) => {
+            Ok(RewriteOutcome::Reselect {
+                path: next_path, ..
+            }) => {
                 rewrite_redirects = rewrite_redirects.saturating_add(1);
                 if rewrite_redirects > MAX_REWRITE_INTERNAL_REDIRECTS {
                     if let Some(response) =
@@ -905,8 +911,7 @@ fn resource_pressure_response(version: Version) -> Response<Body> {
 }
 
 fn secure_link_rejected_response(version: Version) -> Response<Body> {
-    let mut response =
-        fixed_response(403, "text/plain; charset=utf-8", "forbidden", false);
+    let mut response = fixed_response(403, "text/plain; charset=utf-8", "forbidden", false);
     if version == Version::HTTP_09 {
         response.headers_mut().remove(CONTENT_TYPE);
     }
@@ -914,7 +919,12 @@ fn secure_link_rejected_response(version: Version) -> Response<Body> {
 }
 
 fn limit_conn_rejected_response(version: Version) -> Response<Body> {
-    let mut response = fixed_response(503, "text/plain; charset=utf-8", "too many connections", false);
+    let mut response = fixed_response(
+        503,
+        "text/plain; charset=utf-8",
+        "too many connections",
+        false,
+    );
     *response.status_mut() = StatusCode::SERVICE_UNAVAILABLE;
     if version == Version::HTTP_09 {
         response.headers_mut().remove(CONTENT_TYPE);
@@ -937,7 +947,10 @@ fn limit_req_rejected_response(version: Version) -> Response<Body> {
 
 fn auth_basic_challenge_response(realm: &str) -> Response<Body> {
     let mut response = text_response(StatusCode::UNAUTHORIZED, "authorization required\n");
-    let value = format!("Basic realm=\"{}\", charset=\"UTF-8\"", escape_auth_realm(realm));
+    let value = format!(
+        "Basic realm=\"{}\", charset=\"UTF-8\"",
+        escape_auth_realm(realm)
+    );
     if let Ok(header) = HeaderValue::from_str(&value) {
         response.headers_mut().insert(WWW_AUTHENTICATE, header);
     }
@@ -1359,38 +1372,38 @@ async fn serve_deploy_fallback(
     // a failed fallback leaves the caller's 404 unrecorded instead of
     // inventing a phantom 5xx).
     if state.website_delivery.is_some() && served.is_some() {
-    if let Some(meter) = state.usage_meter.clone() {
-        if let Some(hostname) =
-            sdkwork_webserver_core::normalize_authority_host(&request.authority)
-        {
-            let attribution = fallback.attribution(&hostname).unwrap_or_default();
-            let (status_class, egress_bytes) = match &served {
-                Some(sdkwork_webserver_delivery_runtime::WebsiteDeliveryOutcome::Content(
-                    content,
-                )) => ("2xx", content.response_content_length),
-                Some(sdkwork_webserver_delivery_runtime::WebsiteDeliveryOutcome::Redirect(_)) => {
-                    ("3xx", 0)
-                }
-                Some(sdkwork_webserver_delivery_runtime::WebsiteDeliveryOutcome::NotFound) => {
-                    ("4xx", 0)
-                }
-                Some(sdkwork_webserver_delivery_runtime::WebsiteDeliveryOutcome::NotModified) => {
-                    ("2xx", 0)
-                }
-                None => ("5xx", 0),
-            };
-            meter.record(crate::usage_metering::MeteredRequest {
-                hostname: &hostname,
-                server_ip: server_addr.ip(),
-                server_port: server_addr.port(),
-                listener_id: &state.listener_id,
-                attribution: &attribution,
-                ingress_bytes: 0,
-                egress_bytes,
-                status_class,
-            });
+        if let Some(meter) = state.usage_meter.clone() {
+            if let Some(hostname) =
+                sdkwork_webserver_core::normalize_authority_host(&request.authority)
+            {
+                let attribution = fallback.attribution(&hostname).unwrap_or_default();
+                let (status_class, egress_bytes) = match &served {
+                    Some(sdkwork_webserver_delivery_runtime::WebsiteDeliveryOutcome::Content(
+                        content,
+                    )) => ("2xx", content.response_content_length),
+                    Some(sdkwork_webserver_delivery_runtime::WebsiteDeliveryOutcome::Redirect(
+                        _,
+                    )) => ("3xx", 0),
+                    Some(sdkwork_webserver_delivery_runtime::WebsiteDeliveryOutcome::NotFound) => {
+                        ("4xx", 0)
+                    }
+                    Some(
+                        sdkwork_webserver_delivery_runtime::WebsiteDeliveryOutcome::NotModified,
+                    ) => ("2xx", 0),
+                    None => ("5xx", 0),
+                };
+                meter.record(crate::usage_metering::MeteredRequest {
+                    hostname: &hostname,
+                    server_ip: server_addr.ip(),
+                    server_port: server_addr.port(),
+                    listener_id: &state.listener_id,
+                    attribution: &attribution,
+                    ingress_bytes: 0,
+                    egress_bytes,
+                    status_class,
+                });
+            }
         }
-    }
     }
     served.map(|outcome| super::website_delivery::outcome_response(outcome, query.as_deref()))
 }

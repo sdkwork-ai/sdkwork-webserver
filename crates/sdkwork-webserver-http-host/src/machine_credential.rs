@@ -209,7 +209,7 @@ mod tests {
                 "machine-valid" => Ok(Some(AuthenticatedMachineCredential {
                     tenant_id: 42,
                     subject_id: "node-42".to_owned(),
-                    app_id: "sdkwork-web-agent".to_owned(),
+                    app_id: "sdkwork-webserver-agent".to_owned(),
                     permission_scope: vec!["web.agent.*".to_owned()],
                 })),
                 "machine-invalid" => Err(WebServiceError::Forbidden),
@@ -227,7 +227,7 @@ mod tests {
         let machine = resolver.resolve_api_key("machine-valid").await.unwrap();
         assert_eq!(machine.tenant_id(), "42");
         assert_eq!(machine.user_id(), "node-42");
-        assert_eq!(machine.app_id(), "sdkwork-web-agent");
+        assert_eq!(machine.app_id(), "sdkwork-webserver-agent");
         assert_eq!(machine.scopes.permission_scope, vec!["web.agent.*"]);
 
         let delegated = resolver.resolve_api_key("iam-key").await.unwrap();

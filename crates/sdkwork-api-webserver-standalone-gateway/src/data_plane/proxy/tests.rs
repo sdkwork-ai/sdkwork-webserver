@@ -179,10 +179,7 @@ fn target_uri_replaces_the_route_prefix() {
         Some("x=1"),
     )
     .expect("replacement URL");
-    assert_eq!(
-        rewritten.as_str(),
-        "https://origin.example/api/items?x=1"
-    );
+    assert_eq!(rewritten.as_str(), "https://origin.example/api/items?x=1");
     let rewritten = build_target_url(
         &target,
         false,

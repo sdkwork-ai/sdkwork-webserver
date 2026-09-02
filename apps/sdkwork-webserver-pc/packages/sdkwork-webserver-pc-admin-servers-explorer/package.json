@@ -12,6 +12,7 @@
     }
   },
   "dependencies": {
+    "@sdkwork/webserver-pc-admin-core": "workspace:*",
     "@sdkwork/sdk-common": "workspace:*",
     "@sdkwork/webserver-pc-commons": "workspace:*",
     "lucide-react": "catalog:",

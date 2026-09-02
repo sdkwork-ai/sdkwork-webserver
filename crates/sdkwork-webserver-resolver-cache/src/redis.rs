@@ -26,7 +26,8 @@ impl RedisResolverCache {
     pub async fn connect(config: &RedisCacheConfig) -> Result<Arc<Self>, String> {
         let client = redis::Client::open(config.url.as_str())
             .map_err(|error| format!("invalid Redis URL: {error}"))?;
-        let pool = client.get_multiplexed_async_connection()
+        let pool = client
+            .get_multiplexed_async_connection()
             .await
             .map_err(|error| format!("cannot connect to Redis: {error}"))?;
         Ok(Arc::new(Self {
@@ -36,8 +37,14 @@ impl RedisResolverCache {
     }
 
     fn key(&self, domain: &str) -> String {
-        format!("{}:{}", self.prefix, normalize_domain(domain))
+        namespaced_key(&self.prefix, domain)
     }
+}
+
+/// Pure key layout: `<prefix>:<normalized-domain>`. A free function so the
+/// key format is testable without a live Redis connection.
+fn namespaced_key(prefix: &str, domain: &str) -> String {
+    format!("{}:{}", prefix, normalize_domain(domain))
 }
 
 impl ResolverCacheBackend for RedisResolverCache {
@@ -65,7 +72,9 @@ impl ResolverCacheBackend for RedisResolverCache {
     fn set(&self, record: ResolvedRecord) {
         let key = self.key(&record.domain);
         let value = serde_json::to_string(&record).ok();
-        let ttl = record.expires_at_unix.saturating_sub(crate::memory::now_unix());
+        let ttl = record
+            .expires_at_unix
+            .saturating_sub(crate::memory::now_unix());
         let pool = self.pool.clone();
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async move {
@@ -90,7 +99,10 @@ impl ResolverCacheBackend for RedisResolverCache {
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async move {
                 let mut connection = pool.clone();
-                let _: Result<(), _> = redis::cmd("DEL").arg(&key).query_async(&mut connection).await;
+                let _: Result<(), _> = redis::cmd("DEL")
+                    .arg(&key)
+                    .query_async(&mut connection)
+                    .await;
             })
         });
     }
@@ -103,18 +115,16 @@ mod tests {
     #[test]
     fn keys_are_namespaced_and_normalized() {
         // Key layout is pure; connectivity tests need a live Redis.
-        let backend = RedisResolverCache {
-            pool: panic!("no pool in key test"),
-            prefix: "sdkwork:resolver".to_owned(),
-        };
-        // Can't construct pool without a server; verify the key format
-        // through a standalone helper instead.
-        assert_eq!(backend.key("API.Example.COM."), "sdkwork:resolver:api.example.com");
+        assert_eq!(
+            namespaced_key("sdkwork:resolver", "API.Example.COM."),
+            "sdkwork:resolver:api.example.com"
+        );
     }
 
     #[test]
     fn records_round_trip_through_json() {
-        let record = ResolvedRecord::fresh("svc.local", vec!["10.0.0.1".to_owned()], 60, 1_700_000_000);
+        let record =
+            ResolvedRecord::fresh("svc.local", vec!["10.0.0.1".to_owned()], 60, 1_700_000_000);
         let encoded = serde_json::to_string(&record).expect("serialize");
         let decoded: ResolvedRecord = serde_json::from_str(&encoded).expect("deserialize");
         assert_eq!(decoded, record);

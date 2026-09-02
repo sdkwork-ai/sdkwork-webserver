@@ -95,10 +95,7 @@ impl CompiledWebServerApp {
         let mut static_h5_roots = HashMap::new();
         for (index, resource) in config.resources.iter().enumerate() {
             if let ResourceConfig::Static {
-                id,
-                root,
-                h5_root,
-                ..
+                id, root, h5_root, ..
             } = resource
             {
                 // Absolute roots (nginx `root` compatibility) are used
@@ -490,14 +487,12 @@ impl CompiledVirtualHost {
                     prefix_routes.insert(route.route_match.path.as_bytes(), route_index)
                 }
                 RoutePathType::Regex | RoutePathType::RegexIgnoreCase => {
-                    let pattern = if matches!(
-                        route.route_match.path_type,
-                        RoutePathType::RegexIgnoreCase
-                    ) {
-                        format!("(?i){}", route.route_match.path)
-                    } else {
-                        route.route_match.path.clone()
-                    };
+                    let pattern =
+                        if matches!(route.route_match.path_type, RoutePathType::RegexIgnoreCase) {
+                            format!("(?i){}", route.route_match.path)
+                        } else {
+                            route.route_match.path.clone()
+                        };
                     // Patterns are validated before compile; panic is not used —
                     // invalid patterns are skipped only if validation was bypassed.
                     if let Ok(regex) = Regex::new(&pattern) {
@@ -664,7 +659,10 @@ fn resolve_required_file(
         let canonical = fs::canonicalize(&candidate).map_err(|error| {
             validation_error(
                 diagnostic_path,
-                format!("certificate file {} is unavailable: {error}", candidate.display()),
+                format!(
+                    "certificate file {} is unavailable: {error}",
+                    candidate.display()
+                ),
             )
         })?;
         if !canonical.is_file() {

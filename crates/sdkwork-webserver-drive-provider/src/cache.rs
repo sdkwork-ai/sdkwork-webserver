@@ -18,13 +18,18 @@
 //! - Reads are best-effort: a missing or unreadable file is a miss, never an
 //!   error. Cache failures must not break content delivery.
 //! - Eviction is LRU over an in-memory index (rebuilt from disk at startup),
-//!   bounded by total bytes and entry count. Multi-instance eviction races are
+//!   bounded by total bytes and entry count; eviction pops victims from a
+//!   stamp-ordered map in O(log n) so the publish hot path stays cheap at
+//!   the configured 100k-entry bound. Multi-instance eviction races are
 //!   safe: another instance's stale index entry reopens as a miss and
 //!   re-fetches.
+//! - Orphaned staging fills (writer died mid-fill) are swept by age at cache
+//!   open, so the shared staging directory cannot leak disk indefinitely.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
@@ -41,6 +46,12 @@ pub const DRIVE_WEBSITE_CACHE_DEFAULT_MAX_TOTAL_BYTES: u64 = 8 * 1024 * 1024 * 1
 pub const DRIVE_WEBSITE_CACHE_DEFAULT_MAX_ENTRIES: u64 = 100_000;
 const READ_CHUNK_BYTES: usize = 64 * 1024;
 const STANDARD_ENVIRONMENTS: [&str; 4] = ["development", "test", "staging", "production"];
+/// Orphaned staging fills (`*.part`) older than this are swept at cache open.
+/// Live fills complete in minutes at worst; a generous TTL keeps the sweep
+/// safe for concurrent instances sharing the directory (the file name embeds
+/// the writer PID, but PIDs are not comparable across containers, so age is
+/// the only cross-instance-safe staleness signal).
+const STAGING_STALE_AFTER: Duration = Duration::from_secs(6 * 3600);
 
 /// Resolved cache configuration from the process environment.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -164,6 +175,10 @@ struct CacheEntry {
 #[derive(Default)]
 struct CacheIndex {
     entries: HashMap<[u8; 32], CacheEntry>,
+    /// `last_access stamp -> key`, monotonically unique stamps, so LRU
+    /// eviction pops the minimum in O(log n) instead of scanning all
+    /// entries per victim (`pop_first` on a BTreeMap).
+    order: BTreeMap<u64, [u8; 32]>,
     total_bytes: u64,
     access_counter: u64,
 }
@@ -199,8 +214,48 @@ impl DriveContentCache {
             config,
             index: std::sync::Mutex::new(CacheIndex::default()),
         });
+        cache.sweep_staging_before(
+            SystemTime::now()
+                .checked_sub(STAGING_STALE_AFTER)
+                .unwrap_or(SystemTime::UNIX_EPOCH),
+        );
         cache.rebuild_index();
         Some(cache)
+    }
+
+    /// Removes orphaned staging fills (`*.part`) last modified before
+    /// `cutoff`. Called once at cache open; safe for concurrent instances
+    /// because live fills are minutes-scale while the cutoff lags hours
+    /// behind. Returns the number of files removed.
+    pub(crate) fn sweep_staging_before(&self, cutoff: SystemTime) -> usize {
+        let staging_root = staging_root(&self.config);
+        let Ok(entries) = std::fs::read_dir(&staging_root) else {
+            return 0;
+        };
+        let mut removed = 0usize;
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("part") {
+                continue;
+            }
+            let stale = entry
+                .metadata()
+                .ok()
+                .and_then(|metadata| metadata.modified().ok())
+                .map(|modified| modified < cutoff)
+                .unwrap_or(false);
+            if stale && std::fs::remove_file(&path).is_ok() {
+                removed += 1;
+            }
+        }
+        if removed > 0 {
+            tracing::debug!(
+                removed,
+                root = %staging_root.display(),
+                "swept stale drive cache staging fills"
+            );
+        }
+        removed
     }
 
     /// Configuration from process environment; `None` when disabled.
@@ -255,11 +310,17 @@ impl DriveContentCache {
                         continue;
                     }
                     index.total_bytes += bytes;
+                    // Rebuilt entries receive fresh, increasing stamps in
+                    // scan order: deterministic and uniformly cold relative
+                    // to anything touched after startup.
+                    index.access_counter += 1;
+                    let stamp = index.access_counter;
+                    index.order.insert(stamp, key);
                     index.entries.insert(
                         key,
                         CacheEntry {
                             bytes,
-                            last_access: 0,
+                            last_access: stamp,
                         },
                     );
                 }
@@ -295,8 +356,16 @@ impl DriveContentCache {
         let mut index = self.lock_index();
         index.access_counter += 1;
         let access = index.access_counter;
-        if let Some(entry) = index.entries.get_mut(key) {
-            entry.last_access = access;
+        // Read the previous stamp first: `order` and `entries` are disjoint
+        // fields of the same guard, so the stamp must leave the borrow of
+        // `entries` before `order` is mutated.
+        let previous = index.entries.get(key).map(|entry| entry.last_access);
+        if let Some(previous) = previous {
+            index.order.remove(&previous);
+            if let Some(entry) = index.entries.get_mut(key) {
+                entry.last_access = access;
+            }
+            index.order.insert(access, *key);
         }
         path
     }
@@ -345,6 +414,7 @@ impl DriveContentCache {
     fn forget(&self, key: &[u8; 32]) {
         let mut index = self.lock_index();
         if let Some(entry) = index.entries.remove(key) {
+            index.order.remove(&entry.last_access);
             index.total_bytes = index.total_bytes.saturating_sub(entry.bytes);
         }
         let _ = std::fs::remove_file(self.body_path(key));
@@ -406,6 +476,7 @@ impl DriveContentCache {
                 last_access: access,
             },
         );
+        index.order.insert(access, *key);
         index.total_bytes += bytes;
         self.evict_locked(&mut index);
         Some(destination)
@@ -415,12 +486,10 @@ impl DriveContentCache {
         while index.entries.len() as u64 > self.config.max_entries
             || index.total_bytes > self.config.max_total_bytes
         {
-            let Some(victim) = index
-                .entries
-                .iter()
-                .min_by_key(|(_, entry)| entry.last_access)
-                .map(|(key, _)| *key)
-            else {
+            // O(log n) per victim: pop the least recently used stamp instead
+            // of scanning the whole index (10^5 entries stay eviction-cheap
+            // on the publish hot path).
+            let Some((_, victim)) = index.order.pop_first() else {
                 break;
             };
             let entry_bytes = index
@@ -740,6 +809,82 @@ mod tests {
             collected.extend_from_slice(&chunk);
         }
         assert_eq!(collected, (10..=19u8).collect::<Vec<u8>>());
+        let _ = std::fs::remove_dir_all(cache.config().root.clone());
+    }
+
+    #[tokio::test]
+    async fn staging_sweep_removes_only_files_older_than_cutoff() {
+        let config = temp_config("sweep");
+        let cache = DriveContentCache::open(config).expect("cache");
+        let staging_root = cache.config().root.join("test").join("staging");
+        let older_path = staging_root.join("11111111.older.part");
+        let newer_path = staging_root.join("22222222.newer.part");
+        std::fs::write(&older_path, b"orphan").unwrap();
+        // The cutoff sits between the two creation timestamps so one sweep
+        // must remove exactly the older fill (no mtime-editing dependency).
+        std::thread::sleep(Duration::from_millis(120));
+        let cutoff = SystemTime::now();
+        std::thread::sleep(Duration::from_millis(120));
+        std::fs::write(&newer_path, b"live").unwrap();
+
+        // A cutoff in the past keeps both live fills.
+        assert_eq!(
+            cache.sweep_staging_before(cutoff - Duration::from_secs(3600)),
+            0,
+            "files newer than the cutoff are kept"
+        );
+        assert!(older_path.exists() && newer_path.exists());
+        // A cutoff between the creation timestamps removes only the older.
+        assert_eq!(
+            cache.sweep_staging_before(cutoff),
+            1,
+            "older orphan removed"
+        );
+        assert!(!older_path.exists());
+        assert!(newer_path.exists(), "newer fill never swept");
+        // Non-`.part` files are never touched by the sweep.
+        let manifest = staging_root.join("index.json");
+        std::fs::write(&manifest, b"{}").unwrap();
+        assert_eq!(
+            cache.sweep_staging_before(SystemTime::now() + Duration::from_secs(3600)),
+            1,
+            "only .part files swept"
+        );
+        assert!(manifest.exists());
+        let _ = std::fs::remove_dir_all(cache.config().root.clone());
+    }
+
+    #[tokio::test]
+    async fn eviction_is_cheap_at_scale_and_still_lru() {
+        // Structural regression for the O(log n) eviction path: publish far
+        // more entries than max_entries in one process and verify both the
+        // bound and LRU ordering hold (the old min-scan made this quadratic).
+        let mut config = temp_config("scale");
+        config.max_entries = 64;
+        config.max_total_bytes = 64 * 1024;
+        let max_entries = config.max_entries;
+        let cache = DriveContentCache::open(config).expect("cache");
+        let first = cache_key("tenant", "root", "first");
+        let staging = write_staging(&cache, &first, &[0u8; 1024]);
+        cache.publish(&first, &staging).expect("publish");
+        for index in 0..512u32 {
+            let key = cache_key("tenant", "root", &format!("bulk-{index}"));
+            let staging = write_staging(&cache, &key, &[0u8; 1024]);
+            cache.publish(&key, &staging).expect("publish");
+        }
+        // `first` was touched at publish time only, so it is the LRU victim;
+        // the most recent bulk entry must survive.
+        assert!(cache.open_cached(&first, 1024).await.is_none());
+        let last = cache_key("tenant", "root", "bulk-511");
+        assert!(cache.open_cached(&last, 1024).await.is_some());
+        let index = cache.lock_index();
+        assert_eq!(index.entries.len() as u64, max_entries);
+        assert_eq!(
+            index.order.len(),
+            index.entries.len(),
+            "order mirrors entries"
+        );
+        drop(index);
         let _ = std::fs::remove_dir_all(cache.config().root.clone());
     }
 

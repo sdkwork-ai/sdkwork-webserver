@@ -3,9 +3,8 @@ use std::{fs, path::Path};
 use sdkwork_webserver_core::{
     inspect_webserver_config_revision, load_and_compile_webserver_config,
     load_and_compile_webserver_config_revision, AppDomainFallbackLookup, ConfigProviderType,
-    UsageMeteringChannel,
     ProxyProtocolCrc32cPolicy, ProxyProtocolVersion, ResourceConfig, ResourceSampleFailurePolicy,
-    TrustedProxyHeader, WebServerConfigError,
+    TrustedProxyHeader, UsageMeteringChannel, WebServerConfigError,
 };
 use serde_json::{json, Value};
 use tempfile::TempDir;
@@ -562,14 +561,18 @@ fn schema_accepts_limit_req_zones_and_regex_routes() {
         }
     ]);
     let path = write_config(directory.path(), &config);
-    let compiled = load_and_compile_webserver_config(path).expect("limitReqZones + regex must compile");
+    let compiled =
+        load_and_compile_webserver_config(path).expect("limitReqZones + regex must compile");
     assert_eq!(compiled.config().limit_req_zones.len(), 1);
     assert_eq!(compiled.config().limit_req_zones[0].name, "one");
     let selected = compiled
         .select_route("http", "example.com", "/index.HTML", "GET")
         .expect("case-insensitive regex route");
     assert_eq!(selected.route.id, "limited");
-    assert_eq!(selected.route.rewrite[0].flag, sdkwork_webserver_core::RewriteFlag::Permanent);
+    assert_eq!(
+        selected.route.rewrite[0].flag,
+        sdkwork_webserver_core::RewriteFlag::Permanent
+    );
 }
 
 #[test]
@@ -2477,7 +2480,10 @@ fn app_domain_fallback_section_compiles_and_validates() {
         .as_ref()
         .expect("fallback section must be present");
     assert!(fallback.enabled);
-    assert_eq!(fallback.suffixes, vec!["sdkwork.com", "sdkwork.cn", "86offer.cn"]);
+    assert_eq!(
+        fallback.suffixes,
+        vec!["sdkwork.com", "sdkwork.cn", "86offer.cn"]
+    );
     assert_eq!(fallback.timeout_ms, 1500);
     assert!(matches!(fallback.lookup, AppDomainFallbackLookup::Embedded));
 
@@ -2489,9 +2495,10 @@ fn app_domain_fallback_section_compiles_and_validates() {
     });
     let path = write_config(directory.path(), &config);
     let error = load_and_compile_webserver_config(path).expect_err("bad endpoint must fail");
-    assert!(error.diagnostics().iter().any(|diagnostic| {
-        diagnostic.message.contains("absolute http(s) endpoint URL")
-    }));
+    assert!(error
+        .diagnostics()
+        .iter()
+        .any(|diagnostic| { diagnostic.message.contains("absolute http(s) endpoint URL") }));
 
     // Wildcard or malformed suffixes are rejected.
     let mut config = base_config();
@@ -2502,7 +2509,9 @@ fn app_domain_fallback_section_compiles_and_validates() {
     let path = write_config(directory.path(), &config);
     let error = load_and_compile_webserver_config(path).expect_err("wildcard suffix must fail");
     assert!(error.diagnostics().iter().any(|diagnostic| {
-        diagnostic.message.contains("without a leading dot or wildcard")
+        diagnostic
+            .message
+            .contains("without a leading dot or wildcard")
     }));
 
     // The full 14-suffix platform catalog is the default when absent.
@@ -2550,9 +2559,10 @@ fn usage_metering_section_compiles_and_validates() {
     });
     let path = write_config(directory.path(), &config);
     let error = load_and_compile_webserver_config(path).expect_err("bad endpoint must fail");
-    assert!(error.diagnostics().iter().any(|diagnostic| {
-        diagnostic.message.contains("absolute http(s) endpoint URL")
-    }));
+    assert!(error
+        .diagnostics()
+        .iter()
+        .any(|diagnostic| { diagnostic.message.contains("absolute http(s) endpoint URL") }));
 
     // out-of-range window fails.
     let mut config = base_config();

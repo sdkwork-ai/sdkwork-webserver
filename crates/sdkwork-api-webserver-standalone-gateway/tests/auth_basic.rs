@@ -3,9 +3,9 @@
 use std::{fs, net::TcpListener, path::PathBuf, time::Duration};
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use serde_json::json;
 use sdkwork_api_webserver_standalone_gateway::run_data_plane_until;
 use sdkwork_webserver_core::{apr1_hash, load_and_compile_webserver_config};
+use serde_json::json;
 use tokio::sync::oneshot;
 
 fn free_port() -> u16 {
@@ -65,7 +65,11 @@ fn write_config(port: u16, password_hash: &str) -> PathBuf {
             }]
         }]
     });
-    fs::write(&path, serde_json::to_vec_pretty(&config).expect("serialize")).expect("write");
+    fs::write(
+        &path,
+        serde_json::to_vec_pretty(&config).expect("serialize"),
+    )
+    .expect("write");
     path
 }
 

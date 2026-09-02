@@ -27,9 +27,9 @@ describe("webserver error messages", () => {
       },
     }, translator("zh-CN"));
 
-    expect(message).toContain("输入内容未通过校验");
+    expect(message).toContain("部分输入未通过校验");
     expect(message).toContain("name: An application with this name already exists");
-    expect(message).toContain("排障编号：trace-create-40001");
+    expect(message).toContain("支持参考号：trace-create-40001");
   });
 
   it.each([
@@ -82,7 +82,7 @@ describe("webserver error messages", () => {
 
     expect(message).toContain("应用 application-42 已创建为草稿");
     expect(message).toContain("服务暂时不可用");
-    expect(message).toContain("排障编号：trace-source-50301");
+    expect(message).toContain("支持参考号：trace-source-50301");
   });
 
   it("uses safe 4xx detail without exposing SQL, secrets, stacks, or raw 5xx detail", () => {
@@ -126,6 +126,6 @@ describe("webserver error messages", () => {
     expect(formatWebserverErrorMessage(
       new Error("database password=do-not-show"),
       translator("zh-CN"),
-    )).toBe("操作未完成。请稍后重试；如仍失败，请联系管理员。");
+    )).toBe("操作未能完成。请稍后重试；若持续失败请联系管理员。");
   });
 });

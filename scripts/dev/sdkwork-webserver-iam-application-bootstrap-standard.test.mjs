@@ -26,12 +26,18 @@ test('credential entry uses the PC manifest identity in every client profile', (
   assert.equal(pcManifest.backend.tenantId, '100001');
   assert.equal(pcManifest.backend.organizationId, '0');
 
-  for (const profileId of ['standalone.development', 'cloud.development']) {
-    const client = topology.orchestration.profiles[profileId].processes.find(
-      (entry) => entry.id === 'webserver-pc-browser',
+  // Standalone-only topology: every profile must be standalone, and the local
+  // development profile owns the PC browser process (renamed from the retired
+  // `webserver-pc-browser` id); server-only profiles do not run a browser.
+  for (const profileId of Object.keys(topology.orchestration.profiles)) {
+    assert.ok(
+      profileId.startsWith('standalone.'),
+      `profile "${profileId}" must be standalone (standalone-only deployment)`,
     );
-    assert.equal(client.applicationRoot, 'apps/sdkwork-webserver-pc');
   }
+  const developmentProfile = topology.orchestration.profiles['standalone.development'];
+  const client = developmentProfile.processes.find((entry) => entry.id === 'webserver-browser');
+  assert.equal(client?.applicationRoot, 'apps/sdkwork-webserver-pc');
 });
 
 test('standalone startup embeds IAM App API through its owner assembly', () => {
@@ -47,10 +53,13 @@ test('standalone startup embeds IAM App API through its owner assembly', () => {
   const gatewayCargo = read('crates/sdkwork-api-webserver-standalone-gateway/Cargo.toml');
   const workspaceCargo = read('Cargo.toml');
 
-  assert.match(profile, /crate::iam_module_bootstrap::web_iam_module_manifest_path\(\)/u);
   assert.match(
     profile,
-    /sdkwork_api_iam_assembly::assemble_app_api_contribution_with_module_manifests\(&\[\s*web_iam_manifest,\s*\]\)/u,
+    /crate::iam_module_bootstrap::federated_iam_module_manifest_paths\(\)/u,
+  );
+  assert.match(
+    profile,
+    /sdkwork_api_iam_assembly::assemble_app_api_contribution_with_module_manifests\(\s*&federated_iam_manifests,?\s*\)/u,
   );
   assert.match(profile, /sdkwork_api_drive_assembly::assemble_app_api_contribution\(\)/u);
   assert.match(profile, /compose_owner_contributions/u);
@@ -58,7 +67,8 @@ test('standalone startup embeds IAM App API through its owner assembly', () => {
   assert.match(profile, /assembly_unavailable\("sdkwork-iam"/u);
   assert.match(iamModuleBootstrap, /specs\/iam\.module\.manifest\.json/u);
   assert.match(gatewayBootstrap, /assemble_standalone_profile\(\)\s*\.await/u);
-  assert.match(gatewayBootstrap, /with_web_request_context/u);
+  assert.match(gatewayBootstrap, /iam_web_request_context_resolver_from_env/u);
+  assert.match(gatewayBootstrap, /with_problem_correlation/u);
   assert.match(gatewayCargo, /sdkwork-api-iam-assembly/u);
   assert.match(gatewayCargo, /sdkwork-api-drive-assembly/u);
   assert.match(workspaceCargo, /sdkwork-api-iam-assembly/u);

@@ -26,26 +26,29 @@ function runNode(args, cwd = REPO_ROOT) {
 test('root pnpm surface exposes every owned capability through canonical action-first names', () => {
   const scripts = readJson('package.json').scripts;
   for (const name of [
-    'dev', 'dev:standalone', 'dev:cloud', 'stop', 'build', 'test', 'check', 'verify', 'clean',
+    'dev', 'dev:standalone', 'stop', 'build', 'test', 'check', 'verify', 'clean',
     'api:materialize', 'api:materialize:check', 'api:check',
     'sdk:generate', 'sdk:generate:check', 'sdk:check',
     'db:postgres:plan', 'db:postgres:init', 'db:postgres:migrate',
     'gateway:run:standalone', 'gateway:plan:standalone', 'gateway:build:standalone',
     'gateway:package:standalone', 'gateway:validate:standalone', 'gateway:matrix',
-    'release:plan:standalone', 'release:plan:cloud',
-    'release:build:standalone', 'release:build:cloud',
-    'release:package:standalone', 'release:package:cloud',
-    'release:validate:standalone', 'release:validate:cloud',
-    'deploy:validate', 'deploy:plan:standalone', 'deploy:plan:cloud',
-    'deploy:apply:standalone', 'deploy:apply:cloud',
-    'deploy:rollback:standalone', 'deploy:rollback:cloud',
+    'release:plan:standalone',
+    'release:build:standalone',
+    'release:package:standalone',
+    'release:validate:standalone',
+    'deploy:validate', 'deploy:plan:standalone',
+    'deploy:apply:standalone',
+    'deploy:rollback:standalone',
     'topology:validate', 'topology:plan', 'sbom:generate', 'sbom:check',
   ]) {
     assert.equal(typeof scripts[name], 'string', `missing canonical root script ${name}`);
   }
+  // Standalone-only refactor: cloud-prefixed canonical scripts no longer exist.
+  for (const name of Object.keys(scripts)) {
+    assert.doesNotMatch(name, /:cloud$/u, `retired cloud script must not return: ${name}`);
+  }
   assert.equal(scripts.dev, 'pnpm dev:standalone');
   assert.equal(scripts['dev:standalone'], 'pnpm exec sdkwork-app dev --deployment-profile standalone');
-  assert.equal(scripts['dev:cloud'], 'pnpm exec sdkwork-app dev --deployment-profile cloud');
   assert.equal(scripts['_sdkwork:build'], 'node scripts/build.mjs --release');
   assert.equal(scripts['_sdkwork:clean'], 'node scripts/clean.mjs');
   assert.equal(
@@ -60,9 +63,9 @@ test('root pnpm surface exposes every owned capability through canonical action-
 test('SDK generation covers every materialized manifest language', () => {
   const plans = collectGenerationPlans();
   const expected = [
-    'sdkwork-web-app-sdk',
-    'sdkwork-web-backend-sdk',
-    'sdkwork-web-internal-sdk',
+    'sdkwork-webserver-app-sdk',
+    'sdkwork-webserver-backend-sdk',
+    'sdkwork-webserver-internal-sdk',
   ].flatMap((familyName) => {
     const manifest = readJson(`sdks/${familyName}/sdk-manifest.json`);
     return manifest.languages
@@ -78,27 +81,19 @@ test('SDK generation covers every materialized manifest language', () => {
 
 test('PC app surface delegates dev and stop while keeping its local lifecycle scoped', () => {
   const appRoot = 'apps/sdkwork-webserver-pc';
-  const parentDeployment = readJson('etc/sdkwork.deployment.config.json');
   const deployment = readJson(`${appRoot}/etc/sdkwork.deployment.config.json`);
-  const cloudDevelopment = readJson(`${appRoot}/etc/browser/runtime-env.cloud.development.json`);
-  const cloudProduction = readJson(`${appRoot}/etc/browser/runtime-env.production.json`);
-  const standaloneDevelopment = readJson(`${appRoot}/etc/browser/runtime-env.development.json`);
-  const standaloneProduction = readJson(
-    `${appRoot}/etc/browser/runtime-env.standalone.production.json`,
-  );
+  // Standalone-only refactor: one runtime-env per standalone lifecycle profile.
+  const standaloneRuntimeEnvs = Object.entries(deployment.profiles).map(([profileId, profile]) => ({
+    profileId,
+    runtimeConfig: readJson(`${appRoot}/etc/${profile.source}`),
+  }));
   const scripts = readJson(`${appRoot}/package.json`).scripts;
   assert.equal(deployment.kind, 'sdkwork.component-deployment');
   assert.equal(deployment.parentDeploymentConfig, '../../../etc/sdkwork.deployment.config.json');
   assert.equal(deployment.parentTopologySpec, '../../../specs/topology.spec.json');
-  assert.equal(
-    cloudDevelopment.appbaseAppApiBaseUrl,
-    parentDeployment.environments.development.cloudApiBaseUrl,
-  );
-  assert.equal(
-    cloudProduction.appbaseAppApiBaseUrl,
-    parentDeployment.environments.production.cloudApiBaseUrl,
-  );
-  for (const runtimeConfig of [standaloneDevelopment, standaloneProduction]) {
+  for (const { profileId, runtimeConfig } of standaloneRuntimeEnvs) {
+    assert.equal(runtimeConfig.profileId, profileId);
+    assert.equal(runtimeConfig.deploymentProfile, 'standalone');
     assert.equal(runtimeConfig.browserOriginMode, 'same-origin');
     for (const key of [
       'appApiBaseUrl',
@@ -106,7 +101,7 @@ test('PC app surface delegates dev and stop while keeping its local lifecycle sc
       'driveAppApiBaseUrl',
       'appbaseAppApiBaseUrl',
     ]) {
-      assert.equal(runtimeConfig[key], '/');
+      assert.equal(runtimeConfig[key], '/', `${profileId}.${key}`);
     }
     assert.doesNotMatch(JSON.stringify(runtimeConfig), /:(?:3800|3900)\b/u);
   }
@@ -115,15 +110,8 @@ test('PC app surface delegates dev and stop while keeping its local lifecycle sc
     scripts['dev:standalone'],
     'pnpm exec sdkwork-app dev --root ../.. --deployment-profile standalone',
   );
-  assert.equal(
-    scripts['dev:cloud'],
-    'pnpm exec sdkwork-app dev --root ../.. --deployment-profile cloud',
-  );
   assert.equal(scripts.stop, 'pnpm exec sdkwork-app stop --root ../..');
   assert.match(scripts['build:standalone'], /--deployment-profile standalone/u);
-  assert.match(scripts['build:standalone'], /--mode standalone\.production/u);
-  assert.match(scripts['build:cloud'], /--deployment-profile cloud/u);
-  assert.match(scripts['build:cloud'], /--mode cloud\.production/u);
   assert.doesNotMatch(scripts.build, /sdkwork-app/u);
   assert.doesNotMatch(scripts.test, /sdkwork-app/u);
   assert.doesNotMatch(scripts.clean, /sdkwork-app/u);
@@ -138,58 +126,51 @@ test('standalone profile exposes only the application gateway to browser clients
   assert.doesNotMatch(env, /PLATFORM_API_GATEWAY_HTTP_URL/u);
   assert.match(env, /SDKWORK_WEBSERVER_APPLICATION_PUBLIC_HTTP_URL=http:\/\/127\.0\.0\.1:3800/u);
 
+  // Development: one adaptive-web delivery proxies both PC and H5 renderers
+  // behind the single same-origin gateway ingress.
   const development = topology.orchestration.profiles['standalone.development'];
-  assert.deepEqual(development.browserDeliveries, [
-    {
-      id: 'webserver-pc-browser',
-      applicationRoot: 'apps/sdkwork-webserver-pc',
-      clientArchitectures: ['pc-web'],
-      originMode: 'same-origin',
-      deliveryMode: 'dev-server-proxy',
-      apiSurfaceId: 'application.public-ingress',
-      clientProcessId: 'webserver-pc-browser',
-      preserveCanonicalPaths: true,
-    },
-  ]);
+  assert.equal(development.browserDeliveries.length, 1);
+  const delivery = development.browserDeliveries[0];
+  assert.equal(delivery.id, 'webserver-adaptive-web');
+  assert.equal(delivery.applicationRoot, 'apps/sdkwork-webserver-pc');
+  assert.deepEqual(delivery.clientArchitectures, ['pc-web', 'h5']);
+  assert.equal(delivery.originMode, 'same-origin');
+  assert.equal(delivery.deliveryMode, 'dev-server-proxy');
+  assert.equal(delivery.apiSurfaceId, 'application.public-ingress');
+  assert.equal(delivery.clientProcessId, 'webserver-browser');
+  assert.equal(delivery.preserveCanonicalPaths, true);
 
+  // Production: the same gateway statically serves the PC and H5 bundles.
   const production = topology.orchestration.profiles['standalone.production'];
-  assert.deepEqual(production.browserDeliveries, [
-    {
-      id: 'webserver-pc-browser',
-      applicationRoot: 'apps/sdkwork-webserver-pc',
-      clientArchitectures: ['pc-web'],
-      originMode: 'same-origin',
-      deliveryMode: 'gateway-static',
-      apiSurfaceId: 'application.public-ingress',
-      hostProcessId: 'application.public-ingress',
-      buildOutput: 'apps/sdkwork-webserver-pc/dist',
-      runtimeRootEnv: 'SDKWORK_WEBSERVER_PC_STATIC_ROOT',
-      mountPath: '/',
-      spaFallback: '/index.html',
-    },
-  ]);
-  assert.match(
-    readFileSync(path.join(REPO_ROOT, topology.profileFiles['standalone.production']), 'utf8'),
-    /SDKWORK_WEBSERVER_PC_STATIC_ROOT=share\/sdkwork\/webserver-pc/u,
+  assert.ok(production.browserDeliveries.length > 0);
+  for (const staticDelivery of production.browserDeliveries) {
+    assert.equal(staticDelivery.originMode, 'same-origin');
+    assert.equal(staticDelivery.deliveryMode, 'gateway-static');
+    assert.equal(staticDelivery.apiSurfaceId, 'application.public-ingress');
+    assert.equal(staticDelivery.hostProcessId, 'application.public-ingress');
+    assert.match(staticDelivery.buildOutput, /^apps\/sdkwork-webserver-(pc|h5)\/dist$/u);
+  }
+  const productionEnv = readFileSync(
+    path.join(REPO_ROOT, topology.profileFiles['standalone.production']),
+    'utf8',
   );
+  assert.match(productionEnv, /SDKWORK_WEBSERVER_PC_STATIC_ROOT=\/usr\/share\/sdkwork\/webserver\/web\/pc/u);
+  assert.match(productionEnv, /SDKWORK_WEBSERVER_H5_STATIC_ROOT=\/usr\/share\/sdkwork\/webserver\/web\/h5/u);
 });
 
-test('parent topology starts the browser client in both development profiles only', () => {
+test('parent topology starts the browser client only in the standalone development profile', () => {
   const topology = readJson('specs/topology.spec.json');
-  const standalone = topology.orchestration.profiles['standalone.development'].processes;
-  const cloud = topology.orchestration.profiles['cloud.development'].processes;
-  const standaloneClient = standalone.find((entry) => entry.id === 'webserver-pc-browser');
-  const cloudClient = cloud.find((entry) => entry.id === 'webserver-pc-browser');
-  assert.deepEqual(standaloneClient.runtimeTargets, ['browser']);
-  assert.deepEqual(cloudClient.runtimeTargets, ['browser']);
-  assert.equal(standaloneClient.script, '_sdkwork:client:browser:standalone');
-  assert.equal(cloudClient.script, '_sdkwork:client:browser:cloud');
-  for (const profileId of ['standalone.production', 'cloud.production']) {
+  const development = topology.orchestration.profiles['standalone.development'].processes;
+  const client = development.find((entry) => entry.id === 'webserver-browser');
+  assert.ok(client, 'standalone development must start the browser client');
+  assert.deepEqual(client.runtimeTargets, ['browser']);
+  assert.deepEqual(client.clientArchitectures, ['pc-web', 'h5']);
+  for (const profileId of ['standalone.test', 'standalone.production', 'standalone.staging']) {
+    const processes = topology.orchestration.profiles[profileId].processes;
     assert.equal(
-      topology.orchestration.profiles[profileId].processes.some(
-        (entry) => entry.id === 'webserver-pc-browser',
-      ),
+      processes.some((entry) => entry.id === 'webserver-browser'),
       false,
+      `${profileId} must not start a browser client process`,
     );
   }
 });

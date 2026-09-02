@@ -120,7 +120,7 @@ Default management port bases (overridable in the env file): development `13800`
 | `pnpm build:container:standalone` | Build the unified install image only (no bundle) |
 | `pnpm build:container:install` | Build + package the self-contained install bundle (this guide) |
 | `pnpm deploy:apply:standalone:docker` | Run the bundle deploy.sh from the repository root |
-| `docker:build:standalone` and friends | Retained migration aliases; new automation MUST use `build:container:*` / `deploy:apply:*` |
+| `build:container:*` | Container build entrypoints; new automation MUST use `build:container:*` / `deploy:apply:*` |
 
 ## 7. Webserver Spec Compliance (SDKWORK_WEBSERVER_SPEC.md)
 

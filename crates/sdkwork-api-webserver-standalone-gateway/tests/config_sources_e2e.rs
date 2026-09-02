@@ -77,7 +77,11 @@ fn write_json(directory: &PathBuf, port: u16, upstream_port: u16) -> PathBuf {
             ]
         }]
     });
-    fs::write(&path, serde_json::to_vec_pretty(&config).expect("serialize")).expect("write");
+    fs::write(
+        &path,
+        serde_json::to_vec_pretty(&config).expect("serialize"),
+    )
+    .expect("write");
     path
 }
 
@@ -99,11 +103,7 @@ async fn spawn_echo_upstream(port: u16) {
                     return;
                 };
                 let head = String::from_utf8_lossy(&buffer[..read]);
-                let path = head
-                    .split_whitespace()
-                    .nth(1)
-                    .unwrap_or("/")
-                    .to_owned();
+                let path = head.split_whitespace().nth(1).unwrap_or("/").to_owned();
                 let body = format!("echo:{path}");
                 let response = format!(
                     "HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
@@ -116,9 +116,7 @@ async fn spawn_echo_upstream(port: u16) {
     });
 }
 
-async fn spawn_data_plane(
-    path: &PathBuf,
-) -> (oneshot::Sender<()>, tokio::task::JoinHandle<()>) {
+async fn spawn_data_plane(path: &PathBuf) -> (oneshot::Sender<()>, tokio::task::JoinHandle<()>) {
     let loader = WebServerConfigLoader::new();
     let compiled = loader
         .load_and_compile(path, &ConfigLoadOptions::default())
@@ -141,7 +139,10 @@ async fn nginx_toml_and_json_sources_serve_identical_responses() {
     fs::create_dir_all(&directory).expect("dir");
 
     let sources = [
-        ("nginx", write_nginx_conf(&directory, free_port(), upstream_port)),
+        (
+            "nginx",
+            write_nginx_conf(&directory, free_port(), upstream_port),
+        ),
         ("toml", write_toml(&directory, free_port(), upstream_port)),
         ("json", write_json(&directory, free_port(), upstream_port)),
     ];

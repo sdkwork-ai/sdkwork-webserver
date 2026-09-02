@@ -45,7 +45,12 @@ pub(crate) struct DurableCachedResponse {
 }
 
 impl CachedResponse {
-    pub fn new(metadata: ResponseMetadata, body: Bytes, ttl: Duration, stale_ttl: Duration) -> Self {
+    pub fn new(
+        metadata: ResponseMetadata,
+        body: Bytes,
+        ttl: Duration,
+        stale_ttl: Duration,
+    ) -> Self {
         let inserted_at = Instant::now();
         let fresh_until = inserted_at + ttl;
         let stale_until = fresh_until + stale_ttl;
@@ -109,7 +114,8 @@ impl CachedResponse {
             .checked_sub(Duration::from_millis(age_ms))
             .unwrap_or_else(Instant::now);
         let fresh_until = Instant::now() + Duration::from_millis(remaining_ms);
-        let stale_until = Instant::now() + Duration::from_millis(stale_remaining_ms.max(remaining_ms));
+        let stale_until =
+            Instant::now() + Duration::from_millis(stale_remaining_ms.max(remaining_ms));
         Self {
             metadata: durable.metadata,
             body: Bytes::from(durable.body),
@@ -119,9 +125,11 @@ impl CachedResponse {
             inserted_unix_ms: durable.inserted_unix_ms,
             fresh_until_unix_ms: durable.fresh_until_unix_ms,
             stale_until_unix_ms: if durable.stale_until_unix_ms == 0 {
-                durable
-                    .fresh_until_unix_ms
-                    .saturating_add(durable.fresh_until_unix_ms.saturating_sub(durable.inserted_unix_ms))
+                durable.fresh_until_unix_ms.saturating_add(
+                    durable
+                        .fresh_until_unix_ms
+                        .saturating_sub(durable.inserted_unix_ms),
+                )
             } else {
                 durable.stale_until_unix_ms
             },
@@ -153,11 +161,7 @@ pub(crate) fn decide_cacheability(
     fresh_seconds: Option<u64>,
 ) -> CacheDecision {
     let cacheable_status = matches!(status, 200 | 203 | 301 | 302 | 307 | 308);
-    let has_set_cookie = headers
-        .get_all("set-cookie")
-        .iter()
-        .next()
-        .is_some();
+    let has_set_cookie = headers.get_all("set-cookie").iter().next().is_some();
     let cache_control = headers
         .get("cache-control")
         .and_then(|value| value.to_str().ok())

@@ -53,9 +53,8 @@ pub(crate) async fn assemble_standalone_profile(
         StandaloneProfileError::assembly_unavailable("sdkwork-webserver", error.to_string())
     })?;
     let federated_iam_manifests =
-        crate::iam_module_bootstrap::federated_iam_module_manifest_paths().map_err(|error| {
-            StandaloneProfileError::assembly_unavailable("sdkwork-iam", error)
-        })?;
+        crate::iam_module_bootstrap::federated_iam_module_manifest_paths()
+            .map_err(|error| StandaloneProfileError::assembly_unavailable("sdkwork-iam", error))?;
     let iam = sdkwork_api_iam_assembly::assemble_app_api_contribution_with_module_manifests(
         &federated_iam_manifests,
     )

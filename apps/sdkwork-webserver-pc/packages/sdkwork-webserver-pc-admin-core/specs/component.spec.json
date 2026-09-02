@@ -62,7 +62,7 @@
     "sdkClients": [],
     "sdkDependencies": [
       {
-        "workspace": "sdkwork-web-backend-sdk",
+        "workspace": "sdkwork-webserver-backend-sdk",
         "permissionModuleId": "web",
         "surface": "backend-api",
         "credentialMode": "authenticated-backend-admin"

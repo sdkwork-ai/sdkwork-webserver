@@ -17,11 +17,19 @@
 
 name: sdkwork-webserver-test
 
+# Bounded json-file log rotation (DEPLOYMENT_SPEC.md §6 runtime hardening).
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   webserver:
     image: registry.sdkwork.com/apps/sdkwork-webserver-standalone:${SDKWORK_WEBSERVER_IMAGE_TAG:-0.1.0}
     container_name: sdkwork-webserver-test
     restart: unless-stopped
+    logging: *default-logging
     cap_add:
       - NET_BIND_SERVICE
     ports:

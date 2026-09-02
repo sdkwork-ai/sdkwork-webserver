@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 1,
+  "name": "sdkwork-webserver-internal-sdk",
+  "type": "sdk-family",
+  "domain": "web",
+  "apiAuthority": "sdkwork-webserver-internal-api",
+  "apiPrefix": "/internal/v3/api",
+  "sdkSurface": "internal",
+  "sdkType": "custom",
+  "languages": [
+    "typescript",
+    "rust"
+  ],
+  "sdk": {
+    "family": "sdkwork-webserver-internal-sdk",
+    "authority": "sdkwork-webserver-internal-api",
+    "sdkOwner": "sdkwork-webserver",
+    "generationInputSpec": "openapi/sdkwork-web-internal-api.sdkgen.yaml",
+    "apiPrefix": "/internal/v3/api",
+    "packageName": "@sdkwork/web-internal-sdk",
+    "sdkName": "sdkwork-webserver-internal-sdk",
+    "sdkType": "custom",
+    "sdkSurface": "internal",
+    "standardProfile": "sdkwork-v3",
+    "ownerOnlyOperationCount": 4
+  },
+  "generator": {
+    "package": "@sdkwork/sdk-generator",
+    "entrypoint": "../sdkwork-sdk-generator/bin/sdkgen.js",
+    "type": "custom",
+    "standardProfile": "sdkwork-v3"
+  },
+  "contracts": {
+    "layerRole": "sdk-generated",
+    "sdkDependencies": [],
+    "publicExports": [
+      "."
+    ],
+    "runtimeEntrypoints": [],
+    "routeManifest": null,
+    "sdkClients": [],
+    "events": [],
+    "configKeys": []
+  },
+  "auth": {
+    "mode": "ingress-token",
+    "apiKeyHeader": "X-API-Key",
+    "requestIdHeader": "X-Request-Id",
+    "requestIdOwnership": "server"
+  },
+  "requestContextFramework": {
+    "apiSurface": "internal-api",
+    "contextType": "WebRequestContext",
+    "resolver": "WebRequestContextResolver + MachineCredentialResolverDecorator",
+    "standardInterceptors": [
+      "request_identity",
+      "surface_classification",
+      "cors",
+      "method_guard",
+      "header_security",
+      "cross_site_request",
+      "sql_injection_guard",
+      "request_size_limit",
+      "rate_limit",
+      "idempotency",
+      "request_context_resolution",
+      "authentication",
+      "authorization",
+      "tenant_isolation",
+      "context_injection",
+      "logging",
+      "audit",
+      "response_identity"
+    ]
+  },
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "sdkwork-webserver-internal-sdk",
+    "displayName": "SDKWork Web Internal SDK",
+    "version": "0.1.0",
+    "type": "sdk-family",
+    "root": "sdkwork-webserver/sdks/sdkwork-webserver-internal-sdk",
+    "domain": "web",
+    "capability": "web-internal-sdk",
+    "languages": [
+      "typescript",
+      "rust"
+    ],
+    "generated": false,
+    "manifests": []
+  },
+  "canonicalSpecs": [
+    {
+      "file": "COMPONENT_SPEC.md",
+      "path": "../../../sdkwork-specs/COMPONENT_SPEC.md",
+      "purpose": "Component-local contract and discovery rules."
+    },
+    {
+      "file": "CODE_STYLE_SPEC.md",
+      "path": "../../../sdkwork-specs/CODE_STYLE_SPEC.md",
+      "purpose": "Authored source structure and generated code boundaries."
+    },
+    {
+      "file": "NAMING_SPEC.md",
+      "path": "../../../sdkwork-specs/NAMING_SPEC.md",
+      "purpose": "Canonical SDKWork naming rules."
+    },
+    {
+      "file": "MODULE_SPEC.md",
+      "path": "../../../sdkwork-specs/MODULE_SPEC.md",
+      "purpose": "Reusable module and package boundary rules."
+    },
+    {
+      "file": "TEST_SPEC.md",
+      "path": "../../../sdkwork-specs/TEST_SPEC.md",
+      "purpose": "Verification and contract testing expectations."
+    },
+    {
+      "file": "TYPESCRIPT_CODE_SPEC.md",
+      "path": "../../../sdkwork-specs/TYPESCRIPT_CODE_SPEC.md",
+      "purpose": "TypeScript and Node package rules."
+    },
+    {
+      "file": "RUST_CODE_SPEC.md",
+      "path": "../../../sdkwork-specs/RUST_CODE_SPEC.md",
+      "purpose": "Rust crate and module rules."
+    },
+    {
+      "file": "JAVA_CODE_SPEC.md",
+      "path": "../../../sdkwork-specs/JAVA_CODE_SPEC.md",
+      "purpose": "Java and Maven module rules."
+    },
+    {
+      "file": "FRONTEND_CODE_SPEC.md",
+      "path": "../../../sdkwork-specs/FRONTEND_CODE_SPEC.md",
+      "purpose": "Frontend authored source structure."
+    },
+    {
+      "file": "FRONTEND_SPEC.md",
+      "path": "../../../sdkwork-specs/FRONTEND_SPEC.md",
+      "purpose": "Frontend service, state, SDK, and UI boundary rules."
+    },
+    {
+      "file": "UI_ARCHITECTURE_SPEC.md",
+      "path": "../../../sdkwork-specs/UI_ARCHITECTURE_SPEC.md",
+      "purpose": "UI architecture selection rules."
+    },
+    {
+      "file": "APP_FLUTTER_UI_SPEC.md",
+      "path": "../../../sdkwork-specs/APP_FLUTTER_UI_SPEC.md",
+      "purpose": "Flutter package rules."
+    },
+    {
+      "file": "SDK_SPEC.md",
+      "path": "../../../sdkwork-specs/SDK_SPEC.md",
+      "purpose": "SDK family and generated client integration rules."
+    },
+    {
+      "file": "SDK_WORKSPACE_GENERATION_SPEC.md",
+      "path": "../../../sdkwork-specs/SDK_WORKSPACE_GENERATION_SPEC.md",
+      "purpose": "SDK workspace and generated artifact placement rules."
+    },
+    {
+      "file": "API_SPEC.md",
+      "path": "../../../sdkwork-specs/API_SPEC.md",
+      "purpose": "OpenAPI authority rules for SDK generation."
+    }
+  ],
+  "verification": {
+    "commands": [
+      "node --input-type=module -e \"import { readFileSync } from 'node:fs'; JSON.parse(readFileSync('specs/component.spec.json','utf8'));\"",
+      "node tools/materialize_web_phase1_contracts.mjs",
+      "node sdks/sdkwork-webserver-internal-sdk/bin/generate-sdk.mjs"
+    ]
+  },
+  "metadata": {
+    "managedBy": "sdkwork-webserver",
+    "standardVersion": "2026-06-26"
+  }
+}

@@ -268,7 +268,7 @@ archive extraction, packaged gateway validation, HTTP/HTTPS readiness and traffi
 and cleanup smoke for both standalone and cloud profiles. REQ-2026-0059 adds the same bounded
 archive and HTTP/HTTPS/SNI/stop evidence for arm64 using an AArch64 userspace and architecture-bound
 manifests. The smoke includes the canonical
-`sdkwork-web-node-daemon` and the explicitly labelled `sdkwork-web-agent` compatibility binary.
+`sdkwork-webserver-node-daemon` and the explicitly labelled `sdkwork-webserver-agent` compatibility binary.
 Container/service packages, SBOM, signing, provenance, upgrade, rollback, uninstall, native-arm64
 capacity/soak, and production HA evidence remain required.
 

@@ -3,9 +3,9 @@
 use std::{fs, net::TcpListener, path::PathBuf, time::Duration};
 
 use flate2::read::GzDecoder;
-use serde_json::{json, Value};
 use sdkwork_api_webserver_standalone_gateway::run_data_plane_until;
 use sdkwork_webserver_core::load_and_compile_webserver_config;
+use serde_json::{json, Value};
 use std::io::Read;
 use tokio::sync::oneshot;
 
@@ -61,7 +61,11 @@ fn write_config(port: u16, gzip: Value) -> PathBuf {
             }]
         }]
     });
-    fs::write(&path, serde_json::to_vec_pretty(&config).expect("serialize")).expect("write");
+    fs::write(
+        &path,
+        serde_json::to_vec_pretty(&config).expect("serialize"),
+    )
+    .expect("write");
     path
 }
 

@@ -79,9 +79,7 @@ pub fn resolve_nginx_sidecar_path(argument: Option<String>) -> Result<PathBuf, S
     let sidecar_name = nginx_sidecar_file_name(&profile, &environment);
 
     if let Some(app_root) = resolve_application_root() {
-        let repo_sidecar = app_root
-            .join(WEBSERVER_DEPLOY_SUBDIR)
-            .join(&sidecar_name);
+        let repo_sidecar = app_root.join(WEBSERVER_DEPLOY_SUBDIR).join(&sidecar_name);
         if repo_sidecar.is_file() {
             return Ok(repo_sidecar);
         }
@@ -142,7 +140,8 @@ fn resolve_application_root() -> Option<PathBuf> {
         if let Ok(path) = env::var(key) {
             if !path.trim().is_empty() {
                 let root = PathBuf::from(path);
-                if root.join(WEBSERVER_DEPLOY_SUBDIR)
+                if root
+                    .join(WEBSERVER_DEPLOY_SUBDIR)
                     .join(LAYOUT_V3_COMMON_FILE)
                     .is_file()
                 {
@@ -337,25 +336,33 @@ mod tests {
         let module = tempfile::tempdir().expect("temp dir");
         let webserver_dir = module.path().join("deployments/webserver");
         std::fs::create_dir_all(&webserver_dir).expect("create webserver dir");
-        std::fs::write(webserver_dir.join("server.common.toml"), b"enabled = true\n").expect("write common");
+        std::fs::write(
+            webserver_dir.join("server.common.toml"),
+            b"enabled = true\n",
+        )
+        .expect("write common");
         std::fs::write(
             webserver_dir.join("nginx.standalone.development.conf"),
             b"# sidecar\n",
         )
         .expect("write sidecar");
 
-        with_env(APP_ROOT_ENV, Some(module.path().to_str().expect("utf8")), || {
-            with_env(DEPLOYMENT_PROFILE_ENV, Some("standalone"), || {
-                with_env(ENVIRONMENT_ENV, Some("development"), || {
-                    let resolved =
-                        resolve_nginx_sidecar_path(None).expect("sidecar must resolve");
-                    assert_eq!(
-                        resolved,
-                        webserver_dir.join("nginx.standalone.development.conf")
-                    );
+        with_env(
+            APP_ROOT_ENV,
+            Some(module.path().to_str().expect("utf8")),
+            || {
+                with_env(DEPLOYMENT_PROFILE_ENV, Some("standalone"), || {
+                    with_env(ENVIRONMENT_ENV, Some("development"), || {
+                        let resolved =
+                            resolve_nginx_sidecar_path(None).expect("sidecar must resolve");
+                        assert_eq!(
+                            resolved,
+                            webserver_dir.join("nginx.standalone.development.conf")
+                        );
+                    });
                 });
-            });
-        });
+            },
+        );
     }
 
     #[test]

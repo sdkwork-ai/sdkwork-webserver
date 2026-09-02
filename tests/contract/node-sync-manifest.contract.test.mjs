@@ -41,7 +41,7 @@ test('node sync service and daemon retain independent final response bounds', ()
   const service = source(
     'crates/sdkwork-intelligence-webserver-service/src/agent_ops.rs',
   );
-  const daemon = source('crates/sdkwork-web-agent/src/main.rs');
+  const daemon = source('crates/sdkwork-webserver-agent/src/main.rs');
   assert.match(
     service,
     /const MAX_NODE_SYNC_RESPONSE_BYTES: usize = 15 \* 1024 \* 1024/u,

@@ -2,9 +2,9 @@
 
 use std::{fs, net::TcpListener, path::PathBuf, time::Duration};
 
-use serde_json::{json, Value};
 use sdkwork_api_webserver_standalone_gateway::run_data_plane_until;
 use sdkwork_webserver_core::load_and_compile_webserver_config;
+use serde_json::{json, Value};
 use tokio::{io::AsyncReadExt, io::AsyncWriteExt, net::TcpStream, sync::oneshot};
 
 fn free_port() -> u16 {
@@ -31,7 +31,9 @@ async fn spawn_slow_upstream(port: u16, delay: Duration) {
                 let _ = socket.read(&mut buffer).await;
                 tokio::time::sleep(delay).await;
                 let _ = socket
-                    .write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok")
+                    .write_all(
+                        b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok",
+                    )
                     .await;
             });
         }
@@ -90,7 +92,11 @@ fn write_config(port: u16, upstream_port: u16) -> PathBuf {
             }]
         }]
     });
-    fs::write(&path, serde_json::to_vec_pretty(&config).expect("serialize")).expect("write");
+    fs::write(
+        &path,
+        serde_json::to_vec_pretty(&config).expect("serialize"),
+    )
+    .expect("write");
     path
 }
 
@@ -126,7 +132,10 @@ async fn rejects_concurrent_connections_per_key_and_releases_on_completion() {
         {
             break;
         }
-        assert!(tokio::time::Instant::now() < deadline, "data plane not ready");
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "data plane not ready"
+        );
         tokio::time::sleep(Duration::from_millis(25)).await;
     }
 
@@ -152,7 +161,11 @@ async fn rejects_concurrent_connections_per_key_and_releases_on_completion() {
         .send()
         .await
         .expect("second request");
-    assert_eq!(second.status(), 503, "concurrent connection must be limited");
+    assert_eq!(
+        second.status(),
+        503,
+        "concurrent connection must be limited"
+    );
 
     // Complete the first response; the lease releases when the body ends.
     let first = first.await.expect("join");
@@ -167,7 +180,11 @@ async fn rejects_concurrent_connections_per_key_and_releases_on_completion() {
         .send()
         .await
         .expect("third request");
-    assert_eq!(third.status(), 200, "slot must be released after completion");
+    assert_eq!(
+        third.status(),
+        200,
+        "slot must be released after completion"
+    );
 
     let _ = shutdown_tx.send(());
     let _ = server.await;

@@ -2,12 +2,12 @@
 
 use async_trait::async_trait;
 use sdkwork_webserver_contract::{
-    ApplicationStoreListing, CreatePlatformTargetRequest, CreateApplicationRequest, CreateDeploymentRequest,
+    ApplicationStoreListing, CreateApplicationRequest, CreateDeploymentRequest,
     CreateDomainRequest, CreateEnvVariableRequest, CreateHealthCheckRequest,
-    CreateListenerCertificateBindingRequest, CreateSourceVersionRequest,
-    ImportGitSourceVersionRequest, IssueCertificateRequest, ListApplicationsQuery, MediaResource,
-    UpdateApplicationRequest, WebAppApi, WebAppRequestContext, WebAppResourceScope,
-    WebServiceError, WebServiceResult,
+    CreateListenerCertificateBindingRequest, CreatePlatformTargetRequest,
+    CreateSourceVersionRequest, ImportGitSourceVersionRequest, IssueCertificateRequest,
+    ListApplicationsQuery, MediaResource, UpdateApplicationRequest, WebAppApi,
+    WebAppRequestContext, WebAppResourceScope, WebServiceError, WebServiceResult,
 };
 use std::collections::HashSet;
 
@@ -234,11 +234,11 @@ impl WebService {
             if environment != environment.trim()
                 || !matches!(
                     environment,
-                    "development" | "test" | "staging" | "production"
+                    "development" | "test" | "staging" | "production" | "demo"
                 )
             {
                 return Err(sdkwork_webserver_contract::WebServiceError::validation(
-                    "environment must be development, test, staging, or production",
+                    "environment must be development, test, staging, production, or demo",
                 ));
             }
         }
@@ -473,10 +473,10 @@ impl WebService {
         }
         if !matches!(
             request.environment.as_str(),
-            "development" | "test" | "staging" | "production"
+            "development" | "test" | "staging" | "production" | "demo"
         ) {
             return Err(WebServiceError::validation(
-                "environment must be development, test, staging, or production",
+                "environment must be development, test, staging, production, or demo",
             ));
         }
         Self::validate_env_variable_value(&request.value)
@@ -1525,7 +1525,10 @@ impl WebAppApi for WebService {
         application_id: &str,
         request: &CreatePlatformTargetRequest,
     ) -> WebServiceResult<sdkwork_webserver_contract::PlatformTargetResponse> {
-        let tenant_id = self.require_application_access(context, application_id).await?.0;
+        let tenant_id = self
+            .require_application_access(context, application_id)
+            .await?
+            .0;
         Self::validate_platform_target_request(request)?;
         self.repository
             .create_platform_target(tenant_id, application_id, request)
@@ -1539,7 +1542,10 @@ impl WebAppApi for WebService {
         page: i32,
         page_size: i32,
     ) -> WebServiceResult<sdkwork_webserver_contract::PlatformTargetPage> {
-        let tenant_id = self.require_application_access(context, application_id).await?.0;
+        let tenant_id = self
+            .require_application_access(context, application_id)
+            .await?
+            .0;
         self.repository
             .list_platform_targets(tenant_id, application_id, page, page_size)
             .await
@@ -1551,7 +1557,10 @@ impl WebAppApi for WebService {
         application_id: &str,
         platform_target_id: &str,
     ) -> WebServiceResult<sdkwork_webserver_contract::PlatformTargetResponse> {
-        let tenant_id = self.require_application_access(context, application_id).await?.0;
+        let tenant_id = self
+            .require_application_access(context, application_id)
+            .await?
+            .0;
         self.repository
             .retrieve_platform_target(tenant_id, application_id, platform_target_id)
             .await
@@ -1568,9 +1577,12 @@ mod tests {
 
     #[test]
     fn application_type_is_limited_to_public_business_types() {
-        assert!(WebService::validate_app_kind("WEB").is_ok());
-        assert!(WebService::validate_app_kind("API").is_ok());
-        for invalid in ["web", "STATIC", "", "OTHER"] {
+        // Public business kinds per the AppKind contract; `WEB` and `API` are
+        // internal site-carrier application types and must stay invalid here.
+        assert!(WebService::validate_app_kind("STATIC_WEB").is_ok());
+        assert!(WebService::validate_app_kind("SPA_WEB").is_ok());
+        assert!(WebService::validate_app_kind("API_SERVICE").is_ok());
+        for invalid in ["WEB", "API", "web", "STATIC", "", "OTHER"] {
             assert!(WebService::validate_app_kind(invalid).is_err());
         }
     }

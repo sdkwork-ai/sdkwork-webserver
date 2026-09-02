@@ -116,13 +116,7 @@ impl HashPolicy {
         })
     }
 
-    fn resolve_key(
-        &self,
-        client_ip: IpAddr,
-        request_uri: &str,
-        uri: &str,
-        host: &str,
-    ) -> String {
+    fn resolve_key(&self, client_ip: IpAddr, request_uri: &str, uri: &str, host: &str) -> String {
         match self.key {
             UpstreamHashKeyVar::RequestUri => request_uri.to_owned(),
             UpstreamHashKeyVar::Uri => uri.to_owned(),
@@ -547,7 +541,9 @@ fn cached_proxy_response(
         .find(|(name, _)| name.eq_ignore_ascii_case("etag"))
         .map(|(_, value)| value.clone());
     if let Some(etag) = etag {
-        if let Some(condition) = request_headers.get("if-none-match").and_then(|value| value.to_str().ok())
+        if let Some(condition) = request_headers
+            .get("if-none-match")
+            .and_then(|value| value.to_str().ok())
         {
             if condition
                 .split(',')
@@ -717,24 +713,26 @@ async fn proxy_request_dynamic(
             )
         })
         .collect::<HashMap<_, _>>();
-    let evaluated =
-        match sdkwork_webserver_core::expand_proxy_pass_template(
-            template,
-            &host,
-            server_port,
-            request_path,
-            &request_uri,
-            &headers,
-        ) {
-            Ok(url) => url,
-            Err(()) => {
-                return upgrade_failure_response(
-                    upgrade,
-                    text_response(StatusCode::BAD_GATEWAY, "invalid proxy_pass target
-"),
-                );
-            }
-        };
+    let evaluated = match sdkwork_webserver_core::expand_proxy_pass_template(
+        template,
+        &host,
+        server_port,
+        request_path,
+        &request_uri,
+        &headers,
+    ) {
+        Ok(url) => url,
+        Err(()) => {
+            return upgrade_failure_response(
+                upgrade,
+                text_response(
+                    StatusCode::BAD_GATEWAY,
+                    "invalid proxy_pass target
+",
+                ),
+            );
+        }
+    };
     // A template without `$uri`/`$request_uri` forwards the full request URI
     // (nginx `proxy_pass http://host;` semantics).
     let has_uri_variable = template.contains("$uri") || template.contains("$request_uri");
@@ -745,15 +743,15 @@ async fn proxy_request_dynamic(
     };
     let authority = match target_url.parse::<Url>() {
         Ok(url) => match url.host_str() {
-            Some(host) => format!(
-                "{host}:{}",
-                url.port_or_known_default().unwrap_or(80)
-            ),
+            Some(host) => format!("{host}:{}", url.port_or_known_default().unwrap_or(80)),
             None => {
                 return upgrade_failure_response(
                     upgrade,
-                    text_response(StatusCode::BAD_GATEWAY, "invalid proxy_pass target
-"),
+                    text_response(
+                        StatusCode::BAD_GATEWAY,
+                        "invalid proxy_pass target
+",
+                    ),
                 );
             }
         },
@@ -761,8 +759,11 @@ async fn proxy_request_dynamic(
             tracing::debug!("dynamic proxy_pass target failed to parse");
             return upgrade_failure_response(
                 upgrade,
-                text_response(StatusCode::BAD_GATEWAY, "invalid proxy_pass target
-"),
+                text_response(
+                    StatusCode::BAD_GATEWAY,
+                    "invalid proxy_pass target
+",
+                ),
             );
         }
     };
@@ -825,8 +826,10 @@ async fn proxy_request_dynamic(
         Err(()) => {
             return upgrade_failure_response(
                 upgrade,
-                upstream_unavailable_response("upstream is saturated
-"),
+                upstream_unavailable_response(
+                    "upstream is saturated
+",
+                ),
             );
         }
     };
@@ -836,8 +839,10 @@ async fn proxy_request_dynamic(
     else {
         return upgrade_failure_response(
             upgrade,
-            upstream_unavailable_response("all upstream targets are unavailable
-"),
+            upstream_unavailable_response(
+                "all upstream targets are unavailable
+",
+            ),
         );
     };
     let target_activity = upstream.claim_target_activity(selected.index);
@@ -847,8 +852,11 @@ async fn proxy_request_dynamic(
             upstream.abandon_probe(selected);
             return upgrade_failure_response(
                 upgrade,
-                text_response(StatusCode::BAD_GATEWAY, "invalid upstream target
-"),
+                text_response(
+                    StatusCode::BAD_GATEWAY,
+                    "invalid upstream target
+",
+                ),
             );
         }
     };
@@ -1629,7 +1637,10 @@ fn forwarded_request_headers(
     // fields are not forwarded; only the fixed safe defaults below are set.
     if proxy_pass_request_headers {
         for (name, value) in source {
-            if name != HOST && name != CONTENT_LENGTH && name != EXPECT && !hop_by_hop.contains(name)
+            if name != HOST
+                && name != CONTENT_LENGTH
+                && name != EXPECT
+                && !hop_by_hop.contains(name)
             {
                 target.append(name.clone(), value.clone());
             }

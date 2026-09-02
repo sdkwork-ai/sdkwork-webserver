@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "kind": "sdkwork.component.spec",
   "component": {
-    "name": "sdkwork-web",
+    "name": "sdkwork-webserver",
     "displayName": "SDKWork Web Server",
     "version": "0.1.0",
     "type": "web-backend-service",
@@ -85,20 +85,20 @@
       {
         "name": "webRuntimeAssignmentInternalSdk",
         "export": "crates/sdkwork-webserver-website-delivery-edge-runtime",
-        "provider": "sdkwork-web-internal-sdk"
+        "provider": "sdkwork-webserver-internal-sdk"
       }
     ],
     "sdkDependencies": [
       {
-        "workspace": "sdkwork-web-internal-sdk",
+        "workspace": "sdkwork-webserver-internal-sdk",
         "role": "web-runtime-assignment-consumer",
         "required": true,
         "dependencyMode": "consumer-sdk",
         "apiPrefix": "/internal/v3/api",
-        "apiAuthority": "sdkwork-web-internal-api",
+        "apiAuthority": "sdkwork-webserver-internal-api",
         "generatedTransportImportPolicy": "generated-rust-client-only",
         "packageByLanguage": {
-          "rust": "sdkwork-web-internal-sdk"
+          "rust": "sdkwork-webserver-internal-sdk"
         }
       },
       {
@@ -166,9 +166,9 @@
     ],
     "dependencyApiSurfaces": [
       {
-        "workspace": "sdkwork-web-internal-sdk",
-        "sdkFamily": "sdkwork-web-internal-sdk",
-        "apiAuthority": "sdkwork-web-internal-api",
+        "workspace": "sdkwork-webserver-internal-sdk",
+        "sdkFamily": "sdkwork-webserver-internal-sdk",
+        "apiAuthority": "sdkwork-webserver-internal-api",
         "surface": "internal-api",
         "apiPrefix": "/internal/v3/api",
         "runtimeMode": "external-service",

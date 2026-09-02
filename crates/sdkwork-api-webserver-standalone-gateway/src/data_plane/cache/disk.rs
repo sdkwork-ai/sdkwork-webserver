@@ -136,7 +136,14 @@ mod tests {
         let directory = tempfile::tempdir().expect("temp");
         let backend =
             TieredCacheBackend::with_disk(8, directory.path().to_path_buf()).expect("disk");
-        let key = CacheKey::new("GET", "example.com", "/cached", None, &[], &HeaderMap::new());
+        let key = CacheKey::new(
+            "GET",
+            "example.com",
+            "/cached",
+            None,
+            &[],
+            &HeaderMap::new(),
+        );
         let entry = CachedResponse::new(
             ResponseMetadata {
                 status: 200,
@@ -150,8 +157,7 @@ mod tests {
         );
         backend.insert(key.clone(), entry);
         // Drop memory by constructing a fresh backend on the same root.
-        let cold =
-            TieredCacheBackend::with_disk(8, directory.path().to_path_buf()).expect("cold");
+        let cold = TieredCacheBackend::with_disk(8, directory.path().to_path_buf()).expect("cold");
         let hit = cold.get(&key).expect("disk hit");
         assert_eq!(hit.body.as_ref(), b"disk-body");
     }

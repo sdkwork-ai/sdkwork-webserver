@@ -50,7 +50,8 @@ fn replace_first(haystack: &[u8], needle: &[u8], replacement: &[u8]) -> Vec<u8> 
     let Some(index) = find_subslice(haystack, needle) else {
         return haystack.to_vec();
     };
-    let mut output = Vec::with_capacity(haystack.len() + replacement.len().saturating_sub(needle.len()));
+    let mut output =
+        Vec::with_capacity(haystack.len() + replacement.len().saturating_sub(needle.len()));
     output.extend_from_slice(&haystack[..index]);
     output.extend_from_slice(replacement);
     output.extend_from_slice(&haystack[index + needle.len()..]);
@@ -143,7 +144,10 @@ mod tests {
     fn content_type_matching_ignores_parameters_and_case() {
         let types = vec!["text/html".to_owned()];
         assert!(sub_filter_content_type_matches("text/html", &types));
-        assert!(sub_filter_content_type_matches("text/html; charset=utf-8", &types));
+        assert!(sub_filter_content_type_matches(
+            "text/html; charset=utf-8",
+            &types
+        ));
         assert!(sub_filter_content_type_matches("TEXT/HTML", &types));
         assert!(!sub_filter_content_type_matches("application/json", &types));
     }

@@ -56,11 +56,7 @@ fn expires_freshness(expires: Option<&str>, date: Option<&str>) -> Option<u64> {
     let date = date
         .and_then(|value| httpdate::parse_http_date(value).ok())
         .unwrap_or_else(std::time::SystemTime::now);
-    let delta = expires
-        .duration_since(date)
-        .ok()?
-        .as_secs()
-        .min(31_536_000);
+    let delta = expires.duration_since(date).ok()?.as_secs().min(31_536_000);
     Some(delta)
 }
 

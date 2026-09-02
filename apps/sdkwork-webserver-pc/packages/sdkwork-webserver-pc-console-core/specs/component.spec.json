@@ -71,7 +71,7 @@
     ],
     "sdkDependencies": [
       {
-        "workspace": "sdkwork-web-app-sdk",
+        "workspace": "sdkwork-webserver-app-sdk",
         "permissionModuleId": "web",
         "surface": "app-api",
         "credentialMode": "authenticated-app-api"
@@ -87,14 +87,14 @@
       "inheritanceMode": "module-catalog-with-overrides",
       "moduleCatalogRefs": [
         {
-          "moduleId": "drive",
-          "manifestRef": "../../../../../sdkwork-iam/iam/modules/drive/iam.module.manifest.json",
+          "moduleId": "web",
+          "manifestRef": "../../../../specs/iam.module.manifest.json",
           "inheritPermissions": true,
           "inheritRoles": true
         },
         {
-          "moduleId": "web",
-          "manifestRef": "../../../../specs/iam.module.manifest.json",
+          "moduleId": "drive",
+          "manifestRef": "../../../../../sdkwork-iam/iam/modules/drive/iam.module.manifest.json",
           "inheritPermissions": true,
           "inheritRoles": true
         }

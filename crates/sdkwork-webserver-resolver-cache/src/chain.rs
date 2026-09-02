@@ -10,11 +10,7 @@
 //! async layers (Redis, database, fallback) run under a per-domain
 //! single-flight guard so a thundering herd collapses to one resolution.
 
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use tokio::sync::Mutex;
 
@@ -91,11 +87,7 @@ impl ResolutionChain {
     }
 
     /// Resolve `domain` through the chain, falling back to `upstream`.
-    pub async fn resolve(
-        &self,
-        domain: &str,
-        upstream: &UpstreamResolver,
-    ) -> ResolutionOutcome {
+    pub async fn resolve(&self, domain: &str, upstream: &UpstreamResolver) -> ResolutionOutcome {
         let domain = normalize_domain(domain);
         if domain.is_empty() {
             return ResolutionOutcome::NegativeHit;
@@ -168,11 +160,9 @@ impl ResolutionChain {
                 self.ttl_seconds,
                 now_unix(),
             ),
-            Err(()) => ResolvedRecord::negative(
-                domain.clone(),
-                self.negative_ttl_seconds,
-                now_unix(),
-            ),
+            Err(()) => {
+                ResolvedRecord::negative(domain.clone(), self.negative_ttl_seconds, now_unix())
+            }
         };
         self.backfill(record.clone()).await;
 
@@ -221,16 +211,22 @@ mod tests {
 
     fn upstream_ok(address: &'static str) -> Box<UpstreamResolver> {
         let address = address.to_owned();
-        Box::new(move |_domain: &str| -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<String>, ()>> + Send>> {
-            let address = address.clone();
-            Box::pin(async move { Ok(vec![address]) })
-        })
+        Box::new(
+            move |_domain: &str| -> std::pin::Pin<
+                Box<dyn std::future::Future<Output = Result<Vec<String>, ()>> + Send>,
+            > {
+                let address = address.clone();
+                Box::pin(async move { Ok(vec![address]) })
+            },
+        )
     }
 
     fn upstream_fail() -> Box<UpstreamResolver> {
-        Box::new(|_domain: &str| -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<String>, ()>> + Send>> {
-            Box::pin(async move { Err(()) })
-        })
+        Box::new(
+            |_domain: &str| -> std::pin::Pin<
+                Box<dyn std::future::Future<Output = Result<Vec<String>, ()>> + Send>,
+            > { Box::pin(async move { Err(()) }) },
+        )
     }
 
     #[tokio::test]
@@ -243,10 +239,16 @@ mod tests {
             Box::pin(async move { Ok(vec!["10.0.0.7".to_owned()]) })
         });
         let first = chain.resolve("svc.local", &upstream).await;
-        assert_eq!(first, ResolutionOutcome::Resolved(vec!["10.0.0.7".to_owned()]));
+        assert_eq!(
+            first,
+            ResolutionOutcome::Resolved(vec!["10.0.0.7".to_owned()])
+        );
         // Second resolve is served from memory without calling upstream.
         let second = chain.resolve("SVC.LOCAL", &upstream).await;
-        assert_eq!(second, ResolutionOutcome::Resolved(vec!["10.0.0.7".to_owned()]));
+        assert_eq!(
+            second,
+            ResolutionOutcome::Resolved(vec!["10.0.0.7".to_owned()])
+        );
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 
@@ -286,7 +288,10 @@ mod tests {
             })
         });
         let outcome = chain.resolve("seed.local", &upstream).await;
-        assert_eq!(outcome, ResolutionOutcome::Resolved(vec!["10.1.1.1".to_owned()]));
+        assert_eq!(
+            outcome,
+            ResolutionOutcome::Resolved(vec!["10.1.1.1".to_owned()])
+        );
     }
 
     #[tokio::test]
@@ -300,7 +305,8 @@ mod tests {
         });
         let _ = chain.resolve("exp.local", &upstream).await;
         // Force the memory entry to expire.
-        let mut expired = ResolvedRecord::fresh("exp.local", vec!["10.0.0.1".to_owned()], 0, now_unix());
+        let mut expired =
+            ResolvedRecord::fresh("exp.local", vec!["10.0.0.1".to_owned()], 0, now_unix());
         expired.expires_at_unix = now_unix().saturating_sub(1);
         chain.memory.set(expired);
         let _ = chain.resolve("exp.local", &upstream).await;
@@ -309,7 +315,12 @@ mod tests {
 
     #[tokio::test]
     async fn concurrent_resolves_collapse_to_one_upstream_call() {
-        let chain = Arc::new(ResolutionChain::build(&Default::default(), None, None, None));
+        let chain = Arc::new(ResolutionChain::build(
+            &Default::default(),
+            None,
+            None,
+            None,
+        ));
         let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let calls_clone = calls.clone();
         let upstream: Box<UpstreamResolver> = Box::new(move |_domain| {

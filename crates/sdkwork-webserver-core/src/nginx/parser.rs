@@ -62,7 +62,10 @@ pub enum NginxParseError {
 const MAXIMUM_BLOCK_DEPTH: usize = 256;
 
 /// Parse one nginx configuration text into top-level directives.
-pub fn parse_nginx_config(text: &str, source: &Path) -> Result<Vec<NginxDirective>, NginxParseError> {
+pub fn parse_nginx_config(
+    text: &str,
+    source: &Path,
+) -> Result<Vec<NginxDirective>, NginxParseError> {
     let mut lexer = Lexer::new(text, source);
     lexer.parse_directives(None, 0)
 }
@@ -120,12 +123,11 @@ pub fn expand_includes(
                 if stack.contains(&include_path) {
                     return Err(NginxParseError::IncludeCycle { path: include_path });
                 }
-                let text = fs::read_to_string(&include_path).map_err(|source| {
-                    NginxParseError::Read {
+                let text =
+                    fs::read_to_string(&include_path).map_err(|source| NginxParseError::Read {
                         path: include_path.clone(),
                         source,
-                    }
-                })?;
+                    })?;
                 stack.push(include_path.clone());
                 let parsed = parse_nginx_config(&text, &include_path)?;
                 // Relative includes inside the included file resolve against
@@ -156,10 +158,9 @@ fn expand_glob_pattern(pattern: &Path) -> Result<Vec<PathBuf>, NginxParseError> 
     let absolute = text.starts_with('/');
     // Windows drive prefix (`C:/...`): start the walk at the drive root so
     // joined paths stay absolute instead of drive-relative.
-    let drive_prefix = (text.len() >= 3
-        && text.as_bytes()[1] == b':'
-        && text.as_bytes()[2] == b'/')
-        .then(|| &text[..3]);
+    let drive_prefix =
+        (text.len() >= 3 && text.as_bytes()[1] == b':' && text.as_bytes()[2] == b'/')
+            .then(|| &text[..3]);
     let mut segments = text
         .split('/')
         .filter(|segment| !segment.is_empty())
@@ -462,9 +463,8 @@ impl<'a> Lexer<'a> {
                     }
                     ';' | '{' | '}' => break,
                     _ => {
-                        return Err(self.syntax(format!(
-                            "unexpected character {ch:?} after a quoted string"
-                        )));
+                        return Err(self
+                            .syntax(format!("unexpected character {ch:?} after a quoted string")));
                     }
                 }
                 return Ok(unescape_word(&raw));
@@ -721,10 +721,7 @@ server {
         let directory = tempfile::tempdir().expect("temp dir");
         std::fs::write(directory.path().join("a.conf"), "server { listen 1; }\n").unwrap();
         std::fs::write(directory.path().join("b.conf"), "server { listen 2; }\n").unwrap();
-        let text = format!(
-            "include {};\n",
-            directory.path().join("*.conf").display()
-        );
+        let text = format!("include {};\n", directory.path().join("*.conf").display());
         let parsed = parse_nginx_config(&text, Path::new("main.conf")).expect("parse");
         let mut budget = 16;
         let mut stack = Vec::new();
@@ -761,10 +758,7 @@ server {
 }"#,
         );
         let children = &directives[0].children;
-        assert_eq!(
-            children[0].args,
-            vec!["http://127.0.0.1:8080/faq#section"]
-        );
+        assert_eq!(children[0].args, vec!["http://127.0.0.1:8080/faq#section"]);
         assert_eq!(children[1].args, vec!["example.com#internal"]);
     }
 
@@ -803,21 +797,35 @@ server {
             Path::new("bad.conf"),
         )
         .expect_err("nginx need_space rule must reject adjacent text");
-        assert!(error.to_string().contains("after a quoted string"), "{error}");
+        assert!(
+            error.to_string().contains("after a quoted string"),
+            "{error}"
+        );
     }
 
     #[test]
     fn unterminated_quoted_string_is_rejected() {
         let error = parse_nginx_config("set $x \"abc;\n", Path::new("bad.conf"))
             .expect_err("unterminated quote must fail");
-        assert!(error.to_string().contains("unterminated quoted string"), "{error}");
+        assert!(
+            error.to_string().contains("unterminated quoted string"),
+            "{error}"
+        );
     }
 
     #[test]
     fn question_mark_and_character_class_globs_expand() {
         let directory = tempfile::tempdir().expect("temp dir");
-        std::fs::write(directory.path().join("site-a.conf"), "server { listen 1; }\n").unwrap();
-        std::fs::write(directory.path().join("site-b.conf"), "server { listen 2; }\n").unwrap();
+        std::fs::write(
+            directory.path().join("site-a.conf"),
+            "server { listen 1; }\n",
+        )
+        .unwrap();
+        std::fs::write(
+            directory.path().join("site-b.conf"),
+            "server { listen 2; }\n",
+        )
+        .unwrap();
         std::fs::write(directory.path().join("other.txt"), "ignore\n").unwrap();
         let pattern = directory.path().join("site-?.conf");
         let parsed = parse_nginx_config(
@@ -868,12 +876,24 @@ server {
         std::fs::create_dir_all(&a).unwrap();
         std::fs::create_dir_all(&b).unwrap();
         std::fs::create_dir_all(&other).unwrap();
-        std::fs::write(a.join("one.conf"), "server { listen 1; }
-").unwrap();
-        std::fs::write(b.join("two.conf"), "server { listen 2; }
-").unwrap();
-        std::fs::write(other.join("x.conf"), "server { listen 9; }
-").unwrap();
+        std::fs::write(
+            a.join("one.conf"),
+            "server { listen 1; }
+",
+        )
+        .unwrap();
+        std::fs::write(
+            b.join("two.conf"),
+            "server { listen 2; }
+",
+        )
+        .unwrap();
+        std::fs::write(
+            other.join("x.conf"),
+            "server { listen 9; }
+",
+        )
+        .unwrap();
         let parsed = parse_nginx_config(
             &format!(
                 "include {};
@@ -906,11 +926,8 @@ server {
         )
         .unwrap();
         std::fs::write(snippets.join("frag.conf"), "server { listen 7; }\n").unwrap();
-        let parsed = parse_nginx_config(
-            "include fragments;\n",
-            Path::new("main.conf"),
-        )
-        .expect("parse");
+        let parsed =
+            parse_nginx_config("include fragments;\n", Path::new("main.conf")).expect("parse");
         let mut budget = 16;
         let mut stack = Vec::new();
         let expanded =

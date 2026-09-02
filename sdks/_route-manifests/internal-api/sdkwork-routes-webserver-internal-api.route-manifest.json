@@ -3,16 +3,16 @@
   "kind": "sdkwork.route.manifest",
   "packageName": "sdkwork-routes-webserver-internal-api",
   "surface": "internal-api",
-  "owner": "sdkwork-web",
+  "owner": "sdkwork-webserver",
   "domain": "platform",
   "capability": "webserver",
-  "apiAuthority": "sdkwork-web-internal-api",
-  "sdkFamily": "sdkwork-web-internal-sdk",
+  "apiAuthority": "sdkwork-webserver-internal-api",
+  "sdkFamily": "sdkwork-webserver-internal-sdk",
   "prefix": "/internal/v3/api",
   "source": {
     "crateRoot": "crates/sdkwork-routes-webserver-internal-api",
     "crateImport": "sdkwork_routes_webserver_internal_api",
-    "openApiAuthority": "sdks/sdkwork-web-internal-sdk/openapi/sdkwork-web-internal-api.openapi.json"
+    "openApiAuthority": "sdks/sdkwork-webserver-internal-sdk/openapi/sdkwork-webserver-internal-api.openapi.json"
   },
   "routes": [
     {
@@ -32,8 +32,8 @@
         "name": null
       },
       "ownership": {
-        "owner": "sdkwork-web",
-        "apiAuthority": "sdkwork-web-internal-api"
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-internal-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "internal-api",
@@ -58,8 +58,8 @@
         "name": null
       },
       "ownership": {
-        "owner": "sdkwork-web",
-        "apiAuthority": "sdkwork-web-internal-api"
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-internal-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "internal-api",
@@ -84,8 +84,8 @@
         "name": null
       },
       "ownership": {
-        "owner": "sdkwork-web",
-        "apiAuthority": "sdkwork-web-internal-api"
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-internal-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "internal-api",
@@ -110,8 +110,8 @@
         "name": null
       },
       "ownership": {
-        "owner": "sdkwork-web",
-        "apiAuthority": "sdkwork-web-internal-api"
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-internal-api"
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "internal-api",

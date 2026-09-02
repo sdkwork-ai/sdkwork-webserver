@@ -33,7 +33,7 @@
     ],
     "requiredPorts": [
       {"name": "websiteDataPlane", "export": "binary", "provider": "sdkwork-api-webserver-standalone-gateway"},
-      {"name": "webRuntimeAssignmentInternalSdk", "export": "binary", "provider": "sdkwork-web-internal-sdk"},
+      {"name": "webRuntimeAssignmentInternalSdk", "export": "binary", "provider": "sdkwork-webserver-internal-sdk"},
       {"name": "driveWebsiteProvider", "export": "binary", "provider": "sdkwork-webserver-drive-provider"},
       {"name": "knowledgebaseWebsiteWikiProvider", "export": "binary", "provider": "sdkwork-webserver-knowledgebase-provider"}
     ],
@@ -47,14 +47,14 @@
     "sdkClients": [],
     "sdkDependencies": [
       {
-        "workspace": "sdkwork-web-internal-sdk",
+        "workspace": "sdkwork-webserver-internal-sdk",
         "role": "web-runtime-assignment-consumer",
         "required": true,
         "dependencyMode": "consumer-sdk",
         "apiPrefix": "/internal/v3/api",
-        "apiAuthority": "sdkwork-web-internal-api",
+        "apiAuthority": "sdkwork-webserver-internal-api",
         "generatedTransportImportPolicy": "generated-rust-client-only",
-        "packageByLanguage": {"rust": "sdkwork-web-internal-sdk"}
+        "packageByLanguage": {"rust": "sdkwork-webserver-internal-sdk"}
       },
       {
         "workspace": "sdkwork-drive-internal-sdk",

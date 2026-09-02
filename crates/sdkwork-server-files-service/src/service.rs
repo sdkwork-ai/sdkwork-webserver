@@ -4,9 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use super::operations::{operations_for, ProjectClassification};
-use super::path_security::{
-    validate_allowed_root, PathContainmentError, resolve_contained_path,
-};
+use super::path_security::{resolve_contained_path, validate_allowed_root, PathContainmentError};
 use super::project::{classify_directory, ProjectType};
 
 /// Configuration for a [`ServerFilesService`] instance bound to one node root.
@@ -123,7 +121,9 @@ impl ServerFilesService {
         requested_path: &str,
     ) -> Result<DirectoryListing, BrowseDirectoryError> {
         let resolved = self.contained_path(requested_path)?;
-        let parent_path = resolved.parent().map(|parent| parent.to_string_lossy().into_owned());
+        let parent_path = resolved
+            .parent()
+            .map(|parent| parent.to_string_lossy().into_owned());
 
         let mut read_dir = tokio::fs::read_dir(&resolved)
             .await
@@ -202,7 +202,11 @@ impl ServerFilesService {
     }
 
     /// Compute the operation manifest for a project directory.
-    pub fn operations_for(&self, requested_path: &str, classification: &ProjectClassification) -> Result<super::operations::ServerProjectOperations, PathContainmentError> {
+    pub fn operations_for(
+        &self,
+        requested_path: &str,
+        classification: &ProjectClassification,
+    ) -> Result<super::operations::ServerProjectOperations, PathContainmentError> {
         let resolved = self.contained_path(requested_path)?;
         Ok(operations_for(
             &self.config.node_id,

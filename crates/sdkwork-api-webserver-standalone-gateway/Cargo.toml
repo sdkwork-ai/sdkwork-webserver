@@ -90,7 +90,7 @@ sdkwork-webserver-knowledgebase-provider.workspace = true
 sdkwork-drive-contract.workspace = true
 sdkwork-drive-internal-sdk.workspace = true
 sdkwork-knowledgebase-internal-sdk.workspace = true
-sdkwork-web-internal-sdk.workspace = true
+sdkwork-webserver-internal-sdk.workspace = true
 sdkwork-web-bootstrap.workspace = true
 sdkwork-web-axum = { workspace = true, optional = true }
 sdkwork-web-contract = { workspace = true, optional = true }

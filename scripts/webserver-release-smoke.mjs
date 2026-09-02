@@ -52,8 +52,8 @@ const STANDALONE_SAME_ORIGIN_PATHS = Object.freeze({
 const EXPECTED_BINARIES = [
   'sdkwork-api-webserver-standalone-gateway',
   'sdkwork-webserver-website-delivery-edge-runtime',
-  'sdkwork-web-node-daemon',
-  'sdkwork-web-agent',
+  'sdkwork-webserver-node-daemon',
+  'sdkwork-webserver-agent',
   'sdkwork-webserver-certificate-worker',
 ];
 // The packaged binaries fall back to the host canonical runtime config

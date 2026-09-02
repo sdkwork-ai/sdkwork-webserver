@@ -8,8 +8,8 @@ use sdkwork_api_webserver_standalone_gateway::{
 };
 use sdkwork_webserver_core::{
     compile_merged_imports_app, imported_certificate_names, resolve_nginx_sidecar_path,
-    resolve_webserver_config_path,
-    validate_configured_module_imports, ConfigFormat, ConfigLoadOptions, WebServerConfigLoader,
+    resolve_webserver_config_path, validate_configured_module_imports, ConfigFormat,
+    ConfigLoadOptions, WebServerConfigLoader,
 };
 use tokio::signal;
 
@@ -276,9 +276,9 @@ async fn run_data_plane_command(
 ) -> MainResult<()> {
     let loader = config_loader();
     let options = load_options(format_override);
-    let format = loader.format_of(&path, &options).map_err(|error| {
-        io::Error::new(io::ErrorKind::InvalidInput, format!("{error}"))
-    })?;
+    let format = loader
+        .format_of(&path, &options)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, format!("{error}")))?;
     if format == ConfigFormat::Json {
         run_data_plane_from_config_with_operations_until(path, operations, shutdown).await?;
         return Ok(());
@@ -407,9 +407,8 @@ fn validate_imported_module_webserver_configs() -> MainResult<()> {
 }
 
 fn validate_module_imports_command() -> MainResult<()> {
-    let reports = validate_configured_module_imports().map_err(|error| {
-        io::Error::new(io::ErrorKind::InvalidInput, error)
-    })?;
+    let reports = validate_configured_module_imports()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
     if reports.is_empty() {
         println!("no module webserver imports configured");
         return Ok(());
@@ -453,7 +452,8 @@ async fn run_imports_data_plane_command(
             io::ErrorKind::InvalidInput,
             format!("merged module-imports configuration failed: {error}"),
         )
-    })? else {
+    })?
+    else {
         println!("no module webserver imports configured; nothing to serve");
         return Ok(());
     };

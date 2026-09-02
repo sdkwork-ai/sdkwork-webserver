@@ -145,8 +145,8 @@ const SDK_BASE_URL_FIELDS = [
 const BINARIES = [
   'sdkwork-api-webserver-standalone-gateway',
   'sdkwork-webserver-website-delivery-edge-runtime',
-  'sdkwork-web-node-daemon',
-  'sdkwork-web-agent',
+  'sdkwork-webserver-node-daemon',
+  'sdkwork-webserver-agent',
   'sdkwork-webserver-certificate-worker',
 ];
 const PACKAGE_ASSETS = [

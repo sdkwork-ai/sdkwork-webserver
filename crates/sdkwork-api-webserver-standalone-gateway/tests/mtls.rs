@@ -11,13 +11,13 @@ use std::{
 };
 
 use rcgen::{
-    BasicConstraints, CertificateParams, DnType, DistinguishedName, ExtendedKeyUsagePurpose,
-    IsCa, Issuer, KeyPair, KeyUsagePurpose,
+    BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, IsCa,
+    Issuer, KeyPair, KeyUsagePurpose,
 };
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName};
-use serde_json::{json, Value};
 use sdkwork_api_webserver_standalone_gateway::run_data_plane_until;
 use sdkwork_webserver_core::load_and_compile_webserver_config;
+use serde_json::{json, Value};
 use tokio::{net::TcpStream, sync::oneshot};
 
 fn free_port() -> u16 {
@@ -73,9 +73,7 @@ fn write_signed_identity(
     )
     .expect("signed certificate parameters");
     params.distinguished_name = DistinguishedName::new();
-    params
-        .distinguished_name
-        .push(DnType::CommonName, names[0]);
+    params.distinguished_name.push(DnType::CommonName, names[0]);
     params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
     params.extended_key_usages = vec![if client {
         ExtendedKeyUsagePurpose::ClientAuth
@@ -98,11 +96,7 @@ fn write_signed_identity(
     )
 }
 
-fn write_mtls_config(
-    directory: &Path,
-    port: u16,
-    client_auth_mode: &str,
-) -> PathBuf {
+fn write_mtls_config(directory: &Path, port: u16, client_auth_mode: &str) -> PathBuf {
     let config = json!({
         "schemaVersion": 1,
         "kind": "sdkwork.webserver.app",
@@ -159,7 +153,11 @@ fn write_mtls_config(
         }]
     });
     let path = directory.join("config.json");
-    fs::write(&path, serde_json::to_vec_pretty(&config).expect("serialize")).expect("write");
+    fs::write(
+        &path,
+        serde_json::to_vec_pretty(&config).expect("serialize"),
+    )
+    .expect("write");
     path
 }
 
@@ -205,8 +203,13 @@ async fn required_client_auth_accepts_trusted_certificates_and_rejects_missing_o
         write_signed_identity(directory.path(), "trusted-client", &["client-a"], &ca, true);
     // A second CA signs an untrusted client identity.
     let other_ca = write_test_ca(directory.path(), "other-ca");
-    let (untrusted_cert, untrusted_key, _, _) =
-        write_signed_identity(directory.path(), "untrusted-client", &["client-b"], &other_ca, true);
+    let (untrusted_cert, untrusted_key, _, _) = write_signed_identity(
+        directory.path(),
+        "untrusted-client",
+        &["client-b"],
+        &other_ca,
+        true,
+    );
 
     let config_path = write_mtls_config(directory.path(), port, "required");
     let (shutdown_tx, task) = spawn_data_plane(&config_path).await;
@@ -288,8 +291,13 @@ async fn stream_tls_terminate_requires_client_certificates_when_configured() {
     let port = free_port();
     let upstream_port = free_port();
     let ca = write_test_ca(directory.path(), "stream-ca");
-    let (_server_cert, _server_key, server_der, _) =
-        write_signed_identity(directory.path(), "stream-server", &["localhost"], &ca, false);
+    let (_server_cert, _server_key, server_der, _) = write_signed_identity(
+        directory.path(),
+        "stream-server",
+        &["localhost"],
+        &ca,
+        false,
+    );
     let (_client_cert, _client_key, client_der, client_key_der) =
         write_signed_identity(directory.path(), "stream-client", &["client"], &ca, true);
 
@@ -345,8 +353,11 @@ async fn stream_tls_terminate_requires_client_certificates_when_configured() {
         }]
     });
     let config_path = directory.path().join("config.json");
-    fs::write(&config_path, serde_json::to_vec_pretty(&config).expect("serialize"))
-        .expect("write");
+    fs::write(
+        &config_path,
+        serde_json::to_vec_pretty(&config).expect("serialize"),
+    )
+    .expect("write");
     let (shutdown_tx, task) = spawn_data_plane(&config_path).await;
     tokio::time::sleep(Duration::from_millis(200)).await;
 
@@ -362,7 +373,9 @@ async fn stream_tls_terminate_requires_client_certificates_when_configured() {
         .with_root_certificates(roots.clone())
         .with_no_client_auth();
     let anonymous = tokio_rustls::TlsConnector::from(Arc::new(anonymous_config));
-    let tcp = TcpStream::connect(("127.0.0.1", port)).await.expect("connect");
+    let tcp = TcpStream::connect(("127.0.0.1", port))
+        .await
+        .expect("connect");
     let result = anonymous
         .connect(
             ServerName::try_from("localhost".to_owned()).expect("name"),
@@ -374,11 +387,8 @@ async fn stream_tls_terminate_requires_client_certificates_when_configured() {
     // is on the read result, not the connect result.
     let mut anonymous_stream = result.expect("connect returns a stream");
     let mut echoed = vec![0_u8; 4];
-    let read = tokio::time::timeout(
-        Duration::from_secs(2),
-        anonymous_stream.read(&mut echoed),
-    )
-    .await;
+    let read =
+        tokio::time::timeout(Duration::from_secs(2), anonymous_stream.read(&mut echoed)).await;
     assert!(
         matches!(read, Ok(Err(_))),
         "stream mTLS must reject a certificate-less handshake; read={read:?}"
@@ -392,7 +402,9 @@ async fn stream_tls_terminate_requires_client_certificates_when_configured() {
         .with_client_auth_cert(vec![identity], key)
         .expect("client auth config");
     let connector = tokio_rustls::TlsConnector::from(Arc::new(client_config));
-    let tcp = TcpStream::connect(("127.0.0.1", port)).await.expect("connect");
+    let tcp = TcpStream::connect(("127.0.0.1", port))
+        .await
+        .expect("connect");
     let mut stream = connector
         .connect(
             ServerName::try_from("localhost".to_owned()).expect("name"),

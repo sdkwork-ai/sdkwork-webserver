@@ -31,7 +31,7 @@ import {
   type CreateSourceVersionRequest,
   type SdkworkAppClient as SdkworkWebAppClient,
   type UpdateApplicationRequest,
-} from "@sdkwork/web-app-sdk";
+} from "@sdkwork/webserver-app-sdk";
 import { createContext, useContext, type ReactNode } from "react";
 
 export type { SdkworkDriveAppClient };

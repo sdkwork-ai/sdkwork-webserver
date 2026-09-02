@@ -135,9 +135,7 @@ pub fn verify_secure_link(
     now_unix_seconds: u64,
 ) -> Result<Option<String>, SecureLinkFailure> {
     match mode {
-        SecureLinkMode::Secret { secret } => {
-            verify_secret_link(uri, prefix, secret).map(Some)
-        }
+        SecureLinkMode::Secret { secret } => verify_secret_link(uri, prefix, secret).map(Some),
         SecureLinkMode::Md5 {
             argument,
             template,
@@ -225,11 +223,23 @@ mod tests {
         let expires = "4102444800"; // 2100-01-01
         let evaluated = format!("{expires}{uri} {remote} s3cret");
         let provided = md5_hex(evaluated.as_bytes());
-        assert!(verify_md5_link(uri, remote, &provided, Some(expires), template, 1_700_000_000).is_ok());
+        assert!(verify_md5_link(
+            uri,
+            remote,
+            &provided,
+            Some(expires),
+            template,
+            1_700_000_000
+        )
+        .is_ok());
         // Expired links are rejected.
-        assert!(verify_md5_link(uri, remote, &provided, Some("100"), template, 1_700_000_000).is_err());
+        assert!(
+            verify_md5_link(uri, remote, &provided, Some("100"), template, 1_700_000_000).is_err()
+        );
         // Wrong digest is rejected.
-        assert!(verify_md5_link(uri, remote, "beef", Some(expires), template, 1_700_000_000).is_err());
+        assert!(
+            verify_md5_link(uri, remote, "beef", Some(expires), template, 1_700_000_000).is_err()
+        );
         // Missing digest is rejected.
         assert!(verify_md5_link(uri, remote, "", Some(expires), template, 1_700_000_000).is_err());
     }

@@ -55,7 +55,13 @@ pub struct ServerProjectOperations {
 const PERMISSION_BUILD: &str = "web.servers.files.write";
 const PERMISSION_DEPLOY: &str = "web.servers.files.deploy";
 
-fn op(id: &str, kind: ProjectOperationKind, label: &str, permission: &str, dangerous: bool) -> ProjectOperation {
+fn op(
+    id: &str,
+    kind: ProjectOperationKind,
+    label: &str,
+    permission: &str,
+    dangerous: bool,
+) -> ProjectOperation {
     ProjectOperation {
         id: id.to_string(),
         kind,
@@ -74,36 +80,168 @@ pub fn operations_for(
 ) -> ServerProjectOperations {
     let operations = match classification.project_type {
         ProjectType::FlutterApp => vec![
-            op("build", ProjectOperationKind::Build, "Build (debug)", PERMISSION_BUILD, false),
-            op("package", ProjectOperationKind::Package, "Build release bundle", PERMISSION_BUILD, false),
-            op("start", ProjectOperationKind::Start, "Run app", PERMISSION_DEPLOY, false),
-            op("stop", ProjectOperationKind::Stop, "Stop app", PERMISSION_DEPLOY, true),
-            op("deploy", ProjectOperationKind::Deploy, "Deploy to node", PERMISSION_DEPLOY, true),
+            op(
+                "build",
+                ProjectOperationKind::Build,
+                "Build (debug)",
+                PERMISSION_BUILD,
+                false,
+            ),
+            op(
+                "package",
+                ProjectOperationKind::Package,
+                "Build release bundle",
+                PERMISSION_BUILD,
+                false,
+            ),
+            op(
+                "start",
+                ProjectOperationKind::Start,
+                "Run app",
+                PERMISSION_DEPLOY,
+                false,
+            ),
+            op(
+                "stop",
+                ProjectOperationKind::Stop,
+                "Stop app",
+                PERMISSION_DEPLOY,
+                true,
+            ),
+            op(
+                "deploy",
+                ProjectOperationKind::Deploy,
+                "Deploy to node",
+                PERMISSION_DEPLOY,
+                true,
+            ),
         ],
         ProjectType::RustBackend => vec![
-            op("build", ProjectOperationKind::Build, "Cargo build", PERMISSION_BUILD, false),
-            op("package", ProjectOperationKind::Package, "Cargo build --release", PERMISSION_BUILD, false),
-            op("start", ProjectOperationKind::Start, "Run service", PERMISSION_DEPLOY, false),
-            op("restart", ProjectOperationKind::Restart, "Restart service", PERMISSION_DEPLOY, true),
-            op("stop", ProjectOperationKind::Stop, "Stop service", PERMISSION_DEPLOY, true),
-            op("deploy", ProjectOperationKind::Deploy, "Deploy to node", PERMISSION_DEPLOY, true),
+            op(
+                "build",
+                ProjectOperationKind::Build,
+                "Cargo build",
+                PERMISSION_BUILD,
+                false,
+            ),
+            op(
+                "package",
+                ProjectOperationKind::Package,
+                "Cargo build --release",
+                PERMISSION_BUILD,
+                false,
+            ),
+            op(
+                "start",
+                ProjectOperationKind::Start,
+                "Run service",
+                PERMISSION_DEPLOY,
+                false,
+            ),
+            op(
+                "restart",
+                ProjectOperationKind::Restart,
+                "Restart service",
+                PERMISSION_DEPLOY,
+                true,
+            ),
+            op(
+                "stop",
+                ProjectOperationKind::Stop,
+                "Stop service",
+                PERMISSION_DEPLOY,
+                true,
+            ),
+            op(
+                "deploy",
+                ProjectOperationKind::Deploy,
+                "Deploy to node",
+                PERMISSION_DEPLOY,
+                true,
+            ),
         ],
         ProjectType::NodeBackend => vec![
-            op("build", ProjectOperationKind::Build, "Install + build", PERMISSION_BUILD, false),
-            op("start", ProjectOperationKind::Start, "Run server", PERMISSION_DEPLOY, false),
-            op("restart", ProjectOperationKind::Restart, "Restart server", PERMISSION_DEPLOY, true),
-            op("stop", ProjectOperationKind::Stop, "Stop server", PERMISSION_DEPLOY, true),
-            op("deploy", ProjectOperationKind::Deploy, "Deploy to node", PERMISSION_DEPLOY, true),
+            op(
+                "build",
+                ProjectOperationKind::Build,
+                "Install + build",
+                PERMISSION_BUILD,
+                false,
+            ),
+            op(
+                "start",
+                ProjectOperationKind::Start,
+                "Run server",
+                PERMISSION_DEPLOY,
+                false,
+            ),
+            op(
+                "restart",
+                ProjectOperationKind::Restart,
+                "Restart server",
+                PERMISSION_DEPLOY,
+                true,
+            ),
+            op(
+                "stop",
+                ProjectOperationKind::Stop,
+                "Stop server",
+                PERMISSION_DEPLOY,
+                true,
+            ),
+            op(
+                "deploy",
+                ProjectOperationKind::Deploy,
+                "Deploy to node",
+                PERMISSION_DEPLOY,
+                true,
+            ),
         ],
         ProjectType::H5App | ProjectType::PcApp => vec![
-            op("build", ProjectOperationKind::Build, "Build bundle", PERMISSION_BUILD, false),
-            op("package", ProjectOperationKind::Package, "Package distributable", PERMISSION_BUILD, false),
-            op("start", ProjectOperationKind::Start, "Preview", PERMISSION_DEPLOY, false),
-            op("deploy", ProjectOperationKind::Deploy, "Deploy to node", PERMISSION_DEPLOY, true),
+            op(
+                "build",
+                ProjectOperationKind::Build,
+                "Build bundle",
+                PERMISSION_BUILD,
+                false,
+            ),
+            op(
+                "package",
+                ProjectOperationKind::Package,
+                "Package distributable",
+                PERMISSION_BUILD,
+                false,
+            ),
+            op(
+                "start",
+                ProjectOperationKind::Start,
+                "Preview",
+                PERMISSION_DEPLOY,
+                false,
+            ),
+            op(
+                "deploy",
+                ProjectOperationKind::Deploy,
+                "Deploy to node",
+                PERMISSION_DEPLOY,
+                true,
+            ),
         ],
         ProjectType::SdkworkWorkspace => vec![
-            op("build", ProjectOperationKind::Build, "Build workspace", PERMISSION_BUILD, false),
-            op("package", ProjectOperationKind::Package, "Package workspace", PERMISSION_BUILD, false),
+            op(
+                "build",
+                ProjectOperationKind::Build,
+                "Build workspace",
+                PERMISSION_BUILD,
+                false,
+            ),
+            op(
+                "package",
+                ProjectOperationKind::Package,
+                "Package workspace",
+                PERMISSION_BUILD,
+                false,
+            ),
         ],
         ProjectType::Generic => Vec::new(),
     };
@@ -123,24 +261,52 @@ pub fn command_for(
     kind: ProjectOperationKind,
 ) -> Option<ProjectOperationCommand> {
     let command = match (project_type, kind) {
-        (ProjectType::FlutterApp, ProjectOperationKind::Build) => shellish("flutter", &["build", "web"]),
-        (ProjectType::FlutterApp, ProjectOperationKind::Package) => shellish("flutter", &["build", "web", "--release"]),
-        (ProjectType::FlutterApp, ProjectOperationKind::Start) => shellish("flutter", &["run", "-d", "web-server"]),
-        (ProjectType::FlutterApp, ProjectOperationKind::Stop) => shellish("kill", &["$(pgrep -f 'flutter run')"]),
+        (ProjectType::FlutterApp, ProjectOperationKind::Build) => {
+            shellish("flutter", &["build", "web"])
+        }
+        (ProjectType::FlutterApp, ProjectOperationKind::Package) => {
+            shellish("flutter", &["build", "web", "--release"])
+        }
+        (ProjectType::FlutterApp, ProjectOperationKind::Start) => {
+            shellish("flutter", &["run", "-d", "web-server"])
+        }
+        (ProjectType::FlutterApp, ProjectOperationKind::Stop) => {
+            shellish("kill", &["$(pgrep -f 'flutter run')"])
+        }
         (ProjectType::RustBackend, ProjectOperationKind::Build) => shellish("cargo", &["build"]),
-        (ProjectType::RustBackend, ProjectOperationKind::Package) => shellish("cargo", &["build", "--release"]),
+        (ProjectType::RustBackend, ProjectOperationKind::Package) => {
+            shellish("cargo", &["build", "--release"])
+        }
         (ProjectType::RustBackend, ProjectOperationKind::Start) => shellish("cargo", &["run"]),
-        (ProjectType::RustBackend, ProjectOperationKind::Restart) => shellish("systemctl", &["restart", "sdkwork"]) ,
-        (ProjectType::RustBackend, ProjectOperationKind::Stop) => shellish("systemctl", &["stop", "sdkwork"]),
+        (ProjectType::RustBackend, ProjectOperationKind::Restart) => {
+            shellish("systemctl", &["restart", "sdkwork"])
+        }
+        (ProjectType::RustBackend, ProjectOperationKind::Stop) => {
+            shellish("systemctl", &["stop", "sdkwork"])
+        }
         (ProjectType::NodeBackend, ProjectOperationKind::Build) => shellish("npm", &["install"]),
         (ProjectType::NodeBackend, ProjectOperationKind::Start) => shellish("npm", &["start"]),
-        (ProjectType::NodeBackend, ProjectOperationKind::Restart) => shellish("systemctl", &["restart", "sdkwork-node"]),
-        (ProjectType::NodeBackend, ProjectOperationKind::Stop) => shellish("systemctl", &["stop", "sdkwork-node"]),
-        (ProjectType::H5App | ProjectType::PcApp, ProjectOperationKind::Build) => shellish("pnpm", &["build"]),
-        (ProjectType::H5App | ProjectType::PcApp, ProjectOperationKind::Package) => shellish("pnpm", &["build"]),
-        (ProjectType::H5App | ProjectType::PcApp, ProjectOperationKind::Start) => shellish("pnpm", &["dev"]),
-        (ProjectType::SdkworkWorkspace, ProjectOperationKind::Build) => shellish("pnpm", &["build"]),
-        (ProjectType::SdkworkWorkspace, ProjectOperationKind::Package) => shellish("pnpm", &["build"]),
+        (ProjectType::NodeBackend, ProjectOperationKind::Restart) => {
+            shellish("systemctl", &["restart", "sdkwork-node"])
+        }
+        (ProjectType::NodeBackend, ProjectOperationKind::Stop) => {
+            shellish("systemctl", &["stop", "sdkwork-node"])
+        }
+        (ProjectType::H5App | ProjectType::PcApp, ProjectOperationKind::Build) => {
+            shellish("pnpm", &["build"])
+        }
+        (ProjectType::H5App | ProjectType::PcApp, ProjectOperationKind::Package) => {
+            shellish("pnpm", &["build"])
+        }
+        (ProjectType::H5App | ProjectType::PcApp, ProjectOperationKind::Start) => {
+            shellish("pnpm", &["dev"])
+        }
+        (ProjectType::SdkworkWorkspace, ProjectOperationKind::Build) => {
+            shellish("pnpm", &["build"])
+        }
+        (ProjectType::SdkworkWorkspace, ProjectOperationKind::Package) => {
+            shellish("pnpm", &["build"])
+        }
         _ => return None,
     };
     Some(command)
@@ -166,8 +332,14 @@ mod tests {
     fn rust_project_exposes_build_and_deploy() {
         let classification = classify_entry_names(&["Cargo.toml".to_string()]);
         let manifest = operations_for("n1", "/opt/deploy/server", &classification);
-        assert!(manifest.operations.iter().any(|o| o.kind == ProjectOperationKind::Build));
-        assert!(manifest.operations.iter().any(|o| o.kind == ProjectOperationKind::Deploy));
+        assert!(manifest
+            .operations
+            .iter()
+            .any(|o| o.kind == ProjectOperationKind::Build));
+        assert!(manifest
+            .operations
+            .iter()
+            .any(|o| o.kind == ProjectOperationKind::Deploy));
     }
 
     #[test]

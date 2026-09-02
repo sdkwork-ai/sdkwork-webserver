@@ -71,7 +71,7 @@ test('workflow contract makes PostgreSQL verification a PR and release gate', ()
   assert.ok(workflow.on.push.branches.includes('main'));
   assert.equal(
     workflow.jobs.package.uses,
-    'sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-package.yml@b0829529b9277a3da32b90c2d36ff34ff09fa832',
+    'sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-package.yml@bfe420b79d3c584d246f9691c8374b24534c3365',
   );
   assert.equal(workflow.jobs.package.with.config_path, 'sdkwork.workflow.json');
   assert.equal(Object.keys(workflow.jobs).length, 1);

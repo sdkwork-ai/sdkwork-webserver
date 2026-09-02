@@ -53,7 +53,11 @@ pub enum ConfigFormat {
 }
 
 impl ConfigFormat {
-    pub const ALL: [ConfigFormat; 3] = [ConfigFormat::Json, ConfigFormat::Toml, ConfigFormat::NginxConf];
+    pub const ALL: [ConfigFormat; 3] = [
+        ConfigFormat::Json,
+        ConfigFormat::Toml,
+        ConfigFormat::NginxConf,
+    ];
 
     pub fn as_str(self) -> &'static str {
         match self {
@@ -66,7 +70,10 @@ impl ConfigFormat {
     /// Format by file extension (`nginx.conf` file name included). Returns
     /// `None` when the path has no recognizable extension.
     pub fn from_extension(path: &Path) -> Option<ConfigFormat> {
-        let file_name = path.file_name().and_then(|value| value.to_str()).unwrap_or("");
+        let file_name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("");
         if file_name == "nginx.conf" {
             return Some(ConfigFormat::NginxConf);
         }
@@ -81,11 +88,10 @@ impl ConfigFormat {
     /// Detect the format of a path deterministically: extension, directory
     /// layout, then content sniffing for unknown extensions.
     pub fn detect(path: &Path) -> Result<ConfigFormat, WebServerConfigError> {
-        let metadata =
-            fs::metadata(path).map_err(|source| WebServerConfigError::Read {
-                path: path.to_path_buf(),
-                source,
-            })?;
+        let metadata = fs::metadata(path).map_err(|source| WebServerConfigError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?;
         if metadata.is_dir() {
             return detect_directory(path);
         }
@@ -167,9 +173,7 @@ fn sniff_format(path: &Path) -> Result<ConfigFormat, WebServerConfigError> {
     // TOML assignments are `key = value` (or `key=value`); nginx starts with
     // a bare directive name whose arguments may contain `=` only after the
     // directive token (`limit_req_zone … zone=perip:10m;`).
-    let line_end = text[position..]
-        .find('\n')
-        .unwrap_or(text.len() - position);
+    let line_end = text[position..].find('\n').unwrap_or(text.len() - position);
     let line = &text[position..position + line_end];
     let token_end = line
         .char_indices()
@@ -321,7 +325,10 @@ impl ConfigSource for TomlConfigSource {
         let app_key = options.app_key.as_deref().unwrap_or(DEFAULT_APP_KEY);
         if path.is_dir() {
             let profile = options.profile.as_deref().unwrap_or(DEFAULT_TOML_PROFILE);
-            let environment = options.environment.as_deref().unwrap_or(DEFAULT_TOML_ENVIRONMENT);
+            let environment = options
+                .environment
+                .as_deref()
+                .unwrap_or(DEFAULT_TOML_ENVIRONMENT);
             let app = load_server_toml_app(path, profile, environment, app_key)?;
             return Ok(LoadedWebServerConfig {
                 app,
@@ -359,10 +366,7 @@ impl ConfigSource for NginxConfConfigSource {
                     .read_dir()
                     .map(|entries| {
                         entries.flatten().any(|entry| {
-                            entry
-                                .path()
-                                .extension()
-                                .and_then(|value| value.to_str())
+                            entry.path().extension().and_then(|value| value.to_str())
                                 == Some("conf")
                         })
                     })
@@ -490,8 +494,14 @@ mod tests {
         let toml = write(&temp, "server.toml", "[main]\n");
         let conf = write(&temp, "site.conf", "server { listen 80; }\n");
         let nginx_named = write(&temp, "nginx.conf", "events {}\n");
-        assert_eq!(ConfigFormat::detect(&json).expect("json"), ConfigFormat::Json);
-        assert_eq!(ConfigFormat::detect(&toml).expect("toml"), ConfigFormat::Toml);
+        assert_eq!(
+            ConfigFormat::detect(&json).expect("json"),
+            ConfigFormat::Json
+        );
+        assert_eq!(
+            ConfigFormat::detect(&toml).expect("toml"),
+            ConfigFormat::Toml
+        );
         assert_eq!(
             ConfigFormat::detect(&conf).expect("conf"),
             ConfigFormat::NginxConf
@@ -506,11 +516,25 @@ mod tests {
     fn sniffs_unknown_extensions_by_content() {
         let temp = tempfile::tempdir().expect("temp");
         let json = write(&temp, "config.cfg", "{\n  \"appKey\": \"a\"\n}");
-        let toml = write(&temp, "config.xyz", "# comment\n[main]\nworkerProcesses = 4\n");
+        let toml = write(
+            &temp,
+            "config.xyz",
+            "# comment\n[main]\nworkerProcesses = 4\n",
+        );
         let toml_assignment = write(&temp, "config.data", "enabled = true\n");
-        let nginx = write(&temp, "config.inc", "# comment\nserver {\n  listen 80;\n}\n");
-        assert_eq!(ConfigFormat::detect(&json).expect("json"), ConfigFormat::Json);
-        assert_eq!(ConfigFormat::detect(&toml).expect("toml"), ConfigFormat::Toml);
+        let nginx = write(
+            &temp,
+            "config.inc",
+            "# comment\nserver {\n  listen 80;\n}\n",
+        );
+        assert_eq!(
+            ConfigFormat::detect(&json).expect("json"),
+            ConfigFormat::Json
+        );
+        assert_eq!(
+            ConfigFormat::detect(&toml).expect("toml"),
+            ConfigFormat::Toml
+        );
         assert_eq!(
             ConfigFormat::detect(&toml_assignment).expect("toml assignment"),
             ConfigFormat::Toml
@@ -533,7 +557,11 @@ mod tests {
             "specVersion = 1\nkind = \"x\"\n",
         )
         .unwrap();
-        fs::write(layout.join("server.standalone.toml"), "profile = \"standalone\"\n").unwrap();
+        fs::write(
+            layout.join("server.standalone.toml"),
+            "profile = \"standalone\"\n",
+        )
+        .unwrap();
         fs::write(sites.join("web.conf"), "server { listen 80; }\n").unwrap();
         assert_eq!(
             ConfigFormat::detect(&layout).expect("layout"),
@@ -562,10 +590,14 @@ mod tests {
             "[[http.server]]\nlisten = [\"80\"]\nserverName = [\"web.example.com\"]\n\n[[http.server.location]]\nmatch = \"/\"\nreturnStatus = 200\nreturnBody = \"ok\"\n",
         );
         let loader = WebServerConfigLoader::new();
-        let nginx_loaded = loader.load(&nginx, &ConfigLoadOptions::default()).expect("nginx");
+        let nginx_loaded = loader
+            .load(&nginx, &ConfigLoadOptions::default())
+            .expect("nginx");
         assert_eq!(nginx_loaded.format, ConfigFormat::NginxConf);
         assert_eq!(nginx_loaded.app.virtual_hosts.len(), 1);
-        let toml_loaded = loader.load(&toml, &ConfigLoadOptions::default()).expect("toml");
+        let toml_loaded = loader
+            .load(&toml, &ConfigLoadOptions::default())
+            .expect("toml");
         assert_eq!(toml_loaded.format, ConfigFormat::Toml);
         assert_eq!(toml_loaded.app.virtual_hosts.len(), 1);
         assert!(toml_loaded.revision.is_some());
@@ -600,12 +632,17 @@ mod tests {
             "specVersion = 1\nkind = \"sdkwork.webserver.server\"\nid = \"single\"\nprofile = \"standalone\"\n\n[[http.server]]\nlisten = [\"8080\"]\nserverName = [\"single.local\"]\n\n[[http.server.location]]\nmatch = \"/\"\nreturnStatus = 200\n",
         );
         let loader = WebServerConfigLoader::new();
-        let loaded = loader.load(&toml, &ConfigLoadOptions::default()).expect("load");
+        let loaded = loader
+            .load(&toml, &ConfigLoadOptions::default())
+            .expect("load");
         assert_eq!(loaded.format, ConfigFormat::Toml);
         assert_eq!(loaded.app.app_key, DEFAULT_APP_KEY);
         assert_eq!(loaded.app.virtual_hosts.len(), 1);
         let revision = loaded.revision.expect("single-file revision");
-        assert_eq!(revision.size_bytes(), fs::metadata(&toml).unwrap().len() as u64);
+        assert_eq!(
+            revision.size_bytes(),
+            fs::metadata(&toml).unwrap().len() as u64
+        );
     }
 
     #[test]

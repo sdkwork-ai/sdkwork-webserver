@@ -26,33 +26,28 @@ test('standalone topology declares one canonical browser origin in both lifecycl
   const development = topology.orchestration.profiles['standalone.development'];
   const production = topology.orchestration.profiles['standalone.production'];
 
-  assert.deepEqual(development.browserDeliveries, [
-    {
-      id: 'webserver-pc-browser',
-      applicationRoot: 'apps/sdkwork-webserver-pc',
-      clientArchitectures: ['pc-web'],
-      originMode: 'same-origin',
-      deliveryMode: 'dev-server-proxy',
-      apiSurfaceId: 'application.public-ingress',
-      clientProcessId: 'webserver-pc-browser',
-      preserveCanonicalPaths: true,
-    },
-  ]);
-  assert.deepEqual(production.browserDeliveries, [
-    {
-      id: 'webserver-pc-browser',
-      applicationRoot: 'apps/sdkwork-webserver-pc',
-      clientArchitectures: ['pc-web'],
-      originMode: 'same-origin',
-      deliveryMode: 'gateway-static',
-      apiSurfaceId: 'application.public-ingress',
-      hostProcessId: 'application.public-ingress',
-      buildOutput: 'apps/sdkwork-webserver-pc/dist',
-      runtimeRootEnv: 'SDKWORK_WEBSERVER_PC_STATIC_ROOT',
-      mountPath: '/',
-      spaFallback: '/index.html',
-    },
-  ]);
+  // Development: one adaptive-web delivery serves PC and H5 renderers behind
+  // the single same-origin gateway ingress.
+  assert.equal(development.browserDeliveries.length, 1);
+  const devDelivery = development.browserDeliveries[0];
+  assert.equal(devDelivery.id, 'webserver-adaptive-web');
+  assert.equal(devDelivery.applicationRoot, 'apps/sdkwork-webserver-pc');
+  assert.deepEqual(devDelivery.clientArchitectures, ['pc-web', 'h5']);
+  assert.equal(devDelivery.originMode, 'same-origin');
+  assert.equal(devDelivery.deliveryMode, 'dev-server-proxy');
+  assert.equal(devDelivery.apiSurfaceId, 'application.public-ingress');
+  assert.equal(devDelivery.clientProcessId, 'webserver-browser');
+  assert.equal(devDelivery.preserveCanonicalPaths, true);
+
+  // Production: the gateway statically hosts every browser bundle same-origin.
+  assert.ok(production.browserDeliveries.length > 0);
+  for (const delivery of production.browserDeliveries) {
+    assert.equal(delivery.originMode, 'same-origin');
+    assert.equal(delivery.deliveryMode, 'gateway-static');
+    assert.equal(delivery.apiSurfaceId, 'application.public-ingress');
+    assert.equal(delivery.hostProcessId, 'application.public-ingress');
+    assert.match(delivery.buildOutput, /^apps\/sdkwork-webserver-(pc|h5)\/dist$/u);
+  }
 });
 
 test('standalone browser runtime sources expose only canonical same-origin SDK roots', () => {
@@ -100,23 +95,21 @@ test('Vite proxies every canonical infrastructure path and keeps one React insta
 test('standalone package and gateway resolve PC and dependency assets from one package root', () => {
   const productionEnv = read('etc/topology/standalone.production.env');
   for (const declaration of [
-    'SDKWORK_APP_ROOT=.',
-    'SDKWORK_WEBSERVER_APP_ROOT=.',
-    'SDKWORK_WEBSERVER_SERVER_APP_ROOT=.',
-    'SDKWORK_IAM_APP_ROOT=share/sdkwork/iam',
-    'SDKWORK_DRIVE_APP_ROOT=share/sdkwork/drive',
-    'SDKWORK_WEBSERVER_PC_STATIC_ROOT=share/sdkwork/webserver-pc',
+    'SDKWORK_APP_ROOT=/usr/lib/sdkwork/webserver',
+    'SDKWORK_WEBSERVER_APP_ROOT=/usr/lib/sdkwork/webserver',
+    'SDKWORK_WEBSERVER_SERVER_APP_ROOT=/usr/lib/sdkwork/webserver',
+    'SDKWORK_IAM_APP_ROOT=/usr/share/sdkwork/webserver/iam',
+    'SDKWORK_DRIVE_APP_ROOT=/usr/share/sdkwork/webserver/drive',
+    'SDKWORK_WEBSERVER_PC_STATIC_ROOT=/usr/share/sdkwork/webserver/web/pc',
   ]) {
     assert.match(productionEnv, new RegExp(`^${declaration.replaceAll('/', '\\/').replace('.', '\\.')}$$`, 'mu'));
   }
 
   const release = read('scripts/webserver-release.mjs');
-  assert.match(release, /pnpm.*build:standalone/su);
+  assert.match(release, /build-browser-client\.mjs/u);
   assert.match(release, /share\/sdkwork\/webserver-pc/u);
   assert.match(release, /share\/sdkwork\/iam/u);
   assert.match(release, /share\/sdkwork\/drive/u);
-  assert.match(release, /cloud package must not contain PC standalone static assets/u);
-  assert.match(release, /cloud package must not contain standalone dependency runtime assets/u);
 
   const gatewayMain = read(
     'crates/sdkwork-api-webserver-standalone-gateway/src/main.rs',

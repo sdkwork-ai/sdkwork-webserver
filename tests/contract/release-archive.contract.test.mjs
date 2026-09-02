@@ -27,8 +27,8 @@ const PACKAGE_FILES = new Map([
     'bin/sdkwork-webserver-website-delivery-edge-runtime',
     'website delivery edge runtime fixture\n',
   ],
-  ['bin/sdkwork-web-node-daemon', 'canonical node daemon fixture\n'],
-  ['bin/sdkwork-web-agent', 'node daemon fixture\n'],
+  ['bin/sdkwork-webserver-node-daemon', 'canonical node daemon fixture\n'],
+  ['bin/sdkwork-webserver-agent', 'node daemon fixture\n'],
   ['bin/sdkwork-webserver-certificate-worker', 'certificate worker fixture\n'],
   ['sdkwork.app.config.json', '{}\n'],
   ['specs/iam.module.manifest.json', '{}\n'],
@@ -43,10 +43,30 @@ const PACKAGE_FILES = new Map([
   ['database/contract/schema.yaml', 'schemaVersion: 1\n'],
   ['database/contract/table-registry.json', '{}\n'],
   ['database/ddl/baseline/postgres/0001_web_baseline.sql', '-- postgres baseline\n'],
+  ['database/migrations/postgres/0005_web_application.up.sql', '-- application migration\n'],
+  [
+    'database/migrations/postgres/0006_organization_id_not_null.up.sql',
+    '-- organization migration\n',
+  ],
   ['database/drift/policy.yaml', 'schemaVersion: 1\n'],
   ['database/seeds/seed.manifest.json', '{}\n'],
   ['database/seeds/common/001_bootstrap.sql', '-- common seed\n'],
 ]);
+const STANDALONE_BROWSER_RUNTIME_ENV = `${JSON.stringify(
+  {
+    environment: 'production',
+    deploymentProfile: 'standalone',
+    profileId: 'standalone.production',
+    runtimeTarget: 'browser',
+    browserOriginMode: 'same-origin',
+    appApiBaseUrl: '/',
+    backendApiBaseUrl: '/',
+    driveAppApiBaseUrl: '/',
+    appbaseAppApiBaseUrl: '/',
+  },
+  null,
+  2,
+)}\n`;
 const STANDALONE_PC_FILES = new Map([
   [
     'share/sdkwork/webserver-pc/index.html',
@@ -54,40 +74,51 @@ const STANDALONE_PC_FILES = new Map([
   ],
   [
     'share/sdkwork/webserver-pc/runtime-env.json',
-    `${JSON.stringify(
-      {
-        environment: 'production',
-        deploymentProfile: 'standalone',
-        profileId: 'standalone.production',
-        runtimeTarget: 'browser',
-        browserOriginMode: 'same-origin',
-        appApiBaseUrl: '/',
-        backendApiBaseUrl: '/',
-        driveAppApiBaseUrl: '/',
-        appbaseAppApiBaseUrl: '/',
-      },
-      null,
-      2,
-    )}\n`,
+    STANDALONE_BROWSER_RUNTIME_ENV,
   ],
   ['share/sdkwork/webserver-pc/assets/index-AbCd1234.js', 'console.log("fixture");\n'],
+]);
+const STANDALONE_H5_FILES = new Map([
+  [
+    'share/sdkwork/webserver-h5/index.html',
+    '<!doctype html><html><body><div id="root"></div></body></html>\n',
+  ],
+  [
+    'share/sdkwork/webserver-h5/runtime-env.json',
+    STANDALONE_BROWSER_RUNTIME_ENV,
+  ],
+  ['share/sdkwork/webserver-h5/assets/index-EfGh5678.js', 'console.log("fixture");\n'],
+]);
+const STATIC_FALLBACK_FILES = new Map([
+  [
+    'share/sdkwork/webserver-static/index.html',
+    '<!doctype html><html><body>static fallback</body></html>\n',
+  ],
+  [
+    'share/sdkwork/webserver-static/maintenance.html',
+    '<!doctype html><html><body>maintenance</body></html>\n',
+  ],
 ]);
 const STANDALONE_DEPENDENCY_FILES = new Map([
   ['share/sdkwork/iam/database/database.manifest.json', '{}\n'],
   ['share/sdkwork/iam/iam/registry/iam-registry.config.json', '{}\n'],
   ['share/sdkwork/iam/iam/modules/iam-kernel/iam.module.manifest.json', '{}\n'],
   ['share/sdkwork/drive/database/database.manifest.json', '{}\n'],
+  ['share/sdkwork/skills/database/database.manifest.json', '{}\n'],
+  ['share/sdkwork/mcp/database/database.manifest.json', '{}\n'],
+  ['share/sdkwork/deploy/database/database.manifest.json', '{}\n'],
+  ['share/sdkwork/webstore/database/database.manifest.json', '{}\n'],
 ]);
 
-function packageFilesFor(profile, options = {}) {
+function packageFilesFor(options = {}) {
   const files = new Map(PACKAGE_FILES);
-  if (profile === 'standalone' || options.includePcAssets) {
-    for (const [relativePath, text] of STANDALONE_PC_FILES) {
-      files.set(relativePath, options.fileOverrides?.get(relativePath) ?? text);
-    }
-  }
-  if (profile === 'standalone' || options.includeDependencyAssets) {
-    for (const [relativePath, text] of STANDALONE_DEPENDENCY_FILES) {
+  for (const group of [
+    STANDALONE_PC_FILES,
+    STANDALONE_H5_FILES,
+    STATIC_FALLBACK_FILES,
+    STANDALONE_DEPENDENCY_FILES,
+  ]) {
+    for (const [relativePath, text] of group) {
       files.set(relativePath, options.fileOverrides?.get(relativePath) ?? text);
     }
   }
@@ -103,15 +134,15 @@ function archiveDirectoriesFor(packageFiles) {
       [...packageFiles.keys()].flatMap((contentPath) => {
         const segments = contentPath.split('/');
         return segments.slice(0, -1).map((_, index) =>
-          ['sdkwork-web', ...segments.slice(0, index + 1)].join('/'),
+          ['sdkwork-webserver', ...segments.slice(0, index + 1)].join('/'),
         );
-      }).concat('sdkwork-web'),
+      }).concat('sdkwork-webserver'),
     ),
   ).sort();
 }
 
-function expectedArchiveEntries(profile) {
-  const files = packageFilesFor(profile);
+function expectedArchiveEntries() {
+  const files = packageFilesFor();
   return archiveDirectoriesFor(files).length + files.size + 1;
 }
 
@@ -124,6 +155,9 @@ function runValidator(profile, version, architecture = 'x64') {
   delete env.SDKWORK_PACKAGE_VERSION;
   delete env.SDKWORK_RELEASE_VERSION;
   delete env.SDKWORK_PACKAGE_ARCHITECTURE;
+  delete env.SDKWORK_DEPLOYMENT_PROFILE;
+  delete env.SDKWORK_WEBSERVER_ENVIRONMENT;
+  delete env.SDKWORK_ENVIRONMENT;
   return spawnSync(
     process.execPath,
     [
@@ -145,6 +179,9 @@ function runSbom(operation, profile, version, architecture = 'x64') {
   delete env.SDKWORK_PACKAGE_VERSION;
   delete env.SDKWORK_RELEASE_VERSION;
   delete env.SDKWORK_PACKAGE_ARCHITECTURE;
+  delete env.SDKWORK_DEPLOYMENT_PROFILE;
+  delete env.SDKWORK_WEBSERVER_ENVIRONMENT;
+  delete env.SDKWORK_ENVIRONMENT;
   return spawnSync(
     process.execPath,
     [
@@ -206,7 +243,7 @@ test('Kubernetes renderer binds one tenant fleet and Node identity without cross
     assert.ok(statefulSet);
     assert.equal(
       statefulSet.metadata.name,
-      `sdkwork-web-node-${tenantFleetName}-${nodeName}`,
+      `sdkwork-webserver-node-${tenantFleetName}-${nodeName}`,
     );
     assert.equal(
       statefulSet.metadata.labels['sdkwork.com/tenant-fleet'],
@@ -222,7 +259,7 @@ test('Kubernetes renderer binds one tenant fleet and Node identity without cross
     );
     assert.equal(
       statefulSet.spec.serviceName,
-      `sdkwork-web-website-${tenantFleetName}-headless`,
+      `sdkwork-webserver-website-${tenantFleetName}-headless`,
     );
     assert.equal(statefulSet.spec.replicas, 1);
     assert.equal(statefulSet.spec.template.spec.enableServiceLinks, false);
@@ -263,7 +300,7 @@ test('Kubernetes renderer binds one tenant fleet and Node identity without cross
       container.env.some(
         (entry) =>
           entry.name === 'SDKWORK_WEBSERVER_NODE_TOKEN_FILE' &&
-          entry.value === '/run/secrets/sdkwork-web-node/node-token',
+          entry.value === '/run/secrets/sdkwork-webserver-node/node-token',
       ),
     );
     assert.ok(
@@ -298,9 +335,9 @@ test('Kubernetes renderer binds one tenant fleet and Node identity without cross
     assert.deepEqual(
       serviceDocuments.map((document) => document.metadata.name).sort(),
       [
-        `sdkwork-web-events-${tenantFleetName}-${nodeName}`,
-        `sdkwork-web-website-${tenantFleetName}`,
-        `sdkwork-web-website-${tenantFleetName}-headless`,
+        `sdkwork-webserver-events-${tenantFleetName}-${nodeName}`,
+        `sdkwork-webserver-website-${tenantFleetName}`,
+        `sdkwork-webserver-website-${tenantFleetName}-headless`,
       ],
     );
     assert.ok(
@@ -355,7 +392,7 @@ test('Kubernetes renderer binds one tenant fleet and Node identity without cross
       .digest('hex');
     assert.equal(
       configMap.metadata.name,
-      `sdkwork-web-website-config-${tenantFleetName}-${nodeName}-${configRevision.slice(0, 16)}`,
+      `sdkwork-webserver-website-config-${tenantFleetName}-${nodeName}-${configRevision.slice(0, 16)}`,
     );
     assert.equal(configMap.metadata.labels['sdkwork.com/tenant-fleet'], tenantFleetName);
     assert.equal(
@@ -552,16 +589,15 @@ test('Kubernetes renderer keeps equal Node labels isolated across tenant fleets'
 });
 
 async function createFixture(options) {
-  const profile = options.profile ?? 'standalone';
   const architecture = options.architecture ?? 'x64';
   const version = options.version;
-  const artifactBase = `sdkwork-web-linux-${architecture}-${profile}-server-${version}`;
+  const artifactBase = `sdkwork-webserver-linux-${architecture}-standalone-server-${version}`;
   const archive = path.join(OUTPUT_ROOT, `${artifactBase}.tar.gz`);
   const checksum = `${archive}.sha256`;
-  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'sdkwork-web-release-fixture-'));
-  const stageRoot = path.join(temporaryRoot, 'sdkwork-web');
+  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'sdkwork-webserver-release-fixture-'));
+  const stageRoot = path.join(temporaryRoot, 'sdkwork-webserver');
   const content = [];
-  const packageFiles = packageFilesFor(profile, options);
+  const packageFiles = packageFilesFor(options);
   const archiveDirectories = archiveDirectoriesFor(packageFiles);
 
   for (const [relativePath, text] of packageFiles) {
@@ -581,7 +617,7 @@ async function createFixture(options) {
     kind: 'sdkwork.server-package',
     application: 'sdkwork-web',
     version,
-    deploymentProfile: profile,
+    deploymentProfile: 'standalone',
     runtimeTarget: 'server',
     platform: 'linux',
     architecture,
@@ -598,21 +634,21 @@ async function createFixture(options) {
     const extraPath = path.join(stageRoot, 'etc', 'unexpected.txt');
     writeFileSync(extraPath, 'unexpected\n', 'utf8');
     chmodSync(extraPath, 0o644);
-    additionalEntries.push('sdkwork-web/etc/unexpected.txt');
+    additionalEntries.push('sdkwork-webserver/etc/unexpected.txt');
   }
   if (options.symbolicLink) {
     const linkPath = path.join(stageRoot, 'etc', 'unsafe-link');
     symlinkSync('../sdkwork.app.config.json', linkPath, 'file');
-    additionalEntries.push('sdkwork-web/etc/unsafe-link');
+    additionalEntries.push('sdkwork-webserver/etc/unsafe-link');
   }
   const entries = [
     ...archiveDirectories,
-    'sdkwork-web/package.manifest.json',
-    ...content.map((item) => `sdkwork-web/${item.path}`),
+    'sdkwork-webserver/package.manifest.json',
+    ...content.map((item) => `sdkwork-webserver/${item.path}`),
     ...additionalEntries,
   ].sort();
   if (options.duplicateEntry) {
-    entries.push('sdkwork-web/sdkwork.app.config.json');
+    entries.push('sdkwork-webserver/sdkwork.app.config.json');
   }
 
   mkdirSync(OUTPUT_ROOT, { recursive: true });
@@ -629,7 +665,7 @@ async function createFixture(options) {
       filter(entryPath, stat) {
         stat.uid = 0;
         stat.gid = 0;
-        stat.mode = entryPath.startsWith('sdkwork-web/bin/')
+        stat.mode = entryPath.startsWith('sdkwork-webserver/bin/')
           ? 0o100000 | (options.binaryMode ?? 0o755)
           : stat.isDirectory()
             ? 0o040755
@@ -710,13 +746,15 @@ test('workspace and workflow close the frozen release dependency graph', () => {
 
 test('Linux release smoke validates, extracts, serves HTTP and HTTPS, and cleans up', () => {
   const packageJson = JSON.parse(readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'));
+  // sdkwork-webserver is standalone-only: the cloud smoke entry point is retired.
   assert.equal(
     packageJson.scripts['release:smoke:standalone'],
     'node scripts/webserver-release-smoke.mjs --deployment-profile standalone',
   );
+  assert.equal(packageJson.scripts['release:smoke:cloud'], undefined);
   assert.equal(
-    packageJson.scripts['release:smoke:cloud'],
-    'node scripts/webserver-release-smoke.mjs --deployment-profile cloud',
+    Object.keys(packageJson.scripts).filter((name) => name.startsWith('release:smoke')).length,
+    1,
   );
   const source = readFileSync(
     path.join(REPO_ROOT, 'scripts/webserver-release-smoke.mjs'),
@@ -762,7 +800,7 @@ test('bounded release validator accepts an exact immutable archive', async () =>
     assert.match(
       result.stdout,
       new RegExp(
-        `validated artifact=.* bytes=[0-9]+ entries=${expectedArchiveEntries('standalone')}`,
+        `validated artifact=.* bytes=[0-9]+ entries=${expectedArchiveEntries()}`,
         'u',
       ),
     );
@@ -771,50 +809,16 @@ test('bounded release validator accepts an exact immutable archive', async () =>
   }
 });
 
-test('bounded release validator accepts cloud only when PC assets are absent', async () => {
-  const validVersion = '9.8.7-cloud-valid';
-  const valid = await createFixture({ profile: 'cloud', version: validVersion });
-  try {
-    const result = runValidator('cloud', validVersion);
-    assert.equal(result.status, 0, result.stderr);
-    assert.match(
-      result.stdout,
-      new RegExp(
-        `validated artifact=.* bytes=[0-9]+ entries=${expectedArchiveEntries('cloud')}`,
-        'u',
-      ),
-    );
-  } finally {
-    valid.cleanup();
-  }
+test('release tooling rejects the retired cloud deployment profile', () => {
+  // sdkwork-webserver is standalone-only (SDKWORK_WEBSERVER_SPEC.md §17.4):
+  // both the release validator and the SBOM tooling must refuse cloud.
+  const validator = runValidator('cloud', '9.8.7-cloud-retired');
+  assert.notEqual(validator.status, 0);
+  assert.match(validator.stderr, /--deployment-profile must be standalone/u);
 
-  const invalidVersion = '9.8.7-cloud-with-pc';
-  const invalid = await createFixture({
-    profile: 'cloud',
-    version: invalidVersion,
-    includePcAssets: true,
-  });
-  try {
-    const result = runValidator('cloud', invalidVersion);
-    assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /cloud package must not contain PC standalone static assets/u);
-  } finally {
-    invalid.cleanup();
-  }
-
-  const invalidDependencyVersion = '9.8.7-cloud-with-dependencies';
-  const invalidDependency = await createFixture({
-    profile: 'cloud',
-    version: invalidDependencyVersion,
-    includeDependencyAssets: true,
-  });
-  try {
-    const result = runValidator('cloud', invalidDependencyVersion);
-    assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /cloud package must not contain standalone dependency runtime assets/u);
-  } finally {
-    invalidDependency.cleanup();
-  }
+  const sbom = runSbom('generate', 'cloud', '9.8.7-cloud-retired');
+  assert.notEqual(sbom.status, 0);
+  assert.match(sbom.stderr, /--deployment-profile must be standalone/u);
 });
 
 test('standalone release requires valid same-origin PC bootstrap files', async () => {
@@ -828,6 +832,16 @@ test('standalone release requires valid same-origin PC bootstrap files', async (
       'missing-runtime-env',
       { omitFiles: new Set(['share/sdkwork/webserver-pc/runtime-env.json']) },
       /must contain PC index\.html and runtime-env\.json/u,
+    ],
+    [
+      'missing-h5-index',
+      { omitFiles: new Set(['share/sdkwork/webserver-h5/index.html']) },
+      /standalone package must contain H5 index\.html and runtime-env\.json/u,
+    ],
+    [
+      'missing-static-fallback',
+      { omitFiles: new Set(['share/sdkwork/webserver-static/index.html']) },
+      /standalone package must contain static-fallback index\.html/u,
     ],
     [
       'missing-web-iam-module',
@@ -891,7 +905,7 @@ test('CycloneDX SBOM binds the archive and locked Cargo closure and rejects sema
     assert.equal(sbom.metadata.component.hashes[0].content, sha256(readFileSync(fixture.archive)));
     assert.ok(sbom.components.length > 0 && sbom.components.length <= 20_000);
     for (const packageName of [
-      'sdkwork-web-agent',
+      'sdkwork-webserver-agent',
       'sdkwork-api-webserver-standalone-gateway',
       'sdkwork-webserver-website-delivery-edge-runtime',
       'sdkwork-webserver-certificate-worker',
@@ -922,13 +936,13 @@ test('bounded release validator binds an arm64 archive to its manifest architect
   try {
     const result = runValidator('standalone', version, 'arm64');
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /validated artifact=sdkwork-web-linux-arm64-/u);
+    assert.match(result.stdout, /validated artifact=sdkwork-webserver-linux-arm64-/u);
 
     const wrongArchitecture = runValidator('standalone', version, 'x64');
     assert.notEqual(wrongArchitecture.status, 0);
     assert.match(
       wrongArchitecture.stderr,
-      /sdkwork-web-linux-x64-standalone-server-9\.8\.7-arm64\.tar\.gz/u,
+      /sdkwork-webserver-linux-x64-standalone-server-9\.8\.7-arm64\.tar\.gz/u,
     );
   } finally {
     fixture.cleanup();

@@ -4,12 +4,7 @@
 //! `rate + burst` are admitted immediately (nodelay-equivalent). Requests
 //! beyond that window are rejected with 503.
 
-use std::{
-    collections::HashMap,
-    net::IpAddr,
-    sync::Mutex,
-    time::Instant,
-};
+use std::{collections::HashMap, net::IpAddr, sync::Mutex, time::Instant};
 
 use sdkwork_webserver_core::{LimitReqConfig, LimitReqZoneConfig};
 
@@ -51,11 +46,7 @@ impl LimitReqRuntime {
         Self { zones: map }
     }
 
-    pub(super) fn admit(
-        &self,
-        client_ip: IpAddr,
-        rules: &[LimitReqConfig],
-    ) -> LimitReqDecision {
+    pub(super) fn admit(&self, client_ip: IpAddr, rules: &[LimitReqConfig]) -> LimitReqDecision {
         for rule in rules {
             let Some(zone) = self.zones.get(&rule.zone) else {
                 // Semantic validation should reject unknown zones; fail closed.
@@ -86,9 +77,7 @@ impl ZoneState {
             excess: 0.0,
             last: now,
         });
-        let elapsed = now
-            .saturating_duration_since(bucket.last)
-            .as_secs_f64();
+        let elapsed = now.saturating_duration_since(bucket.last).as_secs_f64();
         bucket.last = now;
         // Drain excess at the configured rate.
         bucket.excess = (bucket.excess - elapsed * rate).max(0.0);

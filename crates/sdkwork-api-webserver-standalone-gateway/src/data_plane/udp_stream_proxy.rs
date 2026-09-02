@@ -18,11 +18,7 @@ use std::{
 };
 
 use sdkwork_webserver_core::{StreamServerConfig, StreamTargetConfig};
-use tokio::{
-    net::UdpSocket,
-    sync::watch,
-    sync::OwnedSemaphorePermit,
-};
+use tokio::{net::UdpSocket, sync::watch, sync::OwnedSemaphorePermit};
 
 use super::runtime::RuntimeGeneration;
 use crate::DataPlaneError;
@@ -199,7 +195,14 @@ fn resolve_udp_target(
     target: &StreamTargetConfig,
     client_ip: std::net::IpAddr,
     round_robin: &AtomicUsize,
-) -> Option<(String, u16, Option<(Arc<super::proxy::ProxyUpstream>, super::proxy::StreamEndpoint)>)> {
+) -> Option<(
+    String,
+    u16,
+    Option<(
+        Arc<super::proxy::ProxyUpstream>,
+        super::proxy::StreamEndpoint,
+    )>,
+)> {
     match target {
         StreamTargetConfig::Literal { host, port } => Some((host.clone(), *port, None)),
         StreamTargetConfig::Upstream { name } => {

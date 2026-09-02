@@ -71,7 +71,10 @@ server {
         check: |config| {
             let upstream = &config.upstreams[0];
             assert_eq!(upstream.id, "api");
-            assert_eq!(upstream.load_balancing, UpstreamLoadBalancingStrategy::RoundRobin);
+            assert_eq!(
+                upstream.load_balancing,
+                UpstreamLoadBalancingStrategy::RoundRobin
+            );
             assert_eq!(upstream.targets.len(), 2);
             assert_eq!(upstream.targets[0].weight, 2);
             assert!(upstream.targets[1].backup);
@@ -120,9 +123,15 @@ server {
 "#,
         check: |config| {
             let lc = config.upstreams.iter().find(|u| u.id == "lc").unwrap();
-            assert_eq!(lc.load_balancing, UpstreamLoadBalancingStrategy::LeastConnections);
+            assert_eq!(
+                lc.load_balancing,
+                UpstreamLoadBalancingStrategy::LeastConnections
+            );
             let rnd = config.upstreams.iter().find(|u| u.id == "rnd").unwrap();
-            assert_eq!(rnd.load_balancing, UpstreamLoadBalancingStrategy::RandomTwoLeastConnections);
+            assert_eq!(
+                rnd.load_balancing,
+                UpstreamLoadBalancingStrategy::RandomTwoLeastConnections
+            );
         },
     },
     SurfaceCase {
@@ -179,12 +188,19 @@ server {
 }
 "#,
         check: |config| {
-            let ports = config.listeners.iter().map(|l| (l.bind.as_str(), l.port)).collect::<Vec<_>>();
+            let ports = config
+                .listeners
+                .iter()
+                .map(|l| (l.bind.as_str(), l.port))
+                .collect::<Vec<_>>();
             assert!(ports.contains(&("0.0.0.0", 80)));
             assert!(ports.contains(&("127.0.0.1", 8080)));
             assert!(ports.contains(&("::", 80)));
             assert!(ports.contains(&("::1", 8081)));
-            assert!(ports.contains(&("10.0.0.1", 80)), "bare address defaults to port 80: {ports:?}");
+            assert!(
+                ports.contains(&("10.0.0.1", 80)),
+                "bare address defaults to port 80: {ports:?}"
+            );
         },
     },
     SurfaceCase {
@@ -246,9 +262,19 @@ server {
         check: |config| {
             let ssl_listeners = config.listeners.iter().filter(|l| l.port == 443).count();
             assert_eq!(ssl_listeners, 1, "both servers share one 443 listener");
-            let policy_id = config.listeners.iter().find(|l| l.port == 443).unwrap()
-                .tls_policy_ref.as_deref().unwrap();
-            let policy = config.tls_policies.iter().find(|p| p.id == policy_id).unwrap();
+            let policy_id = config
+                .listeners
+                .iter()
+                .find(|l| l.port == 443)
+                .unwrap()
+                .tls_policy_ref
+                .as_deref()
+                .unwrap();
+            let policy = config
+                .tls_policies
+                .iter()
+                .find(|p| p.id == policy_id)
+                .unwrap();
             let certs = policy.certificate_refs().count();
             assert!(certs >= 2, "SNI policy carries both certificates");
             assert_eq!(config.certificates.len(), 2);
@@ -270,7 +296,10 @@ server {
         check: |config| {
             let policy = &config.tls_policies[0];
             let client_auth = policy.client_auth.as_ref().expect("client auth");
-            assert_eq!(client_auth.mode, sdkwork_webserver_core::config::ClientAuthMode::Optional);
+            assert_eq!(
+                client_auth.mode,
+                sdkwork_webserver_core::config::ClientAuthMode::Optional
+            );
             assert_eq!(client_auth.ca_certificate_files.len(), 1);
         },
     },
@@ -294,7 +323,11 @@ server {
 }
 "#,
         check: |config| {
-            let listeners = config.listeners.iter().filter(|l| l.port == 443).collect::<Vec<_>>();
+            let listeners = config
+                .listeners
+                .iter()
+                .filter(|l| l.port == 443)
+                .collect::<Vec<_>>();
             assert!(!listeners.is_empty());
             for listener in listeners {
                 assert!(
@@ -322,10 +355,17 @@ http {
 }
 "#,
         check: |config| {
-            let proxy = config.resources.iter().find_map(|r| match r {
-                ResourceConfig::Proxy { request_set_headers, .. } => Some(request_set_headers.clone()),
-                _ => None,
-            }).unwrap();
+            let proxy = config
+                .resources
+                .iter()
+                .find_map(|r| match r {
+                    ResourceConfig::Proxy {
+                        request_set_headers,
+                        ..
+                    } => Some(request_set_headers.clone()),
+                    _ => None,
+                })
+                .unwrap();
             assert!(proxy.contains(&"X-Http $scheme".to_owned()), "{proxy:?}");
             assert!(proxy.contains(&"X-Server $host".to_owned()), "{proxy:?}");
         },
@@ -343,16 +383,28 @@ server {
 }
 "#,
         check: |config| {
-            let entries = config.resources.iter().filter_map(|r| match r {
-                ResourceConfig::Proxy { upstream_ref, target_uri, .. } => {
-                    Some((upstream_ref.clone(), target_uri.clone()))
-                }
-                _ => None,
-            }).collect::<Vec<_>>();
+            let entries = config
+                .resources
+                .iter()
+                .filter_map(|r| match r {
+                    ResourceConfig::Proxy {
+                        upstream_ref,
+                        target_uri,
+                        ..
+                    } => Some((upstream_ref.clone(), target_uri.clone())),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
             assert!(entries.contains(&("api".to_owned(), Some("/".to_owned()))));
-            assert!(entries.contains(&("literal-127-0-0-1-9002".to_owned(), Some("/api".to_owned()))));
+            assert!(
+                entries.contains(&("literal-127-0-0-1-9002".to_owned(), Some("/api".to_owned())))
+            );
             assert!(entries.contains(&("literal-127-0-0-1-9003".to_owned(), None)));
-            let literal = config.upstreams.iter().find(|u| u.id == "literal-127-0-0-1-9002").unwrap();
+            let literal = config
+                .upstreams
+                .iter()
+                .find(|u| u.id == "literal-127-0-0-1-9002")
+                .unwrap();
             assert_eq!(literal.targets[0].url, "http://127.0.0.1:9002");
         },
     },
@@ -366,10 +418,14 @@ server {
 }
 "#,
         check: |config| {
-            let proxy = config.resources.iter().find_map(|r| match r {
-                ResourceConfig::Proxy { dynamic_target, .. } => dynamic_target.clone(),
-                _ => None,
-            }).expect("dynamic target");
+            let proxy = config
+                .resources
+                .iter()
+                .find_map(|r| match r {
+                    ResourceConfig::Proxy { dynamic_target, .. } => dynamic_target.clone(),
+                    _ => None,
+                })
+                .expect("dynamic target");
             assert_eq!(proxy, "http://$host:8080");
         },
     },
@@ -386,12 +442,17 @@ server {
 }
 "#,
         check: |config| {
-            let proxy = config.resources.iter().find_map(|r| match r {
-                ResourceConfig::Proxy { proxy_pass_request_headers, .. } => {
-                    Some(*proxy_pass_request_headers)
-                }
-                _ => None,
-            }).unwrap();
+            let proxy = config
+                .resources
+                .iter()
+                .find_map(|r| match r {
+                    ResourceConfig::Proxy {
+                        proxy_pass_request_headers,
+                        ..
+                    } => Some(*proxy_pass_request_headers),
+                    _ => None,
+                })
+                .unwrap();
             assert!(!proxy);
         },
     },
@@ -409,15 +470,22 @@ server {
 }
 "#,
         check: |config| {
-            let kinds = config.resources.iter().map(|r| match r {
-                ResourceConfig::Respond { status, .. } => format!("respond-{status}"),
-                ResourceConfig::Redirect { status, .. } => format!("redirect-{status}"),
-                other => panic!("unexpected {other:?}"),
-            }).collect::<Vec<_>>();
+            let kinds = config
+                .resources
+                .iter()
+                .map(|r| match r {
+                    ResourceConfig::Respond { status, .. } => format!("respond-{status}"),
+                    ResourceConfig::Redirect { status, .. } => format!("redirect-{status}"),
+                    other => panic!("unexpected {other:?}"),
+                })
+                .collect::<Vec<_>>();
             assert!(kinds.contains(&"respond-204".to_owned()));
             assert!(kinds.contains(&"respond-200".to_owned()));
             assert!(kinds.contains(&"redirect-301".to_owned()));
-            assert!(kinds.contains(&"redirect-302".to_owned()), "bare URL is a 302: {kinds:?}");
+            assert!(
+                kinds.contains(&"redirect-302".to_owned()),
+                "bare URL is a 302: {kinds:?}"
+            );
             assert!(kinds.contains(&"respond-404".to_owned()));
         },
     },
@@ -438,13 +506,24 @@ server {
 }
 "#,
         check: |config| {
-            let statics = config.resources.iter().filter_map(|r| match r {
-                ResourceConfig::Static { root, strip_prefix, spa_fallback, .. } => {
-                    Some((root.clone(), *strip_prefix, spa_fallback.clone()))
-                }
-                _ => None,
-            }).collect::<Vec<_>>();
-            assert!(statics.contains(&("/srv/www".to_owned(), false, Some("index.html".to_owned()))));
+            let statics = config
+                .resources
+                .iter()
+                .filter_map(|r| match r {
+                    ResourceConfig::Static {
+                        root,
+                        strip_prefix,
+                        spa_fallback,
+                        ..
+                    } => Some((root.clone(), *strip_prefix, spa_fallback.clone())),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            assert!(statics.contains(&(
+                "/srv/www".to_owned(),
+                false,
+                Some("index.html".to_owned())
+            )));
             assert!(statics.contains(&("/srv/data/".to_owned(), true, None)));
         },
     },
@@ -462,7 +541,9 @@ server {
 }
 "#,
         check: |config| {
-            let matches = config.virtual_hosts[0].routes.iter()
+            let matches = config.virtual_hosts[0]
+                .routes
+                .iter()
                 .map(|r| (r.route_match.path_type, r.route_match.path.clone()))
                 .collect::<Vec<_>>();
             assert!(matches.contains(&(RoutePathType::Exact, "/exact".to_owned())));
@@ -492,10 +573,22 @@ server {
             assert_eq!(route.rewrite.len(), 4);
             assert_eq!(route.rewrite[0].pattern, "^/old/?(.*)$");
             assert_eq!(route.rewrite[0].replacement, "/$1");
-            assert_eq!(route.rewrite[0].flag, sdkwork_webserver_core::config::RewriteFlag::Last);
-            assert_eq!(route.rewrite[1].flag, sdkwork_webserver_core::config::RewriteFlag::Break);
-            assert_eq!(route.rewrite[2].flag, sdkwork_webserver_core::config::RewriteFlag::Redirect);
-            assert_eq!(route.rewrite[3].flag, sdkwork_webserver_core::config::RewriteFlag::Permanent);
+            assert_eq!(
+                route.rewrite[0].flag,
+                sdkwork_webserver_core::config::RewriteFlag::Last
+            );
+            assert_eq!(
+                route.rewrite[1].flag,
+                sdkwork_webserver_core::config::RewriteFlag::Break
+            );
+            assert_eq!(
+                route.rewrite[2].flag,
+                sdkwork_webserver_core::config::RewriteFlag::Redirect
+            );
+            assert_eq!(
+                route.rewrite[3].flag,
+                sdkwork_webserver_core::config::RewriteFlag::Permanent
+            );
         },
     },
     SurfaceCase {
@@ -520,7 +613,10 @@ server {
             assert_eq!(config.limit_conn_zones.len(), 1);
             let route = &config.virtual_hosts[0].routes[0];
             assert_eq!(route.access.len(), 2);
-            assert_eq!(route.access[0].action, sdkwork_webserver_core::config::AccessAction::Allow);
+            assert_eq!(
+                route.access[0].action,
+                sdkwork_webserver_core::config::AccessAction::Allow
+            );
             assert_eq!(route.access[0].network, "10.0.0.0/8");
             assert_eq!(route.limit_req.len(), 1);
             assert_eq!(route.limit_req[0].burst, 20);
@@ -585,7 +681,10 @@ server {
 }
 "#,
         check: |config| {
-            let link = config.virtual_hosts[0].routes[0].secure_link.as_ref().unwrap();
+            let link = config.virtual_hosts[0].routes[0]
+                .secure_link
+                .as_ref()
+                .unwrap();
             match link {
                 sdkwork_webserver_core::config::SecureLinkMode::Secret { secret } => {
                     assert_eq!(secret, "s3cret");
@@ -621,7 +720,12 @@ http {
             assert_eq!(config.gzip.min_length, 1024);
             assert_eq!(config.limit_req_zones[0].name, "one");
             assert!(config.proxy_cache.enabled);
-            assert!(config.proxy_cache.disk_path.as_deref().unwrap().contains("var/cache/nginx"));
+            assert!(config
+                .proxy_cache
+                .disk_path
+                .as_deref()
+                .unwrap()
+                .contains("var/cache/nginx"));
             assert_eq!(config.proxy_cache.default_ttl_seconds, 300);
         },
     },
@@ -659,7 +763,10 @@ server {
         check: |config| {
             let upstream = config.upstreams.iter().find(|u| u.id == "secure").unwrap();
             let tls = upstream.tls.as_ref().expect("upstream tls");
-            assert_eq!(tls.trust_mode, sdkwork_webserver_core::config::UpstreamTlsTrustMode::Custom);
+            assert_eq!(
+                tls.trust_mode,
+                sdkwork_webserver_core::config::UpstreamTlsTrustMode::Custom
+            );
             assert_eq!(tls.ca_certificate_files, vec!["ca.pem"]);
             assert_eq!(tls.client_certificate_file.as_deref(), Some("client.pem"));
         },
@@ -678,7 +785,10 @@ server {
 }
 "#,
         check: |config| {
-            let trusted = config.listeners[0].trusted_proxy.as_ref().expect("trusted proxy");
+            let trusted = config.listeners[0]
+                .trusted_proxy
+                .as_ref()
+                .expect("trusted proxy");
             assert_eq!(trusted.trusted_cidrs.len(), 2);
             assert!(trusted.recursive);
         },
@@ -697,10 +807,20 @@ server {
 }
 "#,
         check: |config| {
-            let security = config.virtual_hosts[0].security_headers.as_ref().expect("security headers");
+            let security = config.virtual_hosts[0]
+                .security_headers
+                .as_ref()
+                .expect("security headers");
             assert!(security.x_frame_options.is_some());
             assert!(security.x_content_type_options);
-            assert_eq!(security.strict_transport_security.as_ref().unwrap().max_age_seconds, 63_072_000);
+            assert_eq!(
+                security
+                    .strict_transport_security
+                    .as_ref()
+                    .unwrap()
+                    .max_age_seconds,
+                63_072_000
+            );
             assert!(security.custom_headers.iter().any(|h| h.name == "X-Custom"));
         },
     },
@@ -739,11 +859,17 @@ stream {
             assert!(plain.proxy_protocol);
             assert_eq!(plain.proxy_timeout_ms, 30_000);
             let upstream_target = config.streams.iter().find(|s| s.port == 5101).unwrap();
-            assert!(matches!(upstream_target.target, sdkwork_webserver_core::config::StreamTargetConfig::Upstream { .. }));
+            assert!(matches!(
+                upstream_target.target,
+                sdkwork_webserver_core::config::StreamTargetConfig::Upstream { .. }
+            ));
             let preread = config.streams.iter().find(|s| s.port == 5102).unwrap();
             assert_eq!(preread.tls, Some(StreamTlsMode::Preread));
             let udp = config.streams.iter().find(|s| s.port == 5103).unwrap();
-            assert_eq!(udp.protocol, sdkwork_webserver_core::config::StreamProtocol::Udp);
+            assert_eq!(
+                udp.protocol,
+                sdkwork_webserver_core::config::StreamProtocol::Udp
+            );
         },
     },
     SurfaceCase {
@@ -762,12 +888,19 @@ stream {
 "#,
         check: |config| {
             let stream = &config.streams[0];
-            let StreamTlsMode::Terminate { certificate_ref, client_auth } = stream.tls.as_ref().unwrap() else {
+            let StreamTlsMode::Terminate {
+                certificate_ref,
+                client_auth,
+            } = stream.tls.as_ref().unwrap()
+            else {
                 panic!("expected terminate mode");
             };
             assert!(!certificate_ref.is_empty());
             let client_auth = client_auth.as_ref().expect("stream client auth");
-            assert_eq!(client_auth.mode, sdkwork_webserver_core::config::ClientAuthMode::Required);
+            assert_eq!(
+                client_auth.mode,
+                sdkwork_webserver_core::config::ClientAuthMode::Required
+            );
             assert_eq!(client_auth.ca_certificate_files.len(), 1);
         },
     },
@@ -797,9 +930,15 @@ const FAIL_CLOSED: &[(&str, &str, &str)] = &[
     ("empty server_name", "server_name \"\";", "empty `server_name"),
     ("return 444", "location / { return 444; }", "return 444"),
     ("variable return body", "location / { return 200 \"$host\"; }", "contains variables"),
-    ("try_files =code fallback", "location / { try_files $uri =404; }", "try_files fallback"),
+    // `=code` fallbacks are accepted since the runtime maps them to a static
+    // resource without a SPA fallback (with `root`); without any root the
+    // location fails closed on the serving-behavior rule.
+    ("try_files =code fallback without a root", "location / { try_files $uri =404; }", "exactly one of"),
     ("try_files @named with serving", "location / { try_files $uri @x; proxy_pass http://127.0.0.1:9001; }", "cannot be combined"),
-    ("try_files intermediate literal", "location / { try_files /fixed $uri /index.html; }", "try_files entry"),
+    // Literal intermediate probes are nginx-standard and accepted; the
+    // rejection path covers non-`$uri`/non-literal probes (unit-tested). The
+    // fixture below fails closed on the serving-behavior rule (no root).
+    ("try_files intermediate literal without a root", "location / { try_files /fixed $uri /index.html; }", "exactly one of"),
     ("unix proxy_pass", "location / { proxy_pass http://unix:/tmp/sock; }", "unix:"),
     ("proxy_pass non-http scheme", "location / { proxy_pass ftp://127.0.0.1:21; }", "must be http(s)://"),
     ("proxy_pass URI query", "location / { proxy_pass http://127.0.0.1:9001/?a=1; }", "query strings"),
@@ -876,8 +1015,14 @@ server {{
     .expect("parse");
     let config = materialize_nginx_app(&parsed, directory.path(), "auth").expect("materialize");
     let routes = &config.virtual_hosts[0].routes;
-    assert!(routes[0].auth_basic.is_none(), "auth_basic off must disable");
-    assert!(routes[1].auth_basic.is_some(), "inherited auth_basic applies");
+    assert!(
+        routes[0].auth_basic.is_none(),
+        "auth_basic off must disable"
+    );
+    assert!(
+        routes[1].auth_basic.is_some(),
+        "inherited auth_basic applies"
+    );
     assert_eq!(routes[1].auth_basic.as_ref().unwrap().users.len(), 1);
 }
 
@@ -891,11 +1036,31 @@ fn every_supported_directive_family_materializes() {
 
 /// Fail-closed forms that live at the http level (upstream blocks).
 const FAIL_CLOSED_HTTP: &[(&str, &str, &str)] = &[
-    ("unix upstream target", "upstream u { server unix:/tmp/sock; }", "unix:"),
-    ("upstream unknown parameter", "upstream u { server 127.0.0.1:9001 resolve; }", "unsupported upstream server parameter"),
-    ("upstream without targets", "upstream empty { keepalive 4; }", "no server targets"),
-    ("upstream hash unsupported key", "upstream u { hash $http_user_agent; server 127.0.0.1:9001; }", "unsupported hash key"),
-    ("gzip invalid value", "gzip maybe;", "unsupported gzip value"),
+    (
+        "unix upstream target",
+        "upstream u { server unix:/tmp/sock; }",
+        "unix:",
+    ),
+    (
+        "upstream unknown parameter",
+        "upstream u { server 127.0.0.1:9001 resolve; }",
+        "unsupported upstream server parameter",
+    ),
+    (
+        "upstream without targets",
+        "upstream empty { keepalive 4; }",
+        "no server targets",
+    ),
+    (
+        "upstream hash unsupported key",
+        "upstream u { hash $http_user_agent; server 127.0.0.1:9001; }",
+        "unsupported hash key",
+    ),
+    (
+        "gzip invalid value",
+        "gzip maybe;",
+        "unsupported gzip value",
+    ),
 ];
 
 #[test]
@@ -918,9 +1083,21 @@ fn every_fail_closed_form_produces_a_precise_diagnostic() {
 
 /// Fail-closed forms that live in the stream context.
 const FAIL_CLOSED_STREAM: &[(&str, &str, &str)] = &[
-    ("stream proxy_protocol v2", "proxy_protocol v2;", "proxy_protocol v2"),
-    ("stream listen inbound proxy_protocol", "listen 5100 proxy_protocol;", "trusted source CIDRs"),
-    ("stream listen unsupported parameter", "listen 5100 fancy=1;", "unsupported stream listen parameter"),
+    (
+        "stream proxy_protocol v2",
+        "proxy_protocol v2;",
+        "proxy_protocol v2",
+    ),
+    (
+        "stream listen inbound proxy_protocol",
+        "listen 5100 proxy_protocol;",
+        "trusted source CIDRs",
+    ),
+    (
+        "stream listen unsupported parameter",
+        "listen 5100 fancy=1;",
+        "unsupported stream listen parameter",
+    ),
 ];
 
 #[test]
@@ -935,12 +1112,36 @@ fn every_stream_fail_closed_form_produces_a_precise_diagnostic() {
 
 /// Fail-closed forms that are whole top-level configurations.
 const FAIL_CLOSED_TOP: &[(&str, &str, &str)] = &[
-    ("multiple http blocks", "http { } http { }", "multiple `http` blocks"),
-    ("multiple stream blocks", "stream { } stream { }", "multiple `stream` blocks"),
-    ("top-level unknown directive", "mail { }", "unsupported directive `mail`"),
-    ("no server blocks", "http { limit_req_zone $binary_remote_addr zone=z:1m rate=1r/s; }", "no `server` or `stream` blocks"),
-    ("server without location", "server { listen 80; server_name x.example.com; }", "at least one location"),
-    ("server without server_name", "server { listen 80; location / { return 200 \"ok\"; } }", "requires server_name"),
+    (
+        "multiple http blocks",
+        "http { } http { }",
+        "multiple `http` blocks",
+    ),
+    (
+        "multiple stream blocks",
+        "stream { } stream { }",
+        "multiple `stream` blocks",
+    ),
+    (
+        "top-level unknown directive",
+        "mail { }",
+        "unsupported directive `mail`",
+    ),
+    (
+        "no server blocks",
+        "http { limit_req_zone $binary_remote_addr zone=z:1m rate=1r/s; }",
+        "no `server` or `stream` blocks",
+    ),
+    (
+        "server without location",
+        "server { listen 80; server_name x.example.com; }",
+        "at least one location",
+    ),
+    (
+        "server without server_name",
+        "server { listen 80; location / { return 200 \"ok\"; } }",
+        "requires server_name",
+    ),
 ];
 
 #[test]
@@ -980,7 +1181,11 @@ fn full_nginx_conf_round_trip_combines_the_whole_surface() {
     std::fs::write(directory.path().join("ca.pem"), "ca").unwrap();
     std::fs::write(directory.path().join("client.pem"), "cert").unwrap();
     std::fs::write(directory.path().join("client.key"), "key").unwrap();
-    std::fs::write(directory.path().join("htpasswd"), "alice:{SHA}5en6G6MezRroT3XKqkdPOmY/BfQ=\n").unwrap();
+    std::fs::write(
+        directory.path().join("htpasswd"),
+        "alice:{SHA}5en6G6MezRroT3XKqkdPOmY/BfQ=\n",
+    )
+    .unwrap();
     let cache = directory.path().join("cache");
     std::fs::create_dir_all(&cache).unwrap();
     let text = format!(
@@ -1050,9 +1255,19 @@ stream {{
     }}
 }}
 "#,
-        mime = directory.path().join("mime.types").display().to_string().replace('\\', "/"),
+        mime = directory
+            .path()
+            .join("mime.types")
+            .display()
+            .to_string()
+            .replace('\\', "/"),
         cache = cache.display().to_string().replace('\\', "/"),
-        htpasswd = directory.path().join("htpasswd").display().to_string().replace('\\', "/"),
+        htpasswd = directory
+            .path()
+            .join("htpasswd")
+            .display()
+            .to_string()
+            .replace('\\', "/"),
     );
     // The `include mime.types` target must exist for the loader path.
     std::fs::write(
@@ -1074,12 +1289,18 @@ stream {{
     assert_eq!(config.limit_req_zones.len(), 1);
     assert!(config.proxy_cache.enabled);
     let api = config.upstreams.iter().find(|u| u.id == "api").unwrap();
-    assert_eq!(api.load_balancing, UpstreamLoadBalancingStrategy::LeastConnections);
+    assert_eq!(
+        api.load_balancing,
+        UpstreamLoadBalancingStrategy::LeastConnections
+    );
     let routes = &config.virtual_hosts[0].routes;
     assert_eq!(routes.len(), 6, "api, healthz, old, static, files, up");
     assert!(routes[0].limit_req.len() == 1 && routes[0].auth_basic.is_some());
     let upstream_tls = config.upstreams.iter().find(|u| u.id == "api").unwrap();
-    assert!(upstream_tls.tls.is_some(), "proxy_ssl attaches to the shared upstream");
+    assert!(
+        upstream_tls.tls.is_some(),
+        "proxy_ssl attaches to the shared upstream"
+    );
 }
 
 #[test]
@@ -1091,10 +1312,24 @@ fn include_surface_expands_files_globs_and_nested_includes() {
     std::fs::write(root.path().join("a.conf"), "server { listen 1; }\n").unwrap();
     std::fs::write(root.path().join("b.conf"), "server { listen 2; }\n").unwrap();
     std::fs::write(root.path().join("c.txt"), "ignore\n").unwrap();
-    std::fs::write(root.path().join("nested.conf"), "include snippets/frag.conf;\n").unwrap();
+    std::fs::write(
+        root.path().join("nested.conf"),
+        "include snippets/frag.conf;\n",
+    )
+    .unwrap();
 
-    let pattern_glob = root.path().join("*.conf").display().to_string().replace('\\', "/");
-    let pattern_nested = root.path().join("nested.conf").display().to_string().replace('\\', "/");
+    let pattern_glob = root
+        .path()
+        .join("*.conf")
+        .display()
+        .to_string()
+        .replace('\\', "/");
+    let pattern_nested = root
+        .path()
+        .join("nested.conf")
+        .display()
+        .to_string()
+        .replace('\\', "/");
     let text = format!("include {pattern_glob};\ninclude {pattern_nested};\n");
     let parsed = parse_nginx_config(&text, Path::new("main.conf")).expect("parse");
     let mut budget = 64;
@@ -1111,11 +1346,8 @@ fn include_surface_expands_files_globs_and_nested_includes() {
 #[test]
 fn include_missing_and_cycle_fail_closed() {
     let root = tempfile::tempdir().expect("temp dir");
-    let parsed = parse_nginx_config(
-        "include missing.conf;\n",
-        Path::new("main.conf"),
-    )
-    .expect("parse");
+    let parsed =
+        parse_nginx_config("include missing.conf;\n", Path::new("main.conf")).expect("parse");
     let mut budget = 16;
     let mut stack = Vec::new();
     let error = expand_includes(parsed, root.path(), &mut budget, &mut stack)
@@ -1222,12 +1454,20 @@ stream {{
     }}
 }}
 ",
-            root.path().join("mime.types").display().to_string().replace('\\', "/")
+            root.path()
+                .join("mime.types")
+                .display()
+                .to_string()
+                .replace('\\', "/")
         ),
     )
     .unwrap();
     let report = load_nginx_compat(&root.path().join("nginx.conf"), "full-file").expect("load");
-    assert_eq!(report.app.virtual_hosts.len(), 1, "the full conf has one server");
+    assert_eq!(
+        report.app.virtual_hosts.len(),
+        1,
+        "the full conf has one server"
+    );
     assert_eq!(report.app.listeners.len(), 1);
     assert_eq!(report.app.listeners[0].port, 8080);
     assert_eq!(report.app.streams.len(), 1);
@@ -1265,13 +1505,27 @@ server {
     assert_eq!(merged.virtual_hosts.len(), 2);
     assert_eq!(merged.listeners.iter().filter(|l| l.port == 443).count(), 1);
     assert_eq!(merged.streams.len(), 1);
-    let policy = merged.tls_policies.iter()
-        .find(|p| p.id == merged.listeners.iter().find(|l| l.port == 443).unwrap()
-            .tls_policy_ref.as_deref().unwrap())
+    let policy = merged
+        .tls_policies
+        .iter()
+        .find(|p| {
+            p.id == merged
+                .listeners
+                .iter()
+                .find(|l| l.port == 443)
+                .unwrap()
+                .tls_policy_ref
+                .as_deref()
+                .unwrap()
+        })
         .unwrap();
     assert!(policy.certificate_refs().count() >= 2);
     // Resource ids from the second file are rewritten to avoid collisions.
-    let ids = merged.resources.iter().map(|r| r.id().to_owned()).collect::<Vec<_>>();
+    let ids = merged
+        .resources
+        .iter()
+        .map(|r| r.id().to_owned())
+        .collect::<Vec<_>>();
     assert_eq!(ids.len(), 2);
     assert_ne!(ids[0], ids[1]);
 }
@@ -1281,10 +1535,22 @@ fn load_report_skips_unmaterializable_site_files_with_diagnostics() {
     let root = tempfile::tempdir().expect("temp dir");
     let sites = root.path().join("sites-enabled");
     std::fs::create_dir_all(&sites).unwrap();
-    std::fs::write(sites.join("ok.conf"), "server { listen 80; server_name ok.example.com; location / { return 200 \"ok\"; } }\n").unwrap();
-    std::fs::write(sites.join("bad.conf"), "server { listen 80; server_name bad.example.com; location @named { root /srv; } }\n").unwrap();
+    std::fs::write(
+        sites.join("ok.conf"),
+        "server { listen 80; server_name ok.example.com; location / { return 200 \"ok\"; } }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        sites.join("bad.conf"),
+        "server { listen 80; server_name bad.example.com; location @named { root /srv; } }\n",
+    )
+    .unwrap();
     let report = load_nginx_compat(&sites, "compat").expect("load");
     assert_eq!(report.app.virtual_hosts.len(), 1);
     assert_eq!(report.skipped.len(), 1);
-    assert!(report.skipped[0].1.contains("named location"), "{:?}", report.skipped);
+    assert!(
+        report.skipped[0].1.contains("named location"),
+        "{:?}",
+        report.skipped
+    );
 }

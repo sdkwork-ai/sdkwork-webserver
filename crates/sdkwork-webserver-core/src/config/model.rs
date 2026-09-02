@@ -1542,8 +1542,6 @@ pub enum SecureLinkMode {
     },
 }
 
-
-
 /// Location response body substitution (`sub_filter` family). The rules
 /// apply in declaration order; `once` (nginx `sub_filter_once`, default on)
 /// replaces only the first occurrence of each rule.

@@ -10,48 +10,48 @@ const drift = [];
 const surfaces = [
   {
     yamlPath: "apis/app-api/web/openapi.yaml",
-    jsonAuthorityPath: "apis/app-api/web/web-app-api.openapi.json",
-    sdkJsonPath: "sdks/sdkwork-web-app-sdk/openapi/web-app-api.openapi.json",
+    jsonAuthorityPath: "apis/app-api/web/sdkwork-webserver-app-api.openapi.json",
+    sdkJsonPath: "sdks/sdkwork-webserver-app-sdk/openapi/sdkwork-webserver-app-api.openapi.json",
     routeManifestPath:
       "sdks/_route-manifests/app-api/sdkwork-routes-webserver-app-api.route-manifest.json",
     crateDir: "crates/sdkwork-routes-webserver-app-api",
     manifestFn: "app_route_manifest",
     packageName: "sdkwork-routes-webserver-app-api",
     surface: "app-api",
-    apiAuthority: "sdkwork-web.app",
-    sdkFamily: "sdkwork-web-app-sdk",
+    apiAuthority: "sdkwork-webserver-app-api",
+    sdkFamily: "sdkwork-webserver-app-sdk",
     prefix: "/app/v3/api",
     domainTag: "web",
   },
   {
     yamlPath: "apis/backend-api/web/openapi.yaml",
-    jsonAuthorityPath: "apis/backend-api/web/web-backend-api.openapi.json",
-    sdkJsonPath: "sdks/sdkwork-web-backend-sdk/openapi/web-backend-api.openapi.json",
+    jsonAuthorityPath: "apis/backend-api/web/sdkwork-webserver-backend-api.openapi.json",
+    sdkJsonPath: "sdks/sdkwork-webserver-backend-sdk/openapi/sdkwork-webserver-backend-api.openapi.json",
     routeManifestPath:
       "sdks/_route-manifests/backend-api/sdkwork-routes-webserver-backend-api.route-manifest.json",
     crateDir: "crates/sdkwork-routes-webserver-backend-api",
     manifestFn: "backend_route_manifest",
     packageName: "sdkwork-routes-webserver-backend-api",
     surface: "backend-api",
-    apiAuthority: "sdkwork-web.backend",
-    sdkFamily: "sdkwork-web-backend-sdk",
+    apiAuthority: "sdkwork-webserver-backend-api",
+    sdkFamily: "sdkwork-webserver-backend-sdk",
     prefix: "/backend/v3/api",
     domainTag: "web",
   },
   {
-    yamlPath: "apis/internal-api/web/sdkwork-web-internal-api.openapi.yaml",
+    yamlPath: "apis/internal-api/web/sdkwork-webserver-internal-api.openapi.yaml",
     jsonAuthorityPath:
-      "apis/internal-api/web/sdkwork-web-internal-api.openapi.json",
+      "apis/internal-api/web/sdkwork-webserver-internal-api.openapi.json",
     sdkJsonPath:
-      "sdks/sdkwork-web-internal-sdk/openapi/sdkwork-web-internal-api.openapi.json",
+      "sdks/sdkwork-webserver-internal-sdk/openapi/sdkwork-webserver-internal-api.openapi.json",
     routeManifestPath:
       "sdks/_route-manifests/internal-api/sdkwork-routes-webserver-internal-api.route-manifest.json",
     crateDir: "crates/sdkwork-routes-webserver-internal-api",
     manifestFn: "internal_route_manifest",
     packageName: "sdkwork-routes-webserver-internal-api",
     surface: "internal-api",
-    apiAuthority: "sdkwork-web-internal-api",
-    sdkFamily: "sdkwork-web-internal-sdk",
+    apiAuthority: "sdkwork-webserver-internal-api",
+    sdkFamily: "sdkwork-webserver-internal-sdk",
     prefix: "/internal/v3/api",
     domainTag: "web",
     languages: ["typescript", "rust"],
@@ -240,7 +240,7 @@ function extractRoutes(openapi, profile) {
         routeAuth: operation["x-sdkwork-route-auth"] ?? null,
         handler: { module: "crate::routes", name: null },
         ownership: {
-          owner: "sdkwork-web",
+          owner: "sdkwork-webserver",
           apiAuthority: profile.apiAuthority,
         },
         requestContext: "WebRequestContext",
@@ -333,7 +333,7 @@ function writeHttpRouteManifestRust(crateDir, fnName, routes) {
 
 const SDK_VERSION = "1.0.0";
 const STANDARD_VERSION = "2026-06-26";
-const SDK_OWNER = "sdkwork-web";
+const SDK_OWNER = "sdkwork-webserver";
 const STANDARD_PROFILE = "sdkwork-v3";
 
 const LANGUAGE_LIST = [
@@ -719,7 +719,7 @@ function writeComponentSpec(profile, openapi) {
       ],
     },
     metadata: {
-      managedBy: "sdkwork-web",
+      managedBy: "sdkwork-webserver",
       standardVersion: STANDARD_VERSION,
     },
   };
@@ -976,7 +976,7 @@ for (const profile of surfaces) {
     kind: "sdkwork.route.manifest",
     packageName: profile.packageName,
     surface: profile.surface,
-    owner: "sdkwork-web",
+    owner: "sdkwork-webserver",
     domain: "platform",
     capability: "webserver",
     apiAuthority: profile.apiAuthority,

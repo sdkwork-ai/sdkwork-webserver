@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "name": "sdkwork-webserver-app-sdk",
+  "version": "1.0.0",
+  "language": "kotlin",
+  "sdkType": "app",
+  "packageName": "com.sdkwork:sdkwork-webserver-app-sdk",
+  "transportPackageName": "com.sdkwork:sdkwork-webserver-app-sdk",
+  "consumerPackageName": "com.sdkwork:sdkwork-webserver-app-sdk",
+  "generator": "@sdkwork/sdk-generator",
+  "capabilities": {
+    "supportsGeneratedTests": true,
+    "supportsReadme": true,
+    "supportsCustomScaffold": true,
+    "supportsPublishWorkflow": true,
+    "hasDistinctBuildStep": false
+  },
+  "generation": {
+    "readme": true,
+    "tests": false
+  },
+  "ownership": {
+    "generatedOwnership": "generated",
+    "scaffoldOwnership": "scaffold",
+    "scaffoldRoots": [
+      "custom/"
+    ],
+    "stateRoots": [
+      ".sdkwork/"
+    ]
+  }
+}

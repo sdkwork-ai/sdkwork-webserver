@@ -52,7 +52,10 @@ impl ResolverCacheBackend for InMemoryResolverCache {
     fn get(&self, domain: &str) -> Option<ResolvedRecord> {
         let domain = normalize_domain(domain);
         let now = now_unix();
-        let mut inner = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let index = *inner.entries.get(&domain)?;
         if inner.order[index].record.expired(now) {
             remove_at(&mut inner, index);
@@ -67,7 +70,10 @@ impl ResolverCacheBackend for InMemoryResolverCache {
         let domain = normalize_domain(&record.domain);
         let mut record = record;
         record.domain = domain.clone();
-        let mut inner = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if let Some(&index) = inner.entries.get(&domain) {
             inner.order[index].record = record;
             inner.order[index].last_used = now;
@@ -94,7 +100,10 @@ impl ResolverCacheBackend for InMemoryResolverCache {
 
     fn remove(&self, domain: &str) {
         let domain = normalize_domain(domain);
-        let mut inner = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let Some(&index) = inner.entries.get(&domain) else {
             return;
         };
@@ -109,7 +118,10 @@ fn remove_at(inner: &mut Inner, index: usize) {
     inner.order.remove(index);
     inner.entries.remove(&domain);
     for (offset, entry) in inner.order.iter().enumerate().skip(index) {
-        *inner.entries.get_mut(&entry.record.domain).expect("indexed") = offset;
+        *inner
+            .entries
+            .get_mut(&entry.record.domain)
+            .expect("indexed") = offset;
     }
 }
 

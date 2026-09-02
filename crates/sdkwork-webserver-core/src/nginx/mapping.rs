@@ -39,61 +39,164 @@ use super::parser::NginxDirective;
 
 const ACCEPTED_IGNORED: &[&str] = &[
     // process / http tuning (gzip / limit_req_zone / proxy_cache* are handled explicitly)
-    "user", "worker_processes", "worker_rlimit_nofile", "worker_connections", "pid",
-    "error_log", "access_log", "sendfile", "tcp_nopush", "tcp_nodelay",
-    "keepalive_timeout", "keepalive_requests", "server_tokens",
-    "map", "log_format", "types", "default_type", "charset", "events", "so_keepalive",
-    "resolver", "resolver_timeout", "client_body_timeout", "client_header_timeout",
+    "user",
+    "worker_processes",
+    "worker_rlimit_nofile",
+    "worker_connections",
+    "pid",
+    "error_log",
+    "access_log",
+    "sendfile",
+    "tcp_nopush",
+    "tcp_nodelay",
+    "keepalive_timeout",
+    "keepalive_requests",
+    "server_tokens",
+    "map",
+    "log_format",
+    "types",
+    "default_type",
+    "charset",
+    "events",
+    "so_keepalive",
+    "resolver",
+    "resolver_timeout",
+    "client_body_timeout",
+    "client_header_timeout",
     "client_header_buffer_size",
-    "large_client_header_buffers", "reset_timedout_connection", "server_names_hash_max_size",
-    "proxy_http_version", "proxy_buffering", "proxy_request_buffering", "proxy_method",
-    "proxy_intercept_errors", "proxy_next_upstream", "proxy_hide_header", "proxy_redirect",
-    "proxy_connect_timeout", "proxy_read_timeout", "proxy_send_timeout", "proxy_buffer_size",
-    "proxy_buffers", "ssl_protocols", "ssl_prefer_server_ciphers", "ssl_session_cache",
-    "ssl_session_timeout", "ssl_session_tickets", "ssl_stapling", "ssl_stapling_verify",
-    "ssl_trusted_certificate", "ssl_ciphers", "ssl_verify_depth", "ssl_dhparam",
-    "ssl_ecdh_curve", "http2", "keepalive",
-    "client_body_buffer_size", "send_timeout", "sendfile_max_chunk", "fastcgi_read_timeout",
+    "large_client_header_buffers",
+    "reset_timedout_connection",
+    "server_names_hash_max_size",
+    "proxy_http_version",
+    "proxy_buffering",
+    "proxy_request_buffering",
+    "proxy_method",
+    "proxy_intercept_errors",
+    "proxy_next_upstream",
+    "proxy_hide_header",
+    "proxy_redirect",
+    "proxy_connect_timeout",
+    "proxy_read_timeout",
+    "proxy_send_timeout",
+    "proxy_buffer_size",
+    "proxy_buffers",
+    "ssl_protocols",
+    "ssl_prefer_server_ciphers",
+    "ssl_session_cache",
+    "ssl_session_timeout",
+    "ssl_session_tickets",
+    "ssl_stapling",
+    "ssl_stapling_verify",
+    "ssl_trusted_certificate",
+    "ssl_ciphers",
+    "ssl_verify_depth",
+    "ssl_dhparam",
+    "ssl_ecdh_curve",
+    "http2",
+    "keepalive",
+    "client_body_buffer_size",
+    "send_timeout",
+    "sendfile_max_chunk",
+    "fastcgi_read_timeout",
     "merge_slashes",
-    "gzip_comp_level", "gzip_vary", "gzip_proxied", "gzip_disable", "gzip_static",
-    "open_file_cache", "open_file_cache_valid", "open_file_cache_min_uses",
-    "limit_conn_status", "limit_conn_log_level", "limit_req_status", "limit_req_log_level", "log_not_found",
-    "underscores_in_headers", "ignore_invalid_headers", "absolute_redirect",
-    "port_in_redirect", "server_name_in_redirect",
+    "gzip_comp_level",
+    "gzip_vary",
+    "gzip_proxied",
+    "gzip_disable",
+    "gzip_static",
+    "open_file_cache",
+    "open_file_cache_valid",
+    "open_file_cache_min_uses",
+    "limit_conn_status",
+    "limit_conn_log_level",
+    "limit_req_status",
+    "limit_req_log_level",
+    "log_not_found",
+    "underscores_in_headers",
+    "ignore_invalid_headers",
+    "absolute_redirect",
+    "port_in_redirect",
+    "server_name_in_redirect",
     // Stock nginx.conf / distro hash-table and buffering tuning; the runtime
     // owns its hash tables and I/O buffering.
-    "server_names_hash_bucket_size", "types_hash_max_size", "types_hash_bucket_size",
-    "variables_hash_max_size", "variables_hash_bucket_size",
-    "map_hash_max_size", "map_hash_bucket_size",
-    "proxy_headers_hash_max_size", "proxy_headers_hash_bucket_size",
-    "gzip_http_version", "gzip_buffers", "gzip_window",
-    "charset_map", "source_charset",
-    "keepalive_disable", "keepalive_time",
-    "lingering_time", "lingering_timeout", "lingering_close",
-    "connection_pool_size", "request_pool_size",
-    "output_buffers", "postpone_output", "read_ahead", "send_lowat",
-    "directio", "directio_alignment",
-    "log_subrequest", "msie_padding", "msie_refresh",
-    "chunked_transfer_encoding", "max_ranges", "recursive_error_pages",
-    "proxy_temp_path", "proxy_max_temp_file_size", "proxy_temp_file_write_size",
-    "proxy_send_lowat", "ssl_conf_command", "proxy_pass_header",
-    "accept_mutex_delay", "charset_types", "ssl_buffer_size",
-    "proxy_ssl_protocols", "proxy_ssl_ciphers", "proxy_ssl_session_reuse",
+    "server_names_hash_bucket_size",
+    "types_hash_max_size",
+    "types_hash_bucket_size",
+    "variables_hash_max_size",
+    "variables_hash_bucket_size",
+    "map_hash_max_size",
+    "map_hash_bucket_size",
+    "proxy_headers_hash_max_size",
+    "proxy_headers_hash_bucket_size",
+    "gzip_http_version",
+    "gzip_buffers",
+    "gzip_window",
+    "charset_map",
+    "source_charset",
+    "keepalive_disable",
+    "keepalive_time",
+    "lingering_time",
+    "lingering_timeout",
+    "lingering_close",
+    "connection_pool_size",
+    "request_pool_size",
+    "output_buffers",
+    "postpone_output",
+    "read_ahead",
+    "send_lowat",
+    "directio",
+    "directio_alignment",
+    "log_subrequest",
+    "msie_padding",
+    "msie_refresh",
+    "chunked_transfer_encoding",
+    "max_ranges",
+    "recursive_error_pages",
+    "proxy_temp_path",
+    "proxy_max_temp_file_size",
+    "proxy_temp_file_write_size",
+    "proxy_send_lowat",
+    "ssl_conf_command",
+    "proxy_pass_header",
+    "accept_mutex_delay",
+    "charset_types",
+    "ssl_buffer_size",
+    "proxy_ssl_protocols",
+    "proxy_ssl_ciphers",
+    "proxy_ssl_session_reuse",
     "proxy_ssl_verify_depth",
     // Main-context process/OS knobs nginx accepts at the top of nginx.conf;
     // the runtime owns process management, so they are safe to accept.
-    "daemon", "master_process", "env", "pcre_jit", "ssl_engine", "timer_resolution",
-    "lock_file", "worker_priority", "worker_cpu_affinity", "worker_shutdown_timeout",
-    "worker_aio_requests", "worker_rlimit_core", "working_directory", "epoll_events",
+    "daemon",
+    "master_process",
+    "env",
+    "pcre_jit",
+    "ssl_engine",
+    "timer_resolution",
+    "lock_file",
+    "worker_priority",
+    "worker_cpu_affinity",
+    "worker_shutdown_timeout",
+    "worker_aio_requests",
+    "worker_rlimit_core",
+    "working_directory",
+    "epoll_events",
     // Response-behavior knobs the runtime owns via its own defaults (error
     // page mapping, directory autoindex, cache/entity headers). Accepted and
     // ignored like the safe tuning directives above; the conformance corpus
     // (config-source-fixtures/nginx/full-nginx.conf) exercises `autoindex on`
     // as part of the accepted surface, and the TOML spec treats autoindex as
     // an operator policy knob (§11.2).
-    "error_page", "autoindex", "expires", "etag", "if_modified_since",
+    "error_page",
+    "autoindex",
+    "expires",
+    "etag",
+    "if_modified_since",
     // events / OS tuning
-    "use", "accept_mutex", "multi_accept", "disable_symlinks",
+    "use",
+    "accept_mutex",
+    "multi_accept",
+    "disable_symlinks",
 ];
 
 const UNSUPPORTED_SECURITY: &[&str] = &[];
@@ -165,16 +268,17 @@ pub fn materialize_nginx_app(
             "proxy_cache_valid" => mapper.apply_proxy_cache_valid(directive)?,
             "proxy_cache" => mapper.materialize_proxy_cache(directive)?,
             "proxy_set_header" => {
-                let entry = format_proxy_set_header_entry(&directive.args).map_err(|message| {
-                    NginxConfigError::unsupported(directive, message)
-                })?;
+                let entry = format_proxy_set_header_entry(&directive.args)
+                    .map_err(|message| NginxConfigError::unsupported(directive, message))?;
                 mapper.http_proxy_set_headers.push(entry);
             }
             "client_max_body_size" => {
                 mapper.note_client_max_body_size(parse_body_size(directive)?);
             }
-            "proxy_ssl_verify" | "proxy_ssl_trusted_certificate"
-            | "proxy_ssl_certificate" | "proxy_ssl_certificate_key"
+            "proxy_ssl_verify"
+            | "proxy_ssl_trusted_certificate"
+            | "proxy_ssl_certificate"
+            | "proxy_ssl_certificate_key"
             | "proxy_ssl_server_name" => {
                 parse_proxy_ssl_directive(&mut mapper.http_proxy_ssl, directive)?;
             }
@@ -452,11 +556,10 @@ impl<'a> Mapper<'a> {
     }
 
     fn materialize_upstream(&mut self, directive: &NginxDirective) -> Result<(), NginxConfigError> {
-        let name = directive
-            .args
-            .first()
-            .cloned()
-            .ok_or_else(|| NginxConfigError::unsupported(directive, "upstream requires a name"))?;
+        let name =
+            directive.args.first().cloned().ok_or_else(|| {
+                NginxConfigError::unsupported(directive, "upstream requires a name")
+            })?;
         if self.upstream_names.contains(&name) {
             return Ok(());
         }
@@ -565,9 +668,10 @@ impl<'a> Mapper<'a> {
                 "random" => {
                     // nginx `random [two least_conn]`; `two least_time` is a
                     // Plus-only variant and fails closed.
-                    let unsupported = child.args.iter().any(|argument| {
-                        argument != "two" && argument != "least_conn"
-                    });
+                    let unsupported = child
+                        .args
+                        .iter()
+                        .any(|argument| argument != "two" && argument != "least_conn");
                     if unsupported {
                         return Err(NginxConfigError::unsupported(
                             child,
@@ -700,9 +804,8 @@ impl<'a> Mapper<'a> {
                             "listen requires an address",
                         ));
                     }
-                    let spec = parse_listen_spec(&child.args.join(" ")).map_err(|message| {
-                        NginxConfigError::unsupported(child, message)
-                    })?;
+                    let spec = parse_listen_spec(&child.args.join(" "))
+                        .map_err(|message| NginxConfigError::unsupported(child, message))?;
                     listen_specs.push(spec);
                 }
                 "server_name" => {
@@ -741,7 +844,9 @@ impl<'a> Mapper<'a> {
                         other => {
                             return Err(NginxConfigError::unsupported(
                                 child,
-                                format!("ssl_verify_client accepts on|optional|off, found `{other}`"),
+                                format!(
+                                    "ssl_verify_client accepts on|optional|off, found `{other}`"
+                                ),
                             ))
                         }
                     };
@@ -791,16 +896,23 @@ impl<'a> Mapper<'a> {
                     client_max_body_size = parse_body_size(child)?;
                 }
                 "proxy_set_header" => {
-                    let entry = format_proxy_set_header_entry(&child.args).map_err(|message| {
-                        NginxConfigError::unsupported(child, message)
-                    })?;
+                    let entry = format_proxy_set_header_entry(&child.args)
+                        .map_err(|message| NginxConfigError::unsupported(child, message))?;
                     inherited_proxy_set_headers.push(entry);
                 }
-                "access_log" | "error_log" | "proxy_http_version"
-                | "proxy_buffering" | "proxy_read_timeout" | "proxy_send_timeout"
-                | "proxy_connect_timeout" | "ssl_protocols" | "ssl_prefer_server_ciphers"
-                | "ssl_session_cache" | "ssl_trusted_certificate"
-                | "client_body_timeout" | "client_header_timeout" => {}
+                "access_log"
+                | "error_log"
+                | "proxy_http_version"
+                | "proxy_buffering"
+                | "proxy_read_timeout"
+                | "proxy_send_timeout"
+                | "proxy_connect_timeout"
+                | "ssl_protocols"
+                | "ssl_prefer_server_ciphers"
+                | "ssl_session_cache"
+                | "ssl_trusted_certificate"
+                | "client_body_timeout"
+                | "client_header_timeout" => {}
                 "http2" => {
                     let Some(value) = child.args.first() else {
                         return Err(NginxConfigError::unsupported(
@@ -828,8 +940,10 @@ impl<'a> Mapper<'a> {
                 "proxy_cache" => {
                     self.materialize_proxy_cache(child)?;
                 }
-                "proxy_ssl_verify" | "proxy_ssl_trusted_certificate"
-                | "proxy_ssl_certificate" | "proxy_ssl_certificate_key"
+                "proxy_ssl_verify"
+                | "proxy_ssl_trusted_certificate"
+                | "proxy_ssl_certificate"
+                | "proxy_ssl_certificate_key"
                 | "proxy_ssl_server_name" => {
                     parse_proxy_ssl_directive(&mut server_proxy_ssl, child)?;
                 }
@@ -875,10 +989,7 @@ impl<'a> Mapper<'a> {
         let primary_name = server_names[0].clone();
         // nginx inheritance: server-level `http2` overrides the http level.
         let http2_on = server_http2.or(self.http_http2).unwrap_or(false);
-        let first_port = listen_specs
-            .first()
-            .map(|spec| spec.port)
-            .unwrap_or(0);
+        let first_port = listen_specs.first().map(|spec| spec.port).unwrap_or(0);
         // The virtual host id is the default-server target on every listener
         // this server owns (nginx: the first server for a listen address is
         // its default, overridden by an explicit `default_server`).
@@ -971,10 +1082,7 @@ impl<'a> Mapper<'a> {
                 // existing TLS policy so every server_name is covered.
                 if spec.ssl {
                     if let Some(cert_name) = certificate_name.as_deref() {
-                        self.merge_certificate_into_shared_listener(
-                            &existing,
-                            cert_name,
-                        )?;
+                        self.merge_certificate_into_shared_listener(&existing, cert_name)?;
                     }
                 }
                 if spec.default_server {
@@ -991,13 +1099,13 @@ impl<'a> Mapper<'a> {
                             ));
                         }
                     } else {
-                        self.explicit_defaults.insert(key.clone(), virtual_host_id.clone());
-                        if let Some(listener) = self
-                            .listeners
-                            .iter_mut()
-                            .find(|listener| listener.get("id").and_then(Value::as_str) == Some(existing.as_str()))
-                        {
-                            listener["defaultVirtualHostRef"] = Value::String(virtual_host_id.clone());
+                        self.explicit_defaults
+                            .insert(key.clone(), virtual_host_id.clone());
+                        if let Some(listener) = self.listeners.iter_mut().find(|listener| {
+                            listener.get("id").and_then(Value::as_str) == Some(existing.as_str())
+                        }) {
+                            listener["defaultVirtualHostRef"] =
+                                Value::String(virtual_host_id.clone());
                         }
                     }
                 }
@@ -1013,7 +1121,8 @@ impl<'a> Mapper<'a> {
                             ),
                         ));
                     }
-                    self.explicit_defaults.insert(key.clone(), virtual_host_id.clone());
+                    self.explicit_defaults
+                        .insert(key.clone(), virtual_host_id.clone());
                 }
                 let id = format!("listener-{}-{}", sanitize_id(&spec.bind), spec.port);
                 let mut listener = json!({
@@ -1103,8 +1212,14 @@ impl<'a> Mapper<'a> {
             let mut security = serde_json::Map::new();
             let mut custom = Vec::new();
             for header in add_headers {
-                let name = header.get("name").and_then(Value::as_str).unwrap_or_default();
-                let value = header.get("value").and_then(Value::as_str).unwrap_or_default();
+                let name = header
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let value = header
+                    .get("value")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
                 let lower = name.to_ascii_lowercase();
                 match lower.as_str() {
                     "x-frame-options" => {
@@ -1113,16 +1228,21 @@ impl<'a> Mapper<'a> {
                         } else {
                             "DENY"
                         };
-                        security.insert("xFrameOptions".to_owned(), Value::String(frame.to_owned()));
+                        security
+                            .insert("xFrameOptions".to_owned(), Value::String(frame.to_owned()));
                     }
                     "x-content-type-options" if value.eq_ignore_ascii_case("nosniff") => {
                         security.insert("xContentTypeOptions".to_owned(), Value::Bool(true));
                     }
                     "content-security-policy" => {
-                        security.insert("contentSecurityPolicy".to_owned(), Value::String(value.to_owned()));
+                        security.insert(
+                            "contentSecurityPolicy".to_owned(),
+                            Value::String(value.to_owned()),
+                        );
                     }
                     "referrer-policy" => {
-                        security.insert("referrerPolicy".to_owned(), Value::String(value.to_owned()));
+                        security
+                            .insert("referrerPolicy".to_owned(), Value::String(value.to_owned()));
                     }
                     "strict-transport-security" => {
                         let max_age = value
@@ -1229,9 +1349,8 @@ impl<'a> Mapper<'a> {
                         ));
                     };
                     if target.contains('$') {
-                        crate::config::validate_proxy_pass_template(target).map_err(|message| {
-                            NginxConfigError::unsupported(child, message)
-                        })?;
+                        crate::config::validate_proxy_pass_template(target)
+                            .map_err(|message| NginxConfigError::unsupported(child, message))?;
                         dynamic_target = Some(target.clone());
                     } else {
                         proxy_pass = Some(target.clone());
@@ -1250,7 +1369,9 @@ impl<'a> Mapper<'a> {
                         other => {
                             return Err(NginxConfigError::unsupported(
                                 child,
-                                format!("proxy_pass_request_headers accepts on|off, found `{other}`"),
+                                format!(
+                                    "proxy_pass_request_headers accepts on|off, found `{other}`"
+                                ),
                             ))
                         }
                     }
@@ -1322,9 +1443,8 @@ impl<'a> Mapper<'a> {
                     }
                 }
                 "proxy_set_header" => {
-                    let entry = format_proxy_set_header_entry(&child.args).map_err(|message| {
-                        NginxConfigError::unsupported(child, message)
-                    })?;
+                    let entry = format_proxy_set_header_entry(&child.args)
+                        .map_err(|message| NginxConfigError::unsupported(child, message))?;
                     location_proxy_set_headers.push(entry);
                 }
                 "sub_filter" => {
@@ -1437,9 +1557,8 @@ impl<'a> Mapper<'a> {
                             "secure_link_md5 requires a template",
                         ));
                     };
-                    crate::config::validate_md5_template(template).map_err(|message| {
-                        NginxConfigError::unsupported(child, message)
-                    })?;
+                    crate::config::validate_md5_template(template)
+                        .map_err(|message| NginxConfigError::unsupported(child, message))?;
                     let entry = extras.secure_link.get_or_insert_with(|| {
                         json!({ "mode": "md5", "argument": "st", "template": "", "expiresArgument": null })
                     });
@@ -1461,7 +1580,9 @@ impl<'a> Mapper<'a> {
                     let Some(name) = argument.strip_prefix("$arg_") else {
                         return Err(NginxConfigError::unsupported(
                             child,
-                            format!("secure_link_expires argument `{argument}` must be `$arg_<name>`"),
+                            format!(
+                                "secure_link_expires argument `{argument}` must be `$arg_<name>`"
+                            ),
                         ));
                     };
                     let entry = extras.secure_link.get_or_insert_with(|| {
@@ -1496,17 +1617,23 @@ impl<'a> Mapper<'a> {
                         json!({ "rules": [], "once": true, "types": ["text/html"], "lastModified": false })
                     })["lastModified"] = Value::Bool(enabled);
                 }
-                "proxy_http_version" | "proxy_buffering"
-                | "proxy_read_timeout" | "proxy_send_timeout" | "proxy_connect_timeout"
-                | "proxy_redirect" | "proxy_request_buffering" => {}
+                "proxy_http_version"
+                | "proxy_buffering"
+                | "proxy_read_timeout"
+                | "proxy_send_timeout"
+                | "proxy_connect_timeout"
+                | "proxy_redirect"
+                | "proxy_request_buffering" => {}
                 "proxy_cache" => {
                     self.materialize_proxy_cache(child)?;
                 }
                 "proxy_cache_key" => {
                     self.proxy_cache_enabled = true;
                 }
-                "proxy_ssl_verify" | "proxy_ssl_trusted_certificate"
-                | "proxy_ssl_certificate" | "proxy_ssl_certificate_key"
+                "proxy_ssl_verify"
+                | "proxy_ssl_trusted_certificate"
+                | "proxy_ssl_certificate"
+                | "proxy_ssl_certificate_key"
                 | "proxy_ssl_server_name" => {
                     parse_proxy_ssl_directive(&mut location_proxy_ssl, child)?;
                 }
@@ -1635,12 +1762,8 @@ impl<'a> Mapper<'a> {
                 "proxyPassRequestHeaders": proxy_pass_request_headers,
             });
             if !request_set_headers.is_empty() {
-                proxy_resource["requestSetHeaders"] = Value::Array(
-                    request_set_headers
-                        .into_iter()
-                        .map(Value::String)
-                        .collect(),
-                );
+                proxy_resource["requestSetHeaders"] =
+                    Value::Array(request_set_headers.into_iter().map(Value::String).collect());
             }
             self.resources.push(proxy_resource);
         } else if let Some(target) = proxy_pass {
@@ -1657,7 +1780,9 @@ impl<'a> Mapper<'a> {
             } else {
                 return Err(NginxConfigError::unsupported(
                     location,
-                    format!("proxy_pass `{target}` must be http(s)://upstream or http(s)://host:port"),
+                    format!(
+                        "proxy_pass `{target}` must be http(s)://upstream or http(s)://host:port"
+                    ),
                 ));
             };
             if !effective_proxy_ssl.is_empty() && !upstream_target.starts_with("https://") {
@@ -1678,12 +1803,8 @@ impl<'a> Mapper<'a> {
                 proxy_resource["targetUri"] = Value::String(uri.clone());
             }
             if !request_set_headers.is_empty() {
-                proxy_resource["requestSetHeaders"] = Value::Array(
-                    request_set_headers
-                        .into_iter()
-                        .map(Value::String)
-                        .collect(),
-                );
+                proxy_resource["requestSetHeaders"] =
+                    Value::Array(request_set_headers.into_iter().map(Value::String).collect());
             }
             if upstream_ref.contains(':') {
                 let literal_id = format!("literal-{}", sanitize_id(&upstream_ref));
@@ -1726,7 +1847,10 @@ impl<'a> Mapper<'a> {
             }
         } else if let Some(return_args) = return_directive {
             let Some(first) = return_args.first() else {
-                return Err(NginxConfigError::unsupported(location, "return requires a status or URL"));
+                return Err(NginxConfigError::unsupported(
+                    location,
+                    "return requires a status or URL",
+                ));
             };
             // nginx `return URL;` form: a first argument that is not a
             // status code is a 302 redirect to that URL.
@@ -1802,7 +1926,9 @@ impl<'a> Mapper<'a> {
                 _ => {
                     return Err(NginxConfigError::unsupported(
                         location,
-                        format!("return {status} requires a URL for redirects or a body for responses"),
+                        format!(
+                            "return {status} requires a URL for redirects or a body for responses"
+                        ),
                     ));
                 }
             }
@@ -1971,7 +2097,8 @@ impl<'a> Mapper<'a> {
             }
             return Ok(());
         }
-        self.real_ip_by_listener.insert(key.clone(), settings.clone());
+        self.real_ip_by_listener
+            .insert(key.clone(), settings.clone());
         Ok(())
     }
 
@@ -2001,7 +2128,6 @@ impl<'a> Mapper<'a> {
     }
 
     fn resolve_path(&self, directive: &NginxDirective) -> Result<String, NginxConfigError> {
-
         let Some(value) = directive.args.first() else {
             return Err(NginxConfigError::unsupported(
                 directive,
@@ -2035,7 +2161,10 @@ impl<'a> Mapper<'a> {
         Ok(())
     }
 
-    fn materialize_gzip_types(&mut self, directive: &NginxDirective) -> Result<(), NginxConfigError> {
+    fn materialize_gzip_types(
+        &mut self,
+        directive: &NginxDirective,
+    ) -> Result<(), NginxConfigError> {
         if directive.args.is_empty() {
             return Err(NginxConfigError::unsupported(
                 directive,
@@ -2118,8 +2247,7 @@ impl<'a> Mapper<'a> {
                 // keys_zone=name:size — approximate shared-memory capacity as
                 // maxEntries (~256 bytes per index entry).
                 if let Some((name, size)) = rest.split_once(':') {
-                    if !name.is_empty() && !self.proxy_cache_zone_names.contains(&name.to_owned())
-                    {
+                    if !name.is_empty() && !self.proxy_cache_zone_names.contains(&name.to_owned()) {
                         self.proxy_cache_zone_names.push(name.to_owned());
                     }
                     if let Some(bytes) = parse_size_bytes(size) {
@@ -2198,10 +2326,7 @@ impl<'a> Mapper<'a> {
         Ok(())
     }
 
-    fn parse_limit_req_rule(
-        &self,
-        directive: &NginxDirective,
-    ) -> Result<Value, NginxConfigError> {
+    fn parse_limit_req_rule(&self, directive: &NginxDirective) -> Result<Value, NginxConfigError> {
         let entry = directive.args.join(" ");
         let rule = parse_limit_req(&entry).map_err(|error| {
             NginxConfigError::unsupported(directive, format!("invalid limit_req: {error}"))
@@ -2242,10 +2367,7 @@ impl<'a> Mapper<'a> {
         Ok(())
     }
 
-    fn parse_limit_conn_rule(
-        &self,
-        directive: &NginxDirective,
-    ) -> Result<Value, NginxConfigError> {
+    fn parse_limit_conn_rule(&self, directive: &NginxDirective) -> Result<Value, NginxConfigError> {
         let entry = directive.args.join(" ");
         let rule = parse_limit_conn(&entry).map_err(|error| {
             NginxConfigError::unsupported(directive, format!("invalid limit_conn: {error}"))
@@ -2425,7 +2547,9 @@ impl<'a> Mapper<'a> {
                         other => {
                             return Err(NginxConfigError::unsupported(
                                 child,
-                                format!("ssl_verify_client accepts on|optional|off, found `{other}`"),
+                                format!(
+                                    "ssl_verify_client accepts on|optional|off, found `{other}`"
+                                ),
                             ))
                         }
                     };
@@ -2439,9 +2563,14 @@ impl<'a> Mapper<'a> {
                     };
                     ssl_client_certificate = Some(self.resolve_path(child)?);
                 }
-                "ssl_protocols" | "ssl_ciphers" | "ssl_prefer_server_ciphers"
-                | "proxy_connect_timeout" | "proxy_socket_keepalive" | "so_keepalive"
-                | "access_log" | "error_log" => {}
+                "ssl_protocols"
+                | "ssl_ciphers"
+                | "ssl_prefer_server_ciphers"
+                | "proxy_connect_timeout"
+                | "proxy_socket_keepalive"
+                | "so_keepalive"
+                | "access_log"
+                | "error_log" => {}
                 name if ACCEPTED_IGNORED.contains(&name) => {}
                 name => {
                     return Err(NginxConfigError::unsupported(
@@ -2552,19 +2681,21 @@ impl<'a> Mapper<'a> {
                 stream["tls"] = tls_entry;
             }
             // Type-check against the runtime model early for clearer diagnostics.
-            let _: StreamTargetConfig = serde_json::from_value(target.clone()).map_err(|error| {
-                NginxConfigError::unsupported(
-                    directive,
-                    format!("stream target materialization failed: {error}"),
-                )
-            })?;
-            if stream.get("tls").is_some() {
-                let _: StreamTlsMode = serde_json::from_value(stream["tls"].clone()).map_err(|error| {
+            let _: StreamTargetConfig =
+                serde_json::from_value(target.clone()).map_err(|error| {
                     NginxConfigError::unsupported(
                         directive,
-                        format!("stream tls materialization failed: {error}"),
+                        format!("stream target materialization failed: {error}"),
                     )
                 })?;
+            if stream.get("tls").is_some() {
+                let _: StreamTlsMode =
+                    serde_json::from_value(stream["tls"].clone()).map_err(|error| {
+                        NginxConfigError::unsupported(
+                            directive,
+                            format!("stream tls materialization failed: {error}"),
+                        )
+                    })?;
             }
             self.streams.push(stream);
         }
@@ -2671,21 +2802,24 @@ fn parse_listen_spec(spec: &str) -> Result<ListenSpec, String> {
             // OS socket knobs the runtime owns (nginx accepts them on
             // `listen`); values are not enforced.
             "reuseport" | "bind" | "deferred" => {}
-            other if other.starts_with("backlog=")
-                || other.starts_with("so_keepalive=")
-                || other.starts_with("ipv6only=")
-                || other.starts_with("fastopen=")
-                || other.starts_with("accept_filter=")
-                || other.starts_with("setfib=")
-                || other.starts_with("rcvbuf=")
-                || other.starts_with("sndbuf=") => {}
+            other
+                if other.starts_with("backlog=")
+                    || other.starts_with("so_keepalive=")
+                    || other.starts_with("ipv6only=")
+                    || other.starts_with("fastopen=")
+                    || other.starts_with("accept_filter=")
+                    || other.starts_with("setfib=")
+                    || other.starts_with("rcvbuf=")
+                    || other.starts_with("sndbuf=") => {}
             "proxy_protocol" => {
                 return Err(
                     "listen parameter `proxy_protocol` requires explicit trusted source CIDRs; configure the listener proxyProtocol policy in the runtime app config".to_owned(),
                 );
             }
             other => {
-                return Err(format!("unsupported listen parameter `{other}` in `{spec}`"));
+                return Err(format!(
+                    "unsupported listen parameter `{other}` in `{spec}`"
+                ));
             }
         }
     }
@@ -2717,9 +2851,18 @@ impl ProxySslSettings {
     fn merge(&self, lower: &ProxySslSettings) -> ProxySslSettings {
         ProxySslSettings {
             verify: self.verify.or(lower.verify),
-            trusted_certificate: self.trusted_certificate.clone().or_else(|| lower.trusted_certificate.clone()),
-            certificate: self.certificate.clone().or_else(|| lower.certificate.clone()),
-            certificate_key: self.certificate_key.clone().or_else(|| lower.certificate_key.clone()),
+            trusted_certificate: self
+                .trusted_certificate
+                .clone()
+                .or_else(|| lower.trusted_certificate.clone()),
+            certificate: self
+                .certificate
+                .clone()
+                .or_else(|| lower.certificate.clone()),
+            certificate_key: self
+                .certificate_key
+                .clone()
+                .or_else(|| lower.certificate_key.clone()),
             server_name: self.server_name.or(lower.server_name),
         }
     }
@@ -2749,11 +2892,13 @@ struct StreamListenSpec {
     udp: bool,
 }
 
-fn parse_stream_listen_spec(directive: &NginxDirective) -> Result<StreamListenSpec, NginxConfigError> {
+fn parse_stream_listen_spec(
+    directive: &NginxDirective,
+) -> Result<StreamListenSpec, NginxConfigError> {
     let mut parts = directive.args.iter();
-    let address = parts
-        .next()
-        .ok_or_else(|| NginxConfigError::unsupported(directive, "stream listen requires an address"))?;
+    let address = parts.next().ok_or_else(|| {
+        NginxConfigError::unsupported(directive, "stream listen requires an address")
+    })?;
     let mut ssl = false;
     let mut udp = false;
     for part in parts {
@@ -2767,14 +2912,15 @@ fn parse_stream_listen_spec(directive: &NginxDirective) -> Result<StreamListenSp
                     "inbound PROXY protocol on stream listeners requires explicit trusted source CIDRs; configure the stream listener policy in the runtime app config",
                 ));
             }
-            other if other.starts_with("backlog=")
-                || other.starts_with("so_keepalive=")
-                || other.starts_with("ipv6only=")
-                || other.starts_with("fastopen=")
-                || other.starts_with("accept_filter=")
-                || other.starts_with("setfib=")
-                || other.starts_with("rcvbuf=")
-                || other.starts_with("sndbuf=") => {}
+            other
+                if other.starts_with("backlog=")
+                    || other.starts_with("so_keepalive=")
+                    || other.starts_with("ipv6only=")
+                    || other.starts_with("fastopen=")
+                    || other.starts_with("accept_filter=")
+                    || other.starts_with("setfib=")
+                    || other.starts_with("rcvbuf=")
+                    || other.starts_with("sndbuf=") => {}
             other => {
                 return Err(NginxConfigError::unsupported(
                     directive,
@@ -2783,11 +2929,14 @@ fn parse_stream_listen_spec(directive: &NginxDirective) -> Result<StreamListenSp
             }
         }
     }
-    let (bind, port) =
-        parse_listen_address(address, &directive.args.join(" ")).map_err(|message| {
-            NginxConfigError::unsupported(directive, message)
-        })?;
-    Ok(StreamListenSpec { bind, port, ssl, udp })
+    let (bind, port) = parse_listen_address(address, &directive.args.join(" "))
+        .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+    Ok(StreamListenSpec {
+        bind,
+        port,
+        ssl,
+        udp,
+    })
 }
 
 /// Parse the `listen` address part. nginx accepts `port`, `address:port`,
@@ -2938,10 +3087,7 @@ fn parse_proxy_ssl_directive(
         ));
     };
     let resolve = |directive: &NginxDirective| -> Result<String, NginxConfigError> {
-        let value = directive
-            .args
-            .first()
-            .expect("checked argument presence");
+        let value = directive.args.first().expect("checked argument presence");
         if value.starts_with('/') || value.contains('\\') {
             return Err(NginxConfigError::unsupported(
                 directive,
@@ -3291,20 +3437,26 @@ fn parse_body_size(directive: &NginxDirective) -> Result<Option<u64>, NginxConfi
         ));
     };
     parse_size_bytes(value).map(Some).ok_or_else(|| {
-        NginxConfigError::unsupported(
-            directive,
-            format!("invalid client_max_body_size `{value}`"),
-        )
+        NginxConfigError::unsupported(directive, format!("invalid client_max_body_size `{value}`"))
     })
 }
 
 fn parse_size_bytes(value: &str) -> Option<u64> {
     let trimmed = value.trim();
-    let (number, multiplier) = if let Some(rest) = trimmed.strip_suffix('k').or_else(|| trimmed.strip_suffix('K')) {
+    let (number, multiplier) = if let Some(rest) = trimmed
+        .strip_suffix('k')
+        .or_else(|| trimmed.strip_suffix('K'))
+    {
         (rest, 1024u64)
-    } else if let Some(rest) = trimmed.strip_suffix('m').or_else(|| trimmed.strip_suffix('M')) {
+    } else if let Some(rest) = trimmed
+        .strip_suffix('m')
+        .or_else(|| trimmed.strip_suffix('M'))
+    {
         (rest, 1024 * 1024)
-    } else if let Some(rest) = trimmed.strip_suffix('g').or_else(|| trimmed.strip_suffix('G')) {
+    } else if let Some(rest) = trimmed
+        .strip_suffix('g')
+        .or_else(|| trimmed.strip_suffix('G'))
+    {
         (rest, 1024 * 1024 * 1024)
     } else {
         (trimmed, 1)
@@ -3322,9 +3474,7 @@ fn parse_add_header(name: &str, value: &str) -> Value {
 
 /// Parse `rewrite <pattern> <replacement> <flag>` into a runtime rule.
 /// Unsupported flags fail closed with a precise diagnostic.
-fn parse_rewrite_rule(
-    directive: &NginxDirective,
-) -> Result<Value, NginxConfigError> {
+fn parse_rewrite_rule(directive: &NginxDirective) -> Result<Value, NginxConfigError> {
     if directive.args.len() != 3 {
         return Err(NginxConfigError::unsupported(
             directive,
@@ -3431,7 +3581,11 @@ mod tests {
 
     fn materialize(text: &str) -> Result<WebServerAppConfig, NginxConfigError> {
         let parsed = parse_nginx_config(text, std::path::Path::new("site.conf")).expect("parse");
-        materialize_nginx_app(&parsed, std::path::Path::new("/etc/nginx/sites-enabled"), "test")
+        materialize_nginx_app(
+            &parsed,
+            std::path::Path::new("/etc/nginx/sites-enabled"),
+            "test",
+        )
     }
 
     #[test]
@@ -3494,11 +3648,9 @@ server {
         let host = &config.virtual_hosts[0];
         assert_eq!(host.server_names, vec!["example.com", "www.example.com"]);
         assert_eq!(host.routes.len(), 2);
-        assert!(host
-            .routes
-            .iter()
-            .any(|route| route.route_match.path_type == crate::config::RoutePathType::Exact
-                && route.route_match.path == "/healthz"));
+        assert!(host.routes.iter().any(|route| route.route_match.path_type
+            == crate::config::RoutePathType::Exact
+            && route.route_match.path == "/healthz"));
     }
 
     #[test]
@@ -3527,8 +3679,7 @@ server {{
             std::path::Path::new("site.conf"),
         )
         .expect("parse");
-        let config =
-            materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize");
+        let config = materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize");
         // `listen 443 ssl http2` + `listen [::]:443 ssl http2` materialize as
         // two listeners (one per address family) sharing the TLS policy.
         assert_eq!(config.listeners.len(), 2);
@@ -3582,15 +3733,17 @@ server {{
             std::path::Path::new("site.conf"),
         )
         .expect("parse");
-        let config =
-            materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize");
+        let config = materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize");
         assert_eq!(config.virtual_hosts.len(), 2);
         let redirect = config
             .resources
             .iter()
             .find(|resource| matches!(resource, crate::config::ResourceConfig::Redirect { .. }))
             .expect("redirect resource");
-        let crate::config::ResourceConfig::Redirect { status, location, .. } = redirect else {
+        let crate::config::ResourceConfig::Redirect {
+            status, location, ..
+        } = redirect
+        else {
             unreachable!()
         };
         assert_eq!(*status, 301);
@@ -3600,7 +3753,9 @@ server {{
             .iter()
             .find(|resource| matches!(resource, crate::config::ResourceConfig::Static { .. }))
             .expect("static resource");
-        let crate::config::ResourceConfig::Static { root, spa_fallback, .. } = static_resource
+        let crate::config::ResourceConfig::Static {
+            root, spa_fallback, ..
+        } = static_resource
         else {
             unreachable!()
         };
@@ -3644,7 +3799,9 @@ server {
         let exclusive = host
             .routes
             .iter()
-            .find(|route| route.route_match.path_type == crate::config::RoutePathType::PrefixExclusive)
+            .find(|route| {
+                route.route_match.path_type == crate::config::RoutePathType::PrefixExclusive
+            })
             .expect("^~ route");
         assert_eq!(exclusive.route_match.path, "/im/ws");
         assert_eq!(exclusive.rewrite.len(), 1);
@@ -3689,7 +3846,9 @@ server {
             .iter()
             .find(|resource| matches!(resource, crate::config::ResourceConfig::Static { .. }))
             .expect("static resource from inherited root");
-        let crate::config::ResourceConfig::Static { root, spa_fallback, .. } = static_resource
+        let crate::config::ResourceConfig::Static {
+            root, spa_fallback, ..
+        } = static_resource
         else {
             unreachable!()
         };
@@ -3721,11 +3880,7 @@ server {
         let directory = tempfile::tempdir().expect("temp");
         let htpasswd = directory.path().join("htpasswd");
         // username `alice`, password `secret` as {SHA} hash
-        std::fs::write(
-            &htpasswd,
-            "alice:{SHA}5en6G6MezRroT3XKqkdPOmY/BfQ=\n",
-        )
-        .unwrap();
+        std::fs::write(&htpasswd, "alice:{SHA}5en6G6MezRroT3XKqkdPOmY/BfQ=\n").unwrap();
         let cache_root = directory.path().join("cache");
         std::fs::create_dir_all(&cache_root).unwrap();
         let text = format!(
@@ -3783,8 +3938,7 @@ stream {{
             htpasswd.display().to_string().replace('\\', "/"),
         );
         let parsed = parse_nginx_config(&text, std::path::Path::new("nginx.conf")).expect("parse");
-        let config =
-            materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize");
+        let config = materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize");
         assert!(config.gzip.enabled);
         assert!(config.gzip.types.contains(&"application/json".to_owned()));
         assert_eq!(config.gzip.min_length, 1024);
@@ -3937,7 +4091,10 @@ server {
         )
         .err()
         .expect("duplicate default_server must be rejected");
-        assert!(error.to_string().contains("duplicate `default_server`"), "{error}");
+        assert!(
+            error.to_string().contains("duplicate `default_server`"),
+            "{error}"
+        );
     }
 
     #[test]
@@ -3961,8 +4118,7 @@ server {{
             std::path::Path::new("site.conf"),
         )
         .expect("parse");
-        let config =
-            materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize");
+        let config = materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize");
         let listener = config
             .listeners
             .iter()
@@ -4015,7 +4171,8 @@ server {
             .collect::<Vec<_>>();
         assert!(proxy_resources.contains(&("api".to_owned(), Some("/".to_owned()))));
         assert!(
-            proxy_resources.contains(&("literal-127-0-0-1-9002".to_owned(), Some("/api".to_owned()))),
+            proxy_resources
+                .contains(&("literal-127-0-0-1-9002".to_owned(), Some("/api".to_owned()))),
             "{proxy_resources:?}"
         );
         assert!(proxy_resources.contains(&("literal-127-0-0-1-9003".to_owned(), None)));
@@ -4046,9 +4203,9 @@ server {
             .resources
             .iter()
             .find_map(|resource| match resource {
-                crate::config::ResourceConfig::Redirect { status, location, .. } => {
-                    Some((*status, location.clone()))
-                }
+                crate::config::ResourceConfig::Redirect {
+                    status, location, ..
+                } => Some((*status, location.clone())),
                 _ => None,
             })
             .expect("redirect resource");
@@ -4135,7 +4292,10 @@ server {
             })
             .expect("static resource");
         assert_eq!(static_resource.0, "/srv/www");
-        assert!(!static_resource.1, "nginx root must keep the full request path");
+        assert!(
+            !static_resource.1,
+            "nginx root must keep the full request path"
+        );
     }
 
     #[test]
@@ -4242,7 +4402,12 @@ server {
         )
         .err()
         .expect("resolve parameter must fail closed");
-        assert!(error.to_string().contains("unsupported upstream server parameter"), "{error}");
+        assert!(
+            error
+                .to_string()
+                .contains("unsupported upstream server parameter"),
+            "{error}"
+        );
     }
 
     #[test]
@@ -4304,7 +4469,9 @@ server {
         .err()
         .expect("conflicting body limits must fail closed");
         assert!(
-            error.to_string().contains("conflicting `client_max_body_size`"),
+            error
+                .to_string()
+                .contains("conflicting `client_max_body_size`"),
             "{error}"
         );
     }
@@ -4369,11 +4536,7 @@ server {
         )
         .expect("adaptive dispatch with @pc/@h5 must materialize");
         assert_eq!(config.resources.len(), 1);
-        let crate::config::ResourceConfig::Static {
-            root,
-            h5_root,
-            ..
-        } = &config.resources[0]
+        let crate::config::ResourceConfig::Static { root, h5_root, .. } = &config.resources[0]
         else {
             panic!("expected static adaptive resource");
         };
@@ -4410,7 +4573,8 @@ http {
             .iter()
             .find_map(|resource| match resource {
                 crate::config::ResourceConfig::Proxy {
-                    request_set_headers, ..
+                    request_set_headers,
+                    ..
                 } => Some(request_set_headers.clone()),
                 _ => None,
             })
@@ -4605,22 +4769,26 @@ server {{
             std::path::Path::new("site.conf"),
         )
         .expect("parse");
-        let config =
-            materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize");
+        let config = materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize");
         let upstream = config
             .upstreams
             .iter()
             .find(|upstream| upstream.id == "api")
             .expect("api upstream");
         let tls = upstream.tls.as_ref().expect("upstream tls");
-        assert_eq!(
-            tls.trust_mode,
-            crate::config::UpstreamTlsTrustMode::Custom
-        );
+        assert_eq!(tls.trust_mode, crate::config::UpstreamTlsTrustMode::Custom);
         assert_eq!(tls.ca_certificate_files.len(), 1);
         assert!(tls.ca_certificate_files[0].ends_with("ca.pem"));
-        assert!(tls.client_certificate_file.as_deref().unwrap().ends_with("client.pem"));
-        assert!(tls.client_private_key_file.as_deref().unwrap().ends_with("client.key"));
+        assert!(tls
+            .client_certificate_file
+            .as_deref()
+            .unwrap()
+            .ends_with("client.pem"));
+        assert!(tls
+            .client_private_key_file
+            .as_deref()
+            .unwrap()
+            .ends_with("client.key"));
     }
 
     #[test]
@@ -4695,7 +4863,9 @@ server {
         .err()
         .expect("conflicting upstream TLS settings must fail closed");
         assert!(
-            error.to_string().contains("conflicting `proxy_ssl_*` settings"),
+            error
+                .to_string()
+                .contains("conflicting `proxy_ssl_*` settings"),
             "{error}"
         );
     }
@@ -4765,7 +4935,10 @@ server {
         )
         .err()
         .expect("conflicting real_ip settings must fail closed");
-        assert!(error.to_string().contains("conflicting `set_real_ip_from`"), "{error}");
+        assert!(
+            error.to_string().contains("conflicting `set_real_ip_from`"),
+            "{error}"
+        );
     }
 
     #[test]
@@ -4791,8 +4964,7 @@ http {{
             std::path::Path::new("site.conf"),
         )
         .expect("parse");
-        let config =
-            materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize");
+        let config = materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize");
         let listener = config
             .listeners
             .iter()
@@ -4820,10 +4992,7 @@ server {
         )
         .err()
         .expect("variable return bodies must fail closed");
-        assert!(
-            error.to_string().contains("contains variables"),
-            "{error}"
-        );
+        assert!(error.to_string().contains("contains variables"), "{error}");
     }
 
     #[test]
@@ -5017,8 +5186,16 @@ server {
         // Malformed but never crashing: every input must produce a
         // parse error or a materialize error, never a panic.
         let cases = [
-            "", " ", "\n", "# comment only\n",
-            "server", "server {", "server { }", "}", "{", "};",
+            "",
+            " ",
+            "\n",
+            "# comment only\n",
+            "server",
+            "server {",
+            "server { }",
+            "}",
+            "{",
+            "};",
             "server { listen ; }",
             "server { listen 80; server_name; }",
             "server { listen 80; server_name x; location { } }",
@@ -5078,10 +5255,7 @@ server {
         let error = parse_nginx_config(&text, Path::new("deep.conf"))
             .err()
             .expect("excessive nesting must fail closed");
-        assert!(
-            error.to_string().contains("nesting exceeds"),
-            "{error}"
-        );
+        assert!(error.to_string().contains("nesting exceeds"), "{error}");
         // Reasonable nesting still parses.
         let shallow = format!("{}server {{ }}{}", "http { ".repeat(64), "}".repeat(64));
         assert!(parse_nginx_config(&shallow, Path::new("shallow.conf")).is_ok());

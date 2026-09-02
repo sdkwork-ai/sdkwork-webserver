@@ -6,17 +6,19 @@
 //! three-layer inheritance merge, and materializes the effective configuration
 //! into the runtime `WebServerAppConfig` model.
 
-use std::{collections::BTreeMap, path::Path};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 
 use serde_json::{json, Map, Value};
 
 use super::{
-    error::WebServerConfigError,
-    model::WebServerAppConfig,
-    network::hostname_upstream_allowed_cidrs,
-    proxy_headers::merge_proxy_set_headers,
+    error::WebServerConfigError, model::WebServerAppConfig,
+    network::hostname_upstream_allowed_cidrs, proxy_headers::merge_proxy_set_headers,
     validate_webserver_config,
 };
+use crate::nginx::{parse_nginx_config, NginxDirective};
 
 /// Identity keys for object-array merge (spec section 2.3 rule 4).
 fn identity_key(path: &str) -> Option<&'static str> {
@@ -60,11 +62,7 @@ fn merge_value(base: &Value, overlay: &Value, path: &str) -> Value {
             } else {
                 format!("{path}.{key}")
             };
-            let merged = merge_value(
-                out.get(key).unwrap_or(&Value::Null),
-                value,
-                &child_path,
-            );
+            let merged = merge_value(out.get(key).unwrap_or(&Value::Null), value, &child_path);
             out.insert(key.clone(), merged);
         }
         return Value::Object(out);
@@ -158,14 +156,17 @@ fn parse_toml_file(path: &Path) -> Result<Value, WebServerConfigError> {
         path: path.to_path_buf(),
         source,
     })?;
-    let value: toml::Value = toml::from_str(&text).map_err(|source| WebServerConfigError::Toml {
-        path: path.to_path_buf(),
-        source,
-    })?;
-    serde_json::to_value(&value).map_err(|source| WebServerConfigError::Materialize(format!(
-        "cannot convert TOML from {}: {source}",
-        path.display()
-    )))
+    let value: toml::Value =
+        toml::from_str(&text).map_err(|source| WebServerConfigError::Toml {
+            path: path.to_path_buf(),
+            source,
+        })?;
+    serde_json::to_value(&value).map_err(|source| {
+        WebServerConfigError::Materialize(format!(
+            "cannot convert TOML from {}: {source}",
+            path.display()
+        ))
+    })
 }
 
 fn materialize_error(path: &str, message: impl std::fmt::Display) -> WebServerConfigError {
@@ -202,28 +203,38 @@ fn materialize_static_resource(
     if let Some(try_files) = location.get("tryFiles").and_then(Value::as_array) {
         if let Some(last) = try_files.iter().filter_map(Value::as_str).last() {
             if last.starts_with('/') {
-                resource["spaFallback"] =
-                    Value::String(last.trim_start_matches('/').to_owned());
+                resource["spaFallback"] = Value::String(last.trim_start_matches('/').to_owned());
             }
         }
     }
     resource
 }
 
-fn as_object<'a>(value: &'a Value, path: &str) -> Result<&'a Map<String, Value>, WebServerConfigError> {
+fn as_object<'a>(
+    value: &'a Value,
+    path: &str,
+) -> Result<&'a Map<String, Value>, WebServerConfigError> {
     value
         .as_object()
         .ok_or_else(|| materialize_error(path, "expected a TOML table"))
 }
 
-fn as_str<'a>(value: &'a Map<String, Value>, path: &str, key: &str) -> Result<&'a str, WebServerConfigError> {
+fn as_str<'a>(
+    value: &'a Map<String, Value>,
+    path: &str,
+    key: &str,
+) -> Result<&'a str, WebServerConfigError> {
     value
         .get(key)
         .and_then(Value::as_str)
         .ok_or_else(|| materialize_error(path, format!("`{key}` must be a string")))
 }
 
-fn as_array<'a>(value: &'a Map<String, Value>, path: &str, key: &str) -> Result<&'a Vec<Value>, WebServerConfigError> {
+fn as_array<'a>(
+    value: &'a Map<String, Value>,
+    path: &str,
+    key: &str,
+) -> Result<&'a Vec<Value>, WebServerConfigError> {
     value
         .get(key)
         .and_then(Value::as_array)
@@ -237,31 +248,74 @@ fn as_array<'a>(value: &'a Map<String, Value>, path: &str, key: &str) -> Result<
 /// supported-key list instead of relying on this ignore set.
 const ACCEPTED_IGNORED: &[&str] = &[
     // process / http tuning
-    "user", "workerProcesses", "workerRlimitNofile", "pid", "errorLog", "include", "raw",
-    "workerConnections", "use", "acceptMutex", "multiAccept", "sendfile", "tcpNopush",
-    "tcpNodelay", "keepaliveTimeout", "keepaliveRequests", "clientBodyTimeout",
-    "clientHeaderTimeout", "clientBodyBufferSize", "clientHeaderBufferSize",
-    "largeClientHeaderBuffers", "resetTimedoutConnection", "sendTimeout",
-    "serverNamesHashMaxSize", "serverTokens", "defaultType", "logFormat", "accessLog",
-    "map", "keepalive",
+    "user",
+    "workerProcesses",
+    "workerRlimitNofile",
+    "pid",
+    "errorLog",
+    "include",
+    "raw",
+    "workerConnections",
+    "use",
+    "acceptMutex",
+    "multiAccept",
+    "sendfile",
+    "tcpNopush",
+    "tcpNodelay",
+    "keepaliveTimeout",
+    "keepaliveRequests",
+    "clientBodyTimeout",
+    "clientHeaderTimeout",
+    "clientBodyBufferSize",
+    "clientHeaderBufferSize",
+    "largeClientHeaderBuffers",
+    "resetTimedoutConnection",
+    "sendTimeout",
+    "serverNamesHashMaxSize",
+    "serverTokens",
+    "defaultType",
+    "logFormat",
+    "accessLog",
+    "map",
+    "keepalive",
     // proxy knobs accepted at non-location contexts; location `proxySetHeader`
     // and websocket/buffering flags are listed in location supported keys and execute
-    "proxyHttpVersion", "proxyBuffering", "proxyWebsocketUpgrade",
-    "proxyInterceptErrors", "proxyNextUpstream", "proxyHideHeader",
-    "proxyRequestBuffering", "proxyMethod",
+    "proxyHttpVersion",
+    "proxyBuffering",
+    "proxyWebsocketUpgrade",
+    "proxyInterceptErrors",
+    "proxyNextUpstream",
+    "proxyHideHeader",
+    "proxyRequestBuffering",
+    "proxyMethod",
     // upstream server flags the runtime owns via its own failure/ejection
     // policy (nginx `max_fails=` / `fail_timeout=` are accepted no-ops)
-    "maxFails", "failTimeout",
+    "maxFails",
+    "failTimeout",
     // `resolve` marks DNS-named targets for deploy-time cluster resolution;
     // the runtime always resolves hostnames at connection time.
     "resolve",
     // static file details
-    "autoindex", "expires", "etag", "disableSymlinks", "logNotFound", "sendfileMaxChunk",
-    "charset", "errorPage",
+    "autoindex",
+    "expires",
+    "etag",
+    "disableSymlinks",
+    "logNotFound",
+    "sendfileMaxChunk",
+    "charset",
+    "errorPage",
     // TLS tuning (the runtime enforces TLSv1.2/1.3 defaults)
-    "ocspStapling", "preferServerCiphers", "sessionCache", "sessionTimeout",
-    "sessionTickets", "stapling", "staplingVerify", "verifyDepth", "dhparam",
-    "ecdhCurve", "ciphers",
+    "ocspStapling",
+    "preferServerCiphers",
+    "sessionCache",
+    "sessionTimeout",
+    "sessionTickets",
+    "stapling",
+    "staplingVerify",
+    "verifyDepth",
+    "dhparam",
+    "ecdhCurve",
+    "ciphers",
 ];
 
 /// Directives that change security semantics; declaring them in server.toml
@@ -318,7 +372,10 @@ fn check_supported_keys(
 }
 
 /// Parse a listen entry like `"443 ssl"`, `"80"`, or `"127.0.0.1:8088"`.
-fn parse_listen(entry: &str, path: &str) -> Result<(String, u16, bool, bool), WebServerConfigError> {
+fn parse_listen(
+    entry: &str,
+    path: &str,
+) -> Result<(String, u16, bool, bool), WebServerConfigError> {
     let mut parts = entry.split_whitespace();
     let address = parts
         .next()
@@ -380,10 +437,7 @@ fn is_public_ip(ip: std::net::IpAddr) -> bool {
                 && !v4.is_documentation()
         }
         std::net::IpAddr::V6(v6) => {
-            !v6.is_loopback()
-                && !v6.is_unique_local()
-                && !v6.is_unspecified()
-                && !v6.is_multicast()
+            !v6.is_loopback() && !v6.is_unique_local() && !v6.is_unspecified() && !v6.is_multicast()
         }
     }
 }
@@ -437,7 +491,10 @@ fn parse_location_match<'a>(
 ) -> Result<(&'static str, &'a str), WebServerConfigError> {
     if let Some(rest) = match_value.strip_prefix("= ") {
         if !rest.starts_with('/') {
-            return Err(materialize_error(path, "exact location match must start with `/`"));
+            return Err(materialize_error(
+                path,
+                "exact location match must start with `/`",
+            ));
         }
         return Ok(("exact", rest));
     }
@@ -452,18 +509,23 @@ fn parse_location_match<'a>(
     }
     if let Some(rest) = match_value.strip_prefix("~* ") {
         regex::Regex::new(&format!("(?i){rest}")).map_err(|error| {
-            materialize_error(path, format!("invalid case-insensitive regex location: {error}"))
+            materialize_error(
+                path,
+                format!("invalid case-insensitive regex location: {error}"),
+            )
         })?;
         return Ok(("regex-ignore-case", rest));
     }
     if let Some(rest) = match_value.strip_prefix("~ ") {
-        regex::Regex::new(rest).map_err(|error| {
-            materialize_error(path, format!("invalid regex location: {error}"))
-        })?;
+        regex::Regex::new(rest)
+            .map_err(|error| materialize_error(path, format!("invalid regex location: {error}")))?;
         return Ok(("regex", rest));
     }
     if !match_value.starts_with('/') {
-        return Err(materialize_error(path, "prefix location match must start with `/`"));
+        return Err(materialize_error(
+            path,
+            "prefix location match must start with `/`",
+        ));
     }
     Ok(("prefix", match_value))
 }
@@ -568,9 +630,9 @@ fn parse_client_auth(
 
 fn parse_upstream_hash_key(hash_key: &str, path: &str) -> Result<Value, WebServerConfigError> {
     let mut parts = hash_key.split_whitespace();
-    let key = parts.next().ok_or_else(|| {
-        materialize_error(path, "`hashKey` must declare a key variable")
-    })?;
+    let key = parts
+        .next()
+        .ok_or_else(|| materialize_error(path, "`hashKey` must declare a key variable"))?;
     let consistent = match parts.next() {
         None => false,
         Some("consistent") => true,
@@ -644,7 +706,6 @@ fn materialize_access_rules(
     }
     Ok(rules)
 }
-
 
 fn materialize_limit_conn_rules(
     location: &Map<String, Value>,
@@ -744,13 +805,9 @@ fn materialize_secure_link(
                 }
                 return Ok(None);
             };
-            crate::config::validate_md5_template(template).map_err(|message| {
-                materialize_error(&format!("{path}.secureLinkMd5"), message)
-            })?;
-            for (key, value) in [
-                ("secureLink", argument),
-                ("secureLinkExpires", expires),
-            ] {
+            crate::config::validate_md5_template(template)
+                .map_err(|message| materialize_error(&format!("{path}.secureLinkMd5"), message))?;
+            for (key, value) in [("secureLink", argument), ("secureLinkExpires", expires)] {
                 if let Some(value) = value {
                     if value.starts_with("$arg_") {
                         return Err(materialize_error(
@@ -1074,12 +1131,16 @@ impl<'a> Materializer<'a> {
             .tls_policies
             .iter()
             .find(|policy| policy.get("id").and_then(Value::as_str) == Some(existing_id))
-            .ok_or_else(|| materialize_error(path, format!("TLS policy `{existing_id}` is missing")))?;
+            .ok_or_else(|| {
+                materialize_error(path, format!("TLS policy `{existing_id}` is missing"))
+            })?;
         let incoming = self
             .tls_policies
             .iter()
             .find(|policy| policy.get("id").and_then(Value::as_str) == Some(incoming_id))
-            .ok_or_else(|| materialize_error(path, format!("TLS policy `{incoming_id}` is missing")))?;
+            .ok_or_else(|| {
+                materialize_error(path, format!("TLS policy `{incoming_id}` is missing"))
+            })?;
         for key in ["minimumVersion", "maximumVersion"] {
             if existing.get(key) != incoming.get(key) {
                 return Err(materialize_error(
@@ -1132,11 +1193,18 @@ impl<'a> Materializer<'a> {
         path: &str,
         client_auth: Option<&Value>,
     ) -> Result<(), WebServerConfigError> {
-        if let Some(index) = self.certificate_names.iter().position(|existing| existing == name) {
+        if let Some(index) = self
+            .certificate_names
+            .iter()
+            .position(|existing| existing == name)
+        {
             if let Some(entry) = self.certificates.get_mut(index) {
                 if let Some(names) = entry.get_mut("serverNames").and_then(Value::as_array_mut) {
                     for server_name in server_names {
-                        if !names.iter().any(|value| value.as_str() == Some(server_name.as_str())) {
+                        if !names
+                            .iter()
+                            .any(|value| value.as_str() == Some(server_name.as_str()))
+                        {
                             names.push(Value::String(server_name.clone()));
                         }
                     }
@@ -1168,7 +1236,9 @@ impl<'a> Materializer<'a> {
                 format!("/etc/sdkwork/certs/letsencrypt/{acme_name}/fullchain.pem"),
                 format!("/etc/sdkwork/certs/letsencrypt/{acme_name}/privkey.pem"),
             ),
-            (_, Some(cert_file), Some(cert_key_file)) => (cert_file.to_owned(), cert_key_file.to_owned()),
+            (_, Some(cert_file), Some(cert_key_file)) => {
+                (cert_file.to_owned(), cert_key_file.to_owned())
+            }
             _ => {
                 return Err(materialize_error(
                     path,
@@ -1200,10 +1270,16 @@ impl<'a> Materializer<'a> {
         Ok(())
     }
 
-    fn ensure_upstream(&mut self, upstream: &Map<String, Value>, path: &str) -> Result<String, WebServerConfigError> {
-        check_supported_keys(upstream, path, &[
-            "name", "target", "loadBalancing", "hashKey",
-        ])?;
+    fn ensure_upstream(
+        &mut self,
+        upstream: &Map<String, Value>,
+        path: &str,
+    ) -> Result<String, WebServerConfigError> {
+        check_supported_keys(
+            upstream,
+            path,
+            &["name", "target", "loadBalancing", "hashKey"],
+        )?;
         let name = as_str(upstream, path, "name")?.to_owned();
         if self.upstream_names.contains(&name) {
             return Ok(name);
@@ -1211,7 +1287,12 @@ impl<'a> Materializer<'a> {
         let targets = upstream
             .get("target")
             .and_then(Value::as_array)
-            .ok_or_else(|| materialize_error(path, format!("upstream `{name}` must declare a target array")))?;
+            .ok_or_else(|| {
+                materialize_error(
+                    path,
+                    format!("upstream `{name}` must declare a target array"),
+                )
+            })?;
         let mut target_values = Vec::new();
         let mut authorized_literal_ips: Vec<String> = Vec::new();
         let mut has_hostname_target = false;
@@ -1220,17 +1301,28 @@ impl<'a> Materializer<'a> {
             let target = target
                 .as_object()
                 .ok_or_else(|| materialize_error(&target_path, "target entries must be tables"))?;
-            check_supported_keys(target, &target_path, &[
-                "address", "weight", "backup", "down", "maxConnections",
-                "slowStartMs",
-            ])?;
+            check_supported_keys(
+                target,
+                &target_path,
+                &[
+                    "address",
+                    "weight",
+                    "backup",
+                    "down",
+                    "maxConnections",
+                    "slowStartMs",
+                ],
+            )?;
             let address = as_str(target, &target_path, "address")?;
             let down = target.get("down").and_then(Value::as_bool).unwrap_or(false);
             if down {
                 continue;
             }
             let url = if address.starts_with("unix:") {
-                return Err(materialize_error(&target_path, "unix: upstream sockets are not supported by the runtime model"));
+                return Err(materialize_error(
+                    &target_path,
+                    "unix: upstream sockets are not supported by the runtime model",
+                ));
             } else if address.contains("://") {
                 address.to_owned()
             } else {
@@ -1252,7 +1344,10 @@ impl<'a> Materializer<'a> {
             target_values.push(entry);
             // Literal IP targets are operator-declared in server.toml; the
             // runtime SSRF guard must be told the target is authorized.
-            let host = address.rsplit_once(':').map(|(host, _)| host).unwrap_or(address);
+            let host = address
+                .rsplit_once(':')
+                .map(|(host, _)| host)
+                .unwrap_or(address);
             if host.parse::<std::net::IpAddr>().is_ok() {
                 match host.parse::<std::net::IpAddr>() {
                     Ok(std::net::IpAddr::V4(ip)) => {
@@ -1272,7 +1367,10 @@ impl<'a> Materializer<'a> {
             }
         }
         if target_values.is_empty() {
-            return Err(materialize_error(path, format!("upstream `{name}` has no live targets after `down` filtering")));
+            return Err(materialize_error(
+                path,
+                format!("upstream `{name}` has no live targets after `down` filtering"),
+            ));
         }
         if has_hostname_target {
             for network in hostname_upstream_allowed_cidrs() {
@@ -1323,13 +1421,19 @@ impl<'a> Materializer<'a> {
                     .map(str::trim)
                     .filter(|value| !value.is_empty())
                     .ok_or_else(|| {
-                        materialize_error(path, "`hashKey` is required when loadBalancing = \"hash\"")
+                        materialize_error(
+                            path,
+                            "`hashKey` is required when loadBalancing = \"hash\"",
+                        )
                     })?;
                 let hash = parse_upstream_hash_key(hash_key, path)?;
                 ("hash", Some(hash))
             }
             Some(other) => {
-                return Err(materialize_error(path, format!("unknown loadBalancing `{other}`")))
+                return Err(materialize_error(
+                    path,
+                    format!("unknown loadBalancing `{other}`"),
+                ))
             }
         };
         let mut upstream = json!({
@@ -1356,18 +1460,50 @@ impl<'a> Materializer<'a> {
         server_name: &str,
         inherited_proxy_set_headers: &[String],
         inherited_root: Option<&str>,
+        named_pc_root: Option<&str>,
+        named_h5_root: Option<&str>,
     ) -> Result<String, WebServerConfigError> {
         let path = format!("http.server[{server_index}].location[{location_index}]");
-        check_supported_keys(location, &path, &[
-            "match", "proxyPass", "root", "alias", "index", "tryFiles", "returnStatus",
-            "returnBody", "returnLocation", "proxyConnectTimeout", "proxyReadTimeout",
-            "proxySendTimeout", "proxyBufferSize", "proxyRedirect", "proxySetHeader",
-            "proxyWebsocketUpgrade", "proxyHttpVersion", "proxyBuffering", "proxyPassRequestHeaders",
-            "allow", "deny",
-            "limitReq", "limitConn", "rewrite", "authBasic", "authBasicUserFile", "subFilter",
-            "subFilterOnce", "subFilterTypes", "subFilterLastModified", "secureLinkSecret",
-            "secureLink", "secureLinkMd5", "secureLinkExpires",
-        ])?;
+        check_supported_keys(
+            location,
+            &path,
+            &[
+                "match",
+                "proxyPass",
+                "root",
+                "alias",
+                "index",
+                "tryFiles",
+                "returnStatus",
+                "returnBody",
+                "returnLocation",
+                "proxyConnectTimeout",
+                "proxyReadTimeout",
+                "proxySendTimeout",
+                "proxyBufferSize",
+                "proxyRedirect",
+                "proxySetHeader",
+                "proxyWebsocketUpgrade",
+                "proxyHttpVersion",
+                "proxyBuffering",
+                "proxyPassRequestHeaders",
+                "allow",
+                "deny",
+                "limitReq",
+                "limitConn",
+                "rewrite",
+                "authBasic",
+                "authBasicUserFile",
+                "subFilter",
+                "subFilterOnce",
+                "subFilterTypes",
+                "subFilterLastModified",
+                "secureLinkSecret",
+                "secureLink",
+                "secureLinkMd5",
+                "secureLinkExpires",
+            ],
+        )?;
         let match_value = as_str(location, &path, "match")?;
         // Validate match syntax early so serving-behavior errors stay attributed
         // to the location; route pathType is attached in materialize_server.
@@ -1384,10 +1520,22 @@ impl<'a> Materializer<'a> {
         .count();
         // A location with only `tryFiles` inherits the server-level root
         // (nginx SPA layout), which counts as static serving.
-        let inherits_static = serving == 0
-            && location.contains_key("tryFiles")
-            && inherited_root.is_some();
-        if serving > 1 || (serving == 0 && !inherits_static) {
+        let inherits_static =
+            serving == 0 && location.contains_key("tryFiles") && inherited_root.is_some();
+        // Adaptive Web dispatch: `try_files … @$surface;` jumps to the
+        // `@pc` / `@h5` named locations that own the document roots
+        // (SDKWORK_DEPLOY_SPEC.md §8.1); no server-level root is required.
+        let adaptive_dispatch = serving == 0
+            && location
+                .get("tryFiles")
+                .and_then(Value::as_array)
+                .is_some_and(|entries| {
+                    entries
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .any(|entry| entry.starts_with('@'))
+                });
+        if serving > 1 || (serving == 0 && !inherits_static && !adaptive_dispatch) {
             return Err(materialize_error(
                 &path,
                 "a location must declare exactly one serving behavior (proxyPass | root | alias | returnStatus, or tryFiles with a server-level root)",
@@ -1406,9 +1554,8 @@ impl<'a> Materializer<'a> {
                 .and_then(Value::as_bool)
                 .unwrap_or(true);
             if proxy_pass.contains('$') {
-                crate::config::validate_proxy_pass_template(proxy_pass).map_err(|message| {
-                    materialize_error(&path, message)
-                })?;
+                crate::config::validate_proxy_pass_template(proxy_pass)
+                    .map_err(|message| materialize_error(&path, message))?;
                 let request_set_headers = location
                     .get("proxySetHeader")
                     .and_then(Value::as_array)
@@ -1422,7 +1569,10 @@ impl<'a> Materializer<'a> {
                             .collect::<Vec<_>>()
                     })
                     .unwrap_or_default();
-                for entry in request_set_headers.iter().chain(inherited_proxy_set_headers) {
+                for entry in request_set_headers
+                    .iter()
+                    .chain(inherited_proxy_set_headers)
+                {
                     validate_proxy_set_header_entry(&path, entry)?;
                 }
                 let merged_headers =
@@ -1437,101 +1587,126 @@ impl<'a> Materializer<'a> {
                     "proxyPassRequestHeaders": proxy_pass_request_headers,
                 }));
             } else {
-            // Split the proxyPass URI part (nginx `proxy_pass` replacement
-            // semantics): a URI part replaces the matched location prefix.
-            let (authority, target_uri) = if let Some(rest) = proxy_pass
-                .strip_prefix("http://")
-                .or_else(|| proxy_pass.strip_prefix("https://"))
-            {
-                if rest.contains("unix:") {
-                    return Err(materialize_error(
-                        &path,
-                        "unix: proxyPass sockets are not supported by the runtime model",
-                    ));
-                }
-                match rest.split_once('/') {
-                    Some((authority, uri_path)) => {
-                        let uri = format!("/{uri_path}");
-                        if uri.contains('?') {
-                            return Err(materialize_error(
+                // Split the proxyPass URI part (nginx `proxy_pass` replacement
+                // semantics): a URI part replaces the matched location prefix.
+                let (authority, target_uri) = if let Some(rest) = proxy_pass
+                    .strip_prefix("http://")
+                    .or_else(|| proxy_pass.strip_prefix("https://"))
+                {
+                    if rest.contains("unix:") {
+                        return Err(materialize_error(
+                            &path,
+                            "unix: proxyPass sockets are not supported by the runtime model",
+                        ));
+                    }
+                    match rest.split_once('/') {
+                        Some((authority, uri_path)) => {
+                            let uri = format!("/{uri_path}");
+                            if uri.contains('?') {
+                                return Err(materialize_error(
                                 &path,
                                 "query strings in the proxyPass URI part are not supported by the runtime model",
                             ));
+                            }
+                            (authority.to_owned(), Some(uri))
                         }
-                        (authority.to_owned(), Some(uri))
+                        None => (rest.to_owned(), None),
                     }
-                    None => (rest.to_owned(), None),
+                } else {
+                    return Err(materialize_error(&path, format!("proxyPass `{proxy_pass}` must be http(s)://upstream or http(s)://host:port")));
+                };
+                if authority.is_empty() {
+                    return Err(materialize_error(
+                        &path,
+                        format!("proxyPass `{proxy_pass}` has an empty upstream authority"),
+                    ));
                 }
-            } else {
-                return Err(materialize_error(&path, format!("proxyPass `{proxy_pass}` must be http(s)://upstream or http(s)://host:port")));
-            };
-            if authority.is_empty() {
-                return Err(materialize_error(
-                    &path,
-                    format!("proxyPass `{proxy_pass}` has an empty upstream authority"),
-                ));
-            }
-            let upstream_ref = if authority.contains(':') {
-                // Literal host:port target: synthesize a dedicated upstream;
-                // the target URL never carries the proxy_pass URI part.
-                let literal_id = format!("literal-{}", authority.replace([':', '/', '.'], "-"));
-                if !self.upstream_names.contains(&literal_id) {
-                    let host = authority.rsplit_once(':').map_or("", |(host, _)| host);
-                    let address_policy = host.parse::<std::net::IpAddr>().ok().map(|ip| {
-                        match ip {
-                            std::net::IpAddr::V4(ip) => format!("{ip}/32"),
-                            std::net::IpAddr::V6(ip) => format!("{ip}/128"),
+                let upstream_ref = if authority.contains(':') {
+                    // Literal host:port target: synthesize a dedicated upstream;
+                    // the target URL never carries the proxy_pass URI part.
+                    let literal_id = format!("literal-{}", authority.replace([':', '/', '.'], "-"));
+                    if !self.upstream_names.contains(&literal_id) {
+                        let host = authority.rsplit_once(':').map_or("", |(host, _)| host);
+                        let address_policy =
+                            host.parse::<std::net::IpAddr>().ok().map(|ip| match ip {
+                                std::net::IpAddr::V4(ip) => format!("{ip}/32"),
+                                std::net::IpAddr::V6(ip) => format!("{ip}/128"),
+                            });
+                        let mut literal_upstream = json!({
+                            "id": literal_id,
+                            "targets": [{ "url": format!("http://{authority}") }],
+                            "loadBalancing": "round-robin",
+                        });
+                        if let Some(cidr) = address_policy {
+                            literal_upstream["addressPolicy"] = json!({ "allowedCidrs": [cidr] });
                         }
-                    });
-                    let mut literal_upstream = json!({
-                        "id": literal_id,
-                        "targets": [{ "url": format!("http://{authority}") }],
-                        "loadBalancing": "round-robin",
-                    });
-                    if let Some(cidr) = address_policy {
-                        literal_upstream["addressPolicy"] =
-                            json!({ "allowedCidrs": [cidr] });
+                        self.upstreams.push(literal_upstream);
+                        self.upstream_names.push(literal_id.clone());
                     }
-                    self.upstreams.push(literal_upstream);
-                    self.upstream_names.push(literal_id.clone());
+                    literal_id
+                } else {
+                    authority
+                };
+                if !self.upstream_names.contains(&upstream_ref) {
+                    return Err(materialize_error(
+                        &path,
+                        format!("proxyPass references undefined upstream `{upstream_ref}`"),
+                    ));
                 }
-                literal_id
-            } else {
-                authority
-            };
-            if !self.upstream_names.contains(&upstream_ref) {
-                return Err(materialize_error(&path, format!("proxyPass references undefined upstream `{upstream_ref}`")));
+                let request_set_headers = location
+                    .get("proxySetHeader")
+                    .and_then(Value::as_array)
+                    .map(|entries| {
+                        entries
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .map(str::trim)
+                            .filter(|entry| !entry.is_empty())
+                            .map(str::to_owned)
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                for entry in request_set_headers
+                    .iter()
+                    .chain(inherited_proxy_set_headers)
+                {
+                    validate_proxy_set_header_entry(&path, entry)?;
+                }
+                let merged_headers =
+                    merge_proxy_set_headers(inherited_proxy_set_headers, &request_set_headers);
+                let mut proxy_resource = json!({
+                    "id": resource_id,
+                    "type": "proxy",
+                    "upstreamRef": upstream_ref,
+                    "stripPrefix": false,
+                    "requestSetHeaders": merged_headers,
+                    "proxyPassRequestHeaders": proxy_pass_request_headers,
+                });
+                if let Some(uri) = target_uri {
+                    proxy_resource["targetUri"] = Value::String(uri);
+                }
+                self.resources.push(proxy_resource);
             }
-            let request_set_headers = location
-                .get("proxySetHeader")
-                .and_then(Value::as_array)
-                .map(|entries| {
-                    entries
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .map(str::trim)
-                        .filter(|entry| !entry.is_empty())
-                        .map(str::to_owned)
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            for entry in request_set_headers.iter().chain(inherited_proxy_set_headers) {
-                validate_proxy_set_header_entry(&path, entry)?;
-            }
-            let merged_headers = merge_proxy_set_headers(inherited_proxy_set_headers, &request_set_headers);
-            let mut proxy_resource = json!({
+        } else if adaptive_dispatch {
+            // Adaptive Web dispatch (SDKWORK_DEPLOY_SPEC.md §8.1):
+            // `try_files … @$sdkwork_webserver_surface_final;` with `@pc` /
+            // `@h5` named locations owning the document roots. The runtime
+            // model carries both roots so the data plane selects the surface
+            // per request (mobile → H5, desktop → PC).
+            let pc_root = named_pc_root
+                .or(named_h5_root)
+                .unwrap_or("/usr/share/sdkwork/web/pc");
+            let mut resource = json!({
                 "id": resource_id,
-                "type": "proxy",
-                "upstreamRef": upstream_ref,
-                "stripPrefix": false,
-                "requestSetHeaders": merged_headers,
-                "proxyPassRequestHeaders": proxy_pass_request_headers,
+                "type": "static",
+                "root": pc_root.trim_start_matches('/'),
+                "indexFiles": ["index.html"],
+                "spaFallback": "index.html",
             });
-            if let Some(uri) = target_uri {
-                proxy_resource["targetUri"] = Value::String(uri);
+            if let Some(h5_root) = named_h5_root {
+                resource["h5Root"] = Value::String(h5_root.trim_start_matches('/').to_owned());
             }
-            self.resources.push(proxy_resource);
-            }
+            self.resources.push(resource);
         } else if let Some(root) = if location.contains_key("root") {
             location.get("root").and_then(Value::as_str)
         } else if inherits_static {
@@ -1567,8 +1742,9 @@ impl<'a> Materializer<'a> {
                 true,
             ));
         } else if let Some(status) = location.get("returnStatus").and_then(Value::as_u64) {
-            let status: u16 = u16::try_from(status)
-                .map_err(|_| materialize_error(&path, format!("invalid returnStatus `{status}`")))?;
+            let status: u16 = u16::try_from(status).map_err(|_| {
+                materialize_error(&path, format!("invalid returnStatus `{status}`"))
+            })?;
             if let Some(return_location) = location.get("returnLocation").and_then(Value::as_str) {
                 // nginx `return <3xx> <url>`: the redirect data plane expands
                 // `$host` / `$request_uri` / `$scheme` (same subset as nginx.conf).
@@ -1621,10 +1797,22 @@ impl<'a> Materializer<'a> {
         server: &Map<String, Value>,
     ) -> Result<(), WebServerConfigError> {
         let path = format!("http.server[{server_index}]");
-        check_supported_keys(server, &path, &[
-            "listen", "serverName", "http2", "root", "index", "tryFiles",
-            "tls", "proxySetHeader", "addHeader", "location",
-        ])?;
+        check_supported_keys(
+            server,
+            &path,
+            &[
+                "listen",
+                "serverName",
+                "http2",
+                "root",
+                "index",
+                "tryFiles",
+                "tls",
+                "proxySetHeader",
+                "addHeader",
+                "location",
+            ],
+        )?;
         // Server-level `proxySetHeader` entries are inherited by every proxy
         // location (nginx `proxy_set_header` inheritance semantics); the
         // merge lets location-level entries override by header name.
@@ -1650,14 +1838,19 @@ impl<'a> Materializer<'a> {
         let primary_name = server_names
             .first()
             .and_then(Value::as_str)
-            .ok_or_else(|| materialize_error(&path, "serverName must be a non-empty array of hostnames"))?
+            .ok_or_else(|| {
+                materialize_error(&path, "serverName must be a non-empty array of hostnames")
+            })?
             .to_owned();
         let server_name_list: Vec<String> = server_names
             .iter()
             .filter_map(Value::as_str)
             .map(str::to_owned)
             .collect();
-        let http2 = server.get("http2").and_then(Value::as_bool).unwrap_or(false);
+        let http2 = server
+            .get("http2")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
         let tls_table = server.get("tls").and_then(Value::as_object);
         let client_auth = if let Some(tls) = tls_table {
             check_supported_keys(tls, &format!("{path}.tls"), SERVER_TLS_KEYS)?;
@@ -1711,7 +1904,10 @@ impl<'a> Materializer<'a> {
             let http2 = http2 || listen_http2;
             if ssl {
                 let Some(certificate) = certificate_name.as_deref() else {
-                    return Err(materialize_error(&path, format!("listen `{entry}` requires [http.server.tls] with a certificate")));
+                    return Err(materialize_error(
+                        &path,
+                        format!("listen `{entry}` requires [http.server.tls] with a certificate"),
+                    ));
                 };
                 self.ensure_certificate(
                     certificate,
@@ -1721,17 +1917,31 @@ impl<'a> Materializer<'a> {
                     client_auth.as_ref(),
                 )?;
             }
-            let tls_policy_ref = ssl.then(|| format!("tls-{}", certificate_name.as_deref().expect("checked ssl")));
-            let listener_id = self.ensure_listener(
-                &bind,
-                port,
-                ssl,
-                http2,
-                tls_policy_ref.as_deref(),
-                &path,
-            )?;
+            let tls_policy_ref =
+                ssl.then(|| format!("tls-{}", certificate_name.as_deref().expect("checked ssl")));
+            let listener_id =
+                self.ensure_listener(&bind, port, ssl, http2, tls_policy_ref.as_deref(), &path)?;
             if !listener_refs.contains(&listener_id) {
                 listener_refs.push(listener_id);
+            }
+        }
+
+        // Adaptive Web named locations (`@pc` / `@h5`) are jump targets, not
+        // routes: collect their document roots and skip them in the
+        // materialization loops (mirrors `nginx::mapping`).
+        let mut named_pc_root: Option<&str> = None;
+        let mut named_h5_root: Option<&str> = None;
+        for location in server
+            .get("location")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_object)
+        {
+            match location.get("match").and_then(Value::as_str) {
+                Some("@pc") => named_pc_root = location.get("root").and_then(Value::as_str),
+                Some("@h5") => named_h5_root = location.get("root").and_then(Value::as_str),
+                _ => {}
             }
         }
 
@@ -1746,6 +1956,13 @@ impl<'a> Materializer<'a> {
             let location = location
                 .as_object()
                 .ok_or_else(|| materialize_error(&path, "location entries must be tables"))?;
+            if location
+                .get("match")
+                .and_then(Value::as_str)
+                .is_some_and(|match_value| match_value.starts_with('@'))
+            {
+                continue;
+            }
             let resource_id = self.materialize_location(
                 server_index,
                 location_index,
@@ -1753,6 +1970,8 @@ impl<'a> Materializer<'a> {
                 &primary_name,
                 &server_proxy_set_headers,
                 server_root,
+                named_pc_root,
+                named_h5_root,
             )?;
             routes.push(resource_id);
         }
@@ -1788,6 +2007,15 @@ impl<'a> Materializer<'a> {
             let location = location
                 .as_object()
                 .ok_or_else(|| materialize_error(&path, "location entries must be tables"))?;
+            if location
+                .get("match")
+                .and_then(Value::as_str)
+                .is_some_and(|match_value| match_value.starts_with('@'))
+            {
+                // Adaptive Web named locations are internal jump targets,
+                // not routes (SDKWORK_DEPLOY_SPEC.md §8.1).
+                continue;
+            }
             let match_value = as_str(location, &path, "match")?;
             let (path_type, route_path) = parse_location_match(&path, match_value)?;
             let mut route = json!({
@@ -1815,31 +2043,46 @@ impl<'a> Materializer<'a> {
         Ok(())
     }
 
-    fn materialize_upstreams(&mut self, http: &Map<String, Value>) -> Result<(), WebServerConfigError> {
+    fn materialize_upstreams(
+        &mut self,
+        http: &Map<String, Value>,
+    ) -> Result<(), WebServerConfigError> {
         if let Some(upstreams) = http.get("upstream").and_then(Value::as_array) {
             for (index, upstream) in upstreams.iter().enumerate() {
-                let upstream = upstream
-                    .as_object()
-                    .ok_or_else(|| materialize_error("http.upstream", "upstream entries must be tables"))?;
+                let upstream = upstream.as_object().ok_or_else(|| {
+                    materialize_error("http.upstream", "upstream entries must be tables")
+                })?;
                 self.ensure_upstream(upstream, &format!("http.upstream[{index}]"))?;
             }
         }
         Ok(())
     }
 
-    fn materialize_certificates(&mut self, http: &Map<String, Value>) -> Result<(), WebServerConfigError> {
+    fn materialize_certificates(
+        &mut self,
+        http: &Map<String, Value>,
+    ) -> Result<(), WebServerConfigError> {
         if let Some(certificates) = http.get("certificates").and_then(Value::as_object) {
             for (name, cert) in certificates {
-                let cert = cert
-                    .as_object()
-                    .ok_or_else(|| materialize_error("http.certificates", "certificate entries must be tables"))?;
-                self.ensure_certificate(name, cert, &[], &format!("http.certificates.{name}"), None)?;
+                let cert = cert.as_object().ok_or_else(|| {
+                    materialize_error("http.certificates", "certificate entries must be tables")
+                })?;
+                self.ensure_certificate(
+                    name,
+                    cert,
+                    &[],
+                    &format!("http.certificates.{name}"),
+                    None,
+                )?;
             }
         }
         Ok(())
     }
 
-    fn materialize_streams(&mut self, root: &Map<String, Value>) -> Result<(), WebServerConfigError> {
+    fn materialize_streams(
+        &mut self,
+        root: &Map<String, Value>,
+    ) -> Result<(), WebServerConfigError> {
         let Some(stream) = root.get("stream").and_then(Value::as_object) else {
             return Ok(());
         };
@@ -1852,16 +2095,25 @@ impl<'a> Materializer<'a> {
             let server = server
                 .as_object()
                 .ok_or_else(|| materialize_error(&path, "stream server entries must be tables"))?;
-            check_supported_keys(server, &path, &[
-                "listen", "proxyPass", "proxyTimeout", "proxyProtocol",
-                "sslPreread", "certificate", "protocol", "clientCertificate",
-                "clientCertificateCA",
-            ])?;
+            check_supported_keys(
+                server,
+                &path,
+                &[
+                    "listen",
+                    "proxyPass",
+                    "proxyTimeout",
+                    "proxyProtocol",
+                    "sslPreread",
+                    "certificate",
+                    "protocol",
+                    "clientCertificate",
+                    "clientCertificateCA",
+                ],
+            )?;
             let listen = as_array(server, &path, "listen")?;
-            let first = listen
-                .first()
-                .and_then(Value::as_str)
-                .ok_or_else(|| materialize_error(&path, "listen must be a non-empty array of bindings"))?;
+            let first = listen.first().and_then(Value::as_str).ok_or_else(|| {
+                materialize_error(&path, "listen must be a non-empty array of bindings")
+            })?;
             let (bind, port, ssl, _) = parse_listen(first, &path)?;
             let ssl_preread = server
                 .get("sslPreread")
@@ -1891,7 +2143,11 @@ impl<'a> Materializer<'a> {
             }
             let tls = if ssl {
                 let certificate_ref = as_str(server, &path, "certificate")?;
-                if !self.certificate_names.iter().any(|name| name == certificate_ref) {
+                if !self
+                    .certificate_names
+                    .iter()
+                    .any(|name| name == certificate_ref)
+                {
                     return Err(materialize_error(
                         &path,
                         format!(
@@ -1918,7 +2174,10 @@ impl<'a> Materializer<'a> {
             // entries are honored, but an explicit public IP requires
             // documented approval and fails closed here.
             let bind_ip: std::net::IpAddr = bind.parse().map_err(|_| {
-                materialize_error(&path, format!("stream listen host `{bind}` must be an IP address"))
+                materialize_error(
+                    &path,
+                    format!("stream listen host `{bind}` must be an IP address"),
+                )
             })?;
             if !bind_ip.is_unspecified() && is_public_ip(bind_ip) {
                 return Err(materialize_error(
@@ -1934,9 +2193,9 @@ impl<'a> Materializer<'a> {
                         format!("proxyPass `{proxy_pass}` must be host:port or a declared upstream name"),
                     ));
                 }
-                let port: u16 = port_text
-                    .parse()
-                    .map_err(|_| materialize_error(&path, format!("invalid proxyPass port in `{proxy_pass}`")))?;
+                let port: u16 = port_text.parse().map_err(|_| {
+                    materialize_error(&path, format!("invalid proxyPass port in `{proxy_pass}`"))
+                })?;
                 crate::config::model::StreamTargetConfig::Literal {
                     host: host.to_owned(),
                     port,
@@ -1952,8 +2211,9 @@ impl<'a> Materializer<'a> {
                 ));
             };
             let proxy_timeout_ms = match server.get("proxyTimeout").and_then(Value::as_str) {
-                Some(value) => materialize_duration_ms(value)
-                    .ok_or_else(|| materialize_error(&path, format!("invalid proxyTimeout `{value}`")))?,
+                Some(value) => materialize_duration_ms(value).ok_or_else(|| {
+                    materialize_error(&path, format!("invalid proxyTimeout `{value}`"))
+                })?,
                 None => 60_000,
             };
             let proxy_protocol = server
@@ -2012,12 +2272,13 @@ impl<'a> Materializer<'a> {
             "metadata": { "source": "deployments/webserver/server.toml" },
         });
         let config: WebServerAppConfig = serde_json::from_value(instance).map_err(|source| {
-            WebServerConfigError::Materialize(format!("runtime model deserialization failed: {source}"))
+            WebServerConfigError::Materialize(format!(
+                "runtime model deserialization failed: {source}"
+            ))
         })?;
         validate_webserver_config(&config)?;
         Ok(config)
     }
-
 
     fn materialize_limit_conn_zones(
         &mut self,
@@ -2031,9 +2292,8 @@ impl<'a> Materializer<'a> {
             let text = entry
                 .as_str()
                 .ok_or_else(|| materialize_error(&path, "limitConnZone entries must be strings"))?;
-            let zone = crate::config::parse_limit_conn_zone(text).map_err(|error| {
-                materialize_error(&path, error.to_string())
-            })?;
+            let zone = crate::config::parse_limit_conn_zone(text)
+                .map_err(|error| materialize_error(&path, error.to_string()))?;
             if self.limit_conn_zone_names.contains(&zone.name) {
                 return Err(materialize_error(
                     &path,
@@ -2062,9 +2322,8 @@ impl<'a> Materializer<'a> {
             let text = entry
                 .as_str()
                 .ok_or_else(|| materialize_error(&path, "limitReqZone entries must be strings"))?;
-            let zone = crate::config::parse_limit_req_zone(text).map_err(|error| {
-                materialize_error(&path, error.to_string())
-            })?;
+            let zone = crate::config::parse_limit_req_zone(text)
+                .map_err(|error| materialize_error(&path, error.to_string()))?;
             if self.limit_req_zone_names.contains(&zone.name) {
                 return Err(materialize_error(
                     &path,
@@ -2157,9 +2416,13 @@ pub fn load_server_toml_app_effective(
                 environment_path.display()
             )));
         }
-        merge_effective(&common, &environment_doc, &profile_doc)
+        let mut effective = merge_effective(&common, &environment_doc, &profile_doc)?;
+        expand_snippet_includes(&mut effective, dir)?;
+        Ok(effective)
     } else {
-        merge_common_profile(&common, &profile_doc)
+        let mut effective = merge_common_profile(&common, &profile_doc)?;
+        expand_snippet_includes(&mut effective, dir)?;
+        Ok(effective)
     }
 }
 
@@ -2177,6 +2440,388 @@ pub fn load_server_toml_app(
     materialize_app(&effective, app_key)
 }
 
+/// Resolve `[http.defaults.tls]` shared TLS declarations.
+///
+/// SDKWORK_WEBSERVER_SPEC.md: `defaults` is a typed key under `[http]` and
+/// `[http.defaults.tls]` carries shared `protocols`, `preferServerCiphers`,
+/// `sessionCache`, ... entries that are merged into each `[[http.server]].tls`
+/// at effective-config time. Only the `tls` sub-table is supported today; its
+/// keys use the same server TLS key set.
+fn materialize_http_defaults(
+    http: &Map<String, Value>,
+) -> Result<Option<Map<String, Value>>, WebServerConfigError> {
+    let Some(defaults) = http.get("defaults").and_then(Value::as_object) else {
+        return Ok(None);
+    };
+    check_supported_keys(defaults, "server.toml.http.defaults", &["tls"])?;
+    let Some(tls) = defaults.get("tls").and_then(Value::as_object) else {
+        return Ok(None);
+    };
+    check_supported_keys(tls, "server.toml.http.defaults.tls", SERVER_TLS_KEYS)?;
+    Ok(Some(tls.clone()))
+}
+
+/// Overlay `[http.defaults.tls]` onto one `[[http.server]]` entry.
+///
+/// Server-level `tls` values win over the shared defaults (nginx override
+/// semantics: the closest declaration to the server block applies). When the
+/// server declares no `tls` of its own, the defaults table is applied as-is.
+fn apply_server_tls_defaults(
+    server: &Map<String, Value>,
+    defaults_tls: Option<&Map<String, Value>>,
+) -> Result<Map<String, Value>, WebServerConfigError> {
+    let Some(defaults_tls) = defaults_tls else {
+        return Ok(server.clone());
+    };
+    let mut effective = server.clone();
+    let mut tls = defaults_tls.clone();
+    if let Some(server_tls) = server.get("tls").and_then(Value::as_object) {
+        for (key, value) in server_tls {
+            tls.insert(key.clone(), value.clone());
+        }
+    }
+    effective.insert("tls".to_owned(), Value::Object(tls));
+    Ok(effective)
+}
+
+/// Expand layout v3 `include` snippet declarations into the typed TOML model
+/// (SDKWORK_WEBSERVER_SPEC.md §11.2/§11.3): server-level `include` pulls in
+/// `location` blocks (including Adaptive Web `@pc` / `@h5` named locations),
+/// and location-level `include` merges snippet directives into the including
+/// location. Snippets are nginx-conf fragments with paths relative to
+/// `deployments/webserver/`; the module directory itself is accepted as the
+/// checkout-layout fallback.
+fn expand_snippet_includes(
+    root: &mut Value,
+    module_dir: &Path,
+) -> Result<(), WebServerConfigError> {
+    let Some(servers) = root
+        .get_mut("http")
+        .and_then(|http| http.get_mut("server"))
+        .and_then(Value::as_array_mut)
+    else {
+        return Ok(());
+    };
+    for (server_index, server) in servers.iter_mut().enumerate() {
+        let Some(server) = server.as_object_mut() else {
+            continue;
+        };
+        let path = format!("http.server[{server_index}]");
+        if let Some(patterns) = server
+            .remove("include")
+            .and_then(|value| value.as_array().cloned())
+        {
+            for pattern in patterns {
+                let pattern = pattern.as_str().ok_or_else(|| {
+                    materialize_error(&path, "server `include` entries must be strings")
+                })?;
+                let locations = load_snippet_locations(module_dir, pattern, &path)?;
+                let entry = server
+                    .entry("location")
+                    .or_insert_with(|| Value::Array(Vec::new()));
+                let Value::Array(entry) = entry else {
+                    return Err(materialize_error(&path, "`location` must be an array"));
+                };
+                for location in locations {
+                    upsert_location_by_match(entry, location);
+                }
+            }
+        }
+        let Some(locations) = server.get_mut("location").and_then(Value::as_array_mut) else {
+            continue;
+        };
+        for location in locations.iter_mut() {
+            let Some(location) = location.as_object_mut() else {
+                continue;
+            };
+            let Some(patterns) = location
+                .remove("include")
+                .and_then(|value| value.as_array().cloned())
+            else {
+                continue;
+            };
+            for pattern in patterns {
+                let pattern = pattern.as_str().ok_or_else(|| {
+                    materialize_error(&path, "location `include` entries must be strings")
+                })?;
+                merge_snippet_into_location(module_dir, pattern, location, &path)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Insert a snippet-derived location, replacing an existing declaration with
+/// the same `match` (TOML merge identity for `http.server.location`).
+fn upsert_location_by_match(locations: &mut Vec<Value>, location: Map<String, Value>) {
+    let match_value = location.get("match").and_then(Value::as_str);
+    if let Some(existing) = locations
+        .iter_mut()
+        .find(|existing| existing.get("match").and_then(Value::as_str) == match_value)
+    {
+        *existing = Value::Object(location);
+        return;
+    }
+    locations.push(Value::Object(location));
+}
+
+/// Resolve one snippet pattern against the module directory candidates and
+/// parse it into typed location tables (server-level include).
+fn load_snippet_locations(
+    module_dir: &Path,
+    pattern: &str,
+    path: &str,
+) -> Result<Vec<Map<String, Value>>, WebServerConfigError> {
+    let directives = load_snippet_directives(module_dir, pattern, path)?;
+    let mut locations = Vec::new();
+    for directive in &directives {
+        if directive.name != "location" {
+            return Err(materialize_error(
+                path,
+                format!(
+                    "snippet `{pattern}`: server-level include accepts only `location` blocks, found `{}`",
+                    directive.name
+                ),
+            ));
+        }
+        locations.push(snippet_location_to_toml(directive, path, pattern)?);
+    }
+    Ok(locations)
+}
+
+/// Merge a location-level snippet: its top-level directives become keys of
+/// the including location. Nested `location` blocks fail closed — declare
+/// them in a server-level snippet instead.
+fn merge_snippet_into_location(
+    module_dir: &Path,
+    pattern: &str,
+    location: &mut Map<String, Value>,
+    path: &str,
+) -> Result<(), WebServerConfigError> {
+    let directives = load_snippet_directives(module_dir, pattern, path)?;
+    for directive in &directives {
+        if directive.name == "location" {
+            return Err(materialize_error(
+                path,
+                format!(
+                    "snippet `{pattern}`: nested `location` blocks inside a location-level include are not supported; declare them in a server-level include"
+                ),
+            ));
+        }
+        apply_snippet_directive(directive, location, path, pattern)?;
+    }
+    Ok(())
+}
+
+fn load_snippet_directives(
+    module_dir: &Path,
+    pattern: &str,
+    path: &str,
+) -> Result<Vec<NginxDirective>, WebServerConfigError> {
+    let snippet = resolve_snippet_path(module_dir, pattern)?;
+    let text = std::fs::read_to_string(&snippet)
+        .map_err(|error| materialize_error(path, format!("read snippet `{pattern}`: {error}")))?;
+    parse_nginx_config(&text, &snippet)
+        .map_err(|error| materialize_error(path, format!("parse snippet `{pattern}`: {error}")))
+}
+
+/// Snippet paths resolve against `deployments/webserver/` (install layout)
+/// with the module directory itself as the checkout-layout fallback.
+fn resolve_snippet_path(module_dir: &Path, pattern: &str) -> Result<PathBuf, WebServerConfigError> {
+    if Path::new(pattern).is_absolute() {
+        return Ok(PathBuf::from(pattern));
+    }
+    let candidates = [
+        module_dir.to_path_buf(),
+        module_dir.join("deployments").join("webserver"),
+    ];
+    for base in &candidates {
+        let candidate = base.join(pattern);
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+    }
+    Err(materialize_error(
+        "server.toml.http.server.include",
+        format!(
+            "snippet `{pattern}` not found under {} (or {})",
+            candidates[0].display(),
+            candidates[1].display()
+        ),
+    ))
+}
+
+/// Convert one snippet `location <match> { … }` block into the typed TOML
+/// location model. Mirrors `nginx::mapping` named-location semantics:
+/// `@pc` / `@h5` carry only `root` / `index` / `try_files`.
+fn snippet_location_to_toml(
+    directive: &NginxDirective,
+    path: &str,
+    pattern: &str,
+) -> Result<Map<String, Value>, WebServerConfigError> {
+    if directive.args.is_empty() {
+        return Err(materialize_error(
+            path,
+            format!("snippet `{pattern}`: `location` requires a match argument"),
+        ));
+    }
+    // nginx tokenizes the match modifier as its own argument
+    // (`location = /healthz` → `["=", "/healthz"]`); typed TOML stores the
+    // combined form (`= /healthz`).
+    let match_value = match directive.args.as_slice() {
+        [modifier, rest] if matches!(modifier.as_str(), "=" | "^~" | "~" | "~*") => {
+            format!("{modifier} {rest}")
+        }
+        [match_value, ..] => match_value.clone(),
+        [] => unreachable!("args checked non-empty above"),
+    };
+    let mut table = Map::new();
+    table.insert("match".to_owned(), Value::String(match_value));
+    for child in &directive.children {
+        apply_snippet_directive(child, &mut table, path, pattern)?;
+    }
+    Ok(table)
+}
+
+/// Map one nginx directive from a snippet onto the typed location keys. The
+/// mapped set matches what `nginx::mapping` executes; anything else fails
+/// closed instead of silently dropping behavior.
+fn apply_snippet_directive(
+    directive: &NginxDirective,
+    location: &mut Map<String, Value>,
+    path: &str,
+    pattern: &str,
+) -> Result<(), WebServerConfigError> {
+    let unsupported = |detail: String| {
+        materialize_error(
+            path,
+            format!(
+                "snippet `{pattern}`: {detail} (directive `{}`)",
+                directive.name
+            ),
+        )
+    };
+    let first_arg = || directive.args.first().cloned();
+    match directive.name.as_str() {
+        "try_files" => {
+            if directive.args.is_empty() {
+                return Err(unsupported(
+                    "`try_files` requires at least one argument".to_owned(),
+                ));
+            }
+            let entries = directive
+                .args
+                .iter()
+                .map(|value| Value::String(value.clone()))
+                .collect();
+            location.insert("tryFiles".to_owned(), Value::Array(entries));
+        }
+        "proxy_pass" => {
+            let Some(target) = first_arg() else {
+                return Err(unsupported("`proxy_pass` requires a target".to_owned()));
+            };
+            location.insert("proxyPass".to_owned(), Value::String(target));
+        }
+        "proxy_http_version" => {
+            let Some(version) = first_arg() else {
+                return Err(unsupported(
+                    "`proxy_http_version` requires a version".to_owned(),
+                ));
+            };
+            location.insert("proxyHttpVersion".to_owned(), Value::String(version));
+        }
+        "proxy_set_header" => {
+            let [name, value] = directive.args.as_slice() else {
+                return Err(unsupported(
+                    "`proxy_set_header` requires a header name and a value".to_owned(),
+                ));
+            };
+            let entry = Value::String(format!("{name} {value}"));
+            let headers = location
+                .entry("proxySetHeader")
+                .or_insert_with(|| Value::Array(Vec::new()));
+            let Value::Array(headers) = headers else {
+                return Err(unsupported("`proxySetHeader` must be an array".to_owned()));
+            };
+            headers.push(entry);
+        }
+        "proxy_buffering" => {
+            let Some(state) = first_arg() else {
+                return Err(unsupported("`proxy_buffering` requires on|off".to_owned()));
+            };
+            let enabled = match state.as_str() {
+                "on" => true,
+                "off" => false,
+                other => {
+                    return Err(unsupported(format!(
+                        "`proxy_buffering` expects on|off, found `{other}`"
+                    )))
+                }
+            };
+            location.insert("proxyBuffering".to_owned(), Value::Bool(enabled));
+        }
+        "proxy_read_timeout" => {
+            let Some(timeout) = first_arg() else {
+                return Err(unsupported(
+                    "`proxy_read_timeout` requires a duration".to_owned(),
+                ));
+            };
+            location.insert("proxyReadTimeout".to_owned(), Value::String(timeout));
+        }
+        "root" => {
+            let Some(root) = first_arg() else {
+                return Err(unsupported("`root` requires a path".to_owned()));
+            };
+            if !root.starts_with('/') {
+                return Err(unsupported(
+                    "`root` must be an absolute directory for nginx compatibility".to_owned(),
+                ));
+            }
+            location.insert("root".to_owned(), Value::String(root));
+        }
+        "alias" => {
+            let Some(alias) = first_arg() else {
+                return Err(unsupported("`alias` requires a path".to_owned()));
+            };
+            location.insert("alias".to_owned(), Value::String(alias));
+        }
+        "index" => {
+            if directive.args.is_empty() {
+                return Err(unsupported("`index` requires at least one file".to_owned()));
+            }
+            let files = directive
+                .args
+                .iter()
+                .map(|value| Value::String(value.clone()))
+                .collect();
+            location.insert("index".to_owned(), Value::Array(files));
+        }
+        "return" => {
+            let Some(status) = directive
+                .args
+                .first()
+                .and_then(|value| value.parse::<u64>().ok())
+            else {
+                return Err(unsupported("`return` requires a numeric status".to_owned()));
+            };
+            location.insert("returnStatus".to_owned(), Value::from(status));
+            if let Some(body) = directive.args.get(1) {
+                location.insert("returnBody".to_owned(), Value::String(body.clone()));
+            }
+        }
+        // Accepted like nginx named-location mapping: response headers on
+        // dispatch/named locations are declarative only (the data plane owns
+        // the Adaptive Web `Vary` header).
+        "add_header" => {}
+        other => {
+            return Err(unsupported(format!(
+                "directive `{other}` is not supported in snippets; materialize it as a typed TOML key"
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Materialize an already-merged effective TOML document.
 pub fn materialize_app(
     effective: &Value,
@@ -2185,13 +2830,26 @@ pub fn materialize_app(
     let root = as_object(effective, "server.toml")?;
     if root.get("enabled").and_then(Value::as_bool) == Some(false) {
         return Err(WebServerConfigError::Materialize(
-            "effective configuration has enabled = false; no runtime app can be materialized".to_owned(),
+            "effective configuration has enabled = false; no runtime app can be materialized"
+                .to_owned(),
         ));
     }
-    check_supported_keys(root, "server.toml", &[
-        "specVersion", "kind", "id", "enabled", "description", "nginx", "main", "http",
-        "stream", "proxyCache",
-    ])?;
+    check_supported_keys(
+        root,
+        "server.toml",
+        &[
+            "specVersion",
+            "kind",
+            "id",
+            "enabled",
+            "description",
+            "nginx",
+            "main",
+            "http",
+            "stream",
+            "proxyCache",
+        ],
+    )?;
     // Keep wording aligned with sdkwork-specs/tools/webserver/retired-nginx.mjs.
     const RETIRED_COMPATIBILITY: &str =
         "retired; migrate to [nginx] (nginx.enabled, nginx.profile) per SDKWORK_WEBSERVER_SPEC.md §4.1";
@@ -2210,17 +2868,27 @@ pub fn materialize_app(
                     RETIRED_NGINX_PROFILE,
                 ));
             }
-            check_supported_keys(nginx, "server.toml.nginx", &[
-                "enabled", "profile", "unknownDirectivePolicy", "exceptionRef",
-                "strict", "confFile",
-            ])?;
+            check_supported_keys(
+                nginx,
+                "server.toml.nginx",
+                &[
+                    "enabled",
+                    "profile",
+                    "unknownDirectivePolicy",
+                    "exceptionRef",
+                    "strict",
+                    "confFile",
+                ],
+            )?;
             json!({
                 "enabled": nginx.get("enabled").and_then(Value::as_bool).unwrap_or(true),
                 "profile": nginx.get("profile").and_then(Value::as_str).unwrap_or("http-core-v1"),
                 "unknownDirectivePolicy": nginx.get("unknownDirectivePolicy").and_then(Value::as_str).unwrap_or("error"),
             })
         }
-        None => json!({ "enabled": true, "profile": "http-core-v1", "unknownDirectivePolicy": "error" }),
+        None => {
+            json!({ "enabled": true, "profile": "http-core-v1", "unknownDirectivePolicy": "error" })
+        }
     };
     let mut limits = json!({});
     let mut gzip = json!({ "enabled": false, "types": [], "minLength": 20 });
@@ -2290,20 +2958,44 @@ pub fn materialize_app(
         check_supported_keys(stream, "server.toml.stream", &["server"])?;
     }
     if let Some(cache) = root.get("proxyCache").and_then(Value::as_object) {
-        check_supported_keys(cache, "server.toml.proxyCache", &[
-            "enabled", "maxEntries", "maxObjectBytes", "defaultTtlSeconds",
-            "staleTtlSeconds", "diskPath",
-        ])?;
+        check_supported_keys(
+            cache,
+            "server.toml.proxyCache",
+            &[
+                "enabled",
+                "maxEntries",
+                "maxObjectBytes",
+                "defaultTtlSeconds",
+                "staleTtlSeconds",
+                "diskPath",
+            ],
+        )?;
     }
     let mut materializer = Materializer::new(app_key);
-    let http = root
-        .get("http")
-        .and_then(Value::as_object)
-        .ok_or_else(|| materialize_error("server.toml", "http table is required for an enabled configuration"))?;
-    check_supported_keys(http, "server.toml.http", &[
-        "certificates", "clientMaxBodySize", "gzip", "gzipTypes", "gzipMinLength",
-        "keepaliveTimeout", "limitConnZone", "limitReqZone", "server", "upstream",
-    ])?;
+    let http = root.get("http").and_then(Value::as_object).ok_or_else(|| {
+        materialize_error(
+            "server.toml",
+            "http table is required for an enabled configuration",
+        )
+    })?;
+    check_supported_keys(
+        http,
+        "server.toml.http",
+        &[
+            "certificates",
+            "clientMaxBodySize",
+            "defaults",
+            "gzip",
+            "gzipTypes",
+            "gzipMinLength",
+            "keepaliveTimeout",
+            "limitConnZone",
+            "limitReqZone",
+            "server",
+            "upstream",
+        ],
+    )?;
+    let defaults_tls = materialize_http_defaults(http)?;
     materializer.materialize_limit_req_zones(http)?;
     materializer.materialize_limit_conn_zones(http)?;
     materializer.materialize_certificates(http)?;
@@ -2313,7 +3005,8 @@ pub fn materialize_app(
             let server = server
                 .as_object()
                 .ok_or_else(|| materialize_error("http.server", "server entries must be tables"))?;
-            materializer.materialize_server(index, server)?;
+            let effective_server = apply_server_tls_defaults(server, defaults_tls.as_ref())?;
+            materializer.materialize_server(index, &effective_server)?;
         }
     }
     // Stream servers resolve upstream references against the materialized
@@ -2321,7 +3014,8 @@ pub fn materialize_app(
     materializer.materialize_streams(root)?;
     if materializer.virtual_hosts.is_empty() {
         return Err(WebServerConfigError::Materialize(
-            "no [[http.server]] virtual hosts are declared in the effective configuration".to_owned(),
+            "no [[http.server]] virtual hosts are declared in the effective configuration"
+                .to_owned(),
         ));
     }
     materializer.finish(limits, nginx, gzip, proxy_cache)
@@ -2372,7 +3066,8 @@ mod tests {
             },
         )
         .expect("write standalone");
-        std::fs::write(dir.join("server.cloud.toml"), "profile = \"cloud\"\n").expect("write cloud");
+        std::fs::write(dir.join("server.cloud.toml"), "profile = \"cloud\"\n")
+            .expect("write cloud");
     }
 
     const MINIMAL_PRODUCTION: &str = r#"
@@ -2399,12 +3094,16 @@ proxyPass = "http://gateway"
 "#;
 
     fn minimal_examples_dir() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("sdkwork-example-layout-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("sdkwork-example-layout-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("temp dir");
-        let common = std::fs::read_to_string(examples_dir().join("server.common.toml")).expect("common");
-        let standalone = std::fs::read_to_string(examples_dir().join("server.standalone.toml")).expect("standalone");
-        let cloud = std::fs::read_to_string(examples_dir().join("server.cloud.toml")).expect("cloud");
+        let common =
+            std::fs::read_to_string(examples_dir().join("server.common.toml")).expect("common");
+        let standalone = std::fs::read_to_string(examples_dir().join("server.standalone.toml"))
+            .expect("standalone");
+        let cloud =
+            std::fs::read_to_string(examples_dir().join("server.cloud.toml")).expect("cloud");
         write_layout_v3_dir(&dir, &common, MINIMAL_PRODUCTION, &standalone);
         std::fs::write(dir.join("server.cloud.toml"), cloud).expect("cloud");
         dir
@@ -2416,8 +3115,15 @@ proxyPass = "http://gateway"
         let config = load_server_toml_app(&dir, "cloud", "production", "sdkwork-example")
             .expect("cloud example must load");
         assert_eq!(config.app_key, "sdkwork-example");
-        let upstream = config.upstreams.iter().find(|u| u.id == "gateway").expect("upstream");
-        assert_eq!(upstream.targets[0].url, "http://sdkwork-api-cloud-gateway:8080");
+        let upstream = config
+            .upstreams
+            .iter()
+            .find(|u| u.id == "gateway")
+            .expect("upstream");
+        assert_eq!(
+            upstream.targets[0].url,
+            "http://sdkwork-api-cloud-gateway:8080"
+        );
         assert_eq!(config.virtual_hosts.len(), 1);
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -2427,7 +3133,11 @@ proxyPass = "http://gateway"
         let dir = minimal_examples_dir();
         let config = load_server_toml_app(&dir, "standalone", "production", "sdkwork-example")
             .expect("standalone example must load");
-        let upstream = config.upstreams.iter().find(|u| u.id == "gateway").expect("upstream");
+        let upstream = config
+            .upstreams
+            .iter()
+            .find(|u| u.id == "gateway")
+            .expect("upstream");
         assert_eq!(upstream.targets[0].url, "http://127.0.0.1:18079");
         assert_eq!(config.virtual_hosts.len(), 1);
         std::fs::remove_dir_all(&dir).ok();
@@ -2440,7 +3150,13 @@ proxyPass = "http://gateway"
         let production = parse_toml_file(&repo.join("server.production.toml")).expect("production");
         let standalone = parse_toml_file(&repo.join("server.standalone.toml")).expect("standalone");
         let effective = merge_effective(&common, &production, &standalone).expect("merge");
-        assert_eq!(effective["http"]["server"].as_array().expect("servers").len(), 14);
+        assert_eq!(
+            effective["http"]["server"]
+                .as_array()
+                .expect("servers")
+                .len(),
+            14
+        );
     }
 
     #[test]
@@ -2464,7 +3180,13 @@ proxyPass = "http://gateway"
             14
         );
         let cloud_effective = merge_effective(&common, &production, &cloud).expect("merge cloud");
-        assert_eq!(cloud_effective["http"]["server"].as_array().expect("servers").len(), 14);
+        assert_eq!(
+            cloud_effective["http"]["server"]
+                .as_array()
+                .expect("servers")
+                .len(),
+            14
+        );
         assert_eq!(
             cloud_effective["http"]["upstream"][0]["target"][0]["address"],
             "sdkwork-api-cloud-gateway:8080"
@@ -2473,12 +3195,14 @@ proxyPass = "http://gateway"
 
     #[test]
     fn rejects_wrong_profile_file() {
-        let dir = std::env::temp_dir().join(format!("sdkwork-server-toml-test-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("sdkwork-server-toml-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("temp dir");
         let examples = examples_dir();
-        let common = std::fs::read_to_string(examples.join("server.common.toml")).expect("common text");
-        let mut standalone =
-            std::fs::read_to_string(examples.join("server.standalone.toml")).expect("standalone text");
+        let common =
+            std::fs::read_to_string(examples.join("server.common.toml")).expect("common text");
+        let mut standalone = std::fs::read_to_string(examples.join("server.standalone.toml"))
+            .expect("standalone text");
         standalone = standalone.replacen("profile = \"standalone\"", "profile = \"cloud\"", 1);
         write_layout_v3_dir(&dir, &common, MINIMAL_PRODUCTION, &standalone);
         let error = load_server_toml_app(&dir, "standalone", "production", "sdkwork-example")
@@ -2494,7 +3218,8 @@ proxyPass = "http://gateway"
 
     #[test]
     fn merge_replaces_targets_wholesale() {
-        let common: Value = serde_json::from_str(r#"{
+        let common: Value = serde_json::from_str(
+            r#"{
             "http": {
                 "upstream": [{
                     "name": "gateway",
@@ -2502,19 +3227,24 @@ proxyPass = "http://gateway"
                     "target": [{ "address": "127.0.0.1:3900", "weight": 1 }]
                 }]
             }
-        }"#)
+        }"#,
+        )
         .expect("fixture");
-        let overlay: Value = serde_json::from_str(r#"{
+        let overlay: Value = serde_json::from_str(
+            r#"{
             "http": {
                 "upstream": [{
                     "name": "gateway",
                     "target": [{ "address": "10.0.4.12:3900", "weight": 3 }]
                 }]
             }
-        }"#)
+        }"#,
+        )
         .expect("fixture");
         let merged = merge_common_profile(&common, &overlay).expect("merge");
-        let targets = merged["http"]["upstream"][0]["target"].as_array().expect("targets");
+        let targets = merged["http"]["upstream"][0]["target"]
+            .as_array()
+            .expect("targets");
         assert_eq!(targets.len(), 1);
         assert_eq!(targets[0]["address"], "10.0.4.12:3900");
         assert_eq!(merged["http"]["upstream"][0]["keepalive"], 32);
@@ -2522,7 +3252,8 @@ proxyPass = "http://gateway"
 
     #[test]
     fn merge_upserts_locations_by_match() {
-        let common: Value = serde_json::from_str(r#"{
+        let common: Value = serde_json::from_str(
+            r#"{
             "http": {
                 "server": [{
                     "serverName": ["im.sdkwork.com"],
@@ -2532,9 +3263,11 @@ proxyPass = "http://gateway"
                     ]
                 }]
             }
-        }"#)
+        }"#,
+        )
         .expect("fixture");
-        let overlay: Value = serde_json::from_str(r#"{
+        let overlay: Value = serde_json::from_str(
+            r#"{
             "http": {
                 "server": [{
                     "serverName": ["im.sdkwork.com"],
@@ -2544,10 +3277,13 @@ proxyPass = "http://gateway"
                     ]
                 }]
             }
-        }"#)
+        }"#,
+        )
         .expect("fixture");
         let merged = merge_common_profile(&common, &overlay).expect("merge");
-        let locations = merged["http"]["server"][0]["location"].as_array().expect("locations");
+        let locations = merged["http"]["server"][0]["location"]
+            .as_array()
+            .expect("locations");
         assert_eq!(locations.len(), 3);
         assert_eq!(locations[0]["proxyPass"], "http://gateway");
         assert_eq!(locations[0]["proxyReadTimeout"], "120s");
@@ -2595,7 +3331,8 @@ returnStatus = 404
 "#,
             "",
         );
-        let config = load_server_toml_app(&dir, "standalone", "production", "stream-test").expect("layout must load");
+        let config = load_server_toml_app(&dir, "standalone", "production", "stream-test")
+            .expect("layout must load");
         assert_eq!(config.streams.len(), 2);
         let literal = &config.streams[0];
         assert_eq!(literal.id, "stream-0");
@@ -2664,7 +3401,8 @@ proxyPass = "127.0.0.1:9443"
             "profile = \"standalone\"\n",
         )
         .unwrap();
-        let config = load_server_toml_app(&dir, "standalone", "production", "stream-tls-test").expect("layout must load");
+        let config = load_server_toml_app(&dir, "standalone", "production", "stream-tls-test")
+            .expect("layout must load");
         assert_eq!(config.streams.len(), 1);
         assert_eq!(
             config.streams[0].tls,
@@ -2744,8 +3482,8 @@ proxyPass = "127.0.0.1:9443"
             "profile = \"standalone\"\n",
         )
         .unwrap();
-        let config =
-            load_server_toml_app(&dir, "standalone", "production", "stream-preread-test").expect("layout must load");
+        let config = load_server_toml_app(&dir, "standalone", "production", "stream-preread-test")
+            .expect("layout must load");
         assert_eq!(
             config.streams[0].tls,
             Some(super::super::model::StreamTlsMode::Preread)
@@ -2787,7 +3525,8 @@ returnBody = "ok"
             "profile = \"standalone\"\n",
         )
         .unwrap();
-        let config = load_server_toml_app(&dir, "standalone", "production", "gzip-test").expect("layout must load");
+        let config = load_server_toml_app(&dir, "standalone", "production", "gzip-test")
+            .expect("layout must load");
         assert!(config.gzip.enabled);
         assert_eq!(config.gzip.min_length, 64);
         assert_eq!(
@@ -2799,10 +3538,8 @@ returnBody = "ok"
 
     #[test]
     fn rejects_public_stream_binds_and_unknown_upstreams() {
-        let dir = std::env::temp_dir().join(format!(
-            "sdkwork-stream-reject-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("sdkwork-stream-reject-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("temp dir");
         let common = r#"
 specVersion = 1
@@ -2908,8 +3645,8 @@ returnBody = "ok"
             "profile = \"standalone\"\n",
         )
         .unwrap();
-        let config =
-            load_server_toml_app(&dir, "standalone", "production", "regex-rewrite-test").expect("layout must load");
+        let config = load_server_toml_app(&dir, "standalone", "production", "regex-rewrite-test")
+            .expect("layout must load");
         let host = &config.virtual_hosts[0];
         let exclusive = host
             .routes
@@ -2974,7 +3711,8 @@ returnStatus = 404
             "profile = \"standalone\"\n",
         )
         .unwrap();
-        let config = load_server_toml_app(&dir, "standalone", "production", "alias-test").expect("layout must load");
+        let config = load_server_toml_app(&dir, "standalone", "production", "alias-test")
+            .expect("layout must load");
         let static_resource = config
             .resources
             .iter()
@@ -2995,10 +3733,8 @@ returnStatus = 404
 
     #[test]
     fn rejects_alias_without_trailing_slash() {
-        let dir = std::env::temp_dir().join(format!(
-            "sdkwork-alias-reject-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("sdkwork-alias-reject-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("temp dir");
         std::fs::write(
             dir.join("server.common.toml"),
@@ -3030,7 +3766,9 @@ returnStatus = 404
             .err()
             .expect("alias without trailing slash must fail");
         assert!(
-            error.to_string().contains("directory aliases must end with"),
+            error
+                .to_string()
+                .contains("directory aliases must end with"),
             "unexpected error: {error}"
         );
         std::fs::remove_dir_all(&dir).ok();
@@ -3038,10 +3776,8 @@ returnStatus = 404
 
     #[test]
     fn rejects_alias_on_regex_location() {
-        let dir = std::env::temp_dir().join(format!(
-            "sdkwork-alias-regex-reject-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("sdkwork-alias-regex-reject-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("temp dir");
         std::fs::write(
             dir.join("server.common.toml"),
@@ -3089,10 +3825,7 @@ returnStatus = 404
         let htpasswd = dir.join("users.htpasswd");
         let hash = crate::config::apr1_hash("secret", "matsalt1");
         std::fs::write(&htpasswd, format!("alice:{hash}\n")).unwrap();
-        let htpasswd_path = htpasswd
-            .to_str()
-            .expect("utf8 path")
-            .replace('\\', "/");
+        let htpasswd_path = htpasswd.to_str().expect("utf8 path").replace('\\', "/");
         std::fs::write(
             dir.join("server.common.toml"),
             format!(

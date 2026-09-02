@@ -130,10 +130,22 @@ mod tests {
     #[test]
     fn hostname_upstream_policy_authorizes_docker_private_ranges() {
         let allowed = hostname_upstream_allowed_cidrs();
-        assert!(upstream_ip_is_allowed("192.168.0.5".parse().unwrap(), &allowed));
-        assert!(upstream_ip_is_allowed("10.0.0.2".parse().unwrap(), &allowed));
-        assert!(upstream_ip_is_allowed("127.0.0.1".parse().unwrap(), &allowed));
-        assert!(!upstream_ip_is_allowed("169.254.169.254".parse().unwrap(), &allowed));
+        assert!(upstream_ip_is_allowed(
+            "192.168.0.5".parse().unwrap(),
+            &allowed
+        ));
+        assert!(upstream_ip_is_allowed(
+            "10.0.0.2".parse().unwrap(),
+            &allowed
+        ));
+        assert!(upstream_ip_is_allowed(
+            "127.0.0.1".parse().unwrap(),
+            &allowed
+        ));
+        assert!(!upstream_ip_is_allowed(
+            "169.254.169.254".parse().unwrap(),
+            &allowed
+        ));
     }
 
     #[test]

@@ -100,3 +100,7 @@ Thumbs.db
 node_modules.bak.*/
 _tmp_*
 sdks/*/*/package-lock.json
+
+# Local cargo verification target dir (mirrors target/)
+target-verify/
+**/target-verify/

@@ -1,7 +1,0 @@
-package com.sdkwork.web.app.sdk
-
-data class FieldError(
-    val field_: String? = null,
-    val message: String? = null,
-    val code: Int? = null
-)

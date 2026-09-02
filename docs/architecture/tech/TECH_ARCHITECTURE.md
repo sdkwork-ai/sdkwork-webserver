@@ -23,6 +23,8 @@ Specs: ARCHITECTURE_DECISION_SPEC.md, DOCUMENTATION_SPEC.md, RUST_CODE_SPEC.md, 
   are implemented.
 
 - [TECH-runtime-data-plane.md](TECH-runtime-data-plane.md) - target and implementation status for the Rust HTTP/HTTPS request data plane.
+- [TECH-resolution-cache.md](TECH-resolution-cache.md) - multi-layer DNS/IP resolution cache layers, TTL policy, and negative caching.
+- [TECH-app-domain-publishing-fallback.md](TECH-app-domain-publishing-fallback.md) - app publishing default-domain and custom-domain fallback behavior on the data plane.
 - [TECH-standards-alignment.md](TECH-standards-alignment.md) - pointer to the repository standards-alignment matrix.
 - [ADR-20260715-rust-webserver-data-plane.md](../decisions/ADR-20260715-rust-webserver-data-plane.md) - accepted data-plane component and technology decision.
 - [PRD.md](../../product/prd/PRD.md) - product behavior and commercial release authority.
@@ -84,7 +86,7 @@ Current implemented baseline:
 
 The host synchronization process is named **Web Node Daemon** in all new
 runtime and operational surfaces. The canonical packaged/development entry
-point is `sdkwork-web-node-daemon`; `sdkwork-web-agent` is retained only as a
+point is `sdkwork-webserver-node-daemon`; `sdkwork-webserver-agent` is retained only as a
 v3 compatibility binary. The v3 Agent API and generated DTO names remain wire
 compatibility identifiers and are not new product terminology.
 
@@ -129,8 +131,8 @@ sdkwork-webserver-edge-runtime
   `-- existing external Nginx artifact operations only
 
 apps/sdkwork-webserver-pc
-  |-- console-* -> console-core -> @sdkwork/web-app-sdk -> app-api
-  |-- admin-* -> lazy admin-core -> @sdkwork/web-backend-sdk -> backend-api
+  |-- console-* -> console-core -> @sdkwork/webserver-app-sdk -> app-api
+  |-- admin-* -> lazy admin-core -> @sdkwork/webserver-backend-sdk -> backend-api
   `-- root bootstrap -> IAM + one TokenManager + typed browser runtime config
 ```
 
@@ -151,15 +153,15 @@ The request path does not call management services or repositories. Management r
 - Node synchronization publishes bounded immutable `sv1:` snapshots through the Agent contract;
   mutable management DTOs do not enter the request path.
 - OpenAPI authorities are app-api, backend-api, and the application-ingress Web Internal API. The
-  Web Node consumes the generated `sdkwork-web-internal-sdk`; the internal route crate consumes the
+  Web Node consumes the generated `sdkwork-webserver-internal-sdk`; the internal route crate consumes the
   local `WebInternalApi` service port and never its own generated client.
 
 ## 5. API, SDK, And Data Ownership
 
 - Management success/error responses follow SDKWork envelopes and Problem Details.
 - Retriable management operations preserve one explicit idempotency contract from authority OpenAPI through route metadata and generated SDK inputs. The framework validates and scopes the Header; deployment repository deduplication receives only that framework-owned context value.
-- SDK families are `sdkwork-web-app-sdk`, `sdkwork-web-backend-sdk`, and the machine-to-machine
-  `sdkwork-web-internal-sdk` used for runtime assignment publication, retrieval, and observations.
+- SDK families are `sdkwork-webserver-app-sdk`, `sdkwork-webserver-backend-sdk`, and the machine-to-machine
+  `sdkwork-webserver-internal-sdk` used for runtime assignment publication, retrieval, and observations.
 - Request data-plane traffic preserves the configured upstream or static Web protocol; it does not wrap arbitrary application responses in SDKWork management envelopes.
 - PostgreSQL is the only authoritative server database and lifecycle, recovery, and
   release-verification profile.

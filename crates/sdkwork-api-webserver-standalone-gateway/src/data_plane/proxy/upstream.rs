@@ -16,11 +16,9 @@ impl ProxyUpstream<UpstreamClient> {
                 metrics,
                 chain,
             ),
-            None => GuardedDnsResolver::new_observed(
-                resolver,
-                config.address_policy.clone(),
-                metrics,
-            ),
+            None => {
+                GuardedDnsResolver::new_observed(resolver, config.address_policy.clone(), metrics)
+            }
         });
         let client = UpstreamClient::build(app, config, resolver)?;
         let targets = config

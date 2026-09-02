@@ -12,25 +12,27 @@ const surfaces = [
   {
     name: 'app-api',
     source: 'apis/app-api/web/openapi.yaml',
-    authority: 'apis/app-api/web/web-app-api.openapi.json',
+    authority: 'apis/app-api/web/sdkwork-webserver-app-api.openapi.json',
     manifest: 'sdks/_route-manifests/app-api/sdkwork-routes-webserver-app-api.route-manifest.json',
-    typescriptApi: 'sdks/sdkwork-web-app-sdk/sdkwork-web-app-sdk-typescript/generated/server-openapi/src/api',
-    expectedIdempotentOperations: 14,
+    typescriptApi: 'sdks/sdkwork-webserver-app-sdk/sdkwork-webserver-app-sdk-typescript/generated/server-openapi/src/api',
+    // 15 marked operations after listener_certificate_bindings and health_checks
+    // idempotency markings were added to apis/app-api/web/openapi.yaml and materialized.
+    expectedIdempotentOperations: 15,
   },
   {
     name: 'backend-api',
     source: 'apis/backend-api/web/openapi.yaml',
-    authority: 'apis/backend-api/web/web-backend-api.openapi.json',
+    authority: 'apis/backend-api/web/sdkwork-webserver-backend-api.openapi.json',
     manifest: 'sdks/_route-manifests/backend-api/sdkwork-routes-webserver-backend-api.route-manifest.json',
-    typescriptApi: 'sdks/sdkwork-web-backend-sdk/sdkwork-web-backend-sdk-typescript/generated/server-openapi/src/api',
+    typescriptApi: 'sdks/sdkwork-webserver-backend-sdk/sdkwork-webserver-backend-sdk-typescript/generated/server-openapi/src/api',
     expectedIdempotentOperations: 32,
   },
   {
     name: 'internal-api',
-    source: 'apis/internal-api/web/sdkwork-web-internal-api.openapi.yaml',
-    authority: 'apis/internal-api/web/sdkwork-web-internal-api.openapi.json',
+    source: 'apis/internal-api/web/sdkwork-webserver-internal-api.openapi.yaml',
+    authority: 'apis/internal-api/web/sdkwork-webserver-internal-api.openapi.json',
     manifest: 'sdks/_route-manifests/internal-api/sdkwork-routes-webserver-internal-api.route-manifest.json',
-    typescriptApi: 'sdks/sdkwork-web-internal-sdk/sdkwork-web-internal-sdk-typescript/generated/server-openapi/src/api',
+    typescriptApi: 'sdks/sdkwork-webserver-internal-sdk/sdkwork-webserver-internal-sdk-typescript/generated/server-openapi/src/api',
     expectedIdempotentOperations: 2,
   },
 ];
@@ -115,8 +117,8 @@ for (const surface of surfaces) {
 }
 
 test('deployment idempotency is Header-owned and consumers do not assemble it manually', () => {
-  const appAuthority = JSON.parse(read('apis/app-api/web/web-app-api.openapi.json'));
-  const backendAuthority = JSON.parse(read('apis/backend-api/web/web-backend-api.openapi.json'));
+  const appAuthority = JSON.parse(read('apis/app-api/web/sdkwork-webserver-app-api.openapi.json'));
+  const backendAuthority = JSON.parse(read('apis/backend-api/web/sdkwork-webserver-backend-api.openapi.json'));
   assert.equal(appAuthority.components.schemas.CreateDeploymentRequest.properties.idempotencyKey, undefined);
   assert.equal(backendAuthority.components.schemas.CreateApplicationDeploymentRequest.properties.idempotencyKey, undefined);
 

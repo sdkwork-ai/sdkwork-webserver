@@ -9,10 +9,19 @@
 # docker-compose.yml (docker compose config --format json) so sibling modules
 # and embedded routers receive the complete SDKWORK_* matrix. Database URL is
 # interpolated from the deployment env file; bind follows the upstream port.
+
+# Bounded json-file log rotation (DEPLOYMENT_SPEC.md §6 runtime hardening).
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   gateway:
     image: ${SDKWORK_MODULE_API_GATEWAY_IMAGE:-sdkwork-api-cloud-gateway:local}
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       knowledgebase-rpc:
         condition: service_started
@@ -124,6 +133,7 @@ services:
     image: ${SDKWORK_MODULE_API_GATEWAY_IMAGE:-sdkwork-api-cloud-gateway:local}
     entrypoint: ["/opt/sdkwork/api-gateway/container/knowledgebase-rpc-entrypoint"]
     restart: unless-stopped
+    logging: *default-logging
     networks:
       sdkwork:
         aliases:

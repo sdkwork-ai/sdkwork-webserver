@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "name": "sdkwork-webserver-app-sdk",
+  "version": "1.0.0",
+  "language": "csharp",
+  "sdkType": "app",
+  "packageName": "SDKWork.Webserver.AppSdk",
+  "transportPackageName": "SDKWork.Webserver.AppSdk",
+  "consumerPackageName": "SDKWork.Webserver.AppSdk",
+  "generator": "@sdkwork/sdk-generator",
+  "capabilities": {
+    "supportsGeneratedTests": true,
+    "supportsReadme": true,
+    "supportsCustomScaffold": true,
+    "supportsPublishWorkflow": true,
+    "hasDistinctBuildStep": false
+  },
+  "generation": {
+    "readme": true,
+    "tests": false
+  },
+  "ownership": {
+    "generatedOwnership": "generated",
+    "scaffoldOwnership": "scaffold",
+    "scaffoldRoots": [
+      "custom/"
+    ],
+    "stateRoots": [
+      ".sdkwork/"
+    ]
+  }
+}

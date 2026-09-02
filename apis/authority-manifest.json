@@ -3,16 +3,16 @@
   "kind": "sdkwork.api.authority.manifest",
   "surfaces": [
     {
-      "authorityPath": "apis/app-api/web/web-app-api.openapi.json",
-      "sdkPath": "sdks/sdkwork-web-app-sdk/openapi/web-app-api.openapi.json"
+      "authorityPath": "apis/app-api/web/sdkwork-webserver-app-api.openapi.json",
+      "sdkPath": "sdks/sdkwork-webserver-app-sdk/openapi/sdkwork-webserver-app-api.openapi.json"
     },
     {
-      "authorityPath": "apis/backend-api/web/web-backend-api.openapi.json",
-      "sdkPath": "sdks/sdkwork-web-backend-sdk/openapi/web-backend-api.openapi.json"
+      "authorityPath": "apis/backend-api/web/sdkwork-webserver-backend-api.openapi.json",
+      "sdkPath": "sdks/sdkwork-webserver-backend-sdk/openapi/sdkwork-webserver-backend-api.openapi.json"
     },
     {
-      "authorityPath": "apis/internal-api/web/sdkwork-web-internal-api.openapi.json",
-      "sdkPath": "sdks/sdkwork-web-internal-sdk/openapi/sdkwork-web-internal-api.openapi.json"
+      "authorityPath": "apis/internal-api/web/sdkwork-webserver-internal-api.openapi.json",
+      "sdkPath": "sdks/sdkwork-webserver-internal-sdk/openapi/sdkwork-webserver-internal-api.openapi.json"
     }
   ]
 }

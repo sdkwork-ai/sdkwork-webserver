@@ -31,10 +31,7 @@ pub struct WebServerConfigFileRevision {
 
 impl WebServerConfigFileRevision {
     pub(crate) fn new(sha256: String, size_bytes: u64) -> Self {
-        Self {
-            sha256,
-            size_bytes,
-        }
+        Self { sha256, size_bytes }
     }
 
     pub fn sha256(&self) -> &str {

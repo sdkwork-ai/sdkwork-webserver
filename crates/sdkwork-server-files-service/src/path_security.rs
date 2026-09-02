@@ -83,8 +83,7 @@ pub fn resolve_contained_path(
     // Collapse `.` and `..` lexically first so we can reject traversal without
     // touching the disk (fast, deterministic, and safe even before the root
     // directory exists).
-    candidate = lexically_normalize(&candidate)
-        .ok_or(PathContainmentError::InvalidPath)?;
+    candidate = lexically_normalize(&candidate).ok_or(PathContainmentError::InvalidPath)?;
 
     if !path_within(&candidate, &root_reference, root_is_fs_root) {
         return Err(PathContainmentError::EscapesRoot);
@@ -93,8 +92,8 @@ pub fn resolve_contained_path(
     // Canonicalize against the live filesystem to defeat symlink escapes and
     // case/alias tricks. If the candidate doesn't exist yet, canonicalize the
     // deepest existing ancestor and re-append the remainder lexically.
-    let canonical = canonicalize_or_ancestor(&candidate)
-        .map_err(|_| PathContainmentError::Unresolvable)?;
+    let canonical =
+        canonicalize_or_ancestor(&candidate).map_err(|_| PathContainmentError::Unresolvable)?;
 
     if !path_within(&canonical, &root_reference, root_is_fs_root) {
         return Err(PathContainmentError::EscapesRoot);

@@ -30,7 +30,8 @@ use sdkwork_webserver_core::{
     ProxyProtocolConfig, WebServerLimits,
 };
 use sdkwork_webserver_delivery_runtime::{AppConfigResourceExecutor, WebsiteDeliveryExecutor};
-use tokio::{    io::{AsyncRead, AsyncWrite},
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
     net::{TcpListener, TcpStream},
     sync::watch,
     task::JoinSet,
@@ -53,16 +54,14 @@ use super::{
     proxy_protocol::{resolve_connection_info, DownstreamConnectionInfo},
     runtime::RuntimeGeneration,
     stream_proxy::{prepare_stream_listener, serve_stream_listener},
-    udp_stream_proxy::{prepare_udp_stream_listener, serve_udp_stream_listener},
     tls::build_tls_config,
     tls_runtime::FileTlsRuntimeController,
+    udp_stream_proxy::{prepare_udp_stream_listener, serve_udp_stream_listener},
     DataPlaneError, DataPlaneRuntime, ListenerState,
 };
 
 use crate::deploy_fallback::DeployFallbackResolver;
-use crate::usage_metering::{
-    HttpUsageIngestChannel, UsageIngestChannel, UsageMeteringAggregator,
-};
+use crate::usage_metering::{HttpUsageIngestChannel, UsageIngestChannel, UsageMeteringAggregator};
 use sdkwork_webserver_core::config::{UsageMeteringChannel, WebServerAppConfig};
 
 struct PreparedListener {
@@ -78,7 +77,8 @@ struct PreparedListener {
 async fn bind_listener(address: SocketAddr) -> std::io::Result<TcpListener> {
     if address.is_ipv6() {
         let domain = socket2::Domain::IPV6;
-        let socket = socket2::Socket::new(domain, socket2::Type::STREAM, Some(socket2::Protocol::TCP))?;
+        let socket =
+            socket2::Socket::new(domain, socket2::Type::STREAM, Some(socket2::Protocol::TCP))?;
         socket.set_reuse_address(true)?;
         socket.set_only_v6(true)?;
         socket.set_nonblocking(true)?;
@@ -138,7 +138,14 @@ pub async fn run_website_data_plane_until<F>(
 where
     F: Future<Output = ()> + Send,
 {
-    run_website_data_plane_with_operations_until(app, website_delivery, deploy_fallback, None, shutdown).await
+    run_website_data_plane_with_operations_until(
+        app,
+        website_delivery,
+        deploy_fallback,
+        None,
+        shutdown,
+    )
+    .await
 }
 
 pub async fn run_website_data_plane_with_operations_until<F>(
@@ -426,12 +433,13 @@ async fn prepare_listener(
             source,
         })?;
     let requested_address = SocketAddr::new(ip, listener.port);
-    let socket = bind_listener(requested_address)
-        .await
-        .map_err(|source| DataPlaneError::Listener {
-            listener_id: listener.id.clone(),
-            source,
-        })?;
+    let socket =
+        bind_listener(requested_address)
+            .await
+            .map_err(|source| DataPlaneError::Listener {
+                listener_id: listener.id.clone(),
+                source,
+            })?;
     let address = socket
         .local_addr()
         .map_err(|source| DataPlaneError::Listener {
@@ -814,16 +822,13 @@ async fn collect_shutdown_results(
     first_error.map_or(Ok(()), Err)
 }
 
-
 /// Build the SaaS traffic usage meter when the app config enables
 /// `usageMetering` and an ingest channel is available. The embedded channel
 /// writes through the shared Deploy database (management feature); the http
 /// channel posts to the Deploy control-plane ingest endpoint. An
 /// unavailable channel disables metering with a warning — it never blocks
 /// the data plane.
-fn build_usage_meter(
-    app_config: &WebServerAppConfig,
-) -> Option<Arc<UsageMeteringAggregator>> {
+fn build_usage_meter(app_config: &WebServerAppConfig) -> Option<Arc<UsageMeteringAggregator>> {
     let config = app_config.usage_metering.as_ref()?;
     if !config.enabled {
         return None;
@@ -846,9 +851,7 @@ fn build_usage_meter(
             }
             #[cfg(not(feature = "management"))]
             {
-                tracing::warn!(
-                    "usage metering embedded channel requires the management feature"
-                );
+                tracing::warn!("usage metering embedded channel requires the management feature");
                 return None;
             }
         }

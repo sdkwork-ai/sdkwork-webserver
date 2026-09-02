@@ -8,7 +8,7 @@ use sdkwork_utils_rust::{
 use sdkwork_webserver_contract::{
     ApplicationPage, AuditLogPage, CertificateDistributionPage, CertificatePage, DeploymentPage,
     DomainPage, EnvVariablePage, HealthCheckPage, ListenerCertificateBindingPage, NginxConfigPage,
-    RootDomainPage, ServerPage, SourceVersionPage, PlatformTargetPage, WebServiceResult,
+    PlatformTargetPage, RootDomainPage, ServerPage, SourceVersionPage, WebServiceResult,
 };
 use serde::Serialize;
 

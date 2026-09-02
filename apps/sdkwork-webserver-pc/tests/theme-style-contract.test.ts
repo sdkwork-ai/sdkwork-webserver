@@ -70,7 +70,7 @@ describe("webserver workspace theme styles", () => {
       /\.row-action-button-danger:not\(:disabled\):hover\s*\{[^}]*background:\s*var\(--webserver-color-danger-surface\)/s,
     );
     expect(stylesheet).toMatch(
-      /\.row-actions-column, \.row-actions-cell\s*\{[^}]*width:\s*152px[^}]*min-width:\s*152px/s,
+      /\.row-actions-column, \.row-actions-cell\s*\{[^}]*width:\s*236px[^}]*min-width:\s*236px/s,
     );
   });
 

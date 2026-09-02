@@ -79,7 +79,8 @@ pub fn canonical_os_system_scope_sdkwork_base() -> Result<PathBuf, String> {
     }
     #[cfg(target_os = "windows")]
     {
-        let program_data = std::env::var("ProgramData").unwrap_or_else(|_| "C:\\ProgramData".to_owned());
+        let program_data =
+            std::env::var("ProgramData").unwrap_or_else(|_| "C:\\ProgramData".to_owned());
         Ok(PathBuf::from(program_data).join("sdkwork"))
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
@@ -109,9 +110,9 @@ pub fn canonical_certificate_domain_directory(domain: &str) -> Result<PathBuf, S
     let domain = domain.trim().trim_end_matches('.').to_ascii_lowercase();
     if domain.is_empty()
         || domain.len() > 253
-        || domain
-            .chars()
-            .any(|character| !(character.is_ascii_alphanumeric() || matches!(character, '-' | '.' | '_')))
+        || domain.chars().any(|character| {
+            !(character.is_ascii_alphanumeric() || matches!(character, '-' | '.' | '_'))
+        })
     {
         return Err(format!("invalid certificate domain `{domain}`"));
     }
@@ -186,7 +187,9 @@ mod tests {
             assert_eq!(directory, PathBuf::from(LINUX_CONFIG_ROOT));
         }
         assert_eq!(
-            directory.file_name().map(|name| name.to_string_lossy().into_owned()),
+            directory
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned()),
             Some(APPLICATION_CODE.to_owned())
         );
     }
@@ -194,7 +197,10 @@ mod tests {
     #[test]
     fn canonical_runtime_config_uses_config_toml() {
         let path = canonical_runtime_config_path().expect("runtime path");
-        assert_eq!(path.file_name().and_then(|n| n.to_str()), Some(RUNTIME_CONFIG_FILE_NAME));
+        assert_eq!(
+            path.file_name().and_then(|n| n.to_str()),
+            Some(RUNTIME_CONFIG_FILE_NAME)
+        );
     }
 
     #[test]

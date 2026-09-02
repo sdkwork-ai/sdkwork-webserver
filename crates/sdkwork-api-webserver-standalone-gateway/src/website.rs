@@ -2609,13 +2609,15 @@ fn build_deploy_fallback(
     let lookup = std::sync::Arc::new(crate::deploy_fallback::EmbeddedDeployServerLookup::new(
         sdkwork_api_webserver_assembly::DeployRepository::new_lookup(pool),
     ));
-    Some(std::sync::Arc::new(crate::deploy_fallback::DeployFallbackResolver::new(
-        std::sync::Arc::new(config.clone()),
-        lookup,
-        providers,
-        node_uuid,
-        environment,
-    )))
+    Some(std::sync::Arc::new(
+        crate::deploy_fallback::DeployFallbackResolver::new(
+            std::sync::Arc::new(config.clone()),
+            lookup,
+            providers,
+            node_uuid,
+            environment,
+        ),
+    ))
 }
 
 /// Non-management builds never construct the embedded Deploy lookup; the

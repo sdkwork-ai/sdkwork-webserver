@@ -1,9 +1,0 @@
-package com.sdkwork.web.backend.sdk
-
-data class CreateRootDomainHostnameRequest(
-    val recordName: String? = null,
-    val applicationId: String? = null,
-    val isPrimary: Boolean? = null,
-    val sslEnabled: Boolean? = null,
-    val sslProvider: String? = null
-)

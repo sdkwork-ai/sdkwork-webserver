@@ -13,12 +13,12 @@ const contracts = [
   },
   {
     label: 'materialized backend API authority',
-    path: 'apis/backend-api/web/web-backend-api.openapi.json',
+    path: 'apis/backend-api/web/sdkwork-webserver-backend-api.openapi.json',
     parse: JSON.parse,
   },
   {
     label: 'materialized backend SDK authority',
-    path: 'sdks/sdkwork-web-backend-sdk/openapi/web-backend-api.openapi.json',
+    path: 'sdks/sdkwork-webserver-backend-sdk/openapi/sdkwork-webserver-backend-api.openapi.json',
     parse: JSON.parse,
   },
 ];

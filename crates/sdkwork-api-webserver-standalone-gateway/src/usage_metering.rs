@@ -137,10 +137,7 @@ impl UsageWindow {
             .take(16)
             .map(|byte| format!("{byte:02x}"))
             .collect::<String>();
-        format!(
-            "traffic:{}:{}:{fingerprint}",
-            self.window_start, dimension
-        )
+        format!("traffic:{}:{}:{fingerprint}", self.window_start, dimension)
     }
 }
 
@@ -202,10 +199,8 @@ impl UsageMeteringAggregator {
         if !self.config.enabled {
             return;
         }
-        let window_start_epoch = Self::window_start_epoch(
-            SystemTime::now(),
-            self.config.window_seconds.max(1),
-        );
+        let window_start_epoch =
+            Self::window_start_epoch(SystemTime::now(), self.config.window_seconds.max(1));
         let key = BucketKey {
             hostname: request.hostname.trim().to_ascii_lowercase(),
             server_ip: request.server_ip.to_string(),
@@ -214,11 +209,7 @@ impl UsageMeteringAggregator {
             tenant_id: request.attribution.tenant_id.unwrap_or(0),
             organization_id: request.attribution.organization_id.unwrap_or(0),
             app_uuid: request.attribution.app_uuid.clone().unwrap_or_default(),
-            binding_uuid: request
-                .attribution
-                .binding_uuid
-                .clone()
-                .unwrap_or_default(),
+            binding_uuid: request.attribution.binding_uuid.clone().unwrap_or_default(),
             app_id: request.attribution.app_id.clone().unwrap_or_default(),
             status_class: request.status_class.to_owned(),
             window_start_epoch,
@@ -234,10 +225,7 @@ impl UsageMeteringAggregator {
     }
 
     fn window_start_epoch(now: SystemTime, window_seconds: u64) -> u64 {
-        let seconds = now
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
+        let seconds = now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
         seconds / window_seconds * window_seconds
     }
 
@@ -317,9 +305,8 @@ impl UsageMeteringAggregator {
                 for (key, counters) in drained {
                     let entry = buckets.entry(key).or_default();
                     entry.requests = entry.requests.saturating_add(counters.requests);
-                    entry.ingress_bytes = entry
-                        .ingress_bytes
-                        .saturating_add(counters.ingress_bytes);
+                    entry.ingress_bytes =
+                        entry.ingress_bytes.saturating_add(counters.ingress_bytes);
                     entry.egress_bytes = entry.egress_bytes.saturating_add(counters.egress_bytes);
                 }
             }
@@ -419,7 +406,8 @@ impl UsageIngestChannel for EmbeddedUsageIngestChannel {
                     dimension: USAGE_DIMENSION_TRAFFIC_INGRESS_BYTES.to_owned(),
                     quantity: i64::try_from(window.ingress_bytes).unwrap_or(i64::MAX),
                     unit: "BYTE".to_owned(),
-                    deduplication_key: window.deduplication_key(USAGE_DIMENSION_TRAFFIC_INGRESS_BYTES),
+                    deduplication_key: window
+                        .deduplication_key(USAGE_DIMENSION_TRAFFIC_INGRESS_BYTES),
                     attribution: attribution.clone(),
                     observed_at: observed_at.clone(),
                 });
@@ -530,7 +518,8 @@ impl UsageIngestChannel for HttpUsageIngestChannel {
                     dimension: USAGE_DIMENSION_TRAFFIC_INGRESS_BYTES.to_owned(),
                     quantity: i64::try_from(window.ingress_bytes).unwrap_or(i64::MAX),
                     unit: "BYTE".to_owned(),
-                    deduplication_key: window.deduplication_key(USAGE_DIMENSION_TRAFFIC_INGRESS_BYTES),
+                    deduplication_key: window
+                        .deduplication_key(USAGE_DIMENSION_TRAFFIC_INGRESS_BYTES),
                     attribution: attribution.clone(),
                     observed_at: observed_at.clone(),
                 });
@@ -611,7 +600,11 @@ mod tests {
         let channel = Arc::new(FakeChannel {
             ingested: std::sync::Mutex::new(Vec::new()),
         });
-        let meter = Arc::new(UsageMeteringAggregator::new(config(), channel.clone(), "node-1"));
+        let meter = Arc::new(UsageMeteringAggregator::new(
+            config(),
+            channel.clone(),
+            "node-1",
+        ));
         let attribution = UsageAttribution {
             tenant_id: Some(7),
             organization_id: Some(9),
@@ -665,7 +658,10 @@ mod tests {
             .iter()
             .find(|window| window.hostname == "mysite.example.com")
             .expect("custom window");
-        assert_eq!(custom.tenant_id, 0, "unmanaged traffic attributes to tenant 0");
+        assert_eq!(
+            custom.tenant_id, 0,
+            "unmanaged traffic attributes to tenant 0"
+        );
         assert_eq!(custom.requests, 1);
         assert_eq!(custom.egress_bytes, 50);
     }

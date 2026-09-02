@@ -103,7 +103,10 @@ pub fn build_router_with_shared_app_api(api: Arc<dyn WebAppApi>) -> Router {
             paths::APPLICATION_PLATFORM_TARGETS,
             get(list_platform_targets).post(create_platform_target),
         )
-        .route(paths::APPLICATION_PLATFORM_TARGET, get(retrieve_platform_target))
+        .route(
+            paths::APPLICATION_PLATFORM_TARGET,
+            get(retrieve_platform_target),
+        )
         .layer(axum::middleware::from_fn(validate_pagination_query))
         .with_state(AppState { api })
 }
@@ -584,7 +587,6 @@ async fn create_health_check(
     )
 }
 
-
 async fn list_platform_targets(
     State(state): State<AppState>,
     context: Option<Extension<WebAppRequestContext>>,
@@ -630,4 +632,3 @@ async fn retrieve_platform_target(
             .await,
     )
 }
-

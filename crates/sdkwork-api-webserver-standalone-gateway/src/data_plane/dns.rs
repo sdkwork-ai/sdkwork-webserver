@@ -119,22 +119,24 @@ impl GuardedDnsResolver {
             let policy = self.policy.clone();
             let metrics = self.metrics.clone();
             let upstream: Box<
-                dyn Fn(&str) -> std::pin::Pin<
-                    Box<dyn std::future::Future<Output = Result<Vec<String>, ()>> + Send>,
-                > + Send
-                + Sync,
+                dyn Fn(
+                        &str,
+                    ) -> std::pin::Pin<
+                        Box<dyn std::future::Future<Output = Result<Vec<String>, ()>> + Send>,
+                    > + Send
+                    + Sync,
             > = Box::new(move |domain: &str| {
                 let resolver = resolver.clone();
                 let policy = policy.clone();
                 let metrics = metrics.clone();
                 let domain = domain.to_owned();
                 Box::pin(async move {
-                    let addresses = match resolve_system_permitted(&resolver, &policy, &metrics, &domain)
-                        .await
-                    {
-                        Ok(addresses) => addresses,
-                        Err(_) => return Err(()),
-                    };
+                    let addresses =
+                        match resolve_system_permitted(&resolver, &policy, &metrics, &domain).await
+                        {
+                            Ok(addresses) => addresses,
+                            Err(_) => return Err(()),
+                        };
                     Ok(addresses
                         .into_iter()
                         .map(|address| address.ip().to_string())

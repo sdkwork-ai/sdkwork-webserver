@@ -59,7 +59,11 @@ fn nginx_corpus_materializes_full_surface() {
         )
         .expect("nginx corpus must materialize");
     let app = &loaded.app;
-    assert!(loaded.skipped.is_empty(), "no files may be skipped: {:?}", loaded.skipped);
+    assert!(
+        loaded.skipped.is_empty(),
+        "no files may be skipped: {:?}",
+        loaded.skipped
+    );
 
     // Two HTTP virtual hosts (www.example.com + secure.example.com).
     assert_eq!(app.virtual_hosts.len(), 2);
@@ -67,7 +71,11 @@ fn nginx_corpus_materializes_full_surface() {
     assert_eq!(app.listeners.len(), 3);
     // Three upstreams: backend, hash_backend, and the literal /api/ … is a
     // named upstream; the 443 location proxies a literal (synthesized).
-    let upstream_names: Vec<&str> = app.upstreams.iter().map(|upstream| upstream.id.as_str()).collect();
+    let upstream_names: Vec<&str> = app
+        .upstreams
+        .iter()
+        .map(|upstream| upstream.id.as_str())
+        .collect();
     assert!(upstream_names.contains(&"backend"));
     assert!(upstream_names.contains(&"hash_backend"));
 
@@ -75,7 +83,10 @@ fn nginx_corpus_materializes_full_surface() {
     assert_eq!(app.streams.len(), 3);
     assert_eq!(app.streams[0].port, 3307);
     assert_eq!(app.streams[1].port, 53);
-    assert_eq!(app.streams[1].protocol, sdkwork_webserver_core::StreamProtocol::Udp);
+    assert_eq!(
+        app.streams[1].protocol,
+        sdkwork_webserver_core::StreamProtocol::Udp
+    );
     assert_eq!(app.streams[2].port, 3443);
     match &app.streams[2].tls {
         Some(sdkwork_webserver_core::StreamTlsMode::Terminate {
@@ -124,7 +135,9 @@ fn nginx_corpus_materializes_full_surface() {
         .find(|resource| resource.id() == redirect.resource_ref)
         .expect("redirect resource");
     match redirect_resource {
-        ResourceConfig::Redirect { status, location, .. } => {
+        ResourceConfig::Redirect {
+            status, location, ..
+        } => {
             assert_eq!(*status, 301);
             assert_eq!(location, "https://$host$request_uri");
         }
@@ -146,7 +159,10 @@ fn nginx_corpus_materializes_full_surface() {
         .find(|policy| policy.id == policy_ref)
         .expect("policy");
     let client_auth = policy.client_auth.as_ref().expect("client auth");
-    assert_eq!(client_auth.mode, sdkwork_webserver_core::ClientAuthMode::Optional);
+    assert_eq!(
+        client_auth.mode,
+        sdkwork_webserver_core::ClientAuthMode::Optional
+    );
     assert_eq!(client_auth.ca_certificate_files.len(), 1);
 
     let api = www
@@ -170,7 +186,10 @@ fn nginx_corpus_materializes_full_surface() {
     assert_eq!(sub_filter.rules[0].from, "Draft");
     assert_eq!(sub_filter.rules[0].to, "Final");
     assert!(!sub_filter.once);
-    assert_eq!(sub_filter.types, vec!["text/html".to_owned(), "text/plain".to_owned()]);
+    assert_eq!(
+        sub_filter.types,
+        vec!["text/html".to_owned(), "text/plain".to_owned()]
+    );
 
     let files = www
         .routes
@@ -208,10 +227,7 @@ fn nginx_corpus_materializes_full_surface() {
             proxy_pass_request_headers,
             ..
         } => {
-            assert_eq!(
-                dynamic_target.as_deref(),
-                Some("http://$host:$server_port")
-            );
+            assert_eq!(dynamic_target.as_deref(), Some("http://$host:$server_port"));
             assert!(!proxy_pass_request_headers);
         }
         other => panic!("dynamic route must be a proxy resource, got {other:?}"),
@@ -232,12 +248,18 @@ fn toml_corpus_materializes_single_file() {
         .expect("toml corpus must materialize");
     let app = &loaded.app;
     assert_eq!(loaded.format, ConfigFormat::Toml);
-    assert!(loaded.revision.is_some(), "single-file sources carry a revision");
+    assert!(
+        loaded.revision.is_some(),
+        "single-file sources carry a revision"
+    );
 
     assert_eq!(app.virtual_hosts.len(), 2);
     assert_eq!(app.listeners.len(), 3);
     assert_eq!(app.streams.len(), 3);
-    assert_eq!(app.streams[1].protocol, sdkwork_webserver_core::StreamProtocol::Udp);
+    assert_eq!(
+        app.streams[1].protocol,
+        sdkwork_webserver_core::StreamProtocol::Udp
+    );
     match &app.streams[2].tls {
         Some(sdkwork_webserver_core::StreamTlsMode::Terminate {
             client_auth: Some(auth),
@@ -552,8 +574,16 @@ fn nginx_sites_with_include_glob_expand_in_order() {
     let directory = tempfile::tempdir().expect("temp dir");
     let sites = directory.path().join("sites-enabled");
     fs::create_dir_all(&sites).expect("sites dir");
-    fs::write(sites.join("a.conf"), "server { listen 18001; server_name a.local; location / { return 200 \"a\"; } }\n").expect("a");
-    fs::write(sites.join("b.conf"), "server { listen 18002; server_name b.local; location / { return 200 \"b\"; } }\n").expect("b");
+    fs::write(
+        sites.join("a.conf"),
+        "server { listen 18001; server_name a.local; location / { return 200 \"a\"; } }\n",
+    )
+    .expect("a");
+    fs::write(
+        sites.join("b.conf"),
+        "server { listen 18002; server_name b.local; location / { return 200 \"b\"; } }\n",
+    )
+    .expect("b");
     let main = directory.path().join("nginx.conf");
     fs::write(&main, "http {\n    include sites-enabled/*.conf;\n}\n").expect("main");
     let loaded = loader()

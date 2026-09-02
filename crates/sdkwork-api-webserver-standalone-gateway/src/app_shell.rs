@@ -154,8 +154,7 @@ impl AdaptiveAppShellConfig {
 
         let pc = optional_spa_surface(PC_STATIC_ROOT_ENV, pc_root, environment)?;
         let h5 = optional_spa_surface(H5_STATIC_ROOT_ENV, h5_root, environment)?;
-        let static_fallback =
-            optional_ordinary_surface(STATIC_FALLBACK_ROOT_ENV, static_root)?;
+        let static_fallback = optional_ordinary_surface(STATIC_FALLBACK_ROOT_ENV, static_root)?;
 
         if pc.is_none() && h5.is_none() && static_fallback.is_none() {
             if matches!(environment, "production" | "prod") {
@@ -348,7 +347,9 @@ impl ReadinessCheck for SpaSurfaceReadinessCheck {
             tokio::task::spawn_blocking(move || {
                 let current_files = collect_static_files(&root, label)?;
                 if current_files != *required_files {
-                    return Err(format!("{label} static file inventory changed after startup"));
+                    return Err(format!(
+                        "{label} static file inventory changed after startup"
+                    ));
                 }
                 validate_bootstrap_files(&root, &environment, label)
             })
@@ -377,9 +378,8 @@ fn resolve_static_root(configured: PathBuf, env_name: &str) -> Result<PathBuf, S
         return Ok(current_directory.join(configured));
     }
 
-    let executable = env::current_exe().map_err(|error| {
-        format!("could not resolve current executable for {env_name}: {error}")
-    })?;
+    let executable = env::current_exe()
+        .map_err(|error| format!("could not resolve current executable for {env_name}: {error}"))?;
     resolve_packaged_static_root(&configured, &executable, env_name)
 }
 
@@ -388,9 +388,9 @@ fn resolve_packaged_static_root(
     executable: &Path,
     env_name: &str,
 ) -> Result<PathBuf, String> {
-    let binary_directory = executable.parent().ok_or_else(|| {
-        format!("current executable has no parent for relative {env_name}")
-    })?;
+    let binary_directory = executable
+        .parent()
+        .ok_or_else(|| format!("current executable has no parent for relative {env_name}"))?;
     if binary_directory
         .file_name()
         .and_then(|value| value.to_str())
@@ -400,16 +400,15 @@ fn resolve_packaged_static_root(
             "relative {env_name} paths resolve from a packaged bin/ directory; use an explicit ./ path for source-tree execution"
         ));
     }
-    let package_root = binary_directory.parent().ok_or_else(|| {
-        format!("packaged bin directory has no package root for {env_name}")
-    })?;
+    let package_root = binary_directory
+        .parent()
+        .ok_or_else(|| format!("packaged bin directory has no package root for {env_name}"))?;
     Ok(package_root.join(configured))
 }
 
 fn collect_static_files(root: &Path, label: &str) -> Result<Vec<PathBuf>, String> {
-    let root_metadata = fs::symlink_metadata(root).map_err(|error| {
-        format!("{label} {} is not available: {error}", root.display())
-    })?;
+    let root_metadata = fs::symlink_metadata(root)
+        .map_err(|error| format!("{label} {} is not available: {error}", root.display()))?;
     if root_metadata.file_type().is_symlink() || !root_metadata.is_dir() {
         return Err(format!(
             "{label} {} must be a non-symlink directory",
@@ -421,7 +420,9 @@ fn collect_static_files(root: &Path, label: &str) -> Result<Vec<PathBuf>, String
     collect_static_files_from(root, root, &mut files, label)?;
     files.sort();
     if files.len() > MAX_STATIC_FILES {
-        return Err(format!("{label} contains more than {MAX_STATIC_FILES} files"));
+        return Err(format!(
+            "{label} contains more than {MAX_STATIC_FILES} files"
+        ));
     }
     Ok(files)
 }
@@ -455,7 +456,9 @@ fn collect_static_files_from(
                 .map_err(|_| format!("{label} entry escaped its configured root"))?;
             files.push(relative.to_owned());
             if files.len() > MAX_STATIC_FILES {
-                return Err(format!("{label} contains more than {MAX_STATIC_FILES} files"));
+                return Err(format!(
+                    "{label} contains more than {MAX_STATIC_FILES} files"
+                ));
             }
         } else {
             return Err(format!(
@@ -481,9 +484,8 @@ fn validate_bootstrap_files(root: &Path, environment: &str, label: &str) -> Resu
     }
 
     let runtime_env = read_bootstrap_file(root, RUNTIME_ENV_FILE, label)?;
-    let runtime_env: Value = serde_json::from_slice(&runtime_env).map_err(|error| {
-        format!("{RUNTIME_ENV_FILE} in {label} must be valid JSON: {error}")
-    })?;
+    let runtime_env: Value = serde_json::from_slice(&runtime_env)
+        .map_err(|error| format!("{RUNTIME_ENV_FILE} in {label} must be valid JSON: {error}"))?;
     validate_runtime_env(&runtime_env, environment, label)
 }
 
@@ -505,9 +507,8 @@ fn read_bootstrap_file(root: &Path, relative: &str, label: &str) -> Result<Vec<u
             "required {relative} in {label} must contain 1..={MAX_BOOTSTRAP_FILE_BYTES} bytes"
         ));
     }
-    let bytes = fs::read(&path).map_err(|error| {
-        format!("required {relative} could not be read from {label}: {error}")
-    })?;
+    let bytes = fs::read(&path)
+        .map_err(|error| format!("required {relative} could not be read from {label}: {error}"))?;
     if bytes.is_empty() || bytes.len() as u64 > MAX_BOOTSTRAP_FILE_BYTES {
         return Err(format!(
             "required {relative} in {label} changed during validation"
@@ -583,14 +584,8 @@ async fn serve_adaptive_request(
     };
 
     let (root, spa_fallback) = match selected {
-        AdaptiveSurface::Pc => (
-            &config.pc.as_ref().expect("pc selected").root,
-            true,
-        ),
-        AdaptiveSurface::H5 => (
-            &config.h5.as_ref().expect("h5 selected").root,
-            true,
-        ),
+        AdaptiveSurface::Pc => (&config.pc.as_ref().expect("pc selected").root, true),
+        AdaptiveSurface::H5 => (&config.h5.as_ref().expect("h5 selected").root, true),
         AdaptiveSurface::Static => (
             &config
                 .static_fallback
@@ -619,9 +614,7 @@ async fn serve_adaptive_request(
                         .is_some_and(|name| name == INDEX_FILE)
             }) {
                 let mut response = serve_index_with_bootstrap_token(root, file, token, &method);
-                response
-                    .headers_mut()
-                    .insert(VARY, adaptive_vary_header());
+                response.headers_mut().insert(VARY, adaptive_vary_header());
                 return response;
             }
             let mut response = serve_opened_file(file, &method, request.headers()).await;
@@ -631,13 +624,10 @@ async fn serve_adaptive_request(
             response
                 .headers_mut()
                 .insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+            response.headers_mut().insert(VARY, adaptive_vary_header());
             response
                 .headers_mut()
-                .insert(VARY, adaptive_vary_header());
-            response.headers_mut().insert(
-                ACCEPT_CH,
-                HeaderValue::from_static("Sec-CH-UA-Mobile"),
-            );
+                .insert(ACCEPT_CH, HeaderValue::from_static("Sec-CH-UA-Mobile"));
             response
         }
         StaticPathTarget::RedirectToDirectory => redirect_to_directory(request.uri()),
@@ -845,15 +835,9 @@ mod tests {
 
     #[test]
     fn production_requires_a_preflighted_static_root() {
-        let missing = AdaptiveAppShellConfig::resolve(
-            "standalone",
-            "production",
-            None,
-            None,
-            None,
-            None,
-        )
-        .expect_err("production must require at least one Adaptive Web root");
+        let missing =
+            AdaptiveAppShellConfig::resolve("standalone", "production", None, None, None, None)
+                .expect_err("production must require at least one Adaptive Web root");
         assert!(missing.contains(PC_STATIC_ROOT_ENV));
 
         let temp = TempDir::new().unwrap();
@@ -881,16 +865,11 @@ mod tests {
         )
         .unwrap()
         .is_none());
-        assert!(AdaptiveAppShellConfig::resolve(
-            "cloud",
-            "production",
-            None,
-            None,
-            None,
-            None,
-        )
-        .unwrap()
-        .is_none());
+        assert!(
+            AdaptiveAppShellConfig::resolve("cloud", "production", None, None, None, None,)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
@@ -923,9 +902,11 @@ mod tests {
         )
         .unwrap_err()
         .contains("explicit ./ path"));
-        assert!(resolve_static_root(PathBuf::from("../outside"), PC_STATIC_ROOT_ENV)
-            .unwrap_err()
-            .contains("parent-directory"));
+        assert!(
+            resolve_static_root(PathBuf::from("../outside"), PC_STATIC_ROOT_ENV)
+                .unwrap_err()
+                .contains("parent-directory")
+        );
     }
 
     #[test]
@@ -1092,12 +1073,18 @@ mod tests {
                 "path={path}"
             );
             assert_eq!(
-                response.headers().get(VARY).and_then(|value| value.to_str().ok()),
+                response
+                    .headers()
+                    .get(VARY)
+                    .and_then(|value| value.to_str().ok()),
                 Some("User-Agent, Sec-CH-UA-Mobile"),
                 "adaptive error responses must vary by client class, path={path}"
             );
             assert_eq!(
-                response.headers().get(ACCEPT_CH).and_then(|value| value.to_str().ok()),
+                response
+                    .headers()
+                    .get(ACCEPT_CH)
+                    .and_then(|value| value.to_str().ok()),
                 Some("Sec-CH-UA-Mobile"),
                 "adaptive error responses must advertise the client hint, path={path}"
             );
@@ -1186,11 +1173,7 @@ mod tests {
     #[tokio::test]
     async fn adaptive_shell_uses_static_fallback_when_neither_spa_exists() {
         let static_root = TempDir::new().unwrap();
-        fs::write(
-            static_root.path().join("readme.txt"),
-            "static-only",
-        )
-        .unwrap();
+        fs::write(static_root.path().join("readme.txt"), "static-only").unwrap();
         let config = AdaptiveAppShellConfig {
             pc: None,
             h5: None,

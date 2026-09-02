@@ -114,8 +114,7 @@ mod tests {
     #[test]
     fn accepts_supported_variables() {
         validate_proxy_set_header_entry("Host $host").expect("host");
-        validate_proxy_set_header_entry("X-Forwarded-For $proxy_add_x_forwarded_for")
-            .expect("xff");
+        validate_proxy_set_header_entry("X-Forwarded-For $proxy_add_x_forwarded_for").expect("xff");
         validate_proxy_set_header_entry("Host $host:$server_port").expect("server_port");
     }
 

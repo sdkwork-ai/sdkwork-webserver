@@ -80,10 +80,12 @@ server { # after block open
 
 #[test]
 fn hash_mid_token_is_part_of_the_token() {
-    let directives = parse_ok(
-        "server {\n    set $x http://host/path#fragment;\n    set $y token#tag;\n}\n",
+    let directives =
+        parse_ok("server {\n    set $x http://host/path#fragment;\n    set $y token#tag;\n}\n");
+    assert_eq!(
+        directives[0].children[0].args,
+        vec!["$x", "http://host/path#fragment"]
     );
-    assert_eq!(directives[0].children[0].args, vec!["$x", "http://host/path#fragment"]);
     assert_eq!(directives[0].children[1].args, vec!["$y", "token#tag"]);
 }
 
@@ -193,7 +195,16 @@ fn unterminated_constructs_are_rejected() {
 #[test]
 fn parse_errors_never_panic_on_adversarial_input() {
     let cases = [
-        "\u{0}", "\\", "\"", "'", "$", "${", "{}", "{{", "}}", "{{}}",
+        "\u{0}",
+        "\\",
+        "\"",
+        "'",
+        "$",
+        "${",
+        "{}",
+        "{{",
+        "}}",
+        "{{}}",
         "server { location / { location / { } } }",
         "server { location / { if ($x) { return 200; } } }",
         "server { server { server { server { } } } }",

@@ -30,10 +30,7 @@ pub(super) fn build_consistent_hash_points(
             digest.update(port.as_bytes());
             digest.update(&prev_hash);
             let hash = digest.finalize();
-            points.push(ConsistentHashPoint {
-                hash,
-                target_index,
-            });
+            points.push(ConsistentHashPoint { hash, target_index });
             prev_hash = hash.to_le_bytes();
         }
     }

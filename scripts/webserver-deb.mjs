@@ -61,8 +61,8 @@ const PC_RUNTIME_ENV_SOURCES = Object.freeze({
 const BINARIES = [
   'sdkwork-api-webserver-standalone-gateway',
   'sdkwork-webserver-website-delivery-edge-runtime',
-  'sdkwork-web-node-daemon',
-  'sdkwork-web-agent',
+  'sdkwork-webserver-node-daemon',
+  'sdkwork-webserver-agent',
   'sdkwork-webserver-certificate-worker',
 ];
 const MAX_DEB_BYTES = 768 * 1024 * 1024;

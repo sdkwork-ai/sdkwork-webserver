@@ -2,8 +2,7 @@
 //! companion `stream-conf.d`) into the runtime app model.
 
 use std::{
-    fs,
-    io,
+    fs, io,
     path::{Path, PathBuf},
 };
 
@@ -22,10 +21,7 @@ pub struct NginxLoadReport {
 /// mixed tree. When `path` is a site directory, companion `stream-conf.d`
 /// directories walking up from the path are also loaded so TCP/UDP `stream`
 /// servers start alongside HTTP virtual hosts.
-pub fn load_nginx_compat(
-    path: &Path,
-    app_key: &str,
-) -> Result<NginxLoadReport, NginxConfigError> {
+pub fn load_nginx_compat(path: &Path, app_key: &str) -> Result<NginxLoadReport, NginxConfigError> {
     let mut skipped = Vec::new();
     let materialized = if path.is_file() {
         Some(load_one_file(path, app_key)?)
@@ -80,7 +76,9 @@ fn load_directory(
         match load_one_file(&file, app_key) {
             Ok(app) => {
                 materialized = Some(match materialized {
-                    Some(existing) => merge_nginx_apps(existing, app).map_err(NginxConfigError::from)?,
+                    Some(existing) => {
+                        merge_nginx_apps(existing, app).map_err(NginxConfigError::from)?
+                    }
                     None => app,
                 });
             }
@@ -112,7 +110,10 @@ fn wrap_bare_stream_file(path: &Path, text: String) -> String {
     if !is_stream_config_path(path) {
         return text;
     }
-    if text.lines().any(|line| line.trim_start().starts_with("stream")) {
+    if text
+        .lines()
+        .any(|line| line.trim_start().starts_with("stream"))
+    {
         return text;
     }
     format!("stream {{\n{text}\n}}\n")
@@ -165,9 +166,15 @@ impl NginxConfigError {
 impl From<super::parser::NginxParseError> for NginxConfigError {
     fn from(error: super::parser::NginxParseError) -> Self {
         match error {
-            super::parser::NginxParseError::Syntax { path, line, message } => {
-                Self::Unsupported { path, line, message }
-            }
+            super::parser::NginxParseError::Syntax {
+                path,
+                line,
+                message,
+            } => Self::Unsupported {
+                path,
+                line,
+                message,
+            },
             other => Self::unsupported_path(Path::new("."), other),
         }
     }

@@ -4,6 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { parseDotEnv } from '../../../sdkwork-specs/tools/postgres/postgres-config.mjs';
+import { parse as parseYaml } from 'yaml';
 import {
   resolveExampleEnvironment,
   validateDeploymentEnvironment,
@@ -634,4 +635,44 @@ test('release smoke is hermetic against host runtime config (RUNTIME_DIRECTORY_S
   assert.doesNotMatch(body, /^\s*\[ingress\]/mu, 'hermetic config must not declare [ingress]');
   assert.match(body, /^\[profile\]/mu, 'hermetic config must declare [profile]');
   assert.match(body, /environment = "production"/u, 'hermetic config pins the production profile');
+});
+
+test('every shipped compose service declares bounded log rotation (DEPLOYMENT_SPEC §6)', () => {
+  const composeFiles = [
+    'docker-compose.yml',
+    'docker-compose.bundle.yml',
+    'docker-compose.bundle-gateway.yml',
+    'docker-compose.development.yml',
+    'docker-compose.test.yml',
+    'docker-compose.staging.yml',
+    'docker-compose.production.yml',
+  ];
+  // Resolve YAML merge keys (`<<: *anchor`) the way compose applies them so
+  // services inheriting logging through x-webserver-common count as covered.
+  const resolveMerge = (service) => {
+    if (service && typeof service === 'object' && service['<<'] && typeof service['<<'] === 'object') {
+      return { ...resolveMerge(service['<<']), ...service };
+    }
+    return service;
+  };
+  for (const file of composeFiles) {
+    const doc = parseYaml(
+      readFileSync(path.join(appRoot, 'deployments', 'docker', file), 'utf8'),
+    );
+    const services = Object.entries(doc.services ?? {});
+    assert.ok(services.length > 0, `${file} must declare services`);
+    for (const [name, service] of services) {
+      const merged = resolveMerge(service);
+      const logging = merged.logging;
+      assert.equal(
+        logging?.driver,
+        'json-file',
+        `${file}/${name} must pin the json-file log driver`,
+      );
+      assert.ok(
+        logging?.options?.['max-size'] && logging?.options?.['max-file'],
+        `${file}/${name} must bound log size and file count`,
+      );
+    }
+  }
 });

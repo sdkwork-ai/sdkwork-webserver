@@ -61,7 +61,7 @@ directory and the `sdkwork_ai_test` database. `standalone.production` binds `0.0
 `server.sdkwork.com` with ACME production issuance and the `sdkwork_ai_prod` database.
 
 `pnpm dev:cloud` selects `cloud.development` with runtime target `server`. The plan starts only the
-local `sdkwork-web-node-daemon` client and resolves the deployed development surfaces from explicit
+local `sdkwork-webserver-node-daemon` client and resolves the deployed development surfaces from explicit
 `https://*-dev.sdkwork.com` URLs. It does not start a gateway, API listener, database, migration,
 seed process, or deployed-service worker.
 

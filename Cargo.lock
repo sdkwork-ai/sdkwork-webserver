@@ -4110,13 +4110,13 @@ dependencies = [
  "sdkwork-web-bootstrap",
  "sdkwork-web-contract",
  "sdkwork-web-core",
- "sdkwork-web-internal-sdk",
  "sdkwork-web-store-sqlx",
  "sdkwork-webserver-contract",
  "sdkwork-webserver-core",
  "sdkwork-webserver-delivery-runtime",
  "sdkwork-webserver-drive-provider",
  "sdkwork-webserver-http-host",
+ "sdkwork-webserver-internal-sdk-generated-rust",
  "sdkwork-webserver-knowledgebase-provider",
  "sdkwork-webserver-resolver-cache",
  "serde",
@@ -4370,7 +4370,7 @@ dependencies = [
  "sdkwork-deploy-contract",
  "sdkwork-deploy-runtime-compiler",
  "sdkwork-utils-rust",
- "sdkwork-web-internal-sdk",
+ "sdkwork-webserver-internal-sdk-generated-rust",
  "serde_json",
 ]
 
@@ -5322,26 +5322,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sdkwork-web-agent"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "dotenvy",
- "sdkwork-utils-rust",
- "sdkwork-web-backend-sdk",
- "sdkwork-webserver-contract",
- "sdkwork-webserver-edge-runtime",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "url",
-]
-
-[[package]]
 name = "sdkwork-web-axum"
 version = "0.1.0"
 dependencies = [
@@ -5355,17 +5335,6 @@ dependencies = [
  "tower",
  "tower-http 0.7.0",
  "tracing",
-]
-
-[[package]]
-name = "sdkwork-web-backend-sdk"
-version = "1.0.0"
-dependencies = [
- "http 1.5.0",
- "reqwest 0.13.4",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -5418,17 +5387,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sdkwork-web-internal-sdk"
-version = "1.0.0"
-dependencies = [
- "http 1.5.0",
- "reqwest 0.13.4",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "sdkwork-web-store-sqlx"
 version = "0.1.0"
 dependencies = [
@@ -5476,6 +5434,37 @@ dependencies = [
  "tracing",
  "url",
  "x509-parser",
+]
+
+[[package]]
+name = "sdkwork-webserver-agent"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "dotenvy",
+ "sdkwork-utils-rust",
+ "sdkwork-webserver-backend-sdk-generated-rust",
+ "sdkwork-webserver-contract",
+ "sdkwork-webserver-edge-runtime",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+]
+
+[[package]]
+name = "sdkwork-webserver-backend-sdk-generated-rust"
+version = "1.0.0"
+dependencies = [
+ "http 1.5.0",
+ "reqwest 0.13.4",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -5608,6 +5597,17 @@ dependencies = [
  "sdkwork-webserver-contract",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "sdkwork-webserver-internal-sdk-generated-rust"
+version = "1.0.0"
+dependencies = [
+ "http 1.5.0",
+ "reqwest 0.13.4",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

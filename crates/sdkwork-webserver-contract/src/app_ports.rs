@@ -67,20 +67,35 @@ pub struct ListAuditLogsQuery {
         deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_i32"
     )]
     pub page_size: Option<i32>,
-    #[serde(default, deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_string")]
+    #[serde(
+        default,
+        deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_string"
+    )]
     pub cursor: Option<String>,
-    #[serde(default, deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_string")]
+    #[serde(
+        default,
+        deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_string"
+    )]
     pub target_type: Option<String>,
-    #[serde(default, deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_string")]
+    #[serde(
+        default,
+        deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_string"
+    )]
     pub action: Option<String>,
     #[serde(
         default,
         deserialize_with = "sdkwork_utils_rust::serde_int64::option_query::deserialize"
     )]
     pub operator_id: Option<i64>,
-    #[serde(default, deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_string")]
+    #[serde(
+        default,
+        deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_string"
+    )]
     pub start_date: Option<String>,
-    #[serde(default, deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_string")]
+    #[serde(
+        default,
+        deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_string"
+    )]
     pub end_date: Option<String>,
 }
 

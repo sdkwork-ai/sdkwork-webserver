@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "name": "sdkwork-webserver-backend-sdk",
+  "version": "1.0.0",
+  "language": "php",
+  "sdkType": "backend",
+  "packageName": "sdkwork/web-backend-sdk",
+  "transportPackageName": "sdkwork/web-backend-sdk",
+  "consumerPackageName": "sdkwork/web-backend-sdk",
+  "generator": "@sdkwork/sdk-generator",
+  "capabilities": {
+    "supportsGeneratedTests": true,
+    "supportsReadme": true,
+    "supportsCustomScaffold": true,
+    "supportsPublishWorkflow": true,
+    "hasDistinctBuildStep": false
+  },
+  "generation": {
+    "readme": true,
+    "tests": false
+  },
+  "ownership": {
+    "generatedOwnership": "generated",
+    "scaffoldOwnership": "scaffold",
+    "scaffoldRoots": [
+      "custom/"
+    ],
+    "stateRoots": [
+      ".sdkwork/"
+    ]
+  }
+}

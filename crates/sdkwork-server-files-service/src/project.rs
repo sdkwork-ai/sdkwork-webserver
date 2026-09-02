@@ -51,18 +51,18 @@ const MARKERS: &[(ProjectType, &[&str])] = &[
         ProjectType::SdkworkWorkspace,
         &["sdkwork.app.config.json", "sdkwork.workflow.json"],
     ),
+    (ProjectType::H5App, &["uni.scss", "project.config.json"]),
+    (ProjectType::PcApp, &["webpack.config.js"]),
+    // Vite / tsconfig are shared between H5 and PC; decide by the presence of
+    // an H5-typical manifest, otherwise treat as a generic web app.
     (
         ProjectType::H5App,
-        &["uni.scss", "project.config.json"],
+        &["vite.config.ts", "vite.config.js", "manifest.json"],
     ),
     (
         ProjectType::PcApp,
-        &["webpack.config.js"],
+        &["vite.config.ts", "vite.config.js", "tsconfig.json"],
     ),
-    // Vite / tsconfig are shared between H5 and PC; decide by the presence of
-    // an H5-typical manifest, otherwise treat as a generic web app.
-    (ProjectType::H5App, &["vite.config.ts", "vite.config.js", "manifest.json"]),
-    (ProjectType::PcApp, &["vite.config.ts", "vite.config.js", "tsconfig.json"]),
     (ProjectType::NodeBackend, &["package.json"]),
 ];
 

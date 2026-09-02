@@ -16,16 +16,17 @@ test('root dev commands use the SDKWork app lifecycle for this server applicatio
     'pnpm exec sdkwork-app dev --deployment-profile standalone',
   );
   assert.equal(
-    packageJson.scripts['dev:cloud'],
-    'pnpm exec sdkwork-app dev --deployment-profile cloud',
-  );
-  assert.equal(
     packageJson.scripts['dev:server'],
     'pnpm exec sdkwork-app dev --runtime-target server --deployment-profile standalone',
   );
   assert.equal(packageJson.scripts['dev:browser'], undefined);
   assert.equal(packageJson.scripts['dev:browser:postgres'], undefined);
   assert.equal(packageJson.scripts['dev:browser:postgres:standalone'], undefined);
+  // Web Server is standalone-only: no retired *:cloud dev scripts may be resurrected.
+  assert.equal(packageJson.scripts['dev:cloud'], undefined);
+  for (const [name] of Object.entries(packageJson.scripts)) {
+    assert.ok(!name.endsWith(':cloud'), `script "${name}" must not exist (standalone-only)`);
+  }
 });
 
 test('deployment index owns all supported Web Server profiles', () => {
@@ -36,12 +37,22 @@ test('deployment index owns all supported Web Server profiles', () => {
   assert.equal(deployment.topology, '../specs/topology.spec.json');
   assert.equal(deployment.defaultProfile, 'standalone.development');
   assert.deepEqual(Object.keys(deployment.profiles).sort(), [
-    'cloud.development',
-    'cloud.production',
+    'standalone.demo',
     'standalone.development',
     'standalone.production',
+    'standalone.staging',
+    'standalone.test',
   ]);
-  assert.equal(deployment.environments.development.cloudApiBaseUrl, 'https://api-dev.sdkwork.com');
+  for (const profileName of Object.keys(deployment.profiles)) {
+    assert.ok(
+      profileName.startsWith('standalone.'),
+      `profile "${profileName}" must be standalone (standalone-only deployment)`,
+    );
+  }
+  assert.equal(
+    deployment.environments.development.applicationOrigin,
+    'http://127.0.0.1:3800',
+  );
   assert.equal(deployment.environments.production.applicationOrigin, 'https://server.sdkwork.com');
 });
 

@@ -47,9 +47,14 @@ pub(crate) fn federated_iam_module_manifest_paths() -> Result<Vec<PathBuf>, Stri
 fn iam_registry_enabled_modules() -> std::collections::BTreeSet<String> {
     let mut enabled = std::collections::BTreeSet::new();
     let candidates = [
-        env_app_root("SDKWORK_IAM_APP_ROOT").map(|root| root.join("iam/registry/iam-registry.config.json")),
-        Some(PathBuf::from("/app/share/sdkwork/iam/iam/registry/iam-registry.config.json")),
-        Some(PathBuf::from("/usr/share/sdkwork/iam/iam/registry/iam-registry.config.json")),
+        env_app_root("SDKWORK_IAM_APP_ROOT")
+            .map(|root| root.join("iam/registry/iam-registry.config.json")),
+        Some(PathBuf::from(
+            "/app/share/sdkwork/iam/iam/registry/iam-registry.config.json",
+        )),
+        Some(PathBuf::from(
+            "/usr/share/sdkwork/iam/iam/registry/iam-registry.config.json",
+        )),
         Some(sibling_app_root("sdkwork-iam").join("iam/registry/iam-registry.config.json")),
     ];
     for path in candidates.into_iter().flatten() {
@@ -59,7 +64,10 @@ fn iam_registry_enabled_modules() -> std::collections::BTreeSet<String> {
         let Ok(value) = serde_json::from_str::<serde_json::Value>(&raw) else {
             continue;
         };
-        if let Some(items) = value.get("enabledModules").and_then(|entry| entry.as_array()) {
+        if let Some(items) = value
+            .get("enabledModules")
+            .and_then(|entry| entry.as_array())
+        {
             for item in items {
                 if let Some(module_id) = item.as_str() {
                     enabled.insert(module_id.to_string());

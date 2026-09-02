@@ -13,27 +13,27 @@ import {
 import { resolveModuleBrowserBuildPlan } from './run-module-browser-build.mjs';
 
 const WORKSPACE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-const IM_ROOT = path.join(WORKSPACE_ROOT, 'sdkwork-im');
+const CMS_ROOT = path.join(WORKSPACE_ROOT, 'sdkwork-cms');
 
 test('DEPLOYMENT_ENVIRONMENT_ALIASES maps lifecycle tiers to dist aliases', () => {
   assert.equal(DEPLOYMENT_ENVIRONMENT_ALIASES.development, 'dev');
   assert.equal(DEPLOYMENT_ENVIRONMENT_ALIASES.production, 'prod');
 });
 
-test('resolveArchitectures all discovers pc and h5 for sdkwork-im', () => {
-  const architectures = resolveArchitectures(IM_ROOT, 'all');
+test('resolveArchitectures all discovers pc and h5 for sdkwork-cms', () => {
+  const architectures = resolveArchitectures(CMS_ROOT, 'all');
   assert.deepEqual(new Set(architectures), new Set(['pc', 'h5']));
 });
 
-test('buildModuleBrowser dry-run plans both surfaces for sdkwork-im dev', () => {
+test('buildModuleBrowser dry-run plans both surfaces for sdkwork-cms dev', () => {
   const result = buildModuleBrowser({
     architecture: 'all',
     deploymentEnvironment: 'development',
     dryRun: true,
-    module: 'sdkwork-im',
+    module: 'sdkwork-cms',
     spaceCheckoutRoot: WORKSPACE_ROOT,
   });
-  assert.equal(result.module, 'sdkwork-im');
+  assert.equal(result.module, 'sdkwork-cms');
   assert.equal(result.plans.length, 2);
   assert.ok(result.plans.every((plan) => plan.outDir === 'dist/standalone/dev'));
 });
@@ -44,7 +44,7 @@ test('resolveModuleBrowserBuildPlan defaults to host mode', () => {
     deploymentEnvironment: 'development',
     deploymentProfile: 'standalone',
     dryRun: true,
-    module: 'sdkwork-im',
+    module: 'sdkwork-cms',
   }, {
     spaceCheckoutRoot: WORKSPACE_ROOT,
   });

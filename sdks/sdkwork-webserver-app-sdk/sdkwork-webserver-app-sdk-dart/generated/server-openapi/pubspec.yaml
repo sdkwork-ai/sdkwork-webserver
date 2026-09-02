@@ -1,0 +1,15 @@
+name: sdkwork_webserver_app_sdk_generated_rust
+description: sdkwork-webserver-app-sdk Dart SDK
+version: 1.0.0
+homepage: https://github.com/sdkwork-ai/sdkwork-sdk-generator
+repository: https://github.com/sdkwork-ai/sdkwork-sdk-generator
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  http: ^1.2.0
+
+dev_dependencies:
+  test: ^1.24.0
+  lints: ^3.0.0

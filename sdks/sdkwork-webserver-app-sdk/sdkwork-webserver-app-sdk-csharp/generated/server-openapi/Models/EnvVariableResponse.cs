@@ -1,0 +1,15 @@
+using System;
+using System.Collections.Generic;
+using System.Text.Json.Serialization;
+
+namespace SDKWork.Webserver.AppSdk.Models
+{
+    public class EnvVariableResponse
+    {
+        public string? Id { get; set; }
+        public string? Key { get; set; }
+        public string? Environment { get; set; }
+        public bool? IsSecret { get; set; }
+        public string? CreatedAt { get; set; }
+    }
+}

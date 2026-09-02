@@ -49,7 +49,8 @@ pub const SERVERS: &str = "/backend/v3/api/servers";
 pub const SERVER_FILES_NODES: &str = "/backend/v3/api/server-files/nodes";
 pub const SERVER_FILES_NODE_BROWSE: &str = "/backend/v3/api/server-files/nodes/{nodeId}/browse";
 pub const SERVER_FILES_NODE_READ: &str = "/backend/v3/api/server-files/nodes/{nodeId}/read";
-pub const SERVER_FILES_NODE_OPERATIONS: &str = "/backend/v3/api/server-files/nodes/{nodeId}/operations";
+pub const SERVER_FILES_NODE_OPERATIONS: &str =
+    "/backend/v3/api/server-files/nodes/{nodeId}/operations";
 pub const AUDIT_LOGS: &str = "/backend/v3/api/audit_logs";
 pub const AGENT_HEARTBEAT: &str = "/backend/v3/api/agent/heartbeat";
 pub const AGENT_SYNC: &str = "/backend/v3/api/agent/sync";

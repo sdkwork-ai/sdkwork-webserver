@@ -9,11 +9,10 @@ use url::Url;
 
 use super::{
     is_supported_upstream_allowed_cidr, upstream_ip_is_allowed, AppDomainFallbackLookup,
-    UsageMeteringChannel,
     CertificateSource, ConfigDiagnostic, ListenerProtocol, ResourceConfig, RouteConfig,
     RoutePathType, SecurityHeadersConfig, StreamTargetConfig, TlsVersion, UpstreamConfig,
-    UpstreamLoadBalancingStrategy, UpstreamTlsTrustMode, WebServerAppConfig, WebServerConfigError,
-    WebServerLimits,
+    UpstreamLoadBalancingStrategy, UpstreamTlsTrustMode, UsageMeteringChannel, WebServerAppConfig,
+    WebServerConfigError, WebServerLimits,
 };
 
 const MAX_DIAGNOSTICS: usize = 128;
@@ -932,9 +931,15 @@ impl SemanticValidator {
         for (index, zone) in config.limit_req_zones.iter().enumerate() {
             let path = format!("/limitReqZones/{index}");
             if zone.name.is_empty() {
-                self.push(format!("{path}/name"), "limitReqZone name must not be empty");
+                self.push(
+                    format!("{path}/name"),
+                    "limitReqZone name must not be empty",
+                );
             } else if !names.insert(zone.name.as_str()) {
-                self.push(format!("{path}/name"), format!("duplicate limitReqZone name {}", zone.name));
+                self.push(
+                    format!("{path}/name"),
+                    format!("duplicate limitReqZone name {}", zone.name),
+                );
             }
             if zone.key != "$binary_remote_addr" && zone.key != "$remote_addr" {
                 self.push(
@@ -975,7 +980,10 @@ impl SemanticValidator {
                 || suffix.contains('/')
                 || suffix.len() > 253
                 || !suffix.bytes().all(|byte| {
-                    byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'.' || byte == b'-'
+                    byte.is_ascii_lowercase()
+                        || byte.is_ascii_digit()
+                        || byte == b'.'
+                        || byte == b'-'
                 })
             {
                 self.push(
@@ -991,8 +999,7 @@ impl SemanticValidator {
             AppDomainFallbackLookup::Embedded => {}
             AppDomainFallbackLookup::Http { endpoint, .. } => {
                 if endpoint.trim().is_empty()
-                    || !endpoint.starts_with("https://")
-                        && !endpoint.starts_with("http://")
+                    || !endpoint.starts_with("https://") && !endpoint.starts_with("http://")
                 {
                     self.push(
                         "/appDomainFallback/lookup/endpoint",
@@ -1039,8 +1046,7 @@ impl SemanticValidator {
         }
         if let UsageMeteringChannel::Http { endpoint, .. } = &metering.channel {
             if endpoint.trim().is_empty()
-                || !endpoint.starts_with("https://")
-                    && !endpoint.starts_with("http://")
+                || !endpoint.starts_with("https://") && !endpoint.starts_with("http://")
             {
                 self.push(
                     "/usageMetering/channel/endpoint",
@@ -1532,26 +1538,27 @@ impl SemanticValidator {
         for (index, stream) in config.streams.iter().enumerate() {
             let path = format!("/streams/{index}");
             if stream.bind.parse::<IpAddr>().is_err() {
-                self.push(format!("{path}/bind"), "bind must be an explicit IPv4 or IPv6 address");
+                self.push(
+                    format!("{path}/bind"),
+                    "bind must be an explicit IPv4 or IPv6 address",
+                );
             }
             let socket_key = stream.socket_key();
             if !sockets.insert(socket_key.clone()) {
-                self.push(&path, "another stream server already owns this bind and port");
+                self.push(
+                    &path,
+                    "another stream server already owns this bind and port",
+                );
             }
-            if config
-                .listeners
-                .iter()
-                .any(|listener| format!("{}:{}", listener.bind.to_ascii_lowercase(), listener.port) == socket_key)
-            {
+            if config.listeners.iter().any(|listener| {
+                format!("{}:{}", listener.bind.to_ascii_lowercase(), listener.port) == socket_key
+            }) {
                 self.push(&path, "an http listener already owns this bind and port");
             }
             match &stream.target {
                 StreamTargetConfig::Upstream { name } => {
                     if !upstreams.contains_key(name.as_str()) {
-                        self.push(
-                            format!("{path}/target"),
-                            format!("unknown upstream {name}"),
-                        );
+                        self.push(format!("{path}/target"), format!("unknown upstream {name}"));
                     }
                 }
                 StreamTargetConfig::Literal { host, port } => {
@@ -1565,8 +1572,7 @@ impl SemanticValidator {
             }
             match &stream.tls {
                 Some(crate::config::model::StreamTlsMode::Terminate {
-                    certificate_ref,
-                    ..
+                    certificate_ref, ..
                 }) => {
                     if certificate_ref.is_empty() {
                         self.push(
@@ -1888,10 +1894,7 @@ fn redirect_template_is_well_formed(location: &str) -> bool {
         };
         remainder = &rest[variable.len()..];
     }
-    saw_variable
-        && remainder
-            .bytes()
-            .all(|byte| (0x21..=0x7e).contains(&byte))
+    saw_variable && remainder.bytes().all(|byte| (0x21..=0x7e).contains(&byte))
 }
 
 fn validate_security_headers(

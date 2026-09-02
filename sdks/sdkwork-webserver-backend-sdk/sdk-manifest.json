@@ -1,0 +1,195 @@
+{
+  "schemaVersion": 1,
+  "sdkFamily": "sdkwork-webserver-backend-sdk",
+  "sdkName": "sdkwork-webserver-backend-sdk",
+  "packageName": "@sdkwork/webserver-backend-sdk",
+  "transportPackageName": "sdkwork-webserver-backend-sdk-generated-typescript",
+  "typescript": {
+    "composedRoot": "sdkwork-webserver-backend-sdk-typescript",
+    "composedEntry": "sdkwork-webserver-backend-sdk-typescript/src/index.ts",
+    "transportRoot": "sdkwork-webserver-backend-sdk-typescript/generated/server-openapi",
+    "transportEntry": "sdkwork-webserver-backend-sdk-typescript/generated/server-openapi/src/index.ts"
+  },
+  "workspace": "sdkwork-webserver-backend-sdk",
+  "title": "SDKWork Webserver Backend API SDK",
+  "apiVersion": "1.0.0",
+  "openapiVersion": "3.1.2",
+  "authoritySpec": "openapi/sdkwork-webserver-backend-api.openapi.json",
+  "generationInputSpec": "openapi/sdkwork-webserver-backend-api.sdkgen.yaml",
+  "derivedSpecs": {
+    "default": "openapi/sdkwork-webserver-backend-api.sdkgen.yaml",
+    "flutter": "openapi/sdkwork-webserver-backend-api.sdkgen.yaml"
+  },
+  "sdkOwner": "sdkwork-webserver",
+  "apiAuthority": "sdkwork-webserver-backend-api",
+  "discoverySurface": {
+    "sdkTarget": "backend",
+    "apiPrefix": "/backend/v3/api",
+    "schemaUrl": "/backend/v3/openapi.json",
+    "generatedProtocols": [
+      "http-openapi"
+    ],
+    "manualTransports": []
+  },
+  "metadata": {
+    "managedBy": "tools/materialize_web_phase1_contracts.mjs",
+    "standardVersion": "2026-06-26"
+  },
+  "languages": [
+    {
+      "language": "typescript",
+      "workspace": "sdkwork-webserver-backend-sdk-typescript",
+      "generationState": "materialized",
+      "releaseState": "not_published",
+      "packagePath": "sdkwork-webserver-backend-sdk-typescript/generated/server-openapi",
+      "manifestPath": "sdkwork-webserver-backend-sdk-typescript/generated/server-openapi/package.json",
+      "version": "1.0.0",
+      "description": "Generator-owned typescript transport SDK for SDKWork Webserver Backend API.",
+      "generatedPath": "sdkwork-webserver-backend-sdk-typescript/generated/server-openapi",
+      "consumerPackageName": "@sdkwork/webserver-backend-sdk",
+      "transportPackageName": "sdkwork-webserver-backend-sdk-generated-typescript"
+    },
+    {
+      "language": "dart",
+      "workspace": "sdkwork-webserver-backend-sdk-dart",
+      "generationState": "materialized",
+      "releaseState": "not_published",
+      "packagePath": "sdkwork-webserver-backend-sdk-dart/generated/server-openapi",
+      "manifestPath": "sdkwork-webserver-backend-sdk-dart/generated/server-openapi/pubspec.yaml",
+      "name": "sdkwork_webserver_backend_sdk_generated_rust",
+      "version": "1.0.0",
+      "description": "Generator-owned dart transport SDK for SDKWork Webserver Backend API.",
+      "generatedPath": "sdkwork-webserver-backend-sdk-dart/generated/server-openapi"
+    },
+    {
+      "language": "python",
+      "workspace": "sdkwork-webserver-backend-sdk-python",
+      "generationState": "materialized",
+      "releaseState": "not_published",
+      "packagePath": "sdkwork-webserver-backend-sdk-python/generated/server-openapi",
+      "manifestPath": "sdkwork-webserver-backend-sdk-python/generated/server-openapi/pyproject.toml",
+      "name": "sdkwork-webserver-backend-sdk",
+      "version": "1.0.0",
+      "description": "Generator-owned python transport SDK for SDKWork Webserver Backend API.",
+      "generatedPath": "sdkwork-webserver-backend-sdk-python/generated/server-openapi"
+    },
+    {
+      "language": "go",
+      "workspace": "sdkwork-webserver-backend-sdk-go",
+      "generationState": "materialized",
+      "releaseState": "not_published",
+      "packagePath": "sdkwork-webserver-backend-sdk-go/generated/server-openapi",
+      "manifestPath": "sdkwork-webserver-backend-sdk-go/generated/server-openapi/go.mod",
+      "name": "github.com/sdkwork/sdkwork-webserver-backend-sdk",
+      "version": "1.0.0",
+      "description": "Generator-owned go transport SDK for SDKWork Webserver Backend API.",
+      "generatedPath": "sdkwork-webserver-backend-sdk-go/generated/server-openapi"
+    },
+    {
+      "language": "java",
+      "workspace": "sdkwork-webserver-backend-sdk-java",
+      "generationState": "materialized",
+      "releaseState": "not_published",
+      "packagePath": "sdkwork-webserver-backend-sdk-java/generated/server-openapi",
+      "manifestPath": "sdkwork-webserver-backend-sdk-java/generated/server-openapi/pom.xml",
+      "name": "com.sdkwork:sdkwork-webserver-backend-sdk",
+      "version": "1.0.0",
+      "description": "Generator-owned java transport SDK for SDKWork Webserver Backend API.",
+      "generatedPath": "sdkwork-webserver-backend-sdk-java/generated/server-openapi"
+    },
+    {
+      "language": "kotlin",
+      "workspace": "sdkwork-webserver-backend-sdk-kotlin",
+      "generationState": "materialized",
+      "releaseState": "not_published",
+      "packagePath": "sdkwork-webserver-backend-sdk-kotlin/generated/server-openapi",
+      "manifestPath": "sdkwork-webserver-backend-sdk-kotlin/generated/server-openapi/build.gradle.kts",
+      "name": "com.sdkwork:sdkwork-webserver-backend-sdk",
+      "version": "1.0.0",
+      "description": "Generator-owned kotlin transport SDK for SDKWork Webserver Backend API.",
+      "generatedPath": "sdkwork-webserver-backend-sdk-kotlin/generated/server-openapi"
+    },
+    {
+      "language": "swift",
+      "workspace": "sdkwork-webserver-backend-sdk-swift",
+      "generationState": "materialized",
+      "releaseState": "not_published",
+      "packagePath": "sdkwork-webserver-backend-sdk-swift/generated/server-openapi",
+      "manifestPath": "sdkwork-webserver-backend-sdk-swift/generated/server-openapi/Package.swift",
+      "name": "sdkwork-webserver-backend-sdk",
+      "version": "1.0.0",
+      "description": "Generator-owned swift transport SDK for SDKWork Webserver Backend API.",
+      "generatedPath": "sdkwork-webserver-backend-sdk-swift/generated/server-openapi"
+    },
+    {
+      "language": "csharp",
+      "workspace": "sdkwork-webserver-backend-sdk-csharp",
+      "generationState": "materialized",
+      "releaseState": "not_published",
+      "packagePath": "sdkwork-webserver-backend-sdk-csharp/generated/server-openapi",
+      "manifestPath": "sdkwork-webserver-backend-sdk-csharp/generated/server-openapi/SDKWork.Webserver.BackendSdk.csproj",
+      "name": "SDKWork.Webserver.BackendSdk",
+      "version": "1.0.0",
+      "description": "Generator-owned csharp transport SDK for SDKWork Webserver Backend API.",
+      "generatedPath": "sdkwork-webserver-backend-sdk-csharp/generated/server-openapi"
+    },
+    {
+      "language": "flutter",
+      "workspace": "sdkwork-webserver-backend-sdk-flutter",
+      "generationState": "materialized",
+      "releaseState": "not_published",
+      "packagePath": "sdkwork-webserver-backend-sdk-flutter/generated/server-openapi",
+      "manifestPath": "sdkwork-webserver-backend-sdk-flutter/generated/server-openapi/pubspec.yaml",
+      "name": "sdkwork_webserver_backend_sdk_generated_rust",
+      "version": "1.0.0",
+      "description": "Generator-owned flutter transport SDK for SDKWork Webserver Backend API.",
+      "generatedPath": "sdkwork-webserver-backend-sdk-flutter/generated/server-openapi"
+    },
+    {
+      "language": "rust",
+      "workspace": "sdkwork-webserver-backend-sdk-rust",
+      "generationState": "materialized",
+      "releaseState": "not_published",
+      "packagePath": "sdkwork-webserver-backend-sdk-rust/generated/server-openapi",
+      "manifestPath": "sdkwork-webserver-backend-sdk-rust/generated/server-openapi/Cargo.toml",
+      "name": "sdkwork-webserver-backend-sdk",
+      "version": "1.0.0",
+      "description": "Generator-owned rust transport SDK for SDKWork Webserver Backend API.",
+      "generatedPath": "sdkwork-webserver-backend-sdk-rust/generated/server-openapi"
+    },
+    {
+      "language": "php",
+      "workspace": "sdkwork-webserver-backend-sdk-php",
+      "generationState": "materialized",
+      "releaseState": "not_published",
+      "packagePath": "sdkwork-webserver-backend-sdk-php/generated/server-openapi",
+      "manifestPath": "sdkwork-webserver-backend-sdk-php/generated/server-openapi/composer.json",
+      "name": "sdkwork/web-backend-sdk",
+      "version": "1.0.0",
+      "description": "Generator-owned php transport SDK for SDKWork Webserver Backend API.",
+      "generatedPath": "sdkwork-webserver-backend-sdk-php/generated/server-openapi"
+    },
+    {
+      "language": "ruby",
+      "workspace": "sdkwork-webserver-backend-sdk-ruby",
+      "generationState": "materialized",
+      "releaseState": "not_published",
+      "packagePath": "sdkwork-webserver-backend-sdk-ruby/generated/server-openapi",
+      "manifestPath": "sdkwork-webserver-backend-sdk-ruby/generated/server-openapi/sdkwork-webserver-backend-sdk.gemspec",
+      "name": "sdkwork-webserver-backend-sdk",
+      "version": "1.0.0",
+      "description": "Generator-owned ruby transport SDK for SDKWork Webserver Backend API.",
+      "generatedPath": "sdkwork-webserver-backend-sdk-ruby/generated/server-openapi"
+    }
+  ],
+  "sdkDependencies": [
+    {
+      "family": "sdkwork-iam-backend-sdk",
+      "reason": "Platform operator IAM for protected backend-api routes."
+    }
+  ],
+  "sdkSurface": "backend",
+  "sdkType": "backend",
+  "ownerOnlyOperationCount": 59,
+  "standardProfile": "sdkwork-v3"
+}

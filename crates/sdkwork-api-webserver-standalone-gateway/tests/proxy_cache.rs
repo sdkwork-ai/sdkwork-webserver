@@ -17,9 +17,9 @@ use axum::{
     routing::get,
     Router,
 };
-use serde_json::json;
 use sdkwork_api_webserver_standalone_gateway::run_data_plane_until;
 use sdkwork_webserver_core::load_and_compile_webserver_config;
+use serde_json::json;
 use tokio::sync::oneshot;
 
 fn free_port() -> u16 {
@@ -86,7 +86,11 @@ fn write_config(listener_port: u16, upstream_port: u16, cache_dir: &PathBuf) -> 
             }]
         }]
     });
-    fs::write(&path, serde_json::to_vec_pretty(&config).expect("serialize")).expect("write");
+    fs::write(
+        &path,
+        serde_json::to_vec_pretty(&config).expect("serialize"),
+    )
+    .expect("write");
     path
 }
 
@@ -187,7 +191,11 @@ async fn proxy_cache_serves_hit_and_stale_on_upstream_failure() {
         .expect("second");
     assert_eq!(second.status(), StatusCode::OK);
     assert_eq!(second.text().await.expect("body"), "cached-body");
-    assert_eq!(hits.load(Ordering::SeqCst), 1, "second request must be a cache hit");
+    assert_eq!(
+        hits.load(Ordering::SeqCst),
+        1,
+        "second request must be a cache hit"
+    );
 
     // Expire freshness, force upstream 5xx, expect stale body.
     tokio::time::sleep(Duration::from_millis(2_200)).await;

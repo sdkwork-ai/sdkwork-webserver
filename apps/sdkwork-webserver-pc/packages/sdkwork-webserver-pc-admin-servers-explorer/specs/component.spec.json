@@ -73,7 +73,7 @@
   "integration": {
     "authority": "Root SDKWork specs remain authoritative.",
     "dependencyPolicy": "Consume sibling packages through public exports only.",
-    "sdkPolicy": "Backend SDK access is isolated behind admin-core."
+    "sdkPolicy": "This package consumes the backend admin SDK exclusively through @sdkwork/webserver-pc-admin-core public exports (createWebserverAdminSdkClient and wire types); raw HTTP and direct generated-SDK imports are forbidden in authored UI code."
   },
   "verification": {
     "commands": [

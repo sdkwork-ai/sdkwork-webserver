@@ -61,8 +61,8 @@ pub fn merge_nginx_apps(
     }
 
     for mut resource in right.resources {
-        if let Some(unique) = resource_upstream_ref(&resource)
-            .and_then(|current| renamed_upstreams.get(current))
+        if let Some(unique) =
+            resource_upstream_ref(&resource).and_then(|current| renamed_upstreams.get(current))
         {
             resource.set_proxy_upstream_ref(unique.clone());
         }
@@ -177,7 +177,10 @@ fn merge_shared_listener(
     }
     // nginx default server: the first file loaded owns the listener default;
     // a later file's default only applies when the first declared none.
-    if left.listeners[left_index].default_virtual_host_ref.is_none() {
+    if left.listeners[left_index]
+        .default_virtual_host_ref
+        .is_none()
+    {
         left.listeners[left_index].default_virtual_host_ref =
             right_listener.default_virtual_host_ref.clone();
     }
@@ -221,7 +224,10 @@ fn extend_certificate_refs(policy: &mut TlsPolicyConfig, refs: Vec<String>) {
             .certificate_ref
             .as_deref()
             .is_some_and(|existing| existing == cert)
-            || policy.certificate_refs.iter().any(|existing| existing == &cert);
+            || policy
+                .certificate_refs
+                .iter()
+                .any(|existing| existing == &cert);
         if !already {
             policy.certificate_refs.push(cert);
         }
@@ -245,8 +251,7 @@ mod tests {
 
     #[test]
     fn merge_keeps_both_tls_virtual_hosts_on_shared_443() {
-        let left = app(
-            r#"
+        let left = app(r#"
 server {
     listen 443 ssl http2;
     server_name api.example.com;
@@ -254,10 +259,8 @@ server {
     ssl_certificate_key /etc/ssl/api.key;
     location / { proxy_pass http://127.0.0.1:3913; }
 }
-"#,
-        );
-        let right = app(
-            r#"
+"#);
+        let right = app(r#"
 server {
     listen 443 ssl http2;
     server_name web.example.com;
@@ -265,8 +268,7 @@ server {
     ssl_certificate_key /etc/ssl/web.key;
     location / { proxy_pass http://127.0.0.1:18080; }
 }
-"#,
-        );
+"#);
         let merged = merge_nginx_apps(left, right).expect("merge");
         assert_eq!(merged.virtual_hosts.len(), 2, "both TLS vhosts must remain");
         assert_eq!(merged.listeners.iter().filter(|l| l.port == 443).count(), 1);
@@ -282,25 +284,24 @@ server {
             .find(|policy| policy.id == policy_id)
             .expect("policy");
         let certs = policy.certificate_refs().collect::<Vec<_>>();
-        assert!(certs.len() >= 2, "SNI policy must reference both certificates: {certs:?}");
+        assert!(
+            certs.len() >= 2,
+            "SNI policy must reference both certificates: {certs:?}"
+        );
     }
 
     #[test]
     fn merge_concatenates_stream_servers() {
-        let left = app(
-            r#"
+        let left = app(r#"
 stream {
     server { listen 5100; proxy_pass 127.0.0.1:15100; }
 }
-"#,
-        );
-        let right = app(
-            r#"
+"#);
+        let right = app(r#"
 stream {
     server { listen 5101; proxy_pass 127.0.0.1:15101; }
 }
-"#,
-        );
+"#);
         let merged = merge_nginx_apps(left, right).expect("merge");
         assert_eq!(merged.streams.len(), 2);
     }

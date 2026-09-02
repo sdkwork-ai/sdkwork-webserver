@@ -60,7 +60,9 @@ fn stream_config(stream_port: u16, target: Value, proxy_timeout_ms: u64) -> Valu
     })
 }
 
-fn spawn_data_plane(config_path: &Path) -> (oneshot::Sender<()>, JoinHandle<Result<(), DataPlaneError>>) {
+fn spawn_data_plane(
+    config_path: &Path,
+) -> (oneshot::Sender<()>, JoinHandle<Result<(), DataPlaneError>>) {
     let compiled = sdkwork_webserver_core::load_and_compile_webserver_config(config_path)
         .expect("compile data-plane config");
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
@@ -148,13 +150,10 @@ async fn round_trip(stream_port: u16, payload: &[u8]) -> Vec<u8> {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     loop {
         let mut buffer = [0_u8; 4096];
-        let read = tokio::time::timeout_at(
-            deadline,
-            client.read(&mut buffer),
-        )
-        .await
-        .expect("echo must arrive before the deadline")
-        .expect("read echo");
+        let read = tokio::time::timeout_at(deadline, client.read(&mut buffer))
+            .await
+            .expect("echo must arrive before the deadline")
+            .expect("read echo");
         if read == 0 {
             break;
         }
@@ -194,7 +193,10 @@ async fn forwards_bytes_to_a_literal_tcp_target() {
 
     shutdown_tx.send(()).ok();
     let result = task.await.expect("data plane task must complete");
-    assert!(result.is_ok(), "data plane must shut down cleanly: {result:?}");
+    assert!(
+        result.is_ok(),
+        "data plane must shut down cleanly: {result:?}"
+    );
     if let Some(shutdown) = upstream.shutdown.take() {
         shutdown.send(()).ok();
     }
@@ -237,13 +239,10 @@ async fn forwards_bytes_through_a_declared_upstream_and_emits_proxy_protocol() {
     let mut proxy_line = Vec::new();
     let mut byte = [0_u8; 1];
     loop {
-        let read = tokio::time::timeout(
-            Duration::from_secs(5),
-            client.read(&mut byte),
-        )
-        .await
-        .expect("PROXY line must arrive")
-        .expect("read PROXY line");
+        let read = tokio::time::timeout(Duration::from_secs(5), client.read(&mut byte))
+            .await
+            .expect("PROXY line must arrive")
+            .expect("read PROXY line");
         assert!(read > 0, "upstream closed before the PROXY line");
         proxy_line.push(byte[0]);
         if proxy_line.ends_with(b"\r\n") {
@@ -270,7 +269,10 @@ async fn forwards_bytes_through_a_declared_upstream_and_emits_proxy_protocol() {
 
     shutdown_tx.send(()).ok();
     let result = task.await.expect("data plane task must complete");
-    assert!(result.is_ok(), "data plane must shut down cleanly: {result:?}");
+    assert!(
+        result.is_ok(),
+        "data plane must shut down cleanly: {result:?}"
+    );
     if let Some(shutdown) = upstream.shutdown.take() {
         shutdown.send(()).ok();
     }
@@ -309,7 +311,10 @@ async fn idle_proxy_timeout_closes_a_silent_connection() {
 
     shutdown_tx.send(()).ok();
     let result = task.await.expect("data plane task must complete");
-    assert!(result.is_ok(), "data plane must shut down cleanly: {result:?}");
+    assert!(
+        result.is_ok(),
+        "data plane must shut down cleanly: {result:?}"
+    );
     if let Some(shutdown) = upstream.shutdown.take() {
         shutdown.send(()).ok();
     }
@@ -418,7 +423,10 @@ async fn terminates_stream_tls_and_forwards_plaintext_to_upstream() {
 
     shutdown_tx.send(()).ok();
     let result = task.await.expect("data plane task must complete");
-    assert!(result.is_ok(), "data plane must shut down cleanly: {result:?}");
+    assert!(
+        result.is_ok(),
+        "data plane must shut down cleanly: {result:?}"
+    );
     if let Some(shutdown) = upstream.shutdown.take() {
         shutdown.send(()).ok();
     }
@@ -462,7 +470,10 @@ async fn ssl_preread_forwards_client_hello_preface_to_upstream() {
 
     shutdown_tx.send(()).ok();
     let result = task.await.expect("data plane task must complete");
-    assert!(result.is_ok(), "data plane must shut down cleanly: {result:?}");
+    assert!(
+        result.is_ok(),
+        "data plane must shut down cleanly: {result:?}"
+    );
     if let Some(shutdown) = upstream.shutdown.take() {
         shutdown.send(()).ok();
     }
@@ -554,5 +565,8 @@ async fn ejects_unhealthy_upstream_targets_for_stream_selection() {
 
     shutdown_tx.send(()).ok();
     let result = task.await.expect("data plane task must complete");
-    assert!(result.is_ok(), "data plane must shut down cleanly: {result:?}");
+    assert!(
+        result.is_ok(),
+        "data plane must shut down cleanly: {result:?}"
+    );
 }

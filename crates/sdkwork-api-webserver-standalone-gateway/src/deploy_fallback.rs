@@ -16,10 +16,7 @@ use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
 use async_trait::async_trait;
-use serde_json::{json, Value};
-use sdkwork_webserver_contract::provider::{
-    WebsiteProviderError, WebsiteProviderErrorKind,
-};
+use sdkwork_webserver_contract::provider::{WebsiteProviderError, WebsiteProviderErrorKind};
 use sdkwork_webserver_core::config::AppDomainFallbackConfig;
 use sdkwork_webserver_core::website_runtime::{
     compile_website_runtime_set_snapshot, website_runtime_descriptor_sha256,
@@ -31,6 +28,7 @@ use sdkwork_webserver_delivery_runtime::{
     WebsiteDeliveryError, WebsiteDeliveryExecutor, WebsiteDeliveryOutcome, WebsiteDeliveryRequest,
     WebsiteProviderRegistry,
 };
+use serde_json::{json, Value};
 use tokio::sync::Mutex;
 
 /// A resolved Deploy server: the app owning the matched hostname together
@@ -215,7 +213,11 @@ impl DeployFallbackResolver {
                     class = %class_label(&class),
                     "app-domain fallback cache expired; re-resolving"
                 );
-                (expired.descriptor, expired.descriptor_sha256, expired.attribution)
+                (
+                    expired.descriptor,
+                    expired.descriptor_sha256,
+                    expired.attribution,
+                )
             }
             None => (None, None, None),
         };
@@ -311,7 +313,9 @@ impl DeployFallbackResolver {
             .map_err(|_| contract_error("app-domain fallback descriptor hash failed"))?;
         if let Some(expected) = expected_sha256 {
             if expected != calculated {
-                return Err(contract_error("app-domain fallback descriptor hash mismatch"));
+                return Err(contract_error(
+                    "app-domain fallback descriptor hash mismatch",
+                ));
             }
         }
         descriptor_json["descriptorSha256"] = Value::String(calculated);
@@ -397,9 +401,7 @@ pub struct EmbeddedDeployServerLookup {
 
 #[cfg(feature = "management")]
 impl EmbeddedDeployServerLookup {
-    pub fn new(
-        repository: sdkwork_api_webserver_assembly::DeployRepository,
-    ) -> Self {
+    pub fn new(repository: sdkwork_api_webserver_assembly::DeployRepository) -> Self {
         Self { repository }
     }
 }

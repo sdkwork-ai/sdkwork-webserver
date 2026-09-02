@@ -49,16 +49,18 @@ pub(crate) async fn prepare_stream_listener(
     config: &StreamServerConfig,
 ) -> Result<PreparedStreamListener, DataPlaneError> {
     let address = format!("{}:{}", config.bind, config.port);
-    let socket = TcpListener::bind(&address).await.map_err(|source| {
-        DataPlaneError::Listener {
+    let socket = TcpListener::bind(&address)
+        .await
+        .map_err(|source| DataPlaneError::Listener {
             listener_id: config.id.clone(),
             source,
-        }
-    })?;
-    let local = socket.local_addr().map_err(|source| DataPlaneError::Listener {
-        listener_id: config.id.clone(),
-        source,
-    })?;
+        })?;
+    let local = socket
+        .local_addr()
+        .map_err(|source| DataPlaneError::Listener {
+            listener_id: config.id.clone(),
+            source,
+        })?;
     tracing::info!(
         stream_id = %config.id,
         address = %local,
@@ -90,9 +92,8 @@ pub(crate) async fn serve_stream_listener(
     listener: PreparedStreamListener,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), DataPlaneError> {
-    let maximum_age = Duration::from_millis(
-        runtime.current().app.config().limits.max_connection_age_ms,
-    );
+    let maximum_age =
+        Duration::from_millis(runtime.current().app.config().limits.max_connection_age_ms);
     let mut tasks = tokio::task::JoinSet::new();
     loop {
         tokio::select! {
@@ -352,9 +353,7 @@ fn resolve_target(
     round_robin: &AtomicUsize,
 ) -> Option<(String, u16, Option<(Arc<ProxyUpstream>, StreamEndpoint)>)> {
     match target {
-        StreamTargetConfig::Literal { host, port } => {
-            Some((host.clone(), *port, None))
-        }
+        StreamTargetConfig::Literal { host, port } => Some((host.clone(), *port, None)),
         StreamTargetConfig::Upstream { name } => {
             if let Some(upstream) = generation.upstreams.get(name) {
                 let endpoint = upstream.select_stream_endpoint(client_ip)?;
@@ -430,10 +429,13 @@ async fn preread_client_hello(
         if filled >= STREAM_PREREAD_MAX_BYTES {
             return Err("ClientHello exceeds stream ssl_preread buffer".to_owned());
         }
-        let read = timeout(STREAM_CONNECT_TIMEOUT, downstream.read(&mut buffer[filled..]))
-            .await
-            .map_err(|_| "ssl_preread idle timeout".to_owned())?
-            .map_err(|error| error.to_string())?;
+        let read = timeout(
+            STREAM_CONNECT_TIMEOUT,
+            downstream.read(&mut buffer[filled..]),
+        )
+        .await
+        .map_err(|_| "ssl_preread idle timeout".to_owned())?
+        .map_err(|error| error.to_string())?;
         if read == 0 {
             return Err("downstream closed before ClientHello".to_owned());
         }
@@ -477,9 +479,8 @@ fn try_parse_client_hello_sni(bytes: &[u8]) -> Option<(usize, Option<String>)> {
     if handshake.len() < 4 || handshake[0] != 0x01 {
         return Some((total, None));
     }
-    let hello_len = ((handshake[1] as usize) << 16)
-        | ((handshake[2] as usize) << 8)
-        | handshake[3] as usize;
+    let hello_len =
+        ((handshake[1] as usize) << 16) | ((handshake[2] as usize) << 8) | handshake[3] as usize;
     if handshake.len() < 4 + hello_len {
         return None;
     }

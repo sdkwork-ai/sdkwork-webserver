@@ -11,9 +11,9 @@ const WORKSPACE_ROOT = path.resolve(REPO_ROOT, '..');
 const GENERATOR_PATH = path.join(WORKSPACE_ROOT, 'sdkwork-sdk-generator', 'bin', 'sdkgen.js');
 const SDK_ROOT = path.join(REPO_ROOT, 'sdks');
 const FAMILY_NAMES = [
-  'sdkwork-web-app-sdk',
-  'sdkwork-web-backend-sdk',
-  'sdkwork-web-internal-sdk',
+  'sdkwork-webserver-app-sdk',
+  'sdkwork-webserver-backend-sdk',
+  'sdkwork-webserver-internal-sdk',
 ];
 
 function readJson(filePath) {

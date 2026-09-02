@@ -7,10 +7,9 @@ mod bootstrap;
 #[cfg(feature = "management")]
 mod credential_entry_bootstrap;
 mod data_plane;
-mod deploy_fallback;
-mod usage_metering;
 #[cfg(feature = "management")]
 mod dependency_assembly;
+mod deploy_fallback;
 #[cfg(feature = "management")]
 mod iam_module_bootstrap;
 mod metric_dimensions;
@@ -19,24 +18,13 @@ mod packaged_runtime;
 #[cfg(feature = "management")]
 mod profile;
 mod provider_event_ingress;
+mod usage_metering;
 mod website;
 mod website_runtime_cloud;
 mod website_runtime_recovery;
 
 #[cfg(feature = "management")]
 pub use app_shell::validate_adaptive_app_shell_from_env;
-pub use deploy_fallback::{
-    classify_host, DeployFallbackResolver, DeployServerLookup, HostClass, ResolvedDeployServer,
-};
-#[cfg(feature = "management")]
-pub use deploy_fallback::EmbeddedDeployServerLookup;
-pub use usage_metering::{
-    HttpUsageIngestChannel, MeteredRequest, UsageAttribution, UsageIngestChannel,
-    UsageMeteringAggregator, UsageWindow, USAGE_DIMENSION_EGRESS_BYTES,
-    USAGE_DIMENSION_INGRESS_BYTES, USAGE_DIMENSION_REQUESTS,
-};
-#[cfg(feature = "management")]
-pub use usage_metering::EmbeddedUsageIngestChannel;
 #[cfg(feature = "management")]
 pub use bootstrap::{build_router, run_database_migrate_only};
 #[cfg(feature = "management")]
@@ -50,7 +38,19 @@ pub use data_plane::{
     FileTlsRuntimeController, FileTlsRuntimeError,
 };
 #[cfg(feature = "management")]
+pub use deploy_fallback::EmbeddedDeployServerLookup;
+pub use deploy_fallback::{
+    classify_host, DeployFallbackResolver, DeployServerLookup, HostClass, ResolvedDeployServer,
+};
+#[cfg(feature = "management")]
 pub use packaged_runtime::configure_packaged_runtime_roots_from_env;
+#[cfg(feature = "management")]
+pub use usage_metering::EmbeddedUsageIngestChannel;
+pub use usage_metering::{
+    HttpUsageIngestChannel, MeteredRequest, UsageAttribution, UsageIngestChannel,
+    UsageMeteringAggregator, UsageWindow, USAGE_DIMENSION_EGRESS_BYTES,
+    USAGE_DIMENSION_INGRESS_BYTES, USAGE_DIMENSION_REQUESTS,
+};
 pub use website::{
     run_website_data_plane_from_config_until, WebsiteDataPlaneBootstrapError,
     DRIVE_INTERNAL_API_BASE_URL_ENV, DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV,

@@ -12,9 +12,7 @@ use crate::packaged_runtime::configure_packaged_runtime_roots_from_env;
 
 /// Issues a signed credential-entry bootstrap Access-Token and writes it to
 /// `output` with mode `0600`.
-pub async fn issue_credential_entry_bootstrap_token_to_file(
-    output: &Path,
-) -> Result<(), String> {
+pub async fn issue_credential_entry_bootstrap_token_to_file(output: &Path) -> Result<(), String> {
     configure_packaged_runtime_roots_from_env()?;
     run_database_migrate_only().await?;
     align_bootstrap_environment_from_webserver_profile();
@@ -25,15 +23,12 @@ pub async fn issue_credential_entry_bootstrap_token_to_file(
 
     let tenant_id = read_env_trimmed("SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_TENANT_ID");
     let app_id = read_env_trimmed("SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_APP_ID");
-    let token = resolve_deployment_bootstrap_access_token(
-        tenant_id.as_deref(),
-        app_id.as_deref(),
-    )
-    .await?
-    .ok_or_else(|| {
-        "IAM database is unavailable; cannot issue credential-entry bootstrap Access-Token"
-            .to_owned()
-    })?;
+    let token = resolve_deployment_bootstrap_access_token(tenant_id.as_deref(), app_id.as_deref())
+        .await?
+        .ok_or_else(|| {
+            "IAM database is unavailable; cannot issue credential-entry bootstrap Access-Token"
+                .to_owned()
+        })?;
 
     if let Some(parent) = output.parent() {
         std::fs::create_dir_all(parent).map_err(|error| {
@@ -65,7 +60,7 @@ pub async fn issue_credential_entry_bootstrap_token_to_file(
     info!(
         path = %output.display(),
         tenant_id = tenant_id.as_deref().unwrap_or("100001"),
-        app_id = app_id.as_deref().unwrap_or("sdkwork-web"),
+        app_id = app_id.as_deref().unwrap_or("sdkwork-webserver"),
         "issued IAM-signed credential-entry bootstrap Access-Token"
     );
     Ok(())

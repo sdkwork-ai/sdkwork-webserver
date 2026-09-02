@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "name": "sdkwork-webserver-backend-sdk",
+  "version": "1.0.0",
+  "language": "go",
+  "sdkType": "backend",
+  "packageName": "github.com/sdkwork/sdkwork-webserver-backend-sdk",
+  "transportPackageName": "github.com/sdkwork/sdkwork-webserver-backend-sdk",
+  "consumerPackageName": "github.com/sdkwork/sdkwork-webserver-backend-sdk",
+  "generator": "@sdkwork/sdk-generator",
+  "capabilities": {
+    "supportsGeneratedTests": true,
+    "supportsReadme": true,
+    "supportsCustomScaffold": true,
+    "supportsPublishWorkflow": true,
+    "hasDistinctBuildStep": false
+  },
+  "generation": {
+    "readme": true,
+    "tests": false
+  },
+  "ownership": {
+    "generatedOwnership": "generated",
+    "scaffoldOwnership": "scaffold",
+    "scaffoldRoots": [
+      "custom/"
+    ],
+    "stateRoots": [
+      ".sdkwork/"
+    ]
+  }
+}

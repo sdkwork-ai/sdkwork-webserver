@@ -36,9 +36,9 @@
     "routeManifest": null,
     "sdkClients": ["SdkworkAppClient", "SdkworkDriveAppClient", "SdkworkBackendClient"],
     "sdkDependencies": [
-      { "workspace": "sdkwork-web-app-sdk", "surface": "app-api", "credentialMode": "authenticated-app-api" },
+      { "workspace": "sdkwork-webserver-app-sdk", "surface": "app-api", "credentialMode": "authenticated-app-api" },
       { "workspace": "sdkwork-drive-app-sdk", "surface": "app-api", "credentialMode": "authenticated-app-api" },
-      { "workspace": "sdkwork-web-backend-sdk", "surface": "backend-api", "credentialMode": "authenticated-backend-admin" },
+      { "workspace": "sdkwork-webserver-backend-sdk", "surface": "backend-api", "credentialMode": "authenticated-backend-admin" },
       { "workspace": "sdkwork-iam-app-sdk", "surface": "app-api", "credentialMode": "authenticated-app-api" }
     ],
     "events": [],

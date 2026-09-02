@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUTPUT_ROOT = path.join(REPO_ROOT, 'dist', 'release');
 const ROOT_PACKAGES = [
-  'sdkwork-web-agent',
+  'sdkwork-webserver-agent',
   'sdkwork-api-webserver-standalone-gateway',
   'sdkwork-webserver-website-delivery-edge-runtime',
   'sdkwork-webserver-certificate-worker',

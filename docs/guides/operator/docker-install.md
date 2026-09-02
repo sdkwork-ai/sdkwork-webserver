@@ -120,7 +120,7 @@ pnpm deploy:apply:standalone:docker -- --environment production --replicas 3
 | `pnpm build:container:standalone` | 只构建统一安装镜像（不打包 bundle） |
 | `pnpm build:container:install` | 构建 + 打包自包含安装 bundle（本指南） |
 | `pnpm deploy:apply:standalone:docker` | 仓库内运行 bundle deploy.sh |
-| `docker:build:standalone` 等 | 保留的迁移别名，新自动化请用 `build:container:*` / `deploy:apply:*` |
+| `build:container:*` | 容器构建入口，新自动化请用 `build:container:*` / `deploy:apply:*` |
 
 ## 7. Webserver 规范合规要点（SDKWORK_WEBSERVER_SPEC.md）
 

@@ -27,16 +27,24 @@ pub fn validate_proxy_pass_template(template: &str) -> Result<(), String> {
                 }
             })
         else {
-            return Err(format!("proxy_pass template `{template}` ends with a bare `$`"));
+            return Err(format!(
+                "proxy_pass template `{template}` ends with a bare `$`"
+            ));
         };
         let variable = &rest[..end];
-        if variable == "$host" || variable == "$server_port" || variable == "$uri" || variable == "$request_uri" {
+        if variable == "$host"
+            || variable == "$server_port"
+            || variable == "$uri"
+            || variable == "$request_uri"
+        {
             remainder = &rest[end..];
             continue;
         }
         if let Some(name) = variable.strip_prefix("$http_") {
             if name.is_empty() {
-                return Err(format!("proxy_pass variable `{variable}` has an empty header name"));
+                return Err(format!(
+                    "proxy_pass variable `{variable}` has an empty header name"
+                ));
             }
             remainder = &rest[end..];
             continue;
@@ -73,7 +81,8 @@ pub fn expand_proxy_pass_template(
             continue;
         }
         let start = index;
-        while index < bytes.len() && (bytes[index].is_ascii_alphanumeric() || bytes[index] == b'_') {
+        while index < bytes.len() && (bytes[index].is_ascii_alphanumeric() || bytes[index] == b'_')
+        {
             index += 1;
         }
         let variable = std::str::from_utf8(&bytes[start..index]).map_err(|_| ())?;
@@ -118,8 +127,10 @@ mod tests {
 
     #[test]
     fn rejects_unsupported_variables() {
-        assert!(validate_proxy_pass_template("http://$request_uri").is_err() == false
-            || validate_proxy_pass_template("http://$request_uri").is_ok());
+        assert!(
+            validate_proxy_pass_template("http://$request_uri").is_err() == false
+                || validate_proxy_pass_template("http://$request_uri").is_ok()
+        );
         assert!(validate_proxy_pass_template("http://$remote_addr").is_err());
         assert!(validate_proxy_pass_template("http://$scheme").is_err());
         assert!(validate_proxy_pass_template("http://$").is_err());
@@ -148,8 +159,8 @@ mod tests {
     #[test]
     fn missing_header_expands_to_empty() {
         let template = "http://$http_missing$uri";
-        let expanded = expand_proxy_pass_template(template, "h", 80, "/p", "/p", &headers())
-            .expect("expand");
+        let expanded =
+            expand_proxy_pass_template(template, "h", 80, "/p", "/p", &headers()).expect("expand");
         assert_eq!(expanded, "http:///p");
     }
 }

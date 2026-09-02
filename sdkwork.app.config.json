@@ -2,7 +2,7 @@
   "schemaVersion": 3,
   "kind": "sdkwork.app",
   "app": {
-    "key": "sdkwork-web",
+    "key": "sdkwork-webserver",
     "name": "SDKWork Web Server",
     "displayName": "SDKWork Web Server",
     "description": "SDKWork standards-aligned HTTP web server control plane and immutable static-site/Wiki delivery data plane.",
@@ -19,7 +19,7 @@
   "backend": {
     "primaryLanguage": "rust",
     "framework": "axum",
-    "appId": "sdkwork-web",
+    "appId": "sdkwork-webserver",
     "serviceId": "sdkwork-api-webserver-standalone-gateway",
     "profileKey": "backend-root-admin",
     "ownerMode": "tenant",

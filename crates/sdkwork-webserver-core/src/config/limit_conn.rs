@@ -85,10 +85,7 @@ pub fn parse_limit_conn(entry: &str) -> Result<LimitConnConfig, LimitConnParseEr
     }
     let mut tokens = trimmed.split_whitespace();
     let first = tokens.next().ok_or(LimitConnParseError::Empty)?;
-    let zone = first
-        .strip_prefix("zone=")
-        .unwrap_or(first)
-        .to_owned();
+    let zone = first.strip_prefix("zone=").unwrap_or(first).to_owned();
     if zone.is_empty() {
         return Err(LimitConnParseError::MissingZone);
     }

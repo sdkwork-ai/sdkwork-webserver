@@ -96,11 +96,9 @@ impl RuntimeGeneration {
                 .map(|runtime| (upstream.id.clone(), Arc::new(runtime)))
             })
             .collect::<Result<HashMap<_, _>, _>>()?;
-        let proxy_cache = app
-            .config()
-            .proxy_cache
-            .enabled
-            .then(|| super::cache::HttpResponseCache::new(&app.config().proxy_cache, metrics.clone()));
+        let proxy_cache = app.config().proxy_cache.enabled.then(|| {
+            super::cache::HttpResponseCache::new(&app.config().proxy_cache, metrics.clone())
+        });
         Ok(Arc::new(Self {
             id,
             revision,
@@ -188,9 +186,10 @@ fn build_resolution_chain(
         return Ok(None);
     }
     let file = match config.file.as_deref() {
-        Some(path) => Some(Arc::new(FileResolverSource::load(std::path::Path::new(path)).map_err(
-            |message| DataPlaneError::ResolverCache(message),
-        )?)),
+        Some(path) => Some(Arc::new(
+            FileResolverSource::load(std::path::Path::new(path))
+                .map_err(|message| DataPlaneError::ResolverCache(message))?,
+        )),
         None => None,
     };
     // External Redis (WSL host service) wiring: SDKWORK_WEBSERVER_REDIS_URL
@@ -231,7 +230,9 @@ fn build_resolution_chain(
     #[cfg(not(feature = "management"))]
     let database = None;
     if database.is_none() && config.database {
-        tracing::warn!("resolution cache database layer requested but no shared database pool is active");
+        tracing::warn!(
+            "resolution cache database layer requested but no shared database pool is active"
+        );
     }
     tracing::info!(
         file = config.file.as_deref().unwrap_or(""),
@@ -241,13 +242,9 @@ fn build_resolution_chain(
         "resolution cache chain built"
     );
     Ok(Some(Arc::new(ResolutionChain::build(
-        config,
-        file,
-        redis,
-        database,
+        config, file, redis, database,
     ))))
 }
-
 
 impl DataPlaneRuntime {
     pub fn build(app: CompiledWebServerApp) -> Result<Arc<Self>, DataPlaneError> {

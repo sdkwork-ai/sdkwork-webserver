@@ -75,7 +75,9 @@ pub enum ModuleImportError {
         source: WebServerConfigError,
     },
 
-    #[error("module import `{id}` at {path}: required upstream `{upstream}` is unreachable ({detail})")]
+    #[error(
+        "module import `{id}` at {path}: required upstream `{upstream}` is unreachable ({detail})"
+    )]
     UnreachableUpstream {
         id: String,
         path: PathBuf,
@@ -165,15 +167,15 @@ fn resolve_conf_import_path(
     };
     for candidate in candidates {
         if candidate.is_file() && is_nginx_conf_path(&candidate) {
-            return candidate.canonicalize().map_err(|error| {
-                ModuleImportError::InvalidSpec {
+            return candidate
+                .canonicalize()
+                .map_err(|error| ModuleImportError::InvalidSpec {
                     id: id.to_owned(),
                     message: format!(
                         "cannot canonicalize nginx conf import `{}` for `{label}`: {error}",
                         candidate.display()
                     ),
-                }
-            });
+                });
         }
     }
     Err(ModuleImportError::InvalidSpec {
@@ -323,19 +325,22 @@ pub fn parse_env_imports(base: &Path) -> Result<Vec<WebserverModuleImport>, Modu
         return Ok(Vec::new());
     };
     if raw.starts_with('[') {
-        let entries: Vec<WebserverImportEntry> = serde_json::from_str(&raw).map_err(|error| {
-            ModuleImportError::InvalidSpec {
+        let entries: Vec<WebserverImportEntry> =
+            serde_json::from_str(&raw).map_err(|error| ModuleImportError::InvalidSpec {
                 id: MODULE_IMPORTS_ENV.to_owned(),
                 message: format!("invalid JSON array: {error}"),
-            }
-        })?;
+            })?;
         return entries
             .into_iter()
             .map(|entry| entry.into_import(base))
             .collect();
     }
     let mut imports = Vec::new();
-    for segment in raw.split(',').map(str::trim).filter(|segment| !segment.is_empty()) {
+    for segment in raw
+        .split(',')
+        .map(str::trim)
+        .filter(|segment| !segment.is_empty())
+    {
         let Some((id, path)) = segment.split_once('=') else {
             return Err(ModuleImportError::InvalidSpec {
                 id: MODULE_IMPORTS_ENV.to_owned(),
@@ -401,20 +406,22 @@ pub fn resolve_import_profile(import: &WebserverModuleImport) -> Result<String, 
 }
 
 /// Effective lifecycle environment for an import.
-pub fn resolve_import_environment(import: &WebserverModuleImport) -> Result<String, ModuleImportError> {
+pub fn resolve_import_environment(
+    import: &WebserverModuleImport,
+) -> Result<String, ModuleImportError> {
     let environment = std::env::var("SDKWORK_WEBSERVER_ENVIRONMENT")
         .or_else(|_| std::env::var("SDKWORK_ENVIRONMENT"))
         .unwrap_or_else(|_| "production".to_owned());
     if matches!(
         environment.as_str(),
-        "development" | "test" | "staging" | "production"
+        "development" | "test" | "staging" | "production" | "demo"
     ) {
         Ok(environment)
     } else {
         Err(ModuleImportError::InvalidSpec {
             id: import.id.clone(),
             message: format!(
-                "environment must be `development`, `test`, `staging`, or `production`, got `{environment}`"
+                "environment must be `development`, `test`, `staging`, `production`, or `demo`, got `{environment}`"
             ),
         })
     }
@@ -455,7 +462,9 @@ pub fn load_module_import_app_config(
 
 /// Validate one import: layout v3 TOML or nginx `.conf`, materialization,
 /// optional upstream probe.
-pub fn validate_module_import(import: &WebserverModuleImport) -> Result<ModuleImportValidation, ModuleImportError> {
+pub fn validate_module_import(
+    import: &WebserverModuleImport,
+) -> Result<ModuleImportValidation, ModuleImportError> {
     if !import.enabled {
         return Ok(ModuleImportValidation {
             import: import.clone(),
@@ -501,7 +510,9 @@ pub fn validate_module_import(import: &WebserverModuleImport) -> Result<ModuleIm
 }
 
 /// Validate every configured import. Disabled imports are skipped.
-pub fn validate_imports(imports: &[WebserverModuleImport]) -> Result<Vec<ModuleImportValidation>, ModuleImportError> {
+pub fn validate_imports(
+    imports: &[WebserverModuleImport],
+) -> Result<Vec<ModuleImportValidation>, ModuleImportError> {
     let mut results = Vec::new();
     for import in imports {
         if !import.enabled {
@@ -569,7 +580,11 @@ mod tests {
     #[test]
     fn resolves_relative_import_against_base() {
         let examples = examples_dir();
-        let base = examples.parent().expect("examples").parent().expect("specs");
+        let base = examples
+            .parent()
+            .expect("examples")
+            .parent()
+            .expect("specs");
         let resolved = resolve_import_path(base, "examples/webserver").expect("resolve");
         assert!(resolved.join("server.common.toml").is_file());
     }
@@ -594,7 +609,8 @@ mod tests {
     fn resolves_absolute_module_root() {
         let repo = webserver_repo_root();
         let configured = repo.to_string_lossy().into_owned();
-        let resolved = resolve_import_path(Path::new("."), &configured).expect("resolve absolute root");
+        let resolved =
+            resolve_import_path(Path::new("."), &configured).expect("resolve absolute root");
         assert!(resolved.join("server.common.toml").is_file());
     }
 
@@ -618,7 +634,11 @@ mod tests {
     fn parses_env_import_pairs() {
         std::env::set_var(MODULE_IMPORTS_ENV, "im-example=examples/webserver");
         let examples = examples_dir();
-        let base = examples.parent().expect("examples").parent().expect("specs");
+        let base = examples
+            .parent()
+            .expect("examples")
+            .parent()
+            .expect("specs");
         let imports = parse_env_imports(base).expect("parse env");
         assert_eq!(imports.len(), 1);
         assert_eq!(imports[0].id, "im-example");

@@ -1,4 +1,4 @@
-﻿use std::{io, sync::Arc};
+use std::{io, sync::Arc};
 
 use axum::{
     body::Body,
@@ -390,9 +390,7 @@ fn matches_adaptive_mobile_user_agent(user_agent: &str) -> bool {
         "quark",
     ];
     let lower = user_agent.to_ascii_lowercase();
-    MOBILE_MARKERS
-        .iter()
-        .any(|marker| lower.contains(marker))
+    MOBILE_MARKERS.iter().any(|marker| lower.contains(marker))
 }
 
 fn is_tv_user_agent(lower_user_agent: &str) -> bool {

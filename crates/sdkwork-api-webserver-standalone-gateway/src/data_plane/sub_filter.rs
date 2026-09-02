@@ -17,8 +17,7 @@ use axum::{
 use futures_util::StreamExt;
 
 use sdkwork_webserver_core::{
-    apply_sub_filters, sub_filter_content_type_matches, SubFilterConfig,
-    MAX_SUB_FILTER_BODY_BYTES,
+    apply_sub_filters, sub_filter_content_type_matches, SubFilterConfig, MAX_SUB_FILTER_BODY_BYTES,
 };
 
 /// Route-level substitution configuration carried on the response.
@@ -75,10 +74,9 @@ async fn apply_sub_filters_to_response(mut response: Response<Body>) -> Response
     if !config.last_modified {
         parts.headers.remove(header::LAST_MODIFIED);
     }
-    parts.headers.insert(
-        header::CONTENT_LENGTH,
-        HeaderValue::from(replaced.len()),
-    );
+    parts
+        .headers
+        .insert(header::CONTENT_LENGTH, HeaderValue::from(replaced.len()));
     Response::from_parts(parts, Body::from(replaced))
 }
 

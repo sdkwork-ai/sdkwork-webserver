@@ -3,9 +3,9 @@
 
 use std::{fs, net::TcpListener, path::PathBuf, time::Duration};
 
-use serde_json::{json, Value};
 use sdkwork_api_webserver_standalone_gateway::run_data_plane_until;
 use sdkwork_webserver_core::load_and_compile_webserver_config;
+use serde_json::{json, Value};
 use tokio::{net::UdpSocket, sync::oneshot};
 
 fn free_port() -> u16 {
@@ -62,7 +62,11 @@ fn write_config(port: u16, upstream_port: u16) -> PathBuf {
             "proxyTimeoutMs": 5000
         }]
     });
-    fs::write(&path, serde_json::to_vec_pretty(&config).expect("serialize")).expect("write");
+    fs::write(
+        &path,
+        serde_json::to_vec_pretty(&config).expect("serialize"),
+    )
+    .expect("write");
     path
 }
 
@@ -99,18 +103,15 @@ async fn udp_stream_forwards_datagrams_both_directions() {
 
     // Round-trip through the data plane to the echo upstream.
     let mut buffer = vec![0_u8; 4096];
-    client.send_to(b"hello-udp", ("127.0.0.1", port)).await.expect("send");
-    let (length, _) = tokio::time::timeout(
-        Duration::from_secs(3),
-        client.recv_from(&mut buffer),
-    )
-    .await
-    .expect("reply timeout")
-    .expect("recv");
-    assert_eq!(
-        String::from_utf8_lossy(&buffer[..length]),
-        "ECHO:hello-udp"
-    );
+    client
+        .send_to(b"hello-udp", ("127.0.0.1", port))
+        .await
+        .expect("send");
+    let (length, _) = tokio::time::timeout(Duration::from_secs(3), client.recv_from(&mut buffer))
+        .await
+        .expect("reply timeout")
+        .expect("recv");
+    assert_eq!(String::from_utf8_lossy(&buffer[..length]), "ECHO:hello-udp");
 
     let _ = shutdown_tx.send(());
     let _ = server.await;

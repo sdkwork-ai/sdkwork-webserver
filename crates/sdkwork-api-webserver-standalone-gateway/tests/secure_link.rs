@@ -3,9 +3,9 @@
 
 use std::{fs, net::TcpListener, path::PathBuf, time::Duration};
 
-use serde_json::{json, Value};
 use sdkwork_api_webserver_standalone_gateway::run_data_plane_until;
 use sdkwork_webserver_core::{load_and_compile_webserver_config, md5_hex};
+use serde_json::{json, Value};
 use tokio::sync::oneshot;
 
 fn free_port() -> u16 {
@@ -62,7 +62,11 @@ fn write_config(port: u16, route: Value, resource: Option<Value>, root: Option<&
             "routes": [route]
         }]
     });
-    fs::write(&path, serde_json::to_vec_pretty(&config).expect("serialize")).expect("write");
+    fs::write(
+        &path,
+        serde_json::to_vec_pretty(&config).expect("serialize"),
+    )
+    .expect("write");
     path
 }
 

@@ -245,16 +245,11 @@ impl WebsiteDeliveryExecutor {
                     route.maximum_object_bytes,
                     request.range,
                 )?;
-                let range = normalize_request_range(request.range, content.metadata.content_length)?;
+                let range =
+                    normalize_request_range(request.range, content.metadata.content_length)?;
                 let opened = self
                     .open_wiki_body(
-                        provider,
-                        &route,
-                        &request,
-                        context,
-                        &deadline,
-                        &content,
-                        range,
+                        provider, &route, &request, context, &deadline, &content, range,
                     )
                     .await?;
                 let canonical_route = route.public_route(&content.canonical_route)?;
@@ -317,9 +312,7 @@ impl WebsiteDeliveryExecutor {
         // `content_length == 0` means the provider could not declare a length
         // (for example a streaming response without Content-Length); the byte
         // ceiling is still enforced while the stream is consumed.
-        if range.is_none()
-            && opened.content_length != 0
-            && opened.content_length != expected_bytes
+        if range.is_none() && opened.content_length != 0 && opened.content_length != expected_bytes
         {
             return Err(provider_contract_mismatch());
         }

@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "sdkFamily": "sdkwork-webserver-internal-sdk",
+  "sdkName": "sdkwork-webserver-internal-sdk",
+  "packageName": "@sdkwork/webserver-internal-sdk",
+  "transportPackageName": "sdkwork-webserver-internal-sdk-generated-typescript",
+  "typescript": {
+    "composedRoot": "sdkwork-webserver-internal-sdk-typescript",
+    "composedEntry": "sdkwork-webserver-internal-sdk-typescript/src/index.ts",
+    "transportRoot": "sdkwork-webserver-internal-sdk-typescript/generated/server-openapi",
+    "transportEntry": "sdkwork-webserver-internal-sdk-typescript/generated/server-openapi/src/index.ts"
+  },
+  "workspace": "sdkwork-webserver-internal-sdk",
+  "title": "SDKWork Webserver Internal API SDK",
+  "apiVersion": "1.0.0",
+  "openapiVersion": "3.1.2",
+  "authoritySpec": "openapi/sdkwork-webserver-internal-api.openapi.json",
+  "generationInputSpec": "openapi/sdkwork-webserver-internal-api.sdkgen.yaml",
+  "derivedSpecs": {
+    "default": "openapi/sdkwork-webserver-internal-api.sdkgen.yaml",
+    "flutter": "openapi/sdkwork-webserver-internal-api.sdkgen.yaml"
+  },
+  "sdkOwner": "sdkwork-webserver",
+  "apiAuthority": "sdkwork-webserver-internal-api",
+  "sdkSurface": "internal",
+  "sdkType": "custom",
+  "discoverySurface": {
+    "sdkTarget": "internal",
+    "apiPrefix": "/internal/v3/api",
+    "schemaUrl": "/internal/v3/openapi.json",
+    "generatedProtocols": [
+      "http-openapi"
+    ],
+    "manualTransports": []
+  },
+  "metadata": {
+    "managedBy": "tools/materialize_web_phase1_contracts.mjs",
+    "standardVersion": "2026-06-26"
+  },
+  "languages": [
+    {
+      "language": "typescript",
+      "workspace": "sdkwork-webserver-internal-sdk-typescript",
+      "generationState": "materialized",
+      "releaseState": "not_published",
+      "packagePath": "sdkwork-webserver-internal-sdk-typescript/generated/server-openapi",
+      "manifestPath": "sdkwork-webserver-internal-sdk-typescript/generated/server-openapi/package.json",
+      "name": "@sdkwork/webserver-internal-sdk",
+      "version": "1.0.0",
+      "description": "Generator-owned typescript transport SDK for SDKWork Webserver Internal API.",
+      "generatedPath": "sdkwork-webserver-internal-sdk-typescript/generated/server-openapi",
+      "consumerPackageName": "@sdkwork/webserver-internal-sdk",
+      "transportPackageName": "sdkwork-webserver-internal-sdk-generated-typescript"
+    },
+    {
+      "language": "rust",
+      "workspace": "sdkwork-webserver-internal-sdk-rust",
+      "generationState": "materialized",
+      "releaseState": "not_published",
+      "packagePath": "sdkwork-webserver-internal-sdk-rust/generated/server-openapi",
+      "manifestPath": "sdkwork-webserver-internal-sdk-rust/generated/server-openapi/Cargo.toml",
+      "name": "sdkwork-webserver-internal-sdk",
+      "version": "1.0.0",
+      "description": "Generator-owned rust transport SDK for SDKWork Webserver Internal API.",
+      "generatedPath": "sdkwork-webserver-internal-sdk-rust/generated/server-openapi"
+    }
+  ],
+  "sdkDependencies": [],
+  "ownerOnlyOperationCount": 4,
+  "standardProfile": "sdkwork-v3"
+}

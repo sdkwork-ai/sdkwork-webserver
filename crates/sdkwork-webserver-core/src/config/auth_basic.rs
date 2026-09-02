@@ -7,8 +7,7 @@ use sha1::Sha1;
 use super::model::{AuthBasicConfig, AuthBasicUserConfig};
 
 const APR1_MAGIC: &str = "$apr1$";
-const APR1_ITOA64: &[u8; 64] =
-    b"./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+const APR1_ITOA64: &[u8; 64] = b"./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthBasicDecision {
@@ -76,7 +75,10 @@ pub fn evaluate_auth_basic(
     let Some(config) = config else {
         return AuthBasicDecision::Inactive;
     };
-    let Some(header) = authorization.map(str::trim).filter(|value| !value.is_empty()) else {
+    let Some(header) = authorization
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
         return AuthBasicDecision::Challenge;
     };
     let Some(encoded) = header

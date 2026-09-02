@@ -17,7 +17,7 @@ use sdkwork_webserver_contract::{MachineCredentialAuthenticator, WebInternalRequ
 
 use crate::http_route_manifest::internal_route_manifest;
 
-const WEB_AGENT_APP_ID: &str = "sdkwork-web-agent";
+const WEB_AGENT_APP_ID: &str = "sdkwork-webserver-agent";
 const RUNTIME_ASSIGNMENT_WRITE_PERMISSION: &str = "web.runtimeAssignments.write";
 
 #[derive(Clone, Default)]
@@ -241,7 +241,7 @@ mod tests {
                 .tenant_id(self.tenant_id)
                 .login_scope(WebLoginScope::Tenant)
                 .user_id("node-1")
-                .app_id("sdkwork-web-agent")
+                .app_id("sdkwork-webserver-agent")
                 .environment(WebEnvironment::Dev)
                 .deployment_mode(WebDeploymentMode::Local)
                 .auth_level(WebAuthLevel::ApiKey)

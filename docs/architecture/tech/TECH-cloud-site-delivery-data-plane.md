@@ -391,7 +391,7 @@ same-origin fallback remain forbidden.
 
 ## 6. SDK Integration Boundary
 
-Cloud assignment delivery consumes the application-root `sdkwork-web-internal-sdk`; content
+Cloud assignment delivery consumes the application-root `sdkwork-webserver-internal-sdk`; content
 adapters consume the declared `sdkwork-drive-internal-sdk` and
 `sdkwork-knowledgebase-internal-sdk` dependencies or an approved server facade. SDK clients are
 constructed in bootstrap after runtime URLs and credentials

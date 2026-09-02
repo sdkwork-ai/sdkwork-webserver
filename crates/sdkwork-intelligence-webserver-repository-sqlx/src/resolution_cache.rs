@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use sdkwork_database_sqlx::{process_shared_database_pool, DatabasePool};
-use sdkwork_webserver_resolver_cache::{ResolvedRecord, ResolutionDatabase};
+use sdkwork_webserver_resolver_cache::{ResolutionDatabase, ResolvedRecord};
 
 /// SQL-backed resolution cache over the process-shared database pool.
 pub struct SqlxResolutionCache {
@@ -18,9 +18,8 @@ pub struct SqlxResolutionCache {
 /// active (management feature deployments). Returns `None` when no pool is
 /// available so the chain falls back to the upper layers.
 pub fn resolution_cache_from_shared_pool() -> Option<Arc<dyn ResolutionDatabase>> {
-    process_shared_database_pool().map(|pool| {
-        Arc::new(SqlxResolutionCache { pool }) as Arc<dyn ResolutionDatabase>
-    })
+    process_shared_database_pool()
+        .map(|pool| Arc::new(SqlxResolutionCache { pool }) as Arc<dyn ResolutionDatabase>)
 }
 
 #[async_trait::async_trait]
@@ -57,8 +56,8 @@ impl ResolutionDatabase for SqlxResolutionCache {
     }
 
     async fn save(&self, record: ResolvedRecord) {
-        let addresses = serde_json::to_string(&record.addresses)
-            .unwrap_or_else(|_| "[]".to_owned());
+        let addresses =
+            serde_json::to_string(&record.addresses).unwrap_or_else(|_| "[]".to_owned());
         let expires_at = chrono::DateTime::from_timestamp(record.expires_at_unix as i64, 0)
             .unwrap_or_else(chrono::Utc::now);
         let Some(pool) = self.pool.as_postgres() else {

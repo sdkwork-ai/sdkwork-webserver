@@ -36,7 +36,7 @@ export function resolveSpaceCheckoutRoot(explicitCheckoutRoot) {
 export function resolveModuleRoot(module, spaceCheckoutRoot = resolveSpaceCheckoutRoot()) {
   const normalized = String(module ?? '').trim().replace(/^\/*/, '');
   if (!normalized.startsWith('sdkwork-')) {
-    throw new Error('module must be a sibling repository name such as sdkwork-im');
+    throw new Error('module must be a sibling repository name under the workspace checkout root');
   }
   return path.join(spaceCheckoutRoot, normalized);
 }

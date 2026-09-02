@@ -100,7 +100,7 @@ impl GitDriveSourceImporter {
             tenant_id: request.tenant_id.to_string(),
             organization_id: request.organization_id.map(|value| value.to_string()),
             actor,
-            app_id: "sdkwork-web".to_string(),
+            app_id: "sdkwork-webserver".to_string(),
             app_resource_type: "web.application.source".to_string(),
             app_resource_id: request.application_id.clone(),
             scene: Some("git-repository".to_string()),

@@ -4,9 +4,9 @@
 use std::{fs, net::TcpListener, path::PathBuf, time::Duration};
 
 use flate2::read::GzDecoder;
-use serde_json::{json, Value};
 use sdkwork_api_webserver_standalone_gateway::run_data_plane_until;
 use sdkwork_webserver_core::load_and_compile_webserver_config;
+use serde_json::{json, Value};
 use std::io::Read;
 use tokio::sync::oneshot;
 
@@ -66,19 +66,18 @@ fn write_config(port: u16, sub_filter: Value) -> PathBuf {
             }]
         }]
     });
-    fs::write(&path, serde_json::to_vec_pretty(&config).expect("serialize")).expect("write");
+    fs::write(
+        &path,
+        serde_json::to_vec_pretty(&config).expect("serialize"),
+    )
+    .expect("write");
     path
 }
 
 async fn wait_ready(client: &reqwest::Client, url: &str) {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     loop {
-        match client
-            .get(url)
-            .header("host", "sub.localhost")
-            .send()
-            .await
-        {
+        match client.get(url).header("host", "sub.localhost").send().await {
             Ok(_) => return,
             Err(error) if tokio::time::Instant::now() < deadline => {
                 let _ = error;
@@ -129,12 +128,7 @@ async fn sub_filter_replaces_once_by_default_and_drops_last_modified() {
 
     let _ = shutdown_tx.send(());
     let _ = server.await;
-    fs::remove_dir_all(
-        config_path
-            .parent()
-            .expect("config dir"),
-    )
-    .ok();
+    fs::remove_dir_all(config_path.parent().expect("config dir")).ok();
 }
 
 #[tokio::test]
@@ -187,10 +181,5 @@ async fn sub_filter_then_gzip_produces_substituted_compressed_body() {
 
     let _ = shutdown_tx.send(());
     let _ = server.await;
-    fs::remove_dir_all(
-        config_path
-            .parent()
-            .expect("config dir"),
-    )
-    .ok();
+    fs::remove_dir_all(config_path.parent().expect("config dir")).ok();
 }

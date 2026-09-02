@@ -5,7 +5,10 @@ mod bootstrap;
 mod framework_observability;
 mod generated;
 
-pub use bootstrap::{assemble_api_router, migrate_database_from_env, seed_space_repository, ApiAssembly, ApiAssemblyContext, assemble_business_routes};
+pub use bootstrap::{
+    assemble_api_router, assemble_business_routes, migrate_database_from_env,
+    seed_space_repository, ApiAssembly, ApiAssemblyContext,
+};
 
 // Expose the Deploy and WebServer repository surfaces that standalone gateway
 // hosting consumes through this owner API assembly integration point instead

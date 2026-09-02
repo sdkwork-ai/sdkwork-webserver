@@ -11,10 +11,7 @@ pub enum AuditInstantBound {
     EndExclusive,
 }
 
-pub fn normalize_audit_instant(
-    value: &str,
-    bound: AuditInstantBound,
-) -> Result<String, String> {
+pub fn normalize_audit_instant(value: &str, bound: AuditInstantBound) -> Result<String, String> {
     let trimmed = value.trim();
     if trimmed.is_empty() || trimmed.len() > 64 {
         return Err("must contain 1..64 characters".to_string());
@@ -49,7 +46,8 @@ mod tests {
             "2026-07-01T12:00:00+00:00"
         );
         assert_eq!(
-            normalize_audit_instant("2026-07-01", AuditInstantBound::StartInclusive).expect("start"),
+            normalize_audit_instant("2026-07-01", AuditInstantBound::StartInclusive)
+                .expect("start"),
             "2026-07-01T00:00:00+00:00"
         );
         assert_eq!(

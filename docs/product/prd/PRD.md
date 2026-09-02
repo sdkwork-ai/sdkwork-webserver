@@ -56,11 +56,13 @@ The managed machine is a **Web Node** and its host process is the **Web Node
 Daemon**. New product, deployment, log, metric, runbook, environment-key, and
 binary names MUST use `node`/`node-daemon`; `Agent` is reserved for SDKWork AI
 agent capabilities. The v3 `/agent/*` routes, `AgentToken` wire fields,
-`SDKWORK_WEBSERVER_AGENT_*` aliases, `sdkwork-web-agent` crate/binary, and persisted
-state filename remain explicit compatibility identifiers until a separately
-reviewed major-version migration removes them. The compatibility layer is one
-implementation and one state store; it must not create a second synchronization
-loop or a second authority.
+`SDKWORK_WEBSERVER_AGENT_*` aliases, the `sdkwork-webserver-agent` crate/binary
+compatibility identifier, and the legacy persisted state filename
+`sdkwork-web-agent-state.json` (auto-migrated to
+`sdkwork-webserver-agent-state.json` on first load) remain explicit
+compatibility identifiers until a separately reviewed major-version migration
+removes them. The compatibility layer is one implementation and one state
+store; it must not create a second synchronization loop or a second authority.
 
 ## 4. Goals And Non-Goals
 
@@ -107,7 +109,7 @@ loop or a second authority.
 | Configuration lifecycle | Draft, validate, plan, immutable revision, publish, canary, activate, observe, rollback, and audit. |
 | Cluster operation | Node-scoped assignments, signed delta snapshots, fencing, offline recovery, version convergence, and no tenant-wide secret broadcast. |
 | Control plane | IAM-protected APIs, SDKs, pagination, idempotency, optimistic concurrency, asynchronous operations, audit, and operational status. |
-| PC management application | `apps/sdkwork-webserver-pc` provides an isolated tenant Console and lazy backend-admin surface. Console Web Server operations consume `@sdkwork/web-app-sdk`; application-package bytes are uploaded only through `@sdkwork/drive-app-sdk`; internal operator workflows consume only `@sdkwork/web-backend-sdk`. All authenticated SDK clients share the bootstrap-owned TokenManager. |
+| PC management application | `apps/sdkwork-webserver-pc` provides an isolated tenant Console and lazy backend-admin surface. Console Web Server operations consume `@sdkwork/webserver-app-sdk`; application-package bytes are uploaded only through `@sdkwork/drive-app-sdk`; internal operator workflows consume only `@sdkwork/webserver-backend-sdk`. All authenticated SDK clients share the bootstrap-owned TokenManager. |
 | Persistence | PostgreSQL authoritative server storage, portable contracts, migration governance, transaction safety, drift detection, backup/restore, and failover evidence. |
 | Operations | Health/readiness, structured logs, metrics, traces, alerts, quotas, rate limits, backup/restore, rolling upgrades, and incident runbooks. |
 | Runtime lifecycle | Deterministic bootstrap, config test/dump/explain, non-root operation, atomic reload, graceful shutdown, overload shedding, service-manager integration, and zero-downtime executable upgrade. |

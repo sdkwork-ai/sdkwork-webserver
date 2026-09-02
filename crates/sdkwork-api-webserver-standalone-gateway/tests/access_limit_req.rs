@@ -2,9 +2,9 @@
 
 use std::{fs, net::TcpListener, path::PathBuf, time::Duration};
 
-use serde_json::json;
 use sdkwork_api_webserver_standalone_gateway::run_data_plane_until;
 use sdkwork_webserver_core::load_and_compile_webserver_config;
+use serde_json::json;
 use tokio::sync::oneshot;
 
 fn free_port() -> u16 {
@@ -15,7 +15,12 @@ fn free_port() -> u16 {
         .port()
 }
 
-fn write_config(port: u16, access: serde_json::Value, limit_req_zones: serde_json::Value, limit_req: serde_json::Value) -> PathBuf {
+fn write_config(
+    port: u16,
+    access: serde_json::Value,
+    limit_req_zones: serde_json::Value,
+    limit_req: serde_json::Value,
+) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
         "sdkwork-access-limit-test-{}-{}",
         std::process::id(),
@@ -60,19 +65,18 @@ fn write_config(port: u16, access: serde_json::Value, limit_req_zones: serde_jso
             }]
         }]
     });
-    fs::write(&path, serde_json::to_vec_pretty(&config).expect("serialize")).expect("write");
+    fs::write(
+        &path,
+        serde_json::to_vec_pretty(&config).expect("serialize"),
+    )
+    .expect("write");
     path
 }
 
 async fn wait_ready(client: &reqwest::Client, url: &str) {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     loop {
-        match client
-            .get(url)
-            .header("host", "acl.localhost")
-            .send()
-            .await
-        {
+        match client.get(url).header("host", "acl.localhost").send().await {
             Ok(_) => return,
             Err(error) if tokio::time::Instant::now() < deadline => {
                 let _ = error;

@@ -16,9 +16,19 @@
 
 name: sdkwork-webserver
 
+# Bounded json-file log rotation: unbounded container logs eventually fill
+# the host disk on long-lived deployments (DEPLOYMENT_SPEC.md §6 runtime
+# hardening). Every service in every shipped compose file attaches this.
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 x-webserver-common: &webserver-common
   image: registry.sdkwork.com/apps/sdkwork-webserver-standalone:${SDKWORK_WEBSERVER_IMAGE_TAG:-0.1.0}
   restart: unless-stopped
+  logging: *default-logging
   cap_add:
     - NET_BIND_SERVICE
   depends_on:
@@ -78,6 +88,7 @@ services:
     image: postgres:16-alpine
     profiles: [development, test, staging, production]
     restart: unless-stopped
+    logging: *default-logging
     command: ["postgres", "-c", "max_connections=${PG_MAX_CONNECTIONS:-200}"]
     environment:
       POSTGRES_USER: ${WEBSERVER_POSTGRES_USER:-postgres}
@@ -112,6 +123,7 @@ services:
     image: redis:8-alpine
     profiles: [development, test, staging, production]
     restart: unless-stopped
+    logging: *default-logging
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     volumes:
       - webserver-redis-data:/data

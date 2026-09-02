@@ -70,8 +70,17 @@ fn git_available() -> bool {
 }
 
 async fn clone_repository(root: &Path) -> Result<(), SpaceCloneError> {
-    run_git(root, &["clone", "--depth", "1", SDKWORK_SPACE_REPOSITORY, SDKWORK_SPACE_DIRECTORY])
-        .await
+    run_git(
+        root,
+        &[
+            "clone",
+            "--depth",
+            "1",
+            SDKWORK_SPACE_REPOSITORY,
+            SDKWORK_SPACE_DIRECTORY,
+        ],
+    )
+    .await
 }
 
 async fn update_repository(repository_dir: &Path) -> Result<(), SpaceCloneError> {

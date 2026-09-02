@@ -16,18 +16,18 @@ use std::sync::Arc;
 
 use axum::{
     extract::{Path, Query, State},
-    http::{StatusCode, header},
+    http::{header, StatusCode},
     response::{IntoResponse, Response},
     routing::get,
     Extension, Json, Router,
 };
-use serde::{Deserialize, Serialize};
 use sdkwork_routes_webserver_common::WebApiError;
 use sdkwork_server_files_service::{
     classify_entry_names, command_for, ServerFilesService, ServerFilesServiceConfig,
 };
 use sdkwork_utils_rust::{SdkWorkResourceData, SdkWorkResultCode};
 use sdkwork_webserver_contract::WebBackendRequestContext;
+use serde::{Deserialize, Serialize};
 
 use crate::{auth::require_backend_context, paths};
 
@@ -107,10 +107,7 @@ struct ServerFilesState {
 /// assembly resolves from the managed deployment nodes.
 pub fn build_server_files_router(registry: ServerFilesNodeRegistry) -> Router {
     Router::new()
-        .route(
-            paths::SERVER_FILES_NODES,
-            get(list_nodes),
-        )
+        .route(paths::SERVER_FILES_NODES, get(list_nodes))
         .route(paths::SERVER_FILES_NODE_BROWSE, get(browse_node_directory))
         .route(paths::SERVER_FILES_NODE_READ, get(read_node_file))
         .route(
@@ -127,7 +124,9 @@ async fn list_nodes(
     context: Option<Extension<WebBackendRequestContext>>,
 ) -> Result<Response, WebApiError> {
     require_read(context)?;
-    Ok(ok_json(&serde_json::json!({ "items": state.registry.all() })))
+    Ok(ok_json(
+        &serde_json::json!({ "items": state.registry.all() }),
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -231,21 +230,18 @@ async fn run_node_operation(
     })))
 }
 
-fn service_for(
-    state: ServerFilesState,
-    node_id: &str,
-) -> Result<ServerFilesService, WebApiError> {
-    let node = state
-        .registry
-        .get(node_id)
-        .ok_or_else(not_found)?;
+fn service_for(state: ServerFilesState, node_id: &str) -> Result<ServerFilesService, WebApiError> {
+    let node = state.registry.get(node_id).ok_or_else(not_found)?;
     ServerFilesService::new(ServerFilesServiceConfig {
         node_id: node.id.clone(),
         filesystem_root: node.filesystem_root.clone(),
         ..ServerFilesServiceConfig::default()
     })
     .map_err(|_error| {
-        WebApiError::new(SdkWorkResultCode::ValidationError, "invalid node filesystem root")
+        WebApiError::new(
+            SdkWorkResultCode::ValidationError,
+            "invalid node filesystem root",
+        )
     })
 }
 
@@ -264,7 +260,12 @@ fn entry_names(path: &std::path::Path) -> Vec<String> {
 fn ok_json<T: Serialize>(data: &T) -> Response {
     let payload = SdkWorkResourceData { item: data };
     let body = sdkwork_utils_rust::SdkWorkApiResponse::success(payload, String::new());
-    (StatusCode::OK, [(header::CONTENT_TYPE, "application/json")], Json(body)).into_response()
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/json")],
+        Json(body),
+    )
+        .into_response()
 }
 
 fn not_found() -> WebApiError {
@@ -277,7 +278,10 @@ fn server_files_error(error: impl std::fmt::Display) -> WebApiError {
 
 fn containment_error(_error: sdkwork_server_files_service::PathContainmentError) -> WebApiError {
     // Do not echo the offending path back to the caller.
-    WebApiError::new(SdkWorkResultCode::ValidationError, "path is outside the authorized directory")
+    WebApiError::new(
+        SdkWorkResultCode::ValidationError,
+        "path is outside the authorized directory",
+    )
 }
 
 fn require_read(context: Option<Extension<WebBackendRequestContext>>) -> Result<(), WebApiError> {

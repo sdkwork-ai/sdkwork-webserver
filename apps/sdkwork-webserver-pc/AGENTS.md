@@ -57,7 +57,7 @@ Language-specific standards are loaded on demand only; do not load unrelated lan
 
 ## Code Style Rules
 
-Consume Web remote capabilities through the composed `@sdkwork/web-app-sdk` and backend-admin-only `@sdkwork/web-backend-sdk` facades declared by component specs. Bootstrap owns SDK client and TokenManager construction. Feature UI receives injected data sources or services and must not create raw HTTP transports, manual auth headers, local SDK forks, or cross-surface business imports. Generated SDK output must not be hand-edited.
+Consume Web remote capabilities through the composed `@sdkwork/webserver-app-sdk` and backend-admin-only `@sdkwork/webserver-backend-sdk` facades declared by component specs. Bootstrap owns SDK client and TokenManager construction. Feature UI receives injected data sources or services and must not create raw HTTP transports, manual auth headers, local SDK forks, or cross-surface business imports. Generated SDK output must not be hand-edited.
 
 ## Build, Test, and Verification
 

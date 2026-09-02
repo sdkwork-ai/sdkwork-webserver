@@ -24,7 +24,7 @@
 ## 前置要求
 
 - WSL2 Ubuntu 22.04，Docker Engine 已安装并运行
-- 已构建 standalone 镜像：`pnpm docker:build:standalone`
+- 已构建 standalone 镜像：`pnpm build:container:standalone`
 - （可选）WSL nginx：用于 `:80` 域名访问
 
 ## 部署步骤

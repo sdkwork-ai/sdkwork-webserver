@@ -15,7 +15,7 @@ members = [
   "crates/sdkwork-webserver-source-provider",
   "crates/sdkwork-webserver-acme-service",
   "crates/sdkwork-webserver-edge-runtime",
-  "crates/sdkwork-web-agent",
+  "crates/sdkwork-webserver-agent",
   "crates/sdkwork-webserver-certificate-worker",
   "crates/sdkwork-intelligence-webserver-service",
   "crates/sdkwork-intelligence-webserver-repository-sqlx",
@@ -26,8 +26,8 @@ members = [
   "crates/sdkwork-webserver-website-delivery-edge-runtime",
 ]
 exclude = [
-  "sdks/sdkwork-web-backend-sdk/sdkwork-web-backend-sdk-rust/generated/server-openapi",
-  "sdks/sdkwork-web-internal-sdk/sdkwork-web-internal-sdk-rust/generated/server-openapi",
+  "sdks/sdkwork-webserver-backend-sdk/sdkwork-webserver-backend-sdk-rust/generated/server-openapi",
+  "sdks/sdkwork-webserver-internal-sdk/sdkwork-webserver-internal-sdk-rust/generated/server-openapi",
 ]
 
 [workspace.package]
@@ -103,7 +103,7 @@ woothee = "0.13"
 sdkwork-server-files-service = { path = "crates/sdkwork-server-files-service" }
 sdkwork-webserver-acme-service = { path = "crates/sdkwork-webserver-acme-service" }
 sdkwork-webserver-edge-runtime = { path = "crates/sdkwork-webserver-edge-runtime" }
-sdkwork-web-agent = { path = "crates/sdkwork-web-agent" }
+sdkwork-webserver-agent = { path = "crates/sdkwork-webserver-agent" }
 sdkwork-webserver-certificate-worker = { path = "crates/sdkwork-webserver-certificate-worker" }
 sdkwork-webserver-contract = { path = "crates/sdkwork-webserver-contract" }
 sdkwork-webserver-core = { path = "crates/sdkwork-webserver-core" }
@@ -124,8 +124,8 @@ sdkwork-routes-webserver-common = { path = "crates/sdkwork-routes-webserver-comm
 sdkwork-api-webserver-assembly = { path = "crates/sdkwork-api-webserver-assembly" }
 sdkwork-api-webserver-standalone-gateway = { path = "crates/sdkwork-api-webserver-standalone-gateway", default-features = false }
 sdkwork-webserver-website-delivery-edge-runtime = { path = "crates/sdkwork-webserver-website-delivery-edge-runtime" }
-sdkwork-web-backend-sdk = { path = "sdks/sdkwork-web-backend-sdk/sdkwork-web-backend-sdk-rust/generated/server-openapi" }
-sdkwork-web-internal-sdk = { path = "sdks/sdkwork-web-internal-sdk/sdkwork-web-internal-sdk-rust/generated/server-openapi" }
+sdkwork-webserver-backend-sdk = { path = "sdks/sdkwork-webserver-backend-sdk/sdkwork-webserver-backend-sdk-rust/generated/server-openapi", package = "sdkwork-webserver-backend-sdk-generated-rust" }
+sdkwork-webserver-internal-sdk = { path = "sdks/sdkwork-webserver-internal-sdk/sdkwork-webserver-internal-sdk-rust/generated/server-openapi", package = "sdkwork-webserver-internal-sdk-generated-rust" }
 
 sdkwork-iam-web-adapter = { path = "../sdkwork-iam/crates/sdkwork-iam-web-adapter" }
 sdkwork-api-iam-assembly = { path = "../sdkwork-iam/crates/sdkwork-api-iam-assembly" }

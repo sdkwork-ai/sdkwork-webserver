@@ -5,7 +5,8 @@ use std::{fs, path::PathBuf};
 
 use sdkwork_webserver_core::{
     canonical_certificate_domain_directory, canonical_certificate_file,
-    canonical_certificate_key_file, canonical_certificates_directory, load_and_compile_webserver_config,
+    canonical_certificate_key_file, canonical_certificates_directory,
+    load_and_compile_webserver_config,
 };
 
 /// Env-sensitive tests must not run concurrently (shared process env).
@@ -114,19 +115,28 @@ fn certs_uri_references_resolve_to_the_domain_inventory() {
                 }]
             }]
         });
-        fs::write(&config_path, serde_json::to_vec_pretty(&config).expect("serialize"))
-            .expect("write");
+        fs::write(
+            &config_path,
+            serde_json::to_vec_pretty(&config).expect("serialize"),
+        )
+        .expect("write");
         let compiled = load_and_compile_webserver_config(&config_path).expect("compile");
         let (certificate_file, private_key_file) = compiled
             .certificate_paths("site")
             .expect("resolved certificate paths");
         assert_eq!(
             certificate_file,
-            domain_dir.join("cert.pem").canonicalize().expect("canonical")
+            domain_dir
+                .join("cert.pem")
+                .canonicalize()
+                .expect("canonical")
         );
         assert_eq!(
             private_key_file,
-            domain_dir.join("key.pem").canonicalize().expect("canonical")
+            domain_dir
+                .join("key.pem")
+                .canonicalize()
+                .expect("canonical")
         );
     });
 }
@@ -175,8 +185,11 @@ fn missing_certs_uri_target_fails_closed() {
                 }
             }]
         });
-        fs::write(&config_path, serde_json::to_vec_pretty(&config).expect("serialize"))
-            .expect("write");
+        fs::write(
+            &config_path,
+            serde_json::to_vec_pretty(&config).expect("serialize"),
+        )
+        .expect("write");
         let error = load_and_compile_webserver_config(&config_path)
             .expect_err("missing inventory file must fail closed");
         let diagnostics = error
@@ -209,10 +222,17 @@ fn docker_standalone_config_compiles_with_8110_and_8430_listeners() {
             .parent()
             .expect("sdkwork-webserver")
             .join("deployments/docker/config/sdkwork.webserver.config.json");
-        let compiled = load_and_compile_webserver_config(&config_path).expect("docker config compiles");
+        let compiled =
+            load_and_compile_webserver_config(&config_path).expect("docker config compiles");
         let ports: Vec<u16> = compiled.config().listeners.iter().map(|l| l.port).collect();
-        assert!(ports.contains(&8110), "HTTP listener 8110 missing: {ports:?}");
-        assert!(ports.contains(&8430), "HTTPS listener 8430 missing: {ports:?}");
+        assert!(
+            ports.contains(&8110),
+            "HTTP listener 8110 missing: {ports:?}"
+        );
+        assert!(
+            ports.contains(&8430),
+            "HTTPS listener 8430 missing: {ports:?}"
+        );
         let https = compiled
             .config()
             .listeners

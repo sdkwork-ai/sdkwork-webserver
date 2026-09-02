@@ -96,10 +96,7 @@ pub fn parse_limit_req(entry: &str) -> Result<LimitReqConfig, LimitReqParseError
     }
     let mut tokens = trimmed.split_whitespace();
     let first = tokens.next().ok_or(LimitReqParseError::Empty)?;
-    let zone = first
-        .strip_prefix("zone=")
-        .unwrap_or(first)
-        .to_owned();
+    let zone = first.strip_prefix("zone=").unwrap_or(first).to_owned();
     if zone.is_empty() {
         return Err(LimitReqParseError::MissingZone);
     }

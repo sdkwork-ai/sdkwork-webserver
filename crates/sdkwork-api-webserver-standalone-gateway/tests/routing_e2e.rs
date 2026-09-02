@@ -5,9 +5,9 @@
 
 use std::{fs, net::TcpListener, path::PathBuf, time::Duration};
 
-use serde_json::{json, Value};
 use sdkwork_api_webserver_standalone_gateway::run_data_plane_until;
 use sdkwork_webserver_core::load_and_compile_webserver_config;
+use serde_json::{json, Value};
 use tokio::sync::oneshot;
 
 fn free_port() -> u16 {
@@ -28,7 +28,12 @@ fn respond_resource(id: &str, body: &str) -> Value {
     })
 }
 
-fn write_config(port: u16, resources: Vec<Value>, routes: Vec<Value>, directory: &PathBuf) -> PathBuf {
+fn write_config(
+    port: u16,
+    resources: Vec<Value>,
+    routes: Vec<Value>,
+    directory: &PathBuf,
+) -> PathBuf {
     let config = json!({
         "schemaVersion": 1,
         "kind": "sdkwork.webserver.app",
@@ -54,7 +59,11 @@ fn write_config(port: u16, resources: Vec<Value>, routes: Vec<Value>, directory:
         }]
     });
     let path = directory.join("config.json");
-    fs::write(&path, serde_json::to_vec_pretty(&config).expect("serialize")).expect("write");
+    fs::write(
+        &path,
+        serde_json::to_vec_pretty(&config).expect("serialize"),
+    )
+    .expect("write");
     path
 }
 
@@ -75,7 +84,12 @@ async fn spawn_data_plane(
 async fn wait_ready(client: &reqwest::Client, url: &str) {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     loop {
-        match client.get(url).header("host", "route.localhost").send().await {
+        match client
+            .get(url)
+            .header("host", "route.localhost")
+            .send()
+            .await
+        {
             Ok(_) => return,
             Err(_) if tokio::time::Instant::now() < deadline => {
                 tokio::time::sleep(Duration::from_millis(25)).await;
@@ -163,13 +177,25 @@ async fn regex_locations_win_over_prefixes_and_prefix_exclusive_suppresses_regex
     wait_ready(&client, &format!("{base}/")).await;
 
     // Regex beats the longer-declared prefix when both match.
-    assert_eq!(body_of(&client, &format!("{base}/api/v1/users")).await, "regex-v1");
+    assert_eq!(
+        body_of(&client, &format!("{base}/api/v1/users")).await,
+        "regex-v1"
+    );
     // Plain prefix still wins for paths only the prefix matches.
-    assert_eq!(body_of(&client, &format!("{base}/api/other")).await, "prefix");
+    assert_eq!(
+        body_of(&client, &format!("{base}/api/other")).await,
+        "prefix"
+    );
     // Case-insensitive regex matches mixed-case paths.
-    assert_eq!(body_of(&client, &format!("{base}/images/IMG.PNG")).await, "regex-png-ci");
+    assert_eq!(
+        body_of(&client, &format!("{base}/images/IMG.PNG")).await,
+        "regex-png-ci"
+    );
     // ^~ prefix suppresses regex evaluation entirely.
-    assert_eq!(body_of(&client, &format!("{base}/static/app.js")).await, "static-exclusive");
+    assert_eq!(
+        body_of(&client, &format!("{base}/static/app.js")).await,
+        "static-exclusive"
+    );
     // Fallback prefix.
     assert_eq!(body_of(&client, &format!("{base}/anything")).await, "root");
 
@@ -268,7 +294,10 @@ async fn rewrite_flags_and_captures_execute_at_request_time() {
         .expect("permanent");
     assert_eq!(permanent.status(), 301);
     assert_eq!(
-        permanent.headers().get("location").and_then(|v| v.to_str().ok()),
+        permanent
+            .headers()
+            .get("location")
+            .and_then(|v| v.to_str().ok()),
         Some("/new/page.html")
     );
 
@@ -282,7 +311,10 @@ async fn rewrite_flags_and_captures_execute_at_request_time() {
     assert_eq!(redirect.status(), 302);
 
     // last → internal re-route to /final/.
-    assert_eq!(body_of(&client, &format!("{base}/docs/guide")).await, "final");
+    assert_eq!(
+        body_of(&client, &format!("{base}/docs/guide")).await,
+        "final"
+    );
 
     // break → the current route's resource is served unchanged.
     assert_eq!(body_of(&client, &format!("{base}/break/x")).await, "broken");
@@ -333,8 +365,11 @@ async fn alias_substitutes_the_matched_prefix_before_static_serving() {
         }]
     });
     let config_path = directory.join("config.json");
-    fs::write(&config_path, serde_json::to_vec_pretty(&config).expect("serialize"))
-        .expect("write");
+    fs::write(
+        &config_path,
+        serde_json::to_vec_pretty(&config).expect("serialize"),
+    )
+    .expect("write");
     let (shutdown_tx, task) = spawn_data_plane(&config_path).await;
     let client = reqwest::Client::builder()
         .no_proxy()

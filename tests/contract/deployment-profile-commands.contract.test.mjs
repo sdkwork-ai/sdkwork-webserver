@@ -27,94 +27,67 @@ function runNode(args, env = {}) {
   });
 }
 
-test('root development commands select explicit standalone and cloud development profiles', () => {
+test('root development commands select the explicit standalone development profile', () => {
   const packageJson = readJson('package.json');
   assert.equal(packageJson.scripts.dev, 'pnpm dev:standalone');
   assert.equal(
     packageJson.scripts['dev:standalone'],
     'pnpm exec sdkwork-app dev --deployment-profile standalone',
   );
-  assert.equal(
-    packageJson.scripts['dev:cloud'],
-    'pnpm exec sdkwork-app dev --deployment-profile cloud',
-  );
-  assert.match(
-    packageJson.scripts['_sdkwork:verify'],
-    /pnpm exec sdkwork-app dev --deployment-profile cloud --dry-run/u,
-  );
+  // Verify must exercise a dev dry-run of the app lifecycle.
+  assert.match(packageJson.scripts['_sdkwork:verify'], /sdkwork-app dev .*--dry-run/u);
 
   const index = readJson('etc/sdkwork.deployment.config.json');
   assert.equal(index.defaultProfile, 'standalone.development');
-  assert.equal(index.profiles['cloud.development'].config, 'topology/cloud.development.env');
+  // Standalone-only refactor: the deployment index owns exactly the
+  // standalone.{development,test,staging,production,demo} profiles.
+  assert.deepEqual(Object.keys(index.profiles).sort(), [
+    'standalone.demo',
+    'standalone.development',
+    'standalone.production',
+    'standalone.staging',
+    'standalone.test',
+  ]);
+  for (const [profileId, profile] of Object.entries(index.profiles)) {
+    assert.equal(profile.config, `topology/${profileId}.env`);
+  }
 });
 
-test('cloud development uses remote HTTPS surfaces and starts only local clients', () => {
-  const source = readFileSync(
-    path.join(REPO_ROOT, 'etc/topology/cloud.development.env'),
-    'utf8',
-  );
-  const values = Object.fromEntries(
-    source.split(/\r?\n/u)
-      .filter((line) => line && !line.startsWith('#'))
-      .map((line) => line.split(/=(.*)/su).slice(0, 2)),
-  );
-  assert.equal(values.SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE, 'cloud');
-  assert.equal(values.SDKWORK_WEBSERVER_ENVIRONMENT, 'development');
-  const controlPlane = new URL(values.SDKWORK_WEBSERVER_APPLICATION_BACKEND_HTTP_URL);
-  assert.equal(controlPlane.protocol, 'https:');
-  assert.notEqual(controlPlane.hostname, 'localhost');
-  assert.doesNotMatch(source, /token|credential|secret/iu);
+// Removed: "cloud development uses remote HTTPS surfaces and starts only local
+// clients" — the cloud development profile and etc/topology/cloud.development.env
+// were deleted by the standalone-only refactor.
 
-  const topology = readJson('specs/topology.spec.json');
-  assert.deepEqual(
-    topology.orchestration.profiles['cloud.development'].processes.map((entry) => entry.role),
-    ['client', 'client'],
-  );
-  const browser = topology.orchestration.profiles['cloud.development'].processes.find(
-    (entry) => entry.id === 'webserver-pc-browser',
-  );
-  assert.equal(browser.script, '_sdkwork:client:browser:cloud');
-  assert.deepEqual(browser.runtimeTargets, ['browser']);
-  const envExample = readFileSync(path.join(REPO_ROOT, 'etc/agent/development.env.example'), 'utf8');
-  assert.match(envExample, /^SDKWORK_WEBSERVER_NODE_TOKEN=$/mu);
-});
-
-test('release dry-runs produce distinct profile and workflow-version-bound artifact names', () => {
+test('release dry-runs produce architecture and workflow-version-bound artifact names', () => {
   const packageJson = readJson('package.json');
   assert.equal(
     packageJson.scripts['release:package:standalone'],
     'pnpm exec sdkwork-app release:package --deployment-profile standalone',
   );
-  assert.equal(
-    packageJson.scripts['release:package:cloud'],
-    'pnpm exec sdkwork-app release:package --deployment-profile cloud',
-  );
 
+  // Standalone-only refactor: one deployment profile, two release architectures.
   for (const architecture of ['x64', 'arm64']) {
-    for (const deploymentProfile of ['standalone', 'cloud']) {
-      const result = runNode(
-        ['scripts/webserver-release.mjs', 'package', '--deployment-profile', deploymentProfile, '--dry-run'],
-        { SDKWORK_PACKAGE_VERSION: '9.8.7', SDKWORK_PACKAGE_ARCHITECTURE: architecture },
-      );
-      assert.equal(result.status, 0, result.stderr);
-      assert.match(result.stdout, new RegExp(`deploymentProfile=${deploymentProfile}`, 'u'));
-      assert.match(result.stdout, new RegExp(`architecture=${architecture}`, 'u'));
-      assert.match(
-        result.stdout,
-        new RegExp(`artifact=sdkwork-web-linux-${architecture}-${deploymentProfile}-server-9\\.8\\.7\\.tar\\.gz`, 'u'),
-      );
-    }
+    const result = runNode(
+      ['scripts/webserver-release.mjs', 'package', '--deployment-profile', 'standalone', '--dry-run'],
+      { SDKWORK_PACKAGE_VERSION: '9.8.7', SDKWORK_PACKAGE_ARCHITECTURE: architecture },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /deploymentProfile=standalone/u);
+    assert.match(result.stdout, new RegExp(`architecture=${architecture}`, 'u'));
+    assert.match(
+      result.stdout,
+      new RegExp(`artifact=sdkwork-webserver-linux-${architecture}-standalone-server-9\\.8\\.7\\.tar\\.gz`, 'u'),
+    );
   }
 
   const conflict = runNode(
-    ['scripts/webserver-release.mjs', 'package', '--deployment-profile', 'cloud', '--dry-run'],
+    ['scripts/webserver-release.mjs', 'package', '--deployment-profile', 'standalone', '--dry-run'],
     { SDKWORK_PACKAGE_VERSION: '9.8.7', SDKWORK_RELEASE_VERSION: '9.8.6' },
   );
   assert.notEqual(conflict.status, 0);
   assert.match(conflict.stderr, /SDKWORK_PACKAGE_VERSION conflicts with SDKWORK_RELEASE_VERSION/u);
 
   const unsupported = runNode(
-    ['scripts/webserver-release.mjs', 'package', '--deployment-profile', 'cloud', '--dry-run'],
+    ['scripts/webserver-release.mjs', 'package', '--deployment-profile', 'standalone', '--dry-run'],
     { SDKWORK_PACKAGE_VERSION: '9.8.7', SDKWORK_PACKAGE_ARCHITECTURE: 'riscv64' },
   );
   assert.notEqual(unsupported.status, 0);
@@ -124,7 +97,7 @@ test('release dry-runs produce distinct profile and workflow-version-bound artif
 test('actual Linux archive generation fails before build on a mismatched host', () => {
   const architecture = process.platform === 'linux' && process.arch === 'x64' ? 'arm64' : 'x64';
   const result = runNode(
-    ['scripts/webserver-release.mjs', 'package', '--deployment-profile', 'cloud'],
+    ['scripts/webserver-release.mjs', 'package', '--deployment-profile', 'standalone'],
     { SDKWORK_PACKAGE_VERSION: '9.8.7', SDKWORK_PACKAGE_ARCHITECTURE: architecture },
   );
   assert.notEqual(result.status, 0);
@@ -156,28 +129,35 @@ test('release smoke fails before archive access on a mismatched host architectur
 
 test('release workflow and archive implementation preserve immutable bounded package contracts', () => {
   const workflow = readJson('sdkwork.workflow.json');
-  assert.equal(workflow.lifecycle.build[0].run, 'node scripts/build.mjs --release');
-  assert.equal(workflow.lifecycle.package.length, 1);
-  assert.equal(workflow.lifecycle.package[0].run, 'node scripts/webserver-release.mjs package');
-  assert.deepEqual(
-    workflow.targets.map((target) => target.deploymentProfile).sort(),
-    ['cloud', 'cloud', 'standalone', 'standalone'],
+  // The build pipeline owns additional generator steps; assert that the
+  // release build step is present instead of pinning its position.
+  assert.ok(
+    workflow.lifecycle.build.some((step) => step.run.includes('node scripts/build.mjs --release')),
   );
+  assert.ok(
+    workflow.lifecycle.package.some((step) => step.run === 'node scripts/webserver-release.mjs package'),
+  );
+  // Standalone-only refactor: every release target packages the standalone
+  // server archive; deb/rpm installer targets cover the test/production envs.
+  assert.ok(workflow.targets.length > 0);
+  for (const target of workflow.targets) {
+    assert.equal(target.deploymentProfile, 'standalone');
+    assert.equal(target.platform, 'linux');
+    assert.ok(['x64', 'arm64'].includes(target.architecture));
+    assert.equal(target.runner, target.architecture === 'arm64' ? 'ubuntu-24.04-arm' : 'ubuntu-24.04');
+  }
   assert.deepEqual(
     [...new Set(workflow.targets.map((target) => target.architecture))].sort(),
     ['arm64', 'x64'],
   );
-  for (const target of workflow.targets) {
-    assert.equal(target.platform, 'linux');
-    assert.ok(['x64', 'arm64'].includes(target.architecture));
-    assert.equal(target.runner, target.architecture === 'arm64' ? 'ubuntu-24.04-arm' : 'ubuntu-24.04');
+  for (const target of workflow.targets.filter((entry) => entry.formats.includes('tar.gz'))) {
     assert.deepEqual(target.formats, ['tar.gz']);
     assert.deepEqual(target.outputGlobs, [
-      `dist/release/sdkwork-web-linux-${target.architecture}-${target.deploymentProfile}-server-*.tar.gz`,
-      `dist/release/sdkwork-web-linux-${target.architecture}-${target.deploymentProfile}-server-*.tar.gz.sha256`,
-      `dist/release/sdkwork-web-linux-${target.architecture}-${target.deploymentProfile}-server-*.tar.gz.sigstore.json`,
-      `dist/release/sdkwork-web-linux-${target.architecture}-${target.deploymentProfile}-server-*.tar.gz.cdx.json`,
-      `dist/release/sdkwork-web-linux-${target.architecture}-${target.deploymentProfile}-server-*.tar.gz.cdx.json.sha256`,
+      `dist/release/sdkwork-webserver-linux-${target.architecture}-standalone-server-*.tar.gz`,
+      `dist/release/sdkwork-webserver-linux-${target.architecture}-standalone-server-*.tar.gz.sha256`,
+      `dist/release/sdkwork-webserver-linux-${target.architecture}-standalone-server-*.tar.gz.sigstore.json`,
+      `dist/release/sdkwork-webserver-linux-${target.architecture}-standalone-server-*.tar.gz.cdx.json`,
+      `dist/release/sdkwork-webserver-linux-${target.architecture}-standalone-server-*.tar.gz.cdx.json.sha256`,
     ]);
   }
   assert.equal(workflow.security.sbomRequired, true);
@@ -207,11 +187,12 @@ test('release workflow and archive implementation preserve immutable bounded pac
   assert.match(source, /source: 'etc\/examples\/public\/index\.html'/u);
   assert.match(source, /target: 'etc\/node-daemon\/development\.env\.example'/u);
   assert.match(source, /PC_PACKAGE_PREFIX = 'share\/sdkwork\/webserver-pc'/u);
-  assert.match(source, /settings\.deploymentProfile === 'standalone'/u);
-  assert.match(source, /'run', 'build:standalone'/u);
-  assert.match(source, /inspectPcBuildOutput\(\)/u);
+  assert.match(source, /deploymentProfile === 'standalone'/u);
+  // The browser bundles are built through the shared adaptive-web runner.
+  assert.match(source, /build-browser-client\.mjs/u);
+  assert.match(source, /inspectPcBuildOutput\(/u);
+  assert.match(source, /inspectH5BuildOutput\(/u);
   assert.match(source, /inspectDependencyRuntimeAssets\(\)/u);
   assert.match(source, /share\/sdkwork\/iam/u);
   assert.match(source, /share\/sdkwork\/drive/u);
-  assert.match(source, /cloud package must not contain PC standalone static assets/u);
 });

@@ -25,11 +25,7 @@ pub(crate) use entry::{decide_cacheability, CacheDecision, CachedResponse, Respo
 pub(crate) use key::{parse_vary_header, CacheKey};
 pub(crate) use policy::freshness_for;
 
-use std::{
-    path::PathBuf,
-    sync::Arc,
-    time::Duration,
-};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use std::sync::Mutex;
 
@@ -52,31 +48,29 @@ pub(crate) struct HttpResponseCache {
 }
 
 impl HttpResponseCache {
-    pub(crate) fn new(
-        config: &ProxyCacheConfig,
-        metrics: Arc<DataPlaneMetrics>,
-    ) -> Arc<Self> {
+    pub(crate) fn new(config: &ProxyCacheConfig, metrics: Arc<DataPlaneMetrics>) -> Arc<Self> {
         let store: Arc<dyn CacheBackend> = match config
             .disk_path
             .as_deref()
             .map(str::trim)
             .filter(|path| !path.is_empty())
         {
-            Some(path) => match TieredCacheBackend::with_disk(config.max_entries, PathBuf::from(path))
-            {
-                Ok(backend) => {
-                    tracing::info!(disk_path = %path, "proxy cache disk backend enabled");
-                    Arc::new(backend)
+            Some(path) => {
+                match TieredCacheBackend::with_disk(config.max_entries, PathBuf::from(path)) {
+                    Ok(backend) => {
+                        tracing::info!(disk_path = %path, "proxy cache disk backend enabled");
+                        Arc::new(backend)
+                    }
+                    Err(error) => {
+                        tracing::warn!(
+                            disk_path = %path,
+                            error = %error,
+                            "proxy cache disk backend unavailable; falling back to memory"
+                        );
+                        Arc::new(MemoryCacheBackend::new(config.max_entries))
+                    }
                 }
-                Err(error) => {
-                    tracing::warn!(
-                        disk_path = %path,
-                        error = %error,
-                        "proxy cache disk backend unavailable; falling back to memory"
-                    );
-                    Arc::new(MemoryCacheBackend::new(config.max_entries))
-                }
-            },
+            }
             // Memory-only path uses the L1 backend directly (no tier wrapper).
             None => Arc::new(MemoryCacheBackend::new(config.max_entries)),
         };
@@ -235,32 +229,30 @@ mod tests {
         let cache = HttpResponseCache::new(&config(), metrics());
         let k = key("/one");
         assert!(cache.lookup(&k).is_none());
-        cache
-            .insert(
-                k.clone(),
-                response("\"v1\""),
-                Bytes::from_static(b"one"),
-                CacheDecision {
-                    cacheable: true,
-                    ttl: Some(std::time::Duration::from_secs(60)),
-                },
-            );
+        cache.insert(
+            k.clone(),
+            response("\"v1\""),
+            Bytes::from_static(b"one"),
+            CacheDecision {
+                cacheable: true,
+                ttl: Some(std::time::Duration::from_secs(60)),
+            },
+        );
         let hit = cache.lookup(&k).expect("cached");
         assert_eq!(hit.body.as_ref(), b"one");
 
         // Fill more entries than capacity; LRU evicts the oldest.
         for i in 0..8 {
             let k = key(&format!("/evict-{i}"));
-            cache
-                .insert(
-                    k,
-                    response("\"v\""),
-                    Bytes::from(vec![b'x'; 10]),
-                    CacheDecision {
-                        cacheable: true,
-                        ttl: None,
-                    },
-                );
+            cache.insert(
+                k,
+                response("\"v\""),
+                Bytes::from(vec![b'x'; 10]),
+                CacheDecision {
+                    cacheable: true,
+                    ttl: None,
+                },
+            );
         }
         assert!(cache.lookup(&k).is_none(), "LRU must evict /one");
     }
@@ -304,6 +296,9 @@ mod tests {
         let gzip = CacheKey::new("GET", "example.com", "/", None, &vary, &headers);
         let identity = CacheKey::new("GET", "example.com", "/", None, &vary, &HeaderMap::new());
         assert_ne!(gzip, identity);
-        assert_eq!(gzip.vary_input.get("accept-encoding").map(String::as_str), Some("gzip"));
+        assert_eq!(
+            gzip.vary_input.get("accept-encoding").map(String::as_str),
+            Some("gzip")
+        );
     }
 }

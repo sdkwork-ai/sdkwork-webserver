@@ -5,13 +5,25 @@ import {
   type CreateServerRequest,
   type SdkworkBackendClient,
   type UpdateNginxConfigRequest,
-} from "@sdkwork/web-backend-sdk";
+} from "@sdkwork/webserver-backend-sdk";
 import type { AuthTokenManager } from "@sdkwork/sdk-common";
 import { createContext, useContext, type ReactNode } from "react";
 import { createDriveAppClient, type SdkworkDriveAppClient } from "@sdkwork/drive-app-sdk";
 
 export type { SdkworkDriveAppClient };
 export { createDriveAppClient };
+
+// Public wire-type surface for feature packages: they consume the generated
+// backend SDK only through these core exports, never via direct imports
+// (frontend composition feature-package import rule).
+export type {
+  ServerDirectoryListing,
+  ServerEntry,
+  ServerFileContent,
+  ServerFilesNode,
+  ServerOperationResult,
+  ServerProjectOperations,
+} from "@sdkwork/webserver-backend-sdk";
 
 export type WebserverAdminSdkClient = SdkworkBackendClient;
 const Context = createContext<WebserverAdminSdkClient | null>(null);

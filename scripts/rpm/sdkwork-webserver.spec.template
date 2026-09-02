@@ -40,9 +40,9 @@ install -m 0755 bin/sdkwork-api-webserver-standalone-gateway \
   %{buildroot}/usr/lib/sdkwork/webserver/bin/
 install -m 0755 bin/sdkwork-webserver-website-delivery-edge-runtime \
   %{buildroot}/usr/lib/sdkwork/webserver/bin/
-install -m 0755 bin/sdkwork-web-node-daemon \
+install -m 0755 bin/sdkwork-webserver-node-daemon \
   %{buildroot}/usr/lib/sdkwork/webserver/bin/
-install -m 0755 bin/sdkwork-web-agent \
+install -m 0755 bin/sdkwork-webserver-agent \
   %{buildroot}/usr/lib/sdkwork/webserver/bin/
 install -m 0755 bin/sdkwork-webserver-certificate-worker \
   %{buildroot}/usr/lib/sdkwork/webserver/bin/

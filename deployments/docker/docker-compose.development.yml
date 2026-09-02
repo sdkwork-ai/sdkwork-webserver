@@ -16,11 +16,19 @@
 
 name: sdkwork-webserver-development
 
+# Bounded json-file log rotation (DEPLOYMENT_SPEC.md §6 runtime hardening).
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   webserver:
     image: registry.sdkwork.com/apps/sdkwork-webserver-standalone:${SDKWORK_WEBSERVER_IMAGE_TAG:-0.1.0}
     container_name: sdkwork-webserver-development
     restart: unless-stopped
+    logging: *default-logging
     # Listen on privileged 80/443 inside the container (module sidecars declare
     # listen 80 / 443 ssl per SDKWORK_WEBSERVER_SPEC.md).
     cap_add:

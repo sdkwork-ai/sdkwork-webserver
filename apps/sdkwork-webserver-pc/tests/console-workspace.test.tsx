@@ -541,7 +541,7 @@ describe("console release controls", () => {
 
     expect(await screen.findByRole("columnheader", { name: "发布环境" })).toBeTruthy();
     expect(screen.getByText("生产环境")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "发布新版本" }));
+    fireEvent.click(screen.getByRole("button", { name: "部署" }));
     expect(screen.getByText("发布方式")).toBeTruthy();
     expect(screen.getByRole("option", { name: "手动上传" })).toBeTruthy();
     expect(screen.queryByRole("option", { name: "Git" })).toBeNull();

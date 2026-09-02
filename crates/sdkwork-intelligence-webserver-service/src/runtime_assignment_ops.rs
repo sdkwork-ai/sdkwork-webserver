@@ -29,7 +29,7 @@ impl MachineCredentialAuthenticator for WebService {
         Ok(Some(AuthenticatedMachineCredential {
             tenant_id,
             subject_id,
-            app_id: "sdkwork-web-agent".to_owned(),
+            app_id: "sdkwork-webserver-agent".to_owned(),
             permission_scope: vec!["web.agent.*".to_owned()],
         }))
     }
