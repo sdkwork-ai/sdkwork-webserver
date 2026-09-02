@@ -83,21 +83,69 @@ lets_encrypt_certs_root() {
   printf '%s' "${SDKWORK_WEBSERVER_CERTS_LETS_ENCRYPT_DIR:-/etc/sdkwork/certs/letsencrypt}"
 }
 
+certificate_covers() {
+  # certificate_covers <cert> <name>: true when the certificate's SAN list
+  # contains DNS:<name> exactly (fixed-string match).
+  openssl x509 -in "$1" -noout -ext subjectAltName 2>/dev/null \
+    | tr -d ' ' | tr ',' '\n' | grep -Fqx "DNS:${2}"
+}
+
 ensure_domain_certificate() {
   local domain="$1"
+  local extra_names="${2:-}"
   local directory="${SDKWORK_CERTS_DIR:-/etc/sdkwork/certs}/${domain}"
   local cert="${directory}/cert.pem"
   local key="${directory}/key.pem"
+  local refresh_le=0
+  # Imported sidecars store certificates under the apex-domain directory
+  # (letsencrypt/sdkwork.com/) while declaring subdomain server_name entries
+  # (server.sdkwork.com, edge.aiot.sdkwork.com, ...). Bootstrap certificates
+  # must therefore carry the apex, a single-label wildcard, and every
+  # aggregated server name; a leaf missing any of them fails the gateway's
+  # SAN validation. Operator/ACME certificates are not self-signed and are
+  # kept untouched.
+  local san="DNS:${domain},DNS:*.${domain}" name
+  if [ -n "${extra_names}" ]; then
+    local IFS=','
+    for name in ${extra_names}; do
+      case "${name}" in
+        "${domain}"|"*.${domain}") continue ;;
+      esac
+      san="${san},DNS:${name}"
+    done
+  fi
   if [ -s "${cert}" ] && [ -s "${key}" ]; then
-    log "certificate present: ${domain}"
-  else
+    if [ "$(openssl x509 -in "${cert}" -noout -issuer 2>/dev/null)" = "$(openssl x509 -in "${cert}" -noout -subject 2>/dev/null)" ]; then
+      local needs_regen=0
+      certificate_covers "${cert}" "*.${domain}" || needs_regen=1
+      if [ -n "${extra_names}" ] && [ "${needs_regen}" = "0" ]; then
+        local IFS=','
+        for name in ${extra_names}; do
+          case "${name}" in
+            "${domain}"|"*.${domain}") continue ;;
+          esac
+          certificate_covers "${cert}" "${name}" || { needs_regen=1; break; }
+        done
+      fi
+      if [ "${needs_regen}" = "1" ]; then
+        log "regenerating self-signed bootstrap certificate for ${domain}: SAN coverage incomplete"
+        rm -f "${cert}" "${key}"
+        refresh_le=1
+      else
+        log "certificate present: ${domain}"
+      fi
+    else
+      log "certificate present: ${domain} (operator/ACME material)"
+    fi
+  fi
+  if [ ! -s "${cert}" ] || [ ! -s "${key}" ]; then
     ensure_directory "${directory}"
     log "generating self-signed bootstrap certificate for ${domain} (replace under ${directory})"
     if ! openssl req -x509 -newkey rsa:2048 -nodes \
         -days 3650 \
         -keyout "${key}" -out "${cert}" \
         -subj "/CN=${domain}" \
-        -addext "subjectAltName=DNS:${domain}" 2>/dev/null \
+        -addext "subjectAltName=${san}" 2>/dev/null \
       && [ ! -s "${cert}" ]; then
       # Older openssl builds reject -addext; retry without the extension and
       # surface a visible warning instead of failing TLS bootstrap silently.
@@ -112,11 +160,17 @@ ensure_domain_certificate() {
       log "warning: failed to generate bootstrap certificate for ${domain}; HTTPS listeners for it stay unserved until operator/ACME material is provisioned"
     fi
     chmod 0600 "${key}" 2>/dev/null || true
+    refresh_le=1
   fi
   local le_dir le_root
   le_root="$(lets_encrypt_certs_root)"
   le_dir="${le_root}/${domain}"
-  if [ ! -s "${le_dir}/fullchain.pem" ] || [ ! -s "${le_dir}/privkey.pem" ]; then
+  if [ "${refresh_le}" = "1" ] && [ -s "${le_dir}/fullchain.pem" ] \
+    && [ "$(openssl x509 -in "${le_dir}/fullchain.pem" -noout -issuer 2>/dev/null)" != "$(openssl x509 -in "${le_dir}/fullchain.pem" -noout -subject 2>/dev/null)" ]; then
+    log "keeping operator-provisioned certificate at ${le_dir}; mirrored bootstrap refresh skipped"
+    refresh_le=0
+  fi
+  if [ "${refresh_le}" = "1" ] || [ ! -s "${le_dir}/fullchain.pem" ] || [ ! -s "${le_dir}/privkey.pem" ]; then
     ensure_directory "${le_dir}"
     cp "${cert}" "${le_dir}/fullchain.pem"
     cp "${key}" "${le_dir}/privkey.pem"
@@ -135,8 +189,15 @@ ensure_domain_certificate() {
 ensure_imported_sidecar_certificates() {
   local imports_root="${CONFIG_ROOT}/imports.d"
   local aggregator conf src_cert domain le_dir seen="" le_root
+  local pairs names
   le_root="$(lets_encrypt_certs_root)"
   [ -d "${imports_root}" ] || return 0
+  # Pass 1: collect, per certificate-directory domain, every server_name
+  # declared by sidecars referencing that domain's certificate directory so
+  # bootstrap SANs cover multi-label hosts (edge.aiot.sdkwork.com) that a
+  # single apex wildcard cannot. Only syntactically plain names are kept
+  # (regex/~ prefixed and nginx placeholder names are skipped).
+  pairs="$(mktemp)"
   for aggregator in "${imports_root}/import.conf.standalone" "${imports_root}/import.conf.cloud"; do
     [ -f "${aggregator}" ] || continue
     while IFS= read -r line; do
@@ -148,6 +209,8 @@ ensure_imported_sidecar_certificates() {
       conf="${conf%;}"
       [ -f "${conf}" ] || continue
       grep -q 'listen[[:space:]][[:space:]]*443[[:space:]][[:space:]]*ssl' "${conf}" || continue
+      names="$(sed -n 's/^[[:space:]]*server_name[[:space:]][[:space:]]*\([^;][^;]*\);.*/\1/p' "${conf}" \
+        | tr -s '[:space:]' '\n' | grep -E '^[A-Za-z0-9*.-]+$' | sort -u)"
       while IFS= read -r src_cert; do
         [ -n "${src_cert}" ] || continue
         # Recognize the configured ACME-layout root first (so operators who
@@ -163,20 +226,28 @@ ensure_imported_sidecar_certificates() {
           continue
         fi
         [ -n "${domain}" ] || continue
-        case ",${seen}," in
-          *,"${domain}",*) continue ;;
-        esac
-        seen="${seen:+${seen},}${domain}"
-        le_dir="$(lets_encrypt_certs_root)/${domain}"
-        if [ ! -s "${le_dir}/fullchain.pem" ] || [ ! -s "${le_dir}/privkey.pem" ]; then
-          log "bootstrapping missing sidecar certificate inventory for ${domain} (${le_dir})"
-          ensure_domain_certificate "${domain}"
-        else
-          log "sidecar certificate inventory present for ${domain}"
-        fi
+        for name in ${names}; do
+          printf '%s %s\n' "${domain}" "${name}" >> "${pairs}"
+        done
       done < <(sed -n 's/^[[:space:]]*ssl_certificate[[:space:]][[:space:]]*\([^;][^;]*\);.*/\1/p' "${conf}")
     done < "${aggregator}"
   done
+  # Pass 2: bootstrap one certificate per referenced domain with the
+  # aggregated server_name inventory as SANs. ensure_domain_certificate is
+  # idempotent: it keeps operator material and only regenerates incomplete
+  # self-signed bootstrap certificates.
+  while IFS= read -r domain; do
+    [ -n "${domain}" ] || continue
+    case ",${seen}," in
+      *,"${domain}",*) continue ;;
+    esac
+    seen="${seen:+${seen},}${domain}"
+    names="$(awk -v d="${domain}" '$1==d{print $2}' "${pairs}" | sort -u | paste -sd, -)"
+    le_dir="$(lets_encrypt_certs_root)/${domain}"
+    log "ensuring sidecar certificate inventory for ${domain} (${le_dir})"
+    ensure_domain_certificate "${domain}" "${names}"
+  done < <(awk '{print $1}' "${pairs}" | sort -u)
+  rm -f "${pairs}"
   # Fail-soft verification: inventory entries that are still absent after all
   # bootstrap attempts get a loud operator-facing warning.
   if [ -n "${seen}" ]; then
@@ -230,7 +301,7 @@ ensure_credential_entry_bootstrap_token() {
     log "removed stale unsigned credential-entry bootstrap Access-Token (${environment})"
   fi
   export SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_TENANT_ID="${SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_TENANT_ID:-100001}"
-  export SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_APP_ID="${SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_APP_ID:-sdkwork-web}"
+  export SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_APP_ID="${SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_APP_ID:-sdkwork-webserver}"
   if run_as_service_user "${GATEWAY_BINARY}" issue-credential-entry-bootstrap-token "${file}"; then
     chown "${SERVICE_USER}:${SERVICE_USER}" "${file}" 2>/dev/null || true
     chmod 0600 "${file}" 2>/dev/null || true
@@ -1444,11 +1515,74 @@ module_adaptive_named_root() {
 # surfaces 404 (SDKWORK_WEBSERVER_SPEC.md §13.6 / §17). Each root is symlinked
 # to the active static-source profile dist tree; existing non-symlink content
 # is never overwritten. Idempotent; safe to re-run on reload.
+# Ensure one declared Adaptive Web root exists and points at the active
+# static-source dist tree. Deduplicated by path; existing non-symlink
+# content is never overwritten.
+link_module_web_static_root() {
+  local module="$1" module_root="$2" surface="$3" root="$4"
+  local src parent
+  case ",${seen_roots}," in
+    *,"${root}",*) return 0 ;;
+  esac
+  seen_roots="${seen_roots:+${seen_roots},}${root}"
+  if [ "${surface}" = "static" ]; then
+    # Static-fallback roots ship with the module checkout itself
+    # (deployments/webserver/static/) instead of a vite dist tree.
+    if [ -d "${module_root}/deployments/webserver/static" ]; then
+      src="${module_root}/deployments/webserver/static"
+    else
+      src=""
+    fi
+  else
+    src="$(module_app_static_root_for_alias "${module}" "${surface}" "${dist_alias}" "${source_profile}")"
+  fi
+  if [ -z "${src}" ]; then
+    log "warning: ${module} ${surface}: no apps/*-${surface}/dist/${source_profile}/${dist_alias} build under ${module_root}; ${root} stays unserved (build with: pnpm --dir ${module} build:${surface}:${dist_alias}:${source_profile})"
+    return 0
+  fi
+  if [ -L "${root}" ]; then
+    if [ "$(readlink -f "${root}")" = "$(readlink -f "${src}")" ]; then
+      return 0
+    fi
+  elif [ -e "${root}" ]; then
+    log "warning: refusing to replace non-symlink content at ${root} (${module} ${surface}); remove it manually to re-point"
+    return 0
+  fi
+  parent="$(dirname "${root}")"
+  mkdir -p "${parent}"
+  chown "${SERVICE_USER}:${SERVICE_USER}" "${parent}" 2>/dev/null || true
+  ln -sfn "${src}" "${root}"
+  log "linked ${root} -> ${src#${module_root}/} (${module} ${surface}, ${source_profile}/${dist_alias})"
+}
+
+# Harvest the declared Adaptive Web roots of one sidecar. Emits
+# "<surface> <root>" pairs for both sidecar generations:
+# (a) @pc/@h5 named locations, and (b) plain
+# `root /usr/share/sdkwork/<code>/web/{pc,h5};` declarations — the
+# fail-closed static-root validation (compiled.rs canonical_directory)
+# requires every declared package root to exist either way.
+module_web_static_root_pairs() {
+  local sidecar="$1" surface root conf_file sidecar_dir
+  sidecar_dir="$(dirname "${sidecar}")"
+  # Scan the sidecar plus its included snippets: some modules declare the
+  # Adaptive Web named locations in snippets/adaptive-web.named-locations.conf
+  # instead of the sidecar body.
+  for conf_file in "${sidecar}" "${sidecar_dir}"/snippets/*.conf; do
+    [ -f "${conf_file}" ] || continue
+    for surface in pc h5; do
+      if root="$(module_adaptive_named_root "${conf_file}" "${surface}")"; then
+        printf '%s %s\n' "${surface}" "${root}"
+      fi
+    done
+    sed -n "s#^[[:space:]]*root[[:space:]]\+\(${adaptive_base}/[^;[:space:]]*/web/\(pc\|h5\|static\)\);.*#\2 \1#p" "${conf_file}"
+  done
+}
+
 materialize_module_web_static_roots() {
   local adaptive_base="${SDKWORK_WEBSERVER_MODULE_WEB_ROOT:-/usr/share/sdkwork}"
   local environment dist_alias source_profile
   local modules_list module module_root conf profile surface
-  local root src parent seen_roots
+  local root src parent seen_roots pair
   environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
   dist_alias="$(environment_dist_alias "${environment}")"
   source_profile="$(static_source_profile)"
@@ -1467,37 +1601,16 @@ materialize_module_web_static_roots() {
     for profile in standalone cloud; do
       conf="$(module_nginx_sidecar_abs_path "${module_root}" "${profile}")"
       [ -f "${conf}" ] || continue
-      for surface in pc h5; do
-        if ! root="$(module_adaptive_named_root "${conf}" "${surface}")"; then
-          continue
-        fi
+      while IFS=' ' read -r surface root; do
+        [ -n "${surface}" ] && [ -n "${root}" ] || continue
         case "${root}" in
           "${adaptive_base}"/*) ;;
           *) log "warning: ${module} ${profile} ${surface} root outside ${adaptive_base}: ${root}; skipped" ; continue ;;
         esac
-        case ",${seen_roots}," in
-          *,"${root}",*) continue ;;
-        esac
-        seen_roots="${seen_roots:+${seen_roots},}${root}"
-        src="$(module_app_static_root_for_alias "${module}" "${surface}" "${dist_alias}" "${source_profile}")"
-        if [ -z "${src}" ]; then
-          log "warning: ${module} ${surface}: no apps/*-${surface}/dist/${source_profile}/${dist_alias} build under ${module_root}; ${root} stays unserved (build with: pnpm --dir ${module} build:${surface}:${dist_alias}:${source_profile})"
-          continue
-        fi
-        if [ -L "${root}" ]; then
-          if [ "$(readlink -f "${root}")" = "$(readlink -f "${src}")" ]; then
-            continue
-          fi
-        elif [ -e "${root}" ]; then
-          log "warning: refusing to replace non-symlink content at ${root} (${module} ${surface}); remove it manually to re-point"
-          continue
-        fi
-        parent="$(dirname "${root}")"
-        mkdir -p "${parent}"
-        chown "${SERVICE_USER}:${SERVICE_USER}" "${parent}" 2>/dev/null || true
-        ln -sfn "${src}" "${root}"
-        log "linked ${root} -> ${src#${module_root}/} (${module} ${surface}, ${source_profile}/${dist_alias})"
-      done
+        link_module_web_static_root "${module}" "${module_root}" "${surface}" "${root}"
+      done <<MODULE_ROOT_PAIRS
+$(module_web_static_root_pairs "${conf}")
+MODULE_ROOT_PAIRS
     done
   done
 }
