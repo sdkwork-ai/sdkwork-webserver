@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using SDKWork.Webserver.BackendSdk.Models;
-using SdkHttpClient = SDKWork.Webserver.BackendSdk.Http.HttpClient;
+using SDKWork.WebserverBackendSdk.Models;
+using SdkHttpClient = SDKWork.WebserverBackendSdk.Http.HttpClient;
 
-namespace SDKWork.Webserver.BackendSdk.Api
+namespace SDKWork.WebserverBackendSdk.Api
 {
     public class ApplicationApi
     {
@@ -18,7 +18,7 @@ namespace SDKWork.Webserver.BackendSdk.Api
         /// <summary>
         /// List managed applications
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ApplicationsListResponse?> ApplicationsListAsync(int? page = null, int? pageSize = null, string? applicationType = null, int? siteType = null, int? status = null, string? keyword = null)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ApplicationsListResponse?> ApplicationsListAsync(int? page = null, int? pageSize = null, string? applicationType = null, int? siteType = null, int? status = null, string? keyword = null)
         {
             var queryString = BuildQueryString(new[]
             {
@@ -29,13 +29,13 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 new QueryParameterSpec("status", status, "form", true, false, null),
                 new QueryParameterSpec("keyword", keyword, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Webserver.BackendSdk.Models.ApplicationsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath("/applications"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ApplicationsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath("/applications"), queryString));
         }
 
         /// <summary>
         /// Create a managed application
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ApplicationsCreateResponse201?> ApplicationsCreateAsync(SDKWork.Webserver.BackendSdk.Models.CreateApplicationRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ApplicationsCreateResponse201?> ApplicationsCreateAsync(SDKWork.WebserverBackendSdk.Models.CreateApplicationRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -44,21 +44,21 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.BackendSdk.Models.ApplicationsCreateResponse201>(ApiPaths.BackendPath("/applications"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ApplicationsCreateResponse201>(ApiPaths.BackendPath("/applications"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
         /// Retrieve a managed application
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ApplicationsRetrieveResponse?> ApplicationsRetrieveAsync(string applicationId)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ApplicationsRetrieveResponse?> ApplicationsRetrieveAsync(string applicationId)
         {
-            return await _client.GetAsync<SDKWork.Webserver.BackendSdk.Models.ApplicationsRetrieveResponse>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}"));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ApplicationsRetrieveResponse>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}"));
         }
 
         /// <summary>
         /// Update a managed application
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ApplicationsUpdateResponse?> ApplicationsUpdateAsync(string applicationId, SDKWork.Webserver.BackendSdk.Models.UpdateApplicationRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ApplicationsUpdateResponse?> ApplicationsUpdateAsync(string applicationId, SDKWork.WebserverBackendSdk.Models.UpdateApplicationRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -67,7 +67,7 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PatchAsync<SDKWork.Webserver.BackendSdk.Models.ApplicationsUpdateResponse>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}"), body, null, requestHeaders, "application/json");
+            return await _client.PatchAsync<SDKWork.WebserverBackendSdk.Models.ApplicationsUpdateResponse>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
@@ -88,7 +88,7 @@ namespace SDKWork.Webserver.BackendSdk.Api
         /// <summary>
         /// Activate a managed application
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ApplicationsActivateResponse?> ApplicationsActivateAsync(string applicationId, string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ApplicationsActivateResponse?> ApplicationsActivateAsync(string applicationId, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -97,13 +97,13 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.BackendSdk.Models.ApplicationsActivateResponse>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/activate"), null, null, requestHeaders);
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ApplicationsActivateResponse>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/activate"), null, null, requestHeaders);
         }
 
         /// <summary>
         /// Pause a managed application
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ApplicationsPauseResponse?> ApplicationsPauseAsync(string applicationId, string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ApplicationsPauseResponse?> ApplicationsPauseAsync(string applicationId, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -112,7 +112,7 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.BackendSdk.Models.ApplicationsPauseResponse>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/pause"), null, null, requestHeaders);
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ApplicationsPauseResponse>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/pause"), null, null, requestHeaders);
         }
 
         private sealed record PathParameterSpec(string Name, string Style, bool Explode);

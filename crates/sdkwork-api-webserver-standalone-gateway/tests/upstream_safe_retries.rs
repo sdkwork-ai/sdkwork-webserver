@@ -345,7 +345,7 @@ async fn explicit_status_retry_fails_over_while_omitted_policy_stays_single_atte
         ],
     );
     let (shutdown, task) = start_data_plane(path, port).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
 
     let retried = client
         .get(format!("http://127.0.0.1:{port}/retry"))
@@ -470,7 +470,7 @@ async fn non_idempotent_body_and_total_deadline_never_replay() {
         ],
     );
     let (shutdown, task) = start_data_plane(path, port).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
 
     let post = client
         .post(format!("http://127.0.0.1:{port}/post"))

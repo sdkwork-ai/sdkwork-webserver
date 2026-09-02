@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\AppSdk\Api;
+namespace SDKWork\Webserver\AppSdk\Api;
 
-use SDKWork\Web\AppSdk\Models\ApplicationsDomainsListenerCertificateBindingsCreateResponse201;
-use SDKWork\Web\AppSdk\Models\ApplicationsDomainsListenerCertificateBindingsListResponse;
-use SDKWork\Web\AppSdk\Models\CreateListenerCertificateBindingRequest;
+use SDKWork\Webserver\AppSdk\Models\ApplicationsDomainsListenerCertificateBindingsCreateResponse201;
+use SDKWork\Webserver\AppSdk\Models\ApplicationsDomainsListenerCertificateBindingsListResponse;
+use SDKWork\Webserver\AppSdk\Models\CreateListenerCertificateBindingRequest;
 
 final class CertificateApi extends BaseApi
 {

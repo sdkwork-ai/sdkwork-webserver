@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace SDKWork.Webserver.AppSdk.Models
+namespace SDKWork.WebserverAppSdk.Models
 {
     public class DeploymentResponse
     {

@@ -452,7 +452,7 @@ async fn http1_limits_headers_without_forwarding_and_passively_recovers() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     wait_for_gateway(port).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
 
     let normal = gateway_get(&client, port, "/ok").await;
     assert_eq!(normal.status(), reqwest::StatusCode::OK);
@@ -514,7 +514,7 @@ async fn https_h2_rejects_field_count_and_header_list_then_recovers() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     wait_for_gateway(port).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
 
     let count = gateway_get(&client, port, "/count").await;
     assert_eq!(count.status(), reqwest::StatusCode::BAD_GATEWAY);
@@ -571,7 +571,7 @@ async fn oversized_active_health_response_marks_target_unhealthy_and_recovers() 
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     wait_for_gateway(port).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
 
     timeout(Duration::from_secs(5), async {
         loop {
@@ -616,7 +616,7 @@ async fn watch_publishes_new_header_budgets_and_retains_valid_generation() {
     let path = write_config(directory.path(), &wide);
     let (shutdown, task) = spawn_watched_data_plane(&path);
     wait_for_gateway(port).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     assert_eq!(
         gateway_get(&client, port, "/wide").await.status(),
         reqwest::StatusCode::OK

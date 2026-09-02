@@ -250,7 +250,7 @@ async fn weights_drive_real_traffic_and_health_exclusion_then_recovery() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     wait_for_gateway(port).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
 
     assert_eq!(
         observe_sequence(&client, port, 4).await,
@@ -291,7 +291,7 @@ async fn passive_recovery_ramps_effective_weight_before_restoring_nominal_distri
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     wait_for_gateway(port).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
 
     assert_eq!(observe_cycle(&client, port, 10).await, (8, 2));
     primary.failing.store(true, Ordering::Release);
@@ -336,7 +336,7 @@ async fn backup_receives_only_fallback_traffic_and_primary_probe_restores_the_ti
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     wait_for_gateway(port).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
 
     for _ in 0..4 {
         let (status, body) = request_label(&client, port).await;
@@ -384,7 +384,7 @@ async fn watch_replaces_weights_and_rejects_invalid_candidate() {
     let path = write_config(directory.path(), &initial);
     let (shutdown, task) = spawn_watched_data_plane(&path);
     wait_for_gateway(port).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     assert_eq!(observe_cycle(&client, port, 8).await, (6, 2));
 
     let mut replacement = weighted_config(port, &[(primary.address, 1), (secondary.address, 3)]);
@@ -445,7 +445,7 @@ async fn watch_replaces_backup_roles_and_rejects_an_all_backup_candidate() {
     let path = write_config(directory.path(), &initial);
     let (shutdown, task) = spawn_watched_data_plane(&path);
     wait_for_gateway(port).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     for _ in 0..4 {
         assert_eq!(
             request_label(&client, port).await,

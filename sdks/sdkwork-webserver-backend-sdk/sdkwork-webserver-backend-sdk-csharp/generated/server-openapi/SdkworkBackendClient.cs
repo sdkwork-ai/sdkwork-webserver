@@ -1,9 +1,9 @@
 using System;
 using SDKwork.Common.Core;
-using SdkHttpClient = SDKWork.Webserver.BackendSdk.Http.HttpClient;
-using SDKWork.Webserver.BackendSdk.Api;
+using SdkHttpClient = SDKWork.WebserverBackendSdk.Http.HttpClient;
+using SDKWork.WebserverBackendSdk.Api;
 
-namespace SDKWork.Webserver.BackendSdk
+namespace SDKWork.WebserverBackendSdk
 {
     public class SdkworkBackendClient
     {

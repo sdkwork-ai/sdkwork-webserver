@@ -6,7 +6,7 @@ FAMILY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 WEB_ROOT="$(cd "${FAMILY_ROOT}/../.." && pwd)"
 WORKSPACE_ROOT="$(cd "${FAMILY_ROOT}/../../.." && pwd)"
 GENERATOR_PATH="${WORKSPACE_ROOT}/sdkwork-sdk-generator/bin/sdkgen.js"
-INPUT_PATH="${FAMILY_ROOT}/openapi/sdkwork-web-backend-api.sdkgen.yaml"
+INPUT_PATH="${FAMILY_ROOT}/openapi/sdkwork-webserver-backend-api.sdkgen.yaml"
 SDK_NAME="sdkwork-webserver-backend-sdk"
 BASE_URL="${BASE_URL:-http://localhost:3800}"
 SDK_VERSION="${SDK_VERSION:-1.0.0}"
@@ -29,28 +29,28 @@ fi
 
 package_name() {
   case "$1" in
-    typescript) echo "@sdkwork/web-backend-sdk" ;;
-    dart) echo "sdkwork_web_backend_sdk" ;;
-    python) echo "sdkwork-web-backend-sdk" ;;
-    go) echo "github.com/sdkwork/sdkwork-web-backend-sdk" ;;
-    java) echo "com.sdkwork:sdkwork-web-backend-sdk" ;;
-    kotlin) echo "com.sdkwork:sdkwork-web-backend-sdk" ;;
-    swift) echo "sdkwork-web-backend-sdk" ;;
-    csharp) echo "SDKWork.Web.BackendSdk" ;;
-    flutter) echo "sdkwork_web_backend_sdk" ;;
-    rust) echo "sdkwork-web-backend-sdk" ;;
-    php) echo "sdkwork/web-backend-sdk" ;;
-    ruby) echo "sdkwork-web-backend-sdk" ;;
+    typescript) echo "@sdkwork/webserver-backend-sdk" ;;
+    dart) echo "sdkwork_webserver_backend_sdk" ;;
+    python) echo "sdkwork-webserver-backend-sdk" ;;
+    go) echo "github.com/sdkwork/sdkwork-webserver-backend-sdk" ;;
+    java) echo "com.sdkwork:sdkwork-webserver-backend-sdk" ;;
+    kotlin) echo "com.sdkwork:sdkwork-webserver-backend-sdk" ;;
+    swift) echo "sdkwork-webserver-backend-sdk" ;;
+    csharp) echo "SDKWork.WebserverBackendSdk" ;;
+    flutter) echo "sdkwork_webserver_backend_sdk" ;;
+    rust) echo "sdkwork-webserver-backend-sdk" ;;
+    php) echo "sdkwork/webserver-backend-sdk" ;;
+    ruby) echo "sdkwork-webserver-backend-sdk" ;;
     *) echo "Unsupported SDK language: $1" >&2; return 1 ;;
   esac
 }
 
 namespace_args() {
   case "$1" in
-    java) printf '%s\n' "--namespace" "com.sdkwork.web.backend.sdk" ;;
-    kotlin) printf '%s\n' "--namespace" "com.sdkwork.web.backend.sdk" ;;
-    csharp) printf '%s\n' "--namespace" "SDKWork.Web.BackendSdk" ;;
-    php) printf '%s\n' "--namespace" "SDKWork\Web\BackendSdk" ;;
+    java) printf '%s\n' "--namespace" "com.sdkwork.webserver.backend.sdk" ;;
+    kotlin) printf '%s\n' "--namespace" "com.sdkwork.webserver.backend.sdk" ;;
+    csharp) printf '%s\n' "--namespace" "SDKWork.WebserverBackendSdk" ;;
+    php) printf '%s\n' "--namespace" "SDKWork\Webserver\BackendSdk" ;;
   esac
 }
 

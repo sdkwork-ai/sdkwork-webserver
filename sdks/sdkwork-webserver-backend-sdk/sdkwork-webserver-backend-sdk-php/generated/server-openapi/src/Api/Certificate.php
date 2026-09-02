@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\BackendSdk\Api;
+namespace SDKWork\Webserver\BackendSdk\Api;
 
-use SDKWork\Web\BackendSdk\Models\ApplicationsDomainsListenerCertificateBindingsCreateResponse201;
-use SDKWork\Web\BackendSdk\Models\ApplicationsDomainsListenerCertificateBindingsListResponse;
-use SDKWork\Web\BackendSdk\Models\CertificatesIssueResponse202;
-use SDKWork\Web\BackendSdk\Models\CertificatesListResponse;
-use SDKWork\Web\BackendSdk\Models\CertificatesOperationsRetrieveResponse;
-use SDKWork\Web\BackendSdk\Models\CertificatesRenewResponse202;
-use SDKWork\Web\BackendSdk\Models\CertificatesRevokeResponse;
-use SDKWork\Web\BackendSdk\Models\CertificatesUpdateResponse;
-use SDKWork\Web\BackendSdk\Models\CreateListenerCertificateBindingRequest;
-use SDKWork\Web\BackendSdk\Models\IssueCertificateRequest;
-use SDKWork\Web\BackendSdk\Models\RevokeCertificateRequest;
-use SDKWork\Web\BackendSdk\Models\UpdateCertificateRequest;
+use SDKWork\Webserver\BackendSdk\Models\ApplicationsDomainsListenerCertificateBindingsCreateResponse201;
+use SDKWork\Webserver\BackendSdk\Models\ApplicationsDomainsListenerCertificateBindingsListResponse;
+use SDKWork\Webserver\BackendSdk\Models\CertificatesIssueResponse202;
+use SDKWork\Webserver\BackendSdk\Models\CertificatesListResponse;
+use SDKWork\Webserver\BackendSdk\Models\CertificatesOperationsRetrieveResponse;
+use SDKWork\Webserver\BackendSdk\Models\CertificatesRenewResponse202;
+use SDKWork\Webserver\BackendSdk\Models\CertificatesRevokeResponse;
+use SDKWork\Webserver\BackendSdk\Models\CertificatesUpdateResponse;
+use SDKWork\Webserver\BackendSdk\Models\CreateListenerCertificateBindingRequest;
+use SDKWork\Webserver\BackendSdk\Models\IssueCertificateRequest;
+use SDKWork\Webserver\BackendSdk\Models\RevokeCertificateRequest;
+use SDKWork\Webserver\BackendSdk\Models\UpdateCertificateRequest;
 
 final class CertificateApi extends BaseApi
 {

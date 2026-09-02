@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\AppSdk;
+namespace SDKWork\Webserver\AppSdk;
 
-use SDKWork\Web\AppSdk\Http\HttpClient;
-use SDKWork\Web\AppSdk\Api\ApplicationApi;
-use SDKWork\Web\AppSdk\Api\DomainApi;
-use SDKWork\Web\AppSdk\Api\CertificateApi;
-use SDKWork\Web\AppSdk\Api\SourceVersionApi;
-use SDKWork\Web\AppSdk\Api\DeploymentApi;
-use SDKWork\Web\AppSdk\Api\EnvVariableApi;
-use SDKWork\Web\AppSdk\Api\MonitorApi;
+use SDKWork\Webserver\AppSdk\Http\HttpClient;
+use SDKWork\Webserver\AppSdk\Api\ApplicationApi;
+use SDKWork\Webserver\AppSdk\Api\DomainApi;
+use SDKWork\Webserver\AppSdk\Api\CertificateApi;
+use SDKWork\Webserver\AppSdk\Api\SourceVersionApi;
+use SDKWork\Webserver\AppSdk\Api\DeploymentApi;
+use SDKWork\Webserver\AppSdk\Api\EnvVariableApi;
+use SDKWork\Webserver\AppSdk\Api\MonitorApi;
 
 final class SdkworkAppClient
 {

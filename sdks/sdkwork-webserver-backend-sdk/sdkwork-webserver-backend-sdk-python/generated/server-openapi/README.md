@@ -11,7 +11,7 @@ pip install sdkwork-webserver-backend-sdk
 ## Quick Start
 
 ```python
-from sdkwork_webserver_backend_sdk_generated_rust import SdkworkBackendClient, SdkConfig
+from sdkwork_webserver_backend_sdk import SdkworkBackendClient, SdkConfig
 
 config = SdkConfig(
     base_url="http://localhost:3800",
@@ -36,7 +36,7 @@ Access-Token: <accessToken>
 ## Configuration (Non-Auth)
 
 ```python
-from sdkwork_webserver_backend_sdk_generated_rust import SdkworkBackendClient, SdkConfig
+from sdkwork_webserver_backend_sdk import SdkworkBackendClient, SdkConfig
 
 config = SdkConfig(
     base_url="http://localhost:3800",

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\BackendSdk\Api;
+namespace SDKWork\Webserver\BackendSdk\Api;
 
-use SDKWork\Web\BackendSdk\Models\CertificatesDistributionListResponse;
+use SDKWork\Webserver\BackendSdk\Models\CertificatesDistributionListResponse;
 
 final class CertificateDistributionApi extends BaseApi
 {

@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\BackendSdk\Models;
+namespace SDKWork\Webserver\BackendSdk\Models;
 
-use SDKWork\Web\BackendSdk\Models\ServerFileContent;
+use SDKWork\Webserver\BackendSdk\Models\ServerFileContent;
 
-final class ServerFilesNodeReadResponse
+final class ServerFilesNodeRetrieveResponse
 {
     public ?int $code = null;
 

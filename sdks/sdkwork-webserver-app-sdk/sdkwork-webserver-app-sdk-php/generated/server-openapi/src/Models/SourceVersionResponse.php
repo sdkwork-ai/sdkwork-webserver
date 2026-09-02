@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\AppSdk\Models;
+namespace SDKWork\Webserver\AppSdk\Models;
 
-use SDKWork\Web\AppSdk\Models\SourceVersionConfigSnapshot;
+use SDKWork\Webserver\AppSdk\Models\SourceVersionConfigSnapshot;
 
 final class SourceVersionResponse
 {

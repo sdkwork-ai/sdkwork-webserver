@@ -11,7 +11,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using SDKwork.Common.Core;
 
-namespace SDKWork.Webserver.BackendSdk.Http
+namespace SDKWork.WebserverBackendSdk.Http
 {
     public class HttpClient
     {

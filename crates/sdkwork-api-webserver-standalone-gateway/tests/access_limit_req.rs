@@ -107,7 +107,7 @@ async fn allow_deny_rejects_unmatched_clients() {
         })
         .await
     });
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     let url = format!("http://127.0.0.1:{port}/");
     wait_ready(&client, &url).await;
     // Loopback is outside 10.0.0.0/8 → deny all.
@@ -144,7 +144,7 @@ async fn limit_req_returns_503_beyond_burst() {
         })
         .await
     });
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     let url = format!("http://127.0.0.1:{port}/");
     wait_ready(&client, &url).await;
     // Drain the readiness probe's token at 1r/s before asserting burst.

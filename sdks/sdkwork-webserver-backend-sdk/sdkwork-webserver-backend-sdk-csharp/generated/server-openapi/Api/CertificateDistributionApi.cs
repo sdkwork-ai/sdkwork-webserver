@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using SDKWork.Webserver.BackendSdk.Models;
-using SdkHttpClient = SDKWork.Webserver.BackendSdk.Http.HttpClient;
+using SDKWork.WebserverBackendSdk.Models;
+using SdkHttpClient = SDKWork.WebserverBackendSdk.Http.HttpClient;
 
-namespace SDKWork.Webserver.BackendSdk.Api
+namespace SDKWork.WebserverBackendSdk.Api
 {
     public class CertificateDistributionApi
     {
@@ -18,14 +18,14 @@ namespace SDKWork.Webserver.BackendSdk.Api
         /// <summary>
         /// List certificate manifest convergence by server
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.CertificatesDistributionListResponse?> CertificatesDistributionListAsync(int? page = null, int? pageSize = null)
+        public async Task<SDKWork.WebserverBackendSdk.Models.CertificatesDistributionListResponse?> CertificatesDistributionListAsync(int? page = null, int? pageSize = null)
         {
             var queryString = BuildQueryString(new[]
             {
                 new QueryParameterSpec("page", page, "form", true, false, null),
                 new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Webserver.BackendSdk.Models.CertificatesDistributionListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath("/certificate_distribution"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.CertificatesDistributionListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath("/certificate_distribution"), queryString));
         }
 
 

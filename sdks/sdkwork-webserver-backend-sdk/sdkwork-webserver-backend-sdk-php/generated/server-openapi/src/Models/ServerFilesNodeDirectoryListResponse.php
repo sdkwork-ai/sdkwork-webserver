@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\BackendSdk\Models;
+namespace SDKWork\Webserver\BackendSdk\Models;
 
-use SDKWork\Web\BackendSdk\Models\ServerDirectoryListing;
+use SDKWork\Webserver\BackendSdk\Models\ServerDirectoryListing;
 
-final class ServerFilesNodeBrowseResponse
+final class ServerFilesNodeDirectoryListResponse
 {
     public ?int $code = null;
 

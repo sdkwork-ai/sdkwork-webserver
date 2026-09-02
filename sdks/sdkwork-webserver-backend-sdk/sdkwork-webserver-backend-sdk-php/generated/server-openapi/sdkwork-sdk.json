@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "language": "php",
   "sdkType": "backend",
-  "packageName": "sdkwork/web-backend-sdk",
-  "transportPackageName": "sdkwork/web-backend-sdk",
-  "consumerPackageName": "sdkwork/web-backend-sdk",
+  "packageName": "sdkwork/webserver-backend-sdk",
+  "transportPackageName": "sdkwork/webserver-backend-sdk",
+  "consumerPackageName": "sdkwork/webserver-backend-sdk",
   "generator": "@sdkwork/sdk-generator",
   "capabilities": {
     "supportsGeneratedTests": true,

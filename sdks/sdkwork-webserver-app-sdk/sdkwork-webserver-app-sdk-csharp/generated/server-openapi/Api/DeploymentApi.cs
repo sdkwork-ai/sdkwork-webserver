@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using SDKWork.Webserver.AppSdk.Models;
-using SdkHttpClient = SDKWork.Webserver.AppSdk.Http.HttpClient;
+using SDKWork.WebserverAppSdk.Models;
+using SdkHttpClient = SDKWork.WebserverAppSdk.Http.HttpClient;
 
-namespace SDKWork.Webserver.AppSdk.Api
+namespace SDKWork.WebserverAppSdk.Api
 {
     public class DeploymentApi
     {
@@ -18,7 +18,7 @@ namespace SDKWork.Webserver.AppSdk.Api
         /// <summary>
         /// 获取部署历史
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsDeploymentsListResponse?> ApplicationsDeploymentsListAsync(string applicationId, int? pageSize = null, string? cursor = null, int? status = null)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsDeploymentsListResponse?> ApplicationsDeploymentsListAsync(string applicationId, int? pageSize = null, string? cursor = null, int? status = null)
         {
             var queryString = BuildQueryString(new[]
             {
@@ -26,13 +26,13 @@ namespace SDKWork.Webserver.AppSdk.Api
                 new QueryParameterSpec("cursor", cursor, "form", true, false, null),
                 new QueryParameterSpec("status", status, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsDeploymentsListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/deployments"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverAppSdk.Models.ApplicationsDeploymentsListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/deployments"), queryString));
         }
 
         /// <summary>
         /// 发起部署
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsDeploymentsCreateResponse201?> ApplicationsDeploymentsCreateAsync(string applicationId, SDKWork.Webserver.AppSdk.Models.CreateDeploymentRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsDeploymentsCreateResponse201?> ApplicationsDeploymentsCreateAsync(string applicationId, SDKWork.WebserverAppSdk.Models.CreateDeploymentRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -41,21 +41,21 @@ namespace SDKWork.Webserver.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsDeploymentsCreateResponse201>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/deployments"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.WebserverAppSdk.Models.ApplicationsDeploymentsCreateResponse201>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/deployments"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
         /// 获取部署详情
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsDeploymentsRetrieveResponse?> ApplicationsDeploymentsRetrieveAsync(string applicationId, string deploymentId)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsDeploymentsRetrieveResponse?> ApplicationsDeploymentsRetrieveAsync(string applicationId, string deploymentId)
         {
-            return await _client.GetAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsDeploymentsRetrieveResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/deployments/{SerializePathParameter(deploymentId, new PathParameterSpec("deploymentId", "simple", false))}"));
+            return await _client.GetAsync<SDKWork.WebserverAppSdk.Models.ApplicationsDeploymentsRetrieveResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/deployments/{SerializePathParameter(deploymentId, new PathParameterSpec("deploymentId", "simple", false))}"));
         }
 
         /// <summary>
         /// 基于历史成功版本创建快速还原命令
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsDeploymentsRollbackResponse?> ApplicationsDeploymentsRollbackAsync(string applicationId, string deploymentId, string idempotencyKey)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsDeploymentsRollbackResponse?> ApplicationsDeploymentsRollbackAsync(string applicationId, string deploymentId, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -64,7 +64,7 @@ namespace SDKWork.Webserver.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsDeploymentsRollbackResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/deployments/{SerializePathParameter(deploymentId, new PathParameterSpec("deploymentId", "simple", false))}/rollback"), null, null, requestHeaders);
+            return await _client.PostAsync<SDKWork.WebserverAppSdk.Models.ApplicationsDeploymentsRollbackResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/deployments/{SerializePathParameter(deploymentId, new PathParameterSpec("deploymentId", "simple", false))}/rollback"), null, null, requestHeaders);
         }
 
         private sealed record PathParameterSpec(string Name, string Style, bool Explode);

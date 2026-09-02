@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\AppSdk\Api;
+namespace SDKWork\Webserver\AppSdk\Api;
 
-use SDKWork\Web\AppSdk\Models\ApplicationsHealthChecksCreateResponse201;
-use SDKWork\Web\AppSdk\Models\ApplicationsHealthChecksListResponse;
-use SDKWork\Web\AppSdk\Models\CreateHealthCheckRequest;
+use SDKWork\Webserver\AppSdk\Models\ApplicationsHealthChecksCreateResponse201;
+use SDKWork\Webserver\AppSdk\Models\ApplicationsHealthChecksListResponse;
+use SDKWork\Webserver\AppSdk\Models\CreateHealthCheckRequest;
 
 final class MonitorApi extends BaseApi
 {

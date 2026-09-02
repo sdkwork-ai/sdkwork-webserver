@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using SDKWork.Webserver.BackendSdk.Models;
-using SdkHttpClient = SDKWork.Webserver.BackendSdk.Http.HttpClient;
+using SDKWork.WebserverBackendSdk.Models;
+using SdkHttpClient = SDKWork.WebserverBackendSdk.Http.HttpClient;
 
-namespace SDKWork.Webserver.BackendSdk.Api
+namespace SDKWork.WebserverBackendSdk.Api
 {
     public class NginxApi
     {
@@ -18,7 +18,7 @@ namespace SDKWork.Webserver.BackendSdk.Api
         /// <summary>
         /// List Nginx configurations
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ConfigsListResponse?> ConfigsListAsync(int? page = null, int? pageSize = null, string? siteId = null, int? configType = null, bool? isActive = null)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ConfigsListResponse?> ConfigsListAsync(int? page = null, int? pageSize = null, string? siteId = null, int? configType = null, bool? isActive = null)
         {
             var queryString = BuildQueryString(new[]
             {
@@ -28,13 +28,13 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 new QueryParameterSpec("config_type", configType, "form", true, false, null),
                 new QueryParameterSpec("is_active", isActive, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Webserver.BackendSdk.Models.ConfigsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath("/nginx/configs"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ConfigsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath("/nginx/configs"), queryString));
         }
 
         /// <summary>
         /// Create an Nginx configuration
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ConfigsCreateResponse201?> ConfigsCreateAsync(SDKWork.Webserver.BackendSdk.Models.CreateNginxConfigRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ConfigsCreateResponse201?> ConfigsCreateAsync(SDKWork.WebserverBackendSdk.Models.CreateNginxConfigRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -43,21 +43,21 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.BackendSdk.Models.ConfigsCreateResponse201>(ApiPaths.BackendPath("/nginx/configs"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ConfigsCreateResponse201>(ApiPaths.BackendPath("/nginx/configs"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
         /// Retrieve an Nginx configuration
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ConfigsRetrieveResponse?> ConfigsRetrieveAsync(string configId)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ConfigsRetrieveResponse?> ConfigsRetrieveAsync(string configId)
         {
-            return await _client.GetAsync<SDKWork.Webserver.BackendSdk.Models.ConfigsRetrieveResponse>(ApiPaths.BackendPath($"/nginx/etc/{SerializePathParameter(configId, new PathParameterSpec("configId", "simple", false))}"));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ConfigsRetrieveResponse>(ApiPaths.BackendPath($"/nginx/etc/{SerializePathParameter(configId, new PathParameterSpec("configId", "simple", false))}"));
         }
 
         /// <summary>
         /// Update an Nginx configuration
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ConfigsUpdateResponse?> ConfigsUpdateAsync(string configId, SDKWork.Webserver.BackendSdk.Models.UpdateNginxConfigRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ConfigsUpdateResponse?> ConfigsUpdateAsync(string configId, SDKWork.WebserverBackendSdk.Models.UpdateNginxConfigRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -66,21 +66,21 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PutAsync<SDKWork.Webserver.BackendSdk.Models.ConfigsUpdateResponse>(ApiPaths.BackendPath($"/nginx/etc/{SerializePathParameter(configId, new PathParameterSpec("configId", "simple", false))}"), body, null, requestHeaders, "application/json");
+            return await _client.PutAsync<SDKWork.WebserverBackendSdk.Models.ConfigsUpdateResponse>(ApiPaths.BackendPath($"/nginx/etc/{SerializePathParameter(configId, new PathParameterSpec("configId", "simple", false))}"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
         /// Validate an Nginx configuration
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ConfigsValidateResponse?> ConfigsValidateAsync(string configId)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ConfigsValidateResponse?> ConfigsValidateAsync(string configId)
         {
-            return await _client.PostAsync<SDKWork.Webserver.BackendSdk.Models.ConfigsValidateResponse>(ApiPaths.BackendPath($"/nginx/etc/{SerializePathParameter(configId, new PathParameterSpec("configId", "simple", false))}/validate"), null);
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ConfigsValidateResponse>(ApiPaths.BackendPath($"/nginx/etc/{SerializePathParameter(configId, new PathParameterSpec("configId", "simple", false))}/validate"), null);
         }
 
         /// <summary>
         /// Deploy an Nginx configuration
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ConfigsDeployResponse?> ConfigsDeployAsync(string configId, string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ConfigsDeployResponse?> ConfigsDeployAsync(string configId, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -89,13 +89,13 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.BackendSdk.Models.ConfigsDeployResponse>(ApiPaths.BackendPath($"/nginx/etc/{SerializePathParameter(configId, new PathParameterSpec("configId", "simple", false))}/deploy"), null, null, requestHeaders);
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ConfigsDeployResponse>(ApiPaths.BackendPath($"/nginx/etc/{SerializePathParameter(configId, new PathParameterSpec("configId", "simple", false))}/deploy"), null, null, requestHeaders);
         }
 
         /// <summary>
         /// Reload Nginx
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ReloadResponse?> ReloadAsync(string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ReloadResponse?> ReloadAsync(string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -104,15 +104,15 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.BackendSdk.Models.ReloadResponse>(ApiPaths.BackendPath("/nginx/reload"), null, null, requestHeaders);
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ReloadResponse>(ApiPaths.BackendPath("/nginx/reload"), null, null, requestHeaders);
         }
 
         /// <summary>
         /// Retrieve Nginx status
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.StatusRetrieveResponse?> StatusRetrieveAsync()
+        public async Task<SDKWork.WebserverBackendSdk.Models.StatusRetrieveResponse?> StatusRetrieveAsync()
         {
-            return await _client.GetAsync<SDKWork.Webserver.BackendSdk.Models.StatusRetrieveResponse>(ApiPaths.BackendPath("/nginx/status"));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.StatusRetrieveResponse>(ApiPaths.BackendPath("/nginx/status"));
         }
 
         private sealed record PathParameterSpec(string Name, string Style, bool Explode);

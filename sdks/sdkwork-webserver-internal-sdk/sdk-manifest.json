@@ -22,6 +22,8 @@
   },
   "sdkOwner": "sdkwork-webserver",
   "apiAuthority": "sdkwork-webserver-internal-api",
+  "ownerOnlyOperationCount": 4,
+  "standardProfile": "sdkwork-v3",
   "sdkSurface": "internal",
   "sdkType": "custom",
   "discoverySurface": {
@@ -47,7 +49,7 @@
       "manifestPath": "sdkwork-webserver-internal-sdk-typescript/generated/server-openapi/package.json",
       "name": "@sdkwork/webserver-internal-sdk",
       "version": "1.0.0",
-      "description": "Generator-owned typescript transport SDK for SDKWork Webserver Internal API.",
+      "description": "Generator-owned typescript transport SDK for SDKWork Web Internal API.",
       "generatedPath": "sdkwork-webserver-internal-sdk-typescript/generated/server-openapi",
       "consumerPackageName": "@sdkwork/webserver-internal-sdk",
       "transportPackageName": "sdkwork-webserver-internal-sdk-generated-typescript"
@@ -61,11 +63,9 @@
       "manifestPath": "sdkwork-webserver-internal-sdk-rust/generated/server-openapi/Cargo.toml",
       "name": "sdkwork-webserver-internal-sdk",
       "version": "1.0.0",
-      "description": "Generator-owned rust transport SDK for SDKWork Webserver Internal API.",
+      "description": "Generator-owned rust transport SDK for SDKWork Web Internal API.",
       "generatedPath": "sdkwork-webserver-internal-sdk-rust/generated/server-openapi"
     }
   ],
-  "sdkDependencies": [],
-  "ownerOnlyOperationCount": 4,
-  "standardProfile": "sdkwork-v3"
+  "sdkDependencies": []
 }

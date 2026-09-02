@@ -5,12 +5,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <RootNamespace>SDKWork.Web.BackendSdk</RootNamespace>
-    <AssemblyName>SDKWork.Web.BackendSdk</AssemblyName>
-    <PackageId>SDKWork.Web.BackendSdk</PackageId>
+    <RootNamespace>SDKWork.WebserverAppSdk</RootNamespace>
+    <AssemblyName>SDKWork.WebserverAppSdk</AssemblyName>
+    <PackageId>SDKWork.WebserverAppSdk</PackageId>
     <Version>1.0.0</Version>
     <Authors>SDKWork Team</Authors>
-    <Description>sdkwork-web-backend-sdk SDK</Description>
+    <Description>sdkwork-webserver-app-sdk SDK</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 

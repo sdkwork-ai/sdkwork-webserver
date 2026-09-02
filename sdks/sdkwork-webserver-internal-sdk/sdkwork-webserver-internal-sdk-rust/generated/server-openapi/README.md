@@ -5,7 +5,7 @@ Professional Rust SDK for SDKWork API.
 ## Installation
 
 ```bash
-cargo add sdkwork-webserver-internal-sdk
+cargo add sdkwork-webserver-internal-sdk-generated-rust
 ```
 
 ## Quick Start

@@ -187,7 +187,7 @@ async fn direct_peer_affinity_ignores_spoofed_forwarding_and_recovers_determinis
         .await
     });
     wait_for_gateway(port).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
 
     for spoofed in [
         "203.0.113.1",

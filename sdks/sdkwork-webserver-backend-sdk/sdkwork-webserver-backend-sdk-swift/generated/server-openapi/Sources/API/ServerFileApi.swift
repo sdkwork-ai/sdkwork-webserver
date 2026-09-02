@@ -13,19 +13,16 @@ public class ServerFileApi {
     }
 
     /// Browse a deployment node directory
-    public func serverFilesNodeBrowse(nodeId: String, path: String) async throws -> ServerFilesNodeBrowseResponse? {
+    public func serverFilesNodeDirectoryList(nodeId: String, path: String) async throws -> ServerFilesNodeDirectoryListResponse? {
         let query = buildQueryString([
             QueryParameterSpec(name: "path", value: path, style: "form", explode: true, allowReserved: false, contentType: nil)
         ])
-        return try await client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/server_files/nodes/\(serializePathParameter(nodeId, PathParameterSpec(name: "nodeId", style: "simple", explode: false)))/browse"), query), responseType: ServerFilesNodeBrowseResponse.self)
+        return try await client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/server_files/nodes/\(serializePathParameter(nodeId, PathParameterSpec(name: "nodeId", style: "simple", explode: false)))/directory"), query), responseType: ServerFilesNodeDirectoryListResponse.self)
     }
 
     /// Read a text file on a deployment node
-    public func serverFilesNodeRead(nodeId: String, path: String) async throws -> ServerFilesNodeReadResponse? {
-        let query = buildQueryString([
-            QueryParameterSpec(name: "path", value: path, style: "form", explode: true, allowReserved: false, contentType: nil)
-        ])
-        return try await client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/server_files/nodes/\(serializePathParameter(nodeId, PathParameterSpec(name: "nodeId", style: "simple", explode: false)))/read"), query), responseType: ServerFilesNodeReadResponse.self)
+    public func serverFilesNodeRetrieve(nodeId: String, filePath: String) async throws -> ServerFilesNodeRetrieveResponse? {
+        return try await client.get(ApiPaths.backendPath("/server_files/nodes/\(serializePathParameter(nodeId, PathParameterSpec(name: "nodeId", style: "simple", explode: false)))/files/\(serializePathParameter(filePath, PathParameterSpec(name: "filePath", style: "simple", explode: false)))"), responseType: ServerFilesNodeRetrieveResponse.self)
     }
 
     /// List operations available for a project directory

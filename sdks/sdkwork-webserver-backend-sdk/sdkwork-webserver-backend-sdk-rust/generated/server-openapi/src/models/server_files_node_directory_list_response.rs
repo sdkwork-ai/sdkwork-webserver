@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-pub struct ServerFilesNodeBrowseResponse {
+pub struct ServerFilesNodeDirectoryListResponse {
     pub code: i64,
 
     pub data: serde_json::Value,

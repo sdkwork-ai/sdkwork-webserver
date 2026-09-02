@@ -1,7 +1,7 @@
 module Sdkwork
   module BackendSdk
     module Models
-      class ServerFilesNodeReadResponse
+      class ServerFilesNodeDirectoryListResponse
               attr_accessor :code, :data, :trace_id
 
               def initialize(attributes = {})

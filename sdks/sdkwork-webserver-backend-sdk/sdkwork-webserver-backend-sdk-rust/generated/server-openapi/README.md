@@ -5,7 +5,7 @@ Generated SDKWork v3 dual-token transport SDK.
 ## Installation
 
 ```bash
-cargo add sdkwork-webserver-backend-sdk
+cargo add sdkwork-webserver-backend-sdk-generated-rust
 ```
 
 ## Quick Start

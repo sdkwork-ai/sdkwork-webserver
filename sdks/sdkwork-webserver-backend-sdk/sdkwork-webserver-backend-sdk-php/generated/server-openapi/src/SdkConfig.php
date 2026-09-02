@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\BackendSdk;
+namespace SDKWork\Webserver\BackendSdk;
 
 final class SdkConfig
 {

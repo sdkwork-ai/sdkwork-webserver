@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using SDKWork.Webserver.AppSdk.Models;
-using SdkHttpClient = SDKWork.Webserver.AppSdk.Http.HttpClient;
+using SDKWork.WebserverAppSdk.Models;
+using SdkHttpClient = SDKWork.WebserverAppSdk.Http.HttpClient;
 
-namespace SDKWork.Webserver.AppSdk.Api
+namespace SDKWork.WebserverAppSdk.Api
 {
     public class EnvVariableApi
     {
@@ -18,19 +18,19 @@ namespace SDKWork.Webserver.AppSdk.Api
         /// <summary>
         /// 获取环境变量列表
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsEnvVariablesListResponse?> ApplicationsEnvVariablesListAsync(string applicationId, string? environment = null)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsEnvVariablesListResponse?> ApplicationsEnvVariablesListAsync(string applicationId, string? environment = null)
         {
             var queryString = BuildQueryString(new[]
             {
                 new QueryParameterSpec("environment", environment, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsEnvVariablesListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/env_variables"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverAppSdk.Models.ApplicationsEnvVariablesListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/env_variables"), queryString));
         }
 
         /// <summary>
         /// 创建环境变量
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsEnvVariablesCreateResponse201?> ApplicationsEnvVariablesCreateAsync(string applicationId, SDKWork.Webserver.AppSdk.Models.CreateEnvVariableRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsEnvVariablesCreateResponse201?> ApplicationsEnvVariablesCreateAsync(string applicationId, SDKWork.WebserverAppSdk.Models.CreateEnvVariableRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -39,13 +39,13 @@ namespace SDKWork.Webserver.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsEnvVariablesCreateResponse201>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/env_variables"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.WebserverAppSdk.Models.ApplicationsEnvVariablesCreateResponse201>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/env_variables"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
         /// 轮换环境变量值
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsEnvVariablesUpdateResponse?> ApplicationsEnvVariablesUpdateAsync(string applicationId, string variableId, SDKWork.Webserver.AppSdk.Models.UpdateEnvVariableRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsEnvVariablesUpdateResponse?> ApplicationsEnvVariablesUpdateAsync(string applicationId, string variableId, SDKWork.WebserverAppSdk.Models.UpdateEnvVariableRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -54,7 +54,7 @@ namespace SDKWork.Webserver.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PatchAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsEnvVariablesUpdateResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/env_variables/{SerializePathParameter(variableId, new PathParameterSpec("variableId", "simple", false))}"), body, null, requestHeaders, "application/json");
+            return await _client.PatchAsync<SDKWork.WebserverAppSdk.Models.ApplicationsEnvVariablesUpdateResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/env_variables/{SerializePathParameter(variableId, new PathParameterSpec("variableId", "simple", false))}"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>

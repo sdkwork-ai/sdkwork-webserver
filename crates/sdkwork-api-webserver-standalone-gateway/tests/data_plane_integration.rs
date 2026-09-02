@@ -1217,7 +1217,7 @@ async fn serves_fixed_and_static_routes_and_drains() {
     );
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
 
     let health = wait_for_http(
         &client,
@@ -1404,7 +1404,7 @@ async fn streams_proxy_body_and_enforces_body_limit() {
     config["limits"]["maxTrailers"] = json!(1);
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
 
     let ready = wait_for_http(
         &client,
@@ -1560,7 +1560,7 @@ async fn system_dns_denies_loopback_by_default_and_allows_explicit_local_policy(
         .remove("addressPolicy");
     let denied_path = write_config(directory.path(), &denied);
     let (denied_shutdown, denied_task) = spawn_data_plane(&denied_path);
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     let denied_response = wait_for_http(
         &client,
         &format!("http://127.0.0.1:{denied_port}/blocked"),
@@ -1628,7 +1628,7 @@ async fn upstream_admission_holds_capacity_through_streaming_response_lifetime()
     config["upstreams"][0]["maxInFlightRequests"] = json!(1);
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     let url = format!("http://127.0.0.1:{port}");
 
     let held = wait_for_http(&client, &format!("{url}/held"), "test.localhost").await;
@@ -1696,7 +1696,7 @@ async fn passive_health_ejects_failure_and_recovers_with_one_later_probe() {
     );
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     let url = format!("http://127.0.0.1:{port}/health");
 
     let failed = wait_for_http(&client, &url, "test.localhost").await;
@@ -1782,7 +1782,7 @@ async fn all_ejected_targets_fail_locally_and_reload_starts_fresh_health_state()
     });
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_watched_data_plane(&path);
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     let url = format!("http://127.0.0.1:{port}/health");
 
     let first = wait_for_http(&client, &url, "test.localhost").await;
@@ -1847,7 +1847,7 @@ async fn private_ca_https_upstream_requires_custom_trust_and_correct_hostname() 
     let server_config = tls_upstream_server_config(server_identity, None, false);
     let (upstream_address, upstream_shutdown, upstream_task) =
         spawn_tls_upstream(server_config).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
 
     let system_port = available_port();
     let system = upstream_tls_proxy_config(system_port, upstream_address, "localhost", None);
@@ -1939,7 +1939,7 @@ async fn mutual_tls_upstream_requires_the_configured_client_identity() {
     let server_config = tls_upstream_server_config(server_identity, Some(&authority), false);
     let (upstream_address, upstream_shutdown, upstream_task) =
         spawn_tls_upstream(server_config).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
 
     let anonymous_port = available_port();
     let anonymous = upstream_tls_proxy_config(
@@ -2011,7 +2011,7 @@ async fn upstream_tls_version_policy_rejects_incompatible_peers() {
     let server_config = tls_upstream_server_config(server_identity, None, true);
     let (upstream_address, upstream_shutdown, upstream_task) =
         spawn_tls_upstream(server_config).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
 
     let incompatible_port = available_port();
     let incompatible = upstream_tls_proxy_config(
@@ -2231,7 +2231,7 @@ async fn upstream_tls_watch_reload_retains_failure_and_replaces_security_pool() 
     });
     let path = write_config(directory.path(), &trusted);
     let (shutdown, task) = spawn_watched_data_plane(&path);
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     let url = format!("http://127.0.0.1:{port}/secure");
     wait_for_body(&client, &url, "test.localhost", "secure-upstream").await;
 
@@ -3027,8 +3027,8 @@ async fn closes_overloaded_http1_connection_and_recovers_after_stream_completion
     let config = held_http_proxy_config(port, upstream_address);
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
-    let first_client = reqwest::Client::new();
-    let second_client = reqwest::Client::new();
+    let first_client = reqwest::Client::builder().no_proxy().build().expect("client");
+    let second_client = reqwest::Client::builder().no_proxy().build().expect("client");
     let base_url = format!("http://127.0.0.1:{port}");
     wait_for_http(
         &first_client,
@@ -3115,7 +3115,7 @@ async fn times_out_idle_http1_response_body_and_releases_admission() {
     config["limits"]["connectionWriteTimeoutMs"] = json!(5_000);
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     let base_url = format!("http://127.0.0.1:{port}");
     wait_for_http(&client, &format!("{base_url}/ready"), "test.localhost").await;
 
@@ -3281,7 +3281,7 @@ async fn closes_slow_reading_http1_client_at_connection_write_deadline() {
     config["limits"]["connectionWriteTimeoutMs"] = json!(200);
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     let base_url = format!("http://127.0.0.1:{port}");
     wait_for_http(&client, &format!("{base_url}/ready"), "test.localhost").await;
 
@@ -4258,7 +4258,7 @@ async fn enforces_uri_query_budgets_and_preserves_valid_proxy_query() {
         400
     );
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     let proxied = client
         .get(format!("http://127.0.0.1:{port}/proxy/query?a=1&b=2"))
         .header("host", "test.localhost")
@@ -4382,7 +4382,7 @@ async fn atomically_reloads_handler_uri_budgets() {
         &watched_response_config(port, "wide-uri-budget"),
     );
     let (shutdown, task) = spawn_watched_data_plane(&path);
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     let url = format!("http://127.0.0.1:{port}/");
     wait_for_body(&client, &url, "test.localhost", "wide-uri-budget").await;
 
@@ -4428,7 +4428,7 @@ async fn closes_idle_http1_keep_alive_without_interrupting_active_upload() {
     config["limits"]["requestBodyIdleTimeoutMs"] = json!(1_000);
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     let readiness = wait_for_http(
         &client,
         &format!("http://127.0.0.1:{port}/"),
@@ -4485,7 +4485,7 @@ async fn closes_idle_http1_keep_alive_without_interrupting_active_upload() {
         .expect("read active upload response");
     assert_eq!(raw_status_code(&response), Some(200));
 
-    let healthy = reqwest::Client::new()
+    let healthy = reqwest::Client::builder().no_proxy().build().expect("client")
         .get(format!("http://127.0.0.1:{port}/"))
         .header("host", "test.localhost")
         .send()
@@ -4812,7 +4812,7 @@ async fn request_body_progress_timeouts_close_http1_and_allow_fresh_connections(
     config["limits"]["requestBodyIdleTimeoutMs"] = json!(250);
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     wait_for_http(
         &client,
         &format!("http://127.0.0.1:{port}/"),
@@ -4951,7 +4951,7 @@ async fn forwards_http1_early_responses_closes_uploads_and_avoids_upstream_pool_
     let config = early_response_http_proxy_config(port, upstream_address);
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     wait_for_http(
         &client,
         &format!("http://127.0.0.1:{port}/ready"),
@@ -5395,7 +5395,7 @@ async fn enforces_http1_header_count_bytes_timeout_and_strict_framing() {
     config["limits"]["maxTrailers"] = json!(1);
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     wait_for_body(
         &client,
         &format!("http://127.0.0.1:{port}/"),
@@ -5557,7 +5557,7 @@ async fn atomically_reloads_valid_config_and_retains_generation_on_failure() {
         &watched_response_config(port, "generation-one"),
     );
     let (shutdown, task) = spawn_watched_data_plane(&path);
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     let url = format!("http://127.0.0.1:{port}/");
     wait_for_body(&client, &url, "test.localhost", "generation-one").await;
 
@@ -5900,7 +5900,7 @@ async fn concurrent_requests_observe_only_complete_reload_generations() {
         &watched_response_config(port, "generation-a"),
     );
     let (shutdown, task) = spawn_watched_data_plane(&path);
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     let url = format!("http://127.0.0.1:{port}/");
     wait_for_body(&client, &url, "test.localhost", "generation-a").await;
 
@@ -5979,7 +5979,7 @@ async fn acme_http01_challenge_is_served_with_narrow_precedence() {
     config["listeners"][0]["acmeHttp01"] = json!({"webroot": "acme-webroot"});
     let path = write_config(directory.path(), &config);
     let (shutdown_tx, task) = spawn_data_plane(&path);
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     let base = format!("http://127.0.0.1:{port}");
     wait_for_http(&client, &base, "test.localhost").await;
 

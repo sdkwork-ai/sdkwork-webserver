@@ -15,21 +15,18 @@ class ServerFileApi(private val client: HttpClient) {
     }
 
     /** Browse a deployment node directory */
-    suspend fun serverFilesNodeBrowse(nodeId: String, path: String): ServerFilesNodeBrowseResponse? {
+    suspend fun serverFilesNodeDirectoryList(nodeId: String, path: String): ServerFilesNodeDirectoryListResponse? {
         val query = buildQueryString(listOf(
             QueryParameterSpec("path", path, "form", true, false, null)
         ))
-        val raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/server_files/nodes/${serializePathParameter(nodeId, PathParameterSpec("nodeId", "simple", false))}/browse"), query))
-        return client.convertValue(raw, object : TypeReference<ServerFilesNodeBrowseResponse>() {})
+        val raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/server_files/nodes/${serializePathParameter(nodeId, PathParameterSpec("nodeId", "simple", false))}/directory"), query))
+        return client.convertValue(raw, object : TypeReference<ServerFilesNodeDirectoryListResponse>() {})
     }
 
     /** Read a text file on a deployment node */
-    suspend fun serverFilesNodeRead(nodeId: String, path: String): ServerFilesNodeReadResponse? {
-        val query = buildQueryString(listOf(
-            QueryParameterSpec("path", path, "form", true, false, null)
-        ))
-        val raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/server_files/nodes/${serializePathParameter(nodeId, PathParameterSpec("nodeId", "simple", false))}/read"), query))
-        return client.convertValue(raw, object : TypeReference<ServerFilesNodeReadResponse>() {})
+    suspend fun serverFilesNodeRetrieve(nodeId: String, filePath: String): ServerFilesNodeRetrieveResponse? {
+        val raw = client.get(ApiPaths.backendPath("/server_files/nodes/${serializePathParameter(nodeId, PathParameterSpec("nodeId", "simple", false))}/files/${serializePathParameter(filePath, PathParameterSpec("filePath", "simple", false))}"))
+        return client.convertValue(raw, object : TypeReference<ServerFilesNodeRetrieveResponse>() {})
     }
 
     /** List operations available for a project directory */

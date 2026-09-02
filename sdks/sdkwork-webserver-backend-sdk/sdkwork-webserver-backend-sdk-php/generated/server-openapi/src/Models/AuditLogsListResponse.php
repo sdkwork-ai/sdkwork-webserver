@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\BackendSdk\Models;
+namespace SDKWork\Webserver\BackendSdk\Models;
 
-use SDKWork\Web\BackendSdk\Models\AuditLogResponse;
-use SDKWork\Web\BackendSdk\Models\PageInfo;
+use SDKWork\Webserver\BackendSdk\Models\AuditLogResponse;
+use SDKWork\Webserver\BackendSdk\Models\PageInfo;
 
 final class AuditLogsListResponse
 {

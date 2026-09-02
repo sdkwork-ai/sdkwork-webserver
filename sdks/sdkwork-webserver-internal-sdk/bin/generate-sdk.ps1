@@ -10,18 +10,18 @@ function Resolve-PackageName {
     param([string]$Language)
 
     switch ($Language) {
-        "typescript" { return "@sdkwork/web-internal-sdk" }
-        "dart" { return "sdkwork_web_internal_sdk" }
-        "python" { return "sdkwork-web-internal-sdk" }
-        "go" { return "github.com/sdkwork/sdkwork-web-internal-sdk" }
-        "java" { return "com.sdkwork:sdkwork-web-internal-sdk" }
-        "kotlin" { return "com.sdkwork:sdkwork-web-internal-sdk" }
-        "swift" { return "sdkwork-web-internal-sdk" }
-        "csharp" { return "SDKWork.Web.InternalSdk" }
-        "flutter" { return "sdkwork_web_internal_sdk" }
-        "rust" { return "sdkwork-web-internal-sdk" }
-        "php" { return "sdkwork/web-internal-sdk" }
-        "ruby" { return "sdkwork-web-internal-sdk" }
+        "typescript" { return "@sdkwork/webserver-internal-sdk" }
+        "dart" { return "sdkwork_webserver_internal_sdk" }
+        "python" { return "sdkwork-webserver-internal-sdk" }
+        "go" { return "github.com/sdkwork/sdkwork-webserver-internal-sdk" }
+        "java" { return "com.sdkwork:sdkwork-webserver-internal-sdk" }
+        "kotlin" { return "com.sdkwork:sdkwork-webserver-internal-sdk" }
+        "swift" { return "sdkwork-webserver-internal-sdk" }
+        "csharp" { return "SDKWork.WebserverInternalSdk" }
+        "flutter" { return "sdkwork_webserver_internal_sdk" }
+        "rust" { return "sdkwork-webserver-internal-sdk" }
+        "php" { return "sdkwork/webserver-internal-sdk" }
+        "ruby" { return "sdkwork-webserver-internal-sdk" }
         default { return "sdkwork-webserver-internal-sdk-$Language" }
     }
 }
@@ -30,10 +30,10 @@ function Resolve-NamespaceArgs {
     param([string]$Language)
 
     switch ($Language) {
-        "java" { return @("--namespace", "com.sdkwork.web.internal.sdk") }
-        "kotlin" { return @("--namespace", "com.sdkwork.web.internal.sdk") }
-        "csharp" { return @("--namespace", "SDKWork.Web.InternalSdk") }
-        "php" { return @("--namespace", "SDKWork\Web\InternalSdk") }
+        "java" { return @("--namespace", "com.sdkwork.webserver.internal.sdk") }
+        "kotlin" { return @("--namespace", "com.sdkwork.webserver.internal.sdk") }
+        "csharp" { return @("--namespace", "SDKWork.WebserverInternalSdk") }
+        "php" { return @("--namespace", "SDKWork\Webserver\InternalSdk") }
         default { return @() }
     }
 }
@@ -43,7 +43,7 @@ $FamilyRoot = (Get-Item $ScriptDir).Parent.FullName
 $WebRoot = (Get-Item $FamilyRoot).Parent.Parent.FullName
 $WorkspaceRoot = (Get-Item (Join-Path $FamilyRoot "..\..\..")).FullName
 $GeneratorPath = Join-Path $WorkspaceRoot "sdkwork-sdk-generator\bin\sdkgen.js"
-$InputPath = Join-Path $FamilyRoot "openapi\sdkwork-web-internal-api.sdkgen.yaml"
+$InputPath = Join-Path $FamilyRoot "openapi\sdkwork-webserver-internal-api.sdkgen.yaml"
 $SdkName = "sdkwork-webserver-internal-sdk"
 $ApiPrefix = "/internal/v3/api"
 $SupportedLanguages = @("typescript", "dart", "python", "go", "java", "kotlin", "swift", "csharp", "flutter", "rust", "php", "ruby")

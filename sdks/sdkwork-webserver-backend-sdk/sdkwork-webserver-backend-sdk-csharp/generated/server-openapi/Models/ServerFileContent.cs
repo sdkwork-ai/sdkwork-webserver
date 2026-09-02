@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace SDKWork.Webserver.BackendSdk.Models
+namespace SDKWork.WebserverBackendSdk.Models
 {
     public class ServerFileContent
     {

@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using SDKWork.Webserver.BackendSdk.Models;
-using SdkHttpClient = SDKWork.Webserver.BackendSdk.Http.HttpClient;
+using SDKWork.WebserverBackendSdk.Models;
+using SdkHttpClient = SDKWork.WebserverBackendSdk.Http.HttpClient;
 
-namespace SDKWork.Webserver.BackendSdk.Api
+namespace SDKWork.WebserverBackendSdk.Api
 {
     public class AuditApi
     {
@@ -18,7 +18,7 @@ namespace SDKWork.Webserver.BackendSdk.Api
         /// <summary>
         /// List audit logs
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.AuditLogsListResponse?> LogsListAsync(int? pageSize = null, string? cursor = null, string? targetType = null, string? action = null, string? operatorId = null, string? startDate = null, string? endDate = null)
+        public async Task<SDKWork.WebserverBackendSdk.Models.AuditLogsListResponse?> LogsListAsync(int? pageSize = null, string? cursor = null, string? targetType = null, string? action = null, string? operatorId = null, string? startDate = null, string? endDate = null)
         {
             var queryString = BuildQueryString(new[]
             {
@@ -30,7 +30,7 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 new QueryParameterSpec("start_date", startDate, "form", true, false, null),
                 new QueryParameterSpec("end_date", endDate, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Webserver.BackendSdk.Models.AuditLogsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath("/audit_logs"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.AuditLogsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath("/audit_logs"), queryString));
         }
 
 

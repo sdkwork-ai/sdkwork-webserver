@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\AppSdk\Api;
+namespace SDKWork\Webserver\AppSdk\Api;
 
-use SDKWork\Web\AppSdk\Models\ApplicationsActivateResponse;
-use SDKWork\Web\AppSdk\Models\ApplicationsCreateResponse201;
-use SDKWork\Web\AppSdk\Models\ApplicationsListResponse;
-use SDKWork\Web\AppSdk\Models\ApplicationsPauseResponse;
-use SDKWork\Web\AppSdk\Models\ApplicationsPlatformTargetsCreateResponse201;
-use SDKWork\Web\AppSdk\Models\ApplicationsPlatformTargetsListResponse;
-use SDKWork\Web\AppSdk\Models\ApplicationsPlatformTargetsRetrieveResponse;
-use SDKWork\Web\AppSdk\Models\ApplicationsRetrieveResponse;
-use SDKWork\Web\AppSdk\Models\ApplicationsUpdateResponse;
-use SDKWork\Web\AppSdk\Models\CreateApplicationRequest;
-use SDKWork\Web\AppSdk\Models\CreatePlatformTargetRequest;
-use SDKWork\Web\AppSdk\Models\UpdateApplicationRequest;
+use SDKWork\Webserver\AppSdk\Models\ApplicationsActivateResponse;
+use SDKWork\Webserver\AppSdk\Models\ApplicationsCreateResponse201;
+use SDKWork\Webserver\AppSdk\Models\ApplicationsListResponse;
+use SDKWork\Webserver\AppSdk\Models\ApplicationsPauseResponse;
+use SDKWork\Webserver\AppSdk\Models\ApplicationsPlatformTargetsCreateResponse201;
+use SDKWork\Webserver\AppSdk\Models\ApplicationsPlatformTargetsListResponse;
+use SDKWork\Webserver\AppSdk\Models\ApplicationsPlatformTargetsRetrieveResponse;
+use SDKWork\Webserver\AppSdk\Models\ApplicationsRetrieveResponse;
+use SDKWork\Webserver\AppSdk\Models\ApplicationsUpdateResponse;
+use SDKWork\Webserver\AppSdk\Models\CreateApplicationRequest;
+use SDKWork\Webserver\AppSdk\Models\CreatePlatformTargetRequest;
+use SDKWork\Webserver\AppSdk\Models\UpdateApplicationRequest;
 
 final class ApplicationApi extends BaseApi
 {

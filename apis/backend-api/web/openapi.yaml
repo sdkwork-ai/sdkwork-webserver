@@ -2167,9 +2167,9 @@ paths:
                           items:
                             $ref: '#/components/schemas/ServerFilesNode'
       parameters: []
-  /backend/v3/api/server_files/nodes/{nodeId}/browse:
+  /backend/v3/api/server_files/nodes/{nodeId}/directory:
     get:
-      operationId: serverFiles.node.browse
+      operationId: serverFiles.node.directory.list
       summary: Browse a deployment node directory
       tags:
       - serverFile
@@ -2209,9 +2209,9 @@ paths:
                   properties:
                     data:
                       $ref: '#/components/schemas/ServerDirectoryListing'
-  /backend/v3/api/server_files/nodes/{nodeId}/read:
+  /backend/v3/api/server_files/nodes/{nodeId}/files/{filePath}:
     get:
-      operationId: serverFiles.node.read
+      operationId: serverFiles.node.file.retrieve
       summary: Read a text file on a deployment node
       tags:
       - serverFile
@@ -2230,9 +2230,11 @@ paths:
         required: true
         schema:
           type: string
-      - name: path
-        in: query
+      - name: filePath
+        in: path
         required: true
+        description: Absolute path of the file to read, resolved strictly inside the
+          node filesystem root.
         schema:
           type: string
       responses:

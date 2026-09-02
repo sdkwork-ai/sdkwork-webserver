@@ -5,7 +5,7 @@ Generated SDKWork v3 dual-token transport SDK.
 ## Installation
 
 ```bash
-composer require sdkwork/web-app-sdk
+composer require sdkwork/webserver-app-sdk
 ```
 
 ## Quick Start
@@ -13,8 +13,8 @@ composer require sdkwork/web-app-sdk
 ```php
 <?php
 
-use SDKWork\Web\AppSdk\SdkworkAppClient;
-use SDKWork\Web\AppSdk\SdkConfig;
+use SDKWork\Webserver\AppSdk\SdkworkAppClient;
+use SDKWork\Webserver\AppSdk\SdkConfig;
 
 
 $config = new SdkConfig(baseUrl: 'http://localhost:3800');
@@ -39,8 +39,8 @@ Access-Token: <accessToken>
 ```php
 <?php
 
-use SDKWork\Web\AppSdk\SdkworkAppClient;
-use SDKWork\Web\AppSdk\SdkConfig;
+use SDKWork\Webserver\AppSdk\SdkworkAppClient;
+use SDKWork\Webserver\AppSdk\SdkConfig;
 
 $config = new SdkConfig(baseUrl: 'http://localhost:3800');
 $client = new SdkworkAppClient($config);
@@ -148,8 +148,8 @@ var_dump($result);
 ```php
 <?php
 
-use SDKWork\Web\AppSdk\SdkworkAppClient;
-use SDKWork\Web\AppSdk\SdkConfig;
+use SDKWork\Webserver\AppSdk\SdkworkAppClient;
+use SDKWork\Webserver\AppSdk\SdkConfig;
 
 
 $config = new SdkConfig(baseUrl: 'http://localhost:3800');

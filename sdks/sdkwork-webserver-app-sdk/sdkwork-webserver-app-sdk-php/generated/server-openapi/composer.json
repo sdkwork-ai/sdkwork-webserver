@@ -1,5 +1,5 @@
 {
-  "name": "sdkwork/web-app-sdk",
+  "name": "sdkwork/webserver-app-sdk",
   "description": "sdkwork-webserver-app-sdk PHP SDK",
   "type": "library",
   "license": "MIT",
@@ -14,7 +14,7 @@
   },
   "autoload": {
     "psr-4": {
-      "SDKWork\\Web\\AppSdk\\": "src/"
+      "SDKWork\\Webserver\\AppSdk\\": "src/"
     }
   },
   "minimum-stability": "stable"

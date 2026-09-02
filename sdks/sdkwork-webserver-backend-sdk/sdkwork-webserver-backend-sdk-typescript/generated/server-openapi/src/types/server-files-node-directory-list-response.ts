@@ -1,6 +1,6 @@
 import type { ServerDirectoryListing } from './server-directory-listing';
 
-export interface ServerFilesNodeBrowseResponse {
+export interface ServerFilesNodeDirectoryListResponse {
   code: 0;
   data: unknown & ServerDirectoryListing;
   /** Server-owned request correlation id. */

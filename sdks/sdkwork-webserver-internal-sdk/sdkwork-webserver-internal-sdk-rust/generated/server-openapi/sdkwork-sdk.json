@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "language": "rust",
   "sdkType": "custom",
-  "packageName": "sdkwork-webserver-internal-sdk",
-  "transportPackageName": "sdkwork-webserver-internal-sdk",
-  "consumerPackageName": "sdkwork-webserver-internal-sdk",
+  "packageName": "sdkwork-webserver-internal-sdk-generated-rust",
+  "transportPackageName": "sdkwork-webserver-internal-sdk-generated-rust",
+  "consumerPackageName": "sdkwork-webserver-internal-sdk-generated-rust",
   "generator": "@sdkwork/sdk-generator",
   "capabilities": {
     "supportsGeneratedTests": true,

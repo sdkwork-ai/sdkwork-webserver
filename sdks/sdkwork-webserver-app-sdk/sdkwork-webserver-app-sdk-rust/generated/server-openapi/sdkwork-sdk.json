@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "language": "rust",
   "sdkType": "app",
-  "packageName": "sdkwork-webserver-app-sdk",
-  "transportPackageName": "sdkwork-webserver-app-sdk",
-  "consumerPackageName": "sdkwork-webserver-app-sdk",
+  "packageName": "sdkwork-webserver-app-sdk-generated-rust",
+  "transportPackageName": "sdkwork-webserver-app-sdk-generated-rust",
+  "consumerPackageName": "sdkwork-webserver-app-sdk-generated-rust",
   "generator": "@sdkwork/sdk-generator",
   "capabilities": {
     "supportsGeneratedTests": true,

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\AppSdk\Models;
+namespace SDKWork\Webserver\AppSdk\Models;
 
 /**
  * Deployment source command. Git deployments (deployType 2) require an HTTPS sourceRef and may omit artifact fields. Other deployment types require artifactDriveUri, artifactSize, and artifactHash together.

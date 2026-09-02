@@ -19,7 +19,7 @@ test('credential entry uses the PC manifest identity in every client profile', (
   const pcManifest = readJson('apps/sdkwork-webserver-pc/sdkwork.app.config.json');
   const topology = readJson('specs/topology.spec.json');
 
-  assert.equal(rootManifest.backend.appId, 'sdkwork-web');
+  assert.equal(rootManifest.backend.appId, 'sdkwork-webserver');
   assert.equal(rootManifest.backend.tenantId, '100001');
   assert.equal(rootManifest.backend.organizationId, '0');
   assert.equal(pcManifest.backend.appId, 'sdkwork-webserver-pc');

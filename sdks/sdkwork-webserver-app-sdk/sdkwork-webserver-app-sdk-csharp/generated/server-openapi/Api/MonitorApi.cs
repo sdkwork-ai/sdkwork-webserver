@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using SDKWork.Webserver.AppSdk.Models;
-using SdkHttpClient = SDKWork.Webserver.AppSdk.Http.HttpClient;
+using SDKWork.WebserverAppSdk.Models;
+using SdkHttpClient = SDKWork.WebserverAppSdk.Http.HttpClient;
 
-namespace SDKWork.Webserver.AppSdk.Api
+namespace SDKWork.WebserverAppSdk.Api
 {
     public class MonitorApi
     {
@@ -18,15 +18,15 @@ namespace SDKWork.Webserver.AppSdk.Api
         /// <summary>
         /// 获取健康检查配置
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsHealthChecksListResponse?> ApplicationsHealthChecksListAsync(string applicationId)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsHealthChecksListResponse?> ApplicationsHealthChecksListAsync(string applicationId)
         {
-            return await _client.GetAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsHealthChecksListResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/health_checks"));
+            return await _client.GetAsync<SDKWork.WebserverAppSdk.Models.ApplicationsHealthChecksListResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/health_checks"));
         }
 
         /// <summary>
         /// 创建健康检查
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsHealthChecksCreateResponse201?> ApplicationsHealthChecksCreateAsync(string applicationId, SDKWork.Webserver.AppSdk.Models.CreateHealthCheckRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsHealthChecksCreateResponse201?> ApplicationsHealthChecksCreateAsync(string applicationId, SDKWork.WebserverAppSdk.Models.CreateHealthCheckRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -35,7 +35,7 @@ namespace SDKWork.Webserver.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsHealthChecksCreateResponse201>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/health_checks"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.WebserverAppSdk.Models.ApplicationsHealthChecksCreateResponse201>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/health_checks"), body, null, requestHeaders, "application/json");
         }
 
         private sealed record PathParameterSpec(string Name, string Style, bool Explode);

@@ -21,26 +21,23 @@ class ServerFileApi {
   }
 
   /// Browse a deployment node directory
-  Future<ServerFilesNodeBrowseResponse?> serverFilesNodeBrowse(String nodeId, String path) async {
+  Future<ServerFilesNodeDirectoryListResponse?> serverFilesNodeDirectoryList(String nodeId, String path) async {
     final query = buildQueryString([
       QueryParameterSpec('path', path, 'form', true, false, null)
     ]);
-    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.backendPath('/server_files/nodes/${serializePathParameter(nodeId, const PathParameterSpec('nodeId', 'simple', false))}/browse'), query));
+    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.backendPath('/server_files/nodes/${serializePathParameter(nodeId, const PathParameterSpec('nodeId', 'simple', false))}/directory'), query));
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : ServerFilesNodeBrowseResponse.fromJson(map);
+      return map == null ? null : ServerFilesNodeDirectoryListResponse.fromJson(map);
     })();
   }
 
   /// Read a text file on a deployment node
-  Future<ServerFilesNodeReadResponse?> serverFilesNodeRead(String nodeId, String path) async {
-    final query = buildQueryString([
-      QueryParameterSpec('path', path, 'form', true, false, null)
-    ]);
-    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.backendPath('/server_files/nodes/${serializePathParameter(nodeId, const PathParameterSpec('nodeId', 'simple', false))}/read'), query));
+  Future<ServerFilesNodeRetrieveResponse?> serverFilesNodeRetrieve(String nodeId, String filePath) async {
+    final response = await _client.get(ApiPaths.backendPath('/server_files/nodes/${serializePathParameter(nodeId, const PathParameterSpec('nodeId', 'simple', false))}/files/${serializePathParameter(filePath, const PathParameterSpec('filePath', 'simple', false))}'));
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : ServerFilesNodeReadResponse.fromJson(map);
+      return map == null ? null : ServerFilesNodeRetrieveResponse.fromJson(map);
     })();
   }
 

@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\AppSdk\Api;
+namespace SDKWork\Webserver\AppSdk\Api;
 
-use SDKWork\Web\AppSdk\Models\ApplicationsDeploymentsCreateResponse201;
-use SDKWork\Web\AppSdk\Models\ApplicationsDeploymentsListResponse;
-use SDKWork\Web\AppSdk\Models\ApplicationsDeploymentsRetrieveResponse;
-use SDKWork\Web\AppSdk\Models\ApplicationsDeploymentsRollbackResponse;
-use SDKWork\Web\AppSdk\Models\CreateDeploymentRequest;
+use SDKWork\Webserver\AppSdk\Models\ApplicationsDeploymentsCreateResponse201;
+use SDKWork\Webserver\AppSdk\Models\ApplicationsDeploymentsListResponse;
+use SDKWork\Webserver\AppSdk\Models\ApplicationsDeploymentsRetrieveResponse;
+use SDKWork\Webserver\AppSdk\Models\ApplicationsDeploymentsRollbackResponse;
+use SDKWork\Webserver\AppSdk\Models\CreateDeploymentRequest;
 
 final class DeploymentApi extends BaseApi
 {

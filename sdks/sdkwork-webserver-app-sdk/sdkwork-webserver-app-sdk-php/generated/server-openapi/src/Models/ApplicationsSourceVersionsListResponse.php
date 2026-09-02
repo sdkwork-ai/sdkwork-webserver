@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\AppSdk\Models;
+namespace SDKWork\Webserver\AppSdk\Models;
 
-use SDKWork\Web\AppSdk\Models\PageInfo;
-use SDKWork\Web\AppSdk\Models\SourceVersionResponse;
+use SDKWork\Webserver\AppSdk\Models\PageInfo;
+use SDKWork\Webserver\AppSdk\Models\SourceVersionResponse;
 
 final class ApplicationsSourceVersionsListResponse
 {

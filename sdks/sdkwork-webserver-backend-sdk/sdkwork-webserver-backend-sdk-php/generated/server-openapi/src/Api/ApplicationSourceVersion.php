@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\BackendSdk\Api;
+namespace SDKWork\Webserver\BackendSdk\Api;
 
-use SDKWork\Web\BackendSdk\Models\ApplicationsSourceVersionsCreateResponse201;
-use SDKWork\Web\BackendSdk\Models\ApplicationsSourceVersionsGitImportCreateResponse201;
-use SDKWork\Web\BackendSdk\Models\ApplicationsSourceVersionsListResponse;
-use SDKWork\Web\BackendSdk\Models\ApplicationsSourceVersionsRetrieveResponse;
-use SDKWork\Web\BackendSdk\Models\CreateApplicationSourceVersionRequest;
-use SDKWork\Web\BackendSdk\Models\ImportApplicationGitSourceVersionRequest;
+use SDKWork\Webserver\BackendSdk\Models\ApplicationsSourceVersionsCreateResponse201;
+use SDKWork\Webserver\BackendSdk\Models\ApplicationsSourceVersionsGitImportCreateResponse201;
+use SDKWork\Webserver\BackendSdk\Models\ApplicationsSourceVersionsListResponse;
+use SDKWork\Webserver\BackendSdk\Models\ApplicationsSourceVersionsRetrieveResponse;
+use SDKWork\Webserver\BackendSdk\Models\CreateApplicationSourceVersionRequest;
+use SDKWork\Webserver\BackendSdk\Models\ImportApplicationGitSourceVersionRequest;
 
 final class ApplicationSourceVersionApi extends BaseApi
 {

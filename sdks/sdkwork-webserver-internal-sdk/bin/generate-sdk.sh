@@ -6,7 +6,7 @@ FAMILY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 WEB_ROOT="$(cd "${FAMILY_ROOT}/../.." && pwd)"
 WORKSPACE_ROOT="$(cd "${FAMILY_ROOT}/../../.." && pwd)"
 GENERATOR_PATH="${WORKSPACE_ROOT}/sdkwork-sdk-generator/bin/sdkgen.js"
-INPUT_PATH="${FAMILY_ROOT}/openapi/sdkwork-web-internal-api.sdkgen.yaml"
+INPUT_PATH="${FAMILY_ROOT}/openapi/sdkwork-webserver-internal-api.sdkgen.yaml"
 SDK_NAME="sdkwork-webserver-internal-sdk"
 BASE_URL="${BASE_URL:-http://localhost:3800}"
 SDK_VERSION="${SDK_VERSION:-1.0.0}"
@@ -29,28 +29,28 @@ fi
 
 package_name() {
   case "$1" in
-    typescript) echo "@sdkwork/web-internal-sdk" ;;
-    dart) echo "sdkwork_web_internal_sdk" ;;
-    python) echo "sdkwork-web-internal-sdk" ;;
-    go) echo "github.com/sdkwork/sdkwork-web-internal-sdk" ;;
-    java) echo "com.sdkwork:sdkwork-web-internal-sdk" ;;
-    kotlin) echo "com.sdkwork:sdkwork-web-internal-sdk" ;;
-    swift) echo "sdkwork-web-internal-sdk" ;;
-    csharp) echo "SDKWork.Web.InternalSdk" ;;
-    flutter) echo "sdkwork_web_internal_sdk" ;;
-    rust) echo "sdkwork-web-internal-sdk" ;;
-    php) echo "sdkwork/web-internal-sdk" ;;
-    ruby) echo "sdkwork-web-internal-sdk" ;;
+    typescript) echo "@sdkwork/webserver-internal-sdk" ;;
+    dart) echo "sdkwork_webserver_internal_sdk" ;;
+    python) echo "sdkwork-webserver-internal-sdk" ;;
+    go) echo "github.com/sdkwork/sdkwork-webserver-internal-sdk" ;;
+    java) echo "com.sdkwork:sdkwork-webserver-internal-sdk" ;;
+    kotlin) echo "com.sdkwork:sdkwork-webserver-internal-sdk" ;;
+    swift) echo "sdkwork-webserver-internal-sdk" ;;
+    csharp) echo "SDKWork.WebserverInternalSdk" ;;
+    flutter) echo "sdkwork_webserver_internal_sdk" ;;
+    rust) echo "sdkwork-webserver-internal-sdk" ;;
+    php) echo "sdkwork/webserver-internal-sdk" ;;
+    ruby) echo "sdkwork-webserver-internal-sdk" ;;
     *) echo "Unsupported SDK language: $1" >&2; return 1 ;;
   esac
 }
 
 namespace_args() {
   case "$1" in
-    java) printf '%s\n' "--namespace" "com.sdkwork.web.internal.sdk" ;;
-    kotlin) printf '%s\n' "--namespace" "com.sdkwork.web.internal.sdk" ;;
-    csharp) printf '%s\n' "--namespace" "SDKWork.Web.InternalSdk" ;;
-    php) printf '%s\n' "--namespace" "SDKWork\Web\InternalSdk" ;;
+    java) printf '%s\n' "--namespace" "com.sdkwork.webserver.internal.sdk" ;;
+    kotlin) printf '%s\n' "--namespace" "com.sdkwork.webserver.internal.sdk" ;;
+    csharp) printf '%s\n' "--namespace" "SDKWork.WebserverInternalSdk" ;;
+    php) printf '%s\n' "--namespace" "SDKWork\Webserver\InternalSdk" ;;
   esac
 }
 

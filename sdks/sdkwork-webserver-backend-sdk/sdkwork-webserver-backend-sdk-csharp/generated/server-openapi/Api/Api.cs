@@ -1,4 +1,4 @@
-namespace SDKWork.Webserver.BackendSdk.Api
+namespace SDKWork.WebserverBackendSdk.Api
 {
     /// <summary>
     /// API modules for sdkwork-webserver-backend-sdk

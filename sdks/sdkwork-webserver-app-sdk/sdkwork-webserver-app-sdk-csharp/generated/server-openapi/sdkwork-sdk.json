@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "language": "csharp",
   "sdkType": "app",
-  "packageName": "SDKWork.Webserver.AppSdk",
-  "transportPackageName": "SDKWork.Webserver.AppSdk",
-  "consumerPackageName": "SDKWork.Webserver.AppSdk",
+  "packageName": "SDKWork.WebserverAppSdk",
+  "transportPackageName": "SDKWork.WebserverAppSdk",
+  "consumerPackageName": "SDKWork.WebserverAppSdk",
   "generator": "@sdkwork/sdk-generator",
   "capabilities": {
     "supportsGeneratedTests": true,

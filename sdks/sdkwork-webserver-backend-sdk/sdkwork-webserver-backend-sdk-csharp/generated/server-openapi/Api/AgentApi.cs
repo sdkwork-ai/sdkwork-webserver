@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using SDKWork.Webserver.BackendSdk.Models;
-using SdkHttpClient = SDKWork.Webserver.BackendSdk.Http.HttpClient;
+using SDKWork.WebserverBackendSdk.Models;
+using SdkHttpClient = SDKWork.WebserverBackendSdk.Http.HttpClient;
 
-namespace SDKWork.Webserver.BackendSdk.Api
+namespace SDKWork.WebserverBackendSdk.Api
 {
     public class AgentApi
     {
@@ -18,21 +18,21 @@ namespace SDKWork.Webserver.BackendSdk.Api
         /// <summary>
         /// Report an edge-agent heartbeat
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.HeartbeatResponse?> HeartbeatAsync(SDKWork.Webserver.BackendSdk.Models.AgentHeartbeatRequest body)
+        public async Task<SDKWork.WebserverBackendSdk.Models.HeartbeatResponse?> HeartbeatAsync(SDKWork.WebserverBackendSdk.Models.AgentHeartbeatRequest body)
         {
-            return await _client.PostAsync<SDKWork.Webserver.BackendSdk.Models.HeartbeatResponse>(ApiPaths.BackendPath("/agent/heartbeat"), body, null, null, "application/json");
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.HeartbeatResponse>(ApiPaths.BackendPath("/agent/heartbeat"), body, null, null, "application/json");
         }
 
         /// <summary>
         /// Retrieve the Nginx configuration and certificate bundle
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.RetrieveResponse?> RetrieveAsync(string? ifSyncVersion = null)
+        public async Task<SDKWork.WebserverBackendSdk.Models.RetrieveResponse?> RetrieveAsync(string? ifSyncVersion = null)
         {
             var queryString = BuildQueryString(new[]
             {
                 new QueryParameterSpec("if_sync_version", ifSyncVersion, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Webserver.BackendSdk.Models.RetrieveResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath("/agent/sync"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.RetrieveResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath("/agent/sync"), queryString));
         }
 
 

@@ -22,20 +22,17 @@ impl ServerFileApi {
     }
 
     /// Browse a deployment node directory
-    pub async fn server_files_node_browse(&self, node_id: &str, path: &str) -> Result<ServerDirectoryListing, SdkworkError> {
+    pub async fn server_files_node_directory_list(&self, node_id: &str, path: &str) -> Result<ServerDirectoryListing, SdkworkError> {
         let query = build_query_string(&[
             QueryParameterSpec::new("path", path, "form", true, false, None),
         ]);
-        let path = append_query_string(backend_path(&format!("/server_files/nodes/{}/browse", serialize_path_parameter(node_id, PathParameterSpec::new("nodeId", "simple", false)))), &query);
+        let path = append_query_string(backend_path(&format!("/server_files/nodes/{}/directory", serialize_path_parameter(node_id, PathParameterSpec::new("nodeId", "simple", false)))), &query);
         self.client.get(&path, None, None).await
     }
 
     /// Read a text file on a deployment node
-    pub async fn server_files_node_read(&self, node_id: &str, path: &str) -> Result<ServerFileContent, SdkworkError> {
-        let query = build_query_string(&[
-            QueryParameterSpec::new("path", path, "form", true, false, None),
-        ]);
-        let path = append_query_string(backend_path(&format!("/server_files/nodes/{}/read", serialize_path_parameter(node_id, PathParameterSpec::new("nodeId", "simple", false)))), &query);
+    pub async fn server_files_node_retrieve(&self, node_id: &str, file_path: &str) -> Result<ServerFileContent, SdkworkError> {
+        let path = backend_path(&format!("/server_files/nodes/{}/files/{}", serialize_path_parameter(node_id, PathParameterSpec::new("nodeId", "simple", false)), serialize_path_parameter(file_path, PathParameterSpec::new("filePath", "simple", false))));
         self.client.get(&path, None, None).await
     }
 

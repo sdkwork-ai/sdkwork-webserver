@@ -5,21 +5,21 @@ Generated SDKWork v3 dual-token transport SDK.
 ## Installation
 
 ```bash
-dotnet add package SDKWork.Webserver.AppSdk
+dotnet add package SDKWork.WebserverAppSdk
 ```
 
 Or add to your `.csproj`:
 
 ```xml
-<PackageReference Include="SDKWork.Webserver.AppSdk" Version="1.0.0" />
+<PackageReference Include="SDKWork.WebserverAppSdk" Version="1.0.0" />
 ```
 
 ## Quick Start
 
 ```csharp
 using System.Collections.Generic;
-using SDKWork.Webserver.AppSdk.Models;
-using SDKWork.Webserver.AppSdk;
+using SDKWork.WebserverAppSdk.Models;
+using SDKWork.WebserverAppSdk;
 using SDKwork.Common.Core;
 
 var config = new SdkConfig("http://localhost:3800");

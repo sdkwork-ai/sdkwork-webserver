@@ -317,15 +317,15 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     ).with_required_permission("web.servers.files.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
-        "/backend/v3/api/server_files/nodes/{nodeId}/browse",
+        "/backend/v3/api/server_files/nodes/{nodeId}/directory",
         "serverFile",
-        "serverFiles.node.browse",
+        "serverFiles.node.directory.list",
     ).with_required_permission("web.servers.files.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
-        "/backend/v3/api/server_files/nodes/{nodeId}/read",
+        "/backend/v3/api/server_files/nodes/{nodeId}/files/{filePath}",
         "serverFile",
-        "serverFiles.node.read",
+        "serverFiles.node.file.retrieve",
     ).with_required_permission("web.servers.files.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,

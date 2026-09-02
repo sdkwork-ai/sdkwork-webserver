@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\BackendSdk\Models;
+namespace SDKWork\Webserver\BackendSdk\Models;
 
-use SDKWork\Web\BackendSdk\Models\RootDomainResponse;
+use SDKWork\Webserver\BackendSdk\Models\RootDomainResponse;
 
 final class RootDomainsRetrieveResponse
 {

@@ -30,20 +30,51 @@ export class ServerFileNodeOperationsApi {
   }
 }
 
-export interface ServerFileNodesBrowseParams {
+export class ServerFileNodeFileApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** Read a text file on a deployment node */
+  async retrieve(nodeId: string, filePath: string, requestOptions?: ApiRequestOptions): Promise<ServerFileContent> {
+    return this.client.request<ServerFileContent>(backendApiPath(`/server_files/nodes/${serializePathParameter(nodeId, { name: 'nodeId', style: 'simple', explode: false })}/files/${serializePathParameter(filePath, { name: 'filePath', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'data' });
+  }
+}
+
+export interface ServerFileNodeDirectoryListParams {
   path: string;
 }
 
-export interface ServerFileNodesReadParams {
-  path: string;
+export class ServerFileNodeDirectoryApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** Browse a deployment node directory */
+  async list(nodeId: string, params: ServerFileNodeDirectoryListParams, requestOptions?: ApiRequestOptions): Promise<ServerDirectoryListing> {
+    const query = buildQueryString([
+      { name: 'path', value: params.path, style: 'form', explode: true, allowReserved: false },
+    ]);
+    return this.client.request<ServerDirectoryListing>(appendQueryString(backendApiPath(`/server_files/nodes/${serializePathParameter(nodeId, { name: 'nodeId', style: 'simple', explode: false })}/directory`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'data' });
+  }
 }
 
 export class ServerFileNodesApi {
   private client: HttpClient;
+  public readonly directory: ServerFileNodeDirectoryApi;
+  public readonly file: ServerFileNodeFileApi;
   public readonly operations: ServerFileNodeOperationsApi;
 
   constructor(client: HttpClient) {
     this.client = client;
+    this.directory = new ServerFileNodeDirectoryApi(client);
+    this.file = new ServerFileNodeFileApi(client);
     this.operations = new ServerFileNodeOperationsApi(client);
   }
 
@@ -51,22 +82,6 @@ export class ServerFileNodesApi {
 /** List Server Files deployment nodes */
   async list(requestOptions?: ApiRequestOptions): Promise<{ items: ServerFilesNode[]; }> {
     return this.client.request<{ items: ServerFilesNode[]; }>(backendApiPath(`/server_files/nodes`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'data' });
-  }
-
-/** Browse a deployment node directory */
-  async browse(nodeId: string, params: ServerFileNodesBrowseParams, requestOptions?: ApiRequestOptions): Promise<ServerDirectoryListing> {
-    const query = buildQueryString([
-      { name: 'path', value: params.path, style: 'form', explode: true, allowReserved: false },
-    ]);
-    return this.client.request<ServerDirectoryListing>(appendQueryString(backendApiPath(`/server_files/nodes/${serializePathParameter(nodeId, { name: 'nodeId', style: 'simple', explode: false })}/browse`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'data' });
-  }
-
-/** Read a text file on a deployment node */
-  async read(nodeId: string, params: ServerFileNodesReadParams, requestOptions?: ApiRequestOptions): Promise<ServerFileContent> {
-    const query = buildQueryString([
-      { name: 'path', value: params.path, style: 'form', explode: true, allowReserved: false },
-    ]);
-    return this.client.request<ServerFileContent>(appendQueryString(backendApiPath(`/server_files/nodes/${serializePathParameter(nodeId, { name: 'nodeId', style: 'simple', explode: false })}/read`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'data' });
   }
 }
 

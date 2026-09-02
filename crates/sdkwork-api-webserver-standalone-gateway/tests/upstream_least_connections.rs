@@ -336,7 +336,7 @@ async fn streaming_activity_drives_weighted_selection_and_cancellation_release()
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     wait_for_gateway(port).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
 
     assert_eq!(request_head_and_disconnect(port, "/first").await, "primary");
     let _ = primary.pulse.send(1);
@@ -382,7 +382,7 @@ async fn random_two_routes_around_the_sampled_active_request() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     wait_for_gateway(port).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
 
     let first = request(&client, port, "/first").await;
     let first_label = response_label(&first).to_owned();
@@ -418,7 +418,7 @@ async fn weighted_ratios_and_primary_tier_remain_authoritative() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     wait_for_gateway(port).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
 
     let first = request(&client, port, "/one").await;
     let second = request(&client, port, "/two").await;
@@ -454,7 +454,7 @@ async fn busy_primary_does_not_enable_backup_tier() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     wait_for_gateway(port).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
 
     let first = request(&client, port, "/first").await;
     let second = request(&client, port, "/second").await;
@@ -484,7 +484,7 @@ async fn watch_generation_starts_with_fresh_activity_counters() {
     let path = write_config(directory.path(), &initial);
     let (shutdown, task) = spawn_watched_data_plane(&path);
     wait_for_gateway(port).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
 
     let old_generation = request(&client, port, "/old-generation").await;
     assert_eq!(response_label(&old_generation), "primary");

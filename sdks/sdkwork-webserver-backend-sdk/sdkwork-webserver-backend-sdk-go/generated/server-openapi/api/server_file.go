@@ -28,29 +28,26 @@ func (a *ServerFileApi) ServerFilesNodesList() (sdktypes.ServerFilesNodesListRes
 }
 
 // Browse a deployment node directory
-func (a *ServerFileApi) ServerFilesNodeBrowse(nodeId string, path string) (sdktypes.ServerFilesNodeBrowseResponse, error) {
+func (a *ServerFileApi) ServerFilesNodeDirectoryList(nodeId string, path string) (sdktypes.ServerFilesNodeDirectoryListResponse, error) {
     query := BuildQueryString([]QueryParameterSpec{
         {Name: "path", Value: path, Style: "form", Explode: true, AllowReserved: false},
     })
-    raw, err := a.client.Get(AppendQueryString(BackendApiPath(fmt.Sprintf("/server_files/nodes/%s/browse", SerializePathParameter(nodeId, PathParameterSpec{Name: "nodeId", Style: "simple", Explode: false}))), query), nil, nil)
+    raw, err := a.client.Get(AppendQueryString(BackendApiPath(fmt.Sprintf("/server_files/nodes/%s/directory", SerializePathParameter(nodeId, PathParameterSpec{Name: "nodeId", Style: "simple", Explode: false}))), query), nil, nil)
     if err != nil {
-        var zero sdktypes.ServerFilesNodeBrowseResponse
+        var zero sdktypes.ServerFilesNodeDirectoryListResponse
         return zero, err
     }
-    return decodeResult[sdktypes.ServerFilesNodeBrowseResponse](raw)
+    return decodeResult[sdktypes.ServerFilesNodeDirectoryListResponse](raw)
 }
 
 // Read a text file on a deployment node
-func (a *ServerFileApi) ServerFilesNodeRead(nodeId string, path string) (sdktypes.ServerFilesNodeReadResponse, error) {
-    query := BuildQueryString([]QueryParameterSpec{
-        {Name: "path", Value: path, Style: "form", Explode: true, AllowReserved: false},
-    })
-    raw, err := a.client.Get(AppendQueryString(BackendApiPath(fmt.Sprintf("/server_files/nodes/%s/read", SerializePathParameter(nodeId, PathParameterSpec{Name: "nodeId", Style: "simple", Explode: false}))), query), nil, nil)
+func (a *ServerFileApi) ServerFilesNodeRetrieve(nodeId string, filePath string) (sdktypes.ServerFilesNodeRetrieveResponse, error) {
+    raw, err := a.client.Get(BackendApiPath(fmt.Sprintf("/server_files/nodes/%s/files/%s", SerializePathParameter(nodeId, PathParameterSpec{Name: "nodeId", Style: "simple", Explode: false}), SerializePathParameter(filePath, PathParameterSpec{Name: "filePath", Style: "simple", Explode: false}))), nil, nil)
     if err != nil {
-        var zero sdktypes.ServerFilesNodeReadResponse
+        var zero sdktypes.ServerFilesNodeRetrieveResponse
         return zero, err
     }
-    return decodeResult[sdktypes.ServerFilesNodeReadResponse](raw)
+    return decodeResult[sdktypes.ServerFilesNodeRetrieveResponse](raw)
 }
 
 // List operations available for a project directory

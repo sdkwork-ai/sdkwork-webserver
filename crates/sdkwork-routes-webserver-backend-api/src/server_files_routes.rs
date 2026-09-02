@@ -108,8 +108,11 @@ struct ServerFilesState {
 pub fn build_server_files_router(registry: ServerFilesNodeRegistry) -> Router {
     Router::new()
         .route(paths::SERVER_FILES_NODES, get(list_nodes))
-        .route(paths::SERVER_FILES_NODE_BROWSE, get(browse_node_directory))
-        .route(paths::SERVER_FILES_NODE_READ, get(read_node_file))
+        .route(
+            paths::SERVER_FILES_NODE_DIRECTORY,
+            get(browse_node_directory),
+        )
+        .route(paths::SERVER_FILES_NODE_FILE, get(read_node_file))
         .route(
             paths::SERVER_FILES_NODE_OPERATIONS,
             get(list_node_operations).post(run_node_operation),
@@ -152,13 +155,12 @@ async fn browse_node_directory(
 async fn read_node_file(
     State(state): State<ServerFilesState>,
     context: Option<Extension<WebBackendRequestContext>>,
-    Path(node_id): Path<String>,
-    Query(query): Query<PathQuery>,
+    Path((node_id, file_path)): Path<(String, String)>,
 ) -> Result<Response, WebApiError> {
     require_read(context)?;
     let service = service_for(state, &node_id)?;
     let content = service
-        .read_file(&query.path)
+        .read_file(&file_path)
         .await
         .map_err(server_files_error)?;
     Ok(ok_json(&content))

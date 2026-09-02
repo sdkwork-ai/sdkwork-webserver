@@ -11,7 +11,7 @@ pip install sdkwork-webserver-app-sdk
 ## Quick Start
 
 ```python
-from sdkwork_webserver_app_sdk_generated_rust import SdkworkAppClient, SdkConfig
+from sdkwork_webserver_app_sdk import SdkworkAppClient, SdkConfig
 
 config = SdkConfig(
     base_url="http://localhost:3800",
@@ -40,7 +40,7 @@ Access-Token: <accessToken>
 ## Configuration (Non-Auth)
 
 ```python
-from sdkwork_webserver_app_sdk_generated_rust import SdkworkAppClient, SdkConfig
+from sdkwork_webserver_app_sdk import SdkworkAppClient, SdkConfig
 
 config = SdkConfig(
     base_url="http://localhost:3800",

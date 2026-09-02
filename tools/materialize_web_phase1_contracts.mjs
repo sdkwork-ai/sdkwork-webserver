@@ -371,31 +371,31 @@ function packageNameFor(family, language) {
   const pascalSurface = pascalCase(surfaceLabel);
   switch (language) {
     case "typescript":
-      return `@sdkwork/web-${surfaceLabel}-sdk`;
+      return `@sdkwork/webserver-${surfaceLabel}-sdk`;
     case "dart":
     case "flutter":
-      return `sdkwork_web_${surfaceLabel}_sdk`;
+      return `sdkwork_webserver_${surfaceLabel}_sdk`;
     case "python":
     case "swift":
     case "rust":
     case "ruby":
-      return `sdkwork-web-${surfaceLabel}-sdk`;
+      return `sdkwork-webserver-${surfaceLabel}-sdk`;
     case "go":
-      return `github.com/sdkwork/sdkwork-web-${surfaceLabel}-sdk`;
+      return `github.com/sdkwork/sdkwork-webserver-${surfaceLabel}-sdk`;
     case "java":
     case "kotlin":
-      return `com.sdkwork:sdkwork-web-${surfaceLabel}-sdk`;
+      return `com.sdkwork:sdkwork-webserver-${surfaceLabel}-sdk`;
     case "csharp":
-      return `SDKWork.Web.${pascalSurface}Sdk`;
+      return `SDKWork.Webserver${pascalSurface}Sdk`;
     case "php":
-      return `sdkwork/web-${surfaceLabel}-sdk`;
+      return `sdkwork/webserver-${surfaceLabel}-sdk`;
     default:
-      return `sdkwork-web-${surfaceLabel}-sdk-${language}`;
+      return `sdkwork-webserver-${surfaceLabel}-sdk-${language}`;
   }
 }
 
 function csharpProjectName(family) {
-  return `SDKWork.Web.${pascalCase(sdkSurfaceLabel(family))}Sdk`;
+  return `SDKWork.Webserver${pascalCase(sdkSurfaceLabel(family))}Sdk`;
 }
 
 function csharpManifestFile(family) {
@@ -420,9 +420,9 @@ function manifestFileFor(family, language) {
 function namespaceArgsFor(family, language) {
   const surfaceLabel = sdkSurfaceLabel(family);
   const pascalSurface = pascalCase(surfaceLabel);
-  const ns = `com.sdkwork.web.${surfaceLabel}.sdk`;
-  const csharpNs = `SDKWork.Web.${pascalSurface}Sdk`;
-  const phpNs = `SDKWork\\Web\\${pascalSurface}Sdk`;
+  const ns = `com.sdkwork.webserver.${surfaceLabel}.sdk`;
+  const csharpNs = `SDKWork.Webserver${pascalSurface}Sdk`;
+  const phpNs = `SDKWork\\Webserver\\${pascalSurface}Sdk`;
   switch (language) {
     case "java":
     case "kotlin":
@@ -525,7 +525,7 @@ function newSdkManifest(profile, openapi) {
   const family = profile.sdkFamily;
   const surfaceLabel = sdkSurfaceLabel(family);
   const languages = profile.languages ?? LANGUAGE_LIST;
-  const sdkgenFileName = `sdkwork-web-${surfaceLabel}-api.sdkgen.yaml`;
+  const sdkgenFileName = `sdkwork-webserver-${surfaceLabel}-api.sdkgen.yaml`;
   const authorityFileName = path.basename(profile.sdkJsonPath);
   const languageEntries = languages.map((language) => {
     const workspace = `${family}-${language}`;
@@ -543,7 +543,7 @@ function newSdkManifest(profile, openapi) {
       generatedPath,
     };
     if (language === "typescript") {
-      entry.consumerPackageName = `@sdkwork/web-${surfaceLabel}-sdk`;
+      entry.consumerPackageName = `@sdkwork/webserver-${surfaceLabel}-sdk`;
       entry.transportPackageName = `${family}-generated-typescript`;
     }
     return entry;
@@ -552,7 +552,7 @@ function newSdkManifest(profile, openapi) {
     schemaVersion: 1,
     sdkFamily: family,
     sdkName: family,
-    packageName: `@sdkwork/web-${surfaceLabel}-sdk`,
+    packageName: `@sdkwork/webserver-${surfaceLabel}-sdk`,
     transportPackageName: `${family}-generated-typescript`,
     typescript: {
       composedRoot: `${family}-typescript`,
@@ -561,7 +561,7 @@ function newSdkManifest(profile, openapi) {
       transportEntry: `${family}-typescript/generated/server-openapi/src/index.ts`,
     },
     workspace: family,
-    title: `SDKWork Web ${pascalCase(surfaceLabel)} API SDK`,
+    title: `SDKWork Webserver ${pascalCase(surfaceLabel)} API SDK`,
     apiVersion: SDK_VERSION,
     openapiVersion: "3.1.2",
     authoritySpec: `openapi/${authorityFileName}`,
@@ -613,9 +613,9 @@ function writeComponentSpec(profile, openapi) {
       family,
       authority: profile.apiAuthority,
       sdkOwner: SDK_OWNER,
-      generationInputSpec: `openapi/sdkwork-web-${surfaceLabel}-api.sdkgen.yaml`,
+      generationInputSpec: `openapi/sdkwork-webserver-${surfaceLabel}-api.sdkgen.yaml`,
       apiPrefix: profile.prefix,
-      packageName: `@sdkwork/web-${surfaceLabel}-sdk`,
+      packageName: `@sdkwork/webserver-${surfaceLabel}-sdk`,
       sdkName: family,
       sdkType,
       sdkSurface: surfaceLabel,
@@ -729,7 +729,7 @@ function writeComponentSpec(profile, openapi) {
 function writeSdkgenInput(profile, openapi) {
   const family = profile.sdkFamily;
   const surfaceLabel = sdkSurfaceLabel(family);
-  const sdkgenFileName = `sdkwork-web-${surfaceLabel}-api.sdkgen.yaml`;
+  const sdkgenFileName = `sdkwork-webserver-${surfaceLabel}-api.sdkgen.yaml`;
   writeJson(`sdks/${family}/openapi/${sdkgenFileName}`, openapi);
 }
 
@@ -739,7 +739,7 @@ function writeGenerateSdkScripts(profile) {
   const sdkName = family;
   const apiPrefix = profile.prefix;
   const generatorType = sdkGeneratorType(profile);
-  const sdkgenFileName = `sdkwork-web-${surfaceLabel}-api.sdkgen.yaml`;
+  const sdkgenFileName = `sdkwork-webserver-${surfaceLabel}-api.sdkgen.yaml`;
   const familyDir = `sdks/${family}`;
   const defaultLanguages = (profile.languages ??
     (profile.surface === "app-api" ? ["typescript"] : ["typescript", "rust"])

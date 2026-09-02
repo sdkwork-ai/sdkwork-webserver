@@ -17,7 +17,7 @@ use sdkwork_routes_webserver_internal_api::{
     gateway_mount as mount_internal, gateway_route_manifest as internal_route_manifest,
     web_internal_domain_context_injectors, wrap_router_with_web_framework_from_env,
 };
-use sdkwork_web_bootstrap::{ApiAssemblyContribution, ReadinessCheck, ReadinessFuture};
+use sdkwork_web_bootstrap::{ApiAssemblyContribution, ReadinessCheck, ReadinessFuture, WebModule};
 use sdkwork_web_core::{AuditEmitter, HttpRoute, HttpRouteManifest, SecurityEventEmitter};
 use sdkwork_webserver_contract::MachineCredentialAuthenticator;
 use std::sync::Arc;
@@ -344,6 +344,29 @@ fn selected_route_manifest(context: ApiAssemblyContext) -> HttpRouteManifest {
     }
     routes.extend_from_slice(internal_route_manifest().routes());
     HttpRouteManifest::from_owned_routes(routes)
+}
+
+/// Installs this application as a Web Module with caller-supplied assembly
+/// context (API_ASSEMBLY_SPEC §4.1.1).
+pub async fn web_module_with_context(
+    context: ApiAssemblyContext,
+) -> Result<WebModule, String> {
+    let assembly = assemble_api_router(context)
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(WebModule::from_contribution(assembly.contribution))
+}
+
+/// Canonical Web Module definition for this application
+/// (API_ASSEMBLY_SPEC §4.1.1): the complete HTTP surface — every route,
+/// manifest, and OpenAPI document of this owner — as one installable module.
+///
+/// The default context is the standalone profile, which also mounts the
+/// Site, certificate, Nginx, and server management control plane. The platform
+/// cloud gateway installs [`web_module_with_context`] with
+/// [`ApiAssemblyContext::cloud_gateway`] instead.
+pub async fn web_module() -> Result<WebModule, String> {
+    web_module_with_context(ApiAssemblyContext::default()).await
 }
 
 #[cfg(test)]

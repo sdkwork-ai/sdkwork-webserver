@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\AppSdk\Models;
+namespace SDKWork\Webserver\AppSdk\Models;
 
-use SDKWork\Web\AppSdk\Models\PageInfo;
-use SDKWork\Web\AppSdk\Models\PlatformTargetResponse;
+use SDKWork\Webserver\AppSdk\Models\PageInfo;
+use SDKWork\Webserver\AppSdk\Models\PlatformTargetResponse;
 
 final class ApplicationsPlatformTargetsListResponse
 {

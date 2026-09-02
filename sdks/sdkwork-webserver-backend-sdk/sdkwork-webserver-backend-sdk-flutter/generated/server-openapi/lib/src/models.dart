@@ -6436,23 +6436,23 @@ class ServerFilesNodesListResponse {
   }
 }
 
-class ServerFilesNodeBrowseResponse {
+class ServerFilesNodeDirectoryListResponse {
   final int code;
   final dynamic data;
   final String traceId;
 
-  ServerFilesNodeBrowseResponse({
+  ServerFilesNodeDirectoryListResponse({
     required this.code,
     required this.data,
     required this.traceId
   });
 
-  factory ServerFilesNodeBrowseResponse.fromJson(Map<String, dynamic> json) {
-    return ServerFilesNodeBrowseResponse(
+  factory ServerFilesNodeDirectoryListResponse.fromJson(Map<String, dynamic> json) {
+    return ServerFilesNodeDirectoryListResponse(
       code: (() {
         final value = json['code'];
         if (value is! int) {
-          throw FormatException('ServerFilesNodeBrowseResponse.code is required');
+          throw FormatException('ServerFilesNodeDirectoryListResponse.code is required');
         }
         return value;
       })(),
@@ -6460,7 +6460,7 @@ class ServerFilesNodeBrowseResponse {
       traceId: (() {
         final value = json['traceId']?.toString();
         if (value == null) {
-          throw FormatException('ServerFilesNodeBrowseResponse.traceId is required');
+          throw FormatException('ServerFilesNodeDirectoryListResponse.traceId is required');
         }
         return value;
       })()
@@ -6476,23 +6476,23 @@ class ServerFilesNodeBrowseResponse {
   }
 }
 
-class ServerFilesNodeReadResponse {
+class ServerFilesNodeRetrieveResponse {
   final int code;
   final dynamic data;
   final String traceId;
 
-  ServerFilesNodeReadResponse({
+  ServerFilesNodeRetrieveResponse({
     required this.code,
     required this.data,
     required this.traceId
   });
 
-  factory ServerFilesNodeReadResponse.fromJson(Map<String, dynamic> json) {
-    return ServerFilesNodeReadResponse(
+  factory ServerFilesNodeRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return ServerFilesNodeRetrieveResponse(
       code: (() {
         final value = json['code'];
         if (value is! int) {
-          throw FormatException('ServerFilesNodeReadResponse.code is required');
+          throw FormatException('ServerFilesNodeRetrieveResponse.code is required');
         }
         return value;
       })(),
@@ -6500,7 +6500,7 @@ class ServerFilesNodeReadResponse {
       traceId: (() {
         final value = json['traceId']?.toString();
         if (value == null) {
-          throw FormatException('ServerFilesNodeReadResponse.traceId is required');
+          throw FormatException('ServerFilesNodeRetrieveResponse.traceId is required');
         }
         return value;
       })()

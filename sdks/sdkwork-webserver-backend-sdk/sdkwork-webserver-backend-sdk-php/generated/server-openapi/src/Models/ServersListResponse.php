@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\BackendSdk\Models;
+namespace SDKWork\Webserver\BackendSdk\Models;
 
-use SDKWork\Web\BackendSdk\Models\PageInfo;
-use SDKWork\Web\BackendSdk\Models\ServerResponse;
+use SDKWork\Webserver\BackendSdk\Models\PageInfo;
+use SDKWork\Webserver\BackendSdk\Models\ServerResponse;
 
 final class ServersListResponse
 {

@@ -1,8 +1,8 @@
 require_relative 'base_api'
-require_relative '../models/server_files_node_browse_response'
+require_relative '../models/server_files_node_directory_list_response'
 require_relative '../models/server_files_node_operations_create_response201'
 require_relative '../models/server_files_node_operations_list_response'
-require_relative '../models/server_files_node_read_response'
+require_relative '../models/server_files_node_retrieve_response'
 require_relative '../models/server_files_nodes_list_response'
 require_relative '../models/server_run_operation_request'
 
@@ -20,8 +20,8 @@ module Sdkwork
           end
 
           # Browse a deployment node directory
-          def server_files_node_browse(node_id, path_)
-            path = interpolate_path('/backend/v3/api/server_files/nodes/{nodeId}/browse', nodeId: serialize_path_parameter(node_id, PathParameterSpec.new('nodeId', 'simple', false)))
+          def server_files_node_directory_list(node_id, path_)
+            path = interpolate_path('/backend/v3/api/server_files/nodes/{nodeId}/directory', nodeId: serialize_path_parameter(node_id, PathParameterSpec.new('nodeId', 'simple', false)))
             query = build_query_string([
               QueryParameterSpec.new('path', path_, 'form', true, false, nil),
             ])
@@ -29,20 +29,16 @@ module Sdkwork
             options = {}
 
             result = @client.request('GET', path, **options)
-            result.is_a?(Hash) ? Models::ServerFilesNodeBrowseResponse.from_hash(result) : nil
+            result.is_a?(Hash) ? Models::ServerFilesNodeDirectoryListResponse.from_hash(result) : nil
           end
 
           # Read a text file on a deployment node
-          def server_files_node_read(node_id, path_)
-            path = interpolate_path('/backend/v3/api/server_files/nodes/{nodeId}/read', nodeId: serialize_path_parameter(node_id, PathParameterSpec.new('nodeId', 'simple', false)))
-            query = build_query_string([
-              QueryParameterSpec.new('path', path_, 'form', true, false, nil),
-            ])
-            path = append_query_string(path, query)
+          def server_files_node_retrieve(node_id, file_path)
+            path = interpolate_path('/backend/v3/api/server_files/nodes/{nodeId}/files/{filePath}', nodeId: serialize_path_parameter(node_id, PathParameterSpec.new('nodeId', 'simple', false)), filePath: serialize_path_parameter(file_path, PathParameterSpec.new('filePath', 'simple', false)))
             options = {}
 
             result = @client.request('GET', path, **options)
-            result.is_a?(Hash) ? Models::ServerFilesNodeReadResponse.from_hash(result) : nil
+            result.is_a?(Hash) ? Models::ServerFilesNodeRetrieveResponse.from_hash(result) : nil
           end
 
           # List operations available for a project directory

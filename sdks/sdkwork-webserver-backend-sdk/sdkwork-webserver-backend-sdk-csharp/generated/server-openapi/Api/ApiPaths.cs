@@ -1,4 +1,4 @@
-namespace SDKWork.Webserver.BackendSdk.Api
+namespace SDKWork.WebserverBackendSdk.Api
 {
     public static class ApiPaths
     {

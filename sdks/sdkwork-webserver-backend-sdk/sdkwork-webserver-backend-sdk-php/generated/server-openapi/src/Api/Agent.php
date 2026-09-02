@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\BackendSdk\Api;
+namespace SDKWork\Webserver\BackendSdk\Api;
 
-use SDKWork\Web\BackendSdk\Models\AgentHeartbeatRequest;
-use SDKWork\Web\BackendSdk\Models\HeartbeatResponse;
-use SDKWork\Web\BackendSdk\Models\RetrieveResponse;
+use SDKWork\Webserver\BackendSdk\Models\AgentHeartbeatRequest;
+use SDKWork\Webserver\BackendSdk\Models\HeartbeatResponse;
+use SDKWork\Webserver\BackendSdk\Models\RetrieveResponse;
 
 final class AgentApi extends BaseApi
 {

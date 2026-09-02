@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using SDKWork.Webserver.BackendSdk.Models;
-using SdkHttpClient = SDKWork.Webserver.BackendSdk.Http.HttpClient;
+using SDKWork.WebserverBackendSdk.Models;
+using SdkHttpClient = SDKWork.WebserverBackendSdk.Http.HttpClient;
 
-namespace SDKWork.Webserver.BackendSdk.Api
+namespace SDKWork.WebserverBackendSdk.Api
 {
     public class ApplicationDomainApi
     {
@@ -18,20 +18,20 @@ namespace SDKWork.Webserver.BackendSdk.Api
         /// <summary>
         /// List application domains
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ApplicationsDomainsListResponse?> ApplicationsDomainsListAsync(string applicationId, int? page = null, int? pageSize = null)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ApplicationsDomainsListResponse?> ApplicationsDomainsListAsync(string applicationId, int? page = null, int? pageSize = null)
         {
             var queryString = BuildQueryString(new[]
             {
                 new QueryParameterSpec("page", page, "form", true, false, null),
                 new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Webserver.BackendSdk.Models.ApplicationsDomainsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ApplicationsDomainsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains"), queryString));
         }
 
         /// <summary>
         /// Bind a public domain to an application
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ApplicationsDomainsCreateResponse201?> ApplicationsDomainsCreateAsync(string applicationId, SDKWork.Webserver.BackendSdk.Models.CreateApplicationDomainRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ApplicationsDomainsCreateResponse201?> ApplicationsDomainsCreateAsync(string applicationId, SDKWork.WebserverBackendSdk.Models.CreateApplicationDomainRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -40,7 +40,7 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.BackendSdk.Models.ApplicationsDomainsCreateResponse201>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ApplicationsDomainsCreateResponse201>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
@@ -61,7 +61,7 @@ namespace SDKWork.Webserver.BackendSdk.Api
         /// <summary>
         /// Create or check an application-domain ownership challenge
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ApplicationsDomainsVerifyResponse?> ApplicationsDomainsVerifyAsync(string applicationId, string domainId, string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ApplicationsDomainsVerifyResponse?> ApplicationsDomainsVerifyAsync(string applicationId, string domainId, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -70,7 +70,7 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.BackendSdk.Models.ApplicationsDomainsVerifyResponse>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}/verify"), null, null, requestHeaders);
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ApplicationsDomainsVerifyResponse>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}/verify"), null, null, requestHeaders);
         }
 
         private sealed record PathParameterSpec(string Name, string Style, bool Explode);

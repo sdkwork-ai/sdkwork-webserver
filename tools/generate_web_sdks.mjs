@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
@@ -58,10 +58,15 @@ export function collectGenerationPlans({ familyName } = {}) {
     if (languages.length === 0) throw new Error(`${selected} declares no materialized languages`);
 
     return languages.map((language) => {
-      const packageName = packageNameFor(manifest, language);
+      let packageName = packageNameFor(manifest, language);
       if (typeof packageName !== 'string' || packageName.length === 0) {
         throw new Error(`${selected}/${language.language} does not declare a package name`);
       }
+      // Rust transport SDKs follow the workspace alias convention: the generated
+      // crate carries the "-generated-rust" suffix so the root workspace can
+      // alias it via `package = "...-generated-rust"` (same pattern as the
+      // sdkwork-drive / sdkwork-knowledgebase internal SDKs).
+      if (language.language === 'rust') packageName = `${packageName}-generated-rust`;
       return {
         apiPrefix: manifest.discoverySurface?.apiPrefix ?? '',
         familyRoot,
@@ -78,8 +83,7 @@ export function collectGenerationPlans({ familyName } = {}) {
   });
 }
 
-function assertPlanPaths(plan) {
-  if (!existsSync(GENERATOR_PATH)) throw new Error(`canonical SDK generator not found: ${GENERATOR_PATH}`);
+function assertPlanPaths(plan) {  if (!existsSync(GENERATOR_PATH)) throw new Error(`canonical SDK generator not found: ${GENERATOR_PATH}`);
   if (!existsSync(plan.input)) throw new Error(`SDK generation input not found: ${plan.input}`);
   const familyPrefix = `${path.resolve(plan.familyRoot)}${path.sep}`;
   if (!path.resolve(plan.output).startsWith(familyPrefix)) {

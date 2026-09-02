@@ -10,18 +10,18 @@ function Resolve-PackageName {
     param([string]$Language)
 
     switch ($Language) {
-        "typescript" { return "@sdkwork/web-backend-sdk" }
-        "dart" { return "sdkwork_web_backend_sdk" }
-        "python" { return "sdkwork-web-backend-sdk" }
-        "go" { return "github.com/sdkwork/sdkwork-web-backend-sdk" }
-        "java" { return "com.sdkwork:sdkwork-web-backend-sdk" }
-        "kotlin" { return "com.sdkwork:sdkwork-web-backend-sdk" }
-        "swift" { return "sdkwork-web-backend-sdk" }
-        "csharp" { return "SDKWork.Web.BackendSdk" }
-        "flutter" { return "sdkwork_web_backend_sdk" }
-        "rust" { return "sdkwork-web-backend-sdk" }
-        "php" { return "sdkwork/web-backend-sdk" }
-        "ruby" { return "sdkwork-web-backend-sdk" }
+        "typescript" { return "@sdkwork/webserver-backend-sdk" }
+        "dart" { return "sdkwork_webserver_backend_sdk" }
+        "python" { return "sdkwork-webserver-backend-sdk" }
+        "go" { return "github.com/sdkwork/sdkwork-webserver-backend-sdk" }
+        "java" { return "com.sdkwork:sdkwork-webserver-backend-sdk" }
+        "kotlin" { return "com.sdkwork:sdkwork-webserver-backend-sdk" }
+        "swift" { return "sdkwork-webserver-backend-sdk" }
+        "csharp" { return "SDKWork.WebserverBackendSdk" }
+        "flutter" { return "sdkwork_webserver_backend_sdk" }
+        "rust" { return "sdkwork-webserver-backend-sdk" }
+        "php" { return "sdkwork/webserver-backend-sdk" }
+        "ruby" { return "sdkwork-webserver-backend-sdk" }
         default { return "sdkwork-webserver-backend-sdk-$Language" }
     }
 }
@@ -30,10 +30,10 @@ function Resolve-NamespaceArgs {
     param([string]$Language)
 
     switch ($Language) {
-        "java" { return @("--namespace", "com.sdkwork.web.backend.sdk") }
-        "kotlin" { return @("--namespace", "com.sdkwork.web.backend.sdk") }
-        "csharp" { return @("--namespace", "SDKWork.Web.BackendSdk") }
-        "php" { return @("--namespace", "SDKWork\Web\BackendSdk") }
+        "java" { return @("--namespace", "com.sdkwork.webserver.backend.sdk") }
+        "kotlin" { return @("--namespace", "com.sdkwork.webserver.backend.sdk") }
+        "csharp" { return @("--namespace", "SDKWork.WebserverBackendSdk") }
+        "php" { return @("--namespace", "SDKWork\Webserver\BackendSdk") }
         default { return @() }
     }
 }
@@ -43,7 +43,7 @@ $FamilyRoot = (Get-Item $ScriptDir).Parent.FullName
 $WebRoot = (Get-Item $FamilyRoot).Parent.Parent.FullName
 $WorkspaceRoot = (Get-Item (Join-Path $FamilyRoot "..\..\..")).FullName
 $GeneratorPath = Join-Path $WorkspaceRoot "sdkwork-sdk-generator\bin\sdkgen.js"
-$InputPath = Join-Path $FamilyRoot "openapi\sdkwork-web-backend-api.sdkgen.yaml"
+$InputPath = Join-Path $FamilyRoot "openapi\sdkwork-webserver-backend-api.sdkgen.yaml"
 $SdkName = "sdkwork-webserver-backend-sdk"
 $ApiPrefix = "/backend/v3/api"
 $SupportedLanguages = @("typescript", "dart", "python", "go", "java", "kotlin", "swift", "csharp", "flutter", "rust", "php", "ruby")

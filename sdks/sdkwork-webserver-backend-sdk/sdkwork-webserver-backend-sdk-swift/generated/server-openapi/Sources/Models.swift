@@ -1943,7 +1943,7 @@ public struct ServerFilesNodesListResponse: Codable {
     }
 }
 
-public struct ServerFilesNodeBrowseResponse: Codable {
+public struct ServerFilesNodeDirectoryListResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -1956,7 +1956,7 @@ public struct ServerFilesNodeBrowseResponse: Codable {
     }
 }
 
-public struct ServerFilesNodeReadResponse: Codable {
+public struct ServerFilesNodeRetrieveResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?

@@ -5,13 +5,13 @@ Generated SDKWork v3 dual-token transport SDK.
 ## Installation
 
 ```bash
-dart pub add sdkwork_webserver_app_sdk_generated_rust
+dart pub add sdkwork_webserver_app_sdk
 ```
 
 ## Quick Start
 
 ```dart
-import 'package:sdkwork_webserver_app_sdk_generated_rust/sdkwork_webserver_app_sdk_generated_rust.dart';
+import 'package:sdkwork_webserver_app_sdk/sdkwork_webserver_app_sdk.dart';
 
 final client = SdkworkAppClient(
   config: const SdkConfig(

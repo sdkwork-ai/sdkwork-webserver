@@ -8,13 +8,13 @@ Add to `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  sdkwork_webserver_app_sdk_generated_rust: ^1.0.0
+  sdkwork_webserver_app_sdk: ^1.0.0
 ```
 
 ## Quick Start
 
 ```dart
-import 'package:sdkwork_webserver_app_sdk_generated_rust/sdkwork_webserver_app_sdk_generated_rust.dart';
+import 'package:sdkwork_webserver_app_sdk/sdkwork_webserver_app_sdk.dart';
 
 final client = SdkworkAppClient.withBaseUrl(baseUrl: 'http://localhost:3800');
 client.setAuthToken('your-auth-token');

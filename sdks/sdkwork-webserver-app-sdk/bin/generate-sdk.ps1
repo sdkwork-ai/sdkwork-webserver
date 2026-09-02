@@ -10,18 +10,18 @@ function Resolve-PackageName {
     param([string]$Language)
 
     switch ($Language) {
-        "typescript" { return "@sdkwork/web-app-sdk" }
-        "dart" { return "sdkwork_web_app_sdk" }
-        "python" { return "sdkwork-web-app-sdk" }
-        "go" { return "github.com/sdkwork/sdkwork-web-app-sdk" }
-        "java" { return "com.sdkwork:sdkwork-web-app-sdk" }
-        "kotlin" { return "com.sdkwork:sdkwork-web-app-sdk" }
-        "swift" { return "sdkwork-web-app-sdk" }
-        "csharp" { return "SDKWork.Web.AppSdk" }
-        "flutter" { return "sdkwork_web_app_sdk" }
-        "rust" { return "sdkwork-web-app-sdk" }
-        "php" { return "sdkwork/web-app-sdk" }
-        "ruby" { return "sdkwork-web-app-sdk" }
+        "typescript" { return "@sdkwork/webserver-app-sdk" }
+        "dart" { return "sdkwork_webserver_app_sdk" }
+        "python" { return "sdkwork-webserver-app-sdk" }
+        "go" { return "github.com/sdkwork/sdkwork-webserver-app-sdk" }
+        "java" { return "com.sdkwork:sdkwork-webserver-app-sdk" }
+        "kotlin" { return "com.sdkwork:sdkwork-webserver-app-sdk" }
+        "swift" { return "sdkwork-webserver-app-sdk" }
+        "csharp" { return "SDKWork.WebserverAppSdk" }
+        "flutter" { return "sdkwork_webserver_app_sdk" }
+        "rust" { return "sdkwork-webserver-app-sdk" }
+        "php" { return "sdkwork/webserver-app-sdk" }
+        "ruby" { return "sdkwork-webserver-app-sdk" }
         default { return "sdkwork-webserver-app-sdk-$Language" }
     }
 }
@@ -30,10 +30,10 @@ function Resolve-NamespaceArgs {
     param([string]$Language)
 
     switch ($Language) {
-        "java" { return @("--namespace", "com.sdkwork.web.app.sdk") }
-        "kotlin" { return @("--namespace", "com.sdkwork.web.app.sdk") }
-        "csharp" { return @("--namespace", "SDKWork.Web.AppSdk") }
-        "php" { return @("--namespace", "SDKWork\Web\AppSdk") }
+        "java" { return @("--namespace", "com.sdkwork.webserver.app.sdk") }
+        "kotlin" { return @("--namespace", "com.sdkwork.webserver.app.sdk") }
+        "csharp" { return @("--namespace", "SDKWork.WebserverAppSdk") }
+        "php" { return @("--namespace", "SDKWork\Webserver\AppSdk") }
         default { return @() }
     }
 }
@@ -43,7 +43,7 @@ $FamilyRoot = (Get-Item $ScriptDir).Parent.FullName
 $WebRoot = (Get-Item $FamilyRoot).Parent.Parent.FullName
 $WorkspaceRoot = (Get-Item (Join-Path $FamilyRoot "..\..\..")).FullName
 $GeneratorPath = Join-Path $WorkspaceRoot "sdkwork-sdk-generator\bin\sdkgen.js"
-$InputPath = Join-Path $FamilyRoot "openapi\sdkwork-web-app-api.sdkgen.yaml"
+$InputPath = Join-Path $FamilyRoot "openapi\sdkwork-webserver-app-api.sdkgen.yaml"
 $SdkName = "sdkwork-webserver-app-sdk"
 $ApiPrefix = "/app/v3/api"
 $SupportedLanguages = @("typescript", "dart", "python", "go", "java", "kotlin", "swift", "csharp", "flutter", "rust", "php", "ruby")

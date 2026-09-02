@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using SDKWork.Webserver.BackendSdk.Models;
-using SdkHttpClient = SDKWork.Webserver.BackendSdk.Http.HttpClient;
+using SDKWork.WebserverBackendSdk.Models;
+using SdkHttpClient = SDKWork.WebserverBackendSdk.Http.HttpClient;
 
-namespace SDKWork.Webserver.BackendSdk.Api
+namespace SDKWork.WebserverBackendSdk.Api
 {
     public class ServerFileApi
     {
@@ -18,53 +18,49 @@ namespace SDKWork.Webserver.BackendSdk.Api
         /// <summary>
         /// List Server Files deployment nodes
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ServerFilesNodesListResponse?> ServerFilesNodesListAsync()
+        public async Task<SDKWork.WebserverBackendSdk.Models.ServerFilesNodesListResponse?> ServerFilesNodesListAsync()
         {
-            return await _client.GetAsync<SDKWork.Webserver.BackendSdk.Models.ServerFilesNodesListResponse>(ApiPaths.BackendPath("/server_files/nodes"));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ServerFilesNodesListResponse>(ApiPaths.BackendPath("/server_files/nodes"));
         }
 
         /// <summary>
         /// Browse a deployment node directory
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ServerFilesNodeBrowseResponse?> ServerFilesNodeBrowseAsync(string nodeId, string path)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ServerFilesNodeDirectoryListResponse?> ServerFilesNodeDirectoryListAsync(string nodeId, string path)
         {
             var queryString = BuildQueryString(new[]
             {
                 new QueryParameterSpec("path", path, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Webserver.BackendSdk.Models.ServerFilesNodeBrowseResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath($"/server_files/nodes/{SerializePathParameter(nodeId, new PathParameterSpec("nodeId", "simple", false))}/browse"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ServerFilesNodeDirectoryListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath($"/server_files/nodes/{SerializePathParameter(nodeId, new PathParameterSpec("nodeId", "simple", false))}/directory"), queryString));
         }
 
         /// <summary>
         /// Read a text file on a deployment node
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ServerFilesNodeReadResponse?> ServerFilesNodeReadAsync(string nodeId, string path)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ServerFilesNodeRetrieveResponse?> ServerFilesNodeRetrieveAsync(string nodeId, string filePath)
         {
-            var queryString = BuildQueryString(new[]
-            {
-                new QueryParameterSpec("path", path, "form", true, false, null),
-            });
-            return await _client.GetAsync<SDKWork.Webserver.BackendSdk.Models.ServerFilesNodeReadResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath($"/server_files/nodes/{SerializePathParameter(nodeId, new PathParameterSpec("nodeId", "simple", false))}/read"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ServerFilesNodeRetrieveResponse>(ApiPaths.BackendPath($"/server_files/nodes/{SerializePathParameter(nodeId, new PathParameterSpec("nodeId", "simple", false))}/files/{SerializePathParameter(filePath, new PathParameterSpec("filePath", "simple", false))}"));
         }
 
         /// <summary>
         /// List operations available for a project directory
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ServerFilesNodeOperationsListResponse?> ServerFilesNodeOperationsListAsync(string nodeId, string path)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ServerFilesNodeOperationsListResponse?> ServerFilesNodeOperationsListAsync(string nodeId, string path)
         {
             var queryString = BuildQueryString(new[]
             {
                 new QueryParameterSpec("path", path, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Webserver.BackendSdk.Models.ServerFilesNodeOperationsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath($"/server_files/nodes/{SerializePathParameter(nodeId, new PathParameterSpec("nodeId", "simple", false))}/operations"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ServerFilesNodeOperationsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath($"/server_files/nodes/{SerializePathParameter(nodeId, new PathParameterSpec("nodeId", "simple", false))}/operations"), queryString));
         }
 
         /// <summary>
         /// Run a project operation on a deployment node
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ServerFilesNodeOperationsCreateResponse201?> ServerFilesNodeOperationsCreateAsync(string nodeId, SDKWork.Webserver.BackendSdk.Models.ServerRunOperationRequest body)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ServerFilesNodeOperationsCreateResponse201?> ServerFilesNodeOperationsCreateAsync(string nodeId, SDKWork.WebserverBackendSdk.Models.ServerRunOperationRequest body)
         {
-            return await _client.PostAsync<SDKWork.Webserver.BackendSdk.Models.ServerFilesNodeOperationsCreateResponse201>(ApiPaths.BackendPath($"/server_files/nodes/{SerializePathParameter(nodeId, new PathParameterSpec("nodeId", "simple", false))}/operations"), body, null, null, "application/json");
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ServerFilesNodeOperationsCreateResponse201>(ApiPaths.BackendPath($"/server_files/nodes/{SerializePathParameter(nodeId, new PathParameterSpec("nodeId", "simple", false))}/operations"), body, null, null, "application/json");
         }
 
         private sealed record PathParameterSpec(string Name, string Style, bool Explode);

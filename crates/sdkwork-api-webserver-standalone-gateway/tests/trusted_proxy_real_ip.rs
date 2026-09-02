@@ -287,7 +287,7 @@ async fn trusted_policy_is_bounded_across_http_https_h2_and_watch_generations() 
     wait_for_gateway(http_port).await;
     wait_for_gateway(https_port).await;
 
-    let http = reqwest::Client::new();
+    let http = reqwest::Client::builder().no_proxy().build().expect("client");
     let https = reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
         .build()
@@ -370,7 +370,7 @@ async fn trusted_effective_ip_controls_stable_ip_hash_affinity() {
     write_config(&path, &config);
     let (shutdown, task) = spawn_gateway(&path);
     wait_for_gateway(http_port).await;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     let url = format!("http://127.0.0.1:{http_port}/affinity");
 
     let first_response = get(&client, &url, "test.localhost", "192.0.2.1")

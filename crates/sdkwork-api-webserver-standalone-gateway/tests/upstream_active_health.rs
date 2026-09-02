@@ -370,7 +370,7 @@ async fn wrong_status_ejects_target_and_consecutive_successes_restore_traffic() 
         &active_health_config(port, &[address], 4, "disabled"),
     );
     let (gateway_shutdown, gateway_task) = spawn_data_plane(path);
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     let url = format!("http://127.0.0.1:{port}/service");
 
     wait_for_status(&client, &url, 503).await;
@@ -396,7 +396,7 @@ async fn timeout_and_oversized_chunked_body_remain_unhealthy_until_bounded_recov
         &active_health_config(port, &[address], 2, "disabled"),
     );
     let (gateway_shutdown, gateway_task) = spawn_data_plane(path);
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     let url = format!("http://127.0.0.1:{port}/service");
 
     wait_for_status(&client, &url, 503).await;
@@ -489,7 +489,7 @@ async fn watch_replacement_stops_old_generation_before_only_new_target_continues
         &active_health_config(port, &[old_address], 2, "watch"),
     );
     let (gateway_shutdown, gateway_task) = spawn_data_plane(path.clone());
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().expect("client");
     let url = format!("http://127.0.0.1:{port}/service");
 
     wait_for_body(&client, &url, "old").await;

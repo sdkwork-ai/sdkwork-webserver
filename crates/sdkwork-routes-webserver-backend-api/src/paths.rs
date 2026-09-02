@@ -46,11 +46,13 @@ pub const NGINX_CONFIG_DEPLOY: &str = "/backend/v3/api/nginx/etc/{configId}/depl
 pub const NGINX_RELOAD: &str = "/backend/v3/api/nginx/reload";
 pub const NGINX_STATUS: &str = "/backend/v3/api/nginx/status";
 pub const SERVERS: &str = "/backend/v3/api/servers";
-pub const SERVER_FILES_NODES: &str = "/backend/v3/api/server-files/nodes";
-pub const SERVER_FILES_NODE_BROWSE: &str = "/backend/v3/api/server-files/nodes/{nodeId}/browse";
-pub const SERVER_FILES_NODE_READ: &str = "/backend/v3/api/server-files/nodes/{nodeId}/read";
+pub const SERVER_FILES_NODES: &str = "/backend/v3/api/server_files/nodes";
+pub const SERVER_FILES_NODE_DIRECTORY: &str =
+    "/backend/v3/api/server_files/nodes/{nodeId}/directory";
+pub const SERVER_FILES_NODE_FILE: &str =
+    "/backend/v3/api/server_files/nodes/{nodeId}/files/{filePath}";
 pub const SERVER_FILES_NODE_OPERATIONS: &str =
-    "/backend/v3/api/server-files/nodes/{nodeId}/operations";
+    "/backend/v3/api/server_files/nodes/{nodeId}/operations";
 pub const AUDIT_LOGS: &str = "/backend/v3/api/audit_logs";
 pub const AGENT_HEARTBEAT: &str = "/backend/v3/api/agent/heartbeat";
 pub const AGENT_SYNC: &str = "/backend/v3/api/agent/sync";

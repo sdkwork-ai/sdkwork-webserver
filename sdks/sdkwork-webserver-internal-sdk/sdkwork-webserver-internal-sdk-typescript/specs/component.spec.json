@@ -3,7 +3,7 @@
   "kind": "sdkwork.component.spec",
   "component": {
     "name": "@sdkwork/webserver-internal-sdk",
-    "displayName": "SDKWork Web Internal SDK TypeScript Facade",
+    "displayName": "SDKWork Webserver Internal SDK TypeScript Facade",
     "version": "0.1.0",
     "type": "typescript-sdk-facade",
     "root": "sdks/sdkwork-webserver-internal-sdk/sdkwork-webserver-internal-sdk-typescript",

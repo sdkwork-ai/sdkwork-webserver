@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\BackendSdk\Api;
+namespace SDKWork\Webserver\BackendSdk\Api;
 
-use SDKWork\Web\BackendSdk\Models\ApplicationsActivateResponse;
-use SDKWork\Web\BackendSdk\Models\ApplicationsCreateResponse201;
-use SDKWork\Web\BackendSdk\Models\ApplicationsListResponse;
-use SDKWork\Web\BackendSdk\Models\ApplicationsPauseResponse;
-use SDKWork\Web\BackendSdk\Models\ApplicationsRetrieveResponse;
-use SDKWork\Web\BackendSdk\Models\ApplicationsUpdateResponse;
-use SDKWork\Web\BackendSdk\Models\CreateApplicationRequest;
-use SDKWork\Web\BackendSdk\Models\UpdateApplicationRequest;
+use SDKWork\Webserver\BackendSdk\Models\ApplicationsActivateResponse;
+use SDKWork\Webserver\BackendSdk\Models\ApplicationsCreateResponse201;
+use SDKWork\Webserver\BackendSdk\Models\ApplicationsListResponse;
+use SDKWork\Webserver\BackendSdk\Models\ApplicationsPauseResponse;
+use SDKWork\Webserver\BackendSdk\Models\ApplicationsRetrieveResponse;
+use SDKWork\Webserver\BackendSdk\Models\ApplicationsUpdateResponse;
+use SDKWork\Webserver\BackendSdk\Models\CreateApplicationRequest;
+use SDKWork\Webserver\BackendSdk\Models\UpdateApplicationRequest;
 
 final class ApplicationApi extends BaseApi
 {

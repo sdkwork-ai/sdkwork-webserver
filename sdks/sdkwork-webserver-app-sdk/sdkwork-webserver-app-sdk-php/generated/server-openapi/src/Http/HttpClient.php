@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\AppSdk\Http;
+namespace SDKWork\Webserver\AppSdk\Http;
 
-use SDKWork\Web\AppSdk\SdkConfig;
+use SDKWork\Webserver\AppSdk\SdkConfig;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
 use RuntimeException;

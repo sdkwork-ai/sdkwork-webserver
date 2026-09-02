@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace SDKWork.Webserver.BackendSdk.Models
+namespace SDKWork.WebserverBackendSdk.Models
 {
-    public class ServerFilesNodeReadResponse
+    public class ServerFilesNodeRetrieveResponse
     {
         public int Code { get; set; }
         public object Data { get; set; }

@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "language": "csharp",
   "sdkType": "backend",
-  "packageName": "SDKWork.Webserver.BackendSdk",
-  "transportPackageName": "SDKWork.Webserver.BackendSdk",
-  "consumerPackageName": "SDKWork.Webserver.BackendSdk",
+  "packageName": "SDKWork.WebserverBackendSdk",
+  "transportPackageName": "SDKWork.WebserverBackendSdk",
+  "consumerPackageName": "SDKWork.WebserverBackendSdk",
   "generator": "@sdkwork/sdk-generator",
   "capabilities": {
     "supportsGeneratedTests": true,

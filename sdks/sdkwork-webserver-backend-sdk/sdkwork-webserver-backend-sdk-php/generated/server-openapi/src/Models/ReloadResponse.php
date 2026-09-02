@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\BackendSdk\Models;
+namespace SDKWork\Webserver\BackendSdk\Models;
 
-use SDKWork\Web\BackendSdk\Models\NginxReloadResponse;
+use SDKWork\Webserver\BackendSdk\Models\NginxReloadResponse;
 
 final class ReloadResponse
 {

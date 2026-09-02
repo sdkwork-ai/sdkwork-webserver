@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\AppSdk\Models;
+namespace SDKWork\Webserver\AppSdk\Models;
 
-use SDKWork\Web\AppSdk\Models\EnvVariableResponse;
+use SDKWork\Webserver\AppSdk\Models\EnvVariableResponse;
 
 final class ApplicationsEnvVariablesCreateResponse201
 {

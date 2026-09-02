@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "language": "php",
   "sdkType": "app",
-  "packageName": "sdkwork/web-app-sdk",
-  "transportPackageName": "sdkwork/web-app-sdk",
-  "consumerPackageName": "sdkwork/web-app-sdk",
+  "packageName": "sdkwork/webserver-app-sdk",
+  "transportPackageName": "sdkwork/webserver-app-sdk",
+  "consumerPackageName": "sdkwork/webserver-app-sdk",
   "generator": "@sdkwork/sdk-generator",
   "capabilities": {
     "supportsGeneratedTests": true,

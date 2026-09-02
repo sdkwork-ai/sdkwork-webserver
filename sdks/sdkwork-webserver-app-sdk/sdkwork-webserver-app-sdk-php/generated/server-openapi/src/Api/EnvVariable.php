@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\AppSdk\Api;
+namespace SDKWork\Webserver\AppSdk\Api;
 
-use SDKWork\Web\AppSdk\Models\ApplicationsEnvVariablesCreateResponse201;
-use SDKWork\Web\AppSdk\Models\ApplicationsEnvVariablesListResponse;
-use SDKWork\Web\AppSdk\Models\ApplicationsEnvVariablesUpdateResponse;
-use SDKWork\Web\AppSdk\Models\CreateEnvVariableRequest;
-use SDKWork\Web\AppSdk\Models\UpdateEnvVariableRequest;
+use SDKWork\Webserver\AppSdk\Models\ApplicationsEnvVariablesCreateResponse201;
+use SDKWork\Webserver\AppSdk\Models\ApplicationsEnvVariablesListResponse;
+use SDKWork\Webserver\AppSdk\Models\ApplicationsEnvVariablesUpdateResponse;
+use SDKWork\Webserver\AppSdk\Models\CreateEnvVariableRequest;
+use SDKWork\Webserver\AppSdk\Models\UpdateEnvVariableRequest;
 
 final class EnvVariableApi extends BaseApi
 {

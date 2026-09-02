@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using SDKWork.Webserver.BackendSdk.Models;
-using SdkHttpClient = SDKWork.Webserver.BackendSdk.Http.HttpClient;
+using SDKWork.WebserverBackendSdk.Models;
+using SdkHttpClient = SDKWork.WebserverBackendSdk.Http.HttpClient;
 
-namespace SDKWork.Webserver.BackendSdk.Api
+namespace SDKWork.WebserverBackendSdk.Api
 {
     public class CertificateApi
     {
@@ -18,20 +18,20 @@ namespace SDKWork.Webserver.BackendSdk.Api
         /// <summary>
         /// List certificates active on an application domain listener
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ApplicationsDomainsListenerCertificateBindingsListResponse?> ApplicationsDomainsListenerCertificateBindingsListAsync(string applicationId, string domainId, int? page = null, int? pageSize = null)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ApplicationsDomainsListenerCertificateBindingsListResponse?> ApplicationsDomainsListenerCertificateBindingsListAsync(string applicationId, string domainId, int? page = null, int? pageSize = null)
         {
             var queryString = BuildQueryString(new[]
             {
                 new QueryParameterSpec("page", page, "form", true, false, null),
                 new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Webserver.BackendSdk.Models.ApplicationsDomainsListenerCertificateBindingsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}/listener_certificate_bindings"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ApplicationsDomainsListenerCertificateBindingsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}/listener_certificate_bindings"), queryString));
         }
 
         /// <summary>
         /// Bind a certificate version to an application domain listener
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ApplicationsDomainsListenerCertificateBindingsCreateResponse201?> ApplicationsDomainsListenerCertificateBindingsCreateAsync(string applicationId, string domainId, SDKWork.Webserver.BackendSdk.Models.CreateListenerCertificateBindingRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ApplicationsDomainsListenerCertificateBindingsCreateResponse201?> ApplicationsDomainsListenerCertificateBindingsCreateAsync(string applicationId, string domainId, SDKWork.WebserverBackendSdk.Models.CreateListenerCertificateBindingRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -40,7 +40,7 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.BackendSdk.Models.ApplicationsDomainsListenerCertificateBindingsCreateResponse201>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}/listener_certificate_bindings"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ApplicationsDomainsListenerCertificateBindingsCreateResponse201>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}/listener_certificate_bindings"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
@@ -61,7 +61,7 @@ namespace SDKWork.Webserver.BackendSdk.Api
         /// <summary>
         /// List canonical certificates
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.CertificatesListResponse?> CertificatesListAsync(int? page = null, int? pageSize = null, string? domainId = null)
+        public async Task<SDKWork.WebserverBackendSdk.Models.CertificatesListResponse?> CertificatesListAsync(int? page = null, int? pageSize = null, string? domainId = null)
         {
             var queryString = BuildQueryString(new[]
             {
@@ -69,13 +69,13 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
                 new QueryParameterSpec("domain_id", domainId, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Webserver.BackendSdk.Models.CertificatesListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath("/certificates"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.CertificatesListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath("/certificates"), queryString));
         }
 
         /// <summary>
         /// Issue a canonical certificate
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.CertificatesIssueResponse202?> CertificatesIssueAsync(SDKWork.Webserver.BackendSdk.Models.IssueCertificateRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.CertificatesIssueResponse202?> CertificatesIssueAsync(SDKWork.WebserverBackendSdk.Models.IssueCertificateRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -84,21 +84,21 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.BackendSdk.Models.CertificatesIssueResponse202>(ApiPaths.BackendPath("/certificates/issue"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.CertificatesIssueResponse202>(ApiPaths.BackendPath("/certificates/issue"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
         /// Retrieve a certificate operation
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.CertificatesOperationsRetrieveResponse?> CertificatesOperationsRetrieveAsync(string operationId)
+        public async Task<SDKWork.WebserverBackendSdk.Models.CertificatesOperationsRetrieveResponse?> CertificatesOperationsRetrieveAsync(string operationId)
         {
-            return await _client.GetAsync<SDKWork.Webserver.BackendSdk.Models.CertificatesOperationsRetrieveResponse>(ApiPaths.BackendPath($"/certificates/operations/{SerializePathParameter(operationId, new PathParameterSpec("operationId", "simple", false))}"));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.CertificatesOperationsRetrieveResponse>(ApiPaths.BackendPath($"/certificates/operations/{SerializePathParameter(operationId, new PathParameterSpec("operationId", "simple", false))}"));
         }
 
         /// <summary>
         /// Update certificate automatic renewal policy
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.CertificatesUpdateResponse?> CertificatesUpdateAsync(string certificateId, SDKWork.Webserver.BackendSdk.Models.UpdateCertificateRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.CertificatesUpdateResponse?> CertificatesUpdateAsync(string certificateId, SDKWork.WebserverBackendSdk.Models.UpdateCertificateRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -107,7 +107,7 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PutAsync<SDKWork.Webserver.BackendSdk.Models.CertificatesUpdateResponse>(ApiPaths.BackendPath($"/certificates/{SerializePathParameter(certificateId, new PathParameterSpec("certificateId", "simple", false))}"), body, null, requestHeaders, "application/json");
+            return await _client.PutAsync<SDKWork.WebserverBackendSdk.Models.CertificatesUpdateResponse>(ApiPaths.BackendPath($"/certificates/{SerializePathParameter(certificateId, new PathParameterSpec("certificateId", "simple", false))}"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
@@ -128,7 +128,7 @@ namespace SDKWork.Webserver.BackendSdk.Api
         /// <summary>
         /// Renew a canonical certificate now
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.CertificatesRenewResponse202?> CertificatesRenewAsync(string certificateId, string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.CertificatesRenewResponse202?> CertificatesRenewAsync(string certificateId, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -137,13 +137,13 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.BackendSdk.Models.CertificatesRenewResponse202>(ApiPaths.BackendPath($"/certificates/{SerializePathParameter(certificateId, new PathParameterSpec("certificateId", "simple", false))}/renew"), null, null, requestHeaders);
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.CertificatesRenewResponse202>(ApiPaths.BackendPath($"/certificates/{SerializePathParameter(certificateId, new PathParameterSpec("certificateId", "simple", false))}/renew"), null, null, requestHeaders);
         }
 
         /// <summary>
         /// Revoke a canonical certificate
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.CertificatesRevokeResponse?> CertificatesRevokeAsync(string certificateId, SDKWork.Webserver.BackendSdk.Models.RevokeCertificateRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.CertificatesRevokeResponse?> CertificatesRevokeAsync(string certificateId, SDKWork.WebserverBackendSdk.Models.RevokeCertificateRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -152,7 +152,7 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.BackendSdk.Models.CertificatesRevokeResponse>(ApiPaths.BackendPath($"/certificates/{SerializePathParameter(certificateId, new PathParameterSpec("certificateId", "simple", false))}/revoke"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.CertificatesRevokeResponse>(ApiPaths.BackendPath($"/certificates/{SerializePathParameter(certificateId, new PathParameterSpec("certificateId", "simple", false))}/revoke"), body, null, requestHeaders, "application/json");
         }
 
         private sealed record PathParameterSpec(string Name, string Style, bool Explode);

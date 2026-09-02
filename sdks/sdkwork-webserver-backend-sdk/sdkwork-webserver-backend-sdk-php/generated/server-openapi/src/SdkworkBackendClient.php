@@ -2,21 +2,21 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\BackendSdk;
+namespace SDKWork\Webserver\BackendSdk;
 
-use SDKWork\Web\BackendSdk\Http\HttpClient;
-use SDKWork\Web\BackendSdk\Api\ApplicationApi;
-use SDKWork\Web\BackendSdk\Api\ApplicationDomainApi;
-use SDKWork\Web\BackendSdk\Api\CertificateApi;
-use SDKWork\Web\BackendSdk\Api\DomainApi;
-use SDKWork\Web\BackendSdk\Api\ApplicationSourceVersionApi;
-use SDKWork\Web\BackendSdk\Api\ApplicationDeploymentApi;
-use SDKWork\Web\BackendSdk\Api\CertificateDistributionApi;
-use SDKWork\Web\BackendSdk\Api\NginxApi;
-use SDKWork\Web\BackendSdk\Api\ServerApi;
-use SDKWork\Web\BackendSdk\Api\ServerFileApi;
-use SDKWork\Web\BackendSdk\Api\AgentApi;
-use SDKWork\Web\BackendSdk\Api\AuditApi;
+use SDKWork\Webserver\BackendSdk\Http\HttpClient;
+use SDKWork\Webserver\BackendSdk\Api\ApplicationApi;
+use SDKWork\Webserver\BackendSdk\Api\ApplicationDomainApi;
+use SDKWork\Webserver\BackendSdk\Api\CertificateApi;
+use SDKWork\Webserver\BackendSdk\Api\DomainApi;
+use SDKWork\Webserver\BackendSdk\Api\ApplicationSourceVersionApi;
+use SDKWork\Webserver\BackendSdk\Api\ApplicationDeploymentApi;
+use SDKWork\Webserver\BackendSdk\Api\CertificateDistributionApi;
+use SDKWork\Webserver\BackendSdk\Api\NginxApi;
+use SDKWork\Webserver\BackendSdk\Api\ServerApi;
+use SDKWork\Webserver\BackendSdk\Api\ServerFileApi;
+use SDKWork\Webserver\BackendSdk\Api\AgentApi;
+use SDKWork\Webserver\BackendSdk\Api\AuditApi;
 
 final class SdkworkBackendClient
 {

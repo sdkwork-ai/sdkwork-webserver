@@ -2,21 +2,21 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\BackendSdk\Api;
+namespace SDKWork\Webserver\BackendSdk\Api;
 
-use SDKWork\Web\BackendSdk\Models\CreateManagedDomainRequest;
-use SDKWork\Web\BackendSdk\Models\CreateRootDomainHostnameRequest;
-use SDKWork\Web\BackendSdk\Models\CreateRootDomainRequest;
-use SDKWork\Web\BackendSdk\Models\DomainsApplicationBindingUpdateResponse;
-use SDKWork\Web\BackendSdk\Models\DomainsCreateResponse201;
-use SDKWork\Web\BackendSdk\Models\DomainsListResponse;
-use SDKWork\Web\BackendSdk\Models\DomainsVerifyResponse;
-use SDKWork\Web\BackendSdk\Models\RootDomainsCreateResponse201;
-use SDKWork\Web\BackendSdk\Models\RootDomainsListResponse;
-use SDKWork\Web\BackendSdk\Models\RootDomainsRetrieveResponse;
-use SDKWork\Web\BackendSdk\Models\RootDomainsSubdomainsCreateResponse201;
-use SDKWork\Web\BackendSdk\Models\RootDomainsSubdomainsListResponse;
-use SDKWork\Web\BackendSdk\Models\UpdateDomainApplicationBindingRequest;
+use SDKWork\Webserver\BackendSdk\Models\CreateManagedDomainRequest;
+use SDKWork\Webserver\BackendSdk\Models\CreateRootDomainHostnameRequest;
+use SDKWork\Webserver\BackendSdk\Models\CreateRootDomainRequest;
+use SDKWork\Webserver\BackendSdk\Models\DomainsApplicationBindingUpdateResponse;
+use SDKWork\Webserver\BackendSdk\Models\DomainsCreateResponse201;
+use SDKWork\Webserver\BackendSdk\Models\DomainsListResponse;
+use SDKWork\Webserver\BackendSdk\Models\DomainsVerifyResponse;
+use SDKWork\Webserver\BackendSdk\Models\RootDomainsCreateResponse201;
+use SDKWork\Webserver\BackendSdk\Models\RootDomainsListResponse;
+use SDKWork\Webserver\BackendSdk\Models\RootDomainsRetrieveResponse;
+use SDKWork\Webserver\BackendSdk\Models\RootDomainsSubdomainsCreateResponse201;
+use SDKWork\Webserver\BackendSdk\Models\RootDomainsSubdomainsListResponse;
+use SDKWork\Webserver\BackendSdk\Models\UpdateDomainApplicationBindingRequest;
 
 final class DomainApi extends BaseApi
 {

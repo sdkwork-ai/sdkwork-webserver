@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using SDKWork.Webserver.BackendSdk.Models;
-using SdkHttpClient = SDKWork.Webserver.BackendSdk.Http.HttpClient;
+using SDKWork.WebserverBackendSdk.Models;
+using SdkHttpClient = SDKWork.WebserverBackendSdk.Http.HttpClient;
 
-namespace SDKWork.Webserver.BackendSdk.Api
+namespace SDKWork.WebserverBackendSdk.Api
 {
     public class ApplicationSourceVersionApi
     {
@@ -18,20 +18,20 @@ namespace SDKWork.Webserver.BackendSdk.Api
         /// <summary>
         /// List immutable application source versions
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ApplicationsSourceVersionsListResponse?> ApplicationsSourceVersionsListAsync(string applicationId, int? pageSize = null, string? cursor = null)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ApplicationsSourceVersionsListResponse?> ApplicationsSourceVersionsListAsync(string applicationId, int? pageSize = null, string? cursor = null)
         {
             var queryString = BuildQueryString(new[]
             {
                 new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
                 new QueryParameterSpec("cursor", cursor, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Webserver.BackendSdk.Models.ApplicationsSourceVersionsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/source_versions"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ApplicationsSourceVersionsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/source_versions"), queryString));
         }
 
         /// <summary>
         /// Register an immutable Drive-backed application source version
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ApplicationsSourceVersionsCreateResponse201?> ApplicationsSourceVersionsCreateAsync(string applicationId, SDKWork.Webserver.BackendSdk.Models.CreateApplicationSourceVersionRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ApplicationsSourceVersionsCreateResponse201?> ApplicationsSourceVersionsCreateAsync(string applicationId, SDKWork.WebserverBackendSdk.Models.CreateApplicationSourceVersionRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -40,13 +40,13 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.BackendSdk.Models.ApplicationsSourceVersionsCreateResponse201>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/source_versions"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ApplicationsSourceVersionsCreateResponse201>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/source_versions"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
         /// Import an immutable application source version from a public Git repository
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ApplicationsSourceVersionsGitImportCreateResponse201?> ApplicationsSourceVersionsGitImportCreateAsync(string applicationId, SDKWork.Webserver.BackendSdk.Models.ImportApplicationGitSourceVersionRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ApplicationsSourceVersionsGitImportCreateResponse201?> ApplicationsSourceVersionsGitImportCreateAsync(string applicationId, SDKWork.WebserverBackendSdk.Models.ImportApplicationGitSourceVersionRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -55,15 +55,15 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.BackendSdk.Models.ApplicationsSourceVersionsGitImportCreateResponse201>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/source_versions/git_import"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ApplicationsSourceVersionsGitImportCreateResponse201>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/source_versions/git_import"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
         /// Retrieve an application source version
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ApplicationsSourceVersionsRetrieveResponse?> ApplicationsSourceVersionsRetrieveAsync(string applicationId, string sourceVersionId)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ApplicationsSourceVersionsRetrieveResponse?> ApplicationsSourceVersionsRetrieveAsync(string applicationId, string sourceVersionId)
         {
-            return await _client.GetAsync<SDKWork.Webserver.BackendSdk.Models.ApplicationsSourceVersionsRetrieveResponse>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/source_versions/{SerializePathParameter(sourceVersionId, new PathParameterSpec("sourceVersionId", "simple", false))}"));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ApplicationsSourceVersionsRetrieveResponse>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/source_versions/{SerializePathParameter(sourceVersionId, new PathParameterSpec("sourceVersionId", "simple", false))}"));
         }
 
         private sealed record PathParameterSpec(string Name, string Style, bool Explode);

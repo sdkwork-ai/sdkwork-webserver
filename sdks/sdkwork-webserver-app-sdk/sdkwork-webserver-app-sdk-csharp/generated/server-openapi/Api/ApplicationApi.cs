@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using SDKWork.Webserver.AppSdk.Models;
-using SdkHttpClient = SDKWork.Webserver.AppSdk.Http.HttpClient;
+using SDKWork.WebserverAppSdk.Models;
+using SdkHttpClient = SDKWork.WebserverAppSdk.Http.HttpClient;
 
-namespace SDKWork.Webserver.AppSdk.Api
+namespace SDKWork.WebserverAppSdk.Api
 {
     public class ApplicationApi
     {
@@ -18,7 +18,7 @@ namespace SDKWork.Webserver.AppSdk.Api
         /// <summary>
         /// 获取应用列表
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsListResponse?> ApplicationsListAsync(int? page = null, int? pageSize = null, int? status = null, string? applicationType = null, int? siteType = null, string? keyword = null)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsListResponse?> ApplicationsListAsync(int? page = null, int? pageSize = null, int? status = null, string? applicationType = null, int? siteType = null, string? keyword = null)
         {
             var queryString = BuildQueryString(new[]
             {
@@ -29,13 +29,13 @@ namespace SDKWork.Webserver.AppSdk.Api
                 new QueryParameterSpec("site_type", siteType, "form", true, false, null),
                 new QueryParameterSpec("keyword", keyword, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath("/applications"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverAppSdk.Models.ApplicationsListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath("/applications"), queryString));
         }
 
         /// <summary>
         /// 创建应用
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsCreateResponse201?> ApplicationsCreateAsync(SDKWork.Webserver.AppSdk.Models.CreateApplicationRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsCreateResponse201?> ApplicationsCreateAsync(SDKWork.WebserverAppSdk.Models.CreateApplicationRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -44,21 +44,21 @@ namespace SDKWork.Webserver.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsCreateResponse201>(ApiPaths.AppPath("/applications"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.WebserverAppSdk.Models.ApplicationsCreateResponse201>(ApiPaths.AppPath("/applications"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
         /// 获取应用详情
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsRetrieveResponse?> ApplicationsRetrieveAsync(string applicationId)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsRetrieveResponse?> ApplicationsRetrieveAsync(string applicationId)
         {
-            return await _client.GetAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsRetrieveResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}"));
+            return await _client.GetAsync<SDKWork.WebserverAppSdk.Models.ApplicationsRetrieveResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}"));
         }
 
         /// <summary>
         /// 更新应用
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsUpdateResponse?> ApplicationsUpdateAsync(string applicationId, SDKWork.Webserver.AppSdk.Models.UpdateApplicationRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsUpdateResponse?> ApplicationsUpdateAsync(string applicationId, SDKWork.WebserverAppSdk.Models.UpdateApplicationRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -67,7 +67,7 @@ namespace SDKWork.Webserver.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PatchAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsUpdateResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}"), body, null, requestHeaders, "application/json");
+            return await _client.PatchAsync<SDKWork.WebserverAppSdk.Models.ApplicationsUpdateResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
@@ -81,36 +81,36 @@ namespace SDKWork.Webserver.AppSdk.Api
         /// <summary>
         /// 激活应用
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsActivateResponse?> ApplicationsActivateAsync(string applicationId)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsActivateResponse?> ApplicationsActivateAsync(string applicationId)
         {
-            return await _client.PostAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsActivateResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/activate"), null);
+            return await _client.PostAsync<SDKWork.WebserverAppSdk.Models.ApplicationsActivateResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/activate"), null);
         }
 
         /// <summary>
         /// 暂停应用
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsPauseResponse?> ApplicationsPauseAsync(string applicationId)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsPauseResponse?> ApplicationsPauseAsync(string applicationId)
         {
-            return await _client.PostAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsPauseResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/pause"), null);
+            return await _client.PostAsync<SDKWork.WebserverAppSdk.Models.ApplicationsPauseResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/pause"), null);
         }
 
         /// <summary>
         /// 获取应用平台目标列表
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsPlatformTargetsListResponse?> ApplicationsPlatformTargetsListAsync(string applicationId, int? page = null, int? pageSize = null)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsPlatformTargetsListResponse?> ApplicationsPlatformTargetsListAsync(string applicationId, int? page = null, int? pageSize = null)
         {
             var queryString = BuildQueryString(new[]
             {
                 new QueryParameterSpec("page", page, "form", true, false, null),
                 new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsPlatformTargetsListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/platform_targets"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverAppSdk.Models.ApplicationsPlatformTargetsListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/platform_targets"), queryString));
         }
 
         /// <summary>
         /// 创建应用平台目标
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsPlatformTargetsCreateResponse201?> ApplicationsPlatformTargetsCreateAsync(string applicationId, SDKWork.Webserver.AppSdk.Models.CreatePlatformTargetRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsPlatformTargetsCreateResponse201?> ApplicationsPlatformTargetsCreateAsync(string applicationId, SDKWork.WebserverAppSdk.Models.CreatePlatformTargetRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -119,15 +119,15 @@ namespace SDKWork.Webserver.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsPlatformTargetsCreateResponse201>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/platform_targets"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.WebserverAppSdk.Models.ApplicationsPlatformTargetsCreateResponse201>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/platform_targets"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
         /// 获取应用平台目标详情
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsPlatformTargetsRetrieveResponse?> ApplicationsPlatformTargetsRetrieveAsync(string applicationId, string platformTargetId)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsPlatformTargetsRetrieveResponse?> ApplicationsPlatformTargetsRetrieveAsync(string applicationId, string platformTargetId)
         {
-            return await _client.GetAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsPlatformTargetsRetrieveResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/platform_targets/{SerializePathParameter(platformTargetId, new PathParameterSpec("platformTargetId", "simple", false))}"));
+            return await _client.GetAsync<SDKWork.WebserverAppSdk.Models.ApplicationsPlatformTargetsRetrieveResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/platform_targets/{SerializePathParameter(platformTargetId, new PathParameterSpec("platformTargetId", "simple", false))}"));
         }
 
         private sealed record PathParameterSpec(string Name, string Style, bool Explode);

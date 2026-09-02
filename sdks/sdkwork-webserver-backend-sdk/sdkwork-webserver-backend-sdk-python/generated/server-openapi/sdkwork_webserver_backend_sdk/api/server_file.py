@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 from ..http_client import HttpClient
-from ..models import ServerFilesNodeBrowseResponse, ServerFilesNodeOperationsCreateResponse201, ServerFilesNodeOperationsListResponse, ServerFilesNodeReadResponse, ServerFilesNodesListResponse, ServerRunOperationRequest
+from ..models import ServerFilesNodeDirectoryListResponse, ServerFilesNodeOperationsCreateResponse201, ServerFilesNodeOperationsListResponse, ServerFilesNodeRetrieveResponse, ServerFilesNodesListResponse, ServerRunOperationRequest
 
 def _append_query_string(path: str, raw_query_string: str) -> str:
     query = raw_query_string.lstrip('?')
@@ -197,6 +197,8 @@ class ServerFileNodesApi:
 
     def __init__(self, client: HttpClient):
         self._client = client
+        self.directory = ServerFileNodeDirectoryApi(client)
+        self.file = ServerFileNodeFileApi(client)
         self.operations = ServerFileNodeOperationsApi(client)
 
 
@@ -204,19 +206,30 @@ class ServerFileNodesApi:
         """List Server Files deployment nodes"""
         return self._client.get(f"/backend/v3/api/server_files/nodes")
 
-    def retrieve_browse(self, node_id: str, path: str) -> ServerFilesNodeBrowseResponse:
+class ServerFileNodeDirectoryApi:
+    """server_file server_files.node.directory API client."""
+
+    def __init__(self, client: HttpClient):
+        self._client = client
+
+
+    def list(self, node_id: str, path: str) -> ServerFilesNodeDirectoryListResponse:
         """Browse a deployment node directory"""
         query = build_query_string([
             {'name': 'path', 'value': path, 'style': 'form', 'explode': True, 'allow_reserved': False},
         ])
-        return self._client.get(_append_query_string(f"/backend/v3/api/server_files/nodes/{serialize_path_parameter(node_id, {'name': 'nodeId', 'style': 'simple', 'explode': False})}/browse", query))
+        return self._client.get(_append_query_string(f"/backend/v3/api/server_files/nodes/{serialize_path_parameter(node_id, {'name': 'nodeId', 'style': 'simple', 'explode': False})}/directory", query))
 
-    def retrieve_read(self, node_id: str, path: str) -> ServerFilesNodeReadResponse:
+class ServerFileNodeFileApi:
+    """server_file server_files.node.file API client."""
+
+    def __init__(self, client: HttpClient):
+        self._client = client
+
+
+    def retrieve(self, node_id: str, file_path: str) -> ServerFilesNodeRetrieveResponse:
         """Read a text file on a deployment node"""
-        query = build_query_string([
-            {'name': 'path', 'value': path, 'style': 'form', 'explode': True, 'allow_reserved': False},
-        ])
-        return self._client.get(_append_query_string(f"/backend/v3/api/server_files/nodes/{serialize_path_parameter(node_id, {'name': 'nodeId', 'style': 'simple', 'explode': False})}/read", query))
+        return self._client.get(f"/backend/v3/api/server_files/nodes/{serialize_path_parameter(node_id, {'name': 'nodeId', 'style': 'simple', 'explode': False})}/files/{serialize_path_parameter(file_path, {'name': 'filePath', 'style': 'simple', 'explode': False})}")
 
 class ServerFileNodeOperationsApi:
     """server_file server_files.node.operations API client."""

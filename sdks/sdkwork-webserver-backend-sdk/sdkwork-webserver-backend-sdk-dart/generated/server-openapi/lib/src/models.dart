@@ -4384,19 +4384,19 @@ class ServerFilesNodesListResponse {
   }
 }
 
-class ServerFilesNodeBrowseResponse {
+class ServerFilesNodeDirectoryListResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  ServerFilesNodeBrowseResponse({
+  ServerFilesNodeDirectoryListResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory ServerFilesNodeBrowseResponse.fromJson(Map<String, dynamic> json) {
-    return ServerFilesNodeBrowseResponse(
+  factory ServerFilesNodeDirectoryListResponse.fromJson(Map<String, dynamic> json) {
+    return ServerFilesNodeDirectoryListResponse(
       code: json['code'] is int ? json['code'] : null,
       data: json['data'],
       traceId: json['traceId']?.toString()
@@ -4412,19 +4412,19 @@ class ServerFilesNodeBrowseResponse {
   }
 }
 
-class ServerFilesNodeReadResponse {
+class ServerFilesNodeRetrieveResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  ServerFilesNodeReadResponse({
+  ServerFilesNodeRetrieveResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory ServerFilesNodeReadResponse.fromJson(Map<String, dynamic> json) {
-    return ServerFilesNodeReadResponse(
+  factory ServerFilesNodeRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return ServerFilesNodeRetrieveResponse(
       code: json['code'] is int ? json['code'] : null,
       data: json['data'],
       traceId: json['traceId']?.toString()

@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using SDKWork.Webserver.BackendSdk.Models;
-using SdkHttpClient = SDKWork.Webserver.BackendSdk.Http.HttpClient;
+using SDKWork.WebserverBackendSdk.Models;
+using SdkHttpClient = SDKWork.WebserverBackendSdk.Http.HttpClient;
 
-namespace SDKWork.Webserver.BackendSdk.Api
+namespace SDKWork.WebserverBackendSdk.Api
 {
     public class ApplicationDeploymentApi
     {
@@ -18,7 +18,7 @@ namespace SDKWork.Webserver.BackendSdk.Api
         /// <summary>
         /// List application deployments
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ApplicationsDeploymentsListResponse?> ApplicationsDeploymentsListAsync(string applicationId, int? pageSize = null, string? cursor = null, int? status = null)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ApplicationsDeploymentsListResponse?> ApplicationsDeploymentsListAsync(string applicationId, int? pageSize = null, string? cursor = null, int? status = null)
         {
             var queryString = BuildQueryString(new[]
             {
@@ -26,13 +26,13 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 new QueryParameterSpec("cursor", cursor, "form", true, false, null),
                 new QueryParameterSpec("status", status, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Webserver.BackendSdk.Models.ApplicationsDeploymentsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/deployments"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ApplicationsDeploymentsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/deployments"), queryString));
         }
 
         /// <summary>
         /// Deploy an application
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ApplicationsDeploymentsCreateResponse201?> ApplicationsDeploymentsCreateAsync(string applicationId, SDKWork.Webserver.BackendSdk.Models.CreateApplicationDeploymentRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ApplicationsDeploymentsCreateResponse201?> ApplicationsDeploymentsCreateAsync(string applicationId, SDKWork.WebserverBackendSdk.Models.CreateApplicationDeploymentRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -41,13 +41,13 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.BackendSdk.Models.ApplicationsDeploymentsCreateResponse201>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/deployments"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ApplicationsDeploymentsCreateResponse201>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/deployments"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
         /// Restore a managed application from an immutable successful version
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ApplicationsDeploymentsRollbackResponse?> ApplicationsDeploymentsRollbackAsync(string applicationId, string deploymentId, string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ApplicationsDeploymentsRollbackResponse?> ApplicationsDeploymentsRollbackAsync(string applicationId, string deploymentId, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -56,7 +56,7 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.BackendSdk.Models.ApplicationsDeploymentsRollbackResponse>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/deployments/{SerializePathParameter(deploymentId, new PathParameterSpec("deploymentId", "simple", false))}/rollback"), null, null, requestHeaders);
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ApplicationsDeploymentsRollbackResponse>(ApiPaths.BackendPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/deployments/{SerializePathParameter(deploymentId, new PathParameterSpec("deploymentId", "simple", false))}/rollback"), null, null, requestHeaders);
         }
 
         private sealed record PathParameterSpec(string Name, string Style, bool Explode);

@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\BackendSdk\Api;
+namespace SDKWork\Webserver\BackendSdk\Api;
 
-use SDKWork\Web\BackendSdk\Models\ConfigsCreateResponse201;
-use SDKWork\Web\BackendSdk\Models\ConfigsDeployResponse;
-use SDKWork\Web\BackendSdk\Models\ConfigsListResponse;
-use SDKWork\Web\BackendSdk\Models\ConfigsRetrieveResponse;
-use SDKWork\Web\BackendSdk\Models\ConfigsUpdateResponse;
-use SDKWork\Web\BackendSdk\Models\ConfigsValidateResponse;
-use SDKWork\Web\BackendSdk\Models\CreateNginxConfigRequest;
-use SDKWork\Web\BackendSdk\Models\ReloadResponse;
-use SDKWork\Web\BackendSdk\Models\StatusRetrieveResponse;
-use SDKWork\Web\BackendSdk\Models\UpdateNginxConfigRequest;
+use SDKWork\Webserver\BackendSdk\Models\ConfigsCreateResponse201;
+use SDKWork\Webserver\BackendSdk\Models\ConfigsDeployResponse;
+use SDKWork\Webserver\BackendSdk\Models\ConfigsListResponse;
+use SDKWork\Webserver\BackendSdk\Models\ConfigsRetrieveResponse;
+use SDKWork\Webserver\BackendSdk\Models\ConfigsUpdateResponse;
+use SDKWork\Webserver\BackendSdk\Models\ConfigsValidateResponse;
+use SDKWork\Webserver\BackendSdk\Models\CreateNginxConfigRequest;
+use SDKWork\Webserver\BackendSdk\Models\ReloadResponse;
+use SDKWork\Webserver\BackendSdk\Models\StatusRetrieveResponse;
+use SDKWork\Webserver\BackendSdk\Models\UpdateNginxConfigRequest;
 
 final class NginxApi extends BaseApi
 {

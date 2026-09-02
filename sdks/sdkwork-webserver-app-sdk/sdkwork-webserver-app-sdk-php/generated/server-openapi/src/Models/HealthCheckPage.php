@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\AppSdk\Models;
+namespace SDKWork\Webserver\AppSdk\Models;
 
-use SDKWork\Web\AppSdk\Models\HealthCheckResponse;
+use SDKWork\Webserver\AppSdk\Models\HealthCheckResponse;
 
 final class HealthCheckPage
 {

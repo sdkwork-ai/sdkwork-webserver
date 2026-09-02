@@ -1,7 +1,7 @@
 package com.sdkwork.webserver.backend.sdk.model;
 
 
-public class ServerFilesNodeBrowseResponse {
+public class ServerFilesNodeDirectoryListResponse {
     private Integer code;
     private Object data;
     private String traceId;

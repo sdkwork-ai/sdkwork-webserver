@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using SDKWork.Webserver.AppSdk.Models;
-using SdkHttpClient = SDKWork.Webserver.AppSdk.Http.HttpClient;
+using SDKWork.WebserverAppSdk.Models;
+using SdkHttpClient = SDKWork.WebserverAppSdk.Http.HttpClient;
 
-namespace SDKWork.Webserver.AppSdk.Api
+namespace SDKWork.WebserverAppSdk.Api
 {
     public class CertificateApi
     {
@@ -18,20 +18,20 @@ namespace SDKWork.Webserver.AppSdk.Api
         /// <summary>
         /// List certificates active on the domain listener
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsDomainsListenerCertificateBindingsListResponse?> ApplicationsDomainsListenerCertificateBindingsListAsync(string applicationId, string domainId, int? page = null, int? pageSize = null)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsDomainsListenerCertificateBindingsListResponse?> ApplicationsDomainsListenerCertificateBindingsListAsync(string applicationId, string domainId, int? page = null, int? pageSize = null)
         {
             var queryString = BuildQueryString(new[]
             {
                 new QueryParameterSpec("page", page, "form", true, false, null),
                 new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsDomainsListenerCertificateBindingsListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}/listener_certificate_bindings"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverAppSdk.Models.ApplicationsDomainsListenerCertificateBindingsListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}/listener_certificate_bindings"), queryString));
         }
 
         /// <summary>
         /// Bind a certificate version to the domain listener
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsDomainsListenerCertificateBindingsCreateResponse201?> ApplicationsDomainsListenerCertificateBindingsCreateAsync(string applicationId, string domainId, SDKWork.Webserver.AppSdk.Models.CreateListenerCertificateBindingRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsDomainsListenerCertificateBindingsCreateResponse201?> ApplicationsDomainsListenerCertificateBindingsCreateAsync(string applicationId, string domainId, SDKWork.WebserverAppSdk.Models.CreateListenerCertificateBindingRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -40,7 +40,7 @@ namespace SDKWork.Webserver.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsDomainsListenerCertificateBindingsCreateResponse201>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}/listener_certificate_bindings"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.WebserverAppSdk.Models.ApplicationsDomainsListenerCertificateBindingsCreateResponse201>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}/listener_certificate_bindings"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\BackendSdk\Models;
+namespace SDKWork\Webserver\BackendSdk\Models;
 
-use SDKWork\Web\BackendSdk\Models\AgentCertificateBundle;
-use SDKWork\Web\BackendSdk\Models\AgentNginxConfigBundle;
+use SDKWork\Webserver\BackendSdk\Models\AgentCertificateBundle;
+use SDKWork\Webserver\BackendSdk\Models\AgentNginxConfigBundle;
 
 final class AgentSyncResponse
 {

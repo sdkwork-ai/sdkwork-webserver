@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\BackendSdk\Models;
+namespace SDKWork\Webserver\BackendSdk\Models;
 
-use SDKWork\Web\BackendSdk\Models\NginxValidateResponse;
+use SDKWork\Webserver\BackendSdk\Models\NginxValidateResponse;
 
 final class ConfigsValidateResponse
 {

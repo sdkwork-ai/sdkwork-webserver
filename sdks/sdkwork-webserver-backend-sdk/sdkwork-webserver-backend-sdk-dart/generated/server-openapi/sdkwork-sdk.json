@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "language": "dart",
   "sdkType": "backend",
-  "packageName": "sdkwork_webserver_backend_sdk_generated_rust",
-  "transportPackageName": "sdkwork_webserver_backend_sdk_generated_rust",
-  "consumerPackageName": "sdkwork_webserver_backend_sdk_generated_rust",
+  "packageName": "sdkwork_webserver_backend_sdk",
+  "transportPackageName": "sdkwork_webserver_backend_sdk",
+  "consumerPackageName": "sdkwork_webserver_backend_sdk",
   "generator": "@sdkwork/sdk-generator",
   "capabilities": {
     "supportsGeneratedTests": true,

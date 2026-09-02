@@ -137,7 +137,7 @@
       {
         "name": "Generate generator-owned drive internal SDK",
         "shell": "bash",
-        "run": "set -euxo pipefail; DRIVE_ROOT=../sdkwork-drive; SDK_MANIFEST=\"$DRIVE_ROOT/sdks/sdkwork-drive-internal-sdk/sdkwork-drive-internal-sdk-rust/generated/server-openapi/Cargo.toml\"; if [ ! -f \"$SDK_MANIFEST\" ]; then (cd \"$DRIVE_ROOT\" && npm install --no-save --no-package-lock yaml@^2.8.0 && node tools/drive_sdk_generate.mjs --language rust); fi; test -f \"$SDK_MANIFEST\""
+        "run": "set -euxo pipefail; DRIVE_ROOT=../sdkwork-drive; SDK_MANIFEST=\"$DRIVE_ROOT/sdks/sdkwork-drive-internal-sdk/sdkwork-drive-internal-sdk-rust/generated/server-openapi/Cargo.toml\"; if [ ! -f \"$SDK_MANIFEST\" ]; then YAML_TMP=\"$(mktemp -d)\"; (cd \"$YAML_TMP\" && npm init -y >/dev/null 2>&1 && npm install yaml@^2.8.0 --no-audit --no-fund --no-package-lock --silent); mkdir -p \"$DRIVE_ROOT/node_modules\"; cp -R \"$YAML_TMP/node_modules/yaml\" \"$DRIVE_ROOT/node_modules/yaml\"; (cd \"$DRIVE_ROOT\" && node tools/drive_sdk_generate.mjs --language rust); fi; test -f \"$SDK_MANIFEST\""
       },
       {
         "name": "Build web API server",

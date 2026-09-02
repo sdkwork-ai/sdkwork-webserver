@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\AppSdk;
+namespace SDKWork\Webserver\AppSdk;
 
 final class SdkConfig
 {

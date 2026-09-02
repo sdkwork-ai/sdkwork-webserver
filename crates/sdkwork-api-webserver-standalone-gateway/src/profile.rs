@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use sdkwork_web_bootstrap::{ApiAssemblyContribution, ComposedApiAssembly};
+use sdkwork_web_bootstrap::{ApiAssemblyContribution, ApiModuleRegistry, ComposedApiAssembly};
 use sdkwork_web_core::{AuditEmitter, SecurityEventEmitter};
 use sdkwork_webserver_contract::MachineCredentialAuthenticator;
 
@@ -86,8 +86,10 @@ fn compose_owner_contributions(
     audit_emitter: Arc<dyn AuditEmitter>,
     security_event_emitter: Arc<dyn SecurityEventEmitter>,
 ) -> Result<StandaloneApiProfile, StandaloneProfileError> {
-    let assembly =
-        ComposedApiAssembly::try_compose("SDKWork Web Server Standalone API", contributions)
+    let mut module_registry = ApiModuleRegistry::new();
+    module_registry.add_modules(contributions);
+    let assembly = module_registry
+        .try_compose("SDKWork Web Server Standalone API")
             .map_err(|detail| StandaloneProfileError::InvalidComposition { detail })?;
     Ok(StandaloneApiProfile {
         assembly,

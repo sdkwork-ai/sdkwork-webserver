@@ -1,4 +1,4 @@
-namespace SDKWork.Webserver.AppSdk.Api
+namespace SDKWork.WebserverAppSdk.Api
 {
     /// <summary>
     /// API modules for sdkwork-webserver-app-sdk

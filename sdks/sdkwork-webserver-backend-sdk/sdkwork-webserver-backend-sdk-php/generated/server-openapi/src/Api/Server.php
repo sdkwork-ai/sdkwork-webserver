@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\BackendSdk\Api;
+namespace SDKWork\Webserver\BackendSdk\Api;
 
-use SDKWork\Web\BackendSdk\Models\CreateServerRequest;
-use SDKWork\Web\BackendSdk\Models\ServersCreateResponse201;
-use SDKWork\Web\BackendSdk\Models\ServersListResponse;
+use SDKWork\Webserver\BackendSdk\Models\CreateServerRequest;
+use SDKWork\Webserver\BackendSdk\Models\ServersCreateResponse201;
+use SDKWork\Webserver\BackendSdk\Models\ServersListResponse;
 
 final class ServerApi extends BaseApi
 {

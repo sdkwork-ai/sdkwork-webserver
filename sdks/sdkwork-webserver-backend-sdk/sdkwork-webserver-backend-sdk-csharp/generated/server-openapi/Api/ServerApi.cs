@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using SDKWork.Webserver.BackendSdk.Models;
-using SdkHttpClient = SDKWork.Webserver.BackendSdk.Http.HttpClient;
+using SDKWork.WebserverBackendSdk.Models;
+using SdkHttpClient = SDKWork.WebserverBackendSdk.Http.HttpClient;
 
-namespace SDKWork.Webserver.BackendSdk.Api
+namespace SDKWork.WebserverBackendSdk.Api
 {
     public class ServerApi
     {
@@ -18,20 +18,20 @@ namespace SDKWork.Webserver.BackendSdk.Api
         /// <summary>
         /// List managed servers
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ServersListResponse?> ServersListAsync(int? pageSize = null, string? cursor = null)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ServersListResponse?> ServersListAsync(int? pageSize = null, string? cursor = null)
         {
             var queryString = BuildQueryString(new[]
             {
                 new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
                 new QueryParameterSpec("cursor", cursor, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Webserver.BackendSdk.Models.ServersListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath("/servers"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ServersListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath("/servers"), queryString));
         }
 
         /// <summary>
         /// Register a managed server
         /// </summary>
-        public async Task<SDKWork.Webserver.BackendSdk.Models.ServersCreateResponse201?> ServersCreateAsync(SDKWork.Webserver.BackendSdk.Models.CreateServerRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ServersCreateResponse201?> ServersCreateAsync(SDKWork.WebserverBackendSdk.Models.CreateServerRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -40,7 +40,7 @@ namespace SDKWork.Webserver.BackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.BackendSdk.Models.ServersCreateResponse201>(ApiPaths.BackendPath("/servers"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ServersCreateResponse201>(ApiPaths.BackendPath("/servers"), body, null, requestHeaders, "application/json");
         }
 
 

@@ -20,21 +20,18 @@ public class ServerFileApi {
     }
 
     /** Browse a deployment node directory */
-    public ServerFilesNodeBrowseResponse serverFilesNodeBrowse(String nodeId, String path) throws Exception {
+    public ServerFilesNodeDirectoryListResponse serverFilesNodeDirectoryList(String nodeId, String path) throws Exception {
         String query = buildQueryString(List.of(
             new QueryParameterSpec("path", path, "form", true, false, null)
         ));
-        Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/server_files/nodes/" + serializePathParameter(nodeId, new PathParameterSpec("nodeId", "simple", false)) + "/browse"), query));
-        return client.convertValue(raw, new TypeReference<ServerFilesNodeBrowseResponse>() {});
+        Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/server_files/nodes/" + serializePathParameter(nodeId, new PathParameterSpec("nodeId", "simple", false)) + "/directory"), query));
+        return client.convertValue(raw, new TypeReference<ServerFilesNodeDirectoryListResponse>() {});
     }
 
     /** Read a text file on a deployment node */
-    public ServerFilesNodeReadResponse serverFilesNodeRead(String nodeId, String path) throws Exception {
-        String query = buildQueryString(List.of(
-            new QueryParameterSpec("path", path, "form", true, false, null)
-        ));
-        Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/server_files/nodes/" + serializePathParameter(nodeId, new PathParameterSpec("nodeId", "simple", false)) + "/read"), query));
-        return client.convertValue(raw, new TypeReference<ServerFilesNodeReadResponse>() {});
+    public ServerFilesNodeRetrieveResponse serverFilesNodeRetrieve(String nodeId, String filePath) throws Exception {
+        Object raw = client.get(ApiPaths.backendPath("/server_files/nodes/" + serializePathParameter(nodeId, new PathParameterSpec("nodeId", "simple", false)) + "/files/" + serializePathParameter(filePath, new PathParameterSpec("filePath", "simple", false)) + ""));
+        return client.convertValue(raw, new TypeReference<ServerFilesNodeRetrieveResponse>() {});
     }
 
     /** List operations available for a project directory */

@@ -27,9 +27,9 @@ import { classifyListing, detectProjectType } from "./project-detection.ts";
  * local-project / node file-system contract:
  *
  *   GET  {base}/backend/v3/api/server_files/nodes              -> node list
- *   GET  {base}/backend/v3/api/server_files/nodes/{nodeId}/browse?path=...
+ *   GET  {base}/backend/v3/api/server_files/nodes/{nodeId}/directory?path=...
  *                                                              -> directory listing
- *   GET  {base}/backend/v3/api/server_files/nodes/{nodeId}/read?path=...
+ *   GET  {base}/backend/v3/api/server_files/nodes/{nodeId}/files/{filePath}
  *                                                              -> file content
  *   GET  {base}/backend/v3/api/server_files/nodes/{nodeId}/operations?path=...
  *                                                              -> per-project operations
@@ -56,13 +56,13 @@ export class ServerFilesClient {
   }
 
   async browseDirectory(nodeId: string, path: string): Promise<ServerDirectoryListing> {
-    const data = await this.client.serverFile.nodes.browse(nodeId, { path });
+    const data = await this.client.serverFile.nodes.directory.list(nodeId, { path });
     const entries = classifyListing({ path: data.path, entries: data.entries.map(mapEntry) });
     return { nodeId: data.nodeId, path: data.path, parentPath: data.parentPath, entries };
   }
 
   async readFile(nodeId: string, path: string): Promise<ServerFileContent> {
-    const data = await this.client.serverFile.nodes.read(nodeId, { path });
+    const data = await this.client.serverFile.nodes.file.retrieve(nodeId, path);
     return mapFileContent(data);
   }
 

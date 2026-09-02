@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\BackendSdk\Api;
+namespace SDKWork\Webserver\BackendSdk\Api;
 
-use SDKWork\Web\BackendSdk\Models\ApplicationsDomainsCreateResponse201;
-use SDKWork\Web\BackendSdk\Models\ApplicationsDomainsListResponse;
-use SDKWork\Web\BackendSdk\Models\ApplicationsDomainsVerifyResponse;
-use SDKWork\Web\BackendSdk\Models\CreateApplicationDomainRequest;
+use SDKWork\Webserver\BackendSdk\Models\ApplicationsDomainsCreateResponse201;
+use SDKWork\Webserver\BackendSdk\Models\ApplicationsDomainsListResponse;
+use SDKWork\Webserver\BackendSdk\Models\ApplicationsDomainsVerifyResponse;
+use SDKWork\Webserver\BackendSdk\Models\CreateApplicationDomainRequest;
 
 final class ApplicationDomainApi extends BaseApi
 {

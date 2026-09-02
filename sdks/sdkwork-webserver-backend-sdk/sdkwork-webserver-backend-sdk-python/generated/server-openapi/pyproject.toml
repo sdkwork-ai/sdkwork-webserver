@@ -43,7 +43,7 @@ warn_unused_configs = true
 disallow_untyped_defs = false
 
 [tool.setuptools.packages.find]
-include = ["sdkwork_webserver_backend_sdk_generated_rust*"]
+include = ["sdkwork_webserver_backend_sdk*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

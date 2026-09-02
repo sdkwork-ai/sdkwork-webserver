@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using SDKWork.Webserver.AppSdk.Models;
-using SdkHttpClient = SDKWork.Webserver.AppSdk.Http.HttpClient;
+using SDKWork.WebserverAppSdk.Models;
+using SdkHttpClient = SDKWork.WebserverAppSdk.Http.HttpClient;
 
-namespace SDKWork.Webserver.AppSdk.Api
+namespace SDKWork.WebserverAppSdk.Api
 {
     public class DomainApi
     {
@@ -18,20 +18,20 @@ namespace SDKWork.Webserver.AppSdk.Api
         /// <summary>
         /// 获取站点域名列表
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsDomainsListResponse?> ApplicationsDomainsListAsync(string applicationId, int? page = null, int? pageSize = null)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsDomainsListResponse?> ApplicationsDomainsListAsync(string applicationId, int? page = null, int? pageSize = null)
         {
             var queryString = BuildQueryString(new[]
             {
                 new QueryParameterSpec("page", page, "form", true, false, null),
                 new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsDomainsListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverAppSdk.Models.ApplicationsDomainsListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains"), queryString));
         }
 
         /// <summary>
         /// 绑定域名
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsDomainsCreateResponse201?> ApplicationsDomainsCreateAsync(string applicationId, SDKWork.Webserver.AppSdk.Models.CreateDomainRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsDomainsCreateResponse201?> ApplicationsDomainsCreateAsync(string applicationId, SDKWork.WebserverAppSdk.Models.CreateDomainRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -40,15 +40,15 @@ namespace SDKWork.Webserver.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsDomainsCreateResponse201>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.WebserverAppSdk.Models.ApplicationsDomainsCreateResponse201>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
         /// 获取域名详情
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsDomainsRetrieveResponse?> ApplicationsDomainsRetrieveAsync(string applicationId, string domainId)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsDomainsRetrieveResponse?> ApplicationsDomainsRetrieveAsync(string applicationId, string domainId)
         {
-            return await _client.GetAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsDomainsRetrieveResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}"));
+            return await _client.GetAsync<SDKWork.WebserverAppSdk.Models.ApplicationsDomainsRetrieveResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}"));
         }
 
         /// <summary>
@@ -62,7 +62,7 @@ namespace SDKWork.Webserver.AppSdk.Api
         /// <summary>
         /// 创建或检查域名所有权验证挑战
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.ApplicationsDomainsVerifyResponse?> ApplicationsDomainsVerifyAsync(string applicationId, string domainId, string idempotencyKey)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsDomainsVerifyResponse?> ApplicationsDomainsVerifyAsync(string applicationId, string domainId, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -71,20 +71,20 @@ namespace SDKWork.Webserver.AppSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PostAsync<SDKWork.Webserver.AppSdk.Models.ApplicationsDomainsVerifyResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}/verify"), null, null, requestHeaders);
+            return await _client.PostAsync<SDKWork.WebserverAppSdk.Models.ApplicationsDomainsVerifyResponse>(ApiPaths.AppPath($"/applications/{SerializePathParameter(applicationId, new PathParameterSpec("applicationId", "simple", false))}/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}/verify"), null, null, requestHeaders);
         }
 
         /// <summary>
         /// 获取证书可签发域名列表
         /// </summary>
-        public async Task<SDKWork.Webserver.AppSdk.Models.DomainsListResponse?> DomainsListAsync(int? page = null, int? pageSize = null)
+        public async Task<SDKWork.WebserverAppSdk.Models.DomainsListResponse?> DomainsListAsync(int? page = null, int? pageSize = null)
         {
             var queryString = BuildQueryString(new[]
             {
                 new QueryParameterSpec("page", page, "form", true, false, null),
                 new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             });
-            return await _client.GetAsync<SDKWork.Webserver.AppSdk.Models.DomainsListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath("/domains"), queryString));
+            return await _client.GetAsync<SDKWork.WebserverAppSdk.Models.DomainsListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath("/domains"), queryString));
         }
 
         private sealed record PathParameterSpec(string Name, string Style, bool Explode);

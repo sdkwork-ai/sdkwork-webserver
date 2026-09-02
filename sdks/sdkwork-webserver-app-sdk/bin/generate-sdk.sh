@@ -6,7 +6,7 @@ FAMILY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 WEB_ROOT="$(cd "${FAMILY_ROOT}/../.." && pwd)"
 WORKSPACE_ROOT="$(cd "${FAMILY_ROOT}/../../.." && pwd)"
 GENERATOR_PATH="${WORKSPACE_ROOT}/sdkwork-sdk-generator/bin/sdkgen.js"
-INPUT_PATH="${FAMILY_ROOT}/openapi/sdkwork-web-app-api.sdkgen.yaml"
+INPUT_PATH="${FAMILY_ROOT}/openapi/sdkwork-webserver-app-api.sdkgen.yaml"
 SDK_NAME="sdkwork-webserver-app-sdk"
 BASE_URL="${BASE_URL:-http://localhost:3800}"
 SDK_VERSION="${SDK_VERSION:-1.0.0}"
@@ -29,28 +29,28 @@ fi
 
 package_name() {
   case "$1" in
-    typescript) echo "@sdkwork/web-app-sdk" ;;
-    dart) echo "sdkwork_web_app_sdk" ;;
-    python) echo "sdkwork-web-app-sdk" ;;
-    go) echo "github.com/sdkwork/sdkwork-web-app-sdk" ;;
-    java) echo "com.sdkwork:sdkwork-web-app-sdk" ;;
-    kotlin) echo "com.sdkwork:sdkwork-web-app-sdk" ;;
-    swift) echo "sdkwork-web-app-sdk" ;;
-    csharp) echo "SDKWork.Web.AppSdk" ;;
-    flutter) echo "sdkwork_web_app_sdk" ;;
-    rust) echo "sdkwork-web-app-sdk" ;;
-    php) echo "sdkwork/web-app-sdk" ;;
-    ruby) echo "sdkwork-web-app-sdk" ;;
+    typescript) echo "@sdkwork/webserver-app-sdk" ;;
+    dart) echo "sdkwork_webserver_app_sdk" ;;
+    python) echo "sdkwork-webserver-app-sdk" ;;
+    go) echo "github.com/sdkwork/sdkwork-webserver-app-sdk" ;;
+    java) echo "com.sdkwork:sdkwork-webserver-app-sdk" ;;
+    kotlin) echo "com.sdkwork:sdkwork-webserver-app-sdk" ;;
+    swift) echo "sdkwork-webserver-app-sdk" ;;
+    csharp) echo "SDKWork.WebserverAppSdk" ;;
+    flutter) echo "sdkwork_webserver_app_sdk" ;;
+    rust) echo "sdkwork-webserver-app-sdk" ;;
+    php) echo "sdkwork/webserver-app-sdk" ;;
+    ruby) echo "sdkwork-webserver-app-sdk" ;;
     *) echo "Unsupported SDK language: $1" >&2; return 1 ;;
   esac
 }
 
 namespace_args() {
   case "$1" in
-    java) printf '%s\n' "--namespace" "com.sdkwork.web.app.sdk" ;;
-    kotlin) printf '%s\n' "--namespace" "com.sdkwork.web.app.sdk" ;;
-    csharp) printf '%s\n' "--namespace" "SDKWork.Web.AppSdk" ;;
-    php) printf '%s\n' "--namespace" "SDKWork\Web\AppSdk" ;;
+    java) printf '%s\n' "--namespace" "com.sdkwork.webserver.app.sdk" ;;
+    kotlin) printf '%s\n' "--namespace" "com.sdkwork.webserver.app.sdk" ;;
+    csharp) printf '%s\n' "--namespace" "SDKWork.WebserverAppSdk" ;;
+    php) printf '%s\n' "--namespace" "SDKWork\Webserver\AppSdk" ;;
   esac
 }
 

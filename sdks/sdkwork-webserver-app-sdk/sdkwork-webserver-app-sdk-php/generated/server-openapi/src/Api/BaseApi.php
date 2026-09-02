@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\AppSdk\Api;
+namespace SDKWork\Webserver\AppSdk\Api;
 
-use SDKWork\Web\AppSdk\Http\HttpClient;
+use SDKWork\Webserver\AppSdk\Http\HttpClient;
 
 abstract class BaseApi
 {

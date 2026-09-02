@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace SDKWork\Web\AppSdk\Models;
+namespace SDKWork\Webserver\AppSdk\Models;
 
-use SDKWork\Web\AppSdk\Models\DeploymentResponse;
-use SDKWork\Web\AppSdk\Models\PageInfo;
+use SDKWork\Webserver\AppSdk\Models\DeploymentResponse;
+use SDKWork\Webserver\AppSdk\Models\PageInfo;
 
 final class ApplicationsDeploymentsListResponse
 {
