@@ -664,6 +664,7 @@ fn parse_runtime_environment(
         "development" => Ok(WebsiteRuntimeEnvironment::Development),
         "test" => Ok(WebsiteRuntimeEnvironment::Test),
         "staging" => Ok(WebsiteRuntimeEnvironment::Staging),
+        "demo" => Ok(WebsiteRuntimeEnvironment::Demo),
         "production" => Ok(WebsiteRuntimeEnvironment::Production),
         _ => Err(WebsiteDataPlaneBootstrapError::RuntimeAssignmentConfig(
             format!("{WEBSITE_RUNTIME_ENVIRONMENT_ENV} is invalid"),
@@ -676,6 +677,7 @@ fn runtime_environment_name(environment: WebsiteRuntimeEnvironment) -> &'static 
         WebsiteRuntimeEnvironment::Development => "development",
         WebsiteRuntimeEnvironment::Test => "test",
         WebsiteRuntimeEnvironment::Staging => "staging",
+        WebsiteRuntimeEnvironment::Demo => "demo",
         WebsiteRuntimeEnvironment::Production => "production",
     }
 }
@@ -1099,6 +1101,7 @@ fn app_config_runtime_environment(
         "development" | "dev" => Ok(WebsiteRuntimeEnvironment::Development),
         "test" => Ok(WebsiteRuntimeEnvironment::Test),
         "staging" | "stage" => Ok(WebsiteRuntimeEnvironment::Staging),
+        "demo" => Ok(WebsiteRuntimeEnvironment::Demo),
         "production" | "prod" => Ok(WebsiteRuntimeEnvironment::Production),
         other => Err(WebsiteDataPlaneBootstrapError::ProviderConfig(format!(
             "SDKWORK_WEBSERVER_ENVIRONMENT is invalid: {other}"

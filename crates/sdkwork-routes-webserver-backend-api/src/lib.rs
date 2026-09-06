@@ -7,6 +7,7 @@ pub mod paths;
 pub mod routes;
 pub mod server_files_routes;
 pub mod web_bootstrap;
+pub mod webserver_config_routes;
 
 pub use http_route_manifest::backend_route_manifest;
 pub use routes::{
@@ -20,6 +21,10 @@ pub use sdkwork_webserver_contract::{WebBackendApi, WebBackendRequestContext};
 pub use server_files_routes::{
     build_server_files_router, local_deployment_node, NodeStatus, ServerFilesNode,
     ServerFilesNodeRegistry,
+};
+pub use webserver_config_routes::{
+    build_webserver_config_router, default_webserver_config_root,
+    webserver_config_service_from_env,
 };
 pub use web_bootstrap::{
     domain_context_injectors as web_backend_domain_context_injectors,
@@ -38,11 +43,16 @@ pub fn gateway_mount(api: Arc<dyn WebBackendApi>) -> axum::Router {
     gateway_mount_with_server_files(api, None)
 }
 
-/// Compose the backend router with the Server Files explorer API.
+/// Compose the backend router with the Server Files explorer API and the
+/// Web Server configuration management API.
 ///
 /// `server_files_nodes` is an optional explicit node inventory. When omitted,
 /// a single local deployment node is derived from `SDKWORK_DEPLOY_ROOT`
-/// (default `/opt/deploy`), so the explorer is immediately browsable.
+/// (default `/opt/deploy`), so the explorer is immediately browsable. The
+/// configuration management router resolves its roots from
+/// `SDKWORK_WEBSERVER_CONFIG_ROOT` (default `/etc/sdkwork/webserver`) and
+/// `SDKWORK_DEPLOY_ROOT` (enables the read-only sibling-module sidecar
+/// group).
 pub fn gateway_mount_with_server_files(
     api: Arc<dyn WebBackendApi>,
     server_files_nodes: Option<Vec<ServerFilesNode>>,
@@ -52,7 +62,13 @@ pub fn gateway_mount_with_server_files(
     let registry = ServerFilesNodeRegistry::new(
         server_files_nodes.unwrap_or_else(|| vec![local_deployment_node(&deployment_root)]),
     );
-    build_router_with_shared_backend_api(api).merge(build_server_files_router(registry))
+    let webserver_config_router = match webserver_config_service_from_env() {
+        Ok(service) => build_webserver_config_router(service),
+        Err(_) => axum::Router::new(),
+    };
+    build_router_with_shared_backend_api(api)
+        .merge(build_server_files_router(registry))
+        .merge(webserver_config_router)
 }
 
 /// Agent-only router for machine-only composition on the standalone gateway.

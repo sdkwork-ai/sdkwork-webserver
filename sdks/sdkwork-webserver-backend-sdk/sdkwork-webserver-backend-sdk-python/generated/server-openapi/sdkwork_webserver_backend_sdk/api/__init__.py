@@ -8,7 +8,8 @@ from .certificate_distribution import CertificateDistributionApi
 from .nginx import NginxApi
 from .server import ServerApi
 from .server_file import ServerFileApi
+from .webserver_config import WebserverConfigApi
 from .agent import AgentApi
 from .audit import AuditApi
 
-__all__ = ['ApplicationApi', 'ApplicationDomainApi', 'CertificateApi', 'DomainApi', 'ApplicationSourceVersionApi', 'ApplicationDeploymentApi', 'CertificateDistributionApi', 'NginxApi', 'ServerApi', 'ServerFileApi', 'AgentApi', 'AuditApi']
+__all__ = ['ApplicationApi', 'ApplicationDomainApi', 'CertificateApi', 'DomainApi', 'ApplicationSourceVersionApi', 'ApplicationDeploymentApi', 'CertificateDistributionApi', 'NginxApi', 'ServerApi', 'ServerFileApi', 'WebserverConfigApi', 'AgentApi', 'AuditApi']

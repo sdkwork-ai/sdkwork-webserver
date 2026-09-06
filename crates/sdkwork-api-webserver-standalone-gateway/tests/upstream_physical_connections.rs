@@ -628,7 +628,10 @@ async fn saturated_target_does_not_consume_another_targets_capacity() {
     config["upstreams"][0]["targets"][1]["maxConnections"] = json!(1);
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
-    let client = reqwest::Client::builder().no_proxy().build().expect("client");
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("client");
     let base_url = format!("http://127.0.0.1:{port}");
 
     let held = client
@@ -693,7 +696,10 @@ async fn target_connection_limit_applies_before_aggregate_capacity_is_exhausted(
     config["upstreams"][0]["targets"][0]["maxConnections"] = json!(1);
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
-    let client = reqwest::Client::builder().no_proxy().build().expect("client");
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("client");
     let base_url = format!("http://127.0.0.1:{port}");
 
     let held = client
@@ -759,7 +765,10 @@ async fn bounds_http1_connections_through_streaming_idle_expiry_and_shutdown() {
     );
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
-    let client = reqwest::Client::builder().no_proxy().build().expect("client");
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("client");
     let base_url = format!("http://127.0.0.1:{port}");
 
     let held = client
@@ -878,7 +887,10 @@ async fn active_health_saturation_keeps_target_state_unchanged() {
     });
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
-    let client = reqwest::Client::builder().no_proxy().build().expect("client");
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("client");
     let base_url = format!("http://127.0.0.1:{port}");
 
     wait_for_at_least(&health_requests, 1, "initial active-health success").await;
@@ -942,7 +954,10 @@ async fn multiplexes_concurrent_https_h2_streams_on_one_physical_connection() {
     config["upstreams"][0]["targets"][0]["maxConnections"] = json!(1);
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
-    let client = reqwest::Client::builder().no_proxy().build().expect("client");
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("client");
     let base_url = format!("http://127.0.0.1:{port}");
 
     let held = client
@@ -1009,7 +1024,10 @@ async fn least_connections_counts_h2_streams_independently_from_physical_connect
     config["upstreams"][0]["targets"][1]["maxConnections"] = json!(1);
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
-    let client = reqwest::Client::builder().no_proxy().build().expect("client");
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("client");
     let base_url = format!("http://127.0.0.1:{port}");
 
     let mut responses = Vec::new();
@@ -1079,7 +1097,10 @@ async fn watch_replaces_connection_pool_and_closes_old_idle_generation() {
     initial["upstreams"][0]["targets"][0]["maxConnections"] = json!(1);
     let path = write_config(directory.path(), &initial);
     let (shutdown, task) = spawn_watched_data_plane(&path);
-    let client = reqwest::Client::builder().no_proxy().build().expect("client");
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("client");
     let url = format!("http://127.0.0.1:{port}/generation");
     wait_for_gateway(&client, &url).await;
 
@@ -1151,7 +1172,10 @@ async fn watch_keeps_old_stream_alive_before_closing_retired_generation() {
     initial["upstreams"][0]["targets"][0]["maxConnections"] = json!(1);
     let path = write_config(directory.path(), &initial);
     let (shutdown, task) = spawn_watched_data_plane(&path);
-    let client = reqwest::Client::builder().no_proxy().build().expect("client");
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("client");
     let base_url = format!("http://127.0.0.1:{port}");
     wait_for_gateway(&client, &format!("{base_url}/ready")).await;
 

@@ -427,6 +427,7 @@ mod tests {
             WebsiteRuntimeEnvironment::Development => "development",
             WebsiteRuntimeEnvironment::Test => "test",
             WebsiteRuntimeEnvironment::Staging => "staging",
+            WebsiteRuntimeEnvironment::Demo => "demo",
             WebsiteRuntimeEnvironment::Production => "production",
         };
         let mut value = json!({

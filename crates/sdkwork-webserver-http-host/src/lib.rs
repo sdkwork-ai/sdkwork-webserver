@@ -29,6 +29,7 @@ fn canonical_lifecycle_environment(value: &str) -> Result<&'static str, String> 
         "dev" | "development" | "local" => Ok("development"),
         "test" | "testing" => Ok("test"),
         "stage" | "staging" => Ok("staging"),
+        "demo" => Ok("demo"),
         "prod" | "production" | "live" => Ok("production"),
         _ => Err(format!(
             "unsupported SDKWork lifecycle environment: {value}"

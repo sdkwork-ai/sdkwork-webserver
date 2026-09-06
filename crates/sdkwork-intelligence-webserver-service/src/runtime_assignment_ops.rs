@@ -198,6 +198,7 @@ fn parse_environment(value: &str) -> WebServiceResult<WebsiteRuntimeEnvironment>
         "development" => Ok(WebsiteRuntimeEnvironment::Development),
         "test" => Ok(WebsiteRuntimeEnvironment::Test),
         "staging" => Ok(WebsiteRuntimeEnvironment::Staging),
+        "demo" => Ok(WebsiteRuntimeEnvironment::Demo),
         "production" => Ok(WebsiteRuntimeEnvironment::Production),
         _ => Err(WebServiceError::validation(
             "unsupported runtime environment",

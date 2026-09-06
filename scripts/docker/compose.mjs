@@ -42,11 +42,11 @@ const COMPOSE_PLATFORM_GATEWAY_ATTACH_EMBEDDED_FILE = path.join(
 );
 
 const VALID_ENVIRONMENTS = ['development', 'test', 'production'];
-// staging is a first-class deployment environment (DEPLOYMENT_SPEC §2,
-// "production-like rehearsal") with its own compose file and env file, but it
-// is excluded from `all`/`--shared` sweeps: those target the local
-// dev/test/production trio on one host.
-const DEPLOYABLE_ENVIRONMENTS = [...VALID_ENVIRONMENTS, 'staging'];
+// staging and demo are first-class deployment environments (DEPLOYMENT_SPEC §2,
+// ENVIRONMENT_SPEC §5.1) with their own compose files and env files, but they
+// are excluded from `all`/`--shared` sweeps: those target the local
+// dev/test/production trio on one host; staging and demo are isolated tiers.
+const DEPLOYABLE_ENVIRONMENTS = [...VALID_ENVIRONMENTS, 'staging', 'demo'];
 const VALID_LAYOUTS = ['embedded', 'external'];
 
 function parseArgs(argv) {

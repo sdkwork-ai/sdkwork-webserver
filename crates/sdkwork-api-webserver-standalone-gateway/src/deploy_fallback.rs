@@ -96,6 +96,7 @@ pub(crate) fn environment_name(environment: &WebsiteRuntimeEnvironment) -> &'sta
         WebsiteRuntimeEnvironment::Development => "development",
         WebsiteRuntimeEnvironment::Test => "test",
         WebsiteRuntimeEnvironment::Staging => "staging",
+        WebsiteRuntimeEnvironment::Demo => "demo",
         WebsiteRuntimeEnvironment::Production => "production",
     }
 }

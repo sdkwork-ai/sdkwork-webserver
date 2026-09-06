@@ -13,6 +13,7 @@ public class SdkworkBackendClient {
     public let nginx: NginxApi
     public let server: ServerApi
     public let serverFile: ServerFileApi
+    public let webserverConfig: WebserverConfigApi
     public let agent: AgentApi
     public let audit: AuditApi
 
@@ -28,6 +29,7 @@ public class SdkworkBackendClient {
         self.nginx = NginxApi(client: httpClient)
         self.server = ServerApi(client: httpClient)
         self.serverFile = ServerFileApi(client: httpClient)
+        self.webserverConfig = WebserverConfigApi(client: httpClient)
         self.agent = AgentApi(client: httpClient)
         self.audit = AuditApi(client: httpClient)
     }
@@ -44,6 +46,7 @@ public class SdkworkBackendClient {
         self.nginx = NginxApi(client: httpClient)
         self.server = ServerApi(client: httpClient)
         self.serverFile = ServerFileApi(client: httpClient)
+        self.webserverConfig = WebserverConfigApi(client: httpClient)
         self.agent = AgentApi(client: httpClient)
         self.audit = AuditApi(client: httpClient)
     }

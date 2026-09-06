@@ -53,6 +53,8 @@ pub const SERVER_FILES_NODE_FILE: &str =
     "/backend/v3/api/server_files/nodes/{nodeId}/files/{filePath}";
 pub const SERVER_FILES_NODE_OPERATIONS: &str =
     "/backend/v3/api/server_files/nodes/{nodeId}/operations";
+pub const WEBSERVER_CONFIGS: &str = "/backend/v3/api/webserver_configs";
+pub const WEBSERVER_CONFIG: &str = "/backend/v3/api/webserver_configs/{configId}";
 pub const AUDIT_LOGS: &str = "/backend/v3/api/audit_logs";
 pub const AGENT_HEARTBEAT: &str = "/backend/v3/api/agent/heartbeat";
 pub const AGENT_SYNC: &str = "/backend/v3/api/agent/sync";

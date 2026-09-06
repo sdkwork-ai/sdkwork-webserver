@@ -25,7 +25,8 @@
     "preview": "vite preview --host 127.0.0.1",
     "start": "pnpm preview",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
-    "_sdkwork:dev:standalone": "node scripts/verify-build-sources.mjs && node scripts/materialize-runtime-env.mjs --deployment-profile standalone --environment development && vite --mode standalone.development"
+    "_sdkwork:dev:standalone": "node scripts/verify-build-sources.mjs && node scripts/materialize-runtime-env.mjs --deployment-profile standalone --environment development && vite --mode standalone.development",
+    "build:demo": "node ../../../sdkwork-specs/tools/build-browser-client.mjs --app-root . --environment demo"
   },
   "dependencies": {
     "react": "catalog:",

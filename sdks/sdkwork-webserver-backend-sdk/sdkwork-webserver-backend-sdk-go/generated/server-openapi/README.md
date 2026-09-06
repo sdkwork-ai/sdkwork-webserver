@@ -65,6 +65,7 @@ client.SetHeader("X-Custom-Header", "value")
 - `client.Nginx` - nginx API
 - `client.Server` - server API
 - `client.ServerFile` - server_file API
+- `client.WebserverConfig` - webserver_config API
 - `client.Agent` - agent API
 - `client.Audit` - audit API
 
@@ -215,6 +216,17 @@ fmt.Println(result)
 ```go
 // List Server Files deployment nodes
 result, err := client.ServerFile.ServerFilesNodesList()
+if err != nil {
+    panic(err)
+}
+fmt.Println(result)
+```
+
+### webserver_config
+
+```go
+// List the managed Web Server configuration catalog
+result, err := client.WebserverConfig.WebserverConfigsList()
 if err != nil {
     panic(err)
 }

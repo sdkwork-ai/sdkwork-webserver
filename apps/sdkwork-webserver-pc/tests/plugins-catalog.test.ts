@@ -17,6 +17,8 @@ import {
   hasActivePluginFilters,
 } from "../packages/sdkwork-webserver-pc-console-plugins/src/plugin-filter.ts";
 import {
+  PLUGIN_HOST_TOOL_IDS,
+  PLUGIN_HOST_TOOL_GROUPS,
   normalizePluginHostTools,
   normalizePluginContributions,
 } from "../packages/sdkwork-webserver-pc-console-plugins/src/plugin-tool-catalog.ts";
@@ -99,6 +101,15 @@ describe("plugin catalog model", () => {
   it("drops unknown tool identifiers during normalization", () => {
     expect(normalizePluginHostTools(["cursor", "unknown_host", "codex"])).toEqual(["cursor", "codex"]);
     expect(normalizePluginContributions(["skills", "not_real", "tools"])).toEqual(["skills", "tools"]);
+    expect(normalizePluginHostTools(["workbuddy", "zcode"])).toEqual(["workbuddy", "zcode"]);
+  });
+
+  it("groups host tools into a complete, duplicate-free partition", () => {
+    const grouped = PLUGIN_HOST_TOOL_GROUPS.flatMap((group) => [...group.ids]).sort();
+    expect(new Set(grouped).size).toBe(grouped.length);
+    expect(grouped.sort()).toEqual([...PLUGIN_HOST_TOOL_IDS].sort());
+    expect(grouped).toContain("workbuddy");
+    expect(grouped).toContain("zcode");
   });
 });
 

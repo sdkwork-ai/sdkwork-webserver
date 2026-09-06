@@ -1472,6 +1472,84 @@
       "rateLimitTier": null
     },
     {
+      "method": "GET",
+      "path": "/backend/v3/api/webserver_configs",
+      "operationId": "webserverConfigs.list",
+      "tags": [
+        "webserverConfig"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.servers.files.read",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "GET",
+      "path": "/backend/v3/api/webserver_configs/{configId}",
+      "operationId": "webserverConfigs.retrieve",
+      "tags": [
+        "webserverConfig"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.servers.files.read",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "PUT",
+      "path": "/backend/v3/api/webserver_configs/{configId}",
+      "operationId": "webserverConfigs.update",
+      "tags": [
+        "webserverConfig"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.servers.files.write",
+      "idempotent": true,
+      "rateLimitTier": null
+    },
+    {
       "method": "POST",
       "path": "/backend/v3/api/agent/heartbeat",
       "operationId": "heartbeat",

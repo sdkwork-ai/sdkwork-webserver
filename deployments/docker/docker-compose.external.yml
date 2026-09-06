@@ -27,13 +27,30 @@
 #   test        -> sdkwork_ai_test / sdkwork_ai_test
 #   production  -> sdkwork_ai_prod / sdkwork_ai_prod
 
+# Bounded json-file log rotation: unbounded container logs eventually fill
+# the host disk on long-lived deployments (OPERATIONS_SPEC.md §2.3).
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
 services:
   postgres:
     profiles: ["external-disabled"]
 
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
   redis:
     profiles: ["external-disabled"]
 
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
   webserver-development:
     depends_on: !reset []
     extra_hosts:
@@ -53,6 +70,11 @@ services:
       SDKWORK_WEBSERVER_REDIS_PASSWORD_FILE: ${WEBSERVER_REDIS_PASSWORD_FILE:-}
       SDKWORK_WEBSERVER_REDIS_TLS: ${WEBSERVER_REDIS_TLS:-false}
 
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
   webserver-test:
     depends_on: !reset []
     extra_hosts:
@@ -72,6 +94,11 @@ services:
       SDKWORK_WEBSERVER_REDIS_PASSWORD_FILE: ${WEBSERVER_REDIS_PASSWORD_FILE:-}
       SDKWORK_WEBSERVER_REDIS_TLS: ${WEBSERVER_REDIS_TLS:-false}
 
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
   webserver-production:
     depends_on: !reset []
     extra_hosts:
@@ -90,3 +117,9 @@ services:
       SDKWORK_WEBSERVER_REDIS_PASSWORD: ${WEBSERVER_REDIS_PASSWORD:-}
       SDKWORK_WEBSERVER_REDIS_PASSWORD_FILE: ${WEBSERVER_REDIS_PASSWORD_FILE:-}
       SDKWORK_WEBSERVER_REDIS_TLS: ${WEBSERVER_REDIS_TLS:-false}
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"

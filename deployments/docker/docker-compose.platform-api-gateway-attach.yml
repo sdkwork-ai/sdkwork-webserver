@@ -23,9 +23,16 @@
 #     -f deployments/docker/docker-compose.platform-api-gateway-attach.yml \
 #     --env-file deployments/docker/env/development.env up -d
 #
-# deploy-docker-environment.sh / compose.mjs select this overlay automatically
+# bin/docker-deploy.sh / compose.mjs select this overlay automatically
 # when SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK is non-empty.
 
+# Bounded json-file log rotation: unbounded container logs eventually fill
+# the host disk on long-lived deployments (OPERATIONS_SPEC.md §2.3).
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
 services:
   webserver:
     environment:
@@ -40,6 +47,11 @@ services:
       - default
       - module-api-gateway
 
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 networks:
   module-api-gateway:
     name: ${SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK:?SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK must be set}

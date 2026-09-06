@@ -2,8 +2,21 @@
 # §4.4). Compose merges port lists, so applying this file on top of
 # docker-compose.bundle.yml additionally publishes the import-plane 80/443
 # host ports. Only instance 1 applies this overlay (DEPLOYMENT_SPEC.md §6).
+# Bounded json-file log rotation: unbounded container logs eventually fill
+# the host disk on long-lived deployments (OPERATIONS_SPEC.md §2.3).
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
 services:
   webserver:
     ports:
       - "${SDKWORK_WEBSERVER_IMPORT_HTTP_HOST_PORT:-80}:80"
       - "${SDKWORK_WEBSERVER_IMPORT_HTTPS_HOST_PORT:-443}:443"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"

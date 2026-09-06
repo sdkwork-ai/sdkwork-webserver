@@ -336,6 +336,9 @@ apply_primary_domain() {  local domain="${SDKWORK_WEBSERVER_PRIMARY_DOMAIN:-sdkw
   elif [ "${environment}" = "staging" ]; then
     # APP_RUNTIME_TOPOLOGY_NAMING §9: staging uses the -staging suffix.
     host_role="server-staging"
+  elif [ "${environment}" = "demo" ]; then
+    # APP_RUNTIME_TOPOLOGY_NAMING §9: demo uses the -demo suffix.
+    host_role="server-demo"
   elif [ "${environment}" = "production" ]; then
     host_role="server"
   fi
@@ -390,6 +393,7 @@ host_http_port_for_environment() {
     development) printf '%s' "${SDKWORK_WEBSERVER_DEV_HOST_PORT:-13800}" ;;
     test) printf '%s' "${SDKWORK_WEBSERVER_TEST_HOST_PORT:-18888}" ;;
     staging) printf '%s' "${SDKWORK_WEBSERVER_STAGING_HOST_PORT:-18081}" ;;
+    demo) printf '%s' "${SDKWORK_WEBSERVER_DEMO_HOST_PORT:-19080}" ;;
     production) printf '%s' "${SDKWORK_WEBSERVER_PROD_HOST_PORT:-18080}" ;;
     *) printf '%s' "${SDKWORK_WEBSERVER_DEV_HOST_PORT:-13800}" ;;
   esac
@@ -411,6 +415,9 @@ default_docker_cors_allowed_origins() {
       ;;
     staging)
       hosts="server-staging.${domain} server-app-staging.${domain} server-admin-staging.${domain}"
+      ;;
+    demo)
+      hosts="server-demo.${domain} server-app-demo.${domain} server-admin-demo.${domain}"
       ;;
     production)
       hosts="server.${domain} server-app.${domain} server-admin.${domain} ${domain} app.${domain}"
@@ -757,7 +764,7 @@ materialize_module_toml_layout() {
   rm -rf "${dest}"
   mkdir -p "${dest}"
   cp "${module_ws}/server.common.toml" "${dest}/"
-  for env_name in development test staging production; do
+  for env_name in development test staging demo production; do
     if [ -f "${module_ws}/server.${env_name}.toml" ]; then
       cp "${module_ws}/server.${env_name}.toml" "${dest}/"
     fi
@@ -885,6 +892,17 @@ module_api_gateway_deployment() {
 module_api_gateway_port() {
   printf '%s' "${SDKWORK_MODULE_API_GATEWAY_PORT:-3900}"
 }
+
+# Upstream hostname for module /api/ reverse proxy and readiness probing.
+# bundled: in-process gateway binds 127.0.0.1; docker/external: the gateway
+# service DNS name on the shared/attach network (SDKWORK_WEBSERVER_SPEC §8.1).
+module_api_gateway_upstream_host() {
+  case "${1:-}" in
+    bundled) printf '%s' "127.0.0.1" ;;
+    *) printf '%s' "${SDKWORK_MODULE_API_GATEWAY_HOST:-gateway}" ;;
+  esac
+}
+
 module_api_gateway_upstream_endpoint() {
   local deployment host port
   deployment="$(module_api_gateway_deployment)"
@@ -1537,7 +1555,19 @@ link_module_web_static_root() {
     src="$(module_app_static_root_for_alias "${module}" "${surface}" "${dist_alias}" "${source_profile}")"
   fi
   if [ -z "${src}" ]; then
-    log "warning: ${module} ${surface}: no apps/*-${surface}/dist/${source_profile}/${dist_alias} build under ${module_root}; ${root} stays unserved (build with: pnpm --dir ${module} build:${surface}:${dist_alias}:${source_profile})"
+    # Fail-closed static-root validation (compiled.rs canonical_directory)
+    # requires every declared package root to exist. Seed a readable
+    # placeholder shell so a missing module dist degrades to a placeholder
+    # page instead of crashing the whole data plane at startup. A real build
+    # replaces it later; non-symlink content is never overwritten (below).
+    log "warning: ${module} ${surface}: no apps/*-${surface}/dist/${source_profile}/${dist_alias} build under ${module_root}; seeding placeholder shell at ${root} (build with: pnpm --dir ${module} build:${surface}:${dist_alias}:${source_profile})"
+    mkdir -p "${root}"
+    if [ ! -f "${root}/index.html" ]; then
+      printf '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>%s</title></head><body><h1>%s %s</h1><p>Static dist not built yet (%s/%s). Build with: pnpm --dir %s build:%s:%s:%s</p></body></html>\n' \
+        "${module}" "${module}" "${surface}" "${source_profile}" "${dist_alias}" "${module}" "${surface}" "${dist_alias}" "${source_profile}" \
+        > "${root}/index.html"
+    fi
+    chown -R "${SERVICE_USER}:${SERVICE_USER}" "${root}" 2>/dev/null || true
     return 0
   fi
   if [ -L "${root}" ]; then

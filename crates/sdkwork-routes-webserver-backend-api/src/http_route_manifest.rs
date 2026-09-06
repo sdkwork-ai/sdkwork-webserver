@@ -339,6 +339,24 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "serverFile",
         "serverFiles.node.operations.create",
     ).with_required_permission("web.servers.files.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/webserver_configs",
+        "webserverConfig",
+        "webserverConfigs.list",
+    ).with_required_permission("web.servers.files.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/webserver_configs/{configId}",
+        "webserverConfig",
+        "webserverConfigs.retrieve",
+    ).with_required_permission("web.servers.files.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Put,
+        "/backend/v3/api/webserver_configs/{configId}",
+        "webserverConfig",
+        "webserverConfigs.update",
+    ).with_required_permission("web.servers.files.write").with_idempotent(true),
     HttpRoute::agent_token(
         HttpMethod::Post,
         "/backend/v3/api/agent/heartbeat",

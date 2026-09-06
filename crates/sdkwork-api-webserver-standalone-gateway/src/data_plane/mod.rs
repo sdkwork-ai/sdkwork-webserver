@@ -2,6 +2,7 @@ mod acme_challenge;
 mod active_health;
 pub(crate) mod cache;
 mod connection_limit;
+mod credential_entry_injection;
 mod dns;
 mod error;
 mod fixed_histogram;

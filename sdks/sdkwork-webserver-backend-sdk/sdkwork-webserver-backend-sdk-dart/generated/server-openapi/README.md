@@ -53,6 +53,7 @@ client.setHeader('X-Custom-Header', 'value');
 - `client.nginx` - nginx API
 - `client.server` - server API
 - `client.serverFile` - server_file API
+- `client.webserverConfig` - webserver_config API
 - `client.agent` - agent API
 - `client.audit` - audit API
 
@@ -176,6 +177,14 @@ print(result);
 ```dart
 // List Server Files deployment nodes
 final result = await client.serverFile.serverFilesNodesList();
+print(result);
+```
+
+### webserver_config
+
+```dart
+// List the managed Web Server configuration catalog
+final result = await client.webserverConfig.webserverConfigsList();
 print(result);
 ```
 

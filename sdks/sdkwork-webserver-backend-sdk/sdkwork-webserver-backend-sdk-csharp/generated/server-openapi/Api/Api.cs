@@ -15,6 +15,7 @@ namespace SDKWork.WebserverBackendSdk.Api
         public static NginxApi? Nginx { get; set; }
         public static ServerApi? Server { get; set; }
         public static ServerFileApi? ServerFile { get; set; }
+        public static WebserverConfigApi? WebserverConfig { get; set; }
         public static AgentApi? Agent { get; set; }
         public static AuditApi? Audit { get; set; }
     }

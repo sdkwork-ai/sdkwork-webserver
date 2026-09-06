@@ -63,6 +63,7 @@ function parseArgs(argv) {
     version: appVersion(),
     tag: undefined,
     skipReleaseBuild: false,
+    noPull: false,
     skipPlatformGateway: false,
     skipPlatformGatewayBuild: false,
     dryRun: false,
@@ -85,6 +86,10 @@ function parseArgs(argv) {
       settings.tag = argv[++index];
     } else if (argument === '--skip-release-build') {
       settings.skipReleaseBuild = true;
+    } else if (argument === '--no-pull') {
+      // Skip `docker build --pull`: reuse the locally cached base image when
+      // the registry mirror is unreachable (e.g. TLS handshake timeouts).
+      settings.noPull = true;
     } else if (argument === '--skip-platform-gateway') {
       settings.skipPlatformGateway = true;
     } else if (argument === '--skip-platform-gateway-build') {
@@ -114,6 +119,8 @@ Options:
   --version <semver>           Default: sdkwork.app.config.json release.currentVersion
   --tag <image-tag>            Default: release version
   --skip-release-build         Do not invoke release packaging when the archive is missing
+  --no-pull                    Do not force docker build --pull; reuse the local base image
+                               (registry mirror unreachable, base image already cached)
   --skip-platform-gateway      Omit bundled sdkwork-api-cloud-gateway from the image (use docker mode)
   --skip-platform-gateway-build  Require prebuilt cloud-gateway artifacts; do not invoke build:container
   --dry-run                    Print the resolved build plan only
@@ -299,13 +306,17 @@ async function main() {
   const plan = await stageContext(settings);
   const buildArgs = [
     'build',
-    '--pull',
+  ];
+  if (!settings.noPull) {
+    buildArgs.push('--pull');
+  }
+  buildArgs.push(
     '--file',
     plan.dockerfile,
     '--tag',
     plan.image,
     STAGE_ROOT,
-  ];
+  );
   console.log(`release archive: ${plan.archive}`);
   console.log(`static bundle environment: ${settings.environment}`);
   console.log(`docker context: ${STAGE_ROOT}`);

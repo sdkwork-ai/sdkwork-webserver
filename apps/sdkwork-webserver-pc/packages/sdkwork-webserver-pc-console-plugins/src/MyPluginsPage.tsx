@@ -174,6 +174,9 @@ export function MyPluginsPage({
       <SurfaceDrawer
         open={drawer?.kind === "edit"}
         title={t("edit.title")}
+        description={drawer?.kind === "edit"
+          ? t("edit.description", { key: drawer.plugin.pluginKey })
+          : undefined}
         onClose={() => setDrawer(null)}
       >
         {drawer?.kind === "edit" ? (

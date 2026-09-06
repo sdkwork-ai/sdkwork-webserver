@@ -25,7 +25,8 @@
     "preview": "vite preview --host 127.0.0.1",
     "start": "pnpm preview",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
-    "_sdkwork:dev:standalone": "node scripts/verify-build-sources.mjs && node scripts/materialize-runtime-env.mjs --deployment-profile standalone --environment development && vite --mode standalone.development"
+    "_sdkwork:dev:standalone": "node scripts/verify-build-sources.mjs && node scripts/materialize-runtime-env.mjs --deployment-profile standalone --environment development && vite --mode standalone.development",
+    "build:demo": "node ../../../sdkwork-specs/tools/build-browser-client.mjs --app-root . --environment demo"
   },
   "dependencies": {
     "@sdkwork/auth-pc-react": "workspace:*",
@@ -48,6 +49,7 @@
     "@sdkwork/webserver-pc-admin-nginx": "workspace:*",
     "@sdkwork/webserver-pc-admin-servers": "workspace:*",
     "@sdkwork/webserver-pc-admin-servers-explorer": "workspace:*",
+    "@sdkwork/webserver-pc-admin-webserver-config": "workspace:*",
     "@sdkwork/webserver-pc-admin-shell": "workspace:*",
     "@sdkwork/webserver-pc-commons": "workspace:*",
     "@sdkwork/webserver-pc-console-core": "workspace:*",

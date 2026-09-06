@@ -37,6 +37,13 @@ profiles:
         aliases:
           - server-app.dtupay.com
           - server.dtupay.com
+      - tls: noaper.com
+        mode: web
+        web: adaptive
+        domain: server-admin.noaper.com
+        aliases:
+          - server-app.noaper.com
+          - server.noaper.com
       - tls: sdkwork.cn
         mode: web
         web: adaptive
@@ -58,6 +65,13 @@ profiles:
         aliases:
           - server-app.dtupay.cn
           - server.dtupay.cn
+      - tls: noaper.cn
+        mode: web
+        web: adaptive
+        domain: server-admin.noaper.cn
+        aliases:
+          - server-app.noaper.cn
+          - server.noaper.cn
       - tls: skubc.com
         mode: web
         web: adaptive
@@ -169,6 +183,13 @@ profiles:
         aliases:
           - server-app-test.dtupay.com
           - server-test.dtupay.com
+      - tls: noaper.com
+        mode: web
+        web: adaptive
+        domain: server-admin-test.noaper.com
+        aliases:
+          - server-app-test.noaper.com
+          - server-test.noaper.com
       - tls: sdkwork.cn
         mode: web
         web: adaptive
@@ -190,6 +211,13 @@ profiles:
         aliases:
           - server-app-test.dtupay.cn
           - server-test.dtupay.cn
+      - tls: noaper.cn
+        mode: web
+        web: adaptive
+        domain: server-admin-test.noaper.cn
+        aliases:
+          - server-app-test.noaper.cn
+          - server-test.noaper.cn
       - tls: skubc.com
         mode: web
         web: adaptive
@@ -290,6 +318,13 @@ profiles:
         aliases:
           - server-app-staging.dtupay.com
           - server-staging.dtupay.com
+      - tls: noaper.com
+        mode: web
+        web: adaptive
+        domain: server-admin-staging.noaper.com
+        aliases:
+          - server-app-staging.noaper.com
+          - server-staging.noaper.com
       - tls: sdkwork.cn
         mode: web
         web: adaptive
@@ -311,6 +346,13 @@ profiles:
         aliases:
           - server-app-staging.dtupay.cn
           - server-staging.dtupay.cn
+      - tls: noaper.cn
+        mode: web
+        web: adaptive
+        domain: server-admin-staging.noaper.cn
+        aliases:
+          - server-app-staging.noaper.cn
+          - server-staging.noaper.cn
       - tls: skubc.com
         mode: web
         web: adaptive
@@ -408,6 +450,12 @@ profiles:
         aliases:
           - server-app-test.dtupay.com
           - server-test.dtupay.com
+      - domain: server-admin-test.noaper.com
+        tls: noaper.com
+        mode: api
+        aliases:
+          - server-app-test.noaper.com
+          - server-test.noaper.com
       - domain: server-admin-test.sdkwork.cn
         tls: sdkwork.cn
         mode: api
@@ -426,6 +474,12 @@ profiles:
         aliases:
           - server-app-test.dtupay.cn
           - server-test.dtupay.cn
+      - domain: server-admin-test.noaper.cn
+        tls: noaper.cn
+        mode: api
+        aliases:
+          - server-app-test.noaper.cn
+          - server-test.noaper.cn
       - domain: server-admin-test.skubc.com
         tls: skubc.com
         mode: api
@@ -513,6 +567,12 @@ profiles:
         aliases:
           - server-app.dtupay.com
           - server.dtupay.com
+      - domain: server-admin.noaper.com
+        tls: noaper.com
+        mode: api
+        aliases:
+          - server-app.noaper.com
+          - server.noaper.com
       - domain: server-admin.sdkwork.cn
         tls: sdkwork.cn
         mode: api
@@ -531,6 +591,12 @@ profiles:
         aliases:
           - server-app.dtupay.cn
           - server.dtupay.cn
+      - domain: server-admin.noaper.cn
+        tls: noaper.cn
+        mode: api
+        aliases:
+          - server-app.noaper.cn
+          - server.noaper.cn
       - domain: server-admin.skubc.com
         tls: skubc.com
         mode: api
@@ -618,6 +684,12 @@ profiles:
         aliases:
           - server-app-staging.dtupay.com
           - server-staging.dtupay.com
+      - domain: server-admin-staging.noaper.com
+        tls: noaper.com
+        mode: api
+        aliases:
+          - server-app-staging.noaper.com
+          - server-staging.noaper.com
       - domain: server-admin-staging.sdkwork.cn
         tls: sdkwork.cn
         mode: api
@@ -636,6 +708,12 @@ profiles:
         aliases:
           - server-app-staging.dtupay.cn
           - server-staging.dtupay.cn
+      - domain: server-admin-staging.noaper.cn
+        tls: noaper.cn
+        mode: api
+        aliases:
+          - server-app-staging.noaper.cn
+          - server-staging.noaper.cn
       - domain: server-admin-staging.skubc.com
         tls: skubc.com
         mode: api

@@ -45,7 +45,7 @@ pub const DRIVE_WEBSITE_CACHE_DEFAULT_ROOT: &str = "/opt/deploy/drive/website-ca
 pub const DRIVE_WEBSITE_CACHE_DEFAULT_MAX_TOTAL_BYTES: u64 = 8 * 1024 * 1024 * 1024;
 pub const DRIVE_WEBSITE_CACHE_DEFAULT_MAX_ENTRIES: u64 = 100_000;
 const READ_CHUNK_BYTES: usize = 64 * 1024;
-const STANDARD_ENVIRONMENTS: [&str; 4] = ["development", "test", "staging", "production"];
+const STANDARD_ENVIRONMENTS: [&str; 5] = ["development", "test", "staging", "demo", "production"];
 /// Orphaned staging fills (`*.part`) older than this are swept at cache open.
 /// Live fills complete in minutes at worst; a generous TTL keeps the sweep
 /// safe for concurrent instances sharing the directory (the file name embeds

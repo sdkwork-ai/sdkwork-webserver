@@ -10,6 +10,7 @@ import 'src/api/certificate_distribution.dart';
 import 'src/api/nginx.dart';
 import 'src/api/server.dart';
 import 'src/api/server_file.dart';
+import 'src/api/webserver_config.dart';
 import 'src/api/agent.dart';
 import 'src/api/audit.dart';
 
@@ -26,6 +27,7 @@ class SdkworkBackendClient {
   late final NginxApi nginx;
   late final ServerApi server;
   late final ServerFileApi serverFile;
+  late final WebserverConfigApi webserverConfig;
   late final AgentApi agent;
   late final AuditApi audit;
 
@@ -42,6 +44,7 @@ class SdkworkBackendClient {
     nginx = NginxApi(_httpClient);
     server = ServerApi(_httpClient);
     serverFile = ServerFileApi(_httpClient);
+    webserverConfig = WebserverConfigApi(_httpClient);
     agent = AgentApi(_httpClient);
     audit = AuditApi(_httpClient);
   }

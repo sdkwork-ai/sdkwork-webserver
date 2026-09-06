@@ -33,6 +33,7 @@ pub enum WebsiteRuntimeEnvironment {
     Development,
     Test,
     Staging,
+    Demo,
     Production,
 }
 

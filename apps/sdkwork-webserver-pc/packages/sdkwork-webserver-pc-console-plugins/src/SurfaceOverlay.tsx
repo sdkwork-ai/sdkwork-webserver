@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 export interface SurfaceDrawerProps {
   open: boolean;
@@ -19,6 +19,27 @@ export function SurfaceDrawer({
   footer,
   size = "lg",
 }: SurfaceDrawerProps) {
+  const panelRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const previouslyFocused = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    panelRef.current?.focus();
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus();
+    };
+  }, [open, onClose]);
+
   if (!open) return null;
   return (
     <div className="sdkwork-surface-drawer-root" role="presentation">
@@ -29,10 +50,12 @@ export function SurfaceDrawer({
         onClick={onClose}
       />
       <aside
+        ref={panelRef}
         className={`sdkwork-surface-drawer-panel sdkwork-surface-drawer-panel--${size}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="sdkwork-surface-drawer-title"
+        tabIndex={-1}
       >
         <header className="sdkwork-surface-drawer-header">
           <div>

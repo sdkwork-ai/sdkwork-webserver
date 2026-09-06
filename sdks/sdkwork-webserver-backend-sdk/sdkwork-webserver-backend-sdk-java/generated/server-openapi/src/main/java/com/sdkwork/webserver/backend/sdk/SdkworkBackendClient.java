@@ -12,6 +12,7 @@ import com.sdkwork.webserver.backend.sdk.api.CertificateDistributionApi;
 import com.sdkwork.webserver.backend.sdk.api.NginxApi;
 import com.sdkwork.webserver.backend.sdk.api.ServerApi;
 import com.sdkwork.webserver.backend.sdk.api.ServerFileApi;
+import com.sdkwork.webserver.backend.sdk.api.WebserverConfigApi;
 import com.sdkwork.webserver.backend.sdk.api.AgentApi;
 import com.sdkwork.webserver.backend.sdk.api.AuditApi;
 
@@ -27,6 +28,7 @@ public class SdkworkBackendClient {
     private NginxApi nginx;
     private ServerApi server;
     private ServerFileApi serverFile;
+    private WebserverConfigApi webserverConfig;
     private AgentApi agent;
     private AuditApi audit;
 
@@ -42,6 +44,7 @@ public class SdkworkBackendClient {
         this.nginx = new NginxApi(httpClient);
         this.server = new ServerApi(httpClient);
         this.serverFile = new ServerFileApi(httpClient);
+        this.webserverConfig = new WebserverConfigApi(httpClient);
         this.agent = new AgentApi(httpClient);
         this.audit = new AuditApi(httpClient);
     }
@@ -58,6 +61,7 @@ public class SdkworkBackendClient {
         this.nginx = new NginxApi(httpClient);
         this.server = new ServerApi(httpClient);
         this.serverFile = new ServerFileApi(httpClient);
+        this.webserverConfig = new WebserverConfigApi(httpClient);
         this.agent = new AgentApi(httpClient);
         this.audit = new AuditApi(httpClient);
     }
@@ -100,6 +104,10 @@ public class SdkworkBackendClient {
 
     public ServerFileApi getServerFile() {
         return this.serverFile;
+    }
+
+    public WebserverConfigApi getWebserverConfig() {
+        return this.webserverConfig;
     }
 
     public AgentApi getAgent() {

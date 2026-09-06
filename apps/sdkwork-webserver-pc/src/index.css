@@ -1849,51 +1849,6 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   cursor: pointer;
 }
 
-.plugin-source-toggle {
-  display: inline-flex;
-  flex-wrap: wrap;
-  width: max-content;
-  max-width: 100%;
-  gap: 0;
-  padding: 3px;
-  border: 1px solid var(--sdk-color-border-default);
-  border-radius: 8px;
-  background: var(--sdk-color-surface-panel-muted, #f8fafc);
-}
-.plugin-source-toggle button {
-  min-height: 32px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--sdk-color-text-secondary);
-  font-size: 13px;
-  font-weight: 650;
-  cursor: pointer;
-}
-.plugin-source-toggle button[aria-pressed="true"] {
-  color: var(--webserver-color-on-accent);
-  background: var(--webserver-color-command-background);
-}
-.plugin-source-toggle button:not([aria-pressed="true"]):hover {
-  color: var(--sdk-color-text-primary);
-  background: var(--sdk-color-surface-panel);
-}
-.plugin-source-detail {
-  display: block;
-  max-width: 28rem;
-  overflow: hidden;
-  color: var(--sdk-color-text-secondary);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.plugin-field-warning {
-  margin: 0;
-  color: var(--webserver-color-warning-text, #92400e);
-  font-size: 12px;
-}
-
 /* Shared list-CRUD drawer / confirm modal (Skills + MCP + Plugins embeds) */
 .skills-console-surface,
 .mcp-console-surface,
@@ -1916,6 +1871,7 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   border: 0;
   background: rgba(15, 23, 42, 0.42);
   cursor: pointer;
+  animation: sdkwork-surface-fade 0.18s ease both;
 }
 .sdkwork-surface-drawer-panel {
   position: absolute;
@@ -1927,8 +1883,12 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   background: var(--sdk-color-surface-panel, #fff);
   color: var(--sdk-color-text-primary);
   box-shadow: -16px 0 48px rgba(15, 23, 42, 0.18);
+  animation: sdkwork-surface-slide 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .sdkwork-surface-drawer-panel--lg { width: min(640px, 100vw); }
+.sdkwork-surface-drawer-panel:focus-visible {
+  outline: none;
+}
 .sdkwork-surface-drawer-header {
   display: flex;
   align-items: flex-start;
@@ -1976,10 +1936,34 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   border-top: 1px solid var(--sdk-color-border-default);
 }
 .sdkwork-surface-drawer-form-actions {
+  position: sticky;
+  bottom: -24px;
+  z-index: 2;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 8px;
+  margin: 16px -20px -24px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--sdk-color-border-default);
+  background: color-mix(in srgb, var(--sdk-color-surface-panel, #fff) 92%, transparent);
+  backdrop-filter: blur(8px);
+}
+.sdkwork-surface-drawer-form-actions button[type="button"] {
+  min-height: 34px;
+  padding: 0 14px;
+  color: var(--sdk-color-text-primary);
+  background: var(--sdk-color-surface-panel-muted, #f8fafc);
+  border: 1px solid var(--sdk-color-border-default);
+  border-radius: 6px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.sdkwork-surface-drawer-form-actions button[type="button"]:hover {
+  border-color: var(--sdk-color-border-focus);
+}
+.sdkwork-surface-drawer-form-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 .sdkwork-surface-modal-panel {
   position: relative;
@@ -1991,6 +1975,26 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   background: var(--sdk-color-surface-panel, #fff);
   color: var(--sdk-color-text-primary);
   box-shadow: 0 24px 64px rgba(15, 23, 42, 0.28);
+  animation: sdkwork-surface-pop 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes sdkwork-surface-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes sdkwork-surface-slide {
+  from { opacity: 0; transform: translateX(28px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes sdkwork-surface-pop {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sdkwork-surface-drawer-backdrop,
+  .sdkwork-surface-drawer-panel,
+  .sdkwork-surface-modal-panel {
+    animation: none;
+  }
 }
 .sdkwork-surface-modal-panel h3 {
   margin: 0;
@@ -2031,30 +2035,97 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   background: #be123c;
 }
 
-/* Plugins console: host-tool multi-select, filter bar, badges */
+/* Plugins console: register/edit drawer, host-tool picker, filter bar, badges */
+.plugin-console-form { max-width: none; }
+.plugin-form-section {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--sdk-color-border-default);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--sdk-color-surface-panel-muted, #f8fafc) 55%, var(--sdk-color-surface-panel, #fff));
+}
+.plugin-form-section-header h4 {
+  margin: 0;
+  color: var(--sdk-color-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.plugin-form-section-body {
+  display: grid;
+  gap: 12px;
+}
+.skills-console-field-label { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.skills-console-field-required { color: var(--webserver-color-danger-text, #be123c); font-weight: 700; }
+.skills-console-field-optional {
+  padding: 1px 7px;
+  border: 1px solid var(--sdk-color-border-default);
+  border-radius: 999px;
+  color: var(--sdk-color-text-secondary);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+.plugin-key-static {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px dashed var(--sdk-color-border-default);
+  border-radius: 6px;
+  background: var(--sdk-color-surface-panel-muted, #f8fafc);
+  color: var(--sdk-color-text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+.plugin-hint-valid {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--webserver-color-success-text, #176534);
+  font-size: 12px;
+}
+.plugin-field-warning { margin: 0; color: var(--webserver-color-warning-text, #604a0a); font-size: 12px; }
+
+/* Source toggle (theme contract: width max-content) */
 .plugin-source-toggle {
   display: inline-flex;
+  flex-wrap: wrap;
+  width: max-content;
+  max-width: 100%;
   gap: 4px;
   padding: 4px;
-  border-radius: 8px;
-  background: var(--sdk-color-surface-panel-muted, #f8fafc);
   border: 1px solid var(--sdk-color-border-default);
+  border-radius: 9px;
+  background: var(--sdk-color-surface-panel-muted, #f8fafc);
 }
 .plugin-source-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   min-height: 32px;
-  padding: 0 12px;
+  padding: 0 14px;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--sdk-color-text-secondary);
+  font-size: 13px;
   font-weight: 650;
+  cursor: pointer;
 }
 .plugin-source-toggle button[aria-pressed="true"] {
-  background: var(--sdk-color-surface-panel, #fff);
-  color: var(--sdk-color-text-primary);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  color: var(--webserver-color-on-accent);
+  background: var(--webserver-color-command-background);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.16);
 }
-.plugin-field-warning { color: var(--webserver-color-warning-text, #604a0a); }
+.plugin-source-toggle button:not([aria-pressed="true"]):hover {
+  color: var(--sdk-color-text-primary);
+  background: var(--sdk-color-surface-panel);
+}
 .plugin-source-detail {
   display: block;
   margin-top: 4px;
@@ -2063,6 +2134,56 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   line-height: 1.4;
   word-break: break-all;
 }
+
+/* Archive upload zone */
+.plugin-upload-zone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 18px 16px;
+  border: 1px dashed var(--sdk-color-border-default);
+  border-radius: 10px;
+  background: var(--sdk-color-surface-panel-muted, #f8fafc);
+  color: var(--sdk-color-text-secondary);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+.plugin-upload-zone:hover {
+  border-color: var(--sdk-color-border-focus);
+  background: color-mix(in srgb, var(--webserver-color-command-background, #2563eb) 4%, var(--sdk-color-surface-panel, #fff));
+}
+.plugin-upload-zone--busy { opacity: 0.7; pointer-events: none; }
+.plugin-upload-zone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.plugin-upload-zone-icon { color: var(--webserver-color-accent-text, #2563eb); }
+.plugin-upload-zone-title { color: var(--sdk-color-text-primary); font-size: 13px; font-weight: 650; }
+.plugin-upload-zone-hint { font-size: 11px; }
+.plugin-upload-result {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--webserver-color-success-text, #176534);
+  font-size: 12px;
+  word-break: break-all;
+}
+.plugin-artifact-ref {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--sdk-color-text-secondary);
+}
+
+/* Host-tool / capability pickers */
 .plugin-tool-picker { display: grid; gap: 10px; }
 .plugin-tool-picker-toolbar {
   display: flex;
@@ -2076,6 +2197,29 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   font-size: 12px;
   font-weight: 650;
 }
+.plugin-tool-picker-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 150px;
+  max-width: 220px;
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--sdk-color-border-default);
+  border-radius: 6px;
+  background: var(--sdk-color-surface-panel, #fff);
+  color: var(--sdk-color-text-secondary);
+}
+.plugin-tool-picker-search:focus-within { border-color: var(--sdk-color-border-focus); }
+.plugin-tool-picker-search input {
+  width: 100%;
+  min-height: 26px;
+  border: 0;
+  background: transparent;
+  color: var(--sdk-color-text-primary);
+  font-size: 12px;
+  outline: none;
+}
 .plugin-tool-picker-actions { display: inline-flex; gap: 8px; }
 .plugin-tool-picker-action {
   padding: 0;
@@ -2086,30 +2230,114 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   font-weight: 650;
   text-decoration: underline;
   text-underline-offset: 2px;
+  cursor: pointer;
 }
 .plugin-tool-picker-error { margin: 0; }
+.plugin-tool-search-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px dashed var(--sdk-color-border-default);
+  border-radius: 8px;
+  color: var(--sdk-color-text-secondary);
+  font-size: 12px;
+}
+.plugin-tool-grid-root { display: grid; gap: 12px; }
+.plugin-tool-group { display: grid; gap: 6px; }
+.plugin-tool-group-header { display: flex; align-items: center; gap: 6px; }
+.plugin-tool-group-title {
+  color: var(--sdk-color-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.plugin-tool-group-count {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--sdk-color-surface-panel-muted, #f1f5f9);
+  color: var(--sdk-color-text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.6;
+}
 .plugin-tool-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 8px;
 }
 .plugin-tool-option {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 36px;
-  padding: 8px 10px;
+  min-height: 38px;
+  padding: 6px 10px;
   border: 1px solid var(--sdk-color-border-default);
   border-radius: 8px;
   background: var(--sdk-color-surface-panel, #fff);
   cursor: pointer;
   user-select: none;
+  transition: border-color 0.14s ease, background 0.14s ease;
 }
-.plugin-tool-option input { margin: 0; accent-color: var(--webserver-color-command-background, #2563eb); }
-.plugin-tool-option span { font-size: 13px; line-height: 1.3; }
+.plugin-tool-option:hover { border-color: var(--sdk-color-border-focus); }
+.plugin-tool-option-check {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.plugin-tool-option:focus-within {
+  outline: 2px solid var(--sdk-color-border-focus);
+  outline-offset: 2px;
+}
+.plugin-tool-option-mono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--webserver-color-command-background, #2563eb) 10%, var(--sdk-color-surface-panel, #fff));
+  color: var(--webserver-color-accent-text, #2563eb);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+}
+.plugin-tool-option-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plugin-tool-option-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--sdk-color-border-default);
+  border-radius: 999px;
+  background: transparent;
+  color: transparent;
+}
 .plugin-tool-option--selected {
-  border-color: color-mix(in srgb, var(--webserver-color-command-background, #2563eb) 45%, var(--sdk-color-border-default));
+  border-color: color-mix(in srgb, var(--webserver-color-command-background, #2563eb) 55%, var(--sdk-color-border-default));
   background: color-mix(in srgb, var(--webserver-color-command-background, #2563eb) 8%, var(--sdk-color-surface-panel, #fff));
+}
+.plugin-tool-option--selected .plugin-tool-option-mark {
+  border-color: transparent;
+  background: var(--webserver-color-command-background, #2563eb);
+  color: var(--webserver-color-on-accent, #fff);
 }
 .plugin-filter-bar {
   display: grid;

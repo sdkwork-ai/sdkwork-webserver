@@ -60,6 +60,7 @@ $client->setHeader('X-Custom-Header', 'value');
 - `$client->nginx` - nginx API
 - `$client->server` - server API
 - `$client->serverFile` - server_file API
+- `$client->webserverConfig` - webserver_config API
 - `$client->agent` - agent API
 - `$client->audit` - audit API
 
@@ -173,6 +174,16 @@ var_dump($result);
 
 // List Server Files deployment nodes
 $result = $client->serverFile->serverFilesNodesList();
+var_dump($result);
+```
+
+### webserver_config
+
+```php
+<?php
+
+// List the managed Web Server configuration catalog
+$result = $client->webserverConfig->webserverConfigsList();
 var_dump($result);
 ```
 

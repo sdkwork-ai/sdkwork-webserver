@@ -55,7 +55,7 @@ const SUPPORTED_ARCHITECTURES = new Set(['x64', 'arm64']);
 /** Lifecycle environment of the packaged frontend (test -> dist/test). */
 function resolvedEnvironment(env = process.env) {
   const value = env.SDKWORK_WEBSERVER_ENVIRONMENT ?? env.SDKWORK_ENVIRONMENT ?? 'production';
-  return ['development', 'test', 'staging', 'production'].includes(value) ? value : 'production';
+  return ['development', 'test', 'staging', 'demo', 'production'].includes(value) ? value : 'production';
 }
 
 const PC_APP_RELATIVE_ROOT = 'apps/sdkwork-webserver-pc';
@@ -491,7 +491,7 @@ function resolveCloudApiBaseUrl() {
   const deployment = JSON.parse(readFileSync(deploymentIndex, 'utf8'));
   const environments = deployment.environments ?? {};
   const result = {};
-  for (const environment of ['development', 'test', 'staging', 'production']) {
+  for (const environment of ['development', 'test', 'staging', 'demo', 'production']) {
     const value = environments[environment]?.cloudApiBaseUrl;
     if (typeof value !== 'string' || value.length === 0) {
       throw new Error(
@@ -1342,6 +1342,29 @@ async function packageArchive(settings) {
       throw new Error(`package content exceeds ${MAX_PACKAGE_CONTENT_BYTES} bytes`);
     }
 
+    // WSL drvfs/9p copies land 0777 (chmod is not persisted on the source
+    // mount), so normalize modes on the staged tree before tar: bin/ entries
+    // stay 0755 executables, every other staged file becomes 0644. Keeps the
+    // archive-contract validator (bin executable, data non-executable) honest
+    // regardless of the source filesystem.
+    const normalizeStagedModes = (dirPath) => {
+      for (const entry of readdirSync(dirPath, { withFileTypes: true })) {
+        const entryPath = path.join(dirPath, entry.name);
+        if (entry.isDirectory()) {
+          chmodSync(entryPath, 0o755);
+          normalizeStagedModes(entryPath);
+        } else {
+          const isBinEntry = path
+            .relative(stageRoot, entryPath)
+            .split(path.sep)
+            .join('/')
+            .startsWith('bin/');
+          chmodSync(entryPath, isBinEntry ? 0o755 : 0o644);
+        }
+      }
+    };
+    normalizeStagedModes(stageRoot);
+
     const sourceDateEpoch = Number.parseInt(process.env.SOURCE_DATE_EPOCH ?? '0', 10);
     if (!Number.isSafeInteger(sourceDateEpoch) || sourceDateEpoch < 0) {
       throw new Error('SOURCE_DATE_EPOCH must be a non-negative safe integer');
@@ -1384,6 +1407,10 @@ async function packageArchive(settings) {
           '--owner=0',
           '--group=0',
           '--numeric-owner',
+          // WSL drvfs/9p mounts report 0777 for every entry (chmod is not
+          // persisted), so clear group/world write bits at archive time to
+          // restore the staged 0755/0644 intent on such filesystems.
+          '--mode=go-w',
           '-czf',
           temporaryArchive,
           'sdkwork-webserver',

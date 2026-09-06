@@ -25,7 +25,9 @@ const surfaces = [
     authority: 'apis/backend-api/web/sdkwork-webserver-backend-api.openapi.json',
     manifest: 'sdks/_route-manifests/backend-api/sdkwork-routes-webserver-backend-api.route-manifest.json',
     typescriptApi: 'sdks/sdkwork-webserver-backend-sdk/sdkwork-webserver-backend-sdk-typescript/generated/server-openapi/src/api',
-    expectedIdempotentOperations: 32,
+    // 33 marked operations after the webserver_configs update (PUT) idempotency
+    // marking was added to apis/backend-api/web/openapi.yaml and materialized.
+    expectedIdempotentOperations: 33,
   },
   {
     name: 'internal-api',

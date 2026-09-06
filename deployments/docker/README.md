@@ -6,11 +6,11 @@ Reference: `sdkwork-api-cloud-gateway` (`docker-compose.yml` + `docker-compose.e
 
 | Mode | Command | PostgreSQL | Redis |
 | --- | --- | --- | --- |
-| ① Built-in | `bash scripts/docker/deploy-docker-environment.sh development` | compose `postgres:16-alpine` | compose `redis:8-alpine` |
-| ② External (standalone files) | `bash scripts/docker/deploy-docker-environment.sh all` | `WEBSERVER_POSTGRES_HOST` | `WEBSERVER_REDIS_HOST` |
-| ③ Shared built-in (all envs) | `bash scripts/docker/deploy-docker-environment.sh all --embedded-shared` | one postgres | one redis |
+| **External (default)** | `bin/docker-deploy.sh install --environment <env>` | host system `5432` | host system `6379` |
+| Embedded (explicit opt-in) | `deployments/docker/bundle/deploy.sh --environment <env> --embedded` | compose embedded | compose embedded |
 
-Operator guide: [docs/guides/operator/WSL_EXTERNAL_DEPLOY.md](../../docs/guides/operator/WSL_EXTERNAL_DEPLOY.md)
+Operator guide: [docs/guides/operator/docker-install.md](../../docs/guides/operator/docker-install.md)
+(`DOCKER_SPEC.md`, `MODULE_BIN_SPEC.md`, `DEPLOYMENT_SPEC.md` §6.1)
 
 ## File Layout
 
@@ -32,31 +32,20 @@ Operator guide: [docs/guides/operator/WSL_EXTERNAL_DEPLOY.md](../../docs/guides/
 Declarative web server authority: [`../webserver/`](../webserver/) (`SDKWORK_WEBSERVER_SPEC.md`).
 Host Ubuntu nginx is **not** used — uninstall with `uninstall-wsl-nginx.sh`.
 
-## Quick Start (WSL External Mode)
+## Quick Start (WSL / Ubuntu External Mode)
 
 ```bash
-# 1. Clone sdkwork-space on the Ubuntu host (once)
-sudo bash deployments/docker/scripts/setup-host-space-clone.sh
+# 0. Build the canonical image once (MODULE_BIN_SPEC.md)
+#    The tag defaults to sdkwork.app.config.json release.currentVersion.
+bin/docker-image.sh build
 
-# 2. One-command deployment (provisions DBs, deploys all envs, retires host nginx)
-sudo bash deployments/docker/scripts/wsl-external-deploy.sh
-
-# Rebuild frontend + release + Docker image, then redeploy all environments
-# (use after admin UI or gateway fixes; does not drop PostgreSQL databases)
-bash scripts/docker/redeploy-all-environments.sh
-
-# Windows (repo on E: etc.) — delegates to WSL; auto-uses /tmp release staging on /mnt/*
-pnpm deploy:rebuild:all:wsl
-
-# WSL checkout on native ext4 — full rebuild including vite in Linux
-bash scripts/docker/redeploy-all-environments.sh
-
-# Or step by step:
-# 1. Provision external dependencies
+# 1. Provision host-system PostgreSQL/Redis for every lifecycle environment
 sudo bash deployments/docker/scripts/setup-host-external-deps.sh
 
-# 2. Deploy all environments
-bash scripts/docker/deploy-docker-environment.sh all
+# 2. Deploy an environment (external deps are the default; idempotent)
+bin/docker-deploy.sh install --environment development
+bin/docker-deploy.sh install --environment test
+bin/docker-deploy.sh install --environment demo
 
 # 3. Hosts + uninstall host nginx (Docker owns reverse proxy)
 sudo bash deployments/docker/scripts/install-wsl-hosts.sh
@@ -65,9 +54,11 @@ sudo bash deployments/docker/scripts/uninstall-wsl-nginx.sh
 # 4. Verify (Docker published ports — development owns host 80/443)
 curl --noproxy '*' http://127.0.0.1:13800/healthz
 curl --noproxy '*' -H 'Host: api-dev.sdkwork.com' http://127.0.0.1/healthz
-curl --noproxy '*' -H 'Host: api-dev.birdcoder.cn' http://127.0.0.1/healthz
+curl --noproxy '*' -H 'Host: api-demo.sdkwork.com' http://127.0.0.1:19098/healthz
 bash scripts/docker/verify-platform-api-plane.sh development
 ```
+
+Remote Ubuntu deployment: `bin/docker-deploy.sh install --environment <env> --host ssh://[user@]host[:port]`.
 
 ## Domain Access (Docker :80 / :443 — no host nginx)
 
@@ -109,7 +100,7 @@ curl --noproxy '*' -k -H 'Host: api-dev.sdkwork.com' https://127.0.0.1/healthz
 
 | Mode | Env | Compose |
 | --- | --- | --- |
-| **docker** (default) | `SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=docker` | add `-f docker-compose.platform-api-gateway.yml` (auto when using `deploy-docker-environment.sh` or `compose.mjs`) |
+| **docker** (default) | `SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=docker` | add `-f docker-compose.platform-api-gateway.yml` (auto when using `bin/docker-deploy.sh` or `compose.mjs`) |
 | **docker + attach** | `SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK=<gateway-network>` | add `-f docker-compose.platform-api-gateway-attach.yml` — join an already-running independent gateway stack (no second container) |
 | **bundled** | `SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=bundled` | webserver container starts `sdkwork-api-cloud-gateway` as a second process on `127.0.0.1:3900` |
 | **external** | `SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=external` + `SDKWORK_MODULE_API_GATEWAY_HOST` | operator-managed gateway endpoint |
@@ -128,7 +119,7 @@ cd ../sdkwork-api-cloud-gateway
 pnpm build:container   # -> sdkwork-api-cloud-gateway:local
 
 # env/*.env already defaults to SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=docker
-bash scripts/docker/deploy-docker-environment.sh development
+bash bin/docker-deploy.sh install --environment development
 ```
 
 Independent gateway already running (attach to its Docker network):
@@ -140,7 +131,7 @@ SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK=sdkwork-gateway-development_default
 SDKWORK_MODULE_API_GATEWAY_HOST=gateway
 SDKWORK_MODULE_API_GATEWAY_PORT=3900
 
-bash scripts/docker/deploy-docker-environment.sh development
+bash bin/docker-deploy.sh install --environment development
 ```
 
 Or compose directly:
@@ -233,6 +224,8 @@ Authority: `PNPM_SCRIPT_SPEC.md` §4.2–§4.3, `SDKWORK_WEBSERVER_SPEC.md` §17
 | --- | --- | --- | --- | --- | --- | --- |
 | development | 13800 | **80** | **443** | `server-dev.sdkwork.com` (+ app/admin) + module/API `*-dev.*` | `sdkwork_ai_dev` | 0 |
 | test | 18888 | 18898→80 | 28430→443 | `server-test.sdkwork.com` (+ app/admin) + module/API `*-test.*` | `sdkwork_ai_test` | 1 |
+| staging | 18081 | 18099→80 | 38431→443 | `server-staging.sdkwork.com` (+ app/admin) + module/API `*-staging.*` | `sdkwork_ai_staging` | 3 |
+| demo | 19080 | 19098→80 | 38432→443 | `server-demo.sdkwork.com` (+ app/admin) + module/API `*-demo.*` | `sdkwork_ai_demo` | 4 |
 | production | 18080 | 18098→80 | 38430→443 | `server.sdkwork.com` (+ app/admin) + module/API bare hosts | `sdkwork_ai_prod` | 2 |
 
 Container listeners are always **80** / **443** (no port remap). Host 80/443 are
@@ -240,7 +233,7 @@ owned by development by default; only one stack may publish them.
 
 Host PostgreSQL (`5432`) and Redis (`6379`) stay on Ubuntu/WSL native services in external mode; containers reach them via `host.docker.internal`.
 
-Space clone defaults: host path `SDKWORK_SPACE_HOST_PATH=/opt/deploy` bind-mounted to container `/opt/deploy`; checkout `SDKWORK_SPACE_CLONE_URL=https://github.com/sdkwork-ai/sdkwork-space.git` at `/opt/deploy/sdkwork-space`. Multiple environment clusters on one Ubuntu host share the same checkout and use distinct **management** host ports (`13800` / `18888` / `18080`). Module imports auto-discover from `sdkwork-*/deployments/webserver/` unless `SDKWORK_SPACE_MODULES` is set; the entrypoint writes one nginx-style import file per module under `/etc/sdkwork/webserver/imports.d/` and the runtime config loads them through `[webserver] include`. See `SDKWORK_WEBSERVER_SPEC.md` §17.
+Space clone defaults: host path `SDKWORK_SPACE_HOST_PATH=/opt/deploy` bind-mounted to container `/opt/deploy`; checkout `SDKWORK_SPACE_CLONE_URL=https://github.com/sdkwork-ai/sdkwork-space.git` at `/opt/deploy/sdkwork-space`. Multiple environment clusters on one Ubuntu host share the same checkout and use distinct **management** host ports (`13800` / `18888` / `18081` / `19080` / `18080`). Module imports auto-discover from `sdkwork-*/deployments/webserver/` unless `SDKWORK_SPACE_MODULES` is set; the entrypoint writes one nginx-style import file per module under `/etc/sdkwork/webserver/imports.d/` and the runtime config loads them through `[webserver] include`. See `SDKWORK_WEBSERVER_SPEC.md` §17.
 
 Base domain: `sdkwork.com` only (registered in topology `cloudPublicHosts`).
 

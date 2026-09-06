@@ -10,15 +10,34 @@
 #   repo:    ../docker-compose.bundle.yml      + ../env/
 #
 # Usage:
-#   deploy.sh --environment <development|test|staging|production> [options]
+#   deploy.sh --environment <development|test|staging|demo|production> [options]
 #     --replicas <N>     instances to run (default 1; every env supports N)
-#     --external         skip embedded postgres/redis (use env-file hosts)
+#     --external         use external postgres/redis (default; env-file hosts,
+#                        typically the host system's services)
+#     --embedded         opt in to embedded postgres/redis containers instead
 #     --image-tag <tag>  override SDKWORK_WEBSERVER_IMAGE_TAG
-#     --down             stop instances + embedded deps
+#     --down             stop instances (+ embedded deps when --embedded)
 #     --purge            with --down: also delete volumes and network
+#     --start            start the previously stopped deployed stack (no repackage)
+#     --stop             stop the deployed stack in place (containers kept;
+#                        embedded deps stop too; sibling gateway best-effort)
+#     --restart          restart the deployed stack instances (embedded deps and
+#                        the sibling gateway keep running)
+#     --set KEY VALUE    write one required value into the env file (refuses to
+#                        overwrite an already-configured value)
+#     --force-set K V    like --set but replaces even a configured value
+#     --check-config     run the env preflight checks only; deploy nothing
 #     --ps               show instance status
-#     --logs [N]         follow instance N logs (default 1)
+#     --logs [N]         instance logs, instance N (default 1; prefer --instance)
+#     --instance <N>     select the instance for --logs (default 1)
+#     --service <name>   compose service to read (default webserver)
+#     --tail <N|all>     lines from the end (default 200)
+#     --since <dur|time> start point, e.g. 15m or 2026-09-05T10:00:00Z
+#     --follow           keep streaming (default: bounded read)
 #     --dry-run          print the resolved commands only
+#
+# Log access is bounded by default: `--follow` is opt-in so scripts and ticket
+# runs get a greppable result instead of hanging (OPERATIONS_SPEC.md §2.4).
 #
 # Multiple independently configurable webservers: create
 # env/<environment>.i<index>.env to layer instance-specific values (primary
@@ -28,7 +47,7 @@
 # Examples:
 #   deploy.sh --environment development
 #   deploy.sh --environment production --replicas 3
-#   deploy.sh --environment production --external --replicas 2
+#   deploy.sh --environment production --embedded --replicas 2
 #   deploy.sh --environment test --down --purge
 #
 # Idempotent: re-running apply updates the existing stack in place.
@@ -43,17 +62,25 @@ die()  { printf '%s ERROR: %s\n' "$LOG_PREFIX" "$*" >&2; exit 1; }
 usage() { sed -n '2,/^set -euo pipefail$/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0; }
 
 # --- layout autodetection ----------------------------------------------------
+# POSTGRES_INIT_HOST_DIR: absolute host path of the postgres workspace-identity
+# init scripts, consumed by docker-compose.bundle.yml (embedded deps). The
+# compose files live in compose/ inside an install bundle but beside postgres/
+# in the repo tree, so the relative ./postgres/init default only works in the
+# repo layout — the bundle layout must point at <bundle>/postgres/init.
 if [ -f "${SCRIPT_DIR}/compose/docker-compose.bundle.yml" ]; then
   COMPOSE_DIR="${SCRIPT_DIR}/compose"
   ENV_DIR="${SCRIPT_DIR}/env"
   BUNDLE_IMAGE_TGZ="${SCRIPT_DIR}/image.tar.gz"
   BUNDLE_IMAGE_ENV="${SCRIPT_DIR}/image.env"
+  POSTGRES_INIT_HOST_DIR="${SCRIPT_DIR}/postgres/init"
 else
   COMPOSE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
   ENV_DIR="${COMPOSE_DIR}/env"
   BUNDLE_IMAGE_TGZ=""
   BUNDLE_IMAGE_ENV=""
+  POSTGRES_INIT_HOST_DIR="${COMPOSE_DIR}/postgres/init"
 fi
+export POSTGRES_INIT_HOST_DIR
 COMPOSE_FILE="${COMPOSE_DIR}/docker-compose.bundle.yml"
 COMPOSE_EDGE_FILE="${COMPOSE_DIR}/docker-compose.bundle-edge.yml"
 COMPOSE_GATEWAY_FILE="${COMPOSE_DIR}/docker-compose.bundle-gateway.yml"
@@ -61,32 +88,56 @@ COMPOSE_GATEWAY_FILE="${COMPOSE_DIR}/docker-compose.bundle-gateway.yml"
 # --- defaults ----------------------------------------------------------------
 ENVIRONMENT=""
 REPLICAS=""
-EXTERNAL="0"
+LOG_INSTANCE="1"
+LOG_SERVICE="webserver"
+LOG_TAIL="200"
+LOG_SINCE=""
+LOG_FOLLOW="0"
+# External host-system postgres/redis is the default dependency mode: the
+# env files target the docker host's own PostgreSQL (5432) and Redis (6379)
+# reached via host.docker.internal. Opt into embedded containers with
+# --embedded for fully self-contained hosts.
+EXTERNAL="1"
 ACTION="apply"
 PURGE="0"
 IMAGE_TAG=""
 DRY_RUN="0"
+SET_KEY=""
+SET_VALUE=""
+SET_FORCE="0"
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --environment) ENVIRONMENT="$2"; shift 2 ;;
     --replicas)    REPLICAS="$2"; shift 2 ;;
     --external)    EXTERNAL="1"; shift ;;
+    --embedded)    EXTERNAL="0"; shift ;;
     --image-tag)   IMAGE_TAG="$2"; shift 2 ;;
+    --set)         [ $# -ge 3 ] || die "--set requires KEY and VALUE"; ACTION="set"; SET_KEY="$2"; SET_VALUE="$3"; shift 3 ;;
+    --force-set)   [ $# -ge 3 ] || die "--force-set requires KEY and VALUE"; ACTION="set"; SET_KEY="$2"; SET_VALUE="$3"; SET_FORCE="1"; shift 3 ;;
+    --check-config) ACTION="check-config"; shift ;;
     --down)        ACTION="down"; shift ;;
+    --start)       ACTION="start"; shift ;;
+    --stop)        ACTION="stop"; shift ;;
+    --restart)     ACTION="restart"; shift ;;
     --purge)       PURGE="1"; shift ;;
     --ps)          ACTION="ps"; shift ;;
     --logs)        ACTION="logs"; LOG_INSTANCE="${2:-1}"; case "${2:-}" in ''|*[!0-9]*) shift ;; *) shift 2 ;; esac ;;
+    --instance)    LOG_INSTANCE="$2"; shift 2 ;;
+    --service)     LOG_SERVICE="$2"; shift 2 ;;
+    --tail)        LOG_TAIL="$2"; shift 2 ;;
+    --since)       LOG_SINCE="$2"; shift 2 ;;
+    --follow)      LOG_FOLLOW="1"; shift ;;
     --dry-run)     DRY_RUN="1"; shift ;;
     -h|--help)     usage ;;
     *)             die "unsupported option: $1 (see --help)" ;;
   esac
 done
 
-[ -n "${ENVIRONMENT}" ] || die "--environment is required (development|test|staging|production)"
+[ -n "${ENVIRONMENT}" ] || die "--environment is required (development|test|staging|demo|production)"
 case "${ENVIRONMENT}" in
-  development|test|staging|production) ;;
-  *) die "unsupported environment: ${ENVIRONMENT} (development|test|staging|production)" ;;
+  development|test|staging|demo|production) ;;
+  *) die "unsupported environment: ${ENVIRONMENT} (development|test|staging|demo|production)" ;;
 esac
 command -v docker >/dev/null 2>&1 || die "docker is required"
 docker compose version >/dev/null 2>&1 || die "docker compose plugin is required (docker-compose-plugin)"
@@ -134,6 +185,11 @@ case "${ENVIRONMENT}" in
     PORT_BASE="$(env_key SDKWORK_WEBSERVER_STAGING_HOST_PORT)";  PORT_BASE="${PORT_BASE:-18081}"
     EDGE_HTTP="$(env_key SDKWORK_WEBSERVER_STAGING_IMPORT_HTTP_HOST_PORT)";  EDGE_HTTP="${EDGE_HTTP:-18099}"
     EDGE_HTTPS="$(env_key SDKWORK_WEBSERVER_STAGING_HTTPS_HOST_PORT)";  EDGE_HTTPS="${EDGE_HTTPS:-38431}"
+    ;;
+  demo)
+    PORT_BASE="$(env_key SDKWORK_WEBSERVER_DEMO_HOST_PORT)";  PORT_BASE="${PORT_BASE:-19080}"
+    EDGE_HTTP="$(env_key SDKWORK_WEBSERVER_DEMO_IMPORT_HTTP_HOST_PORT)";  EDGE_HTTP="${EDGE_HTTP:-19098}"
+    EDGE_HTTPS="$(env_key SDKWORK_WEBSERVER_DEMO_HTTPS_HOST_PORT)";  EDGE_HTTPS="${EDGE_HTTPS:-38432}"
     ;;
   production)
     PORT_BASE="$(env_key SDKWORK_WEBSERVER_PROD_HOST_PORT)";  PORT_BASE="${PORT_BASE:-18080}"
@@ -334,6 +390,31 @@ apply() {
   fi
 }
 
+# Runtime lifecycle on the deployed stack (MODULE_BIN_SPEC.md §4.2): compose
+# stop/start/restart — no image pull, no repackaging, no env change. The
+# containers and volumes are kept, so a later start restores the exact same
+# deployment. stop also stops embedded deps (they are part of the stack);
+# start brings embedded deps back first (database before app); restart only
+# cycles the app instances — stateful deps and the sibling gateway keep
+# running so a restart never drops the database or the module /api/ upstream.
+lifecycle() {
+  local verb="$1" index
+  if [ "${EXTERNAL}" != "1" ] && [ "${verb}" != "restart" ]; then
+    export_instance_env 1
+    run docker compose -p "${DEPS_PROJECT}" --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" --profile deps "${verb}"
+  fi
+  for index in $(seq 1 "${REPLICAS}"); do
+    export_instance_env "${index}"
+    set_instance_env_file_args "${index}"
+    run docker compose -p "sdkwork-webserver-${ENVIRONMENT}-i${index}" "${INSTANCE_ENV_FILE_ARGS[@]}" \
+      -f "${COMPOSE_FILE}" --profile instance "${verb}"
+  done
+  if [ -f "${COMPOSE_GATEWAY_FILE}" ]; then
+    export_instance_env 1
+    run docker compose -p "${GATEWAY_PROJECT}" --env-file "${ENV_FILE}" -f "${COMPOSE_GATEWAY_FILE}" "${verb}" 2>/dev/null || true
+  fi
+}
+
 down() {
   local index
   for index in $(seq 1 "${REPLICAS}"); do
@@ -381,16 +462,132 @@ ps() {
 
 logs() {
   local index="${LOG_INSTANCE:-1}"
-  case "${index}" in ''|*[!0-9]*) die "--logs expects an instance number" ;; esac
+  case "${index}" in ''|*[!0-9]*) die "--logs/--instance expects an instance number" ;; esac
+  case "${LOG_TAIL}" in all) ;; ''|*[!0-9]*) die "--tail expects a positive integer or 'all'" ;; esac
   export_instance_env "${index}"
   set_instance_env_file_args "${index}"
-  docker compose -p "sdkwork-webserver-${ENVIRONMENT}-i${index}" "${INSTANCE_ENV_FILE_ARGS[@]}" \
-    -f "${COMPOSE_FILE}" --profile instance logs -f --tail 200 webserver
+  local args=(docker compose -p "sdkwork-webserver-${ENVIRONMENT}-i${index}" "${INSTANCE_ENV_FILE_ARGS[@]}" \
+    -f "${COMPOSE_FILE}" --profile instance logs --tail "${LOG_TAIL}")
+  if [ -n "${LOG_SINCE}" ]; then args+=(--since "${LOG_SINCE}"); fi
+  if [ "${LOG_FOLLOW}" = "1" ]; then args+=(--follow); fi
+  if [ -n "${LOG_SERVICE}" ]; then args+=("${LOG_SERVICE}"); fi
+  "${args[@]}"
+}
+
+# --- env preflight (fail-closed, collects ALL gaps) -------------------------------
+# Apply-like actions must never start with unconfigured database inputs: docker
+# compose would only fail later with a confusing ':?required' interpolation
+# error. Design contract (OPERATIONS_SPEC.md §3 / PORTABILITY_SPEC.md):
+#   - READ-ONLY: a value that is already configured is kept as-is; deploy never
+#     rewrites or re-prompts for configured secrets.
+#   - COLLECTING: every missing required key is reported in ONE run with
+#     foolproof fix instructions, instead of dying on the first miss.
+#   - FAIL-CLOSED: deploy aborts while any required input is unconfigured.
+
+is_unconfigured() {  # empty value or template placeholder
+  case "$1" in
+    ""|"<CHANGE_ME>"|"<change_me>"|"CHANGE_ME"|"changeme") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Upsert one KEY=VALUE into the env file (BSD/GNU portable: awk + tmp + mv).
+# Refuses to overwrite a configured value unless forced: re-deploys must run
+# without touching live secrets. Returns 3 when it declined to overwrite.
+set_env_key() {  # $1=key $2=value $3=force
+  local key="$1" value="$2" force="${3:-0}" current secret="0"
+  case "${key}" in
+    ''|*[!A-Za-z0-9_]*) die "--set key must be a bare identifier (letters, digits, _): '${key}'" ;;
+  esac
+  current="$(env_key "${key}")"
+  if ! is_unconfigured "${current}" && [ "${force}" != "1" ]; then
+    info "${key} is already configured in ${ENV_FILE}; kept as-is (deploy never rewrites configured values)."
+    info "to replace it deliberately, re-run with: --force-set ${key} '<new-value>'"
+    return 3
+  fi
+  case "${key}" in
+    *PASSWORD*|*SECRET*|*PEPPER*|*API_KEY*|*_KEY|*DATABASE_URL*|*_URL) secret="1" ;;
+  esac
+  awk -v k="${key}" -v v="${value}" '
+    $0 ~ "^[[:space:]]*(export[[:space:]]+)?"k"=" { print k"="v; found=1; next }
+    { print }
+    END { if (!found) print k"="v }
+  ' "${ENV_FILE}" > "${ENV_FILE}.tmp" && mv -f "${ENV_FILE}.tmp" "${ENV_FILE}"
+  if [ "${secret}" = "1" ]; then
+    info "set ${key}=<redacted> in ${ENV_FILE}"
+  else
+    info "set ${key}=${value} in ${ENV_FILE}"
+  fi
+  info "next step: re-run the deploy command, e.g. $0 --environment ${ENVIRONMENT}"
+}
+
+# Read-only required-key check. Reports the gap with concrete fix instructions
+# and marks the run failed; never dies on the first miss.
+require_env_key() {  # $1=key $2=label $3=example value
+  local key="$1" label="$2" example="$3" value
+  value="$(env_key "${key}")"
+  if is_unconfigured "${value}"; then
+    info "MISSING: ${key} (${label}) is not configured"
+    info "  fix 1 (recommended): $0 --environment ${ENVIRONMENT} --set ${key} '<value>'"
+    info "  fix 2: edit ${ENV_FILE} and set: ${key}=${example}"
+    PREFLIGHT_FAIL="1"
+  else
+    info "OK: ${key} configured (existing value kept; deploy never rewrites it)"
+  fi
+}
+
+run_preflight() {
+  PREFLIGHT_FAIL="0"
+  if [ "${EXTERNAL}" = "1" ]; then
+    info "env preflight: ${ENV_FILE} (dependency mode: external PostgreSQL/Redis)"
+    # External database: every connection input is required up front. Keys that
+    # are already configured are kept — re-deploys never re-ask for them.
+    require_env_key SDKWORK_DATABASE_HOST   "external PostgreSQL host"      "host.docker.internal or db.internal.example"
+    require_env_key SDKWORK_DATABASE_PORT   "external PostgreSQL port"      "5432"
+    require_env_key SDKWORK_DATABASE_NAME   "external PostgreSQL database"  "sdkwork_ai_${ENVIRONMENT}"
+    require_env_key SDKWORK_DATABASE_USERNAME "external PostgreSQL user"    "sdkwork_ai_${ENVIRONMENT}"
+    require_env_key SDKWORK_DATABASE_PASSWORD "external PostgreSQL password" "<your-strong-password>"
+  else
+    info "env preflight: ${ENV_FILE} (dependency mode: embedded PostgreSQL/Redis)"
+    # Embedded database: the init password is required exactly once; it is
+    # stored in the env file and reused by every later deploy.
+    require_env_key WEBSERVER_POSTGRES_PASSWORD "embedded PostgreSQL init password (set once, reused on every re-deploy)" "<your-strong-password>"
+  fi
+  if [ "${ENVIRONMENT}" = "production" ]; then
+    prod_db_password="$(env_key SDKWORK_DATABASE_PASSWORD)"
+    if [ "${prod_db_password}" = "sdkworkdev123" ]; then
+      info "MISSING: production still uses the development default database password"
+      info "  fix 1 (recommended): $0 --environment production --force-set SDKWORK_DATABASE_PASSWORD '<production-password>'"
+      info "  fix 2: edit ${ENV_FILE} and change SDKWORK_DATABASE_PASSWORD"
+      PREFLIGHT_FAIL="1"
+    fi
+    case "$(env_key WEBSERVER_POSTGRES_PROD_PASSWORD)" in
+      ""|"<CHANGE_ME>") : ;; # only relevant for embedded production; checked there
+      "sdkworkdev123")
+        info "MISSING: production embedded PostgreSQL still uses the development default password"
+        info "  fix: $0 --environment production --force-set WEBSERVER_POSTGRES_PROD_PASSWORD '<production-password>'"
+        PREFLIGHT_FAIL="1"
+        ;;
+    esac
+  fi
+  if [ "${PREFLIGHT_FAIL}" = "1" ]; then
+    info "env preflight FAILED: configure every MISSING key above (pick one fix per key), then re-run this command. Nothing was deployed."
+    exit 1
+  fi
+  info "env preflight passed: all required inputs are configured (existing values kept; deploy never rewrites them)"
 }
 
 case "${ACTION}" in
-  apply) apply ;;
+  apply) run_preflight; apply ;;
+  check-config) run_preflight; info "configuration check only: nothing was deployed" ;;
+  set)
+    [ -n "${SET_KEY}" ] || die "--set requires KEY and VALUE"
+    set_status="0"
+    set_env_key "${SET_KEY}" "${SET_VALUE}" "${SET_FORCE}" || set_status=$?
+    exit "${set_status}"
+    ;;
   down)  down ;;
+  start|stop|restart) lifecycle "${ACTION}" ;;
   ps)    ps ;;
   logs)  logs ;;
 esac

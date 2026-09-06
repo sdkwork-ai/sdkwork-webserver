@@ -1013,6 +1013,97 @@ public struct ServerFileContent: Codable {
     }
 }
 
+public struct WebserverConfigCatalog: Codable {
+    public let configRoot: String?
+    public let items: [WebserverConfigEntry]?
+
+
+    public init(configRoot: String? = nil, items: [WebserverConfigEntry]? = nil) {
+        self.configRoot = configRoot
+        self.items = items
+    }
+}
+
+public struct WebserverConfigEntry: Codable {
+    public let id: String?
+    public let kind: String?
+    public let name: String?
+    public let path: String?
+    public let language: String?
+    public let size: String?
+    public let updatedAt: String?
+    public let writable: Bool?
+
+
+    public init(id: String? = nil, kind: String? = nil, name: String? = nil, path: String? = nil, language: String? = nil, size: String? = nil, updatedAt: String? = nil, writable: Bool? = nil) {
+        self.id = id
+        self.kind = kind
+        self.name = name
+        self.path = path
+        self.language = language
+        self.size = size
+        self.updatedAt = updatedAt
+        self.writable = writable
+    }
+}
+
+public struct WebserverConfigFile: Codable {
+    public let id: String?
+    public let kind: String?
+    public let name: String?
+    public let path: String?
+    public let language: String?
+    public let writable: Bool?
+    public let content: String?
+    public let size: String?
+    public let sha256: String?
+    public let updatedAt: String?
+
+
+    public init(id: String? = nil, kind: String? = nil, name: String? = nil, path: String? = nil, language: String? = nil, writable: Bool? = nil, content: String? = nil, size: String? = nil, sha256: String? = nil, updatedAt: String? = nil) {
+        self.id = id
+        self.kind = kind
+        self.name = name
+        self.path = path
+        self.language = language
+        self.writable = writable
+        self.content = content
+        self.size = size
+        self.sha256 = sha256
+        self.updatedAt = updatedAt
+    }
+}
+
+public struct WebserverConfigWriteRequest: Codable {
+    public let content: String?
+    public let expectedSha256: String?
+
+
+    public init(content: String? = nil, expectedSha256: String? = nil) {
+        self.content = content
+        self.expectedSha256 = expectedSha256
+    }
+}
+
+public struct WebserverConfigWriteResult: Codable {
+    public let id: String?
+    public let path: String?
+    public let size: String?
+    public let sha256: String?
+    public let backupPath: String?
+    public let updatedAt: String?
+
+
+    public init(id: String? = nil, path: String? = nil, size: String? = nil, sha256: String? = nil, backupPath: String? = nil, updatedAt: String? = nil) {
+        self.id = id
+        self.path = path
+        self.size = size
+        self.sha256 = sha256
+        self.backupPath = backupPath
+        self.updatedAt = updatedAt
+    }
+}
+
 public struct ServerProjectOperations: Codable {
     public let nodeId: String?
     public let path: String?
@@ -1983,6 +2074,45 @@ public struct ServerFilesNodeOperationsListResponse: Codable {
 }
 
 public struct ServerFilesNodeOperationsCreateResponse201: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct WebserverConfigsListResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct WebserverConfigsRetrieveResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct WebserverConfigsUpdateResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?

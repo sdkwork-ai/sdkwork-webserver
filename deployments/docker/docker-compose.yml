@@ -3,13 +3,13 @@
 # Dependency modes (modeled on sdkwork-api-cloud-gateway):
 #
 #   ① Built-in PostgreSQL + Redis (default):
-#      bash scripts/docker/deploy-docker-environment.sh development
+#      bash bin/docker-deploy.sh install --environment development
 #
 #   ② External PostgreSQL + Redis:
-#      bash scripts/docker/deploy-docker-environment.sh development --external
+#      bash bin/docker-deploy.sh install --environment development   # external host deps are the default
 #
 #   ③ All environments, shared built-in postgres/redis:
-#      bash scripts/docker/deploy-docker-environment.sh all --embedded-shared
+#      bash deployments/docker/bundle/deploy.sh --environment <env> --embedded
 #
 # Per-environment env files: deployments/docker/env/<environment>.env
 # (copy from deployments/docker/env/<environment>.env.example)
@@ -179,6 +179,7 @@ services:
       - ../../../sdkwork-mcp/database:/app/share/sdkwork/mcp/database:ro
       - ../../../sdkwork-deployments/database:/app/share/sdkwork/deploy/database:ro
 
+    logging: *default-logging
   webserver-test:
     <<: *webserver-common
     profiles: [test]
@@ -221,6 +222,7 @@ services:
       - ../../../sdkwork-mcp/database:/app/share/sdkwork/mcp/database:ro
       - ../../../sdkwork-deployments/database:/app/share/sdkwork/deploy/database:ro
 
+    logging: *default-logging
   webserver-staging:
     <<: *webserver-common
     profiles: [staging]
@@ -263,6 +265,7 @@ services:
       - ../../../sdkwork-mcp/database:/app/share/sdkwork/mcp/database:ro
       - ../../../sdkwork-deployments/database:/app/share/sdkwork/deploy/database:ro
 
+    logging: *default-logging
   webserver-production:
     <<: *webserver-common
     profiles: [production]
@@ -305,6 +308,7 @@ services:
       - ../../../sdkwork-mcp/database:/app/share/sdkwork/mcp/database:ro
       - ../../../sdkwork-deployments/database:/app/share/sdkwork/deploy/database:ro
 
+    logging: *default-logging
 volumes:
   webserver-postgres-data:
   webserver-redis-data:

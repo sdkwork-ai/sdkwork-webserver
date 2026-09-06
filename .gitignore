@@ -104,3 +104,6 @@ sdks/*/*/package-lock.json
 # Local cargo verification target dir (mirrors target/)
 target-verify/
 **/target-verify/
+
+# Docker runtime materialized state (entrypoint-generated)
+deployments/docker/state/

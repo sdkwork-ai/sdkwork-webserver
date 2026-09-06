@@ -3270,6 +3270,342 @@ class ServerFileContent {
   }
 }
 
+class WebserverConfigCatalog {
+  final String configRoot;
+  final List<WebserverConfigEntry> items;
+
+  WebserverConfigCatalog({
+    required this.configRoot,
+    required this.items
+  });
+
+  factory WebserverConfigCatalog.fromJson(Map<String, dynamic> json) {
+    return WebserverConfigCatalog(
+      configRoot: (() {
+        final value = json['configRoot']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigCatalog.configRoot is required');
+        }
+        return value;
+      })(),
+      items: (() {
+        final list = _sdkworkAsList(json['items']);
+        if (list == null) {
+          throw FormatException('WebserverConfigCatalog.items is required');
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : WebserverConfigEntry.fromJson(map);
+      })())
+            .whereType<WebserverConfigEntry>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'configRoot': configRoot,
+      'items': items.map((item) => item.toJson()).toList(),
+    };
+  }
+}
+
+class WebserverConfigEntry {
+  final String id;
+  final String kind;
+  final String name;
+  final String path;
+  final String language;
+  final String? size;
+  final String? updatedAt;
+  final bool writable;
+
+  WebserverConfigEntry({
+    required this.id,
+    required this.kind,
+    required this.name,
+    required this.path,
+    required this.language,
+    this.size,
+    this.updatedAt,
+    required this.writable
+  });
+
+  factory WebserverConfigEntry.fromJson(Map<String, dynamic> json) {
+    return WebserverConfigEntry(
+      id: (() {
+        final value = json['id']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigEntry.id is required');
+        }
+        return value;
+      })(),
+      kind: (() {
+        final value = json['kind']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigEntry.kind is required');
+        }
+        return value;
+      })(),
+      name: (() {
+        final value = json['name']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigEntry.name is required');
+        }
+        return value;
+      })(),
+      path: (() {
+        final value = json['path']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigEntry.path is required');
+        }
+        return value;
+      })(),
+      language: (() {
+        final value = json['language']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigEntry.language is required');
+        }
+        return value;
+      })(),
+      size: json['size']?.toString(),
+      updatedAt: json['updatedAt']?.toString(),
+      writable: (() {
+        final value = json['writable'];
+        if (value is! bool) {
+          throw FormatException('WebserverConfigEntry.writable is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'kind': kind,
+      'name': name,
+      'path': path,
+      'language': language,
+      'size': size,
+      'updatedAt': updatedAt,
+      'writable': writable,
+    };
+  }
+}
+
+class WebserverConfigFile {
+  final String id;
+  final String kind;
+  final String name;
+  final String path;
+  final String language;
+  final bool writable;
+  final String content;
+  final String size;
+  final String sha256;
+  final String? updatedAt;
+
+  WebserverConfigFile({
+    required this.id,
+    required this.kind,
+    required this.name,
+    required this.path,
+    required this.language,
+    required this.writable,
+    required this.content,
+    required this.size,
+    required this.sha256,
+    this.updatedAt
+  });
+
+  factory WebserverConfigFile.fromJson(Map<String, dynamic> json) {
+    return WebserverConfigFile(
+      id: (() {
+        final value = json['id']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigFile.id is required');
+        }
+        return value;
+      })(),
+      kind: (() {
+        final value = json['kind']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigFile.kind is required');
+        }
+        return value;
+      })(),
+      name: (() {
+        final value = json['name']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigFile.name is required');
+        }
+        return value;
+      })(),
+      path: (() {
+        final value = json['path']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigFile.path is required');
+        }
+        return value;
+      })(),
+      language: (() {
+        final value = json['language']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigFile.language is required');
+        }
+        return value;
+      })(),
+      writable: (() {
+        final value = json['writable'];
+        if (value is! bool) {
+          throw FormatException('WebserverConfigFile.writable is required');
+        }
+        return value;
+      })(),
+      content: (() {
+        final value = json['content']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigFile.content is required');
+        }
+        return value;
+      })(),
+      size: (() {
+        final value = json['size']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigFile.size is required');
+        }
+        return value;
+      })(),
+      sha256: (() {
+        final value = json['sha256']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigFile.sha256 is required');
+        }
+        return value;
+      })(),
+      updatedAt: json['updatedAt']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'kind': kind,
+      'name': name,
+      'path': path,
+      'language': language,
+      'writable': writable,
+      'content': content,
+      'size': size,
+      'sha256': sha256,
+      'updatedAt': updatedAt,
+    };
+  }
+}
+
+class WebserverConfigWriteRequest {
+  final String content;
+  final String? expectedSha256;
+
+  WebserverConfigWriteRequest({
+    required this.content,
+    this.expectedSha256
+  });
+
+  factory WebserverConfigWriteRequest.fromJson(Map<String, dynamic> json) {
+    return WebserverConfigWriteRequest(
+      content: (() {
+        final value = json['content']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigWriteRequest.content is required');
+        }
+        return value;
+      })(),
+      expectedSha256: json['expectedSha256']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'content': content,
+      'expectedSha256': expectedSha256,
+    };
+  }
+}
+
+class WebserverConfigWriteResult {
+  final String id;
+  final String path;
+  final String size;
+  final String sha256;
+  final String? backupPath;
+  final String updatedAt;
+
+  WebserverConfigWriteResult({
+    required this.id,
+    required this.path,
+    required this.size,
+    required this.sha256,
+    this.backupPath,
+    required this.updatedAt
+  });
+
+  factory WebserverConfigWriteResult.fromJson(Map<String, dynamic> json) {
+    return WebserverConfigWriteResult(
+      id: (() {
+        final value = json['id']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigWriteResult.id is required');
+        }
+        return value;
+      })(),
+      path: (() {
+        final value = json['path']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigWriteResult.path is required');
+        }
+        return value;
+      })(),
+      size: (() {
+        final value = json['size']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigWriteResult.size is required');
+        }
+        return value;
+      })(),
+      sha256: (() {
+        final value = json['sha256']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigWriteResult.sha256 is required');
+        }
+        return value;
+      })(),
+      backupPath: json['backupPath']?.toString(),
+      updatedAt: (() {
+        final value = json['updatedAt']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigWriteResult.updatedAt is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'path': path,
+      'size': size,
+      'sha256': sha256,
+      'backupPath': backupPath,
+      'updatedAt': updatedAt,
+    };
+  }
+}
+
 class ServerProjectOperations {
   final String nodeId;
   final String path;
@@ -6581,6 +6917,126 @@ class ServerFilesNodeOperationsCreateResponse201 {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('ServerFilesNodeOperationsCreateResponse201.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class WebserverConfigsListResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  WebserverConfigsListResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory WebserverConfigsListResponse.fromJson(Map<String, dynamic> json) {
+    return WebserverConfigsListResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('WebserverConfigsListResponse.code is required');
+        }
+        return value;
+      })(),
+      data: json['data'],
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigsListResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class WebserverConfigsRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  WebserverConfigsRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory WebserverConfigsRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return WebserverConfigsRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('WebserverConfigsRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: json['data'],
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigsRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class WebserverConfigsUpdateResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  WebserverConfigsUpdateResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory WebserverConfigsUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return WebserverConfigsUpdateResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('WebserverConfigsUpdateResponse.code is required');
+        }
+        return value;
+      })(),
+      data: json['data'],
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('WebserverConfigsUpdateResponse.traceId is required');
         }
         return value;
       })()

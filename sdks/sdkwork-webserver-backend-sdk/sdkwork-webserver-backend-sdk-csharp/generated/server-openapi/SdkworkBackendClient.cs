@@ -19,6 +19,7 @@ namespace SDKWork.WebserverBackendSdk
         public NginxApi Nginx { get; }
         public ServerApi Server { get; }
         public ServerFileApi ServerFile { get; }
+        public WebserverConfigApi WebserverConfig { get; }
         public AgentApi Agent { get; }
         public AuditApi Audit { get; }
 
@@ -35,6 +36,7 @@ namespace SDKWork.WebserverBackendSdk
             Nginx = new NginxApi(_httpClient);
             Server = new ServerApi(_httpClient);
             ServerFile = new ServerFileApi(_httpClient);
+            WebserverConfig = new WebserverConfigApi(_httpClient);
             Agent = new AgentApi(_httpClient);
             Audit = new AuditApi(_httpClient);
         }
@@ -52,6 +54,7 @@ namespace SDKWork.WebserverBackendSdk
             Nginx = new NginxApi(_httpClient);
             Server = new ServerApi(_httpClient);
             ServerFile = new ServerFileApi(_httpClient);
+            WebserverConfig = new WebserverConfigApi(_httpClient);
             Agent = new AgentApi(_httpClient);
             Audit = new AuditApi(_httpClient);
         }

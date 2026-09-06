@@ -8,8 +8,11 @@ export { upsertPluginRecord, removePluginRecord } from "./plugin-catalog.ts";
 export { translatePlugins, normalizePluginsLocale } from "./i18n.ts";
 export {
   PLUGIN_HOST_TOOL_IDS,
+  PLUGIN_HOST_TOOL_GROUPS,
+  PLUGIN_HOST_TOOL_MONOGRAMS,
   PLUGIN_CONTRIBUTION_KINDS,
   type PluginHostToolId,
+  type PluginHostToolGroupId,
   type PluginContributionKind,
 } from "./plugin-tool-catalog.ts";
 export { filterPluginRecords, hasActivePluginFilters } from "./plugin-filter.ts";

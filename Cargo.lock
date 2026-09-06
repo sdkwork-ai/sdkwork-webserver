@@ -5226,6 +5226,7 @@ dependencies = [
  "sdkwork-web-axum",
  "sdkwork-web-bootstrap",
  "sdkwork-web-core",
+ "sdkwork-webserver-config-service",
  "sdkwork-webserver-contract",
  "serde",
  "serde_json",
@@ -5480,6 +5481,22 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "sdkwork-webserver-config-service"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "sdkwork-server-files-service",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.19",
+ "tokio",
+ "toml 0.8.23",
+ "tracing",
 ]
 
 [[package]]

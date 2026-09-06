@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "crates/sdkwork-api-webserver-assembly",
   "crates/sdkwork-server-files-service",
+  "crates/sdkwork-webserver-config-service",
   "crates/sdkwork-webserver-database-host",
   "crates/sdkwork-webserver-http-host",
   "crates/sdkwork-routes-webserver-common",
@@ -101,6 +102,7 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_
 woothee = "0.13"
 
 sdkwork-server-files-service = { path = "crates/sdkwork-server-files-service" }
+sdkwork-webserver-config-service = { path = "crates/sdkwork-webserver-config-service" }
 sdkwork-webserver-acme-service = { path = "crates/sdkwork-webserver-acme-service" }
 sdkwork-webserver-edge-runtime = { path = "crates/sdkwork-webserver-edge-runtime" }
 sdkwork-webserver-agent = { path = "crates/sdkwork-webserver-agent" }

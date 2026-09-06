@@ -1,410 +1,354 @@
-# sdkwork-webserver Docker Install & Deployment Guide (Three Environments · Foolproof)
+# sdkwork-webserver Docker Install And Deployment Guide
 
-> Version: 2026-09-03 · Applies to: `sdkwork-webserver` standalone unified install image
-> Spec basis: `sdkwork-specs/DEPLOYMENT_SPEC.md` §6, `SDKWORK_WEBSERVER_SPEC.md` §17, `sdkwork-specs/PNPM_SCRIPT_SPEC.md` §4.4
-> 中文版本：[docker-install.md](./docker-install.md)
+> Authority: `sdkwork-specs/DOCKER_SPEC.md` (image/install/config standard), `sdkwork-specs/MODULE_BIN_SPEC.md` (`bin/` entrypoint standard), `sdkwork-specs/DEPLOYMENT_SPEC.md` §6/§6.1 (container install and external dependencies).
+> This is the single authoritative Docker install document; it supersedes and absorbs `WSL_DOCKER_DEPLOY.md`, `WSL_EXTERNAL_DEPLOY.md`, and `docker-remote-deploy.md/.en.md`. 中文版: [docker-install.md](./docker-install.md)
 
-**Core idea: one image for everything.** The image is environment-neutral (no domain/database/credentials baked in); development / test / production all run the **same image tag**. The environment is purely a deployment-time input (the env file). Changing environments = changing an env file, never rebuilding.
+**Core idea: one image for every environment + one bin entrypoint family.** The image is environment-neutral (no baked domains/databases/credentials); the five lifecycle environments (development / test / staging / demo / production) share one image tag; all environment differences are deploy-time env inputs. Deployment goes exclusively through the `bin/` entrypoints (`MODULE_BIN_SPEC.md`) — there is no second deployment script family.
 
 ---
 
-## 0. Ten-Minute Quick Start (TL;DR)
+## 0. Quick Start (TL;DR)
 
-### Scenario A: fresh Docker host with an install bundle (fastest path)
+### Scenario A — brand-new Ubuntu/WSL Docker host with an install bundle (fastest)
 
 ```bash
-# 1. Unpack the bundle and enter the directory
 tar -xzf sdkwork-webserver-install-<version>.bundle.tar.gz
 cd sdkwork-webserver-install-<version>.bundle
-
-# 2. One command to deploy (embedded postgres/redis; auto image load, env generation, migrations)
-bash deploy.sh --environment development   # or test / production
-
-# 3. Verify
-curl http://127.0.0.1:13800/healthz        # expect {"status":"ok"}
-
-# 4. Open in a browser
-#    dev http://127.0.0.1:13800  test http://127.0.0.1:18888  production http://127.0.0.1:18080
+$EDITOR env/<environment>.env        # fill secrets; ports/domains have safe defaults
+bash deploy.sh --environment <environment> [--replicas N]
 ```
 
-> The first run generates `env/<environment>.env` from the `.env.example` — **replace every `<CHANGE_ME>` with real secrets before exposing anything beyond localhost**.
-
-### Scenario B: build a new image in the repository + deploy three environments (build machine path)
-
-From the repository root (WSL ext4 environment, see §2.4):
+### Scenario B — dev/operator workstation with the repo checkout (bin/ entrypoints)
 
 ```bash
-# 1. Build the new image (tag version comes from sdkwork.app.config.json currentVersion)
-pnpm build:container:standalone -- --skip-platform-gateway
-
-# 2. Deploy all three environments (development/test/production in one go)
-bash scripts/docker/deploy-docker-environment.sh all --validate
-
-# 3. Verify (expect all 200)
-for p in 13800 18888 18080; do curl -s --noproxy '*' http://127.0.0.1:$p/healthz; echo; done
+bin/docker-image.sh build --image-tag <version>      # build the canonical image (--image-tag is optional; defaults to release.currentVersion)
+bin/docker-deploy.sh install --environment demo      # local WSL deployment
+bin/docker-deploy.sh install --environment demo --host ssh://ops@10.0.0.8   # remote Ubuntu
 ```
 
-### Access entry points after deployment
+> Fully expanded per-environment commands (install / upgrade / rollback / status / logs / down): §5.
 
-| Environment | Management plane (SPA+API same-origin, recommended) | healthz | Data plane (domain-Host routing) |
-| --- | --- | --- | --- |
-| Development | http://127.0.0.1:13800 | `/healthz` | `http://server-dev.sdkwork.com:80` (Host: server-dev.sdkwork.com) |
-| Test | http://127.0.0.1:18888 | `/healthz` | `http://server-test.sdkwork.com:18898` (Host: server-test.sdkwork.com) |
-| Production | http://127.0.0.1:18080 | `/healthz` | `http://server.sdkwork.com:18098` (Host: server.sdkwork.com) |
-
-> For the domain form, point the three domains to `127.0.0.1` (or the WSL IP) in your hosts file. The data plane routes by domain; a direct request without a Host header lands on the default site. Management ports have no such requirement and are the easiest test entry.
-
----
-
-## 1. Prerequisites & One-Time Preparation
-
-| Dependency | Requirement | Check |
-| --- | --- | --- |
-| Docker | 24+, daemon reachable (inside WSL is fine) | `docker version` |
-| Node.js | 22+ (build machine only) | `node -v` |
-| pnpm | 10+ (build machine only) | `pnpm -v` |
-| Rust toolchain | cargo 1.8x (image build only) | `cargo --version` |
-| Ports | 13800/18888/18080 + data-plane ports free | `ss -ltn \| grep -E '13800\|18888\|18080'` |
-
-One-time preparation:
+### Scenario C — install on a remote machine from the repo
 
 ```bash
-# 1. Env files: copy from the examples (bundle deploy.sh does this automatically; repo chain is manual)
-cd deployments/docker/env
-cp development.env.example development.env
-cp test.env.example test.env
-cp production.env.example production.env
-
-# 2. Replace every <CHANGE_ME> with real secrets (database passwords, session keys, ...)
-grep -n 'CHANGE_ME' development.env test.env production.env
-
-# 3. Host mount directory (module import plane)
-sudo mkdir -p /opt/deploy
+bin/docker-image.sh save --image-tag <version> -o image.tar.gz   # optional offline media
+bin/docker-deploy.sh install --environment <env> --host ssh://[user@]host[:port]
 ```
 
 ---
 
-## 2. Building a New Image Package
+## 1. Topology And Roles
 
-### 2.1 Where the version lives
+- `sdkwork-webserver` is the **only public edge** (standalone-only): serves its own PC/H5 SPAs (same-origin `/` SDK API base URLs) and reverse-proxies the platform API plus sibling-module hosts through `imports.d` (default `cloud` set).
+- `sdkwork-api-cloud-gateway` is the API gateway and is **never exposed publicly**; it is reachable only through the webserver reverse proxy (container `:3900`, per-environment host health ports 3910-3914).
+- **Never install host nginx** (`NGINX_SPEC.md` §0); the webserver container publishes public `:80/:443`.
 
-The image tag version comes from **`sdkwork.app.config.json` → `release.currentVersion`**. Bump that one place for a new release:
+## 2. Prerequisites (Ubuntu 22.04 / WSL Ubuntu)
 
-```bash
-# Example: 0.1.0 → 0.1.1
-node -e "const f='sdkwork.app.config.json';const j=require('./'+f);j.release.currentVersion='0.1.1';require('fs').writeFileSync(f,JSON.stringify(j,null,2)+'\n')"
-```
-
-### 2.2 Route A: repository release chain (standalone image)
-
-```bash
-# All-in-one: release build + standalone image (tag = registry.sdkwork.com/apps/sdkwork-webserver-standalone:<version>)
-pnpm build:container:standalone
-
-# Skip the embedded gateway when the gateway runs as a separate container (attach/docker):
-node scripts/docker/build-standalone-image.mjs --skip-platform-gateway
-
-# Re-run only the release archive (tar.gz + SBOM), no image build:
-node scripts/webserver-release.mjs package --deployment-profile standalone
-```
-
-Artifacts:
-
-```text
-dist/release/sdkwork-webserver-linux-x64-standalone-server-<version>.tar.gz   # install archive + SBOM
-docker image registry.sdkwork.com/apps/sdkwork-webserver-standalone:<version> # unified image
-```
-
-### 2.3 Route B: self-contained install bundle (deliver to any Docker host)
-
-```bash
-pnpm build:container:install                       # build image + package bundle
-pnpm build:container:install -- --skip-image-build # reuse a built image, repackage only
-pnpm build:container:install -- --tag 0.1.0 --out dist/docker-install --dry-run
-```
-
-From the sdkwork-space root (WSL / CI), the `bin` wrapper is available:
-
-```bash
-bash bin/build-webserver-docker.sh                 # version from the app manifest
-bash bin/build-webserver-docker.sh --out /opt/deploy/packages
-```
-
-Bundle layout:
-
-```text
-dist/docker-install/sdkwork-webserver-install-<version>.bundle/
-├── image.tar.gz / image.sha256 / image.env   # image archive + checksum + tag
-├── compose/
-│   ├── docker-compose.bundle.yml             # environment-neutral multi-instance template
-│   └── docker-compose.bundle-edge.yml        # instance-1 80/443 edge overlay
-├── env/
-│   ├── development.env.example
-│   ├── test.env.example
-│   └── production.env.example
-├── deploy.sh                                 # generic deploy script (single entrypoint)
-├── manifest.json                             # version / image / sha256 metadata
-└── README.md
-```
-
-### 2.4 WSL / DrvFS build notes (important — mandatory on Windows-mounted sources)
-
-If the source lives under `/mnt/<drive>` (a Windows drive mount), **never run pnpm/cargo there directly**: the pnpm store's SQLite over the 9p filesystem always fails with `disk I/O error`. The correct approach is an rsync copy on the WSL ext4 filesystem:
-
-```bash
-# 1. Sync the repo plus every sibling repository referenced by pnpm-workspace.yaml
-#    (a missing one yields ERR_PNPM_WORKSPACE_PKG_NOT_FOUND; see pnpm-workspace.yaml)
-mkdir -p ~/sdkwork-build && rsync -a \
-  --exclude target --exclude 'node_modules*' --exclude dist --exclude .git \
-  /mnt/e/sdkwork-space/sdkwork-webserver/ ~/sdkwork-build/sdkwork-webserver/
-#    Also sync each ../<repo> sibling referenced by pnpm-workspace.yaml + ../sdkwork-specs + ../sdkwork-github-workflow
-
-# 2. Install dependencies inside the ext4 copy (first run ~5min)
-cd ~/sdkwork-build/sdkwork-webserver && pnpm install
-
-# 3. Rust dependency closure: whenever cargo reports a missing sibling repo,
-#    rsync that single repo from /mnt/e and retry
-#    (add [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env" at script top, else cargo ENOENT)
-
-# 4. Browser static assets: rsync excluded dist, so build the UI dependency closure first
-pnpm --filter "@sdkwork/webserver-pc..." --filter "@sdkwork/webserver-h5..." build
-
-# 5. Run the §2.2 packaging commands inside ~/sdkwork-build/sdkwork-webserver
-```
-
-Copy artifacts back into the repository directory (compose volume mounts depend on repo paths):
-
-```bash
-cp ~/sdkwork-build/sdkwork-webserver/target/release/sdkwork-api-webserver-standalone-gateway \
-   /mnt/e/sdkwork-space/sdkwork-webserver/target/release/
-```
-
-### 2.5 Artifact verification
-
-```bash
-sha256sum dist/release/*.tar.gz                     # record in the release report
-docker images | grep sdkwork-webserver-standalone  # confirm the new tag exists
-```
-
----
-
-## 3. Environment Configuration (environment = env file)
-
-Env file locations: repo chain `deployments/docker/env/<env>.env`; bundle chain `env/<env>.env` (generated by deploy.sh). Full key reference: comments in each `.env.example` and [CONFIG_PATHS.md](./CONFIG_PATHS.md).
-
-### 3.1 Required keys cheat sheet
-
-| Key | Purpose | Default / example |
-| --- | --- | --- |
-| `SDKWORK_WEBSERVER_IMAGE_TAG` | Image tag (identical across environments = "one image") | `0.1.0` |
-| `SDKWORK_WEBSERVER_*_HOST_PORT` | Management port per environment | dev 13800 / test 18888 / prod 18080 |
-| `SDKWORK_WEBSERVER_*_IMPORT_HTTP_HOST_PORT` | Data-plane HTTP port per environment | dev 80 / test 18898 / prod 18098 |
-| `WEBSERVER_POSTGRES_*` / `PG_MAX_CONNECTIONS` | Embedded postgres (embedded mode) | `<CHANGE_ME>` must be replaced |
-| `WEBSERVER_POSTGRES_HOST` / `WEBSERVER_REDIS_HOST` | External instances (external mode) | `host.docker.internal` |
-| `SDKWORK_WEBSERVER_PRIMARY_DOMAIN` | Primary domain (data-plane routing / CORS basis) | `sdkwork.com` |
-| `SDKWORK_CORS_ALLOWED_ORIGINS` | Allowed CORS origins | includes all three environments |
-| `SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT` | /api/ gateway mode | `bundled` (in-image) \| `docker` (sibling container) \| external (attach) |
-| `SDKWORK_DATABASE_SEED_LOCALE` | Seed-data locale | `zh-CN` |
-
-### 3.2 Attaching an independently deployed gateway
-
-Module `/api/` reverse proxying **literally connects to** `sdkwork-api-cloud-gateway:8080` (never rewritten, SDKWORK_WEBSERVER_SPEC §17.3). An independent gateway fleet must provide: network alias `sdkwork-api-cloud-gateway` + in-container listener on 8080. In the env file:
-
-```bash
-SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=external
-SDKWORK_MODULE_API_GATEWAY_HOST=sdkwork-api-cloud-gateway
-SDKWORK_MODULE_API_GATEWAY_PORT=8080
-# Attach network: must match the actual gateway fleet network name
-# (bundle fleets use sdkwork-api-cloud-gateway-<env>)
-SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK=sdkwork-api-cloud-gateway-development   # same for test/production
-```
-
-Self-check: `docker exec sdkwork-webserver-development getent hosts sdkwork-api-cloud-gateway` must resolve; `docker exec <gateway container> curl -s http://127.0.0.1:8080/readyz` must return 200.
-
----
-
-## 4. One-Command Deployment (Three Environments)
-
-### 4.1 Repo chain: `deploy-docker-environment.sh` (recommended on build machines)
-
-```bash
-bash scripts/docker/deploy-docker-environment.sh development --validate
-bash scripts/docker/deploy-docker-environment.sh test        --validate
-bash scripts/docker/deploy-docker-environment.sh production  --validate
-# Or all three at once (development/test/production):
-bash scripts/docker/deploy-docker-environment.sh all --validate
-
-# Other operations
-bash scripts/docker/deploy-docker-environment.sh staging          # single-target deploy
-bash scripts/docker/deploy-docker-environment.sh all --down       # stop all three
-bash scripts/docker/deploy-docker-environment.sh all --pull       # pull images before up
-```
-
-Rules:
-
-- A missing env file fails fast (with copy-from-example hints); no half-deployed state.
-- `--validate` checks env completeness before compose up.
-- Success prints `deployed <env> (sdkwork-webserver-<env>) -> http://127.0.0.1:<port>/healthz`.
-
-### 4.2 Bundle chain: `deploy.sh` (any Docker host, multi-instance capable)
-
-```bash
-# Embedded postgres/redis (default)
-bash deploy.sh --environment development
-
-# Production with 3 instances
-bash deploy.sh --environment production --replicas 3
-
-# External postgres/redis with 2 instances
-bash deploy.sh --environment production --external --replicas 2
-
-# Other operations
-bash deploy.sh --environment test --ps
-bash deploy.sh --environment test --logs 2        # follow instance 2 logs
-bash deploy.sh --environment test --down
-bash deploy.sh --environment test --down --purge  # also delete volumes/network
-```
-
-Key rules:
-
-- `--environment` is required (development | test | production); a missing or unknown value fails **before any side effect**. Re-running apply is idempotent (updates the existing stack in place).
-- If the image is not loaded yet, the script runs `docker load image.tar.gz` automatically.
-- Instance 1 starts first and waits until healthy (including database migrations); instances 2..N start afterwards, avoiding migration races.
-
-Repository-root equivalent: `pnpm deploy:apply:standalone:docker -- --environment production --replicas 3`
-
----
-
-## 5. Post-Deployment Verification (3 minutes)
-
-### 5.1 Health checks (copy-paste ready)
-
-```bash
-# ① All containers should be healthy
-docker ps --format '{{.Names}}\t{{.Status}}' | grep sdkwork-webserver
-
-# ② Management healthz should all be 200 {"status":"ok"}
-for p in 13800 18888 18080; do
-  echo -n "$p -> "; curl -s --noproxy '*' http://127.0.0.1:$p/healthz; echo
-done
-
-# ③ Data-plane SPA (domain-Host routing) should all be 200 with HTML
-curl -s --noproxy '*' -o /dev/null -w 'dev  %{http_code}\n' -H 'Host: server-dev.sdkwork.com'  http://127.0.0.1/
-curl -s --noproxy '*' -o /dev/null -w 'test %{http_code}\n' -H 'Host: server-test.sdkwork.com' http://127.0.0.1:18898/
-curl -s --noproxy '*' -o /dev/null -w 'prod %{http_code}\n' -H 'Host: server.sdkwork.com'      http://127.0.0.1:18098/
-
-# ④ Gateway attach contract (external mode)
-docker exec sdkwork-webserver-development getent hosts sdkwork-api-cloud-gateway
-```
-
-> On WSL hosts with an `http_proxy` configured, curl MUST use `--noproxy '*'`, otherwise results are unreliable.
-
-### 5.2 Multi-Instance Topology (supported for every environment)
-
-```text
-Host (one set per environment)
-├─ network  sdkwork-webserver-<env>            (shared by instances and deps)
-├─ volume   sdkwork-webserver-<env>-secrets    (shared: consistent keys/ACME accounts)
-├─ volume   sdkwork-webserver-<env>-data       (shared: TLS material/runtime data)
-├─ deps project   sdkwork-webserver-<env>-deps (embedded mode: postgres + redis)
-└─ instance project sdkwork-webserver-<env>-i<i>
-     ├─ i1: mgmt base+0 -> 3800, plus 80/443 edge; starts first, migrates first
-     ├─ i2: mgmt base+1 -> 3800
-     └─ iN: mgmt base+N-1 -> 3800
-```
-
-- Per-instance node identity: `SDKWORK_WEBSERVER_NODE_UUID=standalone-<env>-i<i>`.
-- Load balancing across instances: balance the per-instance management ports; the 80/443 edge lives only on instance 1.
-- Multi-instance prerequisite: shared PostgreSQL / Redis (embedded or external); instance 1 performs migrations.
-
-### 5.3 Per-Instance Configuration (optional)
-
-```text
-env/production.env            # environment-level base config (shared by all instances)
-env/production.i1.env         # instance-1 overrides (optional)
-env/production.i2.env         # instance-2 overrides (optional)
-```
-
-When deploy.sh detects `env/<environment>.i<N>.env`, it layers it as a second `--env-file` (the later file wins). Typical uses: different primary domain, clone URL, or TLS/ACME profile per instance. Management ports and node identity are always assigned by the script per instance.
-
----
-
-## 6. Day-2 Operations
-
-### 6.1 Upgrading to a new image
-
-```bash
-# 1. Build the new image per §2 (bump currentVersion → build)
-# 2. Update SDKWORK_WEBSERVER_IMAGE_TAG=<new version> in all three env files
-# 3. Recreate in place (data volumes preserved; migrations run at container start)
-bash scripts/docker/deploy-docker-environment.sh all --validate
-# 4. Re-run the §5.1 checks
-```
-
-> Repo-chain note: `deployments/docker/docker-compose.<env>.yml` bind-mounts the host `target/release/sdkwork-api-webserver-standalone-gateway` read-only into the container (hybrid mode). If you use this path, copy the newly built binary to that location on upgrade (last step of §2.4). Pure-image deployment (bundle chain) has no such step.
-
-### 6.2 Stop / clean up
-
-```bash
-bash scripts/docker/deploy-docker-environment.sh all --down   # stop (volumes kept)
-# Full cleanup (careful: deletes data volumes)
-docker compose -p sdkwork-webserver-development down --volumes
-```
-
-### 6.3 Rollback
-
-Point `SDKWORK_WEBSERVER_IMAGE_TAG` back to the old tag in the env file and `up` again (instant if the old image is still local; database rollback follows the `database/` migration policy separately).
-
----
-
-## 7. Troubleshooting (symptom → cause → fix)
-
-| Symptom | Cause | Fix |
-| --- | --- | --- |
-| `pnpm install` fails with `disk I/O error` | pnpm run on DrvFS (/mnt/e) | Build in an ext4 copy per §2.4 |
-| `ERR_PNPM_WORKSPACE_PKG_NOT_FOUND @sdkwork/...` | ext4 copy missing a sibling repo | rsync the missing `../<repo>` per pnpm-workspace.yaml |
-| `spawnSync cargo ENOENT` | non-login shell lacks PATH | Add `. "$HOME/.cargo/env"` at script top |
-| TS cannot find `@sdkwork/ui-pc-react` types | rsync excluded dist | Run `pnpm --filter "@sdkwork/webserver-pc..." build` first |
-| `port is already allocated` | old fleet holds the port | Change the env port or `--down` the old stack first |
-| `network ... not found` | attach network name mismatch | Check `docker network ls`, update `SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK` in env |
-| webserver won't start; mount point became a directory | target/release binary missing; docker created a same-named dir | `rmdir` it, then copy the binary per §2.4 |
-| Gateway container logs `invalid reference format` | env has unfilled `GATEWAY_IMAGE=...:<VERSION>` placeholder | Fill the real image tag (e.g. `:local`) |
-| Production gateway crash loop, logs contain `must contain sslmode=require` | P0-12 production DB enforces TLS | Add `sslmode=require` to the DB URL (embedded postgres has ssl on); or set `GATEWAY_POSTGRES_SSL_MODE=require` |
-| Gateway logs `requires username "sdkwork_ai_prod"` | DB URL username ≠ embedded postgres `POSTGRES_USER` | Use username `sdkwork_ai_prod`; password from `GATEWAY_POSTGRES_PASSWORD` (URL-encode special chars) |
-| Occasional curl 000/timeout despite healthy service | host proxy (http_proxy=127.0.0.1:7897) intercepts | curl with `--noproxy '*'` |
-| dev/test data-plane 443 connects then closes | only the production sidecar declares a 443 listener; dev/test 443 is a dead mapping | Expected; use the HTTP data-plane ports for dev/test |
-| TLS client with ALPN h2-only gets EOF | rustls data plane lacks h2 fallback (known issue) | Client ALPN `h2,http/1.1`; curl with `--no-alpn` |
-| Leftover containers after `--down` | dynamic discovery of multi-instance projects | `docker ps -a \| grep <app>-<env>-i`, then `docker rm -f` each |
-
----
-
-## 8. Design Overview
-
-`pnpm build:container:install` produces **one unified install bundle** (self-contained install bundle):
-
-- **One image**: the image is environment-neutral. Nothing about the lifecycle environment, domain, database, or credentials is baked at build time. The environment and the instance count are **deployment-time inputs**, resolved by the container entrypoint at start.
-- **Any environment**: development, test, and production all run the same image tag; the environment is selected through the env file at deploy time.
-- **Every environment supports multi-instance**: N instances share one network and one set of secrets/data volumes; each instance owns a distinct compose project name, node identity, and management port. Only instance 1 publishes the 80/443 edge ports and runs database migrations first.
-
-## 9. Relation to Existing Commands
-
-| Command | Purpose |
+| Item | Requirement |
 | --- | --- |
-| `pnpm build:container:standalone` | Build the unified install image only (no bundle) |
-| `pnpm build:container:install` | Build + package the self-contained install bundle |
-| `pnpm deploy:apply:standalone:docker` | Run the bundle deploy.sh from the repository root |
-| `scripts/docker/deploy-docker-environment.sh` | Repo-chain one-command deploy for the three environments (external layout) |
-| `build:container:*` / `deploy:apply:*` | New automation MUST use these entrypoints |
+| Docker Engine + compose plugin | required |
+| Host PostgreSQL | `5432` (system service; `setup-host-external-deps.sh` provisions per-environment databases) |
+| Host Redis | `6379` (system service, no password, `bind 0.0.0.0`) |
+| Space directory | `/opt/deploy` (module clone target `/opt/deploy/sdkwork-space`) |
+| Drive cache | `/opt/deploy/drive` (`SDKWORK_DRIVE_WEBSITE_CACHE_ROOT`) |
+| Certificate directory | `/etc/sdkwork/certs/letsencrypt/<cert-name>/` (TLS environments) |
 
-## 10. Webserver Spec Compliance (SDKWORK_WEBSERVER_SPEC.md)
+External dependencies are the **default mode** (`DEPLOYMENT_SPEC.md` §6.1); embedded postgres/redis containers are an explicit opt-in only (`deploy.sh --embedded`). The retired `15432` port must not appear in any document or script.
 
-| Spec point | Implementation |
+## 3. Five-Environment Matrix
+
+| Environment | Management port key (default) | Import HTTP (default) | HTTPS (default) | Domains | Database |
+| --- | --- | --- | --- | --- | --- |
+| development | `SDKWORK_WEBSERVER_DEV_HOST_PORT` (13800) | 80 | 443 | `server-dev.*`, `*-dev.*` | `sdkwork_ai_dev` |
+| test | `…_TEST_HOST_PORT` (18888) | 18898 | 28430 | `server-test.*`, `*-test.*` | `sdkwork_ai_test` |
+| staging | `…_STAGING_HOST_PORT` (18081) | 18099 | 38431 | `server-staging.*`, `*-staging.*` | `sdkwork_ai_staging` |
+| demo | `…_DEMO_HOST_PORT` (19080) | 19098 | 38432 | `server-demo.*`, `api-demo.*` | `sdkwork_ai_demo` |
+| production | `…_PROD_HOST_PORT` (18080) | 18098 | 38430 | `server.*`, `api.*` | `sdkwork_ai_prod` |
+
+- Containers always listen on **80/443** internally (no port remap); the webserver container gateway port is fixed at **3800**.
+- `demo` is an independent demonstration tier: dedicated database, Redis key prefix, and `api-demo` domain family — persistence is never shared with other environments.
+- Full port-key contract: `DOCKER_SPEC.md` §3.2.
+
+## 4. Standard Install Flow (bin/ entrypoints, recommended)
+
+```bash
+# 0. Build the canonical image (once)
+bin/docker-image.sh build --image-tag <version>
+# → registry.sdkwork.com/apps/sdkwork-webserver-standalone:<version>
+
+# 1. Provision host PostgreSQL/Redis (all environments, once)
+sudo bash deployments/docker/scripts/setup-host-external-deps.sh
+
+# 2. Deploy an environment (idempotent; re-running converges)
+bin/docker-deploy.sh install --environment development
+bin/docker-deploy.sh install --environment test
+bin/docker-deploy.sh install --environment demo
+# production mutations require explicit confirmation:
+bin/docker-deploy.sh install --environment production --yes
+
+# Remote Ubuntu server:
+bin/docker-deploy.sh install --environment demo --host ssh://ops@10.0.0.8
+```
+
+Notes:
+
+- `install` syncs the install bundle to `/opt/deploy/sdkwork-webserver/bundle` on the target host and runs the bundle `deploy.sh --environment <env>`; it is idempotent.
+- Multi-instance: `--replicas N`; only instance 1 publishes edge ports, others use the port stride (`DOCKER_SPEC.md` §3.2).
+- Every mutating command supports `--dry-run`; production without `--yes` is refused (error code 68).
+- `pnpm deploy:reapply:<env>` is a thin alias of the bin entrypoints above.
+- **§5 expands every command for all five environments, copy-paste ready.**
+
+## 5. Per-Environment Command Reference (copy-paste ready)
+
+> Every block below can be copied and run as-is. Replace `<version>` with the
+> real version (current value: `sdkwork.app.config.json` →
+> `release.currentVersion`; **omit `--image-tag` to use it automatically**),
+> replace `ops@10.0.0.8` with your remote Ubuntu host, and note that `--host`
+> defaults to `wsl` (local WSL) when omitted. Any mutating command accepts
+> `--dry-run` to print the plan without executing it.
+
+### 5.1 development
+
+Domains `server-dev.sdkwork.com` / `api-dev.*` · management `13800` · import HTTP `80` · HTTPS `443` · database `sdkwork_ai_dev`
+
+```bash
+bin/docker-image.sh build --image-tag <version>                    # shared by all environments; skip if already built
+bin/docker-deploy.sh install  --environment development            # local WSL (idempotent)
+bin/docker-deploy.sh install  --environment development --host ssh://ops@10.0.0.8
+bin/docker-deploy.sh upgrade  --environment development --image-tag <new-version>
+bin/docker-deploy.sh rollback --environment development            # no release.sh → idempotent re-install of the current bundle
+bin/docker-deploy.sh status   --environment development
+bin/docker-deploy.sh logs     --environment development
+bin/docker-deploy.sh down     --environment development
+bin/docker-deploy.sh stop    --environment development           # stop (keeps containers and volumes; no repackage)
+bin/docker-deploy.sh start   --environment development           # start a stopped stack (embedded deps first)
+bin/docker-deploy.sh restart --environment development           # restart app instances only (deps and gateway stay up)
+bin/docker-deploy.sh down     --environment development --purge --yes
+bin/docker-deploy.sh stop    --environment development           # stop (keeps containers and volumes; no repackage)
+bin/docker-deploy.sh start   --environment development           # start a stopped stack (embedded deps first)
+bin/docker-deploy.sh restart --environment development           # restart app instances only (deps and gateway stay up)
+
+curl --noproxy '*' http://127.0.0.1:13800/healthz                            # management plane
+curl --noproxy '*' -H 'Host: api-dev.sdkwork.com' http://127.0.0.1/healthz   # import plane
+```
+
+### 5.2 test
+
+Domains `server-test.*` / `api-test.*` · management `18888` · import HTTP `18898` · HTTPS `28430` · database `sdkwork_ai_test`
+
+```bash
+bin/docker-image.sh build --image-tag <version>
+bin/docker-deploy.sh install  --environment test
+bin/docker-deploy.sh install  --environment test --host ssh://ops@10.0.0.8
+bin/docker-deploy.sh upgrade  --environment test --image-tag <new-version>
+bin/docker-deploy.sh rollback --environment test                   # no release.sh → idempotent re-install of the current bundle
+bin/docker-deploy.sh status   --environment test
+bin/docker-deploy.sh logs     --environment test
+bin/docker-deploy.sh down     --environment test
+bin/docker-deploy.sh stop    --environment test                  # stop (keeps containers and volumes; no repackage)
+bin/docker-deploy.sh start   --environment test                  # start a stopped stack (embedded deps first)
+bin/docker-deploy.sh restart --environment test                  # restart app instances only (deps and gateway stay up)
+bin/docker-deploy.sh down     --environment test --purge --yes
+bin/docker-deploy.sh stop    --environment test                  # stop (keeps containers and volumes; no repackage)
+bin/docker-deploy.sh start   --environment test                  # start a stopped stack (embedded deps first)
+bin/docker-deploy.sh restart --environment test                  # restart app instances only (deps and gateway stay up)
+
+curl --noproxy '*' http://127.0.0.1:18888/healthz
+curl --noproxy '*' -H 'Host: api-test.sdkwork.com' http://127.0.0.1:18898/healthz
+```
+
+### 5.3 staging
+
+Domains `server-staging.*` / `api-staging.*` · management `18081` · import HTTP `18099` · HTTPS `38431` · database `sdkwork_ai_staging`
+
+```bash
+bin/docker-image.sh build --image-tag <version>
+bin/docker-deploy.sh install  --environment staging
+bin/docker-deploy.sh install  --environment staging --host ssh://ops@10.0.0.8
+bin/docker-deploy.sh upgrade  --environment staging --image-tag <new-version>
+bin/docker-deploy.sh rollback --environment staging                # no release.sh → idempotent re-install of the current bundle
+bin/docker-deploy.sh status   --environment staging
+bin/docker-deploy.sh logs     --environment staging
+bin/docker-deploy.sh down     --environment staging
+bin/docker-deploy.sh stop    --environment staging               # stop (keeps containers and volumes; no repackage)
+bin/docker-deploy.sh start   --environment staging               # start a stopped stack (embedded deps first)
+bin/docker-deploy.sh restart --environment staging               # restart app instances only (deps and gateway stay up)
+bin/docker-deploy.sh down     --environment staging --purge --yes
+bin/docker-deploy.sh stop    --environment staging               # stop (keeps containers and volumes; no repackage)
+bin/docker-deploy.sh start   --environment staging               # start a stopped stack (embedded deps first)
+bin/docker-deploy.sh restart --environment staging               # restart app instances only (deps and gateway stay up)
+
+curl --noproxy '*' http://127.0.0.1:18081/healthz
+curl --noproxy '*' -H 'Host: api-staging.sdkwork.com' http://127.0.0.1:18099/healthz
+```
+
+### 5.4 demo
+
+Domains `server-demo.*` / `api-demo.*` · management `19080` · import HTTP `19098` · HTTPS `38432` · database `sdkwork_ai_demo`
+
+```bash
+bin/docker-image.sh build --image-tag <version>
+bin/docker-deploy.sh install  --environment demo
+bin/docker-deploy.sh install  --environment demo --host ssh://ops@10.0.0.8
+bin/docker-deploy.sh upgrade  --environment demo --image-tag <new-version>
+bin/docker-deploy.sh rollback --environment demo                   # no release.sh → idempotent re-install of the current bundle
+bin/docker-deploy.sh status   --environment demo
+bin/docker-deploy.sh logs     --environment demo
+bin/docker-deploy.sh down     --environment demo
+bin/docker-deploy.sh stop    --environment demo                  # stop (keeps containers and volumes; no repackage)
+bin/docker-deploy.sh start   --environment demo                  # start a stopped stack (embedded deps first)
+bin/docker-deploy.sh restart --environment demo                  # restart app instances only (deps and gateway stay up)
+bin/docker-deploy.sh down     --environment demo --purge --yes
+bin/docker-deploy.sh stop    --environment demo                  # stop (keeps containers and volumes; no repackage)
+bin/docker-deploy.sh start   --environment demo                  # start a stopped stack (embedded deps first)
+bin/docker-deploy.sh restart --environment demo                  # restart app instances only (deps and gateway stay up)
+
+curl --noproxy '*' http://127.0.0.1:19080/healthz
+curl --noproxy '*' -H 'Host: api-demo.sdkwork.com' http://127.0.0.1:19098/healthz
+```
+
+### 5.5 production
+
+Domains `server.*` / `api.*` · management `18080` · import HTTP `18098` · HTTPS `38430` · database `sdkwork_ai_prod`
+
+> **Every mutating command requires `--yes`**, otherwise it is refused
+> (error code 68). `down --purge` requires `--yes` in **every** environment.
+
+```bash
+bin/docker-image.sh build --image-tag <version>
+bin/docker-deploy.sh install  --environment production --yes
+bin/docker-deploy.sh install  --environment production --yes --host ssh://ops@10.0.0.8
+bin/docker-deploy.sh upgrade  --environment production --yes --image-tag <new-version>
+bin/docker-deploy.sh rollback --environment production --yes       # no release.sh → idempotent re-install of the current bundle
+bin/docker-deploy.sh status   --environment production             # read-only, no --yes needed
+bin/docker-deploy.sh logs     --environment production             # read-only, no --yes needed
+bin/docker-deploy.sh down     --environment production
+bin/docker-deploy.sh stop    --environment production            # stop (keeps containers and volumes; no repackage)
+bin/docker-deploy.sh start   --environment production            # start a stopped stack (embedded deps first)
+bin/docker-deploy.sh restart --environment production            # restart app instances only (deps and gateway stay up)
+bin/docker-deploy.sh down     --environment production --purge --yes
+bin/docker-deploy.sh stop    --environment production            # stop (keeps containers and volumes; no repackage)
+bin/docker-deploy.sh start   --environment production            # start a stopped stack (embedded deps first)
+bin/docker-deploy.sh restart --environment production            # restart app instances only (deps and gateway stay up)
+
+curl --noproxy '*' http://127.0.0.1:18080/healthz
+curl --noproxy '*' -H 'Host: api.sdkwork.com' http://127.0.0.1:18098/healthz
+```
+
+### 5.6 Multi-instance, dependency mode, and version rollback
+
+```bash
+# Multi-instance: only instance 1 publishes edge ports, others use the stride (DOCKER_SPEC.md §3.2)
+bin/docker-deploy.sh install --environment demo --replicas 3
+
+# Dependency mode: external host PostgreSQL/Redis is the default; embedded is an explicit opt-in
+bin/docker-deploy.sh install --environment demo --deps external     # default
+bin/docker-deploy.sh install --environment demo --deps embedded
+
+# Roll back to a specific version (the webserver bundle has no release.sh: pin the old tag)
+bin/docker-deploy.sh upgrade --environment demo --image-tag 0.1.0
+```
+
+> **Rollback semantics**: the `sdkwork-webserver` install bundle ships only
+> `deploy.sh` — no `release.sh` — so `rollback` warns and degrades to an
+> idempotent re-install of the current bundle. To return to a specific
+> version, use `upgrade --image-tag <old-version>`.
+> (The `sdkwork-api-cloud-gateway` bundle does ship `release.sh`, so
+> `rollback --to <version>` is effective there.)
+
+## 6. Offline Install (bundle)
+
+For hosts without registry/repository access, use the release artifact:
+
+```bash
+tar -xzf sdkwork-webserver-install-<version>.bundle.tar.gz
+cd sdkwork-webserver-install-<version>.bundle
+docker load -i image.tar.gz            # or docker pull the canonical reference
+$EDITOR env/<environment>.env          # fill secrets; ports/domains have safe defaults
+bash deploy.sh --environment <environment> [--replicas N]
+```
+
+Bundle content contract (`deploy.sh`, `image.env`, five-environment env matrix, compose, sha256): `DOCKER_SPEC.md` §4.
+
+## 7. Import Mode (selected at startup)
+
+Declare in `deployments/docker/env/<environment>.env` (default `cloud`):
+
+```sh
+SDKWORK_WEBSERVER_IMPORT_PROFILE=cloud      # import each module's nginx.cloud.<env>.conf (api-* edge → gateway upstream)
+# SDKWORK_WEBSERVER_IMPORT_PROFILE=standalone   # same-origin: import nginx.standalone.<env>.conf
+```
+
+- At startup the entrypoint materializes both import sets and activates the selected one as `imports.d/import.conf` (`SDKWORK_WEBSERVER_SPEC.md` §17.3.1).
+- Runtime switch (no container recreate): `pnpm import:switch:cloud|standalone`, then restart `serve-imports`; `pnpm import:status` prints the active set.
+- Module PC/H5 static sources follow the active set (cloud activation serves `dist/cloud/<alias>`, standalone serves `dist/standalone/<alias>`).
+
+## 8. Verification
+
+```bash
+curl --noproxy '*' http://127.0.0.1:13800/healthz                                   # development management plane
+curl --noproxy '*' -H 'Host: api-dev.sdkwork.com' http://127.0.0.1/healthz          # platform API plane
+curl --noproxy '*' -H 'Host: server-demo.sdkwork.com' http://127.0.0.1:19098/healthz
+pnpm check:container-deployment    # deployment contract matrix (validate-docker-deployment.mjs)
+```
+
+**Management/import-plane ports and full verification commands for every environment: §5.1–§5.5.**
+
+Acceptance checklist: `sdkwork-specs/DOCKER_SPEC.md` §8.
+
+## 9. Upgrade And Rollback
+
+```bash
+bin/docker-image.sh update --image-tag <new-version>       # pull/update the image, prune dangling layers
+bin/docker-deploy.sh upgrade --environment <env> [--image-tag <new-version>]
+bin/docker-deploy.sh rollback --environment <env>          # re-apply the previous bundle release (webserver degrades to an idempotent re-install, see §5.6)
+bin/docker-deploy.sh status   --environment <env>
+bin/docker-deploy.sh logs     --environment <env>
+bin/docker-deploy.sh down     --environment <env> [--purge]     # --purge requires --yes in every environment
+```
+
+Data volumes and host-system databases are never touched by the deployment scripts; rollback = re-deploying the previous bundle.
+**Fully expanded, copy-paste ready commands per environment: §5.**
+
+## 9.1 Operations Lifecycle (logs / configuration / diagnostics / backup)
+
+```bash
+# Logs: bounded read by default; --follow streams
+bin/docker-deploy.sh logs --environment <env> [--instance N] [--service webserver]
+bin/docker-deploy.sh logs --environment <env> --tail 1000 --since 15m
+bin/docker-deploy.sh logs --environment <env> --tail 5000 --export ./incident
+
+# Configuration: secrets redacted by default (***REDACTED***); set/edit backs up
+# and validates, production requires --yes
+bin/config.sh list     --environment <env>
+bin/config.sh show     --environment <env>
+bin/config.sh get      --environment <env> --key <KEY> [--reveal]
+bin/config.sh set      --environment <env> --key <KEY> --value '<VALUE>'
+bin/config.sh diff     --environment <env>      # missing / undeclared / placeholder keys
+bin/config.sh validate --environment <env>
+EDITOR=vi bin/config.sh edit --environment <env>
+
+# Diagnostics: read-only, 9 checks, exit code 70 when any check fails
+bin/doctor.sh --environment <env> [--json] [--export ./incident]
+
+# Backup and restore: sets live on the target at /opt/deploy/<module>/backups/
+bin/backup.sh create  --environment <env> [--no-db] [--no-volumes]
+bin/backup.sh list    --environment <env>
+bin/backup.sh verify  --environment <env> [--set <name>]
+bin/backup.sh restore --environment <env> --set <name> --yes
+```
+
+Per-environment commands and the full action paths live in `docs/runbooks/`
+(deploy / log-reference / troubleshooting / backup-restore, Chinese and
+English).
+
+## 10. Spec Index
+
+| Topic | Authority |
 | --- | --- |
-| §17 space mounts | The space root `/opt/deploy` is mounted read-only; the `sdkwork-space` checkout subtree is a read-write overlay (the entrypoint clone/pull target) |
-| §17 module import plane | `SDKWORK_SPACE_AUTO_DISCOVER` / `SDKWORK_SPACE_MODULES` / `MODULE_IMPORT_REQUIRED` / `PROBE_UPSTREAMS` are passed through; module static assets resolve from the checkout at `apps/*-{pc,h5}/dist/standalone/<envAlias>/` |
-| §17.3 import sets | `SDKWORK_WEBSERVER_IMPORT_PROFILE` defaults to `cloud` (dual imports.d sets, materialized at start); `SDKWORK_WEBSERVER_IMPORT_LISTENER_PORTS` passes through (identity 80/443 by default) |
-| §17 multi-cluster / multi-instance | Every container listens on gateway port 3800 internally; host ports differ per environment/instance |
-| §17.4 standalone-only | The image/bundle is packaged from the standalone release artifact only (`webserver-release.mjs --deployment-profile standalone`) |
-| §8.1 gateway upstream | Module `/api/` reverse proxying goes through the reserved upstream `gateway`; `SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT` selects `bundled`/`docker`/`external` |
-
-Verified deployment report: [docs/reports/2026-09-03-webserver-docker-packaging-verification.md](../../reports/2026-09-03-webserver-docker-packaging-verification.md)
+| Image naming/tags, bundle layout, five-environment matrix | `sdkwork-specs/DOCKER_SPEC.md` |
+| `bin/` entrypoint contract and shared library | `sdkwork-specs/MODULE_BIN_SPEC.md` |
+| Import mechanism and startup mode selection | `sdkwork-specs/SDKWORK_WEBSERVER_SPEC.md` §17.3/§17.3.1 |
+| External dependency standard (PostgreSQL/Redis) | `sdkwork-specs/DEPLOYMENT_SPEC.md` §6.1 |
+| Public edge authority (no host nginx) | `sdkwork-specs/NGINX_SPEC.md` §0 |

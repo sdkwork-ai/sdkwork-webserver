@@ -1,0 +1,21 @@
+[package]
+name = "sdkwork-webserver-config-service"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Managed catalog, bounded reading, and validated atomic writing of the deployed Web Server configuration files (default config, import plane, and read-only module sidecars)."
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["fs"] }
+tracing.workspace = true
+toml.workspace = true
+sdkwork-server-files-service.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["fs", "macros", "rt-multi-thread"] }

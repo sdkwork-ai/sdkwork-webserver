@@ -64,6 +64,7 @@ const client = new SdkworkBackendClient({
 - `client.nginx` - nginx API
 - `client.server` - server API
 - `client.serverFile` - server_file API
+- `client.webserverConfig` - webserver_config API
 - `client.agent` - agent API
 - `client.audit` - audit API
 
@@ -180,6 +181,13 @@ const result = await client.server.list(params);
 const result = await client.serverFile.nodes.list();
 ```
 
+### webserver_config
+
+```typescript
+// List the managed Web Server configuration catalog
+const result = await client.webserverConfig.list();
+```
+
 ### agent
 
 ```typescript
@@ -233,7 +241,7 @@ This SDK includes cross-platform publish scripts in `bin/`:
 - `bin/publish.sh`
 - `bin/publish.ps1`
 
-TypeScript check and publish commands use pnpm to materialize workspace dependency versions in a temporary tarball. They reject local-only dependency protocols before npm publication and do not rewrite the source `package.json`.
+TypeScript check and publish commands materialize workspace dependency versions in a temporary tarball with pnpm. They reject local-only dependency protocols before npm publication and do not rewrite the source `package.json`.
 
 ### Check
 

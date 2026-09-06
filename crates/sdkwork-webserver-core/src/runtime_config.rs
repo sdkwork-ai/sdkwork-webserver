@@ -1290,18 +1290,21 @@ tablet_surface = "pc"
 development = "apps/sdkwork-webserver-pc/dist/standalone/dev"
 test = "apps/sdkwork-webserver-pc/dist/standalone/test"
 staging = "apps/sdkwork-webserver-pc/dist/standalone/staging"
+demo = "apps/sdkwork-webserver-pc/dist/standalone/demo"
 production = "apps/sdkwork-webserver-pc/dist/standalone/prod"
 
 [app_roots.h5_static_by_environment]
 development = "apps/sdkwork-webserver-h5/dist/standalone/dev"
 test = "apps/sdkwork-webserver-h5/dist/standalone/test"
 staging = "apps/sdkwork-webserver-h5/dist/standalone/staging"
+demo = "apps/sdkwork-webserver-h5/dist/standalone/demo"
 production = "apps/sdkwork-webserver-h5/dist/standalone/prod"
 
 [app_roots.static_fallback_by_environment]
 development = "deployments/webserver/static"
 test = "deployments/webserver/static"
 staging = "deployments/webserver/static"
+demo = "deployments/webserver/static"
 production = "deployments/webserver/static"
 "#,
         )
@@ -1324,7 +1327,7 @@ production = "deployments/webserver/static"
         // the active environment is the config's `[profile] environment` and
         // dist directories use the standard aliases (dev/test/staging/prod)
         // under the standalone profile segment.
-        for environment in ["development", "test", "staging", "production"] {
+        for environment in ["development", "test", "staging", "demo", "production"] {
             let dist_alias = match environment {
                 "development" => "dev",
                 "production" => "prod",

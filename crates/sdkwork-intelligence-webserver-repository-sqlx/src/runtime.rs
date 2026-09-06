@@ -71,10 +71,10 @@ fn certificate_issuer_from_env(
     let use_production = match std::env::var("SDKWORK_WEBSERVER_ACME_PROFILE") {
         Ok(value) => match value.trim().to_ascii_lowercase().as_str() {
             "production" | "prod" => true,
-            "staging" | "stage" | "test" => false,
+            "staging" | "stage" | "test" | "demo" => false,
             other => {
                 return Err(format!(
-                    "invalid SDKWORK_WEBSERVER_ACME_PROFILE {other}; expected production or staging"
+                    "invalid SDKWORK_WEBSERVER_ACME_PROFILE {other}; expected production, staging, test, or demo"
                 ));
             }
         },

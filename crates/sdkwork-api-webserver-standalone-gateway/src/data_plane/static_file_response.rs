@@ -1,4 +1,4 @@
-use std::{io, ops::RangeInclusive};
+use std::{io, ops::RangeInclusive, path::Path};
 
 use axum::{
     body::Body,
@@ -39,10 +39,11 @@ pub(crate) async fn serve_opened_file(
     let mut builder = Response::builder()
         .header(header::CONTENT_TYPE, mime)
         .header(header::ACCEPT_RANGES, "bytes")
-        // Safe default: never cache without an explicit deployment-level
-        // policy. Fingerprinted immutable assets are served through the
-        // CDN/edge cache layer, which owns cache invalidation.
-        .header(header::CACHE_CONTROL, "public, no-cache");
+        // Deployment-level freshness policy (ENVIRONMENT_SPEC §13, SDKWORK_DEPLOY_SPEC
+        // §8.1): fingerprinted immutable assets get long-lived caching, the public
+        // runtime env document never caches, everything else revalidates through
+        // ETag/Last-Modified conditional requests.
+        .header(header::CACHE_CONTROL, cache_control_for_path(&opened.path_hint));
     if let Some(modified) = modified {
         builder = builder.header(header::LAST_MODIFIED, modified.to_string());
     }
@@ -104,6 +105,50 @@ fn parse_range(headers: &HeaderMap, size: u64) -> Option<Result<Vec<RangeInclusi
             .and_then(|range| range.validate(size))
             .map_err(|_| ()),
     )
+}
+
+/// Deployment-level `Cache-Control` freshness for a static file.
+///
+/// - `runtime-env.json`: `no-store` — the public runtime env document varies
+///   per deployment (ENVIRONMENT_SPEC §13), so a cached copy can pin a browser
+///   to a stale gateway/API origin set.
+/// - Fingerprinted assets (`name-HASH.ext`, e.g. Vite `index-CqUZhiZ2.js`):
+///   `public, max-age=31536000, immutable` — content-addressed, safe for
+///   year-long caches and CDN edge retention.
+/// - Everything else (SPA `index.html`, manifests, unfingerprinted files):
+///   `public, no-cache` — storable, but revalidated with ETag/Last-Modified
+///   before every reuse.
+pub(crate) fn cache_control_for_path(path: &Path) -> &'static str {
+    if path.file_name().and_then(|name| name.to_str()) == Some("runtime-env.json") {
+        return "no-store";
+    }
+    if is_fingerprinted_asset(path) {
+        return "public, max-age=31536000, immutable";
+    }
+    "public, no-cache"
+}
+
+/// Detects content-addressed asset filenames: a final `-<hash>` segment of
+/// 8-32 URL-safe characters containing at least one digit (Vite/webpack
+/// `name-HASH.ext` output). Requiring a digit keeps descriptive names such as
+/// `main-module.js` or `font-awesome.svg` on the revalidating default.
+fn is_fingerprinted_asset(path: &Path) -> bool {
+    let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
+        return false;
+    };
+    // Accept the common `name-HASH.min` double-extension form as well.
+    let stem = stem.strip_suffix(".min").unwrap_or(stem);
+    let Some((_, hash)) = stem.rsplit_once('-') else {
+        return false;
+    };
+    let byte_len = hash.len();
+    if !(8..=32).contains(&byte_len) {
+        return false;
+    }
+    hash.bytes().all(|byte| {
+        byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_'
+    })
+        && hash.bytes().any(|byte| byte.is_ascii_digit())
 }
 
 fn if_unmodified_since_passes(headers: &HeaderMap, modified: Option<HttpDate>) -> bool {
@@ -237,6 +282,51 @@ mod tests {
                 .status(),
             StatusCode::NOT_MODIFIED
         );
+    }
+
+    #[test]
+    fn runtime_env_document_is_never_cacheable() {
+        assert_eq!(
+            cache_control_for_path(&Path::new("/srv/web/h5/runtime-env.json")),
+            "no-store"
+        );
+    }
+
+    #[test]
+    fn fingerprinted_assets_are_immutable() {
+        for name in [
+            "index-CqUZhiZ2.js",
+            "vendor-a1B2c3D4e5F6.css",
+            "font-inter-7BaC9D2E.woff2",
+            "chunk-2d0e4b2f.min.js",
+            "logo-2024abCD.png",
+        ] {
+            assert_eq!(
+                cache_control_for_path(&Path::new("/srv/web/pc/assets").join(name)),
+                "public, max-age=31536000, immutable",
+                "{name} should be immutable"
+            );
+        }
+    }
+
+    #[test]
+    fn descriptive_names_stay_on_revalidating_default() {
+        for name in [
+            "index.html",
+            "manifest.webmanifest",
+            "main-module.js",
+            "font-awesome.svg",
+            "sw.js",
+            "i18n-en-US.json",
+            "app-2024-01-02.js",
+            "favicon.ico",
+        ] {
+            assert_eq!(
+                cache_control_for_path(&Path::new("/srv/web/pc").join(name)),
+                "public, no-cache",
+                "{name} should revalidate"
+            );
+        }
     }
 
     fn opened(temp: &NamedTempFile) -> OpenedStaticFile {

@@ -20,6 +20,8 @@ pub mod server;
 pub use server::ServerApi;
 pub mod server_file;
 pub use server_file::ServerFileApi;
+pub mod webserver_config;
+pub use webserver_config::WebserverConfigApi;
 pub mod agent;
 pub use agent::AgentApi;
 pub mod audit;

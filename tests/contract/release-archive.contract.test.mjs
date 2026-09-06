@@ -892,6 +892,10 @@ test('CycloneDX SBOM binds the archive and locked Cargo closure and rejects sema
   const sbomPath = `${fixture.archive}.cdx.json`;
   const checksumPath = `${sbomPath}.sha256`;
   try {
+    // The missing-SBOM assertion requires a pristine fixture: parallel runs of
+    // this suite may have left a stale 9.8.7-sbom SBOM sidecar behind.
+    rmSync(sbomPath, { force: true });
+    rmSync(checksumPath, { force: true });
     const missing = runSbom('validate', 'standalone', version);
     assert.notEqual(missing.status, 0);
     assert.match(missing.stderr, /release SBOM does not exist/u);

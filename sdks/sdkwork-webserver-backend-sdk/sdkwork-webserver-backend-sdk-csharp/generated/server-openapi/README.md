@@ -60,6 +60,7 @@ client.SetHeader("X-Custom-Header", "value");
 - `client.Nginx` - nginx API
 - `client.Server` - server API
 - `client.ServerFile` - server_file API
+- `client.WebserverConfig` - webserver_config API
 - `client.Agent` - agent API
 - `client.Audit` - audit API
 
@@ -191,6 +192,14 @@ Console.WriteLine(result);
 ```csharp
 // List Server Files deployment nodes
 var result = await client.ServerFile.ServerFilesNodesListAsync();
+Console.WriteLine(result);
+```
+
+### webserver_config
+
+```csharp
+// List the managed Web Server configuration catalog
+var result = await client.WebserverConfig.WebserverConfigsListAsync();
 Console.WriteLine(result);
 ```
 

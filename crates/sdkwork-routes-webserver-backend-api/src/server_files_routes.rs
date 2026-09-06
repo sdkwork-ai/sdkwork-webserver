@@ -259,7 +259,7 @@ fn entry_names(path: &std::path::Path) -> Vec<String> {
 }
 
 /// Wrap a serializable value in the canonical success envelope.
-fn ok_json<T: Serialize>(data: &T) -> Response {
+pub(crate) fn ok_json<T: Serialize>(data: &T) -> Response {
     let payload = SdkWorkResourceData { item: data };
     let body = sdkwork_utils_rust::SdkWorkApiResponse::success(payload, String::new());
     (

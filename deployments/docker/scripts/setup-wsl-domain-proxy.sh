@@ -38,7 +38,7 @@ main() {
   require_root
 
   bash "${docker_root}/scripts/setup-host-external-deps.sh"
-  bash "${repo_root}/scripts/docker/deploy-docker-environment.sh" all --validate
+  for e in development test staging demo; do bash "${repo_root}/bin/docker-deploy.sh" install --environment "${e}"; done
   bash "${docker_root}/scripts/install-wsl-hosts.sh"
   # Retire host nginx — Docker webserver is the reverse proxy.
   bash "${docker_root}/scripts/uninstall-wsl-nginx.sh" || true

@@ -53,6 +53,7 @@ client.set_header("X-Custom-Header", "value");
 - `client.nginx()` - nginx API
 - `client.server()` - server API
 - `client.server_file()` - server_file API
+- `client.webserver_config()` - webserver_config API
 - `client.agent()` - agent API
 - `client.audit()` - audit API
 
@@ -176,6 +177,14 @@ println!("{result:?}");
 ```rust
 // List Server Files deployment nodes
 let result = client.server_file().server_files_nodes_list().await?;
+println!("{result:?}");
+```
+
+### webserver_config
+
+```rust
+// List the managed Web Server configuration catalog
+let result = client.webserver_config().webserver_configs_list().await?;
 println!("{result:?}");
 ```
 

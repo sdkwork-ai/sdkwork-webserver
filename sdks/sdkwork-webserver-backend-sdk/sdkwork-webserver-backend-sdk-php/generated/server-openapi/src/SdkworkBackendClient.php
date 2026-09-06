@@ -15,6 +15,7 @@ use SDKWork\Webserver\BackendSdk\Api\CertificateDistributionApi;
 use SDKWork\Webserver\BackendSdk\Api\NginxApi;
 use SDKWork\Webserver\BackendSdk\Api\ServerApi;
 use SDKWork\Webserver\BackendSdk\Api\ServerFileApi;
+use SDKWork\Webserver\BackendSdk\Api\WebserverConfigApi;
 use SDKWork\Webserver\BackendSdk\Api\AgentApi;
 use SDKWork\Webserver\BackendSdk\Api\AuditApi;
 
@@ -31,6 +32,7 @@ final class SdkworkBackendClient
     public NginxApi $nginx;
     public ServerApi $server;
     public ServerFileApi $serverFile;
+    public WebserverConfigApi $webserverConfig;
     public AgentApi $agent;
     public AuditApi $audit;
 
@@ -47,6 +49,7 @@ final class SdkworkBackendClient
         $this->nginx = new NginxApi($this->http);
         $this->server = new ServerApi($this->http);
         $this->serverFile = new ServerFileApi($this->http);
+        $this->webserverConfig = new WebserverConfigApi($this->http);
         $this->agent = new AgentApi($this->http);
         $this->audit = new AuditApi($this->http);
     }

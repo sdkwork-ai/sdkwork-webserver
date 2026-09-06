@@ -16,6 +16,7 @@ class Api(private val client: HttpClient) {
     val nginx: NginxApi = NginxApi(client)
     val server: ServerApi = ServerApi(client)
     val serverFile: ServerFileApi = ServerFileApi(client)
+    val webserverConfig: WebserverConfigApi = WebserverConfigApi(client)
     val agent: AgentApi = AgentApi(client)
     val audit: AuditApi = AuditApi(client)
 }

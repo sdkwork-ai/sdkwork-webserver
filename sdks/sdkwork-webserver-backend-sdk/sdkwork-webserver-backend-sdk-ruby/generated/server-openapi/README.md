@@ -51,6 +51,7 @@ client.set_header('X-Custom-Header', 'value')
 - `client.nginx` - nginx API
 - `client.server` - server API
 - `client.server_file` - server_file API
+- `client.webserver_config` - webserver_config API
 - `client.agent` - agent API
 - `client.audit` - audit API
 
@@ -144,6 +145,14 @@ puts result.inspect
 ```ruby
 # List Server Files deployment nodes
 result = client.server_file.server_files_nodes_list()
+puts result.inspect
+```
+
+### webserver_config
+
+```ruby
+# List the managed Web Server configuration catalog
+result = client.webserver_config.webserver_configs_list()
 puts result.inspect
 ```
 

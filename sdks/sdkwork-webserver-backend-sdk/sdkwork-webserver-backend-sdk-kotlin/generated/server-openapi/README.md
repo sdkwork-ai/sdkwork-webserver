@@ -63,6 +63,7 @@ val client = SdkworkBackendClient(config)
 - `client.nginx` - nginx API
 - `client.server` - server API
 - `client.serverFile` - server_file API
+- `client.webserverConfig` - webserver_config API
 - `client.agent` - agent API
 - `client.audit` - audit API
 
@@ -186,6 +187,14 @@ println(result)
 ```kotlin
 // List Server Files deployment nodes
 val result = client.serverFile.serverFilesNodesList()
+println(result)
+```
+
+### webserver_config
+
+```kotlin
+// List the managed Web Server configuration catalog
+val result = client.webserverConfig.webserverConfigsList()
 println(result)
 ```
 

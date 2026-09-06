@@ -12,6 +12,7 @@ import com.sdkwork.webserver.backend.sdk.api.CertificateDistributionApi
 import com.sdkwork.webserver.backend.sdk.api.NginxApi
 import com.sdkwork.webserver.backend.sdk.api.ServerApi
 import com.sdkwork.webserver.backend.sdk.api.ServerFileApi
+import com.sdkwork.webserver.backend.sdk.api.WebserverConfigApi
 import com.sdkwork.webserver.backend.sdk.api.AgentApi
 import com.sdkwork.webserver.backend.sdk.api.AuditApi
 
@@ -28,6 +29,7 @@ open class SdkworkBackendClient {
     lateinit var nginx: NginxApi
     lateinit var server: ServerApi
     lateinit var serverFile: ServerFileApi
+    lateinit var webserverConfig: WebserverConfigApi
     lateinit var agent: AgentApi
     lateinit var audit: AuditApi
 
@@ -43,6 +45,7 @@ open class SdkworkBackendClient {
         nginx = NginxApi(httpClient)
         server = ServerApi(httpClient)
         serverFile = ServerFileApi(httpClient)
+        webserverConfig = WebserverConfigApi(httpClient)
         agent = AgentApi(httpClient)
         audit = AuditApi(httpClient)
     }
@@ -59,6 +62,7 @@ open class SdkworkBackendClient {
         nginx = NginxApi(httpClient)
         server = ServerApi(httpClient)
         serverFile = ServerFileApi(httpClient)
+        webserverConfig = WebserverConfigApi(httpClient)
         agent = AgentApi(httpClient)
         audit = AuditApi(httpClient)
     }

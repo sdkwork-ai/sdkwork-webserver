@@ -23,6 +23,11 @@ export type {
   ServerFilesNode,
   ServerOperationResult,
   ServerProjectOperations,
+  WebserverConfigCatalog,
+  WebserverConfigEntry,
+  WebserverConfigFile,
+  WebserverConfigWriteRequest,
+  WebserverConfigWriteResult,
 } from "@sdkwork/webserver-backend-sdk";
 
 export type WebserverAdminSdkClient = SdkworkBackendClient;

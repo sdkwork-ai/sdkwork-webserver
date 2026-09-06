@@ -30,7 +30,7 @@ impl CanonicalMetricDimensions {
                 "SDKWORK_WEBSERVER_ENVIRONMENT",
                 environment,
                 "development",
-                &["development", "test", "staging", "production"],
+                &["development", "test", "staging", "demo", "production"],
             )?,
             deployment_profile: validated_metric_dimension(
                 "SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE",

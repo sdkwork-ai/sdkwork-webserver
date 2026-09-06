@@ -31,6 +31,25 @@ x-webserver-common: &webserver-common
   logging: *default-logging
   cap_add:
     - NET_BIND_SERVICE
+  security_opt:
+    - no-new-privileges:true
+  # Resource governance (OPERATIONS_SPEC.md §6 runtime hardening): bound CPU /
+  # memory / process count so one runaway container cannot starve the host or
+  # the co-located per-environment stacks. Env-tunable per deployment; the
+  # data plane needs a high fd ceiling for the merged vhost listeners.
+  deploy:
+    resources:
+      limits:
+        cpus: "${SDKWORK_WEBSERVER_CPU_LIMIT:-4.0}"
+        memory: ${SDKWORK_WEBSERVER_MEMORY_LIMIT:-4g}
+        pids: 512
+      reservations:
+        cpus: "0.5"
+        memory: 512m
+  ulimits:
+    nofile:
+      soft: 65536
+      hard: 65536
   # Resolves the host for SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=external
   # (gateway sibling containers publish host ports 3910-3913).
   extra_hosts:
@@ -133,7 +152,10 @@ x-webserver-common: &webserver-common
     interval: 15s
     timeout: 5s
     retries: 8
-    start_period: 120s
+    # First start materializes 70+ module sidecars over the space checkout,
+    # which can take minutes on slow filesystems; a too-short start window
+    # makes restart: unless-stopped flap the container mid-bootstrap.
+    start_period: 240s
 
 services:
   # Embedded dependencies (default). Skip with --external and supply
@@ -145,6 +167,19 @@ services:
     profiles: [deps]
     restart: unless-stopped
     logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    # Resource ceiling for the embedded cluster (env-tunable). The external
+    # host PostgreSQL is governed by its own postgresql.conf instead.
+    deploy:
+      resources:
+        limits:
+          cpus: "${PG_CPU_LIMIT:-2.0}"
+          memory: ${PG_MEMORY_LIMIT:-2g}
+          pids: 256
+        reservations:
+          cpus: "0.5"
+          memory: 512m
     command: ["postgres", "-c", "max_connections=${PG_MAX_CONNECTIONS:-200}"]
     networks:
       - sdkwork
@@ -165,7 +200,11 @@ services:
       WEBSERVER_POSTGRES_PROD_PASSWORD: ${WEBSERVER_POSTGRES_PROD_PASSWORD:-sdkworkprod123}
     volumes:
       - webserver-postgres-data:/var/lib/postgresql/data
-      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      # deploy.sh exports POSTGRES_INIT_HOST_DIR (absolute) because the compose
+      # files sit in compose/ inside an install bundle while postgres/init
+      # stays at the bundle root; ./postgres/init only resolves in the repo
+      # layout, so it remains the fallback.
+      - ${POSTGRES_INIT_HOST_DIR:-./postgres/init}:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test:
         [
@@ -181,7 +220,30 @@ services:
     profiles: [deps]
     restart: unless-stopped
     logging: *default-logging
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    security_opt:
+      - no-new-privileges:true
+    # Cache + rate-limit/idempotency store: bounded memory with allkeys-lru so
+    # burst traffic evicts stale cache instead of failing writes. Disable OS
+    # persistence on purpose — sessions/limits are rebuildable, latency wins.
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-768mb}
+      - --maxmemory-policy
+      - ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
+    deploy:
+      resources:
+        limits:
+          cpus: "${REDIS_CPU_LIMIT:-1.0}"
+          memory: ${REDIS_MEMORY_LIMIT:-1g}
+          pids: 128
+        reservations:
+          cpus: "0.25"
+          memory: 128m
     networks:
       - sdkwork
     volumes:
@@ -198,8 +260,12 @@ services:
     <<: *webserver-common
     profiles: [instance]
     ports:
-      - "${SDKWORK_WEBSERVER_MGMT_HOST_PORT:?required}:3800"
+      # Management plane defaults to loopback: the admin console must never be
+      # reachable from other interfaces by default. Override
+      # SDKWORK_WEBSERVER_MGMT_BIND_IP=0.0.0.0 only behind a firewall/LB.
+      - "${SDKWORK_WEBSERVER_MGMT_BIND_IP:-127.0.0.1}:${SDKWORK_WEBSERVER_MGMT_HOST_PORT:?required}:3800"
 
+    logging: *default-logging
 networks:
   sdkwork:
     name: sdkwork-webserver-${SDKWORK_WEBSERVER_ENVIRONMENT:?required}

@@ -38,7 +38,7 @@ const DOCKER_ROOT = path.join(REPO_ROOT, 'deployments', 'docker');
 const DEFAULT_OUTPUT_ROOT = path.join(REPO_ROOT, 'dist', 'docker-install');
 // staging is a first-class deployment environment (DEPLOYMENT_SPEC §2) and
 // ships in the bundle so production-like rehearsal uses the same installer.
-const DEFAULT_ENVIRONMENTS = ['development', 'test', 'staging', 'production'];
+const DEFAULT_ENVIRONMENTS = ['development', 'test', 'staging', 'demo', 'production'];
 
 function appVersion() {
   const manifest = JSON.parse(
@@ -143,6 +143,9 @@ async function buildImage(settings) {
   if (settings.skipPlatformGateway) {
     args.push('--skip-platform-gateway');
   }
+  if (process.env.SDKWORK_DOCKER_NO_PULL === '1') {
+    args.push('--no-pull');
+  }
   run('node', args);
   if (!imageExists(ref)) {
     throw new Error(`image was not produced: ${ref}`);
@@ -156,11 +159,16 @@ async function saveImage(ref, destination) {
     stdio: ['ignore', 'pipe', 'inherit'],
     windowsHide: true,
   });
-  await pipeline(child.stdout, createGzip({ level: 1 }), createWriteStream(destination));
-  await new Promise((resolve, reject) => {
+  // Attach the exit listener BEFORE awaiting the pipeline: a fast `docker
+  // save` can exit while the gzip pipeline is still flushing, and an exit
+  // listener attached afterwards never fires — the await would hang on a
+  // dead promise and node would exit 0 with the bundle half-written.
+  const childExited = new Promise((resolve, reject) => {
     child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`docker save exited ${code}`))));
     child.on('error', reject);
   });
+  await pipeline(child.stdout, createGzip({ level: 1 }), createWriteStream(destination));
+  await childExited;
 }
 
 async function sha256File(filePath) {
@@ -192,15 +200,20 @@ Self-contained deployment bundle for the unified install image
 
 Quick start on any Docker host:
 
-    bash deploy.sh --environment development            # embedded postgres/redis
+    bash deploy.sh --environment development            # external host-system postgres/redis (default)
     bash deploy.sh --environment production --replicas 3
-    bash deploy.sh --environment production --external --replicas 2
+    bash deploy.sh --environment production --embedded --replicas 2
     bash deploy.sh --environment test --down --purge
 
 1. Copy env/<environment>.env.example to env/<environment>.env and fill secrets.
-2. deploy.sh loads image.tar.gz, starts shared dependencies, then starts
-   instances 1..N (instance 1 owns the 80/443 edge and runs migrations first).
-3. Management ports are base..base+N-1 -> 3800; load-balance across instances
+2. Default dependency mode is EXTERNAL: the webserver connects to the docker
+   host's own PostgreSQL (host.docker.internal:5432) and Redis
+   (host.docker.internal:6379). Provision host identities with
+   deployments/docker/scripts/setup-host-external-deps.sh (WSL/Ubuntu).
+3. deploy.sh loads image.tar.gz, then starts instances 1..N (instance 1 owns
+   the 80/443 edge and runs migrations first). Use --embedded to run built-in
+   postgres/redis containers instead.
+4. Management ports are base..base+N-1 -> 3800; load-balance across instances
    on those ports.
 
 Full guide: docs/guides/operator/docker-install.md (repo) / docker-install.en.md (English).
@@ -262,11 +275,17 @@ async function main() {
   }
   const deployScript = path.join(bundleDir, 'deploy.sh');
   copyFileSync(path.join(DOCKER_ROOT, 'bundle', 'deploy.sh'), deployScript);
-  const mode = statSync(deployScript).mode | 0o755;
-  const chmod = spawnSync('chmod', ['0755', deployScript], { stdio: 'ignore' });
-  if (chmod.status !== 0) {
-    // Windows filesystems ignore the POSIX mode; harmless.
-    void mode;
+  // Bundle-owned release channel (OPERATIONS_SPEC.md §1.2): versioned
+  // deploy/rollback with a health gate, ledger, and release lock.
+  const releaseScript = path.join(bundleDir, 'release.sh');
+  copyFileSync(path.join(DOCKER_ROOT, 'bundle', 'release.sh'), releaseScript);
+  for (const script of [deployScript, releaseScript]) {
+    const mode = statSync(script).mode | 0o755;
+    const chmod = spawnSync('chmod', ['0755', script], { stdio: 'ignore' });
+    if (chmod.status !== 0) {
+      // Windows filesystems ignore the POSIX mode; harmless.
+      void mode;
+    }
   }
 
   writeFileSync(
@@ -283,7 +302,7 @@ async function main() {
         environments: DEFAULT_ENVIRONMENTS,
         multiInstance: true,
         createdAt: new Date().toISOString(),
-        spec: ['DEPLOYMENT_SPEC.md#6', 'PNPM_SCRIPT_SPEC.md#4.4'],
+        spec: ['DEPLOYMENT_SPEC.md#6', 'OPERATIONS_SPEC.md#1.2', 'PNPM_SCRIPT_SPEC.md#4.4'],
       },
       null,
       2,

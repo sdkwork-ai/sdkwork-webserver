@@ -113,9 +113,13 @@ main() {
   require_root
   ensure_postgresql_running
   ensure_pg_listen_addresses
+  # Passwords MUST match deployments/docker/env/*.env exactly so the env
+  # files, the host system PostgreSQL, and the install bundle stay identical.
   create_identity "sdkwork_ai_dev" "sdkwork_ai_dev" "sdkworkdev123"
-  create_identity "sdkwork_ai_test" "sdkwork_ai_test" "sdkworktest123"
-  create_identity "sdkwork_ai_prod" "sdkwork_ai_prod" "sdkworkprod123"
+  create_identity "sdkwork_ai_test" "sdkwork_ai_test" "sdkwork_ai_test_pw_084d5f14e95b5752"
+  create_identity "sdkwork_ai_staging" "sdkwork_ai_staging" "sdkworkstaging123"
+  create_identity "sdkwork_ai_demo" "sdkwork_ai_demo" "sdkworkdemo123"
+  create_identity "sdkwork_ai_prod" "sdkwork_ai_prod" "sdkwork_ai_prod_pw_1452cce22becab64"
   ensure_pg_hba_docker_access
   ensure_host_redis
   log "host PostgreSQL and Redis are ready for external docker deployment"

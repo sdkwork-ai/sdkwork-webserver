@@ -32,7 +32,7 @@ Environment packages (same layout, different ingress/DB):
 | `sdkwork-webserver-test` | test | `server-test.sdkwork.com` | `0.0.0.0:8888` | direct or `:80` → `8888` |
 | `sdkwork-webserver` | production | `server.sdkwork.com` | `0.0.0.0:8080` | nginx `:443` → `8080` |
 
-Guides: [`deb-install.md`](./deb-install.md), [`bare-metal-install.md`](./bare-metal-install.md), [`WSL_DOCKER_DEPLOY.md`](./WSL_DOCKER_DEPLOY.md).
+Guides: [`deb-install.md`](./deb-install.md), [`bare-metal-install.md`](./bare-metal-install.md), [`docker-install.md`](./docker-install.md).
 
 ---
 
@@ -147,8 +147,15 @@ Native Adaptive Web edge helper (maps to process bind from `config.toml`):
 | --- | --- |
 | `deployments/docker/Dockerfile.standalone` | Image contract + default SPA env roots |
 | `deployments/docker/scripts/entrypoint-standalone.sh` | Writes `/etc/sdkwork/webserver/config.toml`, ensures secrets + SPA copy |
-| `deployments/docker/env/{development,test,production}.env` | Host ports, DB/Redis, URLs |
-| `deployments/docker/docker-compose.{development,test,production}.yml` | Per-env stacks |
+| `deployments/docker/env/{development,test,staging,demo,production}.env` | Host ports, DB/Redis, URLs |
+| `deployments/docker/env/{development,test,production}.i1.env` | Per-instance overrides (snowflake node ids) |
+
+**Env key contract (differs from the gateway deployer)**: the webserver compose
+templates inject the whole env file into the container via `env_file:`
+(whole-file injection), so container-side `SDKWORK_*` keys live directly in the
+env file — there is no host-side `GATEWAY_*`-style prefix mapping. Every key in
+the env file reaches the container; keep only keys the runtime consumes.
+| `deployments/docker/docker-compose.{development,test,staging,demo,production}.yml` | Per-env stacks |
 | Volumes | `…_webserver-secrets-*` → `/etc/sdkwork/webserver/secrets` |
 |  | `…_webserver-data-*` → `/var/lib/sdkwork/webserver` |
 

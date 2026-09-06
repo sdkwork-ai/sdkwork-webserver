@@ -15,6 +15,9 @@
     "standalone.staging": {
       "source": "browser/runtime-env.standalone.staging.json"
     },
+    "standalone.demo": {
+      "source": "browser/runtime-env.standalone.demo.json"
+    },
     "standalone.production": {
       "source": "browser/runtime-env.standalone.production.json"
     }

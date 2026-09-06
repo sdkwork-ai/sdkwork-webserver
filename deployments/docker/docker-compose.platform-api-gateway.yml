@@ -26,6 +26,15 @@
 x-platform-api-gateway-image: &platform-api-gateway-image
   image: ${SDKWORK_MODULE_API_GATEWAY_IMAGE:-sdkwork-api-cloud-gateway:local}
 
+# Bounded json-file rotation (OPERATIONS_SPEC.md §2.3): every service that
+# runs in production declares it; unbounded logs fill the host disk.
+x-platform-api-gateway-logging: &platform-api-gateway-logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "3"
+
 x-platform-api-gateway-network: &platform-api-gateway-network
   networks:
     default:
@@ -77,6 +86,7 @@ x-platform-knowledgebase-rpc: &platform-knowledgebase-rpc
   image: ${SDKWORK_MODULE_API_GATEWAY_IMAGE:-sdkwork-api-cloud-gateway:local}
   entrypoint: ["/opt/sdkwork/api-gateway/container/knowledgebase-rpc-entrypoint"]
   restart: unless-stopped
+  logging: *platform-api-gateway-logging
   environment:
     SDKWORK_KNOWLEDGEBASE_DEPLOYMENT_PROFILE: standalone
     SDKWORK_KNOWLEDGEBASE_RPC_ENABLED: "true"
@@ -107,9 +117,16 @@ x-platform-knowledgebase-rpc: &platform-knowledgebase-rpc
     retries: 20
     start_period: 120s
 
+# Bounded json-file log rotation: unbounded container logs eventually fill
+# the host disk on long-lived deployments (OPERATIONS_SPEC.md §2.3).
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
 services:
   platform-api-gateway:
-    <<: [*platform-api-gateway-image, *platform-api-gateway-network, *platform-api-gateway-healthcheck, *platform-api-gateway-volumes]
+    <<: [*platform-api-gateway-image, *platform-api-gateway-logging, *platform-api-gateway-network, *platform-api-gateway-healthcheck, *platform-api-gateway-volumes]
     restart: unless-stopped
     ports:
       - "${SDKWORK_MODULE_API_GATEWAY_HOST_PORT:-13900}:${SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT:-8080}"
@@ -144,6 +161,11 @@ services:
       platform-knowledgebase-rpc:
         condition: service_started
 
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
   platform-knowledgebase-rpc:
     <<: *platform-knowledgebase-rpc
     environment:
@@ -174,6 +196,11 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
   webserver:
     depends_on:
       platform-api-gateway:
@@ -183,6 +210,11 @@ services:
       SDKWORK_MODULE_API_GATEWAY_HOST: sdkwork-api-cloud-gateway
       SDKWORK_MODULE_API_GATEWAY_PORT: "${SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT:-8080}"
 
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 volumes:
   platform-api-gateway-data:
   platform-api-gateway-secrets:

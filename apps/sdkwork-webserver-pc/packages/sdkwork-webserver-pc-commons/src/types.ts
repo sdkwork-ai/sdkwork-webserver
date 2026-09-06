@@ -30,6 +30,7 @@ export type WebserverResourceKey =
   | "nginx"
   | "servers"
   | "servers-explorer"
+  | "webserver-config"
   | "diagnostics"
   | "audit"
   | "skills"

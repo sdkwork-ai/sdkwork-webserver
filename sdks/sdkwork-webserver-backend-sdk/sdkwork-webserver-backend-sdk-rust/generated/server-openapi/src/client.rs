@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::api::{ApplicationApi, ApplicationDomainApi, CertificateApi, DomainApi, ApplicationSourceVersionApi, ApplicationDeploymentApi, CertificateDistributionApi, NginxApi, ServerApi, ServerFileApi, AgentApi, AuditApi};
+use crate::api::{ApplicationApi, ApplicationDomainApi, CertificateApi, DomainApi, ApplicationSourceVersionApi, ApplicationDeploymentApi, CertificateDistributionApi, NginxApi, ServerApi, ServerFileApi, WebserverConfigApi, AgentApi, AuditApi};
 use crate::http::{SdkworkConfig, SdkworkError, SdkworkHttpClient};
 
 #[derive(Clone)]
@@ -81,6 +81,10 @@ impl SdkworkBackendClient {
 
     pub fn server_file(&self) -> ServerFileApi {
             ServerFileApi::new(Arc::clone(&self.http))
+        }
+
+    pub fn webserver_config(&self) -> WebserverConfigApi {
+            WebserverConfigApi::new(Arc::clone(&self.http))
         }
 
     pub fn agent(&self) -> AgentApi {

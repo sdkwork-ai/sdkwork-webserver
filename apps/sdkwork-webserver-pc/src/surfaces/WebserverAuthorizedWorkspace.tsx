@@ -7,6 +7,7 @@ import { webserverModule as nginxModule } from "@sdkwork/webserver-pc-admin-ngin
 import { webserverModule as pluginsAdminModule, PluginsAdminSurface, type PluginsAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-plugins";
 import { webserverModule as serversModule } from "@sdkwork/webserver-pc-admin-servers";
 import { webserverModule as serversExplorerModule, ServerFilesExplorerSurface } from "@sdkwork/webserver-pc-admin-servers-explorer";
+import { webserverModule as webserverConfigModule, WebserverConfigSurface } from "@sdkwork/webserver-pc-admin-webserver-config";
 import { webserverModule as skillsAdminModule, SkillsAdminSurface, type SkillsAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-skills";
 import { hasWebserverAdminAccess, type WebserverPcModuleDefinition } from "@sdkwork/webserver-pc-commons";
 import { createApplicationMediaStorage, createApplicationSourceStorage, createWebserverConsoleRegistry, WebserverConsoleSdkProvider } from "@sdkwork/webserver-pc-console-core";
@@ -23,7 +24,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import type { BootstrappedWebserverPcRuntime } from "../bootstrap/runtime.ts";
 
 const consoleModules = [sitesModule, configurationModule, deliveryModule, deploymentsModule, pluginsModule, skillsModule, mcpModule] satisfies readonly WebserverPcModuleDefinition[];
-const adminModules = [applicationsModule, nginxModule, serversModule, serversExplorerModule, diagnosticsModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule] satisfies readonly WebserverPcModuleDefinition[];
+const adminModules = [applicationsModule, nginxModule, serversModule, serversExplorerModule, webserverConfigModule, diagnosticsModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule] satisfies readonly WebserverPcModuleDefinition[];
 const LazyAdminSurface = lazy(() => import("./WebserverAdminSurface.tsx").then((module) => ({ default: module.WebserverAdminSurface })));
 
 export function WebserverAuthorizedWorkspace({ runtime }: { runtime: BootstrappedWebserverPcRuntime }) {
@@ -64,6 +65,7 @@ export function WebserverAuthorizedWorkspace({ runtime }: { runtime: Bootstrappe
     skills: <SkillsAdminSurface appApiBaseUrl={runtime.config.appApiBaseUrl} attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as SkillsAdminSurfaceProps["attachSdkClientBoundaries"]} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={runtime.config.driveAppApiBaseUrl} resource="skills" tokenManager={runtime.tokenManager} permissionScope={permissionScope} />,
     mcp: <McpAdminSurface appApiBaseUrl={runtime.config.appApiBaseUrl} attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as McpAdminSurfaceProps["attachSdkClientBoundaries"]} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={runtime.config.driveAppApiBaseUrl} resource="mcp" tokenManager={runtime.tokenManager} />,
     "servers-explorer": <ServerFilesExplorerSurface backendApiBaseUrl={runtime.config.backendApiBaseUrl} permissionScope={permissionScope} resource="servers-explorer" tokenManager={runtime.tokenManager} />,
+    "webserver-config": <WebserverConfigSurface backendApiBaseUrl={runtime.config.backendApiBaseUrl} permissionScope={permissionScope} resource="webserver-config" tokenManager={runtime.tokenManager} />,
   };
 
   return (

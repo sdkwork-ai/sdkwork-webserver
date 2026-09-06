@@ -522,6 +522,7 @@ fn canonical_environment(environment: &str) -> Result<&str, String> {
         "development" | "dev" => Ok("development"),
         "test" => Ok("test"),
         "staging" | "stage" => Ok("staging"),
+        "demo" => Ok("demo"),
         "production" | "prod" => Ok("production"),
         other => Err(format!(
             "unsupported SDKWORK_WEBSERVER_ENVIRONMENT {other} for standalone static delivery"

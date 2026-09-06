@@ -1697,9 +1697,10 @@ fn default_proxy_cache_stale_ttl_seconds() -> u64 {
 pub struct AppDomainFallbackConfig {
     #[serde(default = "default_app_domain_fallback_enabled")]
     pub enabled: bool,
-    /// Platform app-domain suffixes (same 14-domain catalog as
+    /// Platform app-domain suffixes (same 16-domain catalog as
     /// sdkwork-deployments: sdkwork.com, sdkwork.cn, birdcoder.com,
-    /// birdcoder.cn, dtupay.com, dtupay.cn, skubc.com, skubc.cn,
+    /// birdcoder.cn, dtupay.com, dtupay.cn, noaper.com, noaper.cn,
+    /// skubc.com, skubc.cn,
     /// zowalk.com, zowalk.cn, offer86.com, offer86.cn, 86offer.com,
     /// 86offer.cn). Requests for `<slug>.app[-<env>].<suffix>` are
     /// classified as default app domains; every other hostname is treated
@@ -1772,6 +1773,8 @@ pub fn default_app_domain_suffixes() -> Vec<String> {
         "birdcoder.cn",
         "dtupay.com",
         "dtupay.cn",
+        "noaper.com",
+        "noaper.cn",
         "skubc.com",
         "skubc.cn",
         "zowalk.com",

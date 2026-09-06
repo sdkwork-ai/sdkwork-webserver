@@ -10,5 +10,6 @@ export { CertificateDistributionApi, createCertificateDistributionApi } from './
 export { NginxApi, createNginxApi } from './nginx';
 export { ServerApi, createServerApi } from './server';
 export { ServerFileApi, createServerFileApi } from './server-file';
+export { WebserverConfigApi, createWebserverConfigApi } from './webserver-config';
 export { AgentApi, createAgentApi } from './agent';
 export { AuditApi, createAuditApi } from './audit';

@@ -16,9 +16,9 @@ if [ ! -d "${CHECKOUT}" ]; then
 fi
 
 case "${ENVIRONMENT}" in
-  development|test|staging|production|"") ;;
+  development|test|staging|demo|production|"") ;;
   *)
-    echo "usage: $0 [development|test|staging|production]" >&2
+    echo "usage: $0 [development|test|staging|demo|production]" >&2
     exit 2
     ;;
 esac

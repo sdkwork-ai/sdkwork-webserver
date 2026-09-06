@@ -2295,6 +2295,210 @@ class ServerFileContent {
   }
 }
 
+class WebserverConfigCatalog {
+  final String? configRoot;
+  final List<WebserverConfigEntry>? items;
+
+  WebserverConfigCatalog({
+    this.configRoot,
+    this.items
+  });
+
+  factory WebserverConfigCatalog.fromJson(Map<String, dynamic> json) {
+    return WebserverConfigCatalog(
+      configRoot: json['configRoot']?.toString(),
+      items: (() {
+        final list = _sdkworkAsList(json['items']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : WebserverConfigEntry.fromJson(map);
+      })())
+            .whereType<WebserverConfigEntry>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'configRoot': configRoot,
+      'items': items?.map((item) => item.toJson()).toList(),
+    };
+  }
+}
+
+class WebserverConfigEntry {
+  final String? id;
+  final String? kind;
+  final String? name;
+  final String? path;
+  final String? language;
+  final String? size;
+  final String? updatedAt;
+  final bool? writable;
+
+  WebserverConfigEntry({
+    this.id,
+    this.kind,
+    this.name,
+    this.path,
+    this.language,
+    this.size,
+    this.updatedAt,
+    this.writable
+  });
+
+  factory WebserverConfigEntry.fromJson(Map<String, dynamic> json) {
+    return WebserverConfigEntry(
+      id: json['id']?.toString(),
+      kind: json['kind']?.toString(),
+      name: json['name']?.toString(),
+      path: json['path']?.toString(),
+      language: json['language']?.toString(),
+      size: json['size']?.toString(),
+      updatedAt: json['updatedAt']?.toString(),
+      writable: json['writable'] is bool ? json['writable'] : null
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'kind': kind,
+      'name': name,
+      'path': path,
+      'language': language,
+      'size': size,
+      'updatedAt': updatedAt,
+      'writable': writable,
+    };
+  }
+}
+
+class WebserverConfigFile {
+  final String? id;
+  final String? kind;
+  final String? name;
+  final String? path;
+  final String? language;
+  final bool? writable;
+  final String? content;
+  final String? size;
+  final String? sha256;
+  final String? updatedAt;
+
+  WebserverConfigFile({
+    this.id,
+    this.kind,
+    this.name,
+    this.path,
+    this.language,
+    this.writable,
+    this.content,
+    this.size,
+    this.sha256,
+    this.updatedAt
+  });
+
+  factory WebserverConfigFile.fromJson(Map<String, dynamic> json) {
+    return WebserverConfigFile(
+      id: json['id']?.toString(),
+      kind: json['kind']?.toString(),
+      name: json['name']?.toString(),
+      path: json['path']?.toString(),
+      language: json['language']?.toString(),
+      writable: json['writable'] is bool ? json['writable'] : null,
+      content: json['content']?.toString(),
+      size: json['size']?.toString(),
+      sha256: json['sha256']?.toString(),
+      updatedAt: json['updatedAt']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'kind': kind,
+      'name': name,
+      'path': path,
+      'language': language,
+      'writable': writable,
+      'content': content,
+      'size': size,
+      'sha256': sha256,
+      'updatedAt': updatedAt,
+    };
+  }
+}
+
+class WebserverConfigWriteRequest {
+  final String? content;
+  final String? expectedSha256;
+
+  WebserverConfigWriteRequest({
+    this.content,
+    this.expectedSha256
+  });
+
+  factory WebserverConfigWriteRequest.fromJson(Map<String, dynamic> json) {
+    return WebserverConfigWriteRequest(
+      content: json['content']?.toString(),
+      expectedSha256: json['expectedSha256']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'content': content,
+      'expectedSha256': expectedSha256,
+    };
+  }
+}
+
+class WebserverConfigWriteResult {
+  final String? id;
+  final String? path;
+  final String? size;
+  final String? sha256;
+  final String? backupPath;
+  final String? updatedAt;
+
+  WebserverConfigWriteResult({
+    this.id,
+    this.path,
+    this.size,
+    this.sha256,
+    this.backupPath,
+    this.updatedAt
+  });
+
+  factory WebserverConfigWriteResult.fromJson(Map<String, dynamic> json) {
+    return WebserverConfigWriteResult(
+      id: json['id']?.toString(),
+      path: json['path']?.toString(),
+      size: json['size']?.toString(),
+      sha256: json['sha256']?.toString(),
+      backupPath: json['backupPath']?.toString(),
+      updatedAt: json['updatedAt']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'path': path,
+      'size': size,
+      'sha256': sha256,
+      'backupPath': backupPath,
+      'updatedAt': updatedAt,
+    };
+  }
+}
+
 class ServerProjectOperations {
   final String? nodeId;
   final String? path;
@@ -4481,6 +4685,90 @@ class ServerFilesNodeOperationsCreateResponse201 {
 
   factory ServerFilesNodeOperationsCreateResponse201.fromJson(Map<String, dynamic> json) {
     return ServerFilesNodeOperationsCreateResponse201(
+      code: json['code'] is int ? json['code'] : null,
+      data: json['data'],
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class WebserverConfigsListResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  WebserverConfigsListResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory WebserverConfigsListResponse.fromJson(Map<String, dynamic> json) {
+    return WebserverConfigsListResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: json['data'],
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class WebserverConfigsRetrieveResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  WebserverConfigsRetrieveResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory WebserverConfigsRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return WebserverConfigsRetrieveResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: json['data'],
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class WebserverConfigsUpdateResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  WebserverConfigsUpdateResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory WebserverConfigsUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return WebserverConfigsUpdateResponse(
       code: json['code'] is int ? json['code'] : null,
       data: json['data'],
       traceId: json['traceId']?.toString()

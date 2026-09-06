@@ -12,6 +12,7 @@ import { CertificateDistributionApi, createCertificateDistributionApi } from './
 import { NginxApi, createNginxApi } from './api/nginx';
 import { ServerApi, createServerApi } from './api/server';
 import { ServerFileApi, createServerFileApi } from './api/server-file';
+import { WebserverConfigApi, createWebserverConfigApi } from './api/webserver-config';
 import { AgentApi, createAgentApi } from './api/agent';
 import { AuditApi, createAuditApi } from './api/audit';
 
@@ -28,6 +29,7 @@ export class SdkworkBackendClient {
   public readonly nginx: NginxApi;
   public readonly server: ServerApi;
   public readonly serverFile: ServerFileApi;
+  public readonly webserverConfig: WebserverConfigApi;
   public readonly agent: AgentApi;
   public readonly audit: AuditApi;
 
@@ -52,6 +54,8 @@ export class SdkworkBackendClient {
     this.server = createServerApi(this.httpClient);
 
     this.serverFile = createServerFileApi(this.httpClient);
+
+    this.webserverConfig = createWebserverConfigApi(this.httpClient);
 
     this.agent = createAgentApi(this.httpClient);
 

@@ -9,6 +9,13 @@
 # and serve on the declared port, so SDKWORK_MODULE_API_GATEWAY_PORT defaults
 # to 8080 here.
 
+# Bounded json-file log rotation: unbounded container logs eventually fill
+# the host disk on long-lived deployments (OPERATIONS_SPEC.md §2.3).
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
 services:
   webserver-development:
     environment:
@@ -19,6 +26,11 @@ services:
       default: {}
       platform_api_gateway_attach: {}
 
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
   webserver-test:
     environment:
       SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT: docker
@@ -28,6 +40,11 @@ services:
       default: {}
       platform_api_gateway_attach: {}
 
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
   webserver-production:
     environment:
       SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT: docker
@@ -37,6 +54,11 @@ services:
       default: {}
       platform_api_gateway_attach: {}
 
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 networks:
   platform_api_gateway_attach:
     external: true

@@ -9,6 +9,7 @@ serde.workspace = true
 serde_json.workspace = true
 sdkwork-iam-web-adapter.workspace = true
 sdkwork-server-files-service.workspace = true
+sdkwork-webserver-config-service.workspace = true
 sdkwork-webserver-contract.workspace = true
 sdkwork-intelligence-webserver-service.workspace = true
 sdkwork-routes-webserver-common.workspace = true

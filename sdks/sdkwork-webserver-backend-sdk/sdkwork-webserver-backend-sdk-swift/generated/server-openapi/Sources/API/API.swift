@@ -12,6 +12,7 @@ public struct API {
     public static let nginx = NginxApi.self
     public static let server = ServerApi.self
     public static let serverFile = ServerFileApi.self
+    public static let webserverConfig = WebserverConfigApi.self
     public static let agent = AgentApi.self
     public static let audit = AuditApi.self
 }

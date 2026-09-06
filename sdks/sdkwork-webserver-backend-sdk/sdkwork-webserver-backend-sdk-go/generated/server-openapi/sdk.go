@@ -17,6 +17,7 @@ type SdkworkBackendClient struct {
     Nginx *api.NginxApi
     Server *api.ServerApi
     ServerFile *api.ServerFileApi
+    WebserverConfig *api.WebserverConfigApi
     Agent *api.AgentApi
     Audit *api.AuditApi
 }
@@ -40,6 +41,7 @@ func NewSdkworkBackendClientWithConfig(config sdkhttp.Config) *SdkworkBackendCli
         Nginx: api.NewNginxApi(client),
         Server: api.NewServerApi(client),
         ServerFile: api.NewServerFileApi(client),
+        WebserverConfig: api.NewWebserverConfigApi(client),
         Agent: api.NewAgentApi(client),
         Audit: api.NewAuditApi(client),
     }

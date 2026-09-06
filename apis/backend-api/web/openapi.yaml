@@ -2331,6 +2331,122 @@ paths:
                   properties:
                     data:
                       $ref: '#/components/schemas/ServerOperationResult'
+  /backend/v3/api/webserver_configs:
+    get:
+      operationId: webserverConfigs.list
+      summary: List the managed Web Server configuration catalog
+      description: Enumerates the manageable configuration files of the current
+        deployment, covering the default runtime configuration, the imports.d
+        module import plane, and read-only sibling-module sidecar configurations.
+      tags:
+      - webserverConfig
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.servers.files.read
+      x-sdkwork-owner: sdkwork-webserver
+      parameters: []
+      responses:
+        '200':
+          description: Web Server configuration catalog returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/WebserverConfigCatalog'
+  /backend/v3/api/webserver_configs/{configId}:
+    get:
+      operationId: webserverConfigs.retrieve
+      summary: Read one managed configuration file
+      tags:
+      - webserverConfig
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.servers.files.read
+      x-sdkwork-owner: sdkwork-webserver
+      parameters:
+      - name: configId
+        in: path
+        required: true
+        description: Stable catalog id of the configuration entry.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Configuration file content returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/WebserverConfigFile'
+    put:
+      operationId: webserverConfigs.update
+      summary: Validate and atomically overwrite one managed configuration file
+      description: Creates a timestamped backup of the previous content, validates
+        the new content (JSON/TOML parsers where applicable), and replaces the
+        file atomically. Pass expectedSha256 from the preceding read for
+        optimistic concurrency.
+      tags:
+      - webserverConfig
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.servers.files.write
+      x-sdkwork-idempotent: true
+      x-sdkwork-owner: sdkwork-webserver
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - name: configId
+        in: path
+        required: true
+        description: Stable catalog id of the configuration entry.
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebserverConfigWriteRequest'
+      responses:
+        '200':
+          description: Configuration file updated successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/WebserverConfigWriteResult'
   /backend/v3/api/agent/heartbeat:
     post:
       operationId: heartbeat
@@ -4171,6 +4287,151 @@ components:
           type: string
           format: int64
           x-sdkwork-int64-string: true
+    WebserverConfigCatalog:
+      type: object
+      additionalProperties: false
+      required:
+      - configRoot
+      - items
+      properties:
+        configRoot:
+          type: string
+          description: Web Server runtime configuration root the catalog was
+            enumerated from.
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebserverConfigEntry'
+    WebserverConfigEntry:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - kind
+      - name
+      - path
+      - language
+      - writable
+      properties:
+        id:
+          type: string
+          description: Stable, content-independent catalog id (SHA-256 over the
+            catalog identity).
+        kind:
+          type: string
+          enum:
+          - default-config
+          - import-config
+          - module-config
+        name:
+          type: string
+        path:
+          type: string
+          description: Posix path relative to the owning group root.
+        language:
+          type: string
+          description: Editor language id for the file content.
+        size:
+          type: string
+          format: int64
+          x-sdkwork-int64-string: true
+        updatedAt:
+          type: string
+          format: int64
+          x-sdkwork-int64-string: true
+          description: Last modification time, Unix seconds.
+        writable:
+          type: boolean
+          description: Module sidecar configs are read-only by ownership contract.
+    WebserverConfigFile:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - kind
+      - name
+      - path
+      - language
+      - writable
+      - content
+      - size
+      - sha256
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum:
+          - default-config
+          - import-config
+          - module-config
+        name:
+          type: string
+        path:
+          type: string
+        language:
+          type: string
+        writable:
+          type: boolean
+        content:
+          type: string
+          description: Decoded text content, bounded by the read size limit.
+        size:
+          type: string
+          format: int64
+          x-sdkwork-int64-string: true
+        sha256:
+          type: string
+          description: SHA-256 hex digest of the on-disk bytes.
+        updatedAt:
+          type: string
+          format: int64
+          x-sdkwork-int64-string: true
+          description: Last modification time, Unix seconds.
+    WebserverConfigWriteRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - content
+      properties:
+        content:
+          type: string
+          description: New text content; NUL-free, within the write size limit,
+            and syntax-validated for JSON/TOML files.
+        expectedSha256:
+          type: string
+          description: When provided, the write is rejected unless the on-disk
+            digest still matches (optimistic concurrency).
+    WebserverConfigWriteResult:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - path
+      - size
+      - sha256
+      - updatedAt
+      properties:
+        id:
+          type: string
+        path:
+          type: string
+        size:
+          type: string
+          format: int64
+          x-sdkwork-int64-string: true
+        sha256:
+          type: string
+          description: SHA-256 hex digest of the written content.
+        backupPath:
+          type: string
+          description: Backup file holding the previous content, when an existing
+            file was overwritten.
+        updatedAt:
+          type: string
+          format: int64
+          x-sdkwork-int64-string: true
+          description: Modification time of the written file, Unix seconds.
     ServerProjectOperations:
       type: object
       additionalProperties: false

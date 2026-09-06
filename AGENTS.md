@@ -98,7 +98,7 @@ Use dynamic progressive loading:
 - Rust code: `../sdkwork-specs/RUST_CODE_SPEC.md`.
 - API/SDK changes: `../sdkwork-specs/API_SPEC.md`, `../sdkwork-specs/WEB_FRAMEWORK_SPEC.md`, `../sdkwork-specs/WEB_BACKEND_SPEC.md`, `../sdkwork-specs/SDK_SPEC.md`, `../sdkwork-specs/TEST_SPEC.md`.
 - Database changes: `../sdkwork-specs/DATABASE_SPEC.md`, `../sdkwork-specs/DATABASE_FRAMEWORK_SPEC.md`, `../sdkwork-specs/TEST_SPEC.md`.
-- Runtime/deployment/release changes: `../sdkwork-specs/CONFIG_SPEC.md`, `../sdkwork-specs/ENVIRONMENT_SPEC.md`, `../sdkwork-specs/APPLICATION_DEPLOY_LAYOUT_SPEC.md`, `../sdkwork-specs/DEPLOYMENT_SPEC.md`, `../sdkwork-specs/GITHUB_WORKFLOW_SPEC.md`.
+- Runtime/deployment/release changes: `../sdkwork-specs/CONFIG_SPEC.md`, `../sdkwork-specs/ENVIRONMENT_SPEC.md`, `../sdkwork-specs/APPLICATION_DEPLOY_LAYOUT_SPEC.md`, `../sdkwork-specs/DEPLOYMENT_SPEC.md`, `../sdkwork-specs/DOCKER_SPEC.md`, `../sdkwork-specs/GITHUB_WORKFLOW_SPEC.md`.
 - Security/auth changes: `../sdkwork-specs/IAM_SPEC.md`, `../sdkwork-specs/SECURITY_SPEC.md`.
 
 ## Int64 Wire Contract (API_SPEC §13.6)
@@ -363,3 +363,44 @@ Verification:
 node ../sdkwork-specs/tools/sync-agent-sdk-generation-standard.mjs --root . --check
 ```
 <!-- /SDKWORK-SDK-GENERATION-STANDARD: v1 -->
+
+## Deployment Standard (bin/)
+
+Per `../sdkwork-specs/MODULE_BIN_SPEC.md`, this Rust module ships the
+standardized `bin/` entrypoint family; all build/package/deploy work `MUST`
+go through them (or the repository pnpm scripts they delegate to):
+
+| Entrypoint | Delegates to |
+| --- | --- |
+| `bin/docker-image.sh` | `pnpm build:container:standalone` → `registry.sdkwork.com/apps/sdkwork-webserver-standalone:<version>` |
+| `bin/docker-deploy.sh` | `deployments/docker/bundle/deploy.sh` (WSL or remote Ubuntu via `--host`) |
+| `bin/apps-build.sh` | `pc`/`h5` → canonical runner `tools/build-browser-client.mjs`; `server` → `cargo build --release` |
+| `bin/apps-package.sh` | `webserver-deb.mjs` (host-native, `test`/`production` only) / dist archives → `target/bin-packages/` with a sidecar `.sha256` |
+| `bin/apps-deploy.sh` | `server` → `apt-get install` the `.deb` on the Ubuntu target + systemd enable/health probe (`test`/`production` only); `pc`/`h5` report the static-root delivery channel |
+| `bin/apps-pkg-installer.sh` | `server` + `linux` → `webserver-deb.mjs` / `webserver-rpm.mjs` (`--format deb\|rpm`, `test`/`production` only) → `target/bin-installers/`; Windows/macOS server delivery stays on the container channel |
+
+| `bin/config.sh` | `ops-config.sh` — deployed-configuration `list/show/get/set/diff/validate/edit`, secrets redacted, backup + validate before mutation (`OPERATIONS_SPEC.md` §3) |
+| `bin/doctor.sh` | `ops-observe.sh` — read-only environment diagnostics (9 checks, exit 70 on FAIL, `--json`/`--export`) |
+| `bin/backup.sh` | `ops-backup.sh` — backup/list/verify/restore into `/opt/deploy/sdkwork-webserver/backups/` (`OPERATIONS_SPEC.md` §5) |
+| `bin/docker-deploy.sh logs` | `--instance/--service/--tail/--since/--follow/--export` (bounded read by default) |
+- App types declared: `pc,h5,server`; environments: `development`, `test`,
+  `staging`, `demo`, `production`.
+- `install`/`upgrade` push the newest packaged install bundle
+  (`dist/docker-install/*install-*.bundle`) to `/opt/deploy/sdkwork-webserver/bundle`;
+  `image.tar.gz` is skipped when the target already runs the default tag.
+- The install bundle is synced to `/opt/deploy/sdkwork-webserver/bundle` on
+  the target and `deploy.sh` always runs with that directory as its working
+  directory; `--image-tag`, `--replicas` and `--deps external|embedded` are
+  forwarded to it.
+- Host ports per environment: `SDKWORK_WEBSERVER_<ENV>_HOST_PORT` family
+  (`DOCKER_SPEC.md` §3.2); image naming and bundle layout per
+  `DOCKER_SPEC.md`; external host-system PostgreSQL/Redis per
+  `DEPLOYMENT_SPEC.md` §6.1.
+- The host-native `.deb` channel covers `test` and `production` only; every
+  other environment is delivered by the container path
+  (`bin/docker-image.sh` + `bin/docker-deploy.sh`), and the entrypoints fail
+  fast with that guidance instead of substituting another environment.
+- Mutating commands support `--dry-run`; production mutations require
+  `--yes`; `--purge` requires `--yes` in every environment; each run appends
+  its exit status to `target/bin-evidence/evidence.log`.
+- Validate with: `node ../sdkwork-specs/tools/check-module-bin.mjs --root .`

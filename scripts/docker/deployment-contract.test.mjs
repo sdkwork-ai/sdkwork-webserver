@@ -12,9 +12,9 @@ import {
 } from './validate-docker-deployment.mjs';
 
 const appRoot = path.resolve('.');
-const environments = ['development', 'test', 'staging', 'production'];
+const environments = ['development', 'test', 'staging', 'demo', 'production'];
 const baseDomains = ['sdkwork.com'];
-const suffixes = { development: 'dev', test: 'test', staging: 'staging', production: '' };
+const suffixes = { development: 'dev', test: 'test', staging: 'staging', demo: 'demo', production: '' };
 
 function expectedHosts(environment) {
   const role = suffixes[environment] ? `server-${suffixes[environment]}` : 'server';
@@ -119,6 +119,7 @@ test('module API gateway defaults to docker sibling deployment', () => {
     'docker-compose.development.yml',
     'docker-compose.test.yml',
     'docker-compose.staging.yml',
+    'docker-compose.demo.yml',
     'docker-compose.production.yml',
   ]) {
     const compose = readFileSync(path.join(appRoot, 'deployments', 'docker', file), 'utf8');
@@ -223,6 +224,7 @@ test('docker compose files expose module API gateway deployment env', () => {
     'docker-compose.development.yml',
     'docker-compose.test.yml',
     'docker-compose.staging.yml',
+    'docker-compose.demo.yml',
     'docker-compose.production.yml',
   ]) {
     const compose = readFileSync(path.join(appRoot, 'deployments', 'docker', file), 'utf8');
@@ -326,6 +328,7 @@ test('standalone image and compose publish public data plane on 80/443', () => {
     'docker-compose.development.yml',
     'docker-compose.test.yml',
     'docker-compose.staging.yml',
+    'docker-compose.demo.yml',
     'docker-compose.production.yml',
   ]) {
     const compose = readFileSync(path.join(appRoot, 'deployments', 'docker', file), 'utf8');
@@ -376,6 +379,7 @@ test('module space import auto-discovery is the docker default', () => {
     'docker-compose.development.yml',
     'docker-compose.test.yml',
     'docker-compose.staging.yml',
+    'docker-compose.demo.yml',
     'docker-compose.production.yml',
   ]) {
     const compose = readFileSync(path.join(appRoot, 'deployments', 'docker', file), 'utf8');
@@ -467,13 +471,13 @@ test('drive delivery cache mount and env contract is complete (DRIVE_SPEC §17)'
 });
 
 test('unified install bundle ships every lifecycle environment (DEPLOYMENT_SPEC §2/§6)', () => {
-  // deploy.sh accepts all four environments; the installer copies each
+  // deploy.sh accepts all five lifecycle environments; the installer copies each
   // env example into the bundle so operators never hand-craft one.
   const deployScript = readFileSync(
     path.join(appRoot, 'deployments', 'docker', 'bundle', 'deploy.sh'),
     'utf8',
   );
-  assert.match(deployScript, /development\|test\|staging\|production/u);
+  assert.match(deployScript, /development\|test\|staging\|demo\|production/u);
 
   // Port-resolution case matrix must cover every accepted environment
   // (DEPLOYMENT_SPEC §6 bundle deploy port-key contract): a missing branch
@@ -493,6 +497,11 @@ test('unified install bundle ships every lifecycle environment (DEPLOYMENT_SPEC 
       'SDKWORK_WEBSERVER_STAGING_HOST_PORT',
       'SDKWORK_WEBSERVER_STAGING_IMPORT_HTTP_HOST_PORT',
       'SDKWORK_WEBSERVER_STAGING_HTTPS_HOST_PORT',
+    ],
+    demo: [
+      'SDKWORK_WEBSERVER_DEMO_HOST_PORT',
+      'SDKWORK_WEBSERVER_DEMO_IMPORT_HTTP_HOST_PORT',
+      'SDKWORK_WEBSERVER_DEMO_HTTPS_HOST_PORT',
     ],
     production: [
       'SDKWORK_WEBSERVER_PROD_HOST_PORT',
@@ -514,7 +523,7 @@ test('unified install bundle ships every lifecycle environment (DEPLOYMENT_SPEC 
   );
   assert.match(
     installer,
-    /DEFAULT_ENVIRONMENTS = \['development', 'test', 'staging', 'production'\]/u,
+    /DEFAULT_ENVIRONMENTS = \['development', 'test', 'staging', 'demo', 'production'\]/u,
   );
   for (const environment of environments) {
     assert.equal(
@@ -637,14 +646,14 @@ test('release smoke is hermetic against host runtime config (RUNTIME_DIRECTORY_S
   assert.match(body, /environment = "production"/u, 'hermetic config pins the production profile');
 });
 
-test('every shipped compose service declares bounded log rotation (DEPLOYMENT_SPEC §6)', () => {
-  const composeFiles = [
+test('every shipped compose service declares bounded log rotation (DEPLOYMENT_SPEC §6)', () => {  const composeFiles = [
     'docker-compose.yml',
     'docker-compose.bundle.yml',
     'docker-compose.bundle-gateway.yml',
     'docker-compose.development.yml',
     'docker-compose.test.yml',
     'docker-compose.staging.yml',
+    'docker-compose.demo.yml',
     'docker-compose.production.yml',
   ];
   // Resolve YAML merge keys (`<<: *anchor`) the way compose applies them so
@@ -675,4 +684,78 @@ test('every shipped compose service declares bounded log rotation (DEPLOYMENT_SP
       );
     }
   }
+});
+
+test('external host-system dependencies are the default (DEPLOYMENT_SPEC §6.1)', () => {
+  // 1) bundle deploy.sh defaults to external and accepts --embedded opt-in.
+  const deployScript = readFileSync(
+    path.join(appRoot, 'deployments', 'docker', 'bundle', 'deploy.sh'),
+    'utf8',
+  );
+  assert.match(deployScript, /^EXTERNAL="1"$/mu, 'deploy.sh must default EXTERNAL="1"');
+  assert.match(deployScript, /--embedded\)\s+EXTERNAL="0"/u, 'deploy.sh must accept --embedded');
+
+  // 2) Env examples carry the host-system runtime connection keys explicitly,
+  //    never pin an image tag (bundle image.env owns it), and never reference
+  //    the retired 15432 dependency port.
+  for (const environment of environments) {
+    const file = path.join(appRoot, 'deployments', 'docker', 'env', `${environment}.env.example`);
+    const raw = readFileSync(file, 'utf8');
+    const env = parseDotEnv(raw);
+    assert.equal(env.SDKWORK_DATABASE_HOST, 'host.docker.internal', `${environment}.env.example`);
+    assert.equal(env.SDKWORK_DATABASE_PORT, '5432', `${environment}.env.example`);
+    assert.equal(env.SDKWORK_WEBSERVER_REDIS_HOST, 'host.docker.internal', `${environment}.env.example`);
+    assert.equal(env.SDKWORK_WEBSERVER_REDIS_PORT, '6379', `${environment}.env.example`);
+    assert.equal(
+      env.SDKWORK_WEBSERVER_IMAGE_TAG,
+      undefined,
+      `${environment}.env.example must not hardcode an image tag (bundle image.env owns it)`,
+    );
+    assert.doesNotMatch(raw, /15432/u, `${environment}.env.example references the retired 15432 port`);
+  }
+
+  // 3) Real lifecycle env files point at the host-system endpoints too.
+  for (const environment of environments) {
+    const file = path.join(appRoot, 'deployments', 'docker', 'env', `${environment}.env`);
+    const env = parseDotEnv(readFileSync(file, 'utf8'));
+    assert.equal(env.WEBSERVER_POSTGRES_HOST, 'host.docker.internal', `${environment}.env`);
+    assert.equal(env.WEBSERVER_POSTGRES_PORT, '5432', `${environment}.env`);
+    assert.equal(env.WEBSERVER_REDIS_HOST, 'host.docker.internal', `${environment}.env`);
+    assert.equal(env.WEBSERVER_REDIS_PORT, '6379', `${environment}.env`);
+  }
+
+  // 4) The provisioning script covers every lifecycle environment identity
+  //    (staging included) from the env-file identities.
+  const provisioning = readFileSync(
+    path.join(appRoot, 'deployments', 'docker', 'scripts', 'setup-host-external-deps.sh'),
+    'utf8',
+  );
+  for (const identity of ['sdkwork_ai_dev', 'sdkwork_ai_test', 'sdkwork_ai_staging', 'sdkwork_ai_prod']) {
+    assert.ok(
+      provisioning.includes(`create_identity "${identity}" "${identity}"`),
+      `setup-host-external-deps.sh must provision ${identity}`,
+    );
+  }
+});
+
+test('development container identity equals the .env.postgres profile (DEPLOYMENT_SPEC §6.1 / ENVIRONMENT_SPEC §7.1)', () => {
+  // Docker dev and `pnpm dev` must share one workspace identity; only the
+  // reachable host differs (127.0.0.1 from host processes, host.docker.internal
+  // from containers).
+  const devEnvPath = existsSync(path.join(appRoot, '.env.postgres'))
+    ? path.join(appRoot, '.env.postgres')
+    : path.join(appRoot, '.env.postgres.example');
+  const dev = parseDotEnv(readFileSync(devEnvPath, 'utf8'));
+  const dockerDev = parseDotEnv(
+    readFileSync(path.join(appRoot, 'deployments', 'docker', 'env', 'development.env'), 'utf8'),
+  );
+  assert.equal(dockerDev.SDKWORK_DATABASE_NAME, dev.SDKWORK_DATABASE_NAME, 'database name');
+  assert.equal(dockerDev.SDKWORK_DATABASE_SCHEMA, dev.SDKWORK_DATABASE_SCHEMA, 'schema');
+  assert.equal(dockerDev.SDKWORK_DATABASE_USERNAME, dev.SDKWORK_DATABASE_USERNAME, 'username');
+  assert.equal(dockerDev.SDKWORK_DATABASE_PASSWORD, dev.SDKWORK_DATABASE_PASSWORD, 'password');
+  assert.equal(
+    dockerDev.WEBSERVER_POSTGRES_PORT ?? '5432',
+    dev.SDKWORK_DATABASE_PORT ?? '5432',
+    'port',
+  );
 });

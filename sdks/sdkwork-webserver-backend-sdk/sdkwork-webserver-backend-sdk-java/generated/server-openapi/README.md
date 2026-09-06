@@ -71,6 +71,7 @@ client.getHttpClient().setHeader("X-Custom-Header", "value");
 - `client.getNginx()` - nginx API
 - `client.getServer()` - server API
 - `client.getServerFile()` - server_file API
+- `client.getWebserverConfig()` - webserver_config API
 - `client.getAgent()` - agent API
 - `client.getAudit()` - audit API
 
@@ -186,6 +187,14 @@ System.out.println(result);
 ```java
 // List Server Files deployment nodes
 ServerFilesNodesListResponse result = client.getServerFile().serverFilesNodesList();
+System.out.println(result);
+```
+
+### webserver_config
+
+```java
+// List the managed Web Server configuration catalog
+WebserverConfigsListResponse result = client.getWebserverConfig().webserverConfigsList();
 System.out.println(result);
 ```
 

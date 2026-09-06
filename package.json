@@ -5,11 +5,12 @@
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "dependencies": {
-    "tar": "7.5.21",
-    "sigstore": "4.1.1",
-    "yaml": "^2.8.0",
     "@sdkwork/app-topology": "workspace:*",
-    "@sdkwork/iam-application-bootstrap": "workspace:*"
+    "@sdkwork/iam-application-bootstrap": "workspace:*",
+    "@sdkwork/ui-pc-react": "workspace:*",
+    "sigstore": "4.1.1",
+    "tar": "7.5.21",
+    "yaml": "^2.8.0"
   },
   "pnpm": {
     "overrides": {
@@ -60,8 +61,10 @@
     "up:container:test:external": "node scripts/docker/compose.mjs up --environment test --external",
     "up:container:staging": "node scripts/docker/compose.mjs up --environment staging",
     "up:container:staging:external": "node scripts/docker/compose.mjs up --environment staging --external",
+    "up:container:demo": "node scripts/docker/compose.mjs up --environment demo",
     "up:container:production": "node scripts/docker/compose.mjs up --environment production",
     "up:container:production:external": "node scripts/docker/compose.mjs up --environment production --external",
+    "up:container:demo:external": "node scripts/docker/compose.mjs up --environment demo --external",
     "down:container:development": "node scripts/docker/compose.mjs down --environment development",
     "down:container:development:external": "node scripts/docker/compose.mjs down --environment development --external",
     "down:container:test": "node scripts/docker/compose.mjs down --environment test",
@@ -69,19 +72,17 @@
     "down:container:staging": "node scripts/docker/compose.mjs down --environment staging",
     "down:container:staging:external": "node scripts/docker/compose.mjs down --environment staging --external",
     "down:container:production": "node scripts/docker/compose.mjs down --environment production",
+    "down:container:demo": "node scripts/docker/compose.mjs down --environment demo",
     "down:container:production:external": "node scripts/docker/compose.mjs down --environment production --external",
+    "down:container:demo:external": "node scripts/docker/compose.mjs down --environment demo --external",
     "up:container:all:shared": "node scripts/docker/compose.mjs up --environment all --shared",
     "down:container:all:shared": "node scripts/docker/compose.mjs down --environment all --shared",
     "deploy:apply:standalone": "pnpm exec sdkwork-app deploy:apply --profile standalone.production --environment production",
     "deploy:apply:standalone:docker": "bash deployments/docker/bundle/deploy.sh",
-    "deploy:reapply:all": "bash scripts/docker/deploy-docker-environment.sh all --validate",
-    "deploy:rebuild:all": "bash scripts/docker/redeploy-all-environments.sh",
-    "deploy:rebuild:all:wsl": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/docker/redeploy-all-environments.ps1",
-    "deploy:rebuild:all:deploy-only": "bash scripts/docker/redeploy-all-environments.sh --deploy-only",
-    "deploy:reapply:development": "bash scripts/docker/deploy-docker-environment.sh development --validate",
-    "deploy:reapply:test": "bash scripts/docker/deploy-docker-environment.sh test --validate",
-    "deploy:reapply:staging": "bash scripts/docker/deploy-docker-environment.sh staging --validate",
-    "deploy:reapply:production": "bash scripts/docker/deploy-docker-environment.sh production --validate",
+    "deploy:reapply:development": "bash bin/docker-deploy.sh install --environment development",
+    "deploy:reapply:test": "bash bin/docker-deploy.sh install --environment test",
+    "deploy:reapply:staging": "bash bin/docker-deploy.sh install --environment staging",
+    "deploy:reapply:production": "bash bin/docker-deploy.sh install --environment production",
     "check:container-deployment": "node scripts/docker/validate-docker-deployment.mjs --matrix",
     "check:webserver-toml": "node ../sdkwork-specs/tools/check-webserver-toml-standard.mjs --root .",
     "check:webserver-toml:all": "node tools/validate-all-webserver-toml.mjs",
@@ -172,7 +173,11 @@
     "_sdkwork:release:package:standalone": "node scripts/webserver-release.mjs package --deployment-profile standalone",
     "_sdkwork:release:validate:standalone": "node scripts/webserver-release.mjs validate --deployment-profile standalone",
     "import:switch:standalone": "node scripts/webserver-import-profile.mjs standalone",
-    "import:status": "node scripts/webserver-import-profile.mjs status"
+    "import:status": "node scripts/webserver-import-profile.mjs status",
+    "build:pc:demo": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture pc --environment demo",
+    "build:h5:demo": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture h5 --environment demo",
+    "import:switch:cloud": "node scripts/webserver-import-profile.mjs cloud",
+    "deploy:reapply:demo": "bash bin/docker-deploy.sh install --environment demo"
   },
   "exports": {
     ".": {

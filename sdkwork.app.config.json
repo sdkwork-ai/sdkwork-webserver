@@ -161,7 +161,7 @@
             "domain": "server-test.sdkwork.com"
           },
           "checksumAlgorithm": "sha256",
-          "checksum": "d268c7f2c2660f2dc6d330812e357396e8988857b69c73d6b02855ec3e7f4439"
+          "checksum": "519f6e52a443aa8a867e06c11f795c7286a896644a98a9571319c0ca53c647d6"
         },
         {
           "id": "linux-rhel-x64-standalone-server-rpm",
@@ -207,16 +207,32 @@
     }
   },
   "release": {
-    "currentVersion": "0.1.0",
+    "currentVersion": "0.1.2",
     "defaultChannel": "BETA",
     "latest": {
-      "BETA": "0.1.0"
+      "BETA": "0.1.1"
     },
     "notes": [
       {
-        "version": "0.1.0",
+        "version": "0.1.1",
         "channel": "BETA",
         "current": true,
+        "summary": "Standalone Docker three-environment alignment: external host-system PostgreSQL/Redis contract, webserver attach-contract override (gateway alias + container listener 8080) and complete per-environment env surface.",
+        "packageIds": [
+          "linux-rhel-x64-standalone-server-rpm",
+          "linux-rhel-x64-standalone-test-server-rpm",
+          "linux-ubuntu-x64-standalone-server-deb",
+          "linux-ubuntu-x64-standalone-test-server-deb",
+          "linux-x64-standalone-server-tar-gz",
+          "linux-arm64-standalone-server-tar-gz"
+        ],
+        "forceUpdate": false,
+        "minSupportedVersion": "0.1.0"
+      },
+      {
+        "version": "0.1.0",
+        "channel": "BETA",
+        "current": false,
         "summary": "Pre-release SDKWork standards alignment baseline; Ubuntu .deb and RHEL .rpm installers (test/production) built and verified on Ubuntu 22.04.",
         "packageIds": [
           "linux-rhel-x64-standalone-server-rpm",

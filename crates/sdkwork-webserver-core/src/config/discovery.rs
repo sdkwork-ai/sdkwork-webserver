@@ -32,7 +32,7 @@ pub const APP_ROOT_ENV: &str = "SDKWORK_WEBSERVER_APP_ROOT";
 const WEBSERVER_DEPLOY_SUBDIR: &str = "deployments/webserver";
 const LAYOUT_V3_COMMON_FILE: &str = "server.common.toml";
 const VALID_DEPLOYMENT_PROFILES: &[&str] = &["standalone", "cloud"];
-const VALID_ENVIRONMENTS: &[&str] = &["development", "test", "staging", "production"];
+const VALID_ENVIRONMENTS: &[&str] = &["development", "test", "staging", "demo", "production"];
 
 /// Canonical Web Server data-plane config file name inside the application
 /// config directory (`specs/sdkwork.webserver.config.schema.json` is the schema

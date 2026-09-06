@@ -34,6 +34,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { extract as extractTar } from 'tar';
@@ -43,10 +44,18 @@ const RELEASE_OUTPUT_ROOT = path.join(REPO_ROOT, 'dist', 'release');
 const INSTALLER_OUTPUT_ROOT = path.join(REPO_ROOT, 'dist', 'installers');
 // The staging directory must live on a filesystem with real permission bits
 // (Linux ext4). On shared/Windows-mounted filesystems (WSL /mnt) the mode
-// bits are not preserved; override with SDKWORK_DEB_STAGE_PARENT.
+// bits are not preserved and dpkg-deb rejects the control directory
+// ("bad permissions 777"), so a repo checkout under /mnt defaults to the
+// native tmp dir instead. Override with SDKWORK_DEB_STAGE_PARENT.
+function defaultDebStageParent() {
+  if (process.platform === 'linux' && /(^|\/)mnt\//.test(REPO_ROOT)) {
+    return path.join(os.tmpdir(), 'sdkwork-deb-stage');
+  }
+  return path.join(REPO_ROOT, '.sdkwork', 'runtime', 'deb-stage');
+}
 const STAGE_PARENT = process.env.SDKWORK_DEB_STAGE_PARENT
   ? path.resolve(process.env.SDKWORK_DEB_STAGE_PARENT)
-  : path.join(REPO_ROOT, '.sdkwork', 'runtime', 'deb-stage');
+  : defaultDebStageParent();
 const DEB_TEMPLATE_ROOT = path.join(REPO_ROOT, 'scripts', 'deb');
 const PC_RUNTIME_ENV_SOURCES = Object.freeze({
   test: path.join(

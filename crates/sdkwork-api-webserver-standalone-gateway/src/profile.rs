@@ -90,7 +90,7 @@ fn compose_owner_contributions(
     module_registry.add_modules(contributions);
     let assembly = module_registry
         .try_compose("SDKWork Web Server Standalone API")
-            .map_err(|detail| StandaloneProfileError::InvalidComposition { detail })?;
+        .map_err(|detail| StandaloneProfileError::InvalidComposition { detail })?;
     Ok(StandaloneApiProfile {
         assembly,
         machine_authenticator,
