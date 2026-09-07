@@ -3,8 +3,8 @@ import path from 'node:path';
 import { resolveBrowserDistOutDir as resolveSpecsBrowserDistOutDir } from '../../../../sdkwork-specs/tools/browser-dist-layout.mjs';
 
 const DEPLOYMENT_PROFILES = new Set(['standalone', 'cloud']);
-const LIFECYCLE_ENVIRONMENTS = new Set(['development', 'test', 'staging', 'production']);
-const PROFILE_ID_PATTERN = /^(standalone|cloud)\.(development|test|staging|production)$/u;
+const LIFECYCLE_ENVIRONMENTS = new Set(['development', 'test', 'staging', 'demo', 'production']);
+const PROFILE_ID_PATTERN = /^(standalone|cloud)\.(development|test|staging|demo|production)$/u;
 
 export const CANONICAL_API_PROXY_PATHS = Object.freeze([
   '/app/v3/api',

@@ -46,6 +46,46 @@ sdkwork_module_health_port() {
   esac
 }
 
+# §9.3 layout conformance probe (APPLICATION_DEPLOY_LAYOUT_SPEC.md §9):
+# read-only verification of the host deploy root on the target. Doctor emits
+# these rows only when a deploy root actually exists on the target host.
+sdkwork_module_extra_doctor() {
+  local environment="$1"
+  if [[ "${SDKWORK_BIN_DRY_RUN}" == "1" ]]; then
+    sdkwork_doctor_row PASS layout "dry-run: deploy-root layout scan skipped"
+    return 0
+  fi
+  # a) deploy root exists at all (soft: a non-deployed host has no root).
+  sdkwork_doctor_capture "${SDKWORK_BIN_HOST}" bash -lc 'test -d /opt/deploy && echo yes || echo no'
+  if [[ "${SDKWORK_DOCTOR_OUT}" != "yes" ]]; then
+    sdkwork_doctor_row WARN layout "no host deploy root at /opt/deploy on ${SDKWORK_BIN_HOST} (docker deployments only)"
+    return 0
+  fi
+  # b) no loose operation logs at the deploy root (§9.1 anti-drift rule).
+  sdkwork_doctor_capture "${SDKWORK_BIN_HOST}" bash -lc \
+    'find /opt/deploy -maxdepth 1 -type f \( -name "*.log" -o -name "*.txt" \) | head -5'
+  if [[ -n "${SDKWORK_DOCTOR_OUT}" ]]; then
+    sdkwork_doctor_row WARN layout "loose files at deploy root (move to /opt/deploy/logs|archives): ${SDKWORK_DOCTOR_OUT//$'\n'/, }"
+  else
+    sdkwork_doctor_row PASS layout "deploy root free of loose log/text files"
+  fi
+  # c) canonical install root + bundle for this module (§9.1).
+  sdkwork_doctor_capture "${SDKWORK_BIN_HOST}" bash -lc \
+    'test -d /opt/deploy/sdkwork-webserver/bundle && echo bundle-ok || echo bundle-missing'
+  if [[ "${SDKWORK_DOCTOR_OUT}" == "bundle-ok" ]]; then
+    sdkwork_doctor_row PASS layout "/opt/deploy/sdkwork-webserver/{bundle} present"
+  else
+    sdkwork_doctor_row WARN layout "/opt/deploy/sdkwork-webserver/bundle missing for '${environment}' (install first)"
+  fi
+  # d) shared checkout surface present (§9.2: one checkout, all stacks).
+  sdkwork_doctor_capture "${SDKWORK_BIN_HOST}" bash -lc \
+    'test -d /opt/deploy/sdkwork-space && echo space-ok || echo space-missing'
+  case "${SDKWORK_DOCTOR_OUT}" in
+    space-ok)      sdkwork_doctor_row PASS layout "shared checkout /opt/deploy/sdkwork-space present" ;;
+    space-missing) sdkwork_doctor_row WARN layout "shared checkout /opt/deploy/sdkwork-space absent (webserver overlay cannot resolve sidecars)" ;;
+  esac
+}
+
 # Delegates to the repository's canonical deployment validator.
 sdkwork_module_config_validate() {
   local env_file="$1"
