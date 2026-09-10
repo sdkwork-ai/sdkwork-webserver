@@ -852,7 +852,7 @@ pub struct CertificateOperationAcceptedResponse {
 /// Decrypted node-scoped TLS assignment material projected from the control
 /// plane for the self-hosted TLS runtime snapshot. Private key material is
 /// transported only inside the process boundary and never leaves the node.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TlsCertificateAssignmentMaterial {
     pub certificate_id: String,
@@ -864,6 +864,30 @@ pub struct TlsCertificateAssignmentMaterial {
     pub not_after: String,
     pub fullchain_pem: String,
     pub private_key_pem: String,
+}
+
+impl std::fmt::Debug for TlsCertificateAssignmentMaterial {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // PEM bodies (certificate chain, private key) are redacted so any
+        // future `?value` log site can never leak key material.
+        f.debug_struct("TlsCertificateAssignmentMaterial")
+            .field("certificate_id", &self.certificate_id)
+            .field("version_uuid", &self.version_uuid)
+            .field("cert_name", &self.cert_name)
+            .field("hostnames", &self.hostnames)
+            .field("fingerprint_sha256", &self.fingerprint_sha256)
+            .field("not_before", &self.not_before)
+            .field("not_after", &self.not_after)
+            .field(
+                "fullchain_pem",
+                &format!("<pem {} bytes>", self.fullchain_pem.len()),
+            )
+            .field(
+                "private_key_pem",
+                &format!("<private key {} bytes>", self.private_key_pem.len()),
+            )
+            .finish()
+    }
 }
 
 /// Certificate revocation request. `reason` selects one of the RFC 5280
@@ -1022,7 +1046,7 @@ pub struct CertificateDistributionPage {
     pub page_size: i32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct CertificateIssueUpdate {
     pub cert_name: String,
     pub cert_type: i32,
@@ -1038,6 +1062,34 @@ pub struct CertificateIssueUpdate {
     pub not_before: String,
     pub not_after: String,
     pub auto_renew: bool,
+}
+
+impl std::fmt::Debug for CertificateIssueUpdate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Same redaction contract as TlsCertificateAssignmentMaterial.
+        f.debug_struct("CertificateIssueUpdate")
+            .field("cert_name", &self.cert_name)
+            .field("cert_type", &self.cert_type)
+            .field("issuer", &self.issuer)
+            .field("subject", &self.subject)
+            .field("serial_sha256", &self.serial_sha256)
+            .field("fingerprint_sha256", &self.fingerprint_sha256)
+            .field("spki_sha256", &self.spki_sha256)
+            .field("chain_sha256", &self.chain_sha256)
+            .field("key_algorithm", &self.key_algorithm)
+            .field(
+                "fullchain_pem",
+                &format!("<pem {} bytes>", self.fullchain_pem.len()),
+            )
+            .field(
+                "private_key_pem",
+                &format!("<private key {} bytes>", self.private_key_pem.len()),
+            )
+            .field("not_before", &self.not_before)
+            .field("not_after", &self.not_after)
+            .field("auto_renew", &self.auto_renew)
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

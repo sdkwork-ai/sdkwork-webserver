@@ -406,6 +406,8 @@ default_docker_cors_allowed_origins() {
   local environment="$4"
   local origins=""
   local host hosts
+  # Primary-domain role hosts stay explicit per environment
+  # (APP_RUNTIME_TOPOLOGY_NAMING §9).
   case "${environment}" in
     development)
       hosts="server-dev.${domain} server-app-dev.${domain} server-admin-dev.${domain}"
@@ -430,6 +432,37 @@ default_docker_cors_allowed_origins() {
     origins="${origins:+$origins,}${scheme}://${host}:${host_port}"
     origins="${origins},${scheme}://${host}"
   done
+  # Registered product base domains (APP_RUNTIME_TOPOLOGY_NAMING.md §9.3):
+  # every deployment binds the whole remaining family by default so browser
+  # Origins are accepted regardless of which product base domain serves the
+  # console.
+  local base_domains="sdkwork.com birdcoder.com dtupay.com noaper.com sdkwork.cn birdcoder.cn dtupay.cn noaper.cn skubc.com skubc.cn zowalk.com zowalk.cn offer86.com offer86.cn 86offer.com 86offer.cn"
+  local suffix=""
+  case "${environment}" in
+    development) suffix="-dev" ;;
+    test) suffix="-test" ;;
+    staging) suffix="-staging" ;;
+    demo) suffix="-demo" ;;
+    production) suffix="" ;;
+    *) suffix="-dev" ;;
+  esac
+  local domain_entry role family_host
+  for domain_entry in ${base_domains}; do
+    if [ "${domain_entry}" = "${domain}" ]; then
+      continue
+    fi
+    for role in server server-app server-admin; do
+      family_host="${role}${suffix}.${domain_entry}"
+      origins="${origins:+$origins,}${scheme}://${family_host}:${host_port}"
+      origins="${origins},${scheme}://${family_host}"
+    done
+    if [ "${environment}" = "production" ]; then
+      origins="${origins:+$origins,}${scheme}://${domain_entry}:${host_port}"
+      origins="${origins},${scheme}://${domain_entry}"
+      origins="${origins},${scheme}://app.${domain_entry}:${host_port}"
+      origins="${origins},${scheme}://app.${domain_entry}"
+    fi
+  done
   origins="${origins},${scheme}://localhost:${host_port},${scheme}://127.0.0.1:${host_port}"
   # Registered desktop WebView custom schemes and mini program runtimes
   # (WEB_FRAMEWORK_SPEC §12): first-party client origins are always allowed.
@@ -452,6 +485,7 @@ environment_dist_alias() {
     development) printf '%s' "dev" ;;
     test) printf '%s' "test" ;;
     staging) printf '%s' "staging" ;;
+    demo) printf '%s' "demo" ;;
     production) printf '%s' "prod" ;;
     *) printf '%s' "dev" ;;
   esac
@@ -828,12 +862,16 @@ module_nginx_sidecar_abs_path() {
 }
 
 # Environments one webserver instance imports for every module
-# (ENVIRONMENT_SPEC §6.2.2 universal import plane). Default: the instance's
-# own environment only. Comma-separated; unknown names are ignored so a
-# commissioned subset like "development,test,staging,demo,production" works
-# even when a module ships only some sidecars.
+# (ENVIRONMENT_SPEC §6.2.2 universal import plane). A deployed instance MUST
+# route every commissioned lifecycle domain edge, so the default is ALL five
+# lifecycle environments — an instance's own SDKWORK_WEBSERVER_ENVIRONMENT only
+# selects its default routing env, never the set of imported sidecars. Override
+# with a comma-separated SDKWORK_WEBSERVER_IMPORT_ENVIRONMENTS to commission a
+# subset. Comma-separated; unknown names are ignored so a commissioned subset
+# like "development,test,staging,demo,production" works even when a module ships
+# only some sidecars.
 webserver_import_environments() {
-  local configured="${SDKWORK_WEBSERVER_IMPORT_ENVIRONMENTS:-${SDKWORK_WEBSERVER_ENVIRONMENT:-development}}"
+  local configured="${SDKWORK_WEBSERVER_IMPORT_ENVIRONMENTS:-development,test,staging,demo,production}"
   local requested environment out=""
   local -a seen=()
   IFS=',' read -r -a requested <<< "${configured}"
@@ -854,7 +892,7 @@ webserver_import_environments() {
     seen+=("${environment}")
     out="${out:+${out} }${environment}"
   done
-  printf '%s' "${out:-${SDKWORK_WEBSERVER_ENVIRONMENT:-development}}"
+  printf '%s' "${out:-development,test,staging,demo,production}"
 }
 
 module_nginx_conf_path() {
@@ -983,6 +1021,12 @@ discover_module_api_gateway_allowed_hosts() {
       # (api-staging.<brand>), mirroring api-dev/api-test/api.
       for brand in ${brands}; do
         api_hosts="${api_hosts:+${api_hosts},}api-staging.${brand}"
+      done
+      ;;
+    demo)
+      # demo uses the -demo suffix (api-demo.<brand>), mirroring api-staging.
+      for brand in ${brands}; do
+        api_hosts="${api_hosts:+${api_hosts},}api-demo.${brand}"
       done
       ;;
     production)
@@ -1406,7 +1450,8 @@ materialize_module_import_files() {
   environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
   active_profile="$(webserver_import_profile)"
   # Universal import plane (ENVIRONMENT_SPEC §6.2.2): one instance serves all
-  # commissioned lifecycle environments; default is the instance environment.
+  # commissioned lifecycle environments; default is all five so every domain
+  # edge of every imported module routes through this process.
   import_environments="$(webserver_import_environments)"
   product_edge="${imports_root}/product-edge-nginx.conf"
 
@@ -1673,7 +1718,7 @@ materialize_module_web_static_roots() {
     # Both profile sets coexist (§17.3); Adaptive Web roots are identical
     # across them, so process whichever confs exist exactly once per path.
     for profile in standalone cloud; do
-      conf="$(module_nginx_sidecar_abs_path "${module_root}" "${profile}")"
+      conf="$(module_nginx_sidecar_abs_path "${module_root}" "${environment}" "${profile}")"
       [ -f "${conf}" ] || continue
       while IFS=' ' read -r surface root; do
         [ -n "${surface}" ] && [ -n "${root}" ] || continue
@@ -1880,6 +1925,9 @@ ensure_spa_static_root() {
         ;;
       staging)
         messaging_pc_url="${SDKWORK_WEBSERVER_MESSAGING_PC_URL:-https://messaging-staging.sdkwork.com/notifications}"
+        ;;
+      demo)
+        messaging_pc_url="${SDKWORK_WEBSERVER_MESSAGING_PC_URL:-https://messaging-demo.sdkwork.com/notifications}"
         ;;
       production)
         messaging_pc_url="${SDKWORK_WEBSERVER_MESSAGING_PC_URL:-https://messaging.sdkwork.com/notifications}"

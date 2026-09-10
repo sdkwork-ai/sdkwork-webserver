@@ -24,11 +24,12 @@ impl WebFrameworkAuditEmitter {
 impl AuditEmitter for WebFrameworkAuditEmitter {
     async fn emit(&self, fact: AuditFact) -> Result<(), WebFrameworkError> {
         // Audit is an observability side-channel and must never fail the
-        // business response. A fact without a positive numeric tenant
-        // subject (anonymous public endpoints such as login or password
-        // reset) or with an unresolvable one (IAM-injection anomaly) is
-        // skipped instead of persisted: an audit row must never carry a
-        // fabricated tenant id of 0. Persistence failures are logged and
+        // business response. A business fact without a positive numeric
+        // tenant subject (anonymous public endpoints such as login or
+        // password reset) is skipped: business audit rows must not carry a
+        // fabricated tenant id of 0. Anonymous *security* events are handled
+        // by the SecurityEventEmitter below, which persists them under the
+        // platform-shared tenant 0. Persistence failures are logged and
         // downgraded for the same reason.
         let Some(tenant_id) = numeric_subject_id(fact.tenant_id.as_deref()) else {
             tracing::debug!(
@@ -91,18 +92,13 @@ impl WebFrameworkSecurityEventEmitter {
 #[async_trait]
 impl SecurityEventEmitter for WebFrameworkSecurityEventEmitter {
     async fn emit(&self, event: SecurityEvent) -> Result<(), WebFrameworkError> {
-        // Same downgrade rule as the audit emitter: security events without
-        // a positive numeric tenant subject (anonymous endpoints) are
-        // skipped, and persistence failures are logged without failing the
-        // business response.
-        let Some(tenant_id) = numeric_subject_id(event.tenant_id.as_deref()) else {
-            tracing::debug!(
-                request_id = event.request_id.as_deref().unwrap_or("unknown"),
-                kind = ?event.kind,
-                "skipping security event without a positive numeric tenant subject"
-            );
-            return Ok(());
-        };
+        // Authenticated events carry their resolved tenant; anonymous events
+        // (authentication failures, authorization probes against public
+        // surfaces) persist under the platform-shared tenant 0 with a SYSTEM
+        // operator so credential-stuffing and enumeration attempts leave
+        // durable evidence instead of only a debug line (PRD §8.4). Security
+        // events must never fail the business response.
+        let tenant_id = numeric_subject_id(event.tenant_id.as_deref()).unwrap_or(0);
         let metadata_json = serde_json::to_string(&serde_json::json!({
             "apiSurface": &event.api_surface,
             "method": &event.method,

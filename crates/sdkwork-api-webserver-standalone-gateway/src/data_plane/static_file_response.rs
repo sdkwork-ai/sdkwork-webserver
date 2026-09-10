@@ -43,7 +43,10 @@ pub(crate) async fn serve_opened_file(
         // §8.1): fingerprinted immutable assets get long-lived caching, the public
         // runtime env document never caches, everything else revalidates through
         // ETag/Last-Modified conditional requests.
-        .header(header::CACHE_CONTROL, cache_control_for_path(&opened.path_hint));
+        .header(
+            header::CACHE_CONTROL,
+            cache_control_for_path(&opened.path_hint),
+        );
     if let Some(modified) = modified {
         builder = builder.header(header::LAST_MODIFIED, modified.to_string());
     }
@@ -145,9 +148,8 @@ fn is_fingerprinted_asset(path: &Path) -> bool {
     if !(8..=32).contains(&byte_len) {
         return false;
     }
-    hash.bytes().all(|byte| {
-        byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_'
-    })
+    hash.bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
         && hash.bytes().any(|byte| byte.is_ascii_digit())
 }
 

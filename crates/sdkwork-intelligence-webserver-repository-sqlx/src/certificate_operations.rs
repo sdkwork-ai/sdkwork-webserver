@@ -597,12 +597,16 @@ impl WebRepository {
         .execute(&mut *tx)
         .await
         .map_err(|error| store_error("persist certificate operation failure", error))?;
+        // Atomic JSONB merge: the failure code is added to the existing
+        // document so sibling keys (ARI renewal window, listing metadata)
+        // are never clobbered by a whole-document replacement.
         let metadata = json!({ "certificateOperationFailureCode": failure_code });
         sqlx::query(
             "UPDATE web_certificate
              SET renewal_status = CASE WHEN $3 THEN 3 ELSE 2 END,
                  status = CASE WHEN $4 = 'ISSUE' AND $3 THEN 0 ELSE status END,
-                 metadata = CAST($5 AS JSONB), updated_at = NOW(), version = version + 1
+                 metadata = metadata || CAST($5 AS JSONB),
+                 updated_at = NOW(), version = version + 1
              WHERE tenant_id = $1 AND id = $2",
         )
         .bind(lease.tenant_id)
@@ -768,7 +772,8 @@ async fn reap_exhausted_certificate_operations_in_tx(
             UPDATE web_certificate certificate
             SET renewal_status = 3,
                 status = CASE WHEN expired.operation_type = 'ISSUE' THEN 0 ELSE certificate.status END,
-                metadata = jsonb_build_object('certificateOperationFailureCode', $3::text),
+                metadata = certificate.metadata
+                    || jsonb_build_object('certificateOperationFailureCode', $3::text),
                 updated_at = NOW(), version = certificate.version + 1
             FROM expired
             WHERE certificate.tenant_id = expired.tenant_id

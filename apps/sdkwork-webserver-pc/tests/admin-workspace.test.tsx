@@ -249,17 +249,22 @@ describe("admin workspace application controls", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(screen.getByRole("button", { name: "Git repository" }));
 
-    const repositoryInput = screen.getByLabelText("HTTPS Git repository") as HTMLInputElement;
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(screen.getByRole("heading", { name: "Deployment configuration" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    // Going back remounts the source step form: re-query the element instead
+    // of keeping the pre-Back reference, whose events would land outside the
+    // React tree.
+    const repositoryInput = screen.getByLabelText("HTTPS Git repository") as HTMLInputElement;
     fireEvent.change(repositoryInput, { target: { value: "http://github.com/sdkwork/example.git" } });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(screen.getByRole("alert").textContent).toContain("Enter a valid HTTPS Git repository");
-    await waitFor(() => expect(document.activeElement).toBe(repositoryInput));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("HTTPS Git repository")));
 
-    fireEvent.change(repositoryInput, { target: { value: "https://github.com/sdkwork/example.git" } });
+    fireEvent.change(screen.getByLabelText("HTTPS Git repository"), {
+      target: { value: "https://github.com/sdkwork/example.git" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(screen.getByRole("heading", { name: "Deployment configuration" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
@@ -473,6 +478,22 @@ describe("admin workspace application controls", () => {
   });
 
   it("keeps the application draft recoverable when store media upload fails", async () => {
+    // Store media must actually be submitted for the upload to fail: with
+    // FR-034 optional media, a skipped media step never touches the media
+    // storage, so the draft-recoverable path requires a real icon upload.
+    class PreviewUrl extends URL {
+      static createObjectURL(file: Blob): string {
+        return `blob:${(file as File).name}`;
+      }
+
+      static revokeObjectURL(): void {}
+    }
+    vi.stubGlobal("URL", PreviewUrl);
+    vi.stubGlobal("createImageBitmap", vi.fn().mockResolvedValue({
+      close: vi.fn(),
+      height: 1024,
+      width: 1024,
+    }));
     const create = vi.fn().mockResolvedValue({ id: "app-1" });
     const mediaStorage = testMediaStorage();
     vi.mocked(mediaStorage.store).mockRejectedValue(new Error("provider detail must remain hidden"));
@@ -486,6 +507,10 @@ describe("admin workspace application controls", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Create application" }));
     fireEvent.change(screen.getByLabelText("Application name"), { target: { value: "Commercial portal" } });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.change(screen.getByTestId("application-icon-input"), {
+      target: { files: [new File(["icon"], "icon.png", { type: "image/png" })] },
+    });
+    expect(await screen.findByRole("img", { name: "Application icon" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.change(screen.getByTestId("application-source-input"), {
       target: { files: [new File(["source"], "source.zip", { type: "application/zip" })] },

@@ -51,7 +51,7 @@ describe("admin application capability", () => {
       idempotencyKey: "application-create-1",
       sourceInputMode: "archive",
     });
-    expect(listApplications).toHaveBeenCalledWith({ page: 1, pageSize: 20, keyword: "api" });
+    expect(listApplications).toHaveBeenCalledWith({ page: 1, pageSize: 20, q: "api" });
     expect(createApplication).toHaveBeenCalledWith(expect.objectContaining({
       name: "API",
       appKind: "API_SERVICE",

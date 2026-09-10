@@ -45,7 +45,9 @@ pub async fn serve_static(
                 &file,
                 spa_fallback,
                 request.method(),
-            ) {
+            )
+            .await
+            {
                 return with_adaptive_vary_if_spa(response, spa_fallback);
             }
             let response = serve_opened_file(file, request.method(), request.headers()).await;
@@ -75,7 +77,10 @@ pub async fn serve_static(
 /// never hand one renderer's representation to the other device class.
 const ADAPTIVE_VARY_VALUE: &str = "User-Agent, Sec-CH-UA-Mobile";
 
-fn with_adaptive_vary_if_spa(mut response: Response<Body>, spa_fallback: Option<&str>) -> Response<Body> {
+fn with_adaptive_vary_if_spa(
+    mut response: Response<Body>,
+    spa_fallback: Option<&str>,
+) -> Response<Body> {
     if spa_fallback.is_some() && !response.headers().contains_key(header::VARY) {
         if let Ok(value) = HeaderValue::from_str(ADAPTIVE_VARY_VALUE) {
             response.headers_mut().insert(header::VARY, value);
@@ -134,7 +139,7 @@ fn static_path_error_response(error: StaticPathError) -> Response<Body> {
 /// static file service: no development bootstrap token is configured, the
 /// route has no SPA fallback, or the served file is not the fallback index.
 /// HEAD mirrors the GET headers including the injected `Content-Length`.
-fn serve_spa_index_with_credential_entry_bootstrap(
+async fn serve_spa_index_with_credential_entry_bootstrap(
     root: &Path,
     file: &super::static_path::OpenedStaticFile,
     spa_fallback: Option<&str>,
@@ -164,7 +169,13 @@ fn serve_spa_index_with_credential_entry_bootstrap(
         .path_hint
         .strip_prefix(std::path::Path::new(std::path::MAIN_SEPARATOR_STR))
         .unwrap_or(&file.path_hint);
-    let html = std::fs::read(root.join(anchored)).ok()?;
+    let path = root.join(anchored);
+    // The read runs on the blocking pool: an index.html is operator-deployed
+    // and small, but a slow disk must never stall the runtime worker.
+    let html = tokio::task::spawn_blocking(move || std::fs::read(path))
+        .await
+        .ok()?
+        .ok()?;
     let html = inject_bootstrap_token(&html, token);
     let builder = Response::builder()
         .status(StatusCode::OK)

@@ -16,6 +16,13 @@
 #                        typically the host system's services)
 #     --embedded         opt in to embedded postgres/redis containers instead
 #     --image-tag <tag>  override SDKWORK_WEBSERVER_IMAGE_TAG
+#     --host-port <base> override the instance-1 host port base (management/
+#                        app port); instances stride +1 upward. Persisted into
+#                        the env file on apply. Also enables running the same
+#                        environment at different ports for different apps.
+#     --edge-http <port> override the webserver edge HTTP host port (instance 1)
+#     --edge-https <port> override the webserver edge HTTPS host port (instance 1)
+#     --domain <host>    override SDKWORK_WEBSERVER_PRIMARY_DOMAIN
 #     --down             stop instances (+ embedded deps when --embedded)
 #     --purge            with --down: also delete volumes and network
 #     --start            start the previously stopped deployed stack (no repackage)
@@ -49,6 +56,9 @@
 #   deploy.sh --environment production --replicas 3
 #   deploy.sh --environment production --embedded --replicas 2
 #   deploy.sh --environment test --down --purge
+#   deploy.sh --environment demo --host-port 19500 --edge-http 19510 --domain demo.other.example
+#     # run the demo webserver at a custom port range (different app slot),
+#     # persisting the override into env/demo.env for later doctor/status runs.
 #
 # Idempotent: re-running apply updates the existing stack in place.
 # ============================================================================
@@ -105,11 +115,25 @@ DRY_RUN="0"
 SET_KEY=""
 SET_VALUE=""
 SET_FORCE="0"
+# Runtime port/domain overrides (MODULE_BIN_SPEC §4.2): --host-port overrides
+# the instance-1 host port base for this environment, --edge-http/--edge-https
+# the webserver edge HTTP/HTTPS host ports, --domain the primary application
+# host. *_OV avoids colliding with the resolved EDGE_HTTP/EDGE_HTTPS below.
+# Empty = use the env-file value. On apply they are persisted into the env file
+# (single source of truth) and composed this run.
+HOST_PORT_OV=""
+EDGE_HTTP_OV=""
+EDGE_HTTPS_OV=""
+DOMAIN_OV=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --environment) ENVIRONMENT="$2"; shift 2 ;;
     --replicas)    REPLICAS="$2"; shift 2 ;;
+    --host-port)   HOST_PORT_OV="$2"; shift 2 ;;
+    --edge-http)   EDGE_HTTP_OV="$2"; shift 2 ;;
+    --edge-https)  EDGE_HTTPS_OV="$2"; shift 2 ;;
+    --domain)      DOMAIN_OV="$2"; shift 2 ;;
     --external)    EXTERNAL="1"; shift ;;
     --embedded)    EXTERNAL="0"; shift ;;
     --image-tag)   IMAGE_TAG="$2"; shift 2 ;;
@@ -139,6 +163,17 @@ case "${ENVIRONMENT}" in
   development|test|staging|demo|production) ;;
   *) die "unsupported environment: ${ENVIRONMENT} (development|test|staging|demo|production)" ;;
 esac
+# Runtime port/domain overrides validate before any side effect.
+for ov in HOST_PORT_OV EDGE_HTTP_OV EDGE_HTTPS_OV; do
+  val="$(eval "printf '%s' \"\${${ov}}\"")"
+  if [ -n "${val}" ]; then
+    case "${val}" in ''|*[!0-9]*) die "--$(echo "${ov}" | tr 'A-Z' 'a-z' | tr '_' '-' | sed 's/-ov//') must be a positive integer port (got '${val}')" ;; esac
+    [ "${val}" -ge 1 ] && [ "${val}" -le 65535 ] || die "--$(echo "${ov}" | tr 'A-Z' 'a-z' | tr '_' '-' | sed 's/-ov//') port out of range (1..65535, got '${val}')"
+  fi
+done
+if [ -n "${DOMAIN_OV}" ]; then
+  case "${DOMAIN_OV}" in *[[:space:]\/]*) die "--domain must be a bare host name (got '${DOMAIN_OV}')" ;; esac
+fi
 command -v docker >/dev/null 2>&1 || die "docker is required"
 docker compose version >/dev/null 2>&1 || die "docker compose plugin is required (docker-compose-plugin)"
 [ -f "${COMPOSE_FILE}" ] || die "compose template missing: ${COMPOSE_FILE}"
@@ -197,6 +232,21 @@ case "${ENVIRONMENT}" in
     EDGE_HTTPS="$(env_key SDKWORK_WEBSERVER_PROD_HTTPS_HOST_PORT)";  EDGE_HTTPS="${EDGE_HTTPS:-38430}"
     ;;
 esac
+
+# --- CLI runtime overrides take effect this run -------------------------------
+# When a flag is supplied it wins over the env-file value above for THIS run.
+# apply() persists them into the env file (see persist_runtime_overrides) so a
+# later doctor/status/config run reads the same published ports — the env file
+# stays the single source of truth. Supporting a second webserver at another
+# port is just another deploy with a different --host-port base.
+if [ -n "${HOST_PORT_OV}" ]; then PORT_BASE="${HOST_PORT_OV}"; fi
+if [ -n "${EDGE_HTTP_OV}" ];  then EDGE_HTTP="${EDGE_HTTP_OV}"; fi
+if [ -n "${EDGE_HTTPS_OV}" ]; then EDGE_HTTPS="${EDGE_HTTPS_OV}"; fi
+if [ -n "${DOMAIN_OV}" ]; then
+  # Shell env wins over the --env-file in compose; this reaches the webserver
+  # service's SDKWORK_WEBSERVER_PRIMARY_DOMAIN interpolation for this run.
+  export SDKWORK_WEBSERVER_PRIMARY_DOMAIN="${DOMAIN_OV}"
+fi
 
 if [ -z "${REPLICAS}" ]; then
   REPLICAS="$(env_key SDKWORK_WEBSERVER_REPLICAS)"
@@ -370,6 +420,10 @@ wait_container_healthy() {
 }
 
 apply() {
+  # Persist CLI --host-port/--edge-*/--domain overrides first so the env file
+  # (and thus compose interpolation and later doctor/config/status) agrees with
+  # the ports this run composes on.
+  persist_runtime_overrides
   ensure_shared_resources
   ensure_image
   ensure_deps
@@ -519,6 +573,31 @@ set_env_key() {  # $1=key $2=value $3=force
     info "set ${key}=${value} in ${ENV_FILE}"
   fi
   info "next step: re-run the deploy command, e.g. $0 --environment ${ENVIRONMENT}"
+}
+
+# Persist CLI runtime port/domain overrides into the env base file so the
+# deployed state stays the single source of truth (doctor/config/status read the
+# same published ports on later runs). Force-upserts each supplied override.
+# No-op when nothing was supplied or under --dry-run.
+persist_runtime_overrides() {
+  [ "${DRY_RUN}" = "1" ] && return 0
+  local seg key
+  case "${ENVIRONMENT}" in
+    development) seg="DEV" ;; test) seg="TEST" ;; staging) seg="STAGING" ;;
+    demo) seg="DEMO" ;; production) seg="PROD" ;; *) return 0 ;;
+  esac
+  if [ -n "${HOST_PORT_OV}" ]; then
+    set_env_key "SDKWORK_WEBSERVER_${seg}_HOST_PORT" "${HOST_PORT_OV}" 1 || true
+  fi
+  if [ -n "${EDGE_HTTP_OV}" ]; then
+    set_env_key "SDKWORK_WEBSERVER_${seg}_IMPORT_HTTP_HOST_PORT" "${EDGE_HTTP_OV}" 1 || true
+  fi
+  if [ -n "${EDGE_HTTPS_OV}" ]; then
+    set_env_key "SDKWORK_WEBSERVER_${seg}_HTTPS_HOST_PORT" "${EDGE_HTTPS_OV}" 1 || true
+  fi
+  if [ -n "${DOMAIN_OV}" ]; then
+    set_env_key "SDKWORK_WEBSERVER_PRIMARY_DOMAIN" "${DOMAIN_OV}" 1 || true
+  fi
 }
 
 # Read-only required-key check. Reports the gap with concrete fix instructions

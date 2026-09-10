@@ -59,7 +59,7 @@ paths:
               - 4
               - 5
               - 6
-        - name: keyword
+        - name: q
           in: query
           schema:
             type: string

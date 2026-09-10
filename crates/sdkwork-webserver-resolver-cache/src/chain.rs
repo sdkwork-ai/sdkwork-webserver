@@ -114,9 +114,10 @@ impl ResolutionChain {
             }
         }
 
-        // Layer 3: Redis (distributed).
+        // Layer 3: Redis (distributed). The backend bounds its own
+        // round-trips; unavailability degrades to the next layer.
         if let Some(redis) = &self.redis {
-            if let Some(record) = redis.get(&domain) {
+            if let Some(record) = redis.get(&domain).await {
                 if !record.expired(now_unix()) {
                     self.memory.set(record.clone());
                     return self.outcome_of(record);
@@ -124,9 +125,11 @@ impl ResolutionChain {
             }
         }
 
-        // Layer 4: database (deploy-maintained inventory).
+        // Layer 4: database (deploy-maintained inventory). Bounded like the
+        // write path so a stalled database cannot stall resolution.
         if let Some(database) = &self.database {
-            if let Some(record) = database.load(&domain).await {
+            let loaded = tokio::time::timeout(Duration::from_secs(2), database.load(&domain)).await;
+            if let Ok(Some(record)) = loaded {
                 if !record.expired(now_unix()) {
                     self.backfill(record.clone()).await;
                     return self.outcome_of(record);
@@ -134,13 +137,30 @@ impl ResolutionChain {
             }
         }
 
-        // Upstream fallback with per-domain single-flight.
+        // Upstream fallback with per-domain single-flight. The waiter
+        // enables its `Notified` future BEFORE re-reading the memory layer
+        // (`tokio::sync::Notify` loses wakeups delivered to a future that
+        // was not yet polled): the winner back-fills memory before it
+        // removes the in-flight entry and calls `notify_waiters`, so a
+        // waiter either observes the back-filled record or is registered
+        // in time to receive the notification — it can never park forever.
         let notify = {
             let mut in_flight = self.in_flight.lock().await;
             if let Some(notify) = in_flight.get(&domain) {
                 let notify = notify.clone();
                 drop(in_flight);
-                notify.notified().await;
+                let notified = notify.notified();
+                tokio::pin!(notified);
+                notified.as_mut().enable();
+                // The winner may have completed between dropping the lock
+                // and enabling the notification; its back-fill already
+                // landed in memory, so serve it without waiting.
+                if let Some(record) = self.memory.get(&domain) {
+                    if !record.expired(now_unix()) {
+                        return self.outcome_of(record);
+                    }
+                }
+                notified.await;
                 // The winner back-filled the chain; re-read from memory.
                 return match self.memory.get(&domain) {
                     Some(record) => self.outcome_of(record),
@@ -187,7 +207,7 @@ impl ResolutionChain {
     async fn backfill(&self, record: ResolvedRecord) {
         self.memory.set(record.clone());
         if let Some(redis) = &self.redis {
-            redis.set(record.clone());
+            redis.set(record.clone()).await;
         }
         if let Some(database) = &self.database {
             let _ = tokio::time::timeout(Duration::from_secs(2), database.save(record)).await;
@@ -199,7 +219,7 @@ impl ResolutionChain {
         let domain = normalize_domain(domain);
         self.memory.remove(&domain);
         if let Some(redis) = &self.redis {
-            redis.remove(&domain);
+            redis.remove(&domain).await;
         }
     }
 }
@@ -346,5 +366,72 @@ mod tests {
             );
         }
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    /// Regression test for the lost single-flight wakeup family: a waiter
+    /// that observes an in-flight entry must serve the back-filled record
+    /// through the post-enable memory re-check / notification path instead
+    /// of parking forever on a notification it never registered for. The
+    /// stale `Notify` here never carries a winner's `notify_waiters` for the
+    /// parking future until the test fires it explicitly after back-filling
+    /// memory, so a waiter that lost the wakeup would hit the bounded
+    /// timeout and fail the test.
+    #[tokio::test]
+    async fn waiter_serves_backfilled_record_instead_of_parking_on_stale_notify() {
+        let chain = Arc::new(ResolutionChain::build(
+            &Default::default(),
+            None,
+            None,
+            None,
+        ));
+        let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let calls_clone = calls.clone();
+        let upstream: Box<UpstreamResolver> = Box::new(move |_domain| {
+            calls_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Box::pin(async move { Err(()) })
+        });
+        // Pre-register an in-flight entry so the waiter takes the single
+        // -flight wait path instead of becoming the winner.
+        chain.in_flight.lock().await.insert(
+            "race.local".to_owned(),
+            Arc::new(tokio::sync::Notify::new()),
+        );
+        let upstream = Arc::new(upstream);
+        let waiter = tokio::spawn({
+            let chain = chain.clone();
+            let upstream = upstream.clone();
+            async move {
+                tokio::time::timeout(Duration::from_secs(5), async move {
+                    chain.resolve("race.local", upstream.as_ref()).await
+                })
+                .await
+                .expect("waiter must not park on the stale notification")
+            }
+        });
+        // Let the waiter reach the single-flight wait (it registers its
+        // enabled `Notified` and misses the still-empty memory layer).
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Winner completes: memory is back-filled, then registered waiters
+        // are notified.
+        chain.memory.set(ResolvedRecord::fresh(
+            "race.local".to_owned(),
+            vec!["10.9.9.9".to_owned()],
+            60,
+            now_unix(),
+        ));
+        if let Some(notify) = chain.in_flight.lock().await.get("race.local") {
+            notify.notify_waiters();
+        }
+
+        assert_eq!(
+            waiter.await.expect("join"),
+            ResolutionOutcome::Resolved(vec!["10.9.9.9".to_owned()])
+        );
+        assert_eq!(
+            calls.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "the waiter must be served from the back-filled record"
+        );
     }
 }

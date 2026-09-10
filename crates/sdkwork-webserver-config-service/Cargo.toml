@@ -2,8 +2,12 @@
 name = "sdkwork-webserver-config-service"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 description = "Managed catalog, bounded reading, and validated atomic writing of the deployed Web Server configuration files (default config, import plane, and read-only module sidecars)."
+
+[lib]
+name = "sdkwork_webserver_config_service"
 
 [dependencies]
 serde.workspace = true
@@ -19,3 +23,6 @@ sdkwork-server-files-service.workspace = true
 [dev-dependencies]
 tempfile.workspace = true
 tokio = { workspace = true, features = ["fs", "macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

@@ -3,8 +3,12 @@
 
 use std::path::{Path, PathBuf};
 
+use tokio::io::AsyncReadExt;
+
 use super::operations::{operations_for, ProjectClassification};
-use super::path_security::{resolve_contained_path, validate_allowed_root, PathContainmentError};
+use super::path_security::{
+    is_sensitive_file_name, resolve_contained_path, validate_allowed_root, PathContainmentError,
+};
 use super::project::{classify_directory, ProjectType};
 
 /// Configuration for a [`ServerFilesService`] instance bound to one node root.
@@ -89,6 +93,8 @@ pub enum ReadFileError {
     TooLarge,
     #[error("The file could not be read: {0}")]
     Io(String),
+    #[error("Credential and secret files cannot be read through the file explorer")]
+    Sensitive,
 }
 
 /// Async, node-bound filesystem browsing service.
@@ -177,21 +183,47 @@ impl ServerFilesService {
         })
     }
 
-    /// Read a text file inside the root, bounded by the configured size limit.
+    /// Read a text file inside the root, bounded by the configured size
+    /// limit. The size check and the read share one open file handle, so a
+    /// file that grows between the stat and the read cannot expand the read
+    /// beyond the limit (bounded take), and credential-shaped file names
+    /// (`.env`, private keys) are refused outright.
     pub async fn read_file(&self, requested_path: &str) -> Result<FileContent, ReadFileError> {
         let resolved = self.contained_path(requested_path)?;
-        let metadata = tokio::fs::metadata(&resolved)
+        if is_sensitive_file_name(
+            &resolved
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+        ) {
+            return Err(ReadFileError::Sensitive);
+        }
+        let mut file = tokio::fs::File::open(&resolved)
+            .await
+            .map_err(|error| ReadFileError::Io(error.to_string()))?;
+        let metadata = file
+            .metadata()
             .await
             .map_err(|error| ReadFileError::Io(error.to_string()))?;
         if !metadata.is_file() {
             return Err(ReadFileError::NotAFile);
         }
-        if metadata.len() > self.config.maximum_file_bytes as u64 {
+        let maximum_bytes = self.config.maximum_file_bytes as u64;
+        if metadata.len() > maximum_bytes {
             return Err(ReadFileError::TooLarge);
         }
-        let bytes = tokio::fs::read(&resolved)
+        // Bound the read itself: a file grown past the limit between the
+        // metadata probe and the read is truncated at the limit + 1 byte and
+        // rejected instead of materialized.
+        let mut limited = (&mut file).take(maximum_bytes.saturating_add(1));
+        let mut bytes = Vec::new();
+        limited
+            .read_to_end(&mut bytes)
             .await
             .map_err(|error| ReadFileError::Io(error.to_string()))?;
+        if bytes.len() as u64 > maximum_bytes {
+            return Err(ReadFileError::TooLarge);
+        }
         let content = String::from_utf8_lossy(&bytes).into_owned();
         Ok(FileContent {
             node_id: self.config.node_id.clone(),
@@ -213,5 +245,46 @@ impl ServerFilesService {
             &resolved.to_string_lossy(),
             classification,
         ))
+    }
+}
+
+#[cfg(test)]
+mod sensitive_name_tests {
+    use super::super::path_security::is_sensitive_file_name;
+
+    #[test]
+    fn credential_shaped_names_are_refused() {
+        for name in [
+            ".env",
+            ".env.local",
+            ".env.production",
+            "server.pem",
+            "private.key",
+            "identity.p12",
+            "cert.pfx",
+            "putty.ppk",
+            "id_rsa",
+            "id_ed25519.old",
+            "vault.kdbx",
+            "htpasswd",
+            ".git-credentials",
+            ".npmrc",
+        ] {
+            assert!(is_sensitive_file_name(name), "{name} must be refused");
+        }
+    }
+
+    #[test]
+    fn ordinary_names_are_readable() {
+        for name in [
+            "index.html",
+            "app.js",
+            "readme.md",
+            "certificate.crt",
+            "env.sh",
+            "server.conf",
+        ] {
+            assert!(!is_sensitive_file_name(name), "{name} must be readable");
+        }
     }
 }

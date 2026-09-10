@@ -1,9 +1,9 @@
+use super::{EngineArguments, EngineDatabase, EngineRow, WebRepository};
 use crate::audited_sql;
 use sdkwork_webserver_contract::{
     CreateNginxConfigRequest, ListNginxConfigsQuery, NginxConfigPage, NginxConfigResponse,
     NginxStatusResponse, UpdateNginxConfigRequest, WebServiceError, WebServiceResult,
 };
-use super::{EngineArguments, EngineDatabase, EngineRow, WebRepository};
 use sqlx::Row;
 
 use super::support::{
@@ -17,6 +17,12 @@ impl WebRepository {
         tenant_id: Option<i64>,
         query: &ListNginxConfigsQuery,
     ) -> WebServiceResult<NginxConfigPage> {
+        // Fail closed: a tenant-less listing would enumerate every tenant's
+        // configs, so the repository rejects a missing tenant context even
+        // though the service layer already enforces one (defense in depth).
+        let tenant_id = tenant_id.ok_or_else(|| {
+            WebServiceError::validation("tenant context is required for nginx config listing")
+        })?;
         let (page, page_size, offset) = pagination(query.page, query.page_size)?;
         let mut count_sql = String::from(
             "SELECT COUNT(*) AS total
@@ -35,7 +41,7 @@ impl WebRepository {
         );
         let mut binds: Vec<BindValue> = Vec::new();
 
-        if let Some(tenant_id) = tenant_id {
+        {
             let index = binds.len() + 1;
             let clause = format!(" AND config.tenant_id = ${index}");
             count_sql.push_str(&clause);
@@ -269,7 +275,9 @@ impl WebRepository {
         };
 
         if result.rows_affected() == 0 {
-            return self.conflict_or_missing_nginx_config(tenant_id, config_id).await;
+            return self
+                .conflict_or_missing_nginx_config(tenant_id, config_id)
+                .await;
         }
 
         self.retrieve_nginx_config_repo(tenant_id, config_id).await
@@ -309,8 +317,7 @@ impl WebRepository {
         tenant_id: i64,
         site_id: &str,
     ) -> WebServiceResult<Option<String>> {
-        let site_internal_id =
-            resolve_site_internal_id(&self.pool, tenant_id, site_id).await?;
+        let site_internal_id = resolve_site_internal_id(&self.pool, tenant_id, site_id).await?;
         let row = sqlx::query(
             "SELECT config_content FROM web_nginx_config
              WHERE site_id = $1 AND is_active = TRUE AND status = 1",

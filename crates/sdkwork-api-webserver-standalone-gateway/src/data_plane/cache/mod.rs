@@ -38,8 +38,13 @@ use self::disk::TieredCacheBackend;
 /// The proxy response cache. Shared across listeners; all operations are
 /// concurrency-safe. Single-flight fills are tracked per key with a bounded
 /// waiters map so a cache stampede collapses to one upstream request.
+///
+/// The facade is asynchronous: disk-backed stores run on the blocking pool
+/// so a slow disk never stalls a runtime worker, while the memory-only
+/// default takes the direct synchronous path with no spawn overhead.
 pub(crate) struct HttpResponseCache {
     store: Arc<dyn CacheBackend>,
+    disk_backed: bool,
     maximum_object_bytes: u64,
     default_ttl: Duration,
     stale_ttl: Duration,
@@ -49,6 +54,7 @@ pub(crate) struct HttpResponseCache {
 
 impl HttpResponseCache {
     pub(crate) fn new(config: &ProxyCacheConfig, metrics: Arc<DataPlaneMetrics>) -> Arc<Self> {
+        let mut disk_backed = false;
         let store: Arc<dyn CacheBackend> = match config
             .disk_path
             .as_deref()
@@ -59,6 +65,7 @@ impl HttpResponseCache {
                 match TieredCacheBackend::with_disk(config.max_entries, PathBuf::from(path)) {
                     Ok(backend) => {
                         tracing::info!(disk_path = %path, "proxy cache disk backend enabled");
+                        disk_backed = true;
                         Arc::new(backend)
                     }
                     Err(error) => {
@@ -76,6 +83,7 @@ impl HttpResponseCache {
         };
         Arc::new(Self {
             store,
+            disk_backed,
             maximum_object_bytes: config.max_object_bytes,
             default_ttl: Duration::from_secs(config.default_ttl_seconds),
             stale_ttl: Duration::from_secs(config.stale_ttl_seconds),
@@ -84,18 +92,61 @@ impl HttpResponseCache {
         })
     }
 
+    /// Read the backing store, off the runtime worker when disk-backed.
+    async fn store_get(&self, key: &CacheKey) -> Option<CachedResponse> {
+        if !self.disk_backed {
+            return self.store.get(key);
+        }
+        let store = Arc::clone(&self.store);
+        let key = key.clone();
+        match tokio::task::spawn_blocking(move || store.get(&key)).await {
+            Ok(entry) => entry,
+            Err(error) => {
+                tracing::warn!(%error, "proxy cache disk read task failed");
+                None
+            }
+        }
+    }
+
+    /// Write the backing store, off the runtime worker when disk-backed.
+    async fn store_insert(&self, key: CacheKey, entry: CachedResponse) {
+        if !self.disk_backed {
+            self.store.insert(key, entry);
+            return;
+        }
+        let store = Arc::clone(&self.store);
+        let result = tokio::task::spawn_blocking(move || store.insert(key, entry)).await;
+        if result.is_err() {
+            tracing::warn!("proxy cache disk write task failed");
+        }
+    }
+
+    /// Remove an entry, off the runtime worker when disk-backed.
+    async fn store_remove(&self, key: &CacheKey) {
+        if !self.disk_backed {
+            self.store.remove(key);
+            return;
+        }
+        let store = Arc::clone(&self.store);
+        let key = key.clone();
+        let result = tokio::task::spawn_blocking(move || store.remove(&key)).await;
+        if result.is_err() {
+            tracing::warn!("proxy cache disk remove task failed");
+        }
+    }
+
     /// Look up a fresh entry. Returns `None` when the entry is missing,
-    /// expired, or not cacheable. Synchronous: the operation never awaits.
+    /// expired, or not cacheable.
     ///
     /// Expired entries within the stale window are kept so `lookup_stale`
     /// can serve them when the upstream fails (nginx `proxy_cache_use_stale`);
     /// only entries beyond the stale window are evicted here.
-    pub(crate) fn lookup(&self, key: &CacheKey) -> Option<CachedResponse> {
+    pub(crate) async fn lookup(&self, key: &CacheKey) -> Option<CachedResponse> {
         tracing::debug!(?key, "proxy cache lookup");
-        let entry = self.store.get(key)?;
+        let entry = self.store_get(key).await?;
         if entry.expired() {
             if !entry.stale_available() {
-                self.store.remove(key);
+                self.store_remove(key).await;
             }
             self.metrics.record_proxy_cache_miss();
             return None;
@@ -105,13 +156,15 @@ impl HttpResponseCache {
     }
 
     /// Look up a stale entry (freshness elapsed but within the stale window).
-    pub(crate) fn lookup_stale(&self, key: &CacheKey) -> Option<CachedResponse> {
-        self.store.get(key).filter(|entry| entry.stale_available())
+    pub(crate) async fn lookup_stale(&self, key: &CacheKey) -> Option<CachedResponse> {
+        self.store_get(key)
+            .await
+            .filter(|entry| entry.stale_available())
     }
 
     /// Insert a response into the cache. `CacheDecision::NoStore` responses
     /// are never stored; oversized responses are rejected.
-    pub(crate) fn insert(
+    pub(crate) async fn insert(
         &self,
         key: CacheKey,
         response: ResponseMetadata,
@@ -127,7 +180,7 @@ impl HttpResponseCache {
             .min(self.default_ttl.saturating_mul(4));
         let entry = CachedResponse::new(response, body, ttl, self.stale_ttl);
         tracing::debug!(?key, ttl_seconds = ttl.as_secs(), "proxy cache store");
-        self.store.insert(key, entry);
+        self.store_insert(key, entry).await;
         self.metrics.record_proxy_cache_store();
     }
 
@@ -169,15 +222,6 @@ impl HttpResponseCache {
     pub(crate) fn maximum_object_bytes(&self) -> u64 {
         self.maximum_object_bytes
     }
-}
-
-/// Cache hit outcome for the proxy path.
-pub(crate) enum ProxyCacheLookup {
-    /// Fresh entry that can be served directly (or as a 304 when the client
-    /// sent a matching conditional header).
-    Hit(CachedResponse),
-    /// No usable entry: fill from upstream.
-    Miss,
 }
 
 #[cfg(test)]
@@ -228,33 +272,37 @@ mod tests {
     async fn cache_round_trip_hit_miss_and_eviction() {
         let cache = HttpResponseCache::new(&config(), metrics());
         let k = key("/one");
-        assert!(cache.lookup(&k).is_none());
-        cache.insert(
-            k.clone(),
-            response("\"v1\""),
-            Bytes::from_static(b"one"),
-            CacheDecision {
-                cacheable: true,
-                ttl: Some(std::time::Duration::from_secs(60)),
-            },
-        );
-        let hit = cache.lookup(&k).expect("cached");
+        assert!(cache.lookup(&k).await.is_none());
+        cache
+            .insert(
+                k.clone(),
+                response("\"v1\""),
+                Bytes::from_static(b"one"),
+                CacheDecision {
+                    cacheable: true,
+                    ttl: Some(std::time::Duration::from_secs(60)),
+                },
+            )
+            .await;
+        let hit = cache.lookup(&k).await.expect("cached");
         assert_eq!(hit.body.as_ref(), b"one");
 
         // Fill more entries than capacity; LRU evicts the oldest.
         for i in 0..8 {
             let k = key(&format!("/evict-{i}"));
-            cache.insert(
-                k,
-                response("\"v\""),
-                Bytes::from(vec![b'x'; 10]),
-                CacheDecision {
-                    cacheable: true,
-                    ttl: None,
-                },
-            );
+            cache
+                .insert(
+                    k,
+                    response("\"v\""),
+                    Bytes::from(vec![b'x'; 10]),
+                    CacheDecision {
+                        cacheable: true,
+                        ttl: None,
+                    },
+                )
+                .await;
         }
-        assert!(cache.lookup(&k).is_none(), "LRU must evict /one");
+        assert!(cache.lookup(&k).await.is_none(), "LRU must evict /one");
     }
 
     #[tokio::test]

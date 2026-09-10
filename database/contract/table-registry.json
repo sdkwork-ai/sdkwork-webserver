@@ -145,6 +145,18 @@
       "owner": "web-platform",
       "compliance_level": "L2",
       "lifecycle_status": "active"
+    },
+    {
+      "table_name": "web_app_platform_target",
+      "owner": "web-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
+    },
+    {
+      "table_name": "web_resolution_cache",
+      "owner": "web-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
     }
   ]
 }

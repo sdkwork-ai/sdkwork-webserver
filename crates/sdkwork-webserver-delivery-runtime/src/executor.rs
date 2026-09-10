@@ -9,8 +9,8 @@ use sdkwork_webserver_contract::provider::{
     WebsiteWikiProvider, WebsiteWikiRouteResolution,
 };
 use sdkwork_webserver_core::website_runtime::{
-    SelectedWebsiteRoute, WebsiteHandler, WebsiteMountMode, WebsiteRequestRoutingContext,
-    WebsiteRouteSelection, WebsiteRuntimeRegistry,
+    CompiledWebsiteRuntimeSet, SelectedWebsiteRoute, WebsiteHandler, WebsiteMountMode,
+    WebsiteRequestRoutingContext, WebsiteRouteSelection, WebsiteRuntimeRegistry,
 };
 use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore},
@@ -111,6 +111,22 @@ impl WebsiteDeliveryExecutor {
             .await
     }
 
+    /// Serve a request against an explicit compiled runtime set instead of
+    /// the registry's current snapshot. Callers that compile (or cache)
+    /// their own runtime set — the app-domain fallback resolver — pin the
+    /// exact set per request so a concurrent activation of a different site
+    /// can never swap the served content between route selection and
+    /// provider dispatch.
+    pub async fn execute_compiled(
+        &self,
+        request: WebsiteDeliveryRequest,
+        runtime_set: Arc<CompiledWebsiteRuntimeSet>,
+    ) -> Result<WebsiteDeliveryOutcome, WebsiteDeliveryError> {
+        validate_request_identity(&request)?;
+        self.execute_on_runtime_set(request, WebsiteProviderPurpose::Request, &runtime_set)
+            .await
+    }
+
     pub(crate) async fn execute_activation_probe(
         &self,
         request: WebsiteDeliveryRequest,
@@ -129,6 +145,16 @@ impl WebsiteDeliveryExecutor {
             .runtime_registry
             .current()
             .ok_or(WebsiteDeliveryError::RuntimeUnavailable)?;
+        self.execute_on_runtime_set(request, purpose, &runtime_set)
+            .await
+    }
+
+    async fn execute_on_runtime_set(
+        &self,
+        request: WebsiteDeliveryRequest,
+        purpose: WebsiteProviderPurpose,
+        runtime_set: &CompiledWebsiteRuntimeSet,
+    ) -> Result<WebsiteDeliveryOutcome, WebsiteDeliveryError> {
         let routing_context = WebsiteRequestRoutingContext {
             verified_preferred_variant_uuid: request
                 .routing

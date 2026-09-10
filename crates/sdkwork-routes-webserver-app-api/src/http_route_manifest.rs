@@ -80,19 +80,19 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "/app/v3/api/applications/{applicationId}/domains/{domainId}/listener_certificate_bindings",
         "certificate",
         "applications.domains.listenerCertificateBindings.list",
-    ).with_required_permission("web.certificates.read"),
+    ).with_required_permission("web.applications.write"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/applications/{applicationId}/domains/{domainId}/listener_certificate_bindings",
         "certificate",
         "applications.domains.listenerCertificateBindings.create",
-    ).with_required_permission("web.certificates.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::AuthCritical),
+    ).with_required_permission("web.applications.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::AuthCritical),
     HttpRoute::dual_token(
         HttpMethod::Delete,
         "/app/v3/api/applications/{applicationId}/domains/{domainId}/listener_certificate_bindings/{bindingId}",
         "certificate",
         "applications.domains.listenerCertificateBindings.delete",
-    ).with_required_permission("web.certificates.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::AuthCritical),
+    ).with_required_permission("web.applications.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::AuthCritical),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/applications/{applicationId}/source_versions",
@@ -170,13 +170,13 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "/app/v3/api/domains",
         "domain",
         "domains.list",
-    ),
+    ).with_required_permission("web.domains.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/applications/{applicationId}/platform_targets",
         "application",
         "applications.platformTargets.list",
-    ).with_required_permission("web.applications.read"),
+    ).with_required_permission("web.applications.write"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/applications/{applicationId}/platform_targets",
@@ -188,7 +188,7 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "/app/v3/api/applications/{applicationId}/platform_targets/{platformTargetId}",
         "application",
         "applications.platformTargets.retrieve",
-    ).with_required_permission("web.applications.read"),
+    ).with_required_permission("web.applications.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/applications/{applicationId}/health_checks",

@@ -1,5 +1,5 @@
-use crate::audited_sql;
 use super::{EngineRow, WebRepository};
+use crate::audited_sql;
 use sdkwork_webserver_contract::{
     CreatePlatformTargetRequest, PlatformTargetPage, PlatformTargetResponse, WebServiceError,
     WebServiceResult,
@@ -7,8 +7,8 @@ use sdkwork_webserver_contract::{
 use sqlx::Row;
 
 use super::support::{
-    instant_from_row, instant_write_expression, new_uuid, next_id, now_rfc3339, pagination,
-    store_error,
+    instant_from_row, instant_write_expression, json_write_expression, new_uuid, next_id,
+    now_rfc3339, pagination, store_error,
 };
 
 /// Resolves the application's internal id and uuid for the tenant. Platform
@@ -59,6 +59,8 @@ impl WebRepository {
             WebServiceError::Internal(format!("serialize allowed channels: {error}"))
         })?;
         let now_expression = instant_write_expression("$14");
+        let architectures_expression = json_write_expression("$8");
+        let channels_expression = json_write_expression("$13");
 
         let insert_sql = format!(
             "INSERT INTO web_app_platform_target (
@@ -68,9 +70,9 @@ impl WebRepository {
                 allowed_channels_json, target_status, created_at, updated_at, version
              ) VALUES (
                 $1, $2, $3, 0, 1, NULL, $4,
-                $5, $6, $7, $8,
+                $5, $6, $7, {architectures_expression},
                 $9, $10, $11, $12,
-                $13, 'ACTIVE', {now_expression}, {now_expression}, 0
+                {channels_expression}, 'ACTIVE', {now_expression}, {now_expression}, 0
              )"
         );
 
@@ -153,9 +155,11 @@ impl WebRepository {
 
         let mut items = Vec::with_capacity(rows.len());
         for row in &rows {
-            items.push(map_platform_target_row(row, &application_uuid).map_err(|error| {
-                WebServiceError::Internal(format!("map web_app_platform_target row: {error}"))
-            })?);
+            items.push(
+                map_platform_target_row(row, &application_uuid).map_err(|error| {
+                    WebServiceError::Internal(format!("map web_app_platform_target row: {error}"))
+                })?,
+            );
         }
 
         Ok(PlatformTargetPage {
@@ -202,8 +206,8 @@ fn map_platform_target_row(
     application_uuid: &str,
 ) -> Result<PlatformTargetResponse, sqlx::Error> {
     let architectures_json: Option<String> = row.try_get("architectures_json")?;
-    let architectures = architectures_json
-        .and_then(|json| serde_json::from_str::<Vec<String>>(&json).ok());
+    let architectures =
+        architectures_json.and_then(|json| serde_json::from_str::<Vec<String>>(&json).ok());
     Ok(PlatformTargetResponse {
         id: row.try_get("uuid")?,
         app_id: application_uuid.to_owned(),

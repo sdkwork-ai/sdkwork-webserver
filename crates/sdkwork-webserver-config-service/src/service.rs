@@ -4,9 +4,9 @@
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
+use sdkwork_server_files_service::{resolve_contained_path, validate_allowed_root};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use sdkwork_server_files_service::{resolve_contained_path, validate_allowed_root};
 
 use crate::language::config_language_for;
 use crate::wire;
@@ -51,8 +51,8 @@ impl Default for WebserverConfigServiceConfig {
         Self {
             config_root: "/etc/sdkwork/webserver".to_string(),
             deploy_root: None,
-            maximum_file_bytes: 4 * 1024 * 1024,   // 4 MiB
-            maximum_write_bytes: 2 * 1024 * 1024,  // 2 MiB
+            maximum_file_bytes: 4 * 1024 * 1024,  // 4 MiB
+            maximum_write_bytes: 2 * 1024 * 1024, // 2 MiB
             maximum_entries: 4096,
         }
     }
@@ -176,9 +176,7 @@ pub enum WebserverConfigError {
     #[error("The content is invalid: {0}")]
     InvalidContent(String),
     #[error("The file changed since it was read (concurrent edit)")]
-    Conflict {
-        current_sha256: String,
-    },
+    Conflict { current_sha256: String },
     #[error("The file system operation failed: {0}")]
     Io(String),
 }
@@ -221,13 +219,25 @@ impl WebserverConfigService {
         let mut items = Vec::new();
 
         // Default config: regular files directly in the config root.
-        self.collect_group(&self.config_root.clone(), 0, WebserverConfigKind::Default, "", &mut items)
-            .await?;
+        self.collect_group(
+            &self.config_root.clone(),
+            0,
+            WebserverConfigKind::Default,
+            "",
+            &mut items,
+        )
+        .await?;
 
         // Import plane: bounded-depth files under `<config_root>/imports.d`.
         let imports_root = self.config_root.join(IMPORTS_CONFIG_DIRECTORY);
-        self.collect_group(&imports_root, IMPORT_SCAN_DEPTH, WebserverConfigKind::Import, IMPORTS_CONFIG_DIRECTORY, &mut items)
-            .await?;
+        self.collect_group(
+            &imports_root,
+            IMPORT_SCAN_DEPTH,
+            WebserverConfigKind::Import,
+            IMPORTS_CONFIG_DIRECTORY,
+            &mut items,
+        )
+        .await?;
 
         // Sibling-module sidecars: read-only by ownership contract.
         if let Some(deploy_root) = &self.deploy_root {
@@ -314,7 +324,10 @@ impl WebserverConfigService {
             .await
             .map_err(|_| WebserverConfigError::NotFound)?;
         let current_sha256 = sha256_hex(&current_bytes);
-        if let Some(expected) = expected_sha256.map(str::trim).filter(|value| !value.is_empty()) {
+        if let Some(expected) = expected_sha256
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
             if !expected.eq_ignore_ascii_case(&current_sha256) {
                 return Err(WebserverConfigError::Conflict { current_sha256 });
             }
@@ -327,11 +340,8 @@ impl WebserverConfigService {
             .map_err(|error| WebserverConfigError::Io(error.to_string()))?;
 
         // Atomic replacement: temp file in the same directory, fsync, rename.
-        let temporary = absolute.with_file_name(format!(
-            ".{}.tmp-{}",
-            entry.name,
-            std::process::id()
-        ));
+        let temporary =
+            absolute.with_file_name(format!(".{}.tmp-{}", entry.name, std::process::id()));
         {
             use tokio::io::AsyncWriteExt;
             let mut file = tokio::fs::File::create(&temporary)
@@ -346,9 +356,7 @@ impl WebserverConfigService {
         }
         tokio::fs::rename(&temporary, &absolute)
             .await
-            .map_err(|error| {
-                WebserverConfigError::Io(format!("atomic replace failed: {error}"))
-            })?;
+            .map_err(|error| WebserverConfigError::Io(format!("atomic replace failed: {error}")))?;
 
         let metadata = tokio::fs::metadata(&absolute)
             .await
@@ -383,7 +391,10 @@ impl WebserverConfigService {
 
     /// Containment-resolve an entry's absolute path (defense in depth; the
     /// path itself came from our own enumeration).
-    fn absolute_path_for(&self, entry: &WebserverConfigEntry) -> Result<PathBuf, WebserverConfigError> {
+    fn absolute_path_for(
+        &self,
+        entry: &WebserverConfigEntry,
+    ) -> Result<PathBuf, WebserverConfigError> {
         let root = match entry.kind {
             WebserverConfigKind::Default | WebserverConfigKind::Import => &self.config_root,
             WebserverConfigKind::Module => self
@@ -518,10 +529,7 @@ impl WebserverConfigService {
     }
 
     /// Create a timestamped backup of `target` and prune old backups.
-    async fn create_backup(
-        &self,
-        target: &Path,
-    ) -> Result<Option<String>, std::io::Error> {
+    async fn create_backup(&self, target: &Path) -> Result<Option<String>, std::io::Error> {
         let Some(file_name) = target.file_name().and_then(|name| name.to_str()) else {
             return Ok(None);
         };
@@ -539,7 +547,9 @@ impl WebserverConfigService {
             for suffix in 1..1000 {
                 let candidate = directory.join(format!("{file_name}.bak-{timestamp}.{suffix}"));
                 if !candidate.exists() {
-                    return finalize_backup(target, candidate, file_name).await.map(Some);
+                    return finalize_backup(target, candidate, file_name)
+                        .await
+                        .map(Some);
                 }
             }
             return Ok(None);
@@ -663,9 +673,9 @@ mod tests {
         write_file(&root.join("imports.d/import.conf.cloud"), "# cloud\n").await;
         let deploy = tempfile::tempdir().unwrap();
         write_file(
-            &deploy
-                .path()
-                .join("sdkwork-space/some-module/deployments/webserver/nginx.standalone.development.conf"),
+            &deploy.path().join(
+                "sdkwork-space/some-module/deployments/webserver/nginx.standalone.development.conf",
+            ),
             "# sidecar\n",
         )
         .await;
@@ -694,7 +704,9 @@ mod tests {
         assert_eq!(default[0].language, "ini");
         assert!(default[0].writable);
         assert_eq!(import.len(), 2);
-        assert!(import.iter().any(|entry| entry.path == "imports.d/import.conf"));
+        assert!(import
+            .iter()
+            .any(|entry| entry.path == "imports.d/import.conf"));
         assert_eq!(module.len(), 1);
         assert_eq!(
             module[0].path,

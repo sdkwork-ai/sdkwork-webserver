@@ -34,16 +34,40 @@ sdkwork_module_local_env_dir() {
   printf '%s/deployments/docker/env' "${SDKWORK_MODULE_ROOT}"
 }
 
-# Host port publishing the management port 3800 for an environment.
+# Live host port for the management/app port 3800 of an environment instance.
+# Resolution order so bin/doctor probes what is actually published, not a
+# stale fallback (MODULE_BIN_SPEC.md §4.7):
+#   (1) the deployed env-file host-port key for <env> when doctor has already
+#       pulled the live env into SDKWORK_CONFIG_KEYS/VALUES (covers --host-port
+#       CLI overrides that were upserted into the env file, and config.sh --set);
+#   (2) the built-in per-environment default below.
+# The <instance> offset follows the deploy.sh stride (host port base + idx - 1),
+# so instance N is probed on base + N - 1 (DOCKER_SPEC.md §3.2).
 sdkwork_module_health_port() {
-  case "${1:-}" in
-    development) printf '13800' ;;
-    test)        printf '18888' ;;
-    staging)     printf '18081' ;;
-    demo)        printf '19080' ;;
-    production)  printf '18080' ;;
-    *)           printf '' ;;
+  local env="${1:-}" instance="${2:-1}" seg key
+  case "${env}" in
+    development) seg="DEV" ;; test) seg="TEST" ;; staging) seg="STAGING" ;;
+    demo) seg="DEMO" ;; production) seg="PROD" ;; *) return 0 ;;
   esac
+  key="SDKWORK_WEBSERVER_${seg}_HOST_PORT"
+  local base=""
+  if ((${#SDKWORK_CONFIG_KEYS[@]} > 0)); then
+    sdkwork_config_index_of "${key}"
+    if (( SDKWORK_CONFIG_INDEX >= 0 )); then
+      base="${SDKWORK_CONFIG_VALUES[SDKWORK_CONFIG_INDEX]}"
+    fi
+  fi
+  if [[ -z "${base}" ]]; then
+    case "${env}" in
+      development) base="13800" ;;
+      test)        base="18888" ;;
+      staging)     base="18081" ;;
+      demo)        base="19080" ;;
+      production)  base="18080" ;;
+    esac
+  fi
+  case "${instance}" in ''|*[!0-9]*) instance=1 ;; esac
+  printf '%s' "$((base + instance - 1))"
 }
 
 # §9.3 layout conformance probe (APPLICATION_DEPLOY_LAYOUT_SPEC.md §9):

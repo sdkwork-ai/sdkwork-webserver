@@ -131,6 +131,26 @@ impl GuardedDnsResolver {
                 let metrics = metrics.clone();
                 let domain = domain.to_owned();
                 Box::pin(async move {
+                    // The chain path bypasses the direct path's try-acquire
+                    // gate, so the system-resolver concurrency ceiling is
+                    // enforced here on the single-flight winner: a bounded
+                    // wait for a slot, then failure (the chain absorbs it
+                    // exactly like a resolution timeout — no queuing past
+                    // the configured resolver timeout).
+                    let _permit = match resolver.permits.clone().try_acquire_owned() {
+                        Ok(permit) => permit,
+                        Err(_) => {
+                            match timeout(
+                                resolver.timeout,
+                                resolver.permits.clone().acquire_owned(),
+                            )
+                            .await
+                            {
+                                Ok(Ok(permit)) => permit,
+                                _ => return Err(()),
+                            }
+                        }
+                    };
                     let addresses =
                         match resolve_system_permitted(&resolver, &policy, &metrics, &domain).await
                         {

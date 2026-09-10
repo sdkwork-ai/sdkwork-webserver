@@ -15,8 +15,14 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::time::Duration;
 
 use crate::path_security::validate_allowed_root;
+
+/// Wall-clock budget for one git subprocess (clone/fetch/pull). A network
+/// hang must not stall the boot sequence indefinitely; the child is killed
+/// when the budget elapses.
+const GIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// The canonical SDKWork space repository seeded at boot.
 pub const SDKWORK_SPACE_REPOSITORY: &str = "https://github.com/sdkwork-ai/sdkwork-space.git";
@@ -46,7 +52,7 @@ pub async fn ensure_space_repository(
 
     // If git is unavailable, fail cleanly instead of silently browsing an
     // unseeded tree.
-    if !git_available() {
+    if !git_available().await {
         return Err(SpaceCloneError::GitUnavailable);
     }
 
@@ -59,14 +65,19 @@ pub async fn ensure_space_repository(
     Ok(repository_dir)
 }
 
-fn git_available() -> bool {
-    std::process::Command::new("git")
-        .arg("--version")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+async fn git_available() -> bool {
+    matches!(
+        tokio::time::timeout(
+            GIT_COMMAND_TIMEOUT,
+            tokio::process::Command::new("git")
+                .arg("--version")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status(),
+        )
+        .await,
+        Ok(Ok(status)) if status.success()
+    )
 }
 
 async fn clone_repository(root: &Path) -> Result<(), SpaceCloneError> {
@@ -90,20 +101,34 @@ async fn update_repository(repository_dir: &Path) -> Result<(), SpaceCloneError>
 }
 
 async fn run_git(cwd: &Path, args: &[&str]) -> Result<(), SpaceCloneError> {
-    let output = tokio::process::Command::new("git")
+    let mut child = tokio::process::Command::new("git")
         .args(args)
         .current_dir(cwd)
         .stdin(Stdio::null())
-        .output()
-        .await
+        .stdout(Stdio::null())
+        // Stderr is captured only to describe the failure, and only a bounded
+        // prefix is read back so a chatty child cannot grow memory.
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|error| SpaceCloneError::Command(error.to_string()))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
+    let status = match tokio::time::timeout(GIT_COMMAND_TIMEOUT, child.wait()).await {
+        Ok(status) => status.map_err(|error| SpaceCloneError::Command(error.to_string()))?,
+        Err(_) => {
+            let _ = child.kill().await;
+            return Err(SpaceCloneError::Command(format!(
+                "git {} timed out after {:?}",
+                args.join(" "),
+                GIT_COMMAND_TIMEOUT
+            )));
+        }
+    };
+
+    if !status.success() {
         return Err(SpaceCloneError::Command(format!(
-            "git {} failed: {}",
+            "git {} failed with {}",
             args.join(" "),
-            stderr.trim()
+            status
         )));
     }
     Ok(())

@@ -13,7 +13,15 @@ Group=sdkwork
 ExecStart=/usr/lib/sdkwork/webserver/bin/sdkwork-api-webserver-standalone-gateway serve-management
 Restart=on-failure
 RestartSec=5s
+# Explicit lifecycle budgets: the process drains accepted work for up to
+# 30s (drain_timeout), so 45s gives systemd a bounded stop instead of the
+# implicit 90s default; start includes database bootstrap + drift checks.
+TimeoutStopSec=45
+TimeoutStartSec=180
 LimitNOFILE=65536
+# Last-resort memory backstop behind the process admission controller
+# (PRD §8.1: bounded rejection, not allocator exhaustion). Tune per host.
+MemoryMax=4G
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true

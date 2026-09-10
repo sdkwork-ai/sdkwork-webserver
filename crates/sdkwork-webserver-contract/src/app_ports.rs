@@ -34,6 +34,11 @@ pub struct WebBackendRequestContext {
     pub subject_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idempotency_key: Option<String>,
+    /// IAM permission codes granted to the principal (empty for machine-only
+    /// contexts). Consumed by per-operation authorization checks such as the
+    /// deploy-class Server Files operations (PRD-FR-029).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub permission_scope: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -47,6 +52,8 @@ pub struct ListApplicationsQuery {
     pub application_type: Option<String>,
     #[serde(rename = "site_type")]
     pub site_type: Option<i32>,
+    /// Generic free-text search on the wire is `q` (API_SPEC §16.4).
+    #[serde(rename = "q")]
     pub keyword: Option<String>,
 }
 
@@ -112,6 +119,8 @@ pub struct ListRootDomainsQuery {
     #[serde(default = "crate::dto::default_page_size")]
     pub page_size: i32,
     pub status: Option<i32>,
+    /// Generic free-text search on the wire is `q` (API_SPEC §16.4).
+    #[serde(rename = "q")]
     pub keyword: Option<String>,
 }
 

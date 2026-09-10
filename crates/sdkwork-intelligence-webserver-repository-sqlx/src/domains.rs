@@ -1,5 +1,5 @@
-use crate::audited_sql;
 use super::{EngineRow, WebRepository};
+use crate::audited_sql;
 use chrono::{Duration, Utc};
 use sdkwork_intelligence_webserver_service::{
     DomainVerificationChallenge, DomainVerificationObservation,
@@ -223,7 +223,11 @@ impl WebRepository {
             .bind(owner_user_id)
             .bind(root_domain_id)
             .bind(hostname)
-            .bind(if hostname.starts_with("*.") { "WILDCARD" } else { "EXACT" })
+            .bind(if hostname.starts_with("*.") {
+                "WILDCARD"
+            } else {
+                "EXACT"
+            })
             .bind(0_i32)
             .bind(&now)
             .execute(&mut *tx)
@@ -305,6 +309,16 @@ impl WebRepository {
         tenant_id: i64,
         domain_id: &str,
     ) -> WebServiceResult<()> {
+        // Guard counts and the soft delete share one transaction with the
+        // domain row locked, so a concurrent site-binding insert (which locks
+        // the same domain row first) cannot slip an orphan binding past the
+        // check-then-act window or free the unique hostname slot while routes
+        // still reference the domain.
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|error| store_error("begin managed domain delete transaction", error))?;
         let row = sqlx::query(
             "SELECT d.id,
                     (SELECT COUNT(*) FROM web_site_binding b
@@ -316,20 +330,21 @@ impl WebRepository {
                       AND c.deleted_at IS NULL
                      WHERE ci.tenant_id = d.tenant_id AND ci.domain_id = d.id) AS certificate_count
              FROM web_domain d
-             WHERE d.tenant_id = $1 AND d.uuid = $2 AND d.deleted_at IS NULL",
+             WHERE d.tenant_id = $1 AND d.uuid = $2 AND d.deleted_at IS NULL
+             FOR UPDATE OF d",
         )
         .bind(tenant_id)
         .bind(domain_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *tx)
         .await
         .map_err(|error| store_error("load managed domain delete state", error))?
         .ok_or_else(|| WebServiceError::not_found("domain not found"))?;
-        let binding_count: i64 = row.try_get("binding_count").map_err(|error| {
-            store_error("map managed domain binding count", error)
-        })?;
-        let certificate_count: i64 = row.try_get("certificate_count").map_err(|error| {
-            store_error("map managed domain certificate count", error)
-        })?;
+        let binding_count: i64 = row
+            .try_get("binding_count")
+            .map_err(|error| store_error("map managed domain binding count", error))?;
+        let certificate_count: i64 = row
+            .try_get("certificate_count")
+            .map_err(|error| store_error("map managed domain certificate count", error))?;
         if binding_count > 0 {
             return Err(WebServiceError::conflict(
                 "domain bindings must be removed before deletion",
@@ -352,12 +367,15 @@ impl WebRepository {
             .bind(tenant_id)
             .bind(domain_id)
             .bind(&now)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .map_err(|error| store_error("delete managed domain", error))?;
         if result.rows_affected() == 0 {
             return Err(WebServiceError::not_found("domain not found"));
         }
+        tx.commit()
+            .await
+            .map_err(|error| store_error("commit managed domain delete", error))?;
         Ok(())
     }
 
@@ -399,7 +417,8 @@ impl WebRepository {
         tx.commit()
             .await
             .map_err(|error| store_error("commit bind managed domain", error))?;
-        self.retrieve_managed_domain_repo(tenant_id, domain_id).await
+        self.retrieve_managed_domain_repo(tenant_id, domain_id)
+            .await
     }
 
     pub(super) async fn unbind_managed_domain_repo(
@@ -439,7 +458,8 @@ impl WebRepository {
         if result.rows_affected() == 0 {
             return Err(WebServiceError::not_found("domain binding not found"));
         }
-        self.retrieve_managed_domain_repo(tenant_id, domain_id).await
+        self.retrieve_managed_domain_repo(tenant_id, domain_id)
+            .await
     }
 
     pub(super) async fn prepare_domain_verification_repo(
@@ -486,13 +506,13 @@ impl WebRepository {
                ))
              FOR UPDATE",
         )
-            .bind(tenant_id)
-            .bind(domain_id)
-            .bind(expected_site_id)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(|error| store_error("lock domain for verification", error))?
-            .ok_or_else(|| WebServiceError::not_found("domain not found"))?;
+        .bind(tenant_id)
+        .bind(domain_id)
+        .bind(expected_site_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|error| store_error("lock domain for verification", error))?
+        .ok_or_else(|| WebServiceError::not_found("domain not found"))?;
         let domain_internal_id: i64 = domain
             .try_get("id")
             .map_err(|error| WebServiceError::Internal(error.to_string()))?;
@@ -529,7 +549,8 @@ impl WebRepository {
             tenant_id,
             domain_internal_id,
             reusable_status,
-            &now,        )
+            &now,
+        )
         .await?
         {
             tx.commit()
@@ -616,13 +637,12 @@ impl WebRepository {
             .begin()
             .await
             .map_err(|error| store_error("begin domain verification observation", error))?;
-        let row = fetch_domain_verification_challenge_for_update(
-            &mut tx,
-            tenant_id,
-            challenge_id,
-            &now,        )
-        .await?
-        .ok_or_else(|| WebServiceError::not_found("domain verification challenge not found"))?;
+        let row =
+            fetch_domain_verification_challenge_for_update(&mut tx, tenant_id, challenge_id, &now)
+                .await?
+                .ok_or_else(|| {
+                    WebServiceError::not_found("domain verification challenge not found")
+                })?;
         let domain_internal_id: i64 = row
             .try_get("domain_id")
             .map_err(|error| WebServiceError::Internal(error.to_string()))?;
@@ -649,14 +669,16 @@ impl WebRepository {
                 current.attempt_count,
                 None,
                 Some("CHALLENGE_EXPIRED"),
-                &now,            )
+                &now,
+            )
             .await?;
             update_domain_verification_status(
                 &mut tx,
                 tenant_id,
                 domain_internal_id,
                 "EXPIRED",
-                &now,            )
+                &now,
+            )
             .await?;
             tx.commit()
                 .await
@@ -702,22 +724,13 @@ impl WebRepository {
             attempt_count,
             next_attempt_at.as_deref(),
             failure_code,
-            &now,        )
+            &now,
+        )
         .await?;
-        update_domain_verification_status(
-            &mut tx,
-            tenant_id,
-            domain_internal_id,
-            status,
-            &now,        )
-        .await?;
-        if verified {
-            activate_verified_domain_bindings(
-                &mut tx,
-                tenant_id,
-                domain_internal_id,
-                &now,            )
+        update_domain_verification_status(&mut tx, tenant_id, domain_internal_id, status, &now)
             .await?;
+        if verified {
+            activate_verified_domain_bindings(&mut tx, tenant_id, domain_internal_id, &now).await?;
         }
         tx.commit()
             .await
@@ -737,6 +750,23 @@ impl WebRepository {
         ssl_provider: Option<&str>,
         now: &str,
     ) -> WebServiceResult<()> {
+        // Lock the domain row first so a concurrent managed-domain delete
+        // (which locks the same row before its guard counts) serializes
+        // against this insert; the delete transaction cannot soft-delete a
+        // domain whose binding insert is in flight.
+        let live_domain: Option<i64> = sqlx::query_scalar(
+            "SELECT id FROM web_domain
+             WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
+             FOR UPDATE",
+        )
+        .bind(tenant_id)
+        .bind(domain_id)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(|error| store_error("lock domain for binding insert", error))?;
+        if live_domain.is_none() {
+            return Err(WebServiceError::not_found("domain not found"));
+        }
         let existing_site_id: Option<i64> = sqlx::query_scalar(
             "SELECT site_id FROM web_site_binding
              WHERE tenant_id = $1 AND domain_id = $2 AND environment = 'production'
@@ -1196,20 +1226,26 @@ mod tests {
 
     #[test]
     fn domain_verification_observations_fail_closed() {
-        assert!(validate_domain_verification_observation(&DomainVerificationObservation {
-            observed_sha256: Some("a".repeat(64)),
-            failure_code: Some("DNS_TXT_RECORD_NOT_OBSERVED".to_string()),
-        })
-        .is_ok());
-        assert!(validate_domain_verification_observation(&DomainVerificationObservation {
-            observed_sha256: Some("A".repeat(64)),
-            failure_code: None,
-        })
-        .is_err());
-        assert!(validate_domain_verification_observation(&DomainVerificationObservation {
-            observed_sha256: None,
-            failure_code: Some("invalid-code".to_string()),
-        })
-        .is_err());
+        assert!(
+            validate_domain_verification_observation(&DomainVerificationObservation {
+                observed_sha256: Some("a".repeat(64)),
+                failure_code: Some("DNS_TXT_RECORD_NOT_OBSERVED".to_string()),
+            })
+            .is_ok()
+        );
+        assert!(
+            validate_domain_verification_observation(&DomainVerificationObservation {
+                observed_sha256: Some("A".repeat(64)),
+                failure_code: None,
+            })
+            .is_err()
+        );
+        assert!(
+            validate_domain_verification_observation(&DomainVerificationObservation {
+                observed_sha256: None,
+                failure_code: Some("invalid-code".to_string()),
+            })
+            .is_err()
+        );
     }
 }

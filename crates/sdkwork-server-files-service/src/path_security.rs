@@ -185,6 +185,41 @@ fn canonicalize_or_ancestor(path: &Path) -> std::io::Result<PathBuf> {
     }
 }
 
+/// Credential and secret-shaped file names the explorer refuses to read even
+/// inside an authorized root (`.env` files, private keys, keystore archives,
+/// credential stores). Listing still shows the names; only content reads are
+/// denied.
+pub fn is_sensitive_file_name(file_name: &str) -> bool {
+    let name = file_name.to_ascii_lowercase();
+    let sensitive_extensions = [
+        "pem", "key", "p12", "pfx", "ppk", "kdbx", "keystore", "jks", "gpg",
+    ];
+    let sensitive_names = [
+        "id_rsa",
+        "id_dsa",
+        "id_ecdsa",
+        "id_ed25519",
+        "htpasswd",
+        ".netrc",
+        ".git-credentials",
+        ".pgpass",
+        ".my.cnf",
+        ".npmrc",
+        ".dockercfg",
+    ];
+    if name.starts_with(".env") {
+        return true;
+    }
+    if sensitive_names.contains(&name.as_str()) {
+        return true;
+    }
+    name.rsplit_once('.')
+        .is_some_and(|(_, extension)| sensitive_extensions.contains(&extension))
+        || sensitive_names
+            .iter()
+            .any(|sensitive| name.starts_with(&format!("{sensitive}")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

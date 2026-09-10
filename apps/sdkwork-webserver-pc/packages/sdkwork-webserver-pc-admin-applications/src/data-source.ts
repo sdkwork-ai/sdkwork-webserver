@@ -35,7 +35,8 @@ export function createWebserverAdminApplicationRegistry(
   return {
     applications: source(async (query) => enrichApplicationsWithSourceVersionFlag(
       client,
-      await client.application.list({ page: query.page, pageSize: query.pageSize, keyword: query.search }),
+      // Wire search param is `q` (API_SPEC §16.4); the SDK renames it for TS as `q`.
+      await client.application.list({ page: query.page, pageSize: query.pageSize, q: query.search }),
     ), [
         action(
           "create",

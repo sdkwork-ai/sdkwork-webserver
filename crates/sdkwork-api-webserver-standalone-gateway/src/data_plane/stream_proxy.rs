@@ -148,9 +148,34 @@ pub(crate) async fn serve_stream_listener(
         }
     }
     drop(listener.socket);
-    while let Some(result) = tasks.join_next().await {
-        if let Err(error) = result {
-            tracing::warn!(stream_id = %listener.id, error = %error, "stream connection task failed");
+    // Bounded drain: stream connections terminate only through their idle
+    // or maximum-age timers, which can exceed the process shutdown grace
+    // period. Apply the same configured drain deadline as the HTTP path and
+    // deterministically abort the remainder when it expires.
+    let drain_timeout =
+        Duration::from_millis(runtime.current().app.config().limits.drain_timeout_ms);
+    let drain = async {
+        while let Some(result) = tasks.join_next().await {
+            if let Err(error) = result {
+                tracing::warn!(stream_id = %listener.id, error = %error, "stream connection task failed");
+            }
+        }
+    };
+    if drain_timeout.is_zero() {
+        drain.await;
+    } else {
+        tokio::select! {
+            _ = drain => {}
+            _ = sleep(drain_timeout) => {
+                let remaining = tasks.len();
+                tasks.abort_all();
+                tracing::info!(
+                    stream_id = %listener.id,
+                    remaining,
+                    drain_timeout_ms = drain_timeout.as_millis() as u64,
+                    "stream drain deadline expired; aborted remaining connections"
+                );
+            }
         }
     }
     Ok(())

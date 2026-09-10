@@ -48,6 +48,20 @@ bin/docker-deploy.sh install --environment demo                   # 19080
 bin/docker-deploy.sh install --environment production --yes       # 18080 (--yes required)
 ```
 
+> **Universal import plane (default all five).** Every webserver instance,
+> whatever environment it runs in, imports each sibling module's
+> `nginx.<profile>.<environment>.conf` sidecar for **all five** lifecycle
+> environments by default — so the `development` stack also routes
+> `server-test.*` / `api-staging.*` etc. (`ENVIRONMENT_SPEC.md` §6.2.2,
+> `SDKWORK_WEBSERVER_SPEC.md` §17.3.2). `SDKWORK_WEBSERVER_ENVIRONMENT` only
+> selects the instance's default routing environment. To deliberately serve a
+> subset, set `SDKWORK_WEBSERVER_IMPORT_ENVIRONMENTS` (comma-separated) in the
+> env file; compose forwards it into the container
+> (`docker-compose.bundle.yml`). Verify the actual imported set in a running
+> container: `docker exec <c> cat /etc/sdkwork/webserver/imports.d/import.conf`.
+> To run a second webserver slot at different ports for a different app, deploy
+> with `--host-port <base> [--edge-http <p>] [--edge-https <p>]`.
+
 > **Rollback**: the bundle ships `release.sh` (OPERATIONS_SPEC.md §1.2), so
 > `rollback` goes back to the previous successful version recorded in the
 > append-only release ledger, gated by `/healthz` probes on the management
@@ -115,8 +129,22 @@ delivery stays on the container channel; `pc`/`h5` are static web bundles.
 `--environment development|test|staging|demo|production` ·
 `--profile standalone|cloud` (as `<environment>:<profile>` for apps-\*) ·
 `--host wsl|ssh://[user@]host[:port]` · `--image-tag <v>` ·
-`--deps external|embedded` · `--to <version>` · `--purge` · `--yes` ·
-`--dry-run` · `-h|--help`
+`--deps external|embedded` · `--host-port <BASE>` · `--edge-http <P>` ·
+`--edge-https <P>` · `--domain <HOST>` · `--to <version>` · `--purge` ·
+`--yes` · `--dry-run` · `-h|--help`
+
+`--host-port/--edge-http/--edge-https/--domain` are runtime port/domain
+overrides for `install|upgrade` (MODULE_BIN_SPEC.md §4.2). Precedence:
+**CLI > env-file > built-in fallback**. They are forwarded to the bundle
+`deploy.sh`, which composes on them and persists them into the env file on
+apply — so a later `doctor`/`status`/`config` reads the same published ports.
+Binding the same environment at different ports for different applications is a
+deploy with a different base:
+
+```sh
+bin/docker-deploy.sh install --environment demo --host-port 19500 \
+    --edge-http 19510 --domain demo.slot.example   # second app slot at :19500
+```
 
 `--dry-run` prints the plan and executes nothing. Production mutations require
 `--yes`; `--purge` requires `--yes` in every environment. Each run appends a

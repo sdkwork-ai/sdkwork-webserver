@@ -145,6 +145,18 @@ client/cache eviction, and tenant-qualified readiness, drift, usage, and rollout
 replace those missing contracts with token maps, tenant headers, raw HTTP, or direct cross-service
 storage access.
 
+## Scaling Contract
+
+The website data plane is a fleet of **node-scoped StatefulSets**: every Node
+owns its own identity (Node UUID, credential secret, provider-event callback
+routing, and recovery volume), so a generic HorizontalPodAutoscaler must not
+clone a Node identity. Scale horizontally by rendering and applying additional
+Node manifests (`render-kubernetes-manifests.mjs --image-digest ... --website-node-name
+<new-node> ...`) into the same tenant fleet, then rebalancing the fleet's
+public ingress. Capacity-based HPA belongs to stateless components upstream of
+the fleet (ingress, cache), not to the Node identity itself. Always keep at
+least two Nodes per tenant fleet for high availability (step 5).
+
 ## Certificate Worker
 
 `certificate-worker.yaml` deploys `sdkwork-webserver-certificate-worker` (exactly one

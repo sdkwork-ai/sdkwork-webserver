@@ -1545,7 +1545,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.servers.files.write",
+      "permission": "web.nginx.write",
       "idempotent": true,
       "rateLimitTier": null
     },

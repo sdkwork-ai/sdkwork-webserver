@@ -2,6 +2,7 @@
 name = "sdkwork-webserver-agent"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 
 [lib]
 name = "sdkwork_webserver_agent"
@@ -33,3 +34,6 @@ sdkwork-webserver-backend-sdk.workspace = true
 sdkwork-webserver-edge-runtime.workspace = true
 sdkwork-webserver-contract.workspace = true
 sdkwork-utils-rust.workspace = true
+
+[lints]
+workspace = true

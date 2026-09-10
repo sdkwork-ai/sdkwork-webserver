@@ -13,6 +13,12 @@ $coreDomains = @(
     "server-test.sdkwork.com",
     "server-app-test.sdkwork.com",
     "server-admin-test.sdkwork.com",
+    "server-staging.sdkwork.com",
+    "server-app-staging.sdkwork.com",
+    "server-admin-staging.sdkwork.com",
+    "server-demo.sdkwork.com",
+    "server-app-demo.sdkwork.com",
+    "server-admin-demo.sdkwork.com",
     "server.sdkwork.com",
     "server-app.sdkwork.com",
     "server-admin.sdkwork.com",
@@ -21,7 +27,7 @@ $coreDomains = @(
 )
 
 $discovered = New-Object System.Collections.Generic.List[string]
-foreach ($envName in @("development", "test", "production")) {
+foreach ($envName in @("development", "test", "staging", "demo", "production")) {
     $raw = wsl -d $wslDistro -e bash -lc "bash '$discoverScript' $envName" 2>$null
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($raw)) { continue }
     foreach ($line in ($raw -split "[\r\n]+")) {
@@ -30,7 +36,22 @@ foreach ($envName in @("development", "test", "production")) {
     }
 }
 
-$domains = @($coreDomains + $discovered.ToArray() | Select-Object -Unique | Sort-Object)
+# Platform API plane brands (mirrors install-wsl-hosts.sh PLATFORM_API_BRANDS):
+# every environment tier resolves even when module discovery misses the gateway.
+$platformApiBrands = @(
+    "sdkwork.com", "birdcoder.com", "dtupay.com",
+    "sdkwork.cn", "birdcoder.cn", "dtupay.cn",
+    "skubc.com", "skubc.cn", "zowalk.com", "zowalk.cn",
+    "offer86.com", "offer86.cn", "86offer.com", "86offer.cn"
+)
+$platformApi = New-Object System.Collections.Generic.List[string]
+foreach ($brand in $platformApiBrands) {
+    foreach ($prefix in @("api-dev", "api-test", "api-staging", "api-demo", "api")) {
+        [void]$platformApi.Add("$prefix.$brand")
+    }
+}
+
+$domains = @($coreDomains + $discovered.ToArray() + $platformApi.ToArray() | Select-Object -Unique | Sort-Object)
 if ($domains.Count -lt 20) {
     throw "discovered too few domains ($($domains.Count)); aborting hosts rewrite"
 }
@@ -70,7 +91,7 @@ if ($iphlp -and $iphlp.Status -ne "Running") {
 netsh interface portproxy reset | Out-Null
 Write-Host "Cleared Windows portproxy (sdkwork-webserver Docker publishes :80 / :443 via WSL)"
 Write-Host "Public domains: http://api-dev.sdkwork.com/  https://api-dev.sdkwork.com/"
-Write-Host "Management console ports: :13800 / :18888 / :18080"
+Write-Host "Management console ports: :13800 (dev) / :18888 (test) / :18081 (staging) / :19080 (demo) / :18080 (production)"
 
 $ruleName = "SDKWork Web Server HTTP"
 if (-not (Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue)) {

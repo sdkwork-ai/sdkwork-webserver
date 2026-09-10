@@ -42,7 +42,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.read",
         "x-sdkwork-owner": "sdkwork-webserver",
         "x-sdkwork-pagination-mode": "offset",
         "parameters": [
@@ -92,7 +91,7 @@
             }
           },
           {
-            "name": "keyword",
+            "name": "q",
             "in": "query",
             "schema": {
               "type": "string"
@@ -162,7 +161,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.read"
       },
       "post": {
         "operationId": "applications.create",
@@ -180,7 +180,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-idempotent": true,
         "parameters": [
           {
@@ -273,7 +272,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}": {
@@ -298,7 +298,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.read",
         "x-sdkwork-owner": "sdkwork-webserver",
         "responses": {
           "200": {
@@ -355,7 +354,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.read"
       },
       "patch": {
         "operationId": "applications.update",
@@ -373,7 +373,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-owner": "sdkwork-webserver",
         "x-sdkwork-idempotent": true,
         "parameters": [
@@ -456,7 +455,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       },
       "delete": {
         "operationId": "applications.delete",
@@ -474,7 +474,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-owner": "sdkwork-webserver",
         "responses": {
           "204": {
@@ -501,7 +500,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/activate": {
@@ -526,7 +526,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-owner": "sdkwork-webserver",
         "responses": {
           "200": {
@@ -583,7 +582,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/pause": {
@@ -608,7 +608,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-owner": "sdkwork-webserver",
         "responses": {
           "200": {
@@ -665,7 +664,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/domains": {
@@ -690,7 +690,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-owner": "sdkwork-webserver",
         "x-sdkwork-pagination-mode": "offset",
         "parameters": [
@@ -754,7 +753,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       },
       "post": {
         "operationId": "applications.domains.create",
@@ -772,7 +772,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-idempotent": true,
         "parameters": [
           {
@@ -845,7 +844,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/domains/{domainId}": {
@@ -873,7 +873,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-owner": "sdkwork-webserver",
         "responses": {
           "200": {
@@ -920,7 +919,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       },
       "delete": {
         "operationId": "applications.domains.delete",
@@ -938,7 +938,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-owner": "sdkwork-webserver",
         "responses": {
           "204": {
@@ -955,7 +954,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/domains/{domainId}/verify": {
@@ -983,7 +983,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-idempotent": true,
         "parameters": [
           {
@@ -1047,7 +1046,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/domains/{domainId}/listener_certificate_bindings": {
@@ -1076,7 +1076,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.certificates.read",
         "x-sdkwork-owner": "sdkwork-webserver",
         "x-sdkwork-pagination-mode": "offset",
         "parameters": [
@@ -1140,7 +1139,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       },
       "post": {
         "operationId": "applications.domains.listenerCertificateBindings.create",
@@ -1158,7 +1158,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.certificates.write",
         "x-sdkwork-idempotent": true,
         "x-sdkwork-rate-limit-tier": "auth-critical",
         "x-sdkwork-owner": "sdkwork-webserver",
@@ -1243,7 +1242,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/domains/{domainId}/listener_certificate_bindings/{bindingId}": {
@@ -1274,7 +1274,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.certificates.write",
         "x-sdkwork-idempotent": true,
         "x-sdkwork-rate-limit-tier": "auth-critical",
         "x-sdkwork-owner": "sdkwork-webserver",
@@ -1298,7 +1297,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/source_versions": {
@@ -1324,7 +1324,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-owner": "sdkwork-webserver",
         "parameters": [
           {
@@ -1387,7 +1386,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       },
       "post": {
         "operationId": "applications.sourceVersions.create",
@@ -1405,7 +1405,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-owner": "sdkwork-webserver",
         "x-sdkwork-idempotent": true,
         "parameters": [
@@ -1478,7 +1477,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/source_versions/git_import": {
@@ -1503,7 +1503,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-owner": "sdkwork-webserver",
         "x-sdkwork-rate-limit-tier": "auth-critical",
         "x-sdkwork-idempotent": true,
@@ -1567,7 +1566,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/source_versions/{sourceVersionId}": {
@@ -1595,7 +1595,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-owner": "sdkwork-webserver",
         "responses": {
           "200": {
@@ -1642,7 +1641,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/deployments": {
@@ -1667,7 +1667,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-owner": "sdkwork-webserver",
         "x-sdkwork-pagination-mode": "cursor",
         "parameters": [
@@ -1746,7 +1745,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       },
       "post": {
         "operationId": "applications.deployments.create",
@@ -1764,7 +1764,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-idempotent": true,
         "parameters": [
           {
@@ -1838,7 +1837,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/deployments/{deploymentId}": {
@@ -1866,7 +1866,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-owner": "sdkwork-webserver",
         "responses": {
           "200": {
@@ -1913,7 +1912,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/deployments/{deploymentId}/rollback": {
@@ -1941,7 +1941,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-idempotent": true,
         "parameters": [
           {
@@ -1995,7 +1994,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/env_variables": {
@@ -2021,7 +2021,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-owner": "sdkwork-webserver",
         "x-sdkwork-pagination-mode": "offset",
         "parameters": [
@@ -2077,7 +2076,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       },
       "post": {
         "operationId": "applications.envVariables.create",
@@ -2095,7 +2095,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-idempotent": true,
         "parameters": [
           {
@@ -2148,7 +2147,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/env_variables/{variableId}": {
@@ -2183,7 +2183,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-idempotent": true,
         "parameters": [
           {
@@ -2236,7 +2235,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       },
       "delete": {
         "operationId": "applications.envVariables.delete",
@@ -2255,7 +2255,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-idempotent": true,
         "parameters": [
           {
@@ -2268,7 +2267,8 @@
             "description": "删除成功"
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/domains": {
@@ -2352,7 +2352,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.domains.read"
       }
     },
     "/app/v3/api/applications/{applicationId}/platform_targets": {
@@ -2372,7 +2373,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.read",
         "x-sdkwork-owner": "sdkwork-webserver",
         "x-sdkwork-pagination-mode": "offset",
         "parameters": [
@@ -2446,7 +2446,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       },
       "post": {
         "operationId": "applications.platformTargets.create",
@@ -2464,7 +2465,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-idempotent": true,
         "x-sdkwork-owner": "sdkwork-webserver",
         "parameters": [
@@ -2538,7 +2538,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/platform_targets/{platformTargetId}": {
@@ -2558,7 +2559,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.read",
         "x-sdkwork-owner": "sdkwork-webserver",
         "responses": {
           "200": {
@@ -2616,7 +2616,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/health_checks": {
@@ -2642,7 +2643,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-owner": "sdkwork-webserver",
         "x-sdkwork-pagination-mode": "offset",
         "responses": {
@@ -2688,7 +2688,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       },
       "post": {
         "operationId": "applications.healthChecks.create",
@@ -2706,7 +2707,6 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.applications.write",
         "x-sdkwork-idempotent": true,
         "parameters": [
           {
@@ -2759,7 +2759,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     }
   },

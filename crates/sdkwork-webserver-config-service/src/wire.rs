@@ -18,10 +18,7 @@ pub mod i64_as_string {
 
 pub mod option_i64_as_string {
     use serde::{Deserialize, Deserializer, Serializer};
-    pub fn serialize<S: Serializer>(
-        value: &Option<i64>,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error> {
+    pub fn serialize<S: Serializer>(value: &Option<i64>, serializer: S) -> Result<S::Ok, S::Error> {
         match value {
             Some(value) => serializer.serialize_str(&value.to_string()),
             None => serializer.serialize_none(),
@@ -54,10 +51,7 @@ pub mod u64_as_string {
 
 pub mod option_u64_as_string {
     use serde::{Deserialize, Deserializer, Serializer};
-    pub fn serialize<S: Serializer>(
-        value: &Option<u64>,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error> {
+    pub fn serialize<S: Serializer>(value: &Option<u64>, serializer: S) -> Result<S::Ok, S::Error> {
         match value {
             Some(value) => serializer.serialize_str(&value.to_string()),
             None => serializer.serialize_none(),

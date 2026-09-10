@@ -42,13 +42,20 @@ export default defineConfig(({ command, mode }) => {
     ],
     resolve: {
       // Cross-repository workspace links (for example the SDKWork
-      // Deployments console packages) resolve their React and router peers
-      // from their own node_modules; alias the runtime singletons to this
-      // application's copies so hooks and contexts never split into two
-      // instances inside one renderer.
+      // Deployments and Appbase console packages) resolve their React and
+      // router peers from their own node_modules; alias the runtime
+      // singletons — including subpath entries such as `react/jsx-runtime` —
+      // to this application's copies so hooks and contexts never split into
+      // two instances inside one renderer.
       alias: [
-        { find: /^react$/, replacement: PACKAGE_REQUIRE.resolve("react") },
-        { find: /^react-dom$/, replacement: PACKAGE_REQUIRE.resolve("react-dom") },
+        {
+          find: /^react(?:\/(.*))?$/,
+          replacement: `${path.dirname(PACKAGE_REQUIRE.resolve("react/package.json"))}/$1`,
+        },
+        {
+          find: /^react-dom(?:\/(.*))?$/,
+          replacement: `${path.dirname(PACKAGE_REQUIRE.resolve("react-dom/package.json"))}/$1`,
+        },
         { find: /^react-router-dom$/, replacement: PACKAGE_REQUIRE.resolve("react-router-dom") },
         { find: /^lucide-react$/, replacement: PACKAGE_REQUIRE.resolve("lucide-react") },
         {
@@ -78,7 +85,21 @@ export default defineConfig(({ command, mode }) => {
       // singleton aliases above apply inside vitest too.
       server: {
         deps: {
-          inline: [/@sdkwork\/(deployments|skills|mcp)/, "lucide-react"],
+          // Every cross-repository `@sdkwork/*` workspace package must go
+          // through the Vite pipeline so the runtime-singleton aliases above
+          // apply; an externalized sibling resolves React from its own
+          // node_modules and splits the renderer into two instances.
+          // `@testing-library/react` is inlined for the same reason: it pulls
+          // its own `react-dom` peer, which must re-resolve onto the
+          // application's copy.
+          inline: [
+            /^@sdkwork\//,
+            "lucide-react",
+            "@testing-library/react",
+            "react",
+            "react-dom",
+            "react-dom/client",
+          ],
         },
       },
     },

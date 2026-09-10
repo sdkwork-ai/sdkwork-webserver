@@ -77,6 +77,12 @@ x-webserver-common: &webserver-common
     # ships the gateway install tree) by default so the bundle is
     # self-contained. Override to docker/external via the env file.
     SDKWORK_WEBSERVER_IMPORT_PROFILE: ${SDKWORK_WEBSERVER_IMPORT_PROFILE:-cloud}
+    # Universal import plane (ENVIRONMENT_SPEC §6.2.2): the comma-separated set
+    # of lifecycle environments whose module sidecars this instance imports.
+    # Empty = import all five (development,test,staging,demo,production), so a
+    # single webserver routes every commissioned domain edge. A module with a
+    # subset of sidecars is tolerated (missing sidecars are skipped).
+    SDKWORK_WEBSERVER_IMPORT_ENVIRONMENTS: ${SDKWORK_WEBSERVER_IMPORT_ENVIRONMENTS:-}
     # Module-imports data plane: identity 80/443 (leave empty; set only when
     # remapping is required). SDKWORK_WEBSERVER_SPEC.md §17.3.
     SDKWORK_WEBSERVER_IMPORT_LISTENER_PORTS: ${SDKWORK_WEBSERVER_IMPORT_LISTENER_PORTS:-}
@@ -125,6 +131,10 @@ x-webserver-common: &webserver-common
     SDKWORK_WEBSERVER_REDIS_DATABASE: ${SDKWORK_WEBSERVER_REDIS_DATABASE:-0}
     SDKWORK_WEBSERVER_REDIS_TLS: ${SDKWORK_WEBSERVER_REDIS_TLS:-false}
     SDKWORK_WEBSERVER_REDIS_PASSWORD: ${SDKWORK_WEBSERVER_REDIS_PASSWORD:-}
+    # IAM tenant signing master secret: env files may define it; compose only
+    # passes explicitly mapped variables into the container (pass-through trap).
+    # Encrypted tenant secret_refs cannot be decoded without it.
+    SDKWORK_IAM_SIGNING_MASTER_SECRET: ${SDKWORK_IAM_SIGNING_MASTER_SECRET:-}
     SDKWORK_WEBSERVER_CERT_WORKER_ID: ${SDKWORK_WEBSERVER_CERT_WORKER_ID:-certificate-worker-0}
     # Adaptive Web static roots (SDKWORK_WEBSERVER_SPEC.md §13.6): the webserver
     # process serves its own standalone build from the checkout when overridden,

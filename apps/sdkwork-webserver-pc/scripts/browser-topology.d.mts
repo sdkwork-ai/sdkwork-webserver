@@ -1,5 +1,5 @@
 export type WebserverDeploymentProfile = 'standalone' | 'cloud';
-export type WebserverLifecycleEnvironment = 'development' | 'test' | 'staging' | 'production';
+export type WebserverLifecycleEnvironment = 'development' | 'test' | 'staging' | 'demo' | 'production';
 
 export interface BrowserRuntimeProfile {
   deploymentProfile: WebserverDeploymentProfile;

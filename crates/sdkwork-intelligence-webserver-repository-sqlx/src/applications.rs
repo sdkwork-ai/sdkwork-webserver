@@ -1,5 +1,5 @@
-use crate::audited_sql;
 use super::{EngineRow, WebRepository};
+use crate::audited_sql;
 use sdkwork_utils_rust::slugify;
 use sdkwork_webserver_contract::{
     ApplicationPage, ApplicationResponse, ApplicationStoreListing, CreateApplicationRequest,
@@ -246,9 +246,13 @@ impl WebRepository {
         application_id: &str,
         request: &UpdateApplicationRequest,
     ) -> WebServiceResult<ApplicationResponse> {
-        let existing = self.retrieve_application_repo(tenant_id, None, application_id).await?;
+        let existing = self
+            .retrieve_application_repo(tenant_id, None, application_id)
+            .await?;
         let existing_site_id = existing.site_id.clone().unwrap_or_default();
-        let current_version = self.retrieve_site_version_repo(tenant_id, &existing_site_id).await?;
+        let current_version = self
+            .retrieve_site_version_repo(tenant_id, &existing_site_id)
+            .await?;
         let name = request.name.as_ref().unwrap_or(&existing.name);
         let description = request
             .description
@@ -267,7 +271,9 @@ impl WebRepository {
             .as_ref()
             .map(serde_json::to_string)
             .transpose()
-            .map_err(|error| WebServiceError::Internal(format!("serialize store listing: {error}")))?;
+            .map_err(|error| {
+                WebServiceError::Internal(format!("serialize store listing: {error}"))
+            })?;
         // PostgreSQL-only metadata expression (single authoritative engine).
         let metadata_expression =
             "CASE WHEN $6 IS NULL THEN metadata ELSE jsonb_set(metadata, '{storeListing}', CAST($6 AS JSONB), true) END"
@@ -304,10 +310,17 @@ impl WebRepository {
             tx.rollback().await.map_err(|error| {
                 store_error("rollback update web_application transaction", error)
             })?;
-            return self.conflict_or_missing_site(tenant_id, &existing_site_id).await;
+            return self
+                .conflict_or_missing_site(tenant_id, &existing_site_id)
+                .await;
         }
 
-        sqlx::query(audited_sql(
+        // The site-row CAS above serializes concurrent updates of the same
+        // application; this row-count guard additionally rejects the
+        // update-vs-delete interleaving (the delete flow marks the
+        // application row without CAS) instead of committing a half-updated
+        // aggregate.
+        let application_update = sqlx::query(audited_sql(
             "UPDATE web_application
              SET name = $3, description = $4, updated_at = $5, version = version + 1
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
@@ -321,11 +334,21 @@ impl WebRepository {
         .await
         .map_err(|error| store_error("update web_application", error))?;
 
+        if application_update.rows_affected() == 0 {
+            tx.rollback().await.map_err(|error| {
+                store_error("rollback update web_application transaction", error)
+            })?;
+            return Err(WebServiceError::conflict(
+                "application was concurrently modified; retry with the current state",
+            ));
+        }
+
         tx.commit()
             .await
             .map_err(|error| store_error("commit update web_application transaction", error))?;
 
-        self.retrieve_application_repo(tenant_id, None, application_id).await
+        self.retrieve_application_repo(tenant_id, None, application_id)
+            .await
     }
 
     pub(super) async fn delete_application_repo(
@@ -399,9 +422,9 @@ impl WebRepository {
         .map_err(|error| store_error("delete web_site for application", error))?;
 
         if site_update.rows_affected() == 0 {
-            tx.rollback().await.map_err(|error| {
-                store_error("rollback delete web_site for application", error)
-            })?;
+            tx.rollback()
+                .await
+                .map_err(|error| store_error("rollback delete web_site for application", error))?;
             return Err(WebServiceError::conflict(
                 "application state changed; disable it before deletion",
             ));
@@ -513,7 +536,8 @@ impl WebRepository {
             return self.conflict_or_missing_site(tenant_id, &site_id).await;
         }
 
-        self.retrieve_application_repo(tenant_id, None, application_id).await
+        self.retrieve_application_repo(tenant_id, None, application_id)
+            .await
     }
 
     /// Resolves the backing site row uuid for an application resource.
@@ -561,7 +585,11 @@ impl WebRepository {
         tenant_id: i64,
         site_id: &str,
     ) -> WebServiceResult<ApplicationResponse> {
-        if self.retrieve_site_version_repo(tenant_id, site_id).await.is_ok() {
+        if self
+            .retrieve_site_version_repo(tenant_id, site_id)
+            .await
+            .is_ok()
+        {
             return Err(WebServiceError::conflict(
                 "application was modified concurrently; reload and retry",
             ));

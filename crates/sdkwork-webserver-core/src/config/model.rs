@@ -1823,6 +1823,12 @@ pub struct UsageMeteringConfig {
     /// ingest endpoint (cloud deployment).
     #[serde(default)]
     pub channel: UsageMeteringChannel,
+    /// Hard cap on live aggregation buckets. Hostname is client influenceable
+    /// input, so an adversarial traffic pattern must hit bounded rejection
+    /// (facts for new bucket keys are dropped and counted) instead of
+    /// unbounded memory growth (PRD §8.1).
+    #[serde(default = "default_usage_metering_max_buckets")]
+    pub max_buckets: usize,
 }
 
 /// Usage ingest channel configuration.
@@ -1856,8 +1862,13 @@ impl Default for UsageMeteringConfig {
             window_seconds: default_usage_metering_window_seconds(),
             flush_interval_ms: default_usage_metering_flush_interval_ms(),
             channel: UsageMeteringChannel::default(),
+            max_buckets: default_usage_metering_max_buckets(),
         }
     }
+}
+
+fn default_usage_metering_max_buckets() -> usize {
+    65_536
 }
 
 fn default_usage_metering_enabled() -> bool {

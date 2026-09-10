@@ -52,7 +52,9 @@ const ATTEMPTED_TARGET_WORDS: usize = 16;
 const SPLITMIX64_GAMMA: u64 = 0x9e37_79b9_7f4a_7c15;
 /// Upper bound on the dynamic-upstream cache: variable `proxy_pass` targets
 /// keyed by evaluated authority stay bounded under adversarial Host headers.
-const DYNAMIC_UPSTREAM_CACHE_MAXIMUM: usize = 4096;
+/// Each entry embeds one shared-policy `ClientConfig` clone plus a hyper
+/// client, so the bound stays well inside a few tens of MB.
+const DYNAMIC_UPSTREAM_CACHE_MAXIMUM: usize = 256;
 static RANDOM_SEED_SEQUENCE: AtomicU64 = AtomicU64::new(SPLITMIX64_GAMMA);
 
 pub struct ProxyUpstream<T = UpstreamClient> {
@@ -400,7 +402,7 @@ pub(super) async fn proxy_request_cached(
         &[],
         request.headers(),
     );
-    if let Some(hit) = cache.lookup(&base_key) {
+    if let Some(hit) = cache.lookup(&base_key).await {
         if hit.metadata.vary.is_empty() {
             return cached_proxy_response(hit, request.headers());
         }
@@ -412,7 +414,7 @@ pub(super) async fn proxy_request_cached(
             &hit.metadata.vary,
             request.headers(),
         );
-        if let Some(refined_hit) = cache.lookup(&refined) {
+        if let Some(refined_hit) = cache.lookup(&refined).await {
             return cached_proxy_response(refined_hit, request.headers());
         }
     }
@@ -420,7 +422,7 @@ pub(super) async fn proxy_request_cached(
     // Single-flight: concurrent requests for the same key wait for the fill.
     if let Some(waiter) = cache.begin_fill(&base_key) {
         waiter.notified().await;
-        if let Some(hit) = cache.lookup(&base_key) {
+        if let Some(hit) = cache.lookup(&base_key).await {
             return cached_proxy_response(hit, request.headers());
         }
         return proxy_request(context, request).await;
@@ -431,7 +433,7 @@ pub(super) async fn proxy_request_cached(
     // Upstream failure: fall back to a stale entry when one exists (nginx
     // `proxy_cache_use_stale`), keeping the origin available under outages.
     if response.status().is_server_error() {
-        if let Some(stale) = cache.lookup_stale(&base_key) {
+        if let Some(stale) = cache.lookup_stale(&base_key).await {
             cache.finish_fill(&base_key);
             return cached_proxy_response(stale, &request_headers);
         }
@@ -506,7 +508,7 @@ async fn store_proxy_response(
         vary,
         fresh_seconds: freshness.fresh_seconds.unwrap_or(0),
     };
-    cache.insert(key, metadata, bytes.clone(), decision);
+    cache.insert(key, metadata, bytes.clone(), decision).await;
     Response::from_parts(parts, Body::from(bytes))
 }
 
@@ -769,17 +771,25 @@ async fn proxy_request_dynamic(
     };
     // Dynamic upstreams are cached per evaluated authority so repeated
     // variable `proxy_pass` targets reuse one connection pool. The cache is
-    // bounded (an attacker-controlled Host header must not grow memory
+    // LRU-bounded (an attacker-controlled Host header must not grow memory
     // without limit), and the (synchronous) upstream build runs OUTSIDE the
     // lock so one slow build never serializes every dynamic-proxy request.
+    // The shared upstream TLS policy cache (`data_plane::upstream_tls`)
+    // keeps each cached entry's TLS footprint at one `ClientConfig` clone.
     let upstream = {
-        let cached = context
-            .generation
-            .dynamic_upstreams
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .get(&authority)
-            .cloned();
+        let cached = {
+            let mut cache = context
+                .generation
+                .dynamic_upstreams
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            cache.remove(&authority).map(|upstream| {
+                // LRU touch: reinsertion moves the entry to the
+                // most-recently-used end in O(1).
+                cache.insert(authority.clone(), upstream.clone());
+                upstream
+            })
+        };
         if let Some(upstream) = cached {
             upstream
         } else {
@@ -812,9 +822,7 @@ async fn proxy_request_dynamic(
                 existing.clone()
             } else {
                 if cache.len() >= DYNAMIC_UPSTREAM_CACHE_MAXIMUM {
-                    if let Some(victim) = cache.keys().next().cloned() {
-                        cache.remove(&victim);
-                    }
+                    cache.pop_front();
                 }
                 cache.insert(authority.clone(), built.clone());
                 built

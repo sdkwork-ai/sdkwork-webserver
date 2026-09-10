@@ -28,7 +28,9 @@ pub use operations::{
     command_for, operations_for, ProjectOperation, ProjectOperationCommand, ProjectOperationKind,
     ServerProjectOperations,
 };
-pub use path_security::{resolve_contained_path, validate_allowed_root, PathContainmentError};
+pub use path_security::{
+    is_sensitive_file_name, resolve_contained_path, validate_allowed_root, PathContainmentError,
+};
 pub use project::{classify_directory, classify_entry_names, ProjectClassification, ProjectType};
 pub use service::{
     BrowseDirectoryError, ReadFileError, ServerFilesService, ServerFilesServiceConfig,

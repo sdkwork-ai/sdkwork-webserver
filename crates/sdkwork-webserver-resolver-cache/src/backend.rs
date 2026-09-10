@@ -1,20 +1,27 @@
 //! The cache backend plugin interface.
 
+use async_trait::async_trait;
+
 use crate::record::ResolvedRecord;
 
 /// Storage boundary of the resolution cache component. Every cache layer —
 /// in-process memory, distributed Redis, or any future backend — implements
 /// this trait and is swapped in by configuration without changing callers
 /// (component decoupling, plugin pattern).
+///
+/// The methods are asynchronous so remote backends can bound their
+/// round-trips without blocking executor workers; local layers return
+/// immediately inside the async surface.
+#[async_trait]
 pub trait ResolverCacheBackend: Send + Sync {
     /// Read a record for `domain`; `None` when absent or expired.
-    fn get(&self, domain: &str) -> Option<ResolvedRecord>;
+    async fn get(&self, domain: &str) -> Option<ResolvedRecord>;
 
     /// Write a record (positive or negative) with its TTL.
-    fn set(&self, record: ResolvedRecord);
+    async fn set(&self, record: ResolvedRecord);
 
     /// Drop a record (explicit invalidation).
-    fn remove(&self, domain: &str);
+    async fn remove(&self, domain: &str);
 }
 
 /// A chain of backends walked in priority order by the resolution chain.

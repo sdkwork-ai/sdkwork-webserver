@@ -91,7 +91,7 @@
             }
           },
           {
-            "name": "keyword",
+            "name": "q",
             "in": "query",
             "schema": {
               "type": "string"
@@ -161,7 +161,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.read"
       },
       "post": {
         "operationId": "applications.create",
@@ -271,7 +272,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}": {
@@ -352,7 +354,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.read"
       },
       "patch": {
         "operationId": "applications.update",
@@ -452,7 +455,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       },
       "delete": {
         "operationId": "applications.delete",
@@ -496,7 +500,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/activate": {
@@ -577,7 +582,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/pause": {
@@ -658,7 +664,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/domains": {
@@ -746,7 +753,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       },
       "post": {
         "operationId": "applications.domains.create",
@@ -836,7 +844,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/domains/{domainId}": {
@@ -910,7 +919,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       },
       "delete": {
         "operationId": "applications.domains.delete",
@@ -944,7 +954,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/domains/{domainId}/verify": {
@@ -1035,7 +1046,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/domains/{domainId}/listener_certificate_bindings": {
@@ -1127,7 +1139,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       },
       "post": {
         "operationId": "applications.domains.listenerCertificateBindings.create",
@@ -1229,7 +1242,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/domains/{domainId}/listener_certificate_bindings/{bindingId}": {
@@ -1283,7 +1297,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/source_versions": {
@@ -1371,7 +1386,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       },
       "post": {
         "operationId": "applications.sourceVersions.create",
@@ -1461,7 +1477,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/source_versions/git_import": {
@@ -1549,7 +1566,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/source_versions/{sourceVersionId}": {
@@ -1623,7 +1641,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/deployments": {
@@ -1726,7 +1745,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       },
       "post": {
         "operationId": "applications.deployments.create",
@@ -1817,7 +1837,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/deployments/{deploymentId}": {
@@ -1891,7 +1912,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/deployments/{deploymentId}/rollback": {
@@ -1972,7 +1994,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/env_variables": {
@@ -2053,7 +2076,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       },
       "post": {
         "operationId": "applications.envVariables.create",
@@ -2123,7 +2147,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/env_variables/{variableId}": {
@@ -2210,7 +2235,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       },
       "delete": {
         "operationId": "applications.envVariables.delete",
@@ -2241,7 +2267,8 @@
             "description": "删除成功"
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/domains": {
@@ -2325,7 +2352,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.domains.read"
       }
     },
     "/app/v3/api/applications/{applicationId}/platform_targets": {
@@ -2418,7 +2446,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       },
       "post": {
         "operationId": "applications.platformTargets.create",
@@ -2509,7 +2538,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/platform_targets/{platformTargetId}": {
@@ -2586,7 +2616,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     },
     "/app/v3/api/applications/{applicationId}/health_checks": {
@@ -2657,7 +2688,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       },
       "post": {
         "operationId": "applications.healthChecks.create",
@@ -2727,7 +2759,8 @@
             }
           }
         },
-        "x-sdkwork-route-auth": "dual-token"
+        "x-sdkwork-route-auth": "dual-token",
+        "x-sdkwork-permission": "web.applications.write"
       }
     }
   },

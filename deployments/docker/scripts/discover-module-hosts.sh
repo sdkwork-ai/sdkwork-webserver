@@ -57,9 +57,12 @@ host_matches_environment() {
     staging)
       case "${host}" in *-staging.*) return 0 ;; *) return 1 ;; esac
       ;;
+    demo)
+      case "${host}" in *-demo.*) return 0 ;; *) return 1 ;; esac
+      ;;
     production)
       case "${host}" in
-        *-dev.*|*-test.*|*-staging.*) return 1 ;;
+        *-dev.*|*-test.*|*-staging.*|*-demo.*) return 1 ;;
         *) return 0 ;;
       esac
       ;;

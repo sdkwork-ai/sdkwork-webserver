@@ -348,9 +348,7 @@ fn selected_route_manifest(context: ApiAssemblyContext) -> HttpRouteManifest {
 
 /// Installs this application as a Web Module with caller-supplied assembly
 /// context (API_ASSEMBLY_SPEC §4.1.1).
-pub async fn web_module_with_context(
-    context: ApiAssemblyContext,
-) -> Result<WebModule, String> {
+pub async fn web_module_with_context(context: ApiAssemblyContext) -> Result<WebModule, String> {
     let assembly = assemble_api_router(context)
         .await
         .map_err(|error| error.to_string())?;

@@ -11,21 +11,27 @@ const MAXIMUM_PAGE_SIZE: i64 = 200;
 const MAXIMUM_CURSOR_BYTES: usize = 512;
 
 /// Path patterns whose list operations declare cursor (keyset) pagination in
-/// their OpenAPI contract. `cursor` on any other endpoint fails closed.
-const CURSOR_PAGINATED_PATH_PATTERNS: [&str; 7] = [
+/// their OpenAPI contract. `cursor` on any other endpoint fails closed. The
+/// patterns MUST stay in lockstep with the OpenAPI authorities
+/// (`apis/*openapi.yaml` `x-sdkwork-pagination-mode: cursor`); the unit tests
+/// below pin the exact route constants from the app-api/backend-api path
+/// modules to fail fast on route renames.
+const CURSOR_PAGINATED_PATH_PATTERNS: [&str; 6] = [
     "/backend/v3/api/audit_logs",
     "/backend/v3/api/applications/{applicationId}/deployments",
     "/backend/v3/api/applications/{applicationId}/source_versions",
     "/backend/v3/api/servers",
-    "/app/v3/api/sites/{siteId}/deployments",
-    "/app/v3/api/sites/{siteId}/source_versions",
-    "/app/v3/api/audit_logs",
+    "/app/v3/api/applications/{applicationId}/deployments",
+    "/app/v3/api/applications/{applicationId}/source_versions",
 ];
 
 /// Reject malformed or non-canonical pagination query parameters before handlers run.
 pub async fn validate_pagination_query(request: Request, next: Next) -> Response {
     if let Err(detail) = validate_query(request.uri().query(), request.uri().path()) {
-        return WebApiError::new(SdkWorkResultCode::ValidationError, detail).into_response();
+        // `API_SPEC.md` §14.1 and `PAGINATION_SPEC.md` §10.1 mandate
+        // `40003 INVALID_PARAMETER` for page_size overflow, forbidden
+        // aliases, and cursor/page combination rejections.
+        return WebApiError::new(SdkWorkResultCode::InvalidParameter, detail).into_response();
     }
     next.run(request).await
 }
@@ -142,9 +148,21 @@ mod tests {
         assert!(validate_query(Some("cursor=opaque-token"), "/backend/v3/api/servers").is_ok());
         assert!(validate_query(
             Some("cursor=opaque-token"),
-            "/app/v3/api/sites/site-1/source_versions"
+            "/app/v3/api/applications/app-1/source_versions"
         )
         .is_ok());
+        assert!(validate_query(
+            Some("cursor=opaque-token"),
+            "/app/v3/api/applications/app-1/deployments"
+        )
+        .is_ok());
+        // The legacy app site-scoped collection paths never existed in the
+        // OpenAPI authority; cursor on them must keep failing closed.
+        assert!(validate_query(
+            Some("cursor=opaque-token"),
+            "/app/v3/api/sites/site-1/source_versions"
+        )
+        .is_err());
         assert!(validate_query(
             Some("cursor=opaque-token"),
             "/backend/v3/api/applications/app-1/source_versions"

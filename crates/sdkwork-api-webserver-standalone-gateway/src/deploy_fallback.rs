@@ -11,11 +11,12 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as SyncMutex};
 use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
 use async_trait::async_trait;
+use hashlink::LinkedHashMap;
 use sdkwork_webserver_contract::provider::{WebsiteProviderError, WebsiteProviderErrorKind};
 use sdkwork_webserver_core::config::AppDomainFallbackConfig;
 use sdkwork_webserver_core::website_runtime::{
@@ -108,6 +109,11 @@ struct CacheEntry {
     expires_at: Instant,
 }
 
+/// Upper bound on concurrently cached compiled fallback sites. Each entry
+/// pins one compiled runtime set, so the cache is small and LRU-evicted;
+/// beyond the bound a host simply recompiles on its next request.
+const MAXIMUM_COMPILED_SITE_CACHE_ENTRIES: usize = 32;
+
 impl Clone for CacheEntry {
     fn clone(&self) -> Self {
         Self {
@@ -128,8 +134,15 @@ pub struct DeployFallbackResolver {
     lookup: Arc<dyn DeployServerLookup>,
     environment: WebsiteRuntimeEnvironment,
     cache: ArcSwap<HashMap<String, CacheEntry>>,
+    /// Compiled sites keyed by descriptor SHA-256 (LRU, bounded). This is
+    /// both the recompilation fast path and the per-request correctness
+    /// anchor: requests execute against the pinned compiled set, so a
+    /// concurrent activation of a different host can never swap the served
+    /// runtime set between route selection and provider dispatch.
+    compiled_sites: SyncMutex<LinkedHashMap<String, Arc<CompiledWebsiteRuntimeSet>>>,
     /// Serializes compile+activate so the fallback runtime registry always
-    /// observes monotonically increasing generations.
+    /// observes monotonically increasing generations. The guard covers only
+    /// the compile/activate section; request execution runs after release.
     activation: Mutex<()>,
     generation: AtomicU64,
     runtime_registry: Arc<WebsiteRuntimeRegistry>,
@@ -154,6 +167,7 @@ impl DeployFallbackResolver {
             lookup,
             environment,
             cache: ArcSwap::from_pointee(HashMap::new()),
+            compiled_sites: SyncMutex::new(LinkedHashMap::new()),
             activation: Mutex::new(()),
             generation: AtomicU64::new(0),
             runtime_registry,
@@ -290,16 +304,74 @@ impl DeployFallbackResolver {
         // (`DeployFallbackResolver::attribution`); serve itself does not
         // consume it.
         let _ = &attribution;
-        let _guard = self.activation.lock().await;
-        let compiled = match self.compile_site(descriptor, descriptor_sha256.as_deref()) {
-            Ok(compiled) => compiled,
-            Err(error) => {
-                tracing::warn!(hostname = %hostname, error = ?error, "app-domain fallback compile failed");
-                return Err(error);
+        // Fast path: the descriptor is already compiled — serve the pinned
+        // set without taking the activation lock or recompiling.
+        let Some(descriptor_sha256) = descriptor_sha256 else {
+            return Ok(WebsiteDeliveryOutcome::NotFound);
+        };
+        if let Some(compiled) = self.compiled_site(&descriptor_sha256) {
+            return self
+                .executor
+                .execute_compiled(request.clone(), compiled)
+                .await;
+        }
+        // Slow path: serialize compile+activate so the fallback runtime
+        // registry observes monotonically increasing generations. The guard
+        // covers only the compile/activate section — request execution runs
+        // against the pinned compiled set after the guard is released, so
+        // upstream/provider latency never holds the lock.
+        let compiled = {
+            let _guard = self.activation.lock().await;
+            match self.compiled_site(&descriptor_sha256) {
+                Some(compiled) => compiled,
+                None => {
+                    let compiled = match self
+                        .compile_site(descriptor, Some(descriptor_sha256.as_str()))
+                    {
+                        Ok(compiled) => compiled,
+                        Err(error) => {
+                            tracing::warn!(hostname = %hostname, error = ?error, "app-domain fallback compile failed");
+                            return Err(error);
+                        }
+                    };
+                    self.activate(compiled.clone()).await?;
+                    self.remember_compiled_site(descriptor_sha256, compiled.clone());
+                    compiled
+                }
             }
         };
-        self.activate(compiled).await?;
-        self.executor.execute(request.clone()).await
+        self.executor
+            .execute_compiled(request.clone(), compiled)
+            .await
+    }
+
+    /// LRU touch: remove+reinsert moves the entry to the most-recently-used
+    /// position in O(1) (no await inside the lock guard).
+    fn compiled_site(&self, descriptor_sha256: &str) -> Option<Arc<CompiledWebsiteRuntimeSet>> {
+        let mut cache = self
+            .compiled_sites
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let compiled = cache.remove(descriptor_sha256)?;
+        cache.insert(descriptor_sha256.to_owned(), compiled.clone());
+        Some(compiled)
+    }
+
+    fn remember_compiled_site(
+        &self,
+        descriptor_sha256: String,
+        compiled: Arc<CompiledWebsiteRuntimeSet>,
+    ) {
+        let mut cache = self
+            .compiled_sites
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if cache.len() >= MAXIMUM_COMPILED_SITE_CACHE_ENTRIES
+            && !cache.contains_key(&descriptor_sha256)
+        {
+            cache.pop_front();
+        }
+        cache.insert(descriptor_sha256, compiled);
     }
 
     fn compile_site(

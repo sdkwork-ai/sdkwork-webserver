@@ -7,7 +7,7 @@
 --   site carrier. Existing web_site rows get a matching application row linked
 --   through web_application.site_id.
 -- reversible: true
--- rollback: drop-web-application
+-- rollback: down-migration
 -- transactional: true
 -- lock: access-exclusive
 -- lock_timeout: 30s

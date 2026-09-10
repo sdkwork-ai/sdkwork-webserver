@@ -16,10 +16,25 @@ pub struct RedisCacheConfig {
     /// Key prefix for cluster-wide namespacing.
     #[serde(default = "default_redis_prefix")]
     pub prefix: String,
+    /// Connect timeout for the initial (lazy) Redis connection.
+    #[serde(default = "default_redis_connect_timeout_ms")]
+    pub connect_timeout_ms: u64,
+    /// Per-operation timeout bounding every GET/SET/DEL round-trip; a stalled
+    /// Redis degrades to the next chain layer instead of stalling resolution.
+    #[serde(default = "default_redis_operation_timeout_ms")]
+    pub operation_timeout_ms: u64,
 }
 
 fn default_redis_ttl_seconds() -> u64 {
     300
+}
+
+fn default_redis_connect_timeout_ms() -> u64 {
+    1000
+}
+
+fn default_redis_operation_timeout_ms() -> u64 {
+    250
 }
 
 fn default_redis_prefix() -> String {

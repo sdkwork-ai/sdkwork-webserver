@@ -2,6 +2,7 @@
 name = "sdkwork-api-webserver-standalone-gateway"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 
 [features]
 default = ["management"]
@@ -53,6 +54,7 @@ httpdate.workspace = true
 hyper.workspace = true
 hyper-rustls.workspace = true
 hyper-util.workspace = true
+hashlink.workspace = true
 ipnet.workspace = true
 mime_guess.workspace = true
 percent-encoding.workspace = true
@@ -109,3 +111,6 @@ jsonschema.workspace = true
 rcgen.workspace = true
 reqwest.workspace = true
 tempfile.workspace = true
+
+[lints]
+workspace = true

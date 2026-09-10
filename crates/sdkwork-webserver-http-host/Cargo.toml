@@ -2,6 +2,10 @@
 name = "sdkwork-webserver-http-host"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "sdkwork_webserver_http_host"
 
 [dependencies]
 async-trait.workspace = true
@@ -13,3 +17,5 @@ sdkwork-web-bootstrap.workspace = true
 sdkwork-web-core.workspace = true
 sdkwork-webserver-contract.workspace = true
 
+[lints]
+workspace = true

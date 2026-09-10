@@ -2,6 +2,10 @@
 name = "sdkwork-webserver-drive-provider"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "sdkwork_webserver_drive_provider"
 
 [dependencies]
 async-trait.workspace = true
@@ -18,3 +22,6 @@ sdkwork-webserver-core.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

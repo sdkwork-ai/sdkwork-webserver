@@ -1,7 +1,15 @@
 # Backup And Restore Runbook (sdkwork-webserver)
 
 Standard: OPERATIONS_SPEC.md §5 (RPO: production 24 h + a pre-deploy backup;
-RTO: production 4 h). Sets are created on the target at
+RTO: production 4 h).
+
+> **Gap vs the PRD §8.2 targets (stated honestly):** the PRD requires database
+> recovery objectives of RPO ≤ 5 minutes and RTO ≤ 15 minutes. The currently
+> implemented capability is "daily pg_dump + pre-deploy backup + verified
+> restore drill" (RPO ≈ 24 h, RTO ≈ 4 h). Reaching the PRD targets requires
+> WAL streaming with a physical base backup (the path REQ-2026-0051 already
+> verified) plus alerting. Until then, do not quote the PRD recovery targets
+> in external commitments. Sets are created on the target at
 `/opt/deploy/sdkwork-webserver/backups/` and contain: configuration (env chain), the
 database (pg_dump custom format), volumes (optional), and `manifest.json`
 plus a per-component `.sha256`.

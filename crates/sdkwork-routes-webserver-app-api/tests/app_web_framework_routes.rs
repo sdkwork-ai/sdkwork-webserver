@@ -39,14 +39,18 @@ async fn app_router_web_framework_rejects_unauthenticated_requests() {
 }
 
 #[tokio::test]
-async fn app_router_enforces_manifest_permissions_before_business_logic() {
+async fn app_router_authorizes_tier_0_2_operations_by_owner_scope_not_manifest_scope() {
     let app = wrap_router_with_web_framework_and_metrics(
         DefaultWebRequestContextResolver::default(),
         build_router_with_shared_app_api(Arc::new(StubAppApi)),
         HttpMetricsRegistry::new(),
     );
 
-    let denied = app
+    // PERMISSION_STANDARD_SPEC §Surface Authorization Tiers: first-party app-api
+    // operations are tier 0-2; the manifest permission gate must never block a
+    // signed-in principal. The declared permission is observability-only, and the
+    // service layer's owner/ACL checks remain the access authority (PRD-FR-024).
+    let without_permission = app
         .clone()
         .oneshot(authorized_request(auth_token_jwt(
             "42",
@@ -56,9 +60,9 @@ async fn app_router_enforces_manifest_permissions_before_business_logic() {
         )))
         .await
         .unwrap();
-    assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+    assert_eq!(without_permission.status(), StatusCode::OK);
 
-    let allowed = app
+    let with_permission = app
         .oneshot(authorized_request(auth_token_jwt_with_permissions(
             "42",
             "7",
@@ -68,7 +72,7 @@ async fn app_router_enforces_manifest_permissions_before_business_logic() {
         )))
         .await
         .unwrap();
-    assert_eq!(allowed.status(), StatusCode::OK);
+    assert_eq!(with_permission.status(), StatusCode::OK);
 }
 
 #[tokio::test]
@@ -100,8 +104,64 @@ async fn app_router_rejects_non_canonical_or_out_of_range_pagination() {
             .expect("collect bounded problem response")
             .to_bytes();
         let body = String::from_utf8_lossy(&body);
-        assert!(body.contains("40001"), "{query}: {body}");
+        // `API_SPEC.md` §14.1: pagination rejections carry
+        // `40003 INVALID_PARAMETER`.
+        assert!(body.contains("40003"), "{query}: {body}");
     }
+}
+
+#[tokio::test]
+async fn app_router_accepts_cursor_pagination_on_declared_growing_collections() {
+    let app = build_router_with_shared_app_api(Arc::new(StubAppApi));
+    for path in [
+        "/app/v3/api/applications/app-1/deployments",
+        "/app/v3/api/applications/app-1/source_versions",
+    ] {
+        let cursor_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("{path}?cursor=opaque-token"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_ne!(
+            cursor_response.status(),
+            StatusCode::BAD_REQUEST,
+            "{path}: cursor must pass pagination middleware"
+        );
+        let page_request = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("{path}?page=1"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            page_request.status(),
+            StatusCode::BAD_REQUEST,
+            "{path}: offset mode must stay rejected on cursor collections"
+        );
+    }
+    let undeclared = app
+        .oneshot(
+            Request::builder()
+                .uri("/app/v3/api/applications?cursor=opaque-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        undeclared.status(),
+        StatusCode::BAD_REQUEST,
+        "cursor on an offset collection must stay rejected"
+    );
 }
 
 fn authorized_request(auth_token: String) -> Request<Body> {
@@ -421,9 +481,14 @@ impl WebAppApi for StubAppApi {
         _status: Option<i32>,
         _cursor: Option<&str>,
     ) -> WebServiceResult<sdkwork_webserver_contract::DeploymentPage> {
-        Err(sdkwork_webserver_contract::WebServiceError::Internal(
-            "not implemented".into(),
-        ))
+        Ok(sdkwork_webserver_contract::DeploymentPage {
+            items: Vec::new(),
+            total: 0,
+            page: 1,
+            page_size: 20,
+            next_cursor: None,
+            has_more: Some(false),
+        })
     }
 
     async fn create_deployment(

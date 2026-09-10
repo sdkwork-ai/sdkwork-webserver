@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "pnpm dev:standalone",
     "dev:standalone": "pnpm exec sdkwork-app dev --root ../.. --deployment-profile standalone",
+    "dev:cloud": "pnpm exec sdkwork-app dev --root ../.. --deployment-profile cloud",
     "dev:browser": "pnpm dev:browser:postgres:standalone",
     "dev:browser:postgres:standalone": "pnpm exec sdkwork-app dev --root ../.. --runtime-target browser --deployment-profile standalone",
     "stop": "pnpm exec sdkwork-app stop --root ../..",

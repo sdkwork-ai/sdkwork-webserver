@@ -82,7 +82,47 @@ Current implemented baseline:
   fail-closed plaintext policy that rejects public non-loopback listeners without TLS unless
   `allowPlaintextHttp` or `acmeHttp01` is declared;
 - standalone and cloud development topology plans plus standalone/cloud production deployment
-  templates.
+  templates;
+- 2026-09 standards hardening: the public nginx edge denies the unauthenticated
+  `/metrics` and `/livez` surfaces (PRD-FR-021 exposure governance, guarded by
+  `tools/check-edge-exposure-governance.mjs`); Server Files deploy-class operations
+  enforce the per-operation `web.servers.files.deploy` permission and
+  `webserverConfigs.update` requires `web.nginx.write` (PRD-FR-029); usage-metering
+  buckets are hard-capped (`usageMetering.maxBuckets`); the Redis resolver-cache layer
+  is lazily connected with bounded connect/operation timeouts (no executor blocking or
+  `block_on` on the generation build path); anonymous security events persist under the
+  platform-shared tenant 0; environment-variable secrets derive a per-tenant +
+  per-variable key; and the file explorer refuses credential-shaped file names.
+- 2026-09 hardening round 2: validation failures render HTTP `422` with
+  `40001 VALIDATION_ERROR` everywhere the management OpenAPI declares the
+  `ValidationError` response, and pagination rejections carry
+  `40003 INVALID_PARAMETER` (API_SPEC §14.1/§15); dynamic `proxy_pass`
+  upstreams share one TLS `ClientConfig` per policy identity (LRU-bounded
+  store) instead of embedding a webpki root store per Host header, and the
+  per-authority upstream cache is LRU-capped at 256; the proxy response
+  cache's disk tier runs on the blocking pool with no process-wide write
+  lock and no per-object fsync; the app-domain fallback pins the exact
+  compiled runtime set per request, caches compiled sites (LRU 32), and
+  holds its activation lock only across compile/activate — never across
+  request execution; keyset cursors are HMAC-signed
+  (`SDKWORK_WEBSERVER_CURSOR_HMAC_KEY`, else derived from the shared
+  database URL) so forged or unsigned tokens fail closed; nginx-config and
+  audit-log listings reject a missing tenant context at the repository
+  boundary; the TLS distribution lock is a kernel file lock (crash-orphan
+  proof); ACME revocation and ARI lookups self-bound with the issuer
+  operation timeout; pooled PostgreSQL connections carry
+  `statement_timeout` / `lock_timeout` / `idle_in_transaction_session_timeout`
+  guards (env-tunable, sibling `sdkwork-database`); the resolver-cache
+  single-flight uses enable-before-wait notification (no lost wakeups) and
+  enforces the system-resolver concurrency ceiling on chain misses; stream
+  listeners drain within the configured `drainTimeoutMs` and abort the
+  remainder; and the in-memory LRU caches (proxy cache, resolver memory
+  layer) use O(1) linked-map eviction.
+
+Known capacity gap (disclosed, not silently partial): the PRD-FR-018 hierarchical
+resource governor is currently enforced at the process, listener, client, and upstream
+levels; per-application / per-host / per-route budgets do not exist yet —
+`WebServerLimits` is process-global.
 
 The host synchronization process is named **Web Node Daemon** in all new
 runtime and operational surfaces. The canonical packaged/development entry
@@ -245,9 +285,11 @@ parameters are `lower_snake_case`; and env/health collections are capped at 100 
 
 Web and Deploy deployment records are command intents: the deployment worker that advances
 `status` beyond `PENDING` remains a separate authority (REQ-2026-0061/0062 gate). Until that
-authority exists, `sites.activate` (which requires a successful deployment) and
+authority exists, `applications.activate` (which requires a successful deployment) and
 `deployments.rollback` (which requires a successful source) honestly return `409`; the system
-never invents a success state.
+never invents a success state. (The pause/activate commands are
+`applications.pause` / `applications.activate` on the app-api surface; PRD-FR-022
+names the workflow "site pause", the route names are application-scoped.)
 
 ## 6. Security, Privacy, And Resource Boundaries
 

@@ -25,7 +25,7 @@ use sdkwork_routes_webserver_common::WebApiError;
 use sdkwork_server_files_service::{
     classify_entry_names, command_for, ServerFilesService, ServerFilesServiceConfig,
 };
-use sdkwork_utils_rust::{SdkWorkResourceData, SdkWorkResultCode};
+use sdkwork_utils_rust::SdkWorkResultCode;
 use sdkwork_webserver_contract::WebBackendRequestContext;
 use serde::{Deserialize, Serialize};
 
@@ -162,7 +162,7 @@ async fn read_node_file(
     let content = service
         .read_file(&file_path)
         .await
-        .map_err(server_files_error)?;
+        .map_err(read_file_error)?;
     Ok(ok_json(&content))
 }
 
@@ -196,7 +196,7 @@ async fn run_node_operation(
     Path(node_id): Path<String>,
     Json(request): Json<RunOperationRequest>,
 ) -> Result<Response, WebApiError> {
-    require_write(context)?;
+    let context = require_backend_context(context)?;
     let service = service_for(state, &node_id)?;
     let resolved = service
         .contained_path(&request.path)
@@ -211,6 +211,7 @@ async fn run_node_operation(
         .iter()
         .find(|operation| operation.id == request.operation_id)
         .ok_or_else(not_found)?;
+    require_operation_permission(&context, operation)?;
 
     let command = command_for(classification.project_type, operation.kind).ok_or_else(not_found)?;
 
@@ -260,8 +261,13 @@ fn entry_names(path: &std::path::Path) -> Vec<String> {
 
 /// Wrap a serializable value in the canonical success envelope.
 pub(crate) fn ok_json<T: Serialize>(data: &T) -> Response {
-    let payload = SdkWorkResourceData { item: data };
-    let body = sdkwork_utils_rust::SdkWorkApiResponse::success(payload, String::new());
+    // The OpenAPI authority declares these payloads as `data: <T>` (no
+    // `{item}` resource wrapper) with a generated trace id, matching the
+    // canonical SDKWork success envelope.
+    let body = sdkwork_utils_rust::SdkWorkApiResponse::success(
+        data,
+        sdkwork_routes_webserver_common::correlation::resolved_trace_id(),
+    );
     (
         StatusCode::OK,
         [(header::CONTENT_TYPE, "application/json")],
@@ -278,6 +284,24 @@ fn server_files_error(error: impl std::fmt::Display) -> WebApiError {
     WebApiError::new(SdkWorkResultCode::InternalError, error.to_string())
 }
 
+fn read_file_error(error: sdkwork_server_files_service::ReadFileError) -> WebApiError {
+    match &error {
+        sdkwork_server_files_service::ReadFileError::Sensitive => WebApiError::new(
+            SdkWorkResultCode::PermissionRequired,
+            "credential and secret files cannot be read through the file explorer",
+        ),
+        sdkwork_server_files_service::ReadFileError::Containment(containment) => {
+            let _ = containment;
+            // Do not echo the offending path back to the caller.
+            WebApiError::new(
+                SdkWorkResultCode::ValidationError,
+                "path is outside the authorized directory",
+            )
+        }
+        _ => server_files_error(error),
+    }
+}
+
 fn containment_error(_error: sdkwork_server_files_service::PathContainmentError) -> WebApiError {
     // Do not echo the offending path back to the caller.
     WebApiError::new(
@@ -291,7 +315,84 @@ fn require_read(context: Option<Extension<WebBackendRequestContext>>) -> Result<
     Ok(())
 }
 
-fn require_write(context: Option<Extension<WebBackendRequestContext>>) -> Result<(), WebApiError> {
-    require_backend_context(context)?;
-    Ok(())
+/// Deploy-class operations escalate beyond the route's coarse
+/// `web.servers.files.write` gate: they execute lifecycle commands on the node
+/// and must satisfy the per-operation permission declared by the operations
+/// manifest (PRD-FR-029 route-level authorization). Wildcard grants are
+/// honored through the shared framework matcher; an empty grant list fails
+/// closed.
+fn require_operation_permission(
+    context: &WebBackendRequestContext,
+    operation: &sdkwork_server_files_service::ProjectOperation,
+) -> Result<(), WebApiError> {
+    if sdkwork_web_core::request_context::permission_scope_matches_any(
+        &context.permission_scope,
+        &operation.permission,
+    ) {
+        Ok(())
+    } else {
+        Err(WebApiError::new(
+            SdkWorkResultCode::PermissionRequired,
+            format!(
+                "operation '{}' requires the {} permission",
+                operation.id, operation.permission
+            ),
+        ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sdkwork_server_files_service::ProjectOperationKind;
+
+    fn deploy_operation() -> sdkwork_server_files_service::ProjectOperation {
+        sdkwork_server_files_service::ProjectOperation {
+            id: "deploy".to_owned(),
+            kind: ProjectOperationKind::Deploy,
+            label: "Deploy".to_owned(),
+            permission: "web.servers.files.deploy".to_owned(),
+            description: None,
+            dangerous: true,
+        }
+    }
+
+    fn context_with(grants: &[&str]) -> WebBackendRequestContext {
+        WebBackendRequestContext {
+            operator_id: Some(7),
+            tenant_id: Some(42),
+            subject_id: Some("7".to_owned()),
+            idempotency_key: None,
+            permission_scope: grants.iter().map(|grant| (*grant).to_owned()).collect(),
+        }
+    }
+
+    #[test]
+    fn deploy_operation_requires_deploy_permission() {
+        let operation = deploy_operation();
+        // The coarse file-write permission does not authorize deploy-class
+        // lifecycle commands.
+        let denied = require_operation_permission(
+            &context_with(&["web.servers.files.write", "web.servers.files.read"]),
+            &operation,
+        )
+        .unwrap_err();
+        assert_eq!(denied.code(), SdkWorkResultCode::PermissionRequired);
+
+        // An empty grant list fails closed.
+        let anonymous = require_operation_permission(&context_with(&[]), &operation).unwrap_err();
+        assert_eq!(anonymous.code(), SdkWorkResultCode::PermissionRequired);
+
+        // The exact deploy grant authorizes the operation.
+        assert!(require_operation_permission(
+            &context_with(&["web.servers.files.deploy"]),
+            &operation
+        )
+        .is_ok());
+
+        // Domain wildcard grants authorize the operation.
+        assert!(
+            require_operation_permission(&context_with(&["web.servers.*"]), &operation).is_ok()
+        );
+    }
 }

@@ -927,11 +927,14 @@ function ActionDialog({
         if (!hasApplicationSourceInput({ file, files, sourceInputMode, sourceRepository })) {
           return undefined;
         }
+        // The source format error describes the field the operator is editing
+        // on this step, so it takes precedence over the next-step version
+        // requirement.
+        const sourceError = sourceInputError();
+        if (sourceError) return sourceError;
         if (hasMissingRequiredFields(body, ["versionTag"])) {
           return "dialog.applicationVersionRequired";
         }
-        const sourceError = sourceInputError();
-        if (sourceError) return sourceError;
         return undefined;
       }
       const versionMissing = hasMissingRequiredFields(body, ["versionTag"]);
@@ -995,6 +998,17 @@ function ActionDialog({
         return;
       }
     }
+    if (nextStep < applicationStep) {
+      // Re-entering a step re-arms its validation: the operator may fill an
+      // input after having skipped ahead, and a stale skip flag would
+      // silently accept invalid input on the next forward pass.
+      const reArmKey = ({ 1: "media", 2: "source", 3: "deployment" } as Partial<
+        Record<ApplicationWizardStep, "media" | "source" | "deployment">
+      >)[nextStep];
+      if (reArmKey) {
+        setWizardSkips((current) => ({ ...current, [reArmKey]: false }));
+      }
+    }
     setError(undefined);
     setApplicationStep(nextStep);
     setFurthestApplicationStep((current) => Math.max(current, nextStep) as ApplicationWizardStep);
@@ -1006,8 +1020,15 @@ function ActionDialog({
       ".form-grid input:not([disabled]), .form-grid select:not([disabled]), .form-grid textarea:not([disabled]), .source-file-trigger:not([disabled]), .source-repository-input:not([disabled]), .confirm-check input:not([disabled]), button[type='submit']:not([disabled])",
     );
     initialFocus?.focus();
+    // Mark the invoker so restore survives workspace re-renders that replace
+    // the captured node (the list may reload while the dialog is open).
+    previousFocus?.setAttribute("data-sdkwork-dialog-return", "");
     return () => queueMicrotask(() => {
-      if (previousFocus?.isConnected) previousFocus.focus();
+      const marked = document.querySelector<HTMLElement>("[data-sdkwork-dialog-return]");
+      const target = marked ?? (previousFocus?.isConnected ? previousFocus : undefined);
+      target?.focus();
+      marked?.removeAttribute("data-sdkwork-dialog-return");
+      previousFocus?.removeAttribute("data-sdkwork-dialog-return");
     });
   }, []);
 
@@ -2499,17 +2520,18 @@ function trapDialogFocus(event: ReactKeyboardEvent<HTMLElement>, dialog: HTMLEle
     "button:not([disabled]), input:not([disabled]):not([tabindex='-1']), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex='-1'])",
   )).filter((element) => element.getAttribute("aria-hidden") !== "true");
   if (focusable.length === 0) return;
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  } else if (!dialog.contains(document.activeElement)) {
-    event.preventDefault();
-    first.focus();
+  // Sequential navigation (not only boundary wrapping): jsdom and embedded
+  // webviews do not implement native Tab focus movement, so the trap itself
+  // moves focus to the next/previous focusable and wraps at the ends. This
+  // keeps keyboard order deterministic in every environment.
+  const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
+  event.preventDefault();
+  if (event.shiftKey) {
+    (currentIndex <= 0 ? focusable[focusable.length - 1] : focusable[currentIndex - 1]).focus();
+  } else if (currentIndex === -1 || currentIndex === focusable.length - 1) {
+    focusable[0].focus();
+  } else {
+    focusable[currentIndex + 1].focus();
   }
 }
 

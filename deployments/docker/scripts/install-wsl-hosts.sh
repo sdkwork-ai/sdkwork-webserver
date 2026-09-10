@@ -17,6 +17,12 @@ CORE_DOMAINS=(
   server-test.sdkwork.com
   server-app-test.sdkwork.com
   server-admin-test.sdkwork.com
+  server-staging.sdkwork.com
+  server-app-staging.sdkwork.com
+  server-admin-staging.sdkwork.com
+  server-demo.sdkwork.com
+  server-app-demo.sdkwork.com
+  server-admin-demo.sdkwork.com
   server.sdkwork.com
   server-app.sdkwork.com
   server-admin.sdkwork.com
@@ -38,6 +44,8 @@ platform_api_domains() {
   for brand in "${PLATFORM_API_BRANDS[@]}"; do
     printf 'api-dev.%s\n' "${brand}"
     printf 'api-test.%s\n' "${brand}"
+    printf 'api-staging.%s\n' "${brand}"
+    printf 'api-demo.%s\n' "${brand}"
     printf 'api.%s\n' "${brand}"
   done
 }
@@ -47,7 +55,7 @@ collect_domains() {
   printf '%s\n' "${CORE_DOMAINS[@]}"
   platform_api_domains
   if [ -x "${SCRIPT_DIR}/discover-module-hosts.sh" ]; then
-    for env_name in development test production; do
+    for env_name in development test staging demo production; do
       bash "${SCRIPT_DIR}/discover-module-hosts.sh" "${env_name}" 2>/dev/null || true
     done
   else
@@ -56,6 +64,10 @@ collect_domains() {
       router-admin-dev.sdkwork.com router-open-dev.sdkwork.com \
       im-test.sdkwork.com router-test.sdkwork.com cloudrouter-test.sdkwork.com \
       router-admin-test.sdkwork.com router-open-test.sdkwork.com \
+      im-staging.sdkwork.com router-staging.sdkwork.com cloudrouter-staging.sdkwork.com \
+      router-admin-staging.sdkwork.com router-open-staging.sdkwork.com \
+      im-demo.sdkwork.com router-demo.sdkwork.com cloudrouter-demo.sdkwork.com \
+      router-admin-demo.sdkwork.com router-open-demo.sdkwork.com \
       im.sdkwork.com router.sdkwork.com cloudrouter.sdkwork.com \
       router-admin.sdkwork.com router-open.sdkwork.com
   fi

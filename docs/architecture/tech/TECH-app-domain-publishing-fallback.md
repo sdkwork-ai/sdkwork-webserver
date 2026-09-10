@@ -84,13 +84,19 @@ environments use `app-<env>` so every environment is publishable):
 2. Cache (positive TTL / negative TTL) keyed by normalized hostname.
 3. Lookup through `DeployServerLookup` (embedded repository adapter or HTTP
    client) → site descriptor.
-4. The descriptor is compiled into a single-site website runtime set and
+4. Compiled-site fast path: descriptors already compiled (LRU keyed by
+   `descriptor_sha256`, 32 entries) skip straight to serving. Otherwise the
+   descriptor is compiled into a single-site website runtime set and
    activated on a dedicated fallback `WebsiteRuntimeRegistry` (monotonic
-   generations, no-op when the snapshot is already current).
-5. The request is served by the fallback `WebsiteDeliveryExecutor` (shared
-   Drive/Knowledgebase provider registry): bindings, variants, mounts
+   generations) under the activation lock, which covers only
+   compile/activate — request execution runs after the lock is released.
+5. The request executes against the pinned compiled set
+   (`WebsiteDeliveryExecutor::execute_compiled`), so a concurrent activation
+   of a different host can never swap the served runtime set between route
+   selection and provider dispatch. Bindings, variants, mounts
    (STATIC/SPA/WIKI), redirects, range and conditional requests all reuse
-   the website delivery machinery.
+   the website delivery machinery (shared Drive/Knowledgebase provider
+   registry).
 
 Hook points (`data_plane/handler.rs`): the website-delivery path falls back
 on 404; the app-config path falls back when `select_route` returns nothing.

@@ -1,10 +1,12 @@
 //! In-process memory cache backend: bounded TTL entries with LRU eviction.
 
 use std::{
-    collections::HashMap,
     sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
+
+use async_trait::async_trait;
+use hashlink::LinkedHashMap;
 
 use crate::{
     backend::{normalize_domain, ResolverCacheBackend},
@@ -19,54 +21,51 @@ pub(crate) fn now_unix() -> u64 {
         .unwrap_or(0)
 }
 
-struct Entry {
-    record: ResolvedRecord,
-    last_used: u64,
-}
-
 /// Bounded in-process cache. `get` drops expired entries; `set` evicts the
-/// least-recently-used entry when the entry cap is reached.
+/// least-recently-used entry when the entry cap is reached. The linked map
+/// keeps entries in recency order, so lookup, insert, and eviction are all
+/// O(1) under the mutex (no scans, no index rebuilds).
 pub struct InMemoryResolverCache {
     inner: Mutex<Inner>,
     maximum_entries: usize,
 }
 
 struct Inner {
-    entries: HashMap<String, usize>,
-    order: Vec<Entry>,
+    entries: LinkedHashMap<String, ResolvedRecord>,
 }
 
 impl InMemoryResolverCache {
     pub fn new(maximum_entries: usize) -> Self {
         Self {
             inner: Mutex::new(Inner {
-                entries: HashMap::new(),
-                order: Vec::new(),
+                entries: LinkedHashMap::new(),
             }),
             maximum_entries: maximum_entries.max(1),
         }
     }
-}
 
-impl ResolverCacheBackend for InMemoryResolverCache {
-    fn get(&self, domain: &str) -> Option<ResolvedRecord> {
+    /// Synchronous lookup on the resolution chain's hot path; the async trait
+    /// surface delegates here because a local map lookup never blocks.
+    pub fn get(&self, domain: &str) -> Option<ResolvedRecord> {
         let domain = normalize_domain(domain);
         let now = now_unix();
         let mut inner = self
             .inner
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let index = *inner.entries.get(&domain)?;
-        if inner.order[index].record.expired(now) {
-            remove_at(&mut inner, index);
+        if inner.entries.get(&domain)?.expired(now) {
+            inner.entries.remove(&domain);
             return None;
         }
-        inner.order[index].last_used = now;
-        Some(inner.order[index].record.clone())
+        // LRU touch: remove+reinsert moves the entry to the most recently
+        // used end in O(1).
+        let record = inner.entries.remove(&domain)?;
+        inner.entries.insert(domain, record.clone());
+        Some(record)
     }
 
-    fn set(&self, record: ResolvedRecord) {
-        let now = now_unix();
+    /// Synchronous write into the bounded map.
+    pub fn set(&self, record: ResolvedRecord) {
         let domain = normalize_domain(&record.domain);
         let mut record = record;
         record.domain = domain.clone();
@@ -74,54 +73,36 @@ impl ResolverCacheBackend for InMemoryResolverCache {
             .inner
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if let Some(&index) = inner.entries.get(&domain) {
-            inner.order[index].record = record;
-            inner.order[index].last_used = now;
-            return;
+        if inner.entries.len() >= self.maximum_entries && !inner.entries.contains_key(&domain) {
+            // Evict the least recently used entry (front of the map).
+            inner.entries.pop_front();
         }
-        if inner.order.len() >= self.maximum_entries {
-            // Evict the least recently used entry.
-            let victim = inner
-                .order
-                .iter()
-                .enumerate()
-                .min_by_key(|(_, entry)| entry.last_used)
-                .map(|(index, _)| index)
-                .expect("non-empty");
-            remove_at(&mut inner, victim);
-        }
-        let index = inner.order.len();
-        inner.entries.insert(domain, index);
-        inner.order.push(Entry {
-            record,
-            last_used: now,
-        });
+        inner.entries.insert(domain, record);
     }
 
-    fn remove(&self, domain: &str) {
+    /// Synchronous explicit invalidation.
+    pub fn remove(&self, domain: &str) {
         let domain = normalize_domain(domain);
-        let mut inner = self
-            .inner
+        self.inner
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let Some(&index) = inner.entries.get(&domain) else {
-            return;
-        };
-        remove_at(&mut inner, index);
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .entries
+            .remove(&domain);
     }
 }
 
-/// Remove the entry at `index` (dropping its index mapping) and re-index
-/// everything after it.
-fn remove_at(inner: &mut Inner, index: usize) {
-    let domain = inner.order[index].record.domain.clone();
-    inner.order.remove(index);
-    inner.entries.remove(&domain);
-    for (offset, entry) in inner.order.iter().enumerate().skip(index) {
-        *inner
-            .entries
-            .get_mut(&entry.record.domain)
-            .expect("indexed") = offset;
+#[async_trait]
+impl ResolverCacheBackend for InMemoryResolverCache {
+    async fn get(&self, domain: &str) -> Option<ResolvedRecord> {
+        InMemoryResolverCache::get(self, domain)
+    }
+
+    async fn set(&self, record: ResolvedRecord) {
+        InMemoryResolverCache::set(self, record);
+    }
+
+    async fn remove(&self, domain: &str) {
+        InMemoryResolverCache::remove(self, domain);
     }
 }
 
@@ -160,9 +141,8 @@ mod tests {
         let cache = InMemoryResolverCache::new(2);
         cache.set(record("a.local", 100, false));
         cache.set(record("b.local", 100, false));
-        // Age b's last-use beyond a's (the clock is second-granular).
-        std::thread::sleep(std::time::Duration::from_millis(1_100));
-        let _ = cache.get("a.local"); // a is now the most recent
+        // Touch a so b becomes the least recently used entry.
+        let _ = cache.get("a.local");
         cache.set(record("c.local", 100, false)); // evicts b
         assert!(cache.get("b.local").is_none());
         assert!(cache.get("a.local").is_some());

@@ -2,12 +2,13 @@ use std::{
     cmp::{Ordering, Reverse},
     collections::BinaryHeap,
     future::{pending, Future},
+    panic::AssertUnwindSafe,
     pin::Pin,
     sync::Arc,
     time::Duration,
 };
 
-use futures_util::{stream::FuturesUnordered, StreamExt};
+use futures_util::{future::FutureExt, stream::FuturesUnordered, StreamExt};
 use tokio::{
     sync::watch,
     task::{JoinError, JoinHandle},
@@ -37,7 +38,18 @@ impl ActiveHealthSupervisor {
             return None;
         }
         let (stop, stop_rx) = watch::channel(false);
-        let task = tokio::spawn(run_scheduler(generation, stop_rx));
+        let task = tokio::spawn(async move {
+            // The supervisor is a process-lifetime task: a panic here would
+            // silently freeze active health state at stale values. Contain
+            // and log the unwind instead, mirroring the tunnel supervisor.
+            if AssertUnwindSafe(run_scheduler(generation, stop_rx))
+                .catch_unwind()
+                .await
+                .is_err()
+            {
+                tracing::error!("upstream active health supervisor panicked");
+            }
+        });
         Some(Self {
             stop,
             task: Some(task),
@@ -126,10 +138,15 @@ async fn run_scheduler(generation: Arc<RuntimeGeneration>, mut stop: watch::Rece
                             "upstream active health state changed"
                         );
                     }
-                    probe.due = Instant::now()
-                        + upstream
-                            .active_health_interval()
-                            .expect("scheduled upstream retains active health policy");
+                    // Generation data is immutable, so the policy is
+                    // expected to be present; a miss reschedules defensively
+                    // instead of unwinding the supervisor.
+                    let Some(interval) = upstream.active_health_interval() else {
+                        probe.due = Instant::now() + Duration::from_secs(3600);
+                        schedule.push(Reverse(probe));
+                        continue;
+                    };
+                    probe.due = Instant::now() + interval;
                     schedule.push(Reverse(probe));
                 }
             }
@@ -142,9 +159,9 @@ fn initial_schedule(upstreams: &[Arc<ProxyUpstream>]) -> BinaryHeap<Reverse<Sche
     let now = Instant::now();
     let mut schedule = BinaryHeap::new();
     for (upstream_index, upstream) in upstreams.iter().enumerate() {
-        let interval = upstream
-            .active_health_interval()
-            .expect("filtered upstream has active health policy");
+        let Some(interval) = upstream.active_health_interval() else {
+            continue;
+        };
         let target_count = upstream.target_count();
         for target_index in 0..target_count {
             let numerator = interval
@@ -177,7 +194,9 @@ fn launch_due_probes(
         if next.due > now {
             return;
         }
-        let Reverse(probe) = schedule.pop().expect("peeked scheduled probe exists");
+        let Some(Reverse(probe)) = schedule.pop() else {
+            return;
+        };
         let upstream = upstreams[probe.upstream_index].clone();
         probes.push(Box::pin(async move {
             let transition = upstream.run_active_health_check(probe.target_index).await;

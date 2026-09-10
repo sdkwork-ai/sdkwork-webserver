@@ -1,6 +1,11 @@
 #!/bin/bash
 # prerm for the sdkwork-webserver package (environment: __ENVIRONMENT__).
 # Stops the service before removal or upgrade; keeps configuration data.
+# Upgrade contract: the stop happens BEFORE the new package unpacks so
+# schema migrations never run against a serving old binary; on a
+# single-host standalone install this is a bounded maintenance window
+# (TimeoutStopSec=45 + postinst start + health gate). Rolling upgrades
+# belong to the container channel (deploy.sh --replicas >= 2).
 
 set -euo pipefail
 

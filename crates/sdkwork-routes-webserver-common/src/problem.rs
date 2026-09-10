@@ -24,6 +24,12 @@ impl WebApiError {
         }
     }
 
+    /// Result code carried by this error (visible to tests and handlers that
+    /// branch on the failure class before rendering).
+    pub fn code(&self) -> SdkWorkResultCode {
+        self.code
+    }
+
     pub fn authentication_required(detail: impl Into<String>) -> Self {
         Self::new(SdkWorkResultCode::AuthenticationRequired, detail)
     }
@@ -56,7 +62,15 @@ impl From<WebServiceError> for WebApiError {
 impl IntoResponse for WebApiError {
     fn into_response(self) -> Response {
         let trace_id = resolved_trace_id();
-        let problem = SdkWorkProblemDetail::platform(self.code, self.detail, trace_id.clone());
+        let mut problem = SdkWorkProblemDetail::platform(self.code, self.detail, trace_id.clone());
+        // `API_SPEC.md` §15 allows `40001 VALIDATION_ERROR` with `400` or
+        // `422`. The management OpenAPI authorities declare the
+        // `ValidationError` response only under `'422'` (semantic command
+        // validation), so this repository pins the `422` variant; syntactic
+        // failures use `MalformedRequest`/`InvalidParameter` and stay `400`.
+        if self.code == SdkWorkResultCode::ValidationError {
+            problem.status = 422;
+        }
         let status =
             StatusCode::from_u16(problem.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         let mut response = (
@@ -89,6 +103,25 @@ mod tests {
             WebApiError::new(SdkWorkResultCode::ValidationError, "invalid request").into_response();
 
         assert!(response.headers().get(SDKWORK_TRACE_ID_HEADER).is_some());
+    }
+
+    #[test]
+    fn validation_problem_pins_status_422_per_openapi_authorities() {
+        // The OpenAPI authorities declare `ValidationError` only under
+        // `'422'` (`API_SPEC.md` §15: `40001` with `400` or `422`).
+        let response =
+            WebApiError::new(SdkWorkResultCode::ValidationError, "invalid request").into_response();
+        assert_eq!(
+            response.status(),
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY
+        );
+
+        let malformed = WebApiError::new(
+            SdkWorkResultCode::InvalidParameter,
+            "page_size must be <= 200",
+        )
+        .into_response();
+        assert_eq!(malformed.status(), axum::http::StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

@@ -65,6 +65,29 @@ impl CertificateIssuer {
         cert_pem: &str,
         reason: CertificateRevocationReason,
     ) -> AcmeServiceResult<()> {
+        // Every external CA call self-bounds with the issuer's operation
+        // timeout: a CA that accepts the connection and never responds fails
+        // the management request instead of pinning admission and database
+        // resources indefinitely.
+        match tokio::time::timeout(
+            self.operation_timeout,
+            self.revoke_certificate_inner(cert_pem, reason),
+        )
+        .await
+        {
+            Ok(result) => result,
+            Err(_) => Err(AcmeServiceError::provider(format!(
+                "ACME revocation timed out after {} ms",
+                self.operation_timeout.as_millis()
+            ))),
+        }
+    }
+
+    async fn revoke_certificate_inner(
+        &self,
+        cert_pem: &str,
+        reason: CertificateRevocationReason,
+    ) -> AcmeServiceResult<()> {
         let (_, pem) = parse_x509_pem(cert_pem.as_bytes()).map_err(|error| {
             AcmeServiceError::Internal(format!("parse certificate for revocation: {error}"))
         })?;

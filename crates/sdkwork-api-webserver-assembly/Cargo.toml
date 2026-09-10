@@ -1,6 +1,7 @@
 [package]
 name = "sdkwork-api-webserver-assembly"
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 version.workspace = true
 description = "Generated API assembly for sdkwork-webserver application HTTP plane."
@@ -30,3 +31,6 @@ sdkwork-api-mcp-assembly.workspace = true
 sdkwork-routes-webserver-app-api.workspace = true
 sdkwork-routes-webserver-backend-api.workspace = true
 sdkwork-routes-webserver-internal-api.workspace = true
+
+[lints]
+workspace = true

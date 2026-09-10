@@ -4,12 +4,16 @@
 //! bincode-like framing of the serialized `CachedResponse`. The memory
 //! backend remains the L1 index; this module is the L2 spill component and
 //! never talks to the proxy path directly.
+//!
+//! All disk operations are synchronous by design and `Send`: the
+//! `HttpResponseCache` facade runs them on the blocking pool
+//! (`spawn_blocking`) so a slow disk never stalls a runtime worker. Object
+//! writes are independent files, so there is no process-wide write lock.
 
 use std::{
     fs,
     io::{Read, Write},
     path::{Path, PathBuf},
-    sync::Mutex,
 };
 
 use super::{
@@ -24,7 +28,6 @@ const MAGIC: &[u8; 4] = b"SWC1";
 pub(crate) struct TieredCacheBackend {
     memory: MemoryCacheBackend,
     disk_root: Option<PathBuf>,
-    write_lock: Mutex<()>,
 }
 
 impl TieredCacheBackend {
@@ -32,7 +35,6 @@ impl TieredCacheBackend {
         Self {
             memory: MemoryCacheBackend::new(maximum_entries),
             disk_root: None,
-            write_lock: Mutex::new(()),
         }
     }
 
@@ -41,7 +43,6 @@ impl TieredCacheBackend {
         Ok(Self {
             memory: MemoryCacheBackend::new(maximum_entries),
             disk_root: Some(disk_root),
-            write_lock: Mutex::new(()),
         })
     }
 
@@ -75,10 +76,6 @@ impl CacheBackend for TieredCacheBackend {
             return;
         };
         let path = Self::object_path(root, &key);
-        let _guard = self
-            .write_lock
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
         }
@@ -100,8 +97,10 @@ fn write_disk_entry(path: &Path, entry: &CachedResponse) -> std::io::Result<()> 
     let mut file = fs::File::create(path)?;
     file.write_all(MAGIC)?;
     file.write_all(&(payload.len() as u32).to_le_bytes())?;
-    file.write_all(&payload)?;
-    file.sync_all()
+    file.write_all(&payload)
+    // No per-object fsync (nginx `proxy_cache` durability model): a torn
+    // write is rejected by the magic/length validation in `read_disk_entry`
+    // and re-filled from the upstream on the next request.
 }
 
 fn read_disk_entry(path: &Path) -> Option<CachedResponse> {

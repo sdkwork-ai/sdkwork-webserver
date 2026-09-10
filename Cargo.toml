@@ -31,8 +31,28 @@ exclude = [
   "sdks/sdkwork-webserver-internal-sdk/sdkwork-webserver-internal-sdk-rust/generated/server-openapi",
 ]
 
+[workspace.lints.rust]
+# RUST_CODE_SPEC.md §13 baseline. `unsafe_code` is `deny` (not `forbid`)
+# so the one reviewed Win32 sampler can carry a scoped, documented
+# exception instead of a crate-level global allow.
+unsafe_code = "deny"
+unsafe_op_in_unsafe_fn = "deny"
+trivial_casts = "warn"
+trivial_numeric_casts = "warn"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+exit = "deny"
+# `unused_qualifications` (127 live sites), `panic`/`unwrap_used`/
+# `expect_used`/`pedantic` remain documented migration debt: enabling them
+# today floods the build or fails the workspace; they are adopted
+# crate-by-crate together with their cleanup.
+
 [workspace.package]
 edition = "2021"
+rust-version = "1.85"
 version = "0.1.0"
 license = "AGPL-3.0-or-later"
 

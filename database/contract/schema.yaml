@@ -887,3 +887,9 @@ tables:
   - name: web_application
     lifecycle_status: active
     owner: web-platform
+  - name: web_app_platform_target
+    lifecycle_status: active
+    owner: web-platform
+  - name: web_resolution_cache
+    lifecycle_status: active
+    owner: web-platform

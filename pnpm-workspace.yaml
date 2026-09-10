@@ -172,3 +172,11 @@ supportedArchitectures:
   libc:
     - glibc
     - musl
+
+# Single React runtime singleton: transitive packages that declare their own
+# (older) react/react-dom ranges previously resolved a second copy next to the
+# catalog's 19.2.8, splitting hooks state inside one renderer. Pin the exact
+# version for every consumer so tests and the dev server share one instance.
+overrides:
+  react: 19.2.8
+  react-dom: 19.2.8

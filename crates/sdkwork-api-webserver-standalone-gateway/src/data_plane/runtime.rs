@@ -43,8 +43,9 @@ pub(crate) struct RuntimeGeneration {
     pub proxy_cache: Option<Arc<super::cache::HttpResponseCache>>,
     /// System resolver for dynamic `proxy_pass` targets.
     pub resolver: Arc<BoundedSystemResolver>,
-    /// Per-generation cache of synthesized dynamic `proxy_pass` upstreams.
-    pub dynamic_upstreams: std::sync::Mutex<HashMap<String, Arc<ProxyUpstream>>>,
+    /// Per-generation cache of synthesized dynamic `proxy_pass` upstreams,
+    /// LRU-ordered so eviction targets the least recently used authority.
+    pub dynamic_upstreams: std::sync::Mutex<hashlink::LinkedHashMap<String, Arc<ProxyUpstream>>>,
     /// Multi-layer resolution cache chain shared by upstream resolvers.
     pub resolution_chain: Option<Arc<ResolutionChain>>,
 }
@@ -106,7 +107,7 @@ impl RuntimeGeneration {
             upstreams,
             proxy_cache,
             resolver,
-            dynamic_upstreams: std::sync::Mutex::new(HashMap::new()),
+            dynamic_upstreams: std::sync::Mutex::new(hashlink::LinkedHashMap::new()),
             resolution_chain,
         }))
     }
@@ -206,20 +207,13 @@ fn build_resolution_chain(
         }
         redis_config.clone()
     });
-    let redis = redis_config.as_ref().and_then(|redis_config| {
-        match tokio::runtime::Handle::try_current().ok().map(|handle| {
-            handle.block_on(
-                sdkwork_webserver_resolver_cache::redis::RedisResolverCache::connect(redis_config),
-            )
-        }) {
-            Some(Ok(backend)) => {
-                Some(backend as std::sync::Arc<dyn sdkwork_webserver_resolver_cache::ResolverCacheBackend>)
-            }
-            _ => {
-                tracing::warn!(url = %redis_config.url, "Redis resolution cache unavailable; continuing with upper layers");
-                None
-            }
-        }
+    let redis = redis_config.as_ref().map(|redis_config| {
+        // The backend connects lazily on first async use with bounded
+        // timeouts, so generation builds never block an executor worker on
+        // Redis availability (a stalled Redis degrades to the upper layers).
+        std::sync::Arc::new(
+            sdkwork_webserver_resolver_cache::redis::RedisResolverCache::new(redis_config.clone()),
+        ) as std::sync::Arc<dyn sdkwork_webserver_resolver_cache::ResolverCacheBackend>
     });
     #[cfg(feature = "management")]
     let database = if config.database {

@@ -104,7 +104,7 @@ rsync -a --exclude node_modules --exclude target --exclude dist ... \
   /mnt/e/sdkwork-space/sdkwork-webserver/ ~/sdkwork-build/sdkwork-webserver/
 cd ~/sdkwork-build/sdkwork-webserver
 pnpm install                       # 工作区新增 @monaco-editor/react / monaco-editor
-pnpm rebuild esbuild               # 补 native postinstall（pnpm 默认忽略构建脚本）
+npx rebuild esbuild   # 补 native postinstall（pnpm 默认忽略构建脚本，需显式重建）
 node scripts/webserver-release.mjs package --deployment-profile standalone
 node scripts/docker/build-standalone-image.mjs --skip-platform-gateway --no-pull
 ```

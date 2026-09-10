@@ -1226,6 +1226,7 @@ mod tests {
             operator_id: Some(7),
             subject_id: Some("7".to_owned()),
             idempotency_key: Some("deployment-create-1".to_owned()),
+            permission_scope: Vec::new(),
         };
 
         let app_context = WebService::backend_app_context(&context).unwrap();

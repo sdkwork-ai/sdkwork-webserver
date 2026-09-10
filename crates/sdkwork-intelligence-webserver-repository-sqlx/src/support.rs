@@ -1,7 +1,7 @@
+use super::{EnginePool, EngineRow};
 use sdkwork_database_id::{uuid_v4, uuid_v4_with_prefix, SnowflakeIdGenerator};
 use sdkwork_utils_rust::crypto::sha256_hash;
 use sdkwork_webserver_contract::WebServiceError;
-use super::{EnginePool, EngineRow};
 use sqlx::{Error as SqlxError, Row};
 
 pub(crate) fn now_rfc3339() -> String {
@@ -16,16 +16,13 @@ pub(crate) fn store_error(context: &str, error: SqlxError) -> WebServiceError {
             Some("23503" | "23514" | "22P02") => {
                 WebServiceError::validation("database constraint rejected the request")
             }
-            Some("40001" | "40P01" | "55P03" | "57014") => {
-                WebServiceError::DatabaseUnavailable
-            }
+            Some("40001" | "40P01" | "55P03" | "57014") => WebServiceError::DatabaseUnavailable,
             _ => WebServiceError::Internal("database operation failed".to_string()),
         },
         SqlxError::RowNotFound => WebServiceError::not_found("resource not found"),
-        SqlxError::PoolTimedOut
-        | SqlxError::PoolClosed
-        | SqlxError::Io(_)
-        | SqlxError::Tls(_) => WebServiceError::DatabaseUnavailable,
+        SqlxError::PoolTimedOut | SqlxError::PoolClosed | SqlxError::Io(_) | SqlxError::Tls(_) => {
+            WebServiceError::DatabaseUnavailable
+        }
         _ => WebServiceError::Internal("database operation failed".to_string()),
     }
 }
@@ -34,12 +31,11 @@ pub(crate) fn is_unique_violation(error: &SqlxError) -> bool {
     matches!(error, SqlxError::Database(database) if database.code().as_deref() == Some("23505"))
 }
 
-pub(crate) fn pagination(
-    page: i32,
-    page_size: i32,
-) -> Result<(i32, i32, i64), WebServiceError> {
+pub(crate) fn pagination(page: i32, page_size: i32) -> Result<(i32, i32, i64), WebServiceError> {
     if page < 1 {
-        return Err(WebServiceError::validation("page must be greater than or equal to 1"));
+        return Err(WebServiceError::validation(
+            "page must be greater than or equal to 1",
+        ));
     }
     if !(1..=200).contains(&page_size) {
         return Err(WebServiceError::validation(
@@ -52,16 +48,42 @@ pub(crate) fn pagination(
     Ok((page, page_size, offset))
 }
 
-/// Encodes an opaque keyset cursor for `(sort_instant, id)` ordered lists.
-/// The payload is base64 of `v1|<created_at>|<id>`; clients must never parse it.
+/// HMAC secret for keyset cursor integrity. A cursor issued by one gateway
+/// node must validate on every sibling node, so the secret is
+/// deployment-stable: `SDKWORK_WEBSERVER_CURSOR_HMAC_KEY` when the operator
+/// provides one (rotation), otherwise the authoritative database URL, which
+/// every node of a deployment shares by definition.
+fn cursor_hmac_secret() -> &'static str {
+    use std::sync::OnceLock;
+    static SECRET: OnceLock<String> = OnceLock::new();
+    SECRET
+        .get_or_init(
+            || match std::env::var("SDKWORK_WEBSERVER_CURSOR_HMAC_KEY") {
+                Ok(seed) if !seed.trim().is_empty() => seed.trim().to_owned(),
+                _ => std::env::var("SDKWORK_DATABASE_URL").unwrap_or_default(),
+            },
+        )
+        .as_str()
+}
+
+/// Encodes an opaque, HMAC-signed keyset cursor for `(sort_instant, id)`
+/// ordered lists. The token is base64 of `v1|<created_at>|<id>|<hmac>`; the
+/// signature makes the tuple tamper-evident and prevents clients from
+/// forging cursors for arbitrary offsets. Clients must never parse it.
 pub(crate) fn encode_keyset_cursor(created_at: &str, id: i64) -> String {
     use base64::Engine as _;
     let payload = format!("v1|{created_at}|{id}");
-    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(payload.as_bytes())
+    let signature = sdkwork_utils_rust::crypto::hmac_sha256(
+        payload.as_bytes(),
+        cursor_hmac_secret().as_bytes(),
+    );
+    base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .encode(format!("{payload}|{signature}").as_bytes())
 }
 
-/// Decodes a keyset cursor produced by [`encode_keyset_cursor`]; returns `None`
-/// for malformed, oversized, or out-of-range tokens so callers fail closed.
+/// Decodes a keyset cursor produced by [`encode_keyset_cursor`]; returns
+/// `None` for malformed, oversized, unsigned, or out-of-range tokens so
+/// callers fail closed.
 pub(crate) fn decode_keyset_cursor(token: &str) -> Option<(String, i64)> {
     use base64::Engine as _;
     if token.is_empty() || token.len() > 512 {
@@ -71,11 +93,21 @@ pub(crate) fn decode_keyset_cursor(token: &str) -> Option<(String, i64)> {
         .decode(token.as_bytes())
         .ok()?;
     let payload = std::str::from_utf8(&decoded).ok()?;
-    let mut parts = payload.splitn(3, '|');
+    let mut parts = payload.splitn(4, '|');
     let version = parts.next()?;
     let created_at = parts.next()?;
     let id = parts.next()?;
+    let signature = parts.next()?;
     if version != "v1" || created_at.is_empty() || created_at.len() > 64 {
+        return None;
+    }
+    // Integrity first: an unsigned or tampered tuple never reaches the
+    // query layer (constant-time compare via the shared utils).
+    let expected = sdkwork_utils_rust::crypto::hmac_sha256(
+        format!("v1|{created_at}|{id}").as_bytes(),
+        cursor_hmac_secret().as_bytes(),
+    );
+    if !sdkwork_utils_rust::crypto::secure_compare(signature, &expected) {
         return None;
     }
     let id = id.parse::<i64>().ok()?;
@@ -225,11 +257,40 @@ mod tests {
     #[test]
     fn database_instants_are_normalized_to_rfc3339_utc() {
         let expected = "2027-01-01T00:00:00.123Z";
-        assert_eq!(normalize_database_instant(expected).as_deref(), Some(expected));
+        assert_eq!(
+            normalize_database_instant(expected).as_deref(),
+            Some(expected)
+        );
         assert_eq!(
             normalize_database_instant("2027-01-01 08:00:00.123+08").as_deref(),
             Some(expected)
         );
         assert!(normalize_database_instant("not-an-instant").is_none());
+    }
+
+    #[test]
+    fn keyset_cursors_round_trip_and_reject_tampering() {
+        let token = super::encode_keyset_cursor("2027-01-01T00:00:00Z", 42);
+        assert_eq!(
+            super::decode_keyset_cursor(&token),
+            Some(("2027-01-01T00:00:00Z".to_owned(), 42))
+        );
+
+        // A legacy unsigned tuple must fail closed.
+        let unsigned = {
+            use base64::Engine as _;
+            base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .encode("v1|2027-01-01T00:00:00Z|42".as_bytes())
+        };
+        assert!(super::decode_keyset_cursor(&unsigned).is_none());
+
+        // Tampering with any tuple field breaks the HMAC.
+        let forged = {
+            use base64::Engine as _;
+            base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .encode("v1|2027-01-01T00:00:00Z|43|deadbeef".as_bytes())
+        };
+        assert!(super::decode_keyset_cursor(&forged).is_none());
+        assert!(super::decode_keyset_cursor("").is_none());
     }
 }

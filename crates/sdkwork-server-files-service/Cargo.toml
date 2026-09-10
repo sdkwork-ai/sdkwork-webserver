@@ -2,8 +2,12 @@
 name = "sdkwork-server-files-service"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 description = "Secure server filesystem browsing, project classification, and project operation mapping for deployment nodes."
+
+[lib]
+name = "sdkwork_server_files_service"
 
 [dependencies]
 async-trait.workspace = true
@@ -17,3 +21,6 @@ tracing.workspace = true
 [dev-dependencies]
 tempfile.workspace = true
 tokio = { workspace = true, features = ["fs", "io-util", "macros", "process", "rt-multi-thread"] }
+
+[lints]
+workspace = true

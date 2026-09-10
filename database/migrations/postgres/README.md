@@ -7,9 +7,10 @@ SDKWork Web Server uses the `baseline-plus-migrations` strategy declared in
   schema snapshot for fresh installations. It is also the source for the
   `database/contract/schema.yaml` contract.
 - This directory holds expand-only migrations for already-installed databases.
-  The first applied migration (`0001_web_schema_hardening`) carries the
-  production-readiness schema changes (partial slug uniqueness, tenant list
-  indexes, credential GIN index, and referential integrity).
+  The applied sequence starts at `0005_web_application`; earlier production
+  hardening (partial slug uniqueness, tenant list indexes, credential GIN
+  index, referential integrity, organization NOT NULL backfill) is already
+  consolidated into the baseline snapshot.
 
 Conventions:
 
@@ -17,7 +18,10 @@ Conventions:
   zero-padded sequence).
 - Up migrations must be idempotent where PostgreSQL allows (`IF NOT EXISTS` /
   `DROP ... IF EXISTS` before creating), because the module may be re-applied.
-- Every DDL change ships with a paired down migration.
+- Every DDL change ships with a paired down migration, unless the up
+  migration header declares `reversible: false` with a documented
+  `rollback:` strategy (for example a forward-fix whose sentinel backfill is
+  the canonical repair, as in `0006_organization_id_not_null`).
 - After changing the baseline, regenerate the contract:
 
   ```powershell

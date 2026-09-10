@@ -29,6 +29,24 @@ impl CertificateIssuer {
         &self,
         cert_pem: &str,
     ) -> AcmeServiceResult<Option<AriRenewalWindow>> {
+        // Self-bounded like issuance and revocation: the renewal-cycle
+        // watchdog drops hung cycles, but the lookup itself must fail within
+        // the issuer's operation timeout so a stalled CA never pins a worker
+        // batch past its lease.
+        match tokio::time::timeout(self.operation_timeout, self.renewal_info_inner(cert_pem)).await
+        {
+            Ok(result) => result,
+            Err(_) => Err(AcmeServiceError::provider(format!(
+                "ACME ARI lookup timed out after {} ms",
+                self.operation_timeout.as_millis()
+            ))),
+        }
+    }
+
+    async fn renewal_info_inner(
+        &self,
+        cert_pem: &str,
+    ) -> AcmeServiceResult<Option<AriRenewalWindow>> {
         let (_, pem) = parse_x509_pem(cert_pem.as_bytes()).map_err(|error| {
             AcmeServiceError::Internal(format!("parse certificate for ARI lookup: {error}"))
         })?;

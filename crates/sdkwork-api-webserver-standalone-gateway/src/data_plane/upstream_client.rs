@@ -226,10 +226,13 @@ struct ConnectionShutdown {
 
 impl ConnectionShutdown {
     fn register_connection(&self, stream: &Arc<TcpStream>) {
+        // The registry holds only weak stream references; recovering a
+        // poisoned lock keeps connection shutdown working instead of panicking
+        // every subsequent register/close on the request path.
         let mut streams = self
             .streams
             .lock()
-            .expect("connection shutdown stream registry is not poisoned");
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         streams.retain(|registered| registered.strong_count() > 0);
         streams.push(Arc::downgrade(stream));
         drop(streams);
@@ -249,7 +252,7 @@ impl ConnectionShutdown {
         let mut streams = self
             .streams
             .lock()
-            .expect("connection shutdown stream registry is not poisoned");
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         streams.retain(|registered| {
             if let Some(stream) = registered.upgrade() {
                 let _ = shutdown_stream(&stream, Shutdown::Both);

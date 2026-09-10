@@ -490,6 +490,11 @@ mod os {
 
     use super::{ResourceSample, SampleError};
 
+    // Reviewed exception to the workspace `unsafe_code = "deny"` baseline
+    // (RUST_CODE_SPEC §13): the Windows process sampler must call Win32
+    // process-status APIs. Every call below carries its own SAFETY proof and
+    // the surface is limited to these three pseudo-handle queries.
+    #[allow(unsafe_code)]
     pub(super) fn sample(_maximum_open_handles: u64) -> Result<ResourceSample, SampleError> {
         // SAFETY: GetCurrentProcess returns a process-local pseudo handle with no ownership transfer.
         let process = unsafe { GetCurrentProcess() };

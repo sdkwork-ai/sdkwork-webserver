@@ -79,7 +79,7 @@
             }
           },
           {
-            "name": "keyword",
+            "name": "q",
             "in": "query",
             "schema": {
               "type": "string",
@@ -1090,7 +1090,7 @@
             }
           },
           {
-            "name": "keyword",
+            "name": "q",
             "in": "query",
             "schema": {
               "type": "string",
@@ -4179,6 +4179,7 @@
       "post": {
         "operationId": "serverFiles.node.operations.create",
         "summary": "Run a project operation on a deployment node",
+        "description": "Runs a classified project lifecycle operation (build, package, start, deploy, stop, restart) as fixed argv. Deploy-class operations additionally require the `web.servers.files.deploy` permission and are rejected with 403 when the principal lacks it.",
         "tags": [
           "serverFile"
         ],
@@ -4236,6 +4237,16 @@
                       }
                     }
                   ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Deploy-class operation requested without the required web.servers.files.deploy permission.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             }
@@ -4357,7 +4368,7 @@
       "put": {
         "operationId": "webserverConfigs.update",
         "summary": "Validate and atomically overwrite one managed configuration file",
-        "description": "Creates a timestamped backup of the previous content, validates the new content (JSON/TOML parsers where applicable), and replaces the file atomically. Pass expectedSha256 from the preceding read for optimistic concurrency.",
+        "description": "Creates a timestamped backup of the previous content, validates the new content (JSON/TOML parsers where applicable), and replaces the file atomically. Pass expectedSha256 from the preceding read for optimistic concurrency. This operation rewrites the live Web Server configuration plane and therefore requires the `web.nginx.write` permission (PRD-FR-029 route-level authorization).",
         "tags": [
           "webserverConfig"
         ],
@@ -4371,7 +4382,7 @@
         "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "web.servers.files.write",
+        "x-sdkwork-permission": "web.nginx.write",
         "x-sdkwork-idempotent": true,
         "x-sdkwork-owner": "sdkwork-webserver",
         "parameters": [
@@ -4420,6 +4431,16 @@
                       }
                     }
                   ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Principal lacks the required web.nginx.write permission.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             }

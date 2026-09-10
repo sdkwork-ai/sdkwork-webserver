@@ -107,3 +107,6 @@ target-verify/
 
 # Docker runtime materialized state (entrypoint-generated)
 deployments/docker/state/
+
+# Generated SDK output (regenerated locally, never committed)
+sdks/**/generated/

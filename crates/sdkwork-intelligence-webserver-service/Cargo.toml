@@ -2,6 +2,10 @@
 name = "sdkwork-intelligence-webserver-service"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "sdkwork_intelligence_webserver_service"
 
 [dependencies]
 async-trait.workspace = true
@@ -17,3 +21,6 @@ tokio.workspace = true
 tracing.workspace = true
 url.workspace = true
 sdkwork-utils-rust.workspace = true
+
+[lints]
+workspace = true

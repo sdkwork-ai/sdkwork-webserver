@@ -2,6 +2,10 @@
 name = "sdkwork-webserver-source-provider"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "sdkwork_webserver_source_provider"
 
 [dependencies]
 async-trait.workspace = true
@@ -21,3 +25,6 @@ url.workspace = true
 zip.workspace = true
 
 [dev-dependencies]
+
+[lints]
+workspace = true

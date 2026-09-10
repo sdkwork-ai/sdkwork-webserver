@@ -1,16 +1,33 @@
 use crate::audited_sql;
-use sdkwork_utils_rust::aes_gcm_encrypt;
+use sdkwork_utils_rust::{aes_gcm_encrypt, derive_aes_256_key};
+
+use crate::SecretEncryptionKey;
+
+/// Key-derivation context binding environment-variable secret ciphertext to
+/// its tenant and variable identity (same discipline as certificate secret
+/// bundles): a ciphertext copied to another tenant or row in the database
+/// cannot be decrypted there.
+const ENV_VARIABLE_SECRET_KEY_CONTEXT: &[u8] = b"sdkwork-web-env-variable-secret-bound-v1";
+
+fn env_variable_secret_key(
+    master_key: &SecretEncryptionKey,
+    tenant_id: i64,
+    variable_uuid: &str,
+) -> SecretEncryptionKey {
+    let salt = format!("{tenant_id}:{variable_uuid}");
+    derive_aes_256_key(master_key, salt.as_bytes(), ENV_VARIABLE_SECRET_KEY_CONTEXT)
+}
 use sdkwork_webserver_contract::{
     CreateEnvVariableRequest, EnvVariablePage, EnvVariableResponse, UpdateEnvVariableRequest,
     WebServiceError, WebServiceResult,
 };
 use sqlx::Row;
 
-use super::{EngineRow, WebRepository};
 use super::support::{
     bool_from_row, instant_write_expression, new_uuid, next_id, now_rfc3339,
     resolve_site_internal_id, store_error,
 };
+use super::{EngineRow, WebRepository};
 
 /// 机密值在 list/retrieve 响应中的掩码占位符。
 /// 真实值仅通过 create 接口接收并加密落库，永不在查询响应中返回明文。
@@ -117,8 +134,10 @@ impl WebRepository {
         let now = now_rfc3339();
 
         // 机密值必须加密后落库，非机密值原样存储以保持可读性与查询效率。
+        // 密钥按 tenant + 变量派生：密文被移植到其他租户/行后无法解密。
+        let derived = env_variable_secret_key(self.secret_key(), tenant_id, &uuid);
         let stored_value = if request.is_secret {
-            aes_gcm_encrypt(self.secret_key(), request.value.as_bytes()).map_err(|error| {
+            aes_gcm_encrypt(&derived, request.value.as_bytes()).map_err(|error| {
                 WebServiceError::Internal(format!("encrypt env variable: {error}"))
             })?
         } else {
@@ -136,9 +155,11 @@ impl WebRepository {
              )"
         );
 
-        let mut transaction = self.pool.begin().await.map_err(|error| {
-            store_error("begin create web_env_variable transaction", error)
-        })?;
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|error| store_error("begin create web_env_variable transaction", error))?;
         let locked = sqlx::query(
             "UPDATE web_site SET version = version
              WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL",
@@ -165,9 +186,10 @@ impl WebRepository {
             .try_get("total")
             .map_err(|error| store_error("map web_env_variable capacity", error))?;
         if total >= MAX_SITE_ENV_VARIABLES {
-            transaction.rollback().await.map_err(|error| {
-                store_error("rollback full web_env_variable collection", error)
-            })?;
+            transaction
+                .rollback()
+                .await
+                .map_err(|error| store_error("rollback full web_env_variable collection", error))?;
             return Err(WebServiceError::conflict(
                 "a site supports at most 100 active environment variables",
             ));
@@ -187,9 +209,10 @@ impl WebRepository {
             .await
             .map_err(|error| store_error("insert web_env_variable", error))?;
 
-        transaction.commit().await.map_err(|error| {
-            store_error("commit create web_env_variable transaction", error)
-        })?;
+        transaction
+            .commit()
+            .await
+            .map_err(|error| store_error("commit create web_env_variable transaction", error))?;
 
         // 响应中机密值返回掩码，不回传明文/密文，避免泄漏。
         Ok(EnvVariableResponse {
@@ -235,8 +258,9 @@ impl WebRepository {
         let stored_version: i64 = row
             .try_get("version")
             .map_err(|error| store_error("map web_env_variable version", error))?;
+        let derived = env_variable_secret_key(self.secret_key(), tenant_id, variable_id);
         let stored_value = if request.is_secret {
-            aes_gcm_encrypt(self.secret_key(), request.value.as_bytes()).map_err(|error| {
+            aes_gcm_encrypt(&derived, request.value.as_bytes()).map_err(|error| {
                 WebServiceError::Internal(format!("encrypt env variable: {error}"))
             })?
         } else {

@@ -561,8 +561,13 @@ fn parse_alpn(value: &str) -> WebServiceResult<Vec<String>> {
 /// publish concurrently; the lock serializes the read-modify-write of the
 /// generation counter so the published snapshot always carries a fresh
 /// monotonic generation.
+///
+/// The exclusion is a kernel file lock (`File::try_lock`), not an
+/// existence-checked sentinel: a worker killed while holding the lock lets
+/// the kernel release it immediately, so a crash can never orphan the lock
+/// and silently block every future publication (the same model as the Web
+/// Node Daemon state lock).
 struct DistributionLock {
-    path: PathBuf,
     _file: fs::File,
 }
 
@@ -575,15 +580,34 @@ impl DistributionLock {
             ))
         })?;
         let path = material_root.join(TLS_DISTRIBUTION_LOCK_FILE);
+        let file = fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&path)
+            .map_err(|error| {
+                WebServiceError::Internal(format!(
+                    "open TLS distribution lock {}: {error}",
+                    path.display()
+                ))
+            })?;
+        let metadata = fs::symlink_metadata(&path).map_err(|error| {
+            WebServiceError::Internal(format!(
+                "inspect TLS distribution lock {}: {error}",
+                path.display()
+            ))
+        })?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(WebServiceError::Internal(format!(
+                "TLS distribution lock {} must be a regular file",
+                path.display()
+            )));
+        }
         let deadline = std::time::Instant::now() + DISTRIBUTION_LOCK_TIMEOUT;
         loop {
-            match fs::OpenOptions::new()
-                .create_new(true)
-                .write(true)
-                .open(&path)
-            {
-                Ok(file) => return Ok(Self { path, _file: file }),
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            match file.try_lock() {
+                Ok(()) => return Ok(Self { _file: file }),
+                Err(std::fs::TryLockError::WouldBlock) => {
                     if std::time::Instant::now() >= deadline {
                         return Err(WebServiceError::Internal(
                             "TLS distribution lock is held by another publisher".to_string(),
@@ -591,7 +615,7 @@ impl DistributionLock {
                     }
                     std::thread::sleep(DISTRIBUTION_LOCK_RETRY);
                 }
-                Err(error) => {
+                Err(std::fs::TryLockError::Error(error)) => {
                     return Err(WebServiceError::Internal(format!(
                         "acquire TLS distribution lock {}: {error}",
                         path.display()
@@ -599,12 +623,6 @@ impl DistributionLock {
                 }
             }
         }
-    }
-}
-
-impl Drop for DistributionLock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
     }
 }
 

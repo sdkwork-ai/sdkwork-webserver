@@ -2,6 +2,10 @@
 name = "sdkwork-webserver-edge-runtime"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "sdkwork_webserver_edge_runtime"
 
 [dependencies]
 anyhow.workspace = true
@@ -17,3 +21,6 @@ sdkwork-utils-rust.workspace = true
 
 [dev-dependencies]
 rcgen.workspace = true
+
+[lints]
+workspace = true

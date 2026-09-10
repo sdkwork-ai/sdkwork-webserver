@@ -2,6 +2,10 @@
 name = "sdkwork-routes-webserver-app-api"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "sdkwork_routes_webserver_app_api"
 
 [dependencies]
 async-trait.workspace = true
@@ -22,3 +26,6 @@ axum.workspace = true
 http-body-util.workspace = true
 sdkwork-iam-web-adapter.workspace = true
 tower.workspace = true
+
+[lints]
+workspace = true

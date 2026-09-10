@@ -38,7 +38,7 @@ const EMBEDDED_MODULE_DATABASES = [
   { repo: 'sdkwork-mcp', shareName: 'mcp' },
   { repo: 'sdkwork-deployments', shareName: 'deploy' },
 ];
-const SUPPORTED_ENVIRONMENTS = ['development', 'test', 'staging', 'production'];
+const SUPPORTED_ENVIRONMENTS = ['development', 'test', 'staging', 'demo', 'production'];
 
 function appVersion() {
   const manifest = JSON.parse(

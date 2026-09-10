@@ -1,9 +1,9 @@
+use super::{EngineRow, WebRepository};
 use crate::audited_sql;
 use sdkwork_intelligence_webserver_service::AuditLogWrite;
 use sdkwork_webserver_contract::{
     AuditLogPage, AuditLogResponse, ListAuditLogsQuery, WebServiceError, WebServiceResult,
 };
-use super::{EngineRow, WebRepository};
 use sqlx::Row;
 
 use super::support::{
@@ -51,7 +51,10 @@ impl AuditFilter {
     ) {
         let numbered = sql.replace('$', &format!("${next_index}"));
         *next_index += bindings.len();
-        filters.push(AuditFilter { sql: numbered, bindings });
+        filters.push(AuditFilter {
+            sql: numbered,
+            bindings,
+        });
     }
 }
 
@@ -116,7 +119,9 @@ fn push_audit_filters(
             vec![AuditBindValue::Text(end_date.to_string())],
         );
     }
-    if let (Some(start_date), Some(end_date)) = (query.start_date.as_deref(), query.end_date.as_deref()) {
+    if let (Some(start_date), Some(end_date)) =
+        (query.start_date.as_deref(), query.end_date.as_deref())
+    {
         if start_date >= end_date {
             return Err(WebServiceError::validation(
                 "startDate must be earlier than endDate",
@@ -176,16 +181,21 @@ impl WebRepository {
         let (cursor_created_at, cursor_id) = decode_keyset_cursor(cursor)
             .ok_or_else(|| WebServiceError::validation("cursor is invalid"))?;
 
+        // Fail closed: tenant-less audit enumeration is forbidden (audit
+        // logs require a tenant context), so the repository rejects a
+        // missing tenant even though the service layer already enforces one
+        // (defense in depth).
+        let tenant_id = tenant_id.ok_or_else(|| {
+            WebServiceError::validation("tenant context is required for audit log listing")
+        })?;
         let mut filters: Vec<AuditFilter> = Vec::new();
         let mut next_index = 1_usize;
-        if let Some(tenant_id) = tenant_id {
-            AuditFilter::push(
-                &mut filters,
-                &mut next_index,
-                "tenant_id = $",
-                vec![AuditBindValue::Int(tenant_id)],
-            );
-        }
+        AuditFilter::push(
+            &mut filters,
+            &mut next_index,
+            "tenant_id = $",
+            vec![AuditBindValue::Int(tenant_id)],
+        );
         push_audit_filters(query, &mut filters, &mut next_index)?;
         AuditFilter::push(
             &mut filters,
@@ -229,7 +239,10 @@ impl WebRepository {
             .await
             .map_err(|error| store_error("list web_audit_log cursor", error))?;
         let has_more = rows.len() > page_size as usize;
-        let page_rows = rows.into_iter().take(page_size as usize).collect::<Vec<_>>();
+        let page_rows = rows
+            .into_iter()
+            .take(page_size as usize)
+            .collect::<Vec<_>>();
 
         let mut items = Vec::with_capacity(page_rows.len());
         for row in &page_rows {

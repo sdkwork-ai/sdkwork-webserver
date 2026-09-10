@@ -2,6 +2,7 @@
 name = "sdkwork-webserver-certificate-worker"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 
 [[bin]]
 name = "sdkwork-webserver-certificate-worker"
@@ -18,3 +19,6 @@ sdkwork-intelligence-webserver-repository-sqlx.workspace = true
 sdkwork-intelligence-webserver-service.workspace = true
 sdkwork-database-sqlx.workspace = true
 sdkwork-webserver-core.workspace = true
+
+[lints]
+workspace = true

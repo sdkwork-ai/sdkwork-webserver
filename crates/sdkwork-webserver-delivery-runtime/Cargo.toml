@@ -2,6 +2,10 @@
 name = "sdkwork-webserver-delivery-runtime"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "sdkwork_webserver_delivery_runtime"
 
 [dependencies]
 async-trait.workspace = true
@@ -20,3 +24,6 @@ tokio = { workspace = true, features = ["sync", "time"] }
 serde_json.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }
+
+[lints]
+workspace = true

@@ -36,6 +36,7 @@
       "web.servers.write",
       "web.servers.files.read",
       "web.servers.files.write",
+      "web.servers.files.deploy",
       "web.auditLogs.read"
     ]
   },
@@ -207,16 +208,48 @@
     }
   },
   "release": {
-    "currentVersion": "0.1.2",
+    "currentVersion": "0.1.4",
     "defaultChannel": "BETA",
     "latest": {
-      "BETA": "0.1.1"
+      "BETA": "0.1.4"
     },
     "notes": [
       {
-        "version": "0.1.1",
+        "version": "0.1.4",
         "channel": "BETA",
         "current": true,
+        "summary": "Full rebuild on WSL Ubuntu 22.04 with host-installed external PostgreSQL/Redis (no embedded containers); verified install/upgrade across all five environments.",
+        "packageIds": [
+          "linux-rhel-x64-standalone-server-rpm",
+          "linux-rhel-x64-standalone-test-server-rpm",
+          "linux-ubuntu-x64-standalone-server-deb",
+          "linux-ubuntu-x64-standalone-test-server-deb",
+          "linux-x64-standalone-server-tar-gz",
+          "linux-arm64-standalone-server-tar-gz"
+        ],
+        "forceUpdate": false,
+        "minSupportedVersion": "0.1.0"
+      },
+      {
+        "version": "0.1.2",
+        "channel": "BETA",
+        "current": false,
+        "summary": "Standards alignment hardening: platform-target database contract, app-api cursor pagination, edge exposure governance, deploy-class operation authorization, bounded usage metering, and timeout-hardened resolver cache.",
+        "packageIds": [
+          "linux-rhel-x64-standalone-server-rpm",
+          "linux-rhel-x64-standalone-test-server-rpm",
+          "linux-ubuntu-x64-standalone-server-deb",
+          "linux-ubuntu-x64-standalone-test-server-deb",
+          "linux-x64-standalone-server-tar-gz",
+          "linux-arm64-standalone-server-tar-gz"
+        ],
+        "forceUpdate": false,
+        "minSupportedVersion": "0.1.0"
+      },
+      {
+        "version": "0.1.1",
+        "channel": "BETA",
+        "current": false,
         "summary": "Standalone Docker three-environment alignment: external host-system PostgreSQL/Redis contract, webserver attach-contract override (gateway alias + container listener 8080) and complete per-environment env surface.",
         "packageIds": [
           "linux-rhel-x64-standalone-server-rpm",

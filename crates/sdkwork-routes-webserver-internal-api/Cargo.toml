@@ -2,6 +2,10 @@
 name = "sdkwork-routes-webserver-internal-api"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "sdkwork_routes_webserver_internal_api"
 
 [dependencies]
 axum.workspace = true
@@ -18,3 +22,6 @@ http-body-util.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tower.workspace = true
+
+[lints]
+workspace = true

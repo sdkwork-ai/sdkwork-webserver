@@ -218,6 +218,13 @@ impl UsageMeteringAggregator {
             tracing::warn!("usage metering bucket lock poisoned; dropping one request fact");
             return;
         };
+        // Bounded rejection: hostname is client influenceable input, so a new
+        // bucket beyond the configured cap drops the fact instead of growing
+        // memory without limit (PRD §8.1).
+        if !buckets.contains_key(&key) && buckets.len() >= self.config.max_buckets.max(1) {
+            self.dropped_windows.fetch_add(1, Ordering::Relaxed);
+            return;
+        }
         let counters = buckets.entry(key).or_default();
         counters.requests = counters.requests.saturating_add(1);
         counters.ingress_bytes = counters.ingress_bytes.saturating_add(request.ingress_bytes);
@@ -303,6 +310,15 @@ impl UsageMeteringAggregator {
                     return;
                 };
                 for (key, counters) in drained {
+                    // Re-merge under the same hard cap as `record`: existing
+                    // keys always merge back, new keys beyond the cap are
+                    // dropped (counted) so an extended ingest outage cannot
+                    // grow memory without bound.
+                    if !buckets.contains_key(&key)
+                        && buckets.len() >= self.config.max_buckets.max(1)
+                    {
+                        continue;
+                    }
                     let entry = buckets.entry(key).or_default();
                     entry.requests = entry.requests.saturating_add(counters.requests);
                     entry.ingress_bytes =
@@ -580,6 +596,7 @@ mod tests {
             window_seconds: 1,
             flush_interval_ms: 30_000,
             channel: sdkwork_webserver_core::config::UsageMeteringChannel::Embedded,
+            max_buckets: 65_536,
         })
     }
 
@@ -690,5 +707,39 @@ mod tests {
         assert_eq!(key, window.deduplication_key(USAGE_DIMENSION_REQUESTS));
         assert!(key.len() <= 200, "dedup key must fit the column: {key}");
         assert!(key.starts_with("traffic:2026-08-25T10:00:00Z:traffic.requests:"));
+    }
+
+    #[tokio::test]
+    async fn buckets_beyond_the_cap_are_rejected_not_grown() {
+        let config = Arc::new(UsageMeteringConfig {
+            enabled: true,
+            window_seconds: 1,
+            flush_interval_ms: 30_000,
+            channel: sdkwork_webserver_core::config::UsageMeteringChannel::Embedded,
+            max_buckets: 2,
+        });
+        let meter = UsageMeteringAggregator::new(
+            config,
+            Arc::new(FakeChannel {
+                ingested: std::sync::Mutex::new(Vec::new()),
+            }),
+            "node-1",
+        );
+        let attribution = UsageAttribution::default();
+        for hostname in ["a.test", "b.test", "c.test", "d.test"] {
+            meter.record(MeteredRequest {
+                hostname,
+                server_ip: std::net::IpAddr::from([10u8, 0, 0, 1]),
+                server_port: 8080,
+                listener_id: "http",
+                attribution: &attribution,
+                ingress_bytes: 1,
+                egress_bytes: 1,
+                status_class: "2xx",
+            });
+        }
+        assert_eq!(meter.dropped_windows(), 2, "two hostnames beyond the cap");
+        let live_buckets = meter.buckets.lock().unwrap().len();
+        assert_eq!(live_buckets, 2);
     }
 }

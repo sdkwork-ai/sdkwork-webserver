@@ -1,10 +1,8 @@
 //! Bounded in-memory cache store with LRU eviction.
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-    time::Instant,
-};
+use std::sync::Mutex;
+
+use hashlink::LinkedHashMap;
 
 use super::entry::CachedResponse;
 
@@ -17,29 +15,23 @@ pub(crate) trait CacheBackend: Send + Sync {
     fn remove(&self, key: &super::key::CacheKey);
 }
 
-struct LruEntry {
-    key: super::key::CacheKey,
-    value: CachedResponse,
-    last_used: Instant,
-}
-
-/// In-memory LRU store with a bounded entry count.
+/// In-memory LRU store with a bounded entry count. The linked map keeps
+/// entries in recency order, so lookup, insert, and eviction are all O(1)
+/// under the mutex (no scans, no index rebuilds).
 pub(crate) struct MemoryCacheBackend {
     inner: Mutex<Inner>,
     maximum_entries: usize,
 }
 
 struct Inner {
-    entries: HashMap<super::key::CacheKey, usize>,
-    order: Vec<LruEntry>,
+    entries: LinkedHashMap<super::key::CacheKey, CachedResponse>,
 }
 
 impl MemoryCacheBackend {
     pub fn new(maximum_entries: usize) -> Self {
         Self {
             inner: Mutex::new(Inner {
-                entries: HashMap::new(),
-                order: Vec::new(),
+                entries: LinkedHashMap::new(),
             }),
             maximum_entries: maximum_entries.max(1),
         }
@@ -52,10 +44,11 @@ impl CacheBackend for MemoryCacheBackend {
             .inner
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let index = *inner.entries.get(key)?;
-        let entry = &mut inner.order[index];
-        entry.last_used = Instant::now();
-        Some(entry.value.clone())
+        // LRU touch: remove+reinsert moves the entry to the most recently
+        // used end in O(1).
+        let value = inner.entries.remove(key)?;
+        inner.entries.insert(key.clone(), value.clone());
+        Some(value)
     }
 
     fn insert(&self, key: super::key::CacheKey, entry: CachedResponse) {
@@ -63,58 +56,19 @@ impl CacheBackend for MemoryCacheBackend {
             .inner
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if let Some(&index) = inner.entries.get(&key) {
-            inner.order[index].value = entry;
-            inner.order[index].last_used = Instant::now();
-            return;
+        if inner.entries.len() >= self.maximum_entries && !inner.entries.contains_key(&key) {
+            // Evict the least recently used entry (front of the map).
+            inner.entries.pop_front();
         }
-        if inner.order.len() >= self.maximum_entries {
-            // Evict the least recently used entry.
-            let victim = inner
-                .order
-                .iter()
-                .enumerate()
-                .min_by_key(|(_, entry)| entry.last_used)
-                .map(|(index, _)| index)
-                .expect("non-empty order when at capacity");
-            let victim_key = inner.order[victim].key.clone();
-            inner.entries.remove(&victim_key);
-            inner.order.swap_remove(victim);
-            // Fix up indices shifted by swap_remove.
-            let keys = inner
-                .order
-                .iter()
-                .map(|entry| entry.key.clone())
-                .collect::<Vec<_>>();
-            for (index, key) in keys.into_iter().enumerate() {
-                inner.entries.insert(key, index);
-            }
-        }
-        let index = inner.order.len();
-        inner.order.push(LruEntry {
-            key: key.clone(),
-            value: entry,
-            last_used: Instant::now(),
-        });
-        inner.entries.insert(key, index);
+        inner.entries.insert(key, entry);
     }
 
     fn remove(&self, key: &super::key::CacheKey) {
-        let mut inner = self
-            .inner
+        self.inner
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if let Some(index) = inner.entries.remove(key) {
-            inner.order.swap_remove(index);
-            let keys = inner
-                .order
-                .iter()
-                .map(|entry| entry.key.clone())
-                .collect::<Vec<_>>();
-            for (index, key) in keys.into_iter().enumerate() {
-                inner.entries.insert(key, index);
-            }
-        }
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .entries
+            .remove(key);
     }
 }
 
@@ -123,12 +77,61 @@ impl MemoryCacheBackend {
         self.inner
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .order
+            .entries
             .len()
     }
 }
 
-/// Test seam: construct an in-memory backend directly.
-pub(crate) fn memory_backend(maximum_entries: usize) -> Arc<MemoryCacheBackend> {
-    Arc::new(MemoryCacheBackend::new(maximum_entries))
+#[cfg(test)]
+mod tests {
+    use super::super::entry::ResponseMetadata;
+    use axum::http::HeaderMap;
+    use bytes::Bytes;
+    use std::time::Duration;
+
+    use super::*;
+
+    fn cache_key(id: u8) -> super::super::key::CacheKey {
+        super::super::key::CacheKey::new(
+            "GET",
+            "example.com",
+            &format!("/{id}"),
+            None,
+            &[],
+            &HeaderMap::new(),
+        )
+    }
+
+    fn cache_entry(status: u16) -> CachedResponse {
+        CachedResponse::new(
+            ResponseMetadata {
+                status,
+                headers: Vec::new(),
+                vary: Vec::new(),
+                fresh_seconds: 60,
+            },
+            Bytes::from_static(b"body"),
+            Duration::from_secs(60),
+            Duration::from_secs(60),
+        )
+    }
+
+    #[test]
+    fn lru_eviction_is_bounded_and_keeps_recent_entries() {
+        let backend = MemoryCacheBackend::new(2);
+        backend.insert(cache_key(1), cache_entry(200));
+        backend.insert(cache_key(2), cache_entry(200));
+        // Touch key 1 so key 2 becomes the least recently used entry.
+        assert!(backend.get(&cache_key(1)).is_some());
+        backend.insert(cache_key(3), cache_entry(200));
+        assert_eq!(backend.entry_count(), 2);
+        assert!(
+            backend.get(&cache_key(2)).is_none(),
+            "LRU victim must be evicted"
+        );
+        assert!(backend.get(&cache_key(1)).is_some());
+        assert!(backend.get(&cache_key(3)).is_some());
+        backend.remove(&cache_key(1));
+        assert!(backend.get(&cache_key(1)).is_none());
+    }
 }

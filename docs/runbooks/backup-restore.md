@@ -1,6 +1,12 @@
 # 备份与恢复 Runbook（sdkwork-webserver）
 
 规范：OPERATIONS_SPEC.md §5（RPO：生产 24h + 每次升级前；RTO：生产 4h）。
+
+> **与 PRD §8.2 目标的差距（如实声明）**：PRD 要求数据库恢复目标
+> RPO ≤ 5 分钟、RTO ≤ 15 分钟。当前已实现能力为"每日 pg_dump + 升级前备份 +
+> 已验证的恢复演练"（RPO ≈ 24h，RTO ≈ 4h）。要达成 PRD 目标需启用
+> WAL 流复制与物理基线备份（REQ-2026-0051 已验证该路径），并接入告警。
+> 在此之前，不要在对外承诺中引用 PRD 恢复目标。
 备份集生成在目标机 `/opt/deploy/sdkwork-webserver/backups/`，包含：配置（env 链）、
 数据库（pg_dump 自定义格式）、卷（可选）、manifest.json + 每组件 `.sha256`。
 
