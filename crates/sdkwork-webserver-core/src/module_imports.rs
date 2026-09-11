@@ -210,22 +210,26 @@ fn lifecycle_environment_dist_alias(environment: &str) -> Option<&'static str> {
 /// Environment-scoped sibling of a declared Adaptive Web package root:
 /// `<base>/<module>/web/<surface>` -> `<base>/<module>/web/<alias>/<surface>`.
 ///
+/// The `<module>` segment is **never interpreted**: the plan is derived from
+/// the declared root alone, so it stays correct for whatever path segment a
+/// module uses under `<base>` — the Adaptive Web runtime code (`im`), not the
+/// repository directory id (`sdkwork-im`). Kept in step with the entrypoint's
+/// `module_env_web_static_root` (`bin/container/entrypoint-standalone.sh`),
+/// which inserts `<alias>/` before the last segment in exactly the same way.
+///
 /// `None` when the declared root is not an Adaptive Web package root, or when
 /// the environment-scoped root has not been materialized — a
 /// single-environment deployment therefore keeps serving the declared root
 /// exactly as before.
-fn environment_scoped_adaptive_root(declared: &str, module: &str, alias: &str) -> Option<String> {
-    let base = std::env::var("SDKWORK_WEBSERVER_MODULE_WEB_ROOT")
-        .ok()
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "/usr/share/sdkwork".to_owned());
-    let prefix = format!("{}/{module}/web/", base.trim_end_matches('/'));
-    let surface = declared.trim().strip_prefix(&prefix)?;
-    if surface.is_empty() || surface.contains('/') {
+fn environment_scoped_adaptive_root(declared: &str, alias: &str) -> Option<String> {
+    let trimmed = declared.trim().trim_end_matches('/');
+    let (parent, surface) = trimmed.rsplit_once('/')?;
+    // Adaptive Web package roots only (SDKWORK_DEPLOY_SPEC.md §8.1):
+    // `<base>/<module>/web/{pc,h5}`. Everything else keeps its declared root.
+    if !matches!(surface, "pc" | "h5") || !parent.ends_with("/web") {
         return None;
     }
-    let candidate = format!("{prefix}{alias}/{surface}");
+    let candidate = format!("{parent}/{alias}/{surface}");
     Path::new(&candidate).exists().then_some(candidate)
 }
 
@@ -245,9 +249,6 @@ fn apply_environment_scoped_adaptive_roots(app: &mut WebServerAppConfig, sidecar
     let Some((_profile, environment)) = sidecar_profile_environment(sidecar) else {
         return;
     };
-    let Some(module) = module_dir_id_from_nginx_sidecar(sidecar) else {
-        return;
-    };
     let Some(alias) = lifecycle_environment_dist_alias(environment) else {
         return;
     };
@@ -255,12 +256,12 @@ fn apply_environment_scoped_adaptive_roots(app: &mut WebServerAppConfig, sidecar
         let ResourceConfig::Static { root, h5_root, .. } = resource else {
             continue;
         };
-        if let Some(scoped) = environment_scoped_adaptive_root(root, &module, alias) {
+        if let Some(scoped) = environment_scoped_adaptive_root(root, alias) {
             *root = scoped;
         }
         let declared_h5 = h5_root.clone();
         if let Some(scoped) =
-            declared_h5.and_then(|value| environment_scoped_adaptive_root(&value, &module, alias))
+            declared_h5.and_then(|value| environment_scoped_adaptive_root(&value, alias))
         {
             *h5_root = Some(scoped);
         }
@@ -763,5 +764,44 @@ mod tests {
         assert_eq!(imports.len(), 1);
         assert_eq!(imports[0].id, "im-example");
         std::env::remove_var(MODULE_IMPORTS_ENV);
+    }
+
+    /// The environment-scoped root plan must be derived from the declared root
+    /// alone: the path segment under the web base is the module's Adaptive Web
+    /// runtime code (`im`), never the repository directory id (`sdkwork-im`).
+    /// Re-introducing a module-id prefix silently disables per-environment
+    /// static resolution, so pin the plan and the refusals here.
+    #[test]
+    fn environment_scoped_adaptive_root_follows_the_declared_root_segment() {
+        let base = std::env::temp_dir().join(format!(
+            "sdkwork-adaptive-root-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let staging_pc = base.join("im/web/staging/pc");
+        std::fs::create_dir_all(&staging_pc).expect("materialize staging pc root");
+
+        let declared = format!("{}/im/web/pc", base.display());
+        let scoped = environment_scoped_adaptive_root(&declared, "staging");
+        assert_eq!(scoped.as_deref(), Some(staging_pc.to_string_lossy().as_ref()));
+
+        // Not materialized for this environment -> keep the declared root.
+        assert!(environment_scoped_adaptive_root(&declared, "production").is_none());
+        // Trailing slashes are tolerated.
+        assert_eq!(
+            environment_scoped_adaptive_root(&format!("{declared}/"), "staging").as_deref(),
+            Some(staging_pc.to_string_lossy().as_ref())
+        );
+        // Non-Adaptive-Web roots are never rewritten.
+        assert!(
+            environment_scoped_adaptive_root(&format!("{}/im/static", base.display()), "staging")
+                .is_none()
+        );
+        assert!(
+            environment_scoped_adaptive_root(&format!("{}/im/web/pc/app", base.display()), "staging")
+                .is_none()
+        );
+
+        let _ = std::fs::remove_dir_all(&base);
     }
 }
