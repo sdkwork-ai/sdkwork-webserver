@@ -587,6 +587,19 @@ module_webserver_enabled() {
   return 0
 }
 
+# A directory is only an importable fleet module when it is a governed SDKWork
+# repository: the checkout root also accumulates stale leftovers from previous
+# deploy layouts, and one of those (`sdkwork-env-dispatch`, the pre-universal
+# import plane cut-over edge) carried a server.common.toml whose single
+# development sidecar re-declared the whole fleet matrix — enough to fail
+# merged-config validation with duplicate server-name diagnostics and
+# crash-loop the data plane. AGENTS.md is the fleet enumeration marker
+# (SDKWORK_WORKSPACE_SPEC); a directory without it is not a commissioned repo.
+module_is_governed_repo() {
+  local module_dir="$1"
+  [ -f "${module_dir}/AGENTS.md" ]
+}
+
 discover_importable_modules() {
   local checkout discovered="" module_dir module_id auto_discover
   # Standard behavior (SDKWORK_WEBSERVER_SPEC.md §17): auto-import every
@@ -608,6 +621,10 @@ discover_importable_modules() {
         case "${module_id}" in
           sdkwork-webserver) continue ;;
         esac
+        if ! module_is_governed_repo "${module_dir}"; then
+          log "skipping non-governed path ${module_dir} (no AGENTS.md; not a fleet module)"
+          continue
+        fi
         if module_webserver_enabled "${module_dir}"; then
           discovered="${discovered:+$discovered,}${module_id}"
         fi
