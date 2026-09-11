@@ -121,10 +121,21 @@ sdkwork_module_config_validate() {
 # ----------------------------------------------------------------------------
 sdkwork_image_build() {
   local ref="$1" tag="$2"
-  # pnpm forwards trailing arguments to the underlying script. Do NOT use a
-  # '--' separator: this pnpm version passes a literal '--' through and the
-  # build script rejects it.
-  sdkwork_local_run pnpm build:container:standalone --tag "${tag}"
+  # Delegates to the repository's canonical container build (MODULE_BIN_SPEC.md
+  # §4.1). Invoked through `node` rather than `pnpm run`: this workspace is
+  # routinely operated straight from the DrvFs checkout (/mnt/e), where the
+  # Windows-installed node_modules records a Windows storeDir in
+  # node_modules/.modules.yaml and pnpm aborts with "disk I/O error" on the 9p
+  # mount. package.json build:container:standalone is exactly this invocation,
+  # so the canonical build stays single-sourced.
+  local args=(node scripts/docker/build-standalone-image.mjs --tag "${tag}")
+  # Registry-unreachable host (no daemon proxy): `docker build --pull` cannot
+  # refresh base-image metadata and dies on TLS timeouts — reuse the cached base
+  # image instead.
+  if [[ "${SDKWORK_IMAGE_NO_PULL:-0}" == "1" ]]; then args+=(--no-pull); fi
+  # Reuse an already produced release archive instead of repackaging it.
+  if [[ "${SDKWORK_IMAGE_SKIP_RELEASE_BUILD:-0}" == "1" ]]; then args+=(--skip-release-build); fi
+  sdkwork_local_run "${args[@]}"
 }
 
 # ----------------------------------------------------------------------------
@@ -141,6 +152,10 @@ sdkwork_build_app() {
                   --architecture "${app_type}"
                   --environment "${alias}")
       if [[ "${profile}" == "cloud" ]]; then args+=(--deployment-profile cloud); fi
+      # ENVIRONMENT_SPEC.md sanctions --skip-typecheck for workspace-wide
+      # dependency debt: the typecheck walks sibling checkouts (sdkwork-iam,
+      # sdkwork-skills, …) whose TS errors are not owned by this module.
+      if [[ "${SDKWORK_BROWSER_SKIP_TYPECHECK:-0}" == "1" ]]; then args+=(--skip-typecheck); fi
       sdkwork_local_run "${args[@]}" ;;
     server)
       sdkwork_local_run cargo build --release ;;

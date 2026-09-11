@@ -27,10 +27,10 @@ ensure_host_redis() {
 
   local redis_conf="/etc/redis/redis.conf"
   # Ensure no password and listen on all interfaces for host.docker.internal access.
-  sed -i 's/^# requirepass .*/requirepass ""/' "${redis_conf}" 2>/dev/null || true
-  sed -i 's/^requirepass .*/requirepass ""/' "${redis_conf}" 2>/dev/null || true
-  sed -i 's/^bind 127.0.0.1 .*/bind 0.0.0.0 ::1/' "${redis_conf}" 2>/dev/null || true
-  sed -i 's/^protected-mode yes/protected-mode no/' "${redis_conf}" 2>/dev/null || true
+  sed -i 's/^# requirepass .*/requirepass ""/' "${redis_conf}" 2>/dev/null || true # PORTABILITY:target-linux
+  sed -i 's/^requirepass .*/requirepass ""/' "${redis_conf}" 2>/dev/null || true # PORTABILITY:target-linux
+  sed -i 's/^bind 127.0.0.1 .*/bind 0.0.0.0 ::1/' "${redis_conf}" 2>/dev/null || true # PORTABILITY:target-linux
+  sed -i 's/^protected-mode yes/protected-mode no/' "${redis_conf}" 2>/dev/null || true # PORTABILITY:target-linux
 
   systemctl enable redis-server
   systemctl restart redis-server

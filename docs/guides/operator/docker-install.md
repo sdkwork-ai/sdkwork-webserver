@@ -12,11 +12,10 @@
 ### 场景 A：拿到安装 bundle 的全新 Ubuntu/WSL Docker 主机（最快路径）
 
 ```bash
-tar -xzf sdkwork-webserver-install-<version>.bundle.tar.gz
-cd sdkwork-webserver-install-<version>.bundle
-$EDITOR env/<environment>.env        # 填密码；端口/域名已有安全默认
-bash deploy.sh --environment <environment> [--replicas N]
+bin/docker-deploy.sh install --environment <environment> [--host ssh://[user@]host] [--replicas N]
 ```
+
+bin/ 会完成 bundle 同步、sha256 校验、镜像加载与健康门禁；bundle 内执行器由 bin/ 调用，无需手动执行任何脚本。
 
 ### 场景 B：仓库内开发/运维机（bin/ 标准入口）
 
@@ -54,7 +53,7 @@ bin/docker-deploy.sh install --environment <env> --host ssh://[user@]host[:port]
 | Drive 缓存 | `/opt/deploy/drive`（`SDKWORK_DRIVE_WEBSITE_CACHE_ROOT`） |
 | 证书目录 | `/etc/sdkwork/certs/letsencrypt/<cert-name>/`（TLS 环境级） |
 
-外部依赖是**默认模式**（`DEPLOYMENT_SPEC.md` §6.1）；嵌入式 postgres/redis 容器仅作显式 opt-in（`deploy.sh --embedded`）。旧的 `15432` 端口已退役，任何文档/脚本不得再引用。
+外部依赖是**默认模式**（`DEPLOYMENT_SPEC.md` §6.1）；嵌入式 postgres/redis 容器仅作显式 opt-in（`bin/docker-deploy.sh install --environment <env> --deps embedded`）。旧的 `15432` 端口已退役，任何文档/脚本不得再引用。
 
 ## 3. 五环境矩阵
 
@@ -116,7 +115,7 @@ bin/docker-image.sh build --image-tag <version>                    # 全环境�
 bin/docker-deploy.sh install  --environment development            # 本机 WSL（幂等）
 bin/docker-deploy.sh install  --environment development --host ssh://ops@10.0.0.8
 bin/docker-deploy.sh upgrade  --environment development --image-tag <new-version>
-bin/docker-deploy.sh rollback --environment development            # 无 release.sh → 幂等重装当前 bundle
+bin/docker-deploy.sh rollback --environment development            # 无发布台账 → 幂等重装当前 bundle
 bin/docker-deploy.sh status   --environment development
 bin/docker-deploy.sh logs     --environment development
 bin/docker-deploy.sh down     --environment development
@@ -141,7 +140,7 @@ bin/docker-image.sh build --image-tag <version>
 bin/docker-deploy.sh install  --environment test
 bin/docker-deploy.sh install  --environment test --host ssh://ops@10.0.0.8
 bin/docker-deploy.sh upgrade  --environment test --image-tag <new-version>
-bin/docker-deploy.sh rollback --environment test                   # 无 release.sh → 幂等重装当前 bundle
+bin/docker-deploy.sh rollback --environment test                   # 无发布台账 → 幂等重装当前 bundle
 bin/docker-deploy.sh status   --environment test
 bin/docker-deploy.sh logs     --environment test
 bin/docker-deploy.sh down     --environment test
@@ -166,7 +165,7 @@ bin/docker-image.sh build --image-tag <version>
 bin/docker-deploy.sh install  --environment staging
 bin/docker-deploy.sh install  --environment staging --host ssh://ops@10.0.0.8
 bin/docker-deploy.sh upgrade  --environment staging --image-tag <new-version>
-bin/docker-deploy.sh rollback --environment staging                # 无 release.sh → 幂等重装当前 bundle
+bin/docker-deploy.sh rollback --environment staging                # 无发布台账 → 幂等重装当前 bundle
 bin/docker-deploy.sh status   --environment staging
 bin/docker-deploy.sh logs     --environment staging
 bin/docker-deploy.sh down     --environment staging
@@ -191,7 +190,7 @@ bin/docker-image.sh build --image-tag <version>
 bin/docker-deploy.sh install  --environment demo
 bin/docker-deploy.sh install  --environment demo --host ssh://ops@10.0.0.8
 bin/docker-deploy.sh upgrade  --environment demo --image-tag <new-version>
-bin/docker-deploy.sh rollback --environment demo                   # 无 release.sh → 幂等重装当前 bundle
+bin/docker-deploy.sh rollback --environment demo                   # 无发布台账 → 幂等重装当前 bundle
 bin/docker-deploy.sh status   --environment demo
 bin/docker-deploy.sh logs     --environment demo
 bin/docker-deploy.sh down     --environment demo
@@ -219,7 +218,7 @@ bin/docker-image.sh build --image-tag <version>
 bin/docker-deploy.sh install  --environment production --yes
 bin/docker-deploy.sh install  --environment production --yes --host ssh://ops@10.0.0.8
 bin/docker-deploy.sh upgrade  --environment production --yes --image-tag <new-version>
-bin/docker-deploy.sh rollback --environment production --yes       # 无 release.sh → 幂等重装当前 bundle
+bin/docker-deploy.sh rollback --environment production --yes       # 无发布台账 → 幂等重装当前 bundle
 bin/docker-deploy.sh status   --environment production             # 只读，不需要 --yes
 bin/docker-deploy.sh logs     --environment production             # 只读，不需要 --yes
 bin/docker-deploy.sh down     --environment production
@@ -245,14 +244,14 @@ bin/docker-deploy.sh install --environment demo --replicas 3
 bin/docker-deploy.sh install --environment demo --deps external     # 默认
 bin/docker-deploy.sh install --environment demo --deps embedded
 
-# 回滚到指定版本（webserver bundle 不带 release.sh，用 upgrade 指定旧 tag）
+# 回滚到指定版本（webserver bundle 不带发布台账，用 upgrade 指定旧 tag）
 bin/docker-deploy.sh upgrade --environment demo --image-tag 0.1.0
 ```
 
 > **回滚语义**：`sdkwork-webserver` 的安装 bundle 只含 `deploy.sh`，不含
-> `release.sh`，因此 `rollback` 会告警并退化为「幂等重装当前 bundle」。
+> 发布台账，因此 `rollback` 会告警并退化为「幂等重装当前 bundle」。
 > 要回退到某个具体版本，用 `upgrade --image-tag <旧版本>`。
-> （`sdkwork-api-cloud-gateway` 的 bundle 带 `release.sh`，`rollback --to <version>`
+> （`sdkwork-api-cloud-gateway` 的 bundle 带发布台账，`rollback --to <version>`
 > 在那里才有效。）
 
 ## 6. 离线安装（bundle 直装）
@@ -260,14 +259,12 @@ bin/docker-deploy.sh upgrade --environment demo --image-tag 0.1.0
 无外网/无仓库检查环境使用发布产物：
 
 ```bash
-tar -xzf sdkwork-webserver-install-<version>.bundle.tar.gz
-cd sdkwork-webserver-install-<version>.bundle
-docker load -i image.tar.gz            # 或 docker pull 规范引用
-$EDITOR env/<environment>.env          # 填写密码；端口/域名已有安全默认
-bash deploy.sh --environment <environment> [--replicas N]
+bin/docker-image.sh save -o dist/image.tar.gz               # 产出镜像 tar.gz + sha256（无外网时离线携带）
+bin/docker-image.sh load  -i dist/image.tar.gz              # 目标机侧导入镜像
+bin/docker-deploy.sh install --environment <environment> [--host ssh://[user@]host] [--replicas N]
 ```
 
-bundle 内容契约（`deploy.sh`、`image.env`、五环境 env 矩阵、compose、sha256）见 `DOCKER_SPEC.md` §4。
+bundle 内容契约（内置执行器、`image.env`、五环境 env 矩阵、compose、sha256）见 `DOCKER_SPEC.md` §4。
 
 ## 7. import 模式（启动时选择）
 

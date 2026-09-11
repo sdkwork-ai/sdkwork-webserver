@@ -14,9 +14,56 @@ identity and delegation.
 | `apps-package.sh` | package surfaces into `target/bin-packages/` (+ sidecar `.sha256`) |
 | `apps-deploy.sh` | deploy packaged apps to WSL Ubuntu / remote Ubuntu |
 | `apps-pkg-installer.sh` | package native OS installers (`server` + `linux` → `.deb`/`.rpm` via `webserver-deb.mjs` / `webserver-rpm.mjs`) into `target/bin-installers/` (+ sidecar `.sha256`) |
+| `build-apps-static.sh` | build PC/H5 static dist for **any sibling workspace module** (`sdkwork-im`, `sdkwork-community`, …) via the canonical browser runner; implementation in `bin/lib/apps-static.sh` |
+| `deploy-apps-static.sh` | build + package (tar.gz+sha256) + publish static dist to a target host (`wsl` / `ssh://…`), with extraction, integrity verification, atomic `current` switch and quick rollback; implementation in `bin/lib/apps-static-deploy.sh` |
 
 Declared app types: `pc,h5,server`. Default image tag comes from
 `sdkwork.app.config.json` → `release.currentVersion`.
+
+## Sibling-module static builds (`build-apps-static.sh`)
+
+Build the Adaptive Web static dist (PC / H5) of an independent sibling module
+directly from this bin/ directory — the build always delegates to the
+canonical runner (`sdkwork-specs/tools/build-browser-client.mjs`,
+PNPM_SCRIPT_SPEC.md §4.2), so env materialization and the
+`dist/<profile>/<envAlias>` layout match every other browser build:
+
+```sh
+bin/build-apps-static.sh --list                       # which modules own buildable pc/h5 apps
+bin/build-apps-static.sh im                           # sdkwork-im, pc + h5, dev:standalone
+bin/build-apps-static.sh sdkwork-im h5 prod           # h5 only, production standalone
+bin/build-apps-static.sh im all test:cloud            # both archs, cloud profile
+bin/build-apps-static.sh im --skip-typecheck          # fast iteration build (no vue-tsc)
+bin/build-apps-static.sh im --out target/static --tar # copy dist + tar.gz (+ .sha256)
+bin/build-apps-static.sh im --clean --dry-run         # plan only
+```
+
+Output lands in `<module>/apps/<app>/dist/<profile>/<envAlias>/`; `--out`
+copies it to a self-describing folder
+(`<module>-<arch>-<profile>-<env>/`). Module names accept the short form
+(`im` → `sdkwork-im`).
+
+## Static publish + rollback (`deploy-apps-static.sh`)
+
+End-to-end: build (or `--no-build`) → `tar.gz` + sidecar `.sha256` → upload
+to the target → `sha256sum -c` on the target → extract into an immutable
+`releases/<UTC-timestamp>/` → prune (`--keep`, default 5) → atomic
+`current` symlink switch. Target layout:
+`<target-root>/<module>-<arch>-<profile>-<env>/{releases,current,incoming}`
+(default root `/opt/deploy/sdkwork-static-apps`).
+
+```sh
+bin/deploy-apps-static.sh im h5 test --host wsl                     # build + publish (local WSL)
+bin/deploy-apps-static.sh im all prod --host ssh://ops@10.0.0.8 --yes   # remote host
+bin/deploy-apps-static.sh im h5 test --host wsl --no-build --keep 3     # reuse dist, tighter retention
+bin/deploy-apps-static.sh im h5 prod status --host ssh://ops@10.0.0.8   # current + release list
+bin/deploy-apps-static.sh im h5 prod rollback --host ssh://ops@10.0.0.8 --yes        # one step back
+bin/deploy-apps-static.sh im h5 prod rollback --to 20260910T071500Z --host wsl --yes # pin a release
+```
+
+`rollback` re-points `current` with `ln -sfn` (atomic); production deploys
+and rollbacks require `--yes`. Every run appends an evidence line to
+`target/bin-evidence/evidence.log`.
 
 ## Container path (every environment)
 

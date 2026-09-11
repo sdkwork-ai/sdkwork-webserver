@@ -133,8 +133,9 @@ nginx-compat commands:
 /usr/lib/sdkwork/webserver/bin/sdkwork-api-webserver-standalone-gateway serve-nginx /etc/nginx/sites-enabled/sdkwork
 ```
 
-Docker WSL site helper (maps **Docker host ports**, not native deb bind):
-`deployments/docker/scripts/install-wsl-nginx.sh`.
+Docker WSL site helper (**retired** — host nginx is replaced by the
+sdkwork-webserver Docker `serve-imports` data plane; the script now only
+uninstalls nginx): `deployments/docker/scripts/uninstall-wsl-nginx.sh`.
 
 Native Adaptive Web edge helper (maps to process bind from `config.toml`):
 `.sdkwork/wsl-point-server-sites-to-gateway.sh`.

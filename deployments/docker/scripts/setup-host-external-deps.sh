@@ -79,7 +79,7 @@ ensure_pg_listen_addresses() {
   fi
 
   if grep -qE "^[[:space:]]*#?[[:space:]]*listen_addresses[[:space:]=]" "${pgconf}"; then
-    sed -i -E "s|^[[:space:]]*#?[[:space:]]*listen_addresses[[:space:]=]+.*|listen_addresses = '*'|" "${pgconf}"
+    sed -i -E "s|^[[:space:]]*#?[[:space:]]*listen_addresses[[:space:]=]+.*|listen_addresses = '*'|" "${pgconf}" # PORTABILITY:target-linux
   else
     echo "listen_addresses = '*'" >> "${pgconf}"
   fi

@@ -87,10 +87,11 @@ require_root() {
 remove_legacy_block() {
   if grep -q "${MARKER}" "${HOSTS_FILE}"; then
     # Drop previous marker block (including retired server*/testserver* names).
-    sed -i "/${MARKER}/,/^\$/d" "${HOSTS_FILE}" || true
-    sed -i "/${MARKER}/d" "${HOSTS_FILE}" || true
+    sed -i "/${MARKER}/,/^\$/d" "${HOSTS_FILE}" || true # PORTABILITY:target-linux
+    sed -i "/${MARKER}/d" "${HOSTS_FILE}" || true # PORTABILITY:target-linux
   fi
   # Best-effort cleanup of retired nicknames if left outside the marker block.
+  # PORTABILITY:target-linux — this script edits the WSL host's /etc/hosts.
   sed -i \
     -e '/[[:space:]]server-dev\.sdkwork\.com$/d' \
     -e '/[[:space:]]server-test\.sdkwork\.com$/d' \
@@ -108,7 +109,7 @@ remove_legacy_block() {
 main() {
   require_root
   remove_legacy_block
-  mapfile -t DOMAINS < <(collect_domains | sed '/^$/d' | sort -u)
+  mapfile -t DOMAINS < <(collect_domains | sed '/^$/d' | sort -u) # PORTABILITY:target-linux
   {
     echo ""
     echo "${MARKER}"

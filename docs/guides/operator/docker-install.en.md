@@ -12,11 +12,11 @@
 ### Scenario A — brand-new Ubuntu/WSL Docker host with an install bundle (fastest)
 
 ```bash
-tar -xzf sdkwork-webserver-install-<version>.bundle.tar.gz
-cd sdkwork-webserver-install-<version>.bundle
-$EDITOR env/<environment>.env        # fill secrets; ports/domains have safe defaults
-bash deploy.sh --environment <environment> [--replicas N]
+bin/docker-deploy.sh install --environment <environment> [--host ssh://[user@]host] [--replicas N]
 ```
+
+bin/ handles bundle sync, sha256 verification, image loading and the health gate; the
+in-bundle executor is invoked by bin/ — never run scripts by hand.
 
 ### Scenario B — dev/operator workstation with the repo checkout (bin/ entrypoints)
 
@@ -54,7 +54,7 @@ bin/docker-deploy.sh install --environment <env> --host ssh://[user@]host[:port]
 | Drive cache | `/opt/deploy/drive` (`SDKWORK_DRIVE_WEBSITE_CACHE_ROOT`) |
 | Certificate directory | `/etc/sdkwork/certs/letsencrypt/<cert-name>/` (TLS environments) |
 
-External dependencies are the **default mode** (`DEPLOYMENT_SPEC.md` §6.1); embedded postgres/redis containers are an explicit opt-in only (`deploy.sh --embedded`). The retired `15432` port must not appear in any document or script.
+External dependencies are the **default mode** (`DEPLOYMENT_SPEC.md` §6.1); embedded postgres/redis containers are an explicit opt-in only (`bin/docker-deploy.sh install --environment <env> --deps embedded`). The retired `15432` port must not appear in any document or script.
 
 ## 3. Five-Environment Matrix
 
@@ -117,7 +117,7 @@ bin/docker-image.sh build --image-tag <version>                    # shared by a
 bin/docker-deploy.sh install  --environment development            # local WSL (idempotent)
 bin/docker-deploy.sh install  --environment development --host ssh://ops@10.0.0.8
 bin/docker-deploy.sh upgrade  --environment development --image-tag <new-version>
-bin/docker-deploy.sh rollback --environment development            # no release.sh → idempotent re-install of the current bundle
+bin/docker-deploy.sh rollback --environment development            # no release ledger → idempotent re-install of the current bundle
 bin/docker-deploy.sh status   --environment development
 bin/docker-deploy.sh logs     --environment development
 bin/docker-deploy.sh down     --environment development
@@ -142,7 +142,7 @@ bin/docker-image.sh build --image-tag <version>
 bin/docker-deploy.sh install  --environment test
 bin/docker-deploy.sh install  --environment test --host ssh://ops@10.0.0.8
 bin/docker-deploy.sh upgrade  --environment test --image-tag <new-version>
-bin/docker-deploy.sh rollback --environment test                   # no release.sh → idempotent re-install of the current bundle
+bin/docker-deploy.sh rollback --environment test                   # no release ledger → idempotent re-install of the current bundle
 bin/docker-deploy.sh status   --environment test
 bin/docker-deploy.sh logs     --environment test
 bin/docker-deploy.sh down     --environment test
@@ -167,7 +167,7 @@ bin/docker-image.sh build --image-tag <version>
 bin/docker-deploy.sh install  --environment staging
 bin/docker-deploy.sh install  --environment staging --host ssh://ops@10.0.0.8
 bin/docker-deploy.sh upgrade  --environment staging --image-tag <new-version>
-bin/docker-deploy.sh rollback --environment staging                # no release.sh → idempotent re-install of the current bundle
+bin/docker-deploy.sh rollback --environment staging                # no release ledger → idempotent re-install of the current bundle
 bin/docker-deploy.sh status   --environment staging
 bin/docker-deploy.sh logs     --environment staging
 bin/docker-deploy.sh down     --environment staging
@@ -192,7 +192,7 @@ bin/docker-image.sh build --image-tag <version>
 bin/docker-deploy.sh install  --environment demo
 bin/docker-deploy.sh install  --environment demo --host ssh://ops@10.0.0.8
 bin/docker-deploy.sh upgrade  --environment demo --image-tag <new-version>
-bin/docker-deploy.sh rollback --environment demo                   # no release.sh → idempotent re-install of the current bundle
+bin/docker-deploy.sh rollback --environment demo                   # no release ledger → idempotent re-install of the current bundle
 bin/docker-deploy.sh status   --environment demo
 bin/docker-deploy.sh logs     --environment demo
 bin/docker-deploy.sh down     --environment demo
@@ -220,7 +220,7 @@ bin/docker-image.sh build --image-tag <version>
 bin/docker-deploy.sh install  --environment production --yes
 bin/docker-deploy.sh install  --environment production --yes --host ssh://ops@10.0.0.8
 bin/docker-deploy.sh upgrade  --environment production --yes --image-tag <new-version>
-bin/docker-deploy.sh rollback --environment production --yes       # no release.sh → idempotent re-install of the current bundle
+bin/docker-deploy.sh rollback --environment production --yes       # no release ledger → idempotent re-install of the current bundle
 bin/docker-deploy.sh status   --environment production             # read-only, no --yes needed
 bin/docker-deploy.sh logs     --environment production             # read-only, no --yes needed
 bin/docker-deploy.sh down     --environment production
@@ -246,15 +246,15 @@ bin/docker-deploy.sh install --environment demo --replicas 3
 bin/docker-deploy.sh install --environment demo --deps external     # default
 bin/docker-deploy.sh install --environment demo --deps embedded
 
-# Roll back to a specific version (the webserver bundle has no release.sh: pin the old tag)
+# Roll back to a specific version (the webserver bundle carries no release ledger: pin the old tag)
 bin/docker-deploy.sh upgrade --environment demo --image-tag 0.1.0
 ```
 
 > **Rollback semantics**: the `sdkwork-webserver` install bundle ships only
-> `deploy.sh` — no `release.sh` — so `rollback` warns and degrades to an
+> the bundle ships no release ledger, so `rollback` warns and degrades to an
 > idempotent re-install of the current bundle. To return to a specific
 > version, use `upgrade --image-tag <old-version>`.
-> (The `sdkwork-api-cloud-gateway` bundle does ship `release.sh`, so
+> (The `sdkwork-api-cloud-gateway` bundle does ship a release ledger, so
 > `rollback --to <version>` is effective there.)
 
 ## 6. Offline Install (bundle)
@@ -262,11 +262,9 @@ bin/docker-deploy.sh upgrade --environment demo --image-tag 0.1.0
 For hosts without registry/repository access, use the release artifact:
 
 ```bash
-tar -xzf sdkwork-webserver-install-<version>.bundle.tar.gz
-cd sdkwork-webserver-install-<version>.bundle
-docker load -i image.tar.gz            # or docker pull the canonical reference
-$EDITOR env/<environment>.env          # fill secrets; ports/domains have safe defaults
-bash deploy.sh --environment <environment> [--replicas N]
+bin/docker-image.sh save -o dist/image.tar.gz               # image tar.gz + sha256 (carry offline when no registry)
+bin/docker-image.sh load  -i dist/image.tar.gz              # import the image on the target side
+bin/docker-deploy.sh install --environment <environment> [--host ssh://[user@]host] [--replicas N]
 ```
 
 Bundle content contract (`deploy.sh`, `image.env`, five-environment env matrix, compose, sha256): `DOCKER_SPEC.md` §4.

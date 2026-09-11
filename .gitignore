@@ -17,6 +17,10 @@ tmp/
 .mimocode/
 .cursor/
 tmp-backup/
+# Throwaway host-side scratch scripts: they hard-code deployment-root paths
+# (and, in one past case, a database password), so they must never be committed.
+tmp_*.sh
+tmp-*.sh
 __pycache__/
 *.tsbuildinfo
 *.db

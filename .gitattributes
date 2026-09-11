@@ -1,0 +1,7 @@
+# Shell scripts must always be LF: CRLF breaks bash on WSL/Linux
+# (`$'\r': command not found` when sourcing bin/lib/*.sh) and MSYS silently
+# hides the corruption, so it only surfaces inside WSL. Override any
+# core.autocrlf=true checkout conversion.
+*.sh text eol=lf
+*.bash text eol=lf
+*.ps1 text eol=crlf

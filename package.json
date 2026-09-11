@@ -78,7 +78,6 @@
     "up:container:all:shared": "node scripts/docker/compose.mjs up --environment all --shared",
     "down:container:all:shared": "node scripts/docker/compose.mjs down --environment all --shared",
     "deploy:apply:standalone": "pnpm exec sdkwork-app deploy:apply --profile standalone.production --environment production",
-    "deploy:apply:standalone:docker": "bash deployments/docker/bundle/deploy.sh",
     "deploy:reapply:development": "bash bin/docker-deploy.sh install --environment development",
     "deploy:reapply:test": "bash bin/docker-deploy.sh install --environment test",
     "deploy:reapply:staging": "bash bin/docker-deploy.sh install --environment staging",

@@ -31,8 +31,8 @@ link_local_checkout() {
   fi
   install -d -m 0755 "${SPACE_ROOT}"
   if [ -L "${CHECKOUT}" ]; then
-    current_target="$(readlink -f "${CHECKOUT}" 2>/dev/null || readlink "${CHECKOUT}")"
-    local_target="$(readlink -f "${LOCAL_PATH}" 2>/dev/null || readlink "${LOCAL_PATH}")"
+    current_target="$(readlink -f "${CHECKOUT}" 2>/dev/null || readlink "${CHECKOUT}")" # PORTABILITY:target-linux
+    local_target="$(readlink -f "${LOCAL_PATH}" 2>/dev/null || readlink "${LOCAL_PATH}")" # PORTABILITY:target-linux
     if [ "${current_target}" = "${local_target}" ]; then
       log "linked ${CHECKOUT} -> ${LOCAL_PATH}"
       return 0

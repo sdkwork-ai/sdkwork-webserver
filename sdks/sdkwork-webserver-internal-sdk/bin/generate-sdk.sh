@@ -59,7 +59,10 @@ for language in "${language_array[@]}"; do
   language="$(echo "${language}" | xargs)"
   [[ -z "${language}" ]] && continue
   output_path="${FAMILY_ROOT}/${SDK_NAME}-${language}/generated/server-openapi"
-  mapfile -t ns_args < <(namespace_args "${language}")
+  # bash 3.2 has no mapfile (macOS /usr/bin/bash): read the lines into the
+  # same indexed array so SDK regeneration also works off Linux.
+  ns_args=()
+  while IFS= read -r ns_line; do ns_args+=("$ns_line"); done < <(namespace_args "${language}")
   node "${GENERATOR_PATH}" generate \
     -i "${INPUT_PATH}" \
     -o "${output_path}" \

@@ -1660,7 +1660,7 @@ link_module_web_static_root() {
     return 0
   fi
   if [ -L "${root}" ]; then
-    if [ "$(readlink -f "${root}")" = "$(readlink -f "${src}")" ]; then
+    if [ "$(readlink -f "${root}")" = "$(readlink -f "${src}")" ]; then # PORTABILITY:target-linux
       return 0
     fi
   elif [ -e "${root}" ]; then
