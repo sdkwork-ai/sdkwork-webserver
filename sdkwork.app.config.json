@@ -208,16 +208,32 @@
     }
   },
   "release": {
-    "currentVersion": "0.1.4",
+    "currentVersion": "0.1.5",
     "defaultChannel": "BETA",
     "latest": {
-      "BETA": "0.1.4"
+      "BETA": "0.1.5"
     },
     "notes": [
       {
-        "version": "0.1.4",
+        "version": "0.1.5",
         "channel": "BETA",
         "current": true,
+        "summary": "Standalone edge re-release from the cleaned baseline: five-environment (development/test/staging/demo/production) container packaging through the bin/ single operator channel, plus offline-friendly image build (pnpm-free delegation, --no-pull).",
+        "packageIds": [
+          "linux-rhel-x64-standalone-server-rpm",
+          "linux-rhel-x64-standalone-test-server-rpm",
+          "linux-ubuntu-x64-standalone-server-deb",
+          "linux-ubuntu-x64-standalone-test-server-deb",
+          "linux-x64-standalone-server-tar-gz",
+          "linux-arm64-standalone-server-tar-gz"
+        ],
+        "forceUpdate": false,
+        "minSupportedVersion": "0.1.0"
+      },
+      {
+        "version": "0.1.4",
+        "channel": "BETA",
+        "current": false,
         "summary": "Full rebuild on WSL Ubuntu 22.04 with host-installed external PostgreSQL/Redis (no embedded containers); verified install/upgrade across all five environments.",
         "packageIds": [
           "linux-rhel-x64-standalone-server-rpm",
