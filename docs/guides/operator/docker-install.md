@@ -77,7 +77,7 @@ bin/docker-image.sh build --image-tag <version>
 # → registry.sdkwork.com/apps/sdkwork-webserver-standalone:<version>
 
 # 1. 供应宿主 PostgreSQL/Redis（全部环境，一次性）
-sudo bash deployments/docker/scripts/setup-host-external-deps.sh
+sudo bash bin/host/setup-host-external-deps.sh
 
 # 2. 部署指定环境（幂等；可重复执行收敛到目标状态）
 bin/docker-deploy.sh install --environment development

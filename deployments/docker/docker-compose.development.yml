@@ -130,7 +130,7 @@ services:
       # Platform API plane sidecar (api*.brand): ensure import even when the
       # space checkout lacks sdkwork-api-cloud-gateway as a submodule.
       - ${SDKWORK_MODULE_API_GATEWAY_CHECKOUT_HOST_PATH:-../../../sdkwork-api-cloud-gateway}:/opt/deploy/sdkwork-space/sdkwork-api-cloud-gateway:ro
-      - ./scripts/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
+      - ../../bin/container/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
       # Dev: mount workspace-built gateway so imports.d/import.conf aggregator works.
       - ../../target/release/sdkwork-api-webserver-standalone-gateway:/app/bin/sdkwork-api-webserver-standalone-gateway:ro
       # Bundled module API gateway (SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=bundled):

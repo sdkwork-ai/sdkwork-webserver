@@ -112,7 +112,7 @@ services:
       - ${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}:/opt/deploy:ro
       - ${SDKWORK_SPACE_CHECKOUT_HOST_PATH:-${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}/sdkwork-space}:/opt/deploy/sdkwork-space:rw
       - ${SDKWORK_MODULE_API_GATEWAY_CHECKOUT_HOST_PATH:-../../../sdkwork-api-cloud-gateway}:/opt/deploy/sdkwork-space/sdkwork-api-cloud-gateway:ro
-      - ./scripts/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
+      - ../../bin/container/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
       # Mount workspace-built gateway so imports.d/import.conf aggregator works
       # (registry 0.1.0 rejects multi-module full nginx sidecars).
       - ../../target/release/sdkwork-api-webserver-standalone-gateway:/app/bin/sdkwork-api-webserver-standalone-gateway:ro

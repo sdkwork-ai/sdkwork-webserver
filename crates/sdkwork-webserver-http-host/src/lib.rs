@@ -153,6 +153,19 @@ fn web_security_policy(
     // their origins are canonical (WEB_FRAMEWORK_SPEC §12), so deployments
     // never need to repeat them in SDKWORK_CORS_ALLOWED_ORIGINS.
     policy.cors = policy.cors.with_registered_sdkwork_client_origins();
+    // Every module console — including this edge's own `server*` consoles — is a
+    // cross-origin browser client of the platform API edge, and origin matching
+    // has no sub-domain wildcard. Declaring the registered console host pattern
+    // keeps `SDKWORK_CORS_ALLOWED_ORIGINS` from having to enumerate every
+    // console origin; an unset pattern preserves exact-origin-only behavior.
+    if let Some(hosts) = sdkwork_web_core::registered_console_hosts_from_env()
+        .map_err(|error| format!("invalid registered console host configuration: {error}"))?
+    {
+        policy.cors = policy
+            .cors
+            .with_registered_console_hosts(hosts)
+            .map_err(|error| format!("invalid registered console host configuration: {error}"))?;
+    }
     if matches!(environment, WebEnvironment::Prod) {
         policy
             .cors

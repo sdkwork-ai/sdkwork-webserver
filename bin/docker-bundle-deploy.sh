@@ -16,6 +16,11 @@
 #                        typically the host system's services)
 #     --embedded         opt in to embedded postgres/redis containers instead
 #     --image-tag <tag>  override SDKWORK_WEBSERVER_IMAGE_TAG
+#     --allow-version-mismatch
+#                        deploy the env-file tag even when it disagrees with
+#                        this bundle's image.env. Without it, a mismatch is a
+#                        hard error so an untagged upgrade can never silently
+#                        change the deployed image version.
 #     --host-port <base> override the instance-1 host port base (management/
 #                        app port); instances stride +1 upward. Persisted into
 #                        the env file on apply. Also enables running the same
@@ -68,15 +73,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_PREFIX="[sdkwork-deploy]"
 
 info() { printf '%s %s\n' "$LOG_PREFIX" "$*"; }
+warn() { printf '%s WARN: %s\n' "$LOG_PREFIX" "$*" >&2; }
 die()  { printf '%s ERROR: %s\n' "$LOG_PREFIX" "$*" >&2; exit 1; }
 usage() { sed -n '2,/^set -euo pipefail$/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0; }
 
 # --- layout autodetection ----------------------------------------------------
 # POSTGRES_INIT_HOST_DIR: absolute host path of the postgres workspace-identity
 # init scripts, consumed by docker-compose.bundle.yml (embedded deps). The
-# compose files live in compose/ inside an install bundle but beside postgres/
-# in the repo tree, so the relative ./postgres/init default only works in the
-# repo layout — the bundle layout must point at <bundle>/postgres/init.
+# compose files live in compose/ inside an install bundle but under
+# deployments/docker/ in the repo tree, so the relative default in the compose
+# file only works in the repo layout — the bundle layout must point at
+# <bundle>/postgres/init.
+#
+# Repo mode: this script is authored flat as bin/docker-bundle-deploy.sh
+# (MODULE_BIN_SPEC.md §2.2) and the packaging step copies it to the bundle root
+# under the artifact name deploy.sh, so the repo-mode branch resolves from
+# <repo>/bin rather than from a bundle directory.
 if [ -f "${SCRIPT_DIR}/compose/docker-compose.bundle.yml" ]; then
   COMPOSE_DIR="${SCRIPT_DIR}/compose"
   ENV_DIR="${SCRIPT_DIR}/env"
@@ -84,11 +96,12 @@ if [ -f "${SCRIPT_DIR}/compose/docker-compose.bundle.yml" ]; then
   BUNDLE_IMAGE_ENV="${SCRIPT_DIR}/image.env"
   POSTGRES_INIT_HOST_DIR="${SCRIPT_DIR}/postgres/init"
 else
-  COMPOSE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+  SDKWORK_REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+  COMPOSE_DIR="${SDKWORK_REPO_ROOT}/deployments/docker"
   ENV_DIR="${COMPOSE_DIR}/env"
   BUNDLE_IMAGE_TGZ=""
   BUNDLE_IMAGE_ENV=""
-  POSTGRES_INIT_HOST_DIR="${COMPOSE_DIR}/postgres/init"
+  POSTGRES_INIT_HOST_DIR="${SDKWORK_REPO_ROOT}/bin/container/postgres-init"
 fi
 export POSTGRES_INIT_HOST_DIR
 COMPOSE_FILE="${COMPOSE_DIR}/docker-compose.bundle.yml"
@@ -111,6 +124,9 @@ EXTERNAL="1"
 ACTION="apply"
 PURGE="0"
 IMAGE_TAG=""
+# 0 = refuse to deploy a tag that disagrees with this bundle's image.env
+# (fail-fast against silent version drift); 1 = deploy the pinned tag anyway.
+ALLOW_VERSION_MISMATCH="0"
 DRY_RUN="0"
 SET_KEY=""
 SET_VALUE=""
@@ -137,6 +153,7 @@ while [ $# -gt 0 ]; do
     --external)    EXTERNAL="1"; shift ;;
     --embedded)    EXTERNAL="0"; shift ;;
     --image-tag)   IMAGE_TAG="$2"; shift 2 ;;
+    --allow-version-mismatch) ALLOW_VERSION_MISMATCH="1"; shift ;;
     --set)         [ $# -ge 3 ] || die "--set requires KEY and VALUE"; ACTION="set"; SET_KEY="$2"; SET_VALUE="$3"; shift 3 ;;
     --force-set)   [ $# -ge 3 ] || die "--force-set requires KEY and VALUE"; ACTION="set"; SET_KEY="$2"; SET_VALUE="$3"; SET_FORCE="1"; shift 3 ;;
     --check-config) ACTION="check-config"; shift ;;
@@ -193,11 +210,33 @@ env_key() {
 }
 
 # --- image tag resolution ------------------------------------------------------
-if [ -z "${IMAGE_TAG}" ]; then
-  IMAGE_TAG="$(env_key SDKWORK_WEBSERVER_IMAGE_TAG)"
+# An explicit --image-tag is operator intent and always wins. Otherwise a
+# *disagreement* between the live env file and this bundle's authoritative
+# image.env is fatal: the env file is operator state that lags behind the
+# bundle, and silently letting it win downgrades the deployment. On 2026-09-11
+# a single untagged upgrade moved all five environments from 0.1.5 back to
+# 0.1.2 exactly this way. Operators who genuinely want a different image must
+# say so explicitly (--image-tag or --allow-version-mismatch).
+BUNDLE_IMAGE_TAG=""
+if [ -n "${BUNDLE_IMAGE_ENV}" ] && [ -f "${BUNDLE_IMAGE_ENV}" ]; then
+  BUNDLE_IMAGE_TAG="$(sed -n 's/^SDKWORK_WEBSERVER_IMAGE_TAG=//p' "${BUNDLE_IMAGE_ENV}" | tail -1 | tr -d '\r')"
 fi
-if [ -z "${IMAGE_TAG}" ] && [ -n "${BUNDLE_IMAGE_ENV}" ] && [ -f "${BUNDLE_IMAGE_ENV}" ]; then
-  IMAGE_TAG="$(sed -n 's/^SDKWORK_WEBSERVER_IMAGE_TAG=//p' "${BUNDLE_IMAGE_ENV}" | tail -1 | tr -d '\r')"
+if [ -z "${IMAGE_TAG}" ]; then
+  ENV_IMAGE_TAG="$(env_key SDKWORK_WEBSERVER_IMAGE_TAG)"
+  if [ -n "${ENV_IMAGE_TAG}" ] && [ -n "${BUNDLE_IMAGE_TAG}" ] && [ "${ENV_IMAGE_TAG}" != "${BUNDLE_IMAGE_TAG}" ]; then
+    if [ "${ALLOW_VERSION_MISMATCH}" = "1" ]; then
+      warn "env/${ENVIRONMENT}.env pins SDKWORK_WEBSERVER_IMAGE_TAG=${ENV_IMAGE_TAG} but this bundle ships ${BUNDLE_IMAGE_TAG}; deploying the pinned ${ENV_IMAGE_TAG} (--allow-version-mismatch)"
+      IMAGE_TAG="${ENV_IMAGE_TAG}"
+    else
+      die "version mismatch for environment ${ENVIRONMENT}: env/${ENVIRONMENT}.env pins SDKWORK_WEBSERVER_IMAGE_TAG=${ENV_IMAGE_TAG} but this bundle ships ${BUNDLE_IMAGE_TAG}.
+    Refusing to silently change the deployed image version. Choose one:
+      --image-tag ${ENV_IMAGE_TAG}                    keep the pinned version
+      SDKWORK_WEBSERVER_IMAGE_TAG=${BUNDLE_IMAGE_TAG}  in env/${ENVIRONMENT}.env to adopt the bundle version
+      --allow-version-mismatch                        force the pinned version deliberately"
+    fi
+  else
+    IMAGE_TAG="${ENV_IMAGE_TAG:-${BUNDLE_IMAGE_TAG}}"
+  fi
 fi
 IMAGE_TAG="${IMAGE_TAG:-0.1.0}"
 IMAGE_REF="registry.sdkwork.com/apps/sdkwork-webserver-standalone:${IMAGE_TAG}"

@@ -9,7 +9,7 @@
 #      bash bin/docker-deploy.sh install --environment development   # external host deps are the default
 #
 #   ③ All environments, shared built-in postgres/redis:
-#      bash deployments/docker/bundle/deploy.sh --environment <env> --embedded
+#      bash bin/docker-deploy.sh install --environment <env> --embedded
 #
 # Per-environment env files: deployments/docker/env/<environment>.env
 # (copy from deployments/docker/env/<environment>.env.example)
@@ -77,7 +77,7 @@ x-webserver-common: &webserver-common
     - ${SDKWORK_SPACE_CHECKOUT_HOST_PATH:-${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}/sdkwork-space}:/opt/deploy/sdkwork-space:rw
     - ${SDKWORK_MODULE_API_GATEWAY_CHECKOUT_HOST_PATH:-../../../sdkwork-api-cloud-gateway}:/opt/deploy/sdkwork-space/sdkwork-api-cloud-gateway:ro
     - ${SDKWORK_DRIVE_CACHE_HOST_PATH:-/opt/deploy/drive}:/opt/deploy/drive:rw
-    - ./scripts/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
+    - ../../bin/container/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
   healthcheck:
     test:
       [
@@ -114,7 +114,7 @@ services:
       WEBSERVER_POSTGRES_PROD_PASSWORD: ${WEBSERVER_POSTGRES_PROD_PASSWORD:-sdkworkprod123}
     volumes:
       - webserver-postgres-data:/var/lib/postgresql/data
-      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - ../../bin/container/postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test:
         [

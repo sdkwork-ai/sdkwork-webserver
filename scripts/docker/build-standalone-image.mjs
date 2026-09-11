@@ -19,6 +19,10 @@ import { extract as extractTar } from 'tar';
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const WORKSPACE_ROOT = path.resolve(REPO_ROOT, '..');
 const DOCKER_ROOT = path.join(REPO_ROOT, 'deployments', 'docker');
+// Authored container scripts live under bin/ (MODULE_BIN_SPEC.md §1/§2.1) and are
+// staged into the build context by this script; the Dockerfile only ever sees
+// build output.
+const BIN_ROOT = path.join(REPO_ROOT, 'bin');
 const RELEASE_OUTPUT_ROOT = path.join(REPO_ROOT, 'dist', 'release');
 const STAGE_ROOT = path.join(REPO_ROOT, '.sdkwork', 'runtime', 'docker-standalone-context');
 const CLOUD_GATEWAY_ROOT = path.join(WORKSPACE_ROOT, 'sdkwork-api-cloud-gateway');
@@ -284,7 +288,7 @@ async function stageContext(settings) {
   }
   writeFileSync(
     path.join(STAGE_ROOT, 'entrypoint-standalone.sh'),
-    readFileSync(path.join(DOCKER_ROOT, 'scripts', 'entrypoint-standalone.sh')),
+    readFileSync(path.join(BIN_ROOT, 'container', 'entrypoint-standalone.sh')),
     { mode: 0o755 },
   );
   const platformGateway = stagePlatformGatewayInstall(settings);

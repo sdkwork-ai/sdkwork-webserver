@@ -40,7 +40,7 @@ Read `sdkwork.app.config.json` for Web Server identity, registration, SDK/API in
 
 `sdkwork-webserver` is **standalone-only** (`SDKWORK_WEBSERVER_SPEC.md` §17.4) and is the **only** public reverse-proxy edge (`SDKWORK_WEBSERVER_SPEC.md` §0.1, `NGINX_SPEC.md` §0):
 
-- Stock OpenResty/nginx and `/etc/nginx` `MUST NOT` serve SDKWork public domains. Uninstall host nginx (`deployments/docker/scripts/uninstall-wsl-nginx.sh`); `install-wsl-nginx.sh` is retired and only invokes uninstall. Docker development publishes host `:80`/`:443`.
+- Stock OpenResty/nginx and `/etc/nginx` `MUST NOT` serve SDKWork public domains. Uninstall host nginx (`bin/host/uninstall-wsl-nginx.sh`); `install-wsl-nginx.sh` is retired and only invokes uninstall. Docker development publishes host `:80`/`:443`.
 - `sdkwork.app.config.json` declares `runtime.supportedDeploymentProfiles = ["standalone"]`; there is no cloud build, cloud package, or cloud runtime-env surface in this repository.
 - Its browser applications (`apps/sdkwork-webserver-pc`, `apps/sdkwork-webserver-h5`) build with the canonical runner at `build:pc|h5:<env>` only (no `:cloud` variants). Every SDK API base URL is the same-origin root `/` (`browserOriginMode = same-origin`); the gateway serves the SPAs and the API on one origin.
 - Release packaging (`scripts/webserver-release.mjs`, deb/rpm) produces standalone server packages only; `--deployment-profile cloud` is rejected.
@@ -373,7 +373,7 @@ go through them (or the repository pnpm scripts they delegate to):
 | Entrypoint | Delegates to |
 | --- | --- |
 | `bin/docker-image.sh` | `pnpm build:container:standalone` → `registry.sdkwork.com/apps/sdkwork-webserver-standalone:<version>` |
-| `bin/docker-deploy.sh` | `deployments/docker/bundle/deploy.sh` (WSL or remote Ubuntu via `--host`) |
+| `bin/docker-deploy.sh` | `bin/docker-bundle-deploy.sh` (private executor, copied into the install bundle as `deploy.sh` by `package-install-bundle.mjs`; WSL or remote Ubuntu via `--host`) |
 | `bin/apps-build.sh` | `pc`/`h5` → canonical runner `tools/build-browser-client.mjs`; `server` → `cargo build --release` |
 | `bin/apps-package.sh` | `webserver-deb.mjs` (host-native, `test`/`production` only) / dist archives → `target/bin-packages/` with a sidecar `.sha256` |
 | `bin/apps-deploy.sh` | `server` → `apt-get install` the `.deb` on the Ubuntu target + systemd enable/health probe (`test`/`production` only); `pc`/`h5` report the static-root delivery channel |

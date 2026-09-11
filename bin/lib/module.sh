@@ -15,19 +15,14 @@ SDKWORK_PRIMARY_SERVICE="webserver"
 SDKWORK_HEALTH_PATH="/healthz"
 SDKWORK_CONFIG_ENV_SUBDIR="env"
 
-sdkwork_module_bundle_dir() {
-  printf '%s/deployments/docker/bundle' "${SDKWORK_MODULE_ROOT}"
-}
-
-# Install/upgrade consume the newest packaged install bundle
-# (dist/docker-install/*, produced by pnpm build:container:install) — a
-# self-contained stage-2 artifact; fall back to the source bundle dir.
-sdkwork_module_install_bundle_dir() {
-  local d
-  d="$(sdkwork_newest_install_bundle "${SDKWORK_MODULE_ROOT}/dist/docker-install")"
-  if [[ -n "${d}" ]]; then printf '%s' "${d}"; return 0; fi
-  sdkwork_module_bundle_dir
-}
+# Install/upgrade resolve the newest packaged install bundle via the shared
+# default (newest under dist/docker-install) — this hook is OPTIONAL
+# (MODULE_BIN_SPEC.md §3) and the default is already correct, so there is no
+# override. There is deliberately no source-tree bundle: the executors are
+# authored flat under bin/ (docker-bundle-deploy.sh / -release.sh) and the
+# compose/env inputs live in deployments/docker/, so an un-packaged install
+# fails fast with packaging guidance instead of pushing a directory that cannot
+# run on the target.
 
 # Source-tree env dir; used for --dry-run rendering and by config.sh.
 sdkwork_module_local_env_dir() {

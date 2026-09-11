@@ -65,6 +65,12 @@ x-webserver-common: &webserver-common
     SDKWORK_WEBSERVER_PRIMARY_DOMAIN: ${SDKWORK_WEBSERVER_PRIMARY_DOMAIN:-sdkwork.com}
     SDKWORK_WEBSERVER_PUBLIC_SCHEME: ${SDKWORK_WEBSERVER_PUBLIC_SCHEME:-http}
     SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_CORS_ALLOWED_ORIGINS:-}
+    # Registered console host pattern for the edge's own policy: every module
+    # console calls the edge cross-origin, and exact matching has no sub-domain
+    # wildcard, so the pattern replaces enumerating them.
+    SDKWORK_CORS_CONSOLE_HOST_LABELS: ${SDKWORK_CORS_CONSOLE_HOST_LABELS:-}
+    SDKWORK_CORS_CONSOLE_HOST_SUFFIX: ${SDKWORK_CORS_CONSOLE_HOST_SUFFIX:-}
+    SDKWORK_CORS_CONSOLE_HOST_SCHEMES: ${SDKWORK_CORS_CONSOLE_HOST_SCHEMES:-}
     SDKWORK_WEBSERVER_APPLICATION_PUBLIC_HTTP_URL: ${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_HTTP_URL:-}
     SDKWORK_WEBSERVER_APPLICATION_APP_HTTP_URL: ${SDKWORK_WEBSERVER_APPLICATION_APP_HTTP_URL:-}
     SDKWORK_WEBSERVER_APPLICATION_BACKEND_HTTP_URL: ${SDKWORK_WEBSERVER_APPLICATION_BACKEND_HTTP_URL:-}
@@ -212,9 +218,9 @@ services:
       - webserver-postgres-data:/var/lib/postgresql/data
       # deploy.sh exports POSTGRES_INIT_HOST_DIR (absolute) because the compose
       # files sit in compose/ inside an install bundle while postgres/init
-      # stays at the bundle root; ./postgres/init only resolves in the repo
-      # layout, so it remains the fallback.
-      - ${POSTGRES_INIT_HOST_DIR:-./postgres/init}:/docker-entrypoint-initdb.d:ro
+      # stays at the bundle root; the fallback below only resolves in the repo
+      # layout, where the init scripts are authored under bin/container/.
+      - ${POSTGRES_INIT_HOST_DIR:-../../bin/container/postgres-init}:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test:
         [

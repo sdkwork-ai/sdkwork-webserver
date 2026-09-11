@@ -79,7 +79,7 @@ log() {
 
 require_root() {
   if [ "$(id -u)" -ne 0 ]; then
-    log "run as root: sudo bash deployments/docker/scripts/install-wsl-hosts.sh"
+    log "run as root: sudo bash bin/host/install-wsl-hosts.sh"
     exit 1
   fi
 }

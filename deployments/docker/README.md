@@ -7,7 +7,7 @@ Reference: `sdkwork-api-cloud-gateway` (`docker-compose.yml` + `docker-compose.e
 | Mode | Command | PostgreSQL | Redis |
 | --- | --- | --- | --- |
 | **External (default)** | `bin/docker-deploy.sh install --environment <env>` | host system `5432` | host system `6379` |
-| Embedded (explicit opt-in) | `deployments/docker/bundle/deploy.sh --environment <env> --embedded` | compose embedded | compose embedded |
+| Embedded (explicit opt-in) | `bin/docker-deploy.sh install --environment <env> --embedded` | compose embedded | compose embedded |
 
 Operator guide: [docs/guides/operator/docker-install.md](../../docs/guides/operator/docker-install.md)
 (`DOCKER_SPEC.md`, `MODULE_BIN_SPEC.md`, `DEPLOYMENT_SPEC.md` §6.1)
@@ -24,10 +24,15 @@ Operator guide: [docs/guides/operator/docker-install.md](../../docs/guides/opera
 | `docker-compose.platform-api-gateway.yml` | Optional overlay: sibling `sdkwork-api-cloud-gateway` container |
 | `env/<environment>.env` | Per-environment deployment configuration |
 | `env/<environment>.env.example` | Per-environment deployment template |
-| `postgres/init/` | Built-in multi-identity bootstrap |
 | `postgres/external-schema.sql` | External postgres schema provisioning |
 | `nginx/README.md` | Host nginx retired; Docker webserver owns reverse proxy |
-| `scripts/` | Container entrypoint and WSL deployment helpers |
+
+Authored shell scripts do **not** live in this tree: `bin/` is the single script
+source root (`MODULE_BIN_SPEC.md` §1/§2.1). The container entrypoint is
+`bin/container/entrypoint-standalone.sh`, the postgres bootstrap is
+`bin/container/postgres-init/`, and the WSL/host helpers are `bin/host/`. The
+build copies them into the image and the install bundle, so anything under
+`deployments/docker/` that looks like a script is build output, not a source.
 
 Declarative web server authority: [`../webserver/`](../webserver/) (`SDKWORK_WEBSERVER_SPEC.md`).
 Host Ubuntu nginx is **not** used — uninstall with `uninstall-wsl-nginx.sh`.
@@ -40,7 +45,7 @@ Host Ubuntu nginx is **not** used — uninstall with `uninstall-wsl-nginx.sh`.
 bin/docker-image.sh build
 
 # 1. Provision host-system PostgreSQL/Redis for every lifecycle environment
-sudo bash deployments/docker/scripts/setup-host-external-deps.sh
+sudo bash bin/host/setup-host-external-deps.sh
 
 # 2. Deploy an environment (external deps are the default; idempotent)
 bin/docker-deploy.sh install --environment development
@@ -48,14 +53,14 @@ bin/docker-deploy.sh install --environment test
 bin/docker-deploy.sh install --environment demo
 
 # 3. Hosts + uninstall host nginx (Docker owns reverse proxy)
-sudo bash deployments/docker/scripts/install-wsl-hosts.sh
-sudo bash deployments/docker/scripts/uninstall-wsl-nginx.sh
+sudo bash bin/host/install-wsl-hosts.sh
+sudo bash bin/host/uninstall-wsl-nginx.sh
 
 # 4. Verify (Docker published ports — development owns host 80/443)
 curl --noproxy '*' http://127.0.0.1:13800/healthz
 curl --noproxy '*' -H 'Host: api-dev.sdkwork.com' http://127.0.0.1/healthz
 curl --noproxy '*' -H 'Host: api-demo.sdkwork.com' http://127.0.0.1:19098/healthz
-bash scripts/docker/verify-platform-api-plane.sh development
+bash bin/packaging/verify-platform-api-plane.sh development
 ```
 
 Remote Ubuntu deployment: `bin/docker-deploy.sh install --environment <env> --host ssh://[user@]host[:port]`.
@@ -91,7 +96,7 @@ Windows hosts point at `127.0.0.1`; WSL mirrors Docker `:80`/`:443` — no host
 nginx and no portproxy side port.
 
 ```bash
-sudo bash deployments/docker/scripts/uninstall-wsl-nginx.sh
+sudo bash bin/host/uninstall-wsl-nginx.sh
 curl --noproxy '*' -H 'Host: api-dev.sdkwork.com' http://127.0.0.1/healthz
 curl --noproxy '*' -k -H 'Host: api-dev.sdkwork.com' https://127.0.0.1/healthz
 ```
@@ -157,7 +162,7 @@ pnpm build:container   # produces dist/container-image-build + :local image
 One-shot setup inside WSL:
 
 ```bash
-sudo bash deployments/docker/scripts/setup-wsl-domain-proxy.sh
+sudo bash bin/host/setup-wsl-domain-proxy.sh
 ```
 
 Windows browser (run **PowerShell as Administrator** once):

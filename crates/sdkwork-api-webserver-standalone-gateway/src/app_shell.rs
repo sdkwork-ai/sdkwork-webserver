@@ -105,6 +105,20 @@ impl AdaptiveAppShellConfig {
             .trim()
             .to_ascii_lowercase();
         let environment = sdkwork_webserver_contract::web_environment_name();
+        // `IAM_CREDENTIAL_ENTRY_SPEC.md` §4/§5: only development renderers may
+        // receive the credential-entry bootstrap token; staging, demo, and
+        // production must never inject it into browser artifacts. The policy
+        // (environment predicate + token sanitising) lives in
+        // `data_plane::credential_entry_injection` and is shared with the
+        // imports data plane so the two injection paths cannot diverge.
+        let bootstrap_access_token =
+            crate::data_plane::credential_entry_injection::resolve_injection_token(
+                crate::data_plane::credential_entry_injection::injection_environment().as_deref(),
+                env::var(CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN_ENV)
+                    .ok()
+                    .as_deref(),
+                None,
+            );
         Self::resolve(
             &deployment_profile,
             &environment,
@@ -112,6 +126,7 @@ impl AdaptiveAppShellConfig {
             env::var_os(H5_STATIC_ROOT_ENV),
             env::var_os(STATIC_FALLBACK_ROOT_ENV),
             env::var(TABLET_SURFACE_ENV).ok(),
+            bootstrap_access_token,
         )
     }
 
@@ -122,6 +137,7 @@ impl AdaptiveAppShellConfig {
         h5_root: Option<OsString>,
         static_root: Option<OsString>,
         tablet_surface: Option<String>,
+        bootstrap_access_token: Option<String>,
     ) -> Result<Option<Self>, String> {
         if deployment_profile != "standalone" {
             for (env_name, value) in [
@@ -164,11 +180,6 @@ impl AdaptiveAppShellConfig {
             }
             return Ok(None);
         }
-
-        let bootstrap_access_token = env::var(CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN_ENV)
-            .ok()
-            .map(|token| token.trim().to_owned())
-            .filter(|token| !token.is_empty());
 
         Ok(Some(Self {
             pc,
@@ -836,9 +847,16 @@ mod tests {
 
     #[test]
     fn production_requires_a_preflighted_static_root() {
-        let missing =
-            AdaptiveAppShellConfig::resolve("standalone", "production", None, None, None, None)
-                .expect_err("production must require at least one Adaptive Web root");
+        let missing = AdaptiveAppShellConfig::resolve(
+            "standalone",
+            "production",
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect_err("production must require at least one Adaptive Web root");
         assert!(missing.contains(PC_STATIC_ROOT_ENV));
 
         let temp = TempDir::new().unwrap();
@@ -846,6 +864,7 @@ mod tests {
             "standalone",
             "production",
             Some(temp.path().as_os_str().to_owned()),
+            None,
             None,
             None,
             None,
@@ -863,13 +882,37 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .unwrap()
         .is_none());
-        assert!(
-            AdaptiveAppShellConfig::resolve("cloud", "production", None, None, None, None,)
-                .unwrap()
-                .is_none()
+        assert!(AdaptiveAppShellConfig::resolve(
+            "cloud", "production", None, None, None, None, None,
+        )
+        .unwrap()
+        .is_none());
+    }
+
+    /// Regression guard for the 2026-09-11 production leak: the Adaptive Web
+    /// app shell must only ever carry a credential-entry bootstrap token that
+    /// the shared development-only policy has already approved.
+    #[test]
+    fn bootstrap_token_is_development_only_across_the_shell_boundary() {
+        use crate::data_plane::credential_entry_injection::resolve_injection_token;
+
+        let token = "header.payload.signature";
+        // Non-development environments reject the same raw token the shell
+        // would otherwise read from the process environment.
+        for environment in ["test", "staging", "demo", "production"] {
+            assert_eq!(
+                resolve_injection_token(Some(environment), Some(token), None),
+                None,
+                "{environment} must never carry a browser bootstrap token"
+            );
+        }
+        assert_eq!(
+            resolve_injection_token(Some("development"), Some(token), None).as_deref(),
+            Some(token)
         );
     }
 

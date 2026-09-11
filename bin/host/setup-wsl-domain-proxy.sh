@@ -3,10 +3,10 @@
 # Host nginx is NOT used — sdkwork-webserver Docker owns domain reverse proxy.
 #
 # Usage (inside WSL Ubuntu, password sudo):
-#   sudo bash deployments/docker/scripts/setup-wsl-domain-proxy.sh
+#   sudo bash bin/host/setup-wsl-domain-proxy.sh
 #
 # Windows browser access (run PowerShell as Administrator on Windows host):
-#   deployments/docker/scripts/setup-windows-port-forwarding-admin.ps1
+#   bin/host/setup-windows-port-forwarding-admin.ps1
 set -euo pipefail
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)"
@@ -18,7 +18,7 @@ log() { echo "[setup-wsl-domain-proxy] $*"; }
 
 require_root() {
   if [ "$(id -u)" -ne 0 ]; then
-    log "run as root: sudo bash deployments/docker/scripts/setup-wsl-domain-proxy.sh"
+    log "run as root: sudo bash bin/host/setup-wsl-domain-proxy.sh"
     exit 1
   fi
 }
@@ -61,7 +61,7 @@ main() {
   log "  HTTPS:       https://api-dev.sdkwork.com/  (Docker host :443)"
   log ""
   log "Windows: run as Administrator:"
-  log "  deployments/docker/scripts/setup-windows-port-forwarding-admin.ps1"
+  log "  bin/host/setup-windows-port-forwarding-admin.ps1"
 }
 
 main "$@"

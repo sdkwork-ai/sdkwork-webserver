@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# apps-static-deploy.sh — deploy-apps-static capability: package the static
+# apps-static-deploy.sh — apps-static-deploy capability: package the static
 # dist of a sibling module's apps/ and publish it to a target host (local WSL
 # or remote ssh), with extraction, verification, atomic current-symlink
-# switch and quick rollback.
+# switch and quick rollback. Driven by bin/apps-static-deploy.sh
+# (MODULE_BIN_SPEC.md §2.2).
 #
 # Target layout (per app, POSIX paths on the target):
 #   <target-root>/<module>-<arch>-<profile>-<env>/
@@ -15,10 +16,10 @@
 # (sdkwork_remote / sdkwork_remote_capture, wsl and ssh://[user@]host[:port]).
 
 sdkwork_apps_static_deploy_usage() {
-  sdkwork_log "deploy-apps-static.sh — build, package and publish PC/H5 static dist to a target host"
+  sdkwork_log "apps-static-deploy.sh — build, package and publish PC/H5 static dist to a target host"
   sdkwork_log ""
   sdkwork_log "Usage:"
-  sdkwork_log "  bin/deploy-apps-static.sh <module> [pc|h5|all] [env[:profile]] [deploy|rollback|status] [options]"
+  sdkwork_log "  bin/apps-static-deploy.sh <module> [pc|h5|all] [env[:profile]] [deploy|rollback|status] [options]"
   sdkwork_log ""
   sdkwork_log "Actions:"
   sdkwork_log "  deploy    (default) build -> tar.gz(+sha256) -> upload -> verify -> extract -> prune -> switch current"
@@ -39,12 +40,12 @@ sdkwork_apps_static_deploy_usage() {
   sdkwork_log "  -h|--help           this help"
   sdkwork_log ""
   sdkwork_log "Examples:"
-  sdkwork_log "  bin/deploy-apps-static.sh im h5 test --host wsl"
-  sdkwork_log "  bin/deploy-apps-static.sh im all prod --host ssh://ops@10.0.0.8 --yes"
-  sdkwork_log "  bin/deploy-apps-static.sh im h5 prod rollback --host ssh://ops@10.0.0.8 --yes"
-  sdkwork_log "  bin/deploy-apps-static.sh im h5 prod rollback --to 20260910T071500Z --host wsl --yes"
-  sdkwork_log "  bin/deploy-apps-static.sh im h5 dev status --host wsl"
-  sdkwork_log "  bin/deploy-apps-static.sh im h5 test --host wsl --no-build --dry-run"
+  sdkwork_log "  bin/apps-static-deploy.sh im h5 test --host wsl"
+  sdkwork_log "  bin/apps-static-deploy.sh im all prod --host ssh://ops@10.0.0.8 --yes"
+  sdkwork_log "  bin/apps-static-deploy.sh im h5 prod rollback --host ssh://ops@10.0.0.8 --yes"
+  sdkwork_log "  bin/apps-static-deploy.sh im h5 prod rollback --to 20260910T071500Z --host wsl --yes"
+  sdkwork_log "  bin/apps-static-deploy.sh im h5 dev status --host wsl"
+  sdkwork_log "  bin/apps-static-deploy.sh im h5 test --host wsl --no-build --dry-run"
 }
 
 # Upload one local file to the target (binary-safe stdin stream; the same
@@ -85,7 +86,7 @@ sdkwork_apps_static_deploy_package_arch() {
 
   env_alias="$(sdkwork_environment_alias "${SDKWORK_BIN_ENVIRONMENT}")"
   local dist_dir="${SDKWORK_APPS_STATIC_APP_ROOT}/dist/${SDKWORK_BIN_PROFILE}/${env_alias}"
-  sdkwork_require_dir "${dist_dir}" "build it first (drop --no-build or run build-apps-static.sh)"
+  sdkwork_require_dir "${dist_dir}" "build it first (drop --no-build or run apps-static-build.sh)"
   if [[ ! -f "${dist_dir}/index.html" ]]; then
     sdkwork_die "${SDKWORK_BIN_E_STATE}" "incomplete dist at ${dist_dir} (no index.html)"
   fi
@@ -228,7 +229,7 @@ sdkwork_apps_static_deploy_status_arch() {
   done <<< "${raw}"
 }
 
-sdkwork_entry_deploy_apps_static() {
+sdkwork_entry_apps_static_deploy() {
   local module="" arch="all" spec="" profile_opt="" action="deploy"
   local host="wsl" target_root="/opt/deploy/sdkwork-static-apps" keep=5 artifacts="" to_release=""
   local arch_given=0 no_build=0 skip_typecheck=0 do_clean=0
@@ -245,7 +246,7 @@ sdkwork_entry_deploy_apps_static() {
       --yes) SDKWORK_BIN_YES=1; shift ;;
       --dry-run) SDKWORK_BIN_DRY_RUN=1; shift ;;
       -h|--help) sdkwork_apps_static_deploy_usage; return 0 ;;
-      -*) sdkwork_die "${SDKWORK_BIN_E_USAGE}" "unknown option '$1' for deploy-apps-static.sh" ;;
+      -*) sdkwork_die "${SDKWORK_BIN_E_USAGE}" "unknown option '$1' for apps-static-deploy.sh" ;;
       *)
         if [[ "${arch_given}" == "0" && "$1" =~ ^(pc|h5|all)$ ]]; then
           arch="$1"; arch_given=1
@@ -256,7 +257,7 @@ sdkwork_entry_deploy_apps_static() {
         elif [[ -z "${spec}" ]]; then
           spec="$1"
         else
-          sdkwork_die "${SDKWORK_BIN_E_USAGE}" "unexpected extra argument '$1' for deploy-apps-static.sh"
+          sdkwork_die "${SDKWORK_BIN_E_USAGE}" "unexpected extra argument '$1' for apps-static-deploy.sh"
         fi
         shift
         ;;
@@ -304,7 +305,7 @@ sdkwork_entry_deploy_apps_static() {
     artifacts="${SDKWORK_MODULE_ROOT}/target/static-packages"
   fi
 
-  sdkwork_evidence "deploy-apps-static ${action} ${module} ${arch} ${SDKWORK_BIN_ENVIRONMENT}:${SDKWORK_BIN_PROFILE} host=${host} root=${target_root}"
+  sdkwork_evidence "apps-static-deploy ${action} ${module} ${arch} ${SDKWORK_BIN_ENVIRONMENT}:${SDKWORK_BIN_PROFILE} host=${host} root=${target_root}"
 
   local arch_list a env_alias
   case "${arch}" in all) arch_list="pc h5" ;; *) arch_list="${arch}" ;; esac

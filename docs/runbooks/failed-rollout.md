@@ -4,21 +4,28 @@
 适用症状：容器通道 `release.sh` 健康门失败、deb 升级后健康探针不通过、
 应用部署记录长时间停留 PENDING。
 
-## 1. 容器通道（deploy.sh / release.sh）
+## 1. 容器通道（bin/docker-deploy.sh）
+
+`bin/` 是唯一操作入口（MODULE_BIN_SPEC.md §1）：bundle 内的 `deploy.sh` /
+`release.sh` 由该入口驱动，不要直接调用，否则会绕过预变更备份门与证据记录。
 
 ```bash
-cd /opt/deploy/sdkwork-webserver/bundle
-# 发布状态与追加式账本
-bash deploy.sh --environment production --ps
-tail -n 50 release-ledger.log 2>/dev/null || ls var/
+# 发布状态（内部走 bundle 的 deploy.sh --ps）
+bin/docker-deploy.sh status --environment production
 # 逐实例健康门：新实例未通过 wait_container_healthy 前，旧实例保持服务
 docker ps --format '{{.Names}} {{.Status}}' | grep sdkwork
+# 账本（部署目标上：/opt/deploy/sdkwork-webserver/bundle/）
+tail -n 50 /opt/deploy/sdkwork-webserver/bundle/release-ledger.log 2>/dev/null
 ```
 
-- `release.sh` 自带摘要/sha256 完整性校验与**自动回滚**：新版本健康门失败时回退
-  上一镜像标签并记录账本。人工回滚：
-  `bash release.sh --rollback`（或按账本中上一 `--image-tag` 重新执行 `deploy.sh`）。
+- 入口内建的 `install`/`upgrade` 在 staging/demo/production 上先过**预变更备份门**
+  （`--skip-backup` 会记录证据行）；bundle 的 `release.sh` 再带摘要/sha256 完整性
+  校验与**自动回滚**：新版本健康门失败时回退上一镜像标签并追加账本。
+- 人工回滚统一走同一入口：
+  `bin/docker-deploy.sh rollback --environment production`
+  （指定版本用 `--to <image-tag>`；未指定时回退账本中的上一标签）。
 - 回滚后必须验证 `/healthz` 与业务入口，再决定是否修复后重发。
+- 现场诊断用 `bin/docker-deploy.sh logs --environment production --tail 200`。
 
 ## 2. deb/systemd 通道
 

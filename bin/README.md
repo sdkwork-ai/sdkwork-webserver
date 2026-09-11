@@ -14,13 +14,13 @@ identity and delegation.
 | `apps-package.sh` | package surfaces into `target/bin-packages/` (+ sidecar `.sha256`) |
 | `apps-deploy.sh` | deploy packaged apps to WSL Ubuntu / remote Ubuntu |
 | `apps-pkg-installer.sh` | package native OS installers (`server` + `linux` → `.deb`/`.rpm` via `webserver-deb.mjs` / `webserver-rpm.mjs`) into `target/bin-installers/` (+ sidecar `.sha256`) |
-| `build-apps-static.sh` | build PC/H5 static dist for **any sibling workspace module** (`sdkwork-im`, `sdkwork-community`, …) via the canonical browser runner; implementation in `bin/lib/apps-static.sh` |
-| `deploy-apps-static.sh` | build + package (tar.gz+sha256) + publish static dist to a target host (`wsl` / `ssh://…`), with extraction, integrity verification, atomic `current` switch and quick rollback; implementation in `bin/lib/apps-static-deploy.sh` |
+| `apps-static-build.sh` | build PC/H5 static dist for **any sibling workspace module** (`sdkwork-im`, `sdkwork-community`, …) via the canonical browser runner; implementation in `bin/lib/apps-static.sh` |
+| `apps-static-deploy.sh` | build + package (tar.gz+sha256) + publish static dist to a target host (`wsl` / `ssh://…`), with extraction, integrity verification, atomic `current` switch and quick rollback; implementation in `bin/lib/apps-static-deploy.sh` |
 
 Declared app types: `pc,h5,server`. Default image tag comes from
 `sdkwork.app.config.json` → `release.currentVersion`.
 
-## Sibling-module static builds (`build-apps-static.sh`)
+## Sibling-module static builds (`apps-static-build.sh`)
 
 Build the Adaptive Web static dist (PC / H5) of an independent sibling module
 directly from this bin/ directory — the build always delegates to the
@@ -29,13 +29,13 @@ PNPM_SCRIPT_SPEC.md §4.2), so env materialization and the
 `dist/<profile>/<envAlias>` layout match every other browser build:
 
 ```sh
-bin/build-apps-static.sh --list                       # which modules own buildable pc/h5 apps
-bin/build-apps-static.sh im                           # sdkwork-im, pc + h5, dev:standalone
-bin/build-apps-static.sh sdkwork-im h5 prod           # h5 only, production standalone
-bin/build-apps-static.sh im all test:cloud            # both archs, cloud profile
-bin/build-apps-static.sh im --skip-typecheck          # fast iteration build (no vue-tsc)
-bin/build-apps-static.sh im --out target/static --tar # copy dist + tar.gz (+ .sha256)
-bin/build-apps-static.sh im --clean --dry-run         # plan only
+bin/apps-static-build.sh --list                       # which modules own buildable pc/h5 apps
+bin/apps-static-build.sh im                           # sdkwork-im, pc + h5, dev:standalone
+bin/apps-static-build.sh sdkwork-im h5 prod           # h5 only, production standalone
+bin/apps-static-build.sh im all test:cloud            # both archs, cloud profile
+bin/apps-static-build.sh im --skip-typecheck          # fast iteration build (no vue-tsc)
+bin/apps-static-build.sh im --out target/static --tar # copy dist + tar.gz (+ .sha256)
+bin/apps-static-build.sh im --clean --dry-run         # plan only
 ```
 
 Output lands in `<module>/apps/<app>/dist/<profile>/<envAlias>/`; `--out`
@@ -43,7 +43,7 @@ copies it to a self-describing folder
 (`<module>-<arch>-<profile>-<env>/`). Module names accept the short form
 (`im` → `sdkwork-im`).
 
-## Static publish + rollback (`deploy-apps-static.sh`)
+## Static publish + rollback (`apps-static-deploy.sh`)
 
 End-to-end: build (or `--no-build`) → `tar.gz` + sidecar `.sha256` → upload
 to the target → `sha256sum -c` on the target → extract into an immutable
@@ -53,12 +53,12 @@ to the target → `sha256sum -c` on the target → extract into an immutable
 (default root `/opt/deploy/sdkwork-static-apps`).
 
 ```sh
-bin/deploy-apps-static.sh im h5 test --host wsl                     # build + publish (local WSL)
-bin/deploy-apps-static.sh im all prod --host ssh://ops@10.0.0.8 --yes   # remote host
-bin/deploy-apps-static.sh im h5 test --host wsl --no-build --keep 3     # reuse dist, tighter retention
-bin/deploy-apps-static.sh im h5 prod status --host ssh://ops@10.0.0.8   # current + release list
-bin/deploy-apps-static.sh im h5 prod rollback --host ssh://ops@10.0.0.8 --yes        # one step back
-bin/deploy-apps-static.sh im h5 prod rollback --to 20260910T071500Z --host wsl --yes # pin a release
+bin/apps-static-deploy.sh im h5 test --host wsl                     # build + publish (local WSL)
+bin/apps-static-deploy.sh im all prod --host ssh://ops@10.0.0.8 --yes   # remote host
+bin/apps-static-deploy.sh im h5 test --host wsl --no-build --keep 3     # reuse dist, tighter retention
+bin/apps-static-deploy.sh im h5 prod status --host ssh://ops@10.0.0.8   # current + release list
+bin/apps-static-deploy.sh im h5 prod rollback --host ssh://ops@10.0.0.8 --yes        # one step back
+bin/apps-static-deploy.sh im h5 prod rollback --to 20260910T071500Z --host wsl --yes # pin a release
 ```
 
 `rollback` re-points `current` with `ln -sfn` (atomic); production deploys
@@ -109,17 +109,21 @@ bin/docker-deploy.sh install --environment production --yes       # 18080 (--yes
 > To run a second webserver slot at different ports for a different app, deploy
 > with `--host-port <base> [--edge-http <p>] [--edge-https <p>]`.
 
-> **Rollback**: the bundle ships `release.sh` (OPERATIONS_SPEC.md §1.2), so
-> `rollback` goes back to the previous successful version recorded in the
-> append-only release ledger, gated by `/healthz` probes on the management
-> ports. To pin an explicit version use `--to <old-version>`. Release history:
-> `bash release.sh history --environment <env>` on the target bundle.
+> **Rollback**: the bundle ships the private `release.sh` executor
+> (OPERATIONS_SPEC.md §1.2), so `bin/docker-deploy.sh rollback` goes back to the
+> previous successful version recorded in the append-only release ledger, gated
+> by `/healthz` probes on the management ports. To pin an explicit version use
+> `--to <old-version>`. The ledger is read-only inspectable at
+> `<bundle>/release-state/<env>/ledger.jsonl` on the target; `release.sh` is a
+> private implementation of `bin/docker-deploy.sh` and is not an operator entry.
 > Per-environment command blocks (upgrade / rollback / status / logs / down /
 > verification) are in
 > [`docs/guides/operator/docker-install.md`](../docs/guides/operator/docker-install.md) §5.
 
 The bundle is synced to `/opt/deploy/sdkwork-webserver/bundle` on the target
-and `deploy.sh` is executed with that directory as the working directory.
+and the bundle's `deploy.sh` — a build-time copy of `bin/docker-bundle-deploy.sh`
+(`MODULE_BIN_SPEC.md` §2.2) — is executed with that directory as the working
+directory.
 `--image-tag`, `--replicas`, `--deps external|embedded` and `--purge` are
 forwarded to the bundle entrypoint.
 

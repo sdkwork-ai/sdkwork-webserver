@@ -14,7 +14,7 @@ Write-Host "sdkwork-webserver is the public edge (nginx-compatible; stock nginx 
 Write-Host "Docker publishes host :80 / :443 from sdkwork-webserver-development."
 Write-Host ""
 Write-Host "If you need hosts + portproxy cleanup, run as Administrator:"
-Write-Host "  powershell -ExecutionPolicy Bypass -File deployments/docker/scripts/setup-windows-port-forwarding-admin.ps1"
+Write-Host "  powershell -ExecutionPolicy Bypass -File bin/host/setup-windows-port-forwarding-admin.ps1"
 Write-Host ""
 Write-Host "Verify (no proxy):"
 Write-Host "  curl --noproxy '*' -H 'Host: api-dev.birdcoder.cn' http://127.0.0.1/healthz"

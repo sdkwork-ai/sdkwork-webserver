@@ -41,7 +41,7 @@ ensure_host_redis() {
 
 if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
   if [ "$(id -u)" -ne 0 ]; then
-    log "run as root: sudo bash deployments/docker/scripts/ensure-host-redis.sh"
+    log "run as root: sudo bash bin/host/ensure-host-redis.sh"
     exit 1
   fi
   ensure_host_redis

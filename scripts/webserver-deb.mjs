@@ -56,7 +56,7 @@ function defaultDebStageParent() {
 const STAGE_PARENT = process.env.SDKWORK_DEB_STAGE_PARENT
   ? path.resolve(process.env.SDKWORK_DEB_STAGE_PARENT)
   : defaultDebStageParent();
-const DEB_TEMPLATE_ROOT = path.join(REPO_ROOT, 'scripts', 'deb');
+const DEB_TEMPLATE_ROOT = path.join(REPO_ROOT, 'bin', 'packaging', 'deb');
 const PC_RUNTIME_ENV_SOURCES = Object.freeze({
   test: path.join(
     REPO_ROOT,

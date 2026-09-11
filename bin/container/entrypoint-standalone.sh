@@ -292,10 +292,44 @@ is_unsigned_credential_entry_fixture() {
   esac
 }
 
+# Single policy predicate for the credential-entry bootstrap Access-Token
+# (IAM_CREDENTIAL_ENTRY_SPEC.md §4/§5). The token is a *browser* handoff and
+# nothing in this stack consumes it server-side, so it is provisioned for
+# development only; `test` may opt in from an isolated runner; staging, demo,
+# and production must fail closed. Keep this in sync with the Rust policy core
+# `data_plane::credential_entry_injection::resolve_injection_token`.
+credential_entry_bootstrap_token_is_enabled() {
+  local environment
+  environment="$(printf '%s' "${SDKWORK_WEBSERVER_ENVIRONMENT:-development}" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  case "${environment}" in
+    development|dev) return 0 ;;
+    test) [ "${SDKWORK_WEBSERVER_CREDENTIAL_ENTRY_BOOTSTRAP_ALLOW_TEST:-0}" = "1" ] ;;
+    *) return 1 ;;
+  esac
+}
+
+# The secret lives on a persistent volume, so an environment that must not
+# inject the token has to purge it on every start. Otherwise an upgraded
+# container keeps the token minted by a previous (leaking) release on disk,
+# where any later regression in the injection gate would expose it again.
+purge_credential_entry_bootstrap_token() {
+  local file="${SECRETS_ROOT}/credential-entry-bootstrap-access-token"
+  if [ -e "${file}" ]; then
+    rm -f "${file}"
+    log "purged credential-entry bootstrap Access-Token (${1}: browser injection is development-only)"
+  fi
+}
+
 ensure_credential_entry_bootstrap_token() {
   local environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
   local file="${SECRETS_ROOT}/credential-entry-bootstrap-access-token"
   ensure_directory "${SECRETS_ROOT}"
+  if ! credential_entry_bootstrap_token_is_enabled; then
+    purge_credential_entry_bootstrap_token "${environment}"
+    return 0
+  fi
   if is_unsigned_credential_entry_fixture "${file}"; then
     rm -f "${file}"
     log "removed stale unsigned credential-entry bootstrap Access-Token (${environment})"
@@ -1771,6 +1805,16 @@ render_runtime_config() {
     db_password_field="password_file = \"${SDKWORK_DATABASE_PASSWORD_FILE}\""
   fi
 
+  # IAM_CREDENTIAL_ENTRY_SPEC.md §4/§5: only development renderers may receive
+  # the credential-entry bootstrap Access-Token in browser artifacts, so the
+  # secret is declared only where the shared policy enables it. Declaring it
+  # elsewhere would make the runtime read (and the shell inject) a token that
+  # must never reach a staging/demo/production browser.
+  local credential_entry_bootstrap_field=''
+  if credential_entry_bootstrap_token_is_enabled; then
+    credential_entry_bootstrap_field="credential_entry_bootstrap_access_token_file = \"${SECRETS_ROOT}/credential-entry-bootstrap-access-token\""
+  fi
+
   # Build cors_allowed_origins TOML array from comma-separated env var.
   # "http://a.com, http://b.com" -> ["http://a.com", "http://b.com"]
   local cors_origins="${SDKWORK_CORS_ALLOWED_ORIGINS:-${public_url}}"
@@ -1860,7 +1904,7 @@ auto_migrate = true
 [secrets]
 encryption_key_file = "${SECRETS_ROOT}/encryption-key"
 deploy_encryption_key_file = "${SECRETS_ROOT}/deploy-encryption-key"
-credential_entry_bootstrap_access_token_file = "${SECRETS_ROOT}/credential-entry-bootstrap-access-token"
+${credential_entry_bootstrap_field}
 
 [acme]
 profile = "${SDKWORK_WEBSERVER_ACME_PROFILE:-staging}"

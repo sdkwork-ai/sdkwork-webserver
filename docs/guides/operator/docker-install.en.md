@@ -78,7 +78,7 @@ bin/docker-image.sh build --image-tag <version>
 # → registry.sdkwork.com/apps/sdkwork-webserver-standalone:<version>
 
 # 1. Provision host PostgreSQL/Redis (all environments, once)
-sudo bash deployments/docker/scripts/setup-host-external-deps.sh
+sudo bash bin/host/setup-host-external-deps.sh
 
 # 2. Deploy an environment (idempotent; re-running converges)
 bin/docker-deploy.sh install --environment development

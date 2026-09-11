@@ -41,8 +41,9 @@ const INSTALLER_OUTPUT_ROOT = path.join(REPO_ROOT, 'dist', 'installers');
 // preserve mode bits).
 const STAGE_PARENT = process.env.SDKWORK_RPM_STAGE_PARENT
   ? path.resolve(process.env.SDKWORK_RPM_STAGE_PARENT)
-  : path.join(REPO_ROOT, '.sdkwork', 'runtime', 'rpm-stage');const RPM_TEMPLATE_ROOT = path.join(REPO_ROOT, 'scripts', 'rpm');
-const DEB_TEMPLATE_ROOT = path.join(REPO_ROOT, 'scripts', 'deb');
+  : path.join(REPO_ROOT, '.sdkwork', 'runtime', 'rpm-stage');
+const RPM_TEMPLATE_ROOT = path.join(REPO_ROOT, 'bin', 'packaging', 'rpm');
+const DEB_TEMPLATE_ROOT = path.join(REPO_ROOT, 'bin', 'packaging', 'deb');
 const PC_RUNTIME_ENV_SOURCES = Object.freeze({
   test: path.join(
     REPO_ROOT,

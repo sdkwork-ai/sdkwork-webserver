@@ -84,9 +84,8 @@ test('embedded compose shares /opt/deploy bind mount across profiles', () => {
 test('space clone helper script exists', () => {
   const script = path.join(
     appRoot,
-    'deployments',
-    'docker',
-    'scripts',
+    'bin',
+    'host',
     'setup-host-space-clone.sh',
   );
   assert.equal(existsSync(script), true);
@@ -96,7 +95,7 @@ test('space clone helper script exists', () => {
 
 test('entrypoint imports the platform API gateway sidecar for api*.brand hosts', () => {
   const entrypoint = readFileSync(
-    path.join(appRoot, 'deployments', 'docker', 'scripts', 'entrypoint-standalone.sh'),
+    path.join(appRoot, 'bin', 'container', 'entrypoint-standalone.sh'),
     'utf8',
   );
   assert.match(entrypoint, /is_platform_api_gateway_module/u);
@@ -110,7 +109,7 @@ test('entrypoint imports the platform API gateway sidecar for api*.brand hosts',
 
 test('module API gateway defaults to docker sibling deployment', () => {
   const entrypoint = readFileSync(
-    path.join(appRoot, 'deployments', 'docker', 'scripts', 'entrypoint-standalone.sh'),
+    path.join(appRoot, 'bin', 'container', 'entrypoint-standalone.sh'),
     'utf8',
   );
   assert.match(entrypoint, /SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT:-\}?docker/u);
@@ -136,7 +135,7 @@ test('module API gateway defaults to docker sibling deployment', () => {
 
 test('entrypoint ensures platform API plane import and does not require gateway up', () => {
   const entrypoint = readFileSync(
-    path.join(appRoot, 'deployments', 'docker', 'scripts', 'entrypoint-standalone.sh'),
+    path.join(appRoot, 'bin', 'container', 'entrypoint-standalone.sh'),
     'utf8',
   );
   assert.match(entrypoint, /ensure_platform_api_gateway_import_listed/u);
@@ -148,12 +147,11 @@ test('entrypoint ensures platform API plane import and does not require gateway 
 test('host nginx uninstall script exists and install-wsl-nginx is retired', () => {
   const uninstall = path.join(
     appRoot,
-    'deployments',
-    'docker',
-    'scripts',
+    'bin',
+    'host',
     'uninstall-wsl-nginx.sh',
   );
-  const install = path.join(appRoot, 'deployments', 'docker', 'scripts', 'install-wsl-nginx.sh');
+  const install = path.join(appRoot, 'bin', 'host', 'install-wsl-nginx.sh');
   assert.equal(existsSync(uninstall), true);
   assert.match(readFileSync(uninstall, 'utf8'), /apt-get purge/u);
   assert.match(readFileSync(install, 'utf8'), /RETIRED/u);
@@ -162,7 +160,7 @@ test('host nginx uninstall script exists and install-wsl-nginx is retired', () =
 
 test('entrypoint includes module nginx sidecars checkout-direct without rewriting', () => {
   const entrypoint = readFileSync(
-    path.join(appRoot, 'deployments', 'docker', 'scripts', 'entrypoint-standalone.sh'),
+    path.join(appRoot, 'bin', 'container', 'entrypoint-standalone.sh'),
     'utf8',
   );
   // §17.3: sibling sidecars stay the single source of truth; the aggregator
@@ -235,7 +233,7 @@ test('docker compose files expose module API gateway deployment env', () => {
 
 test('entrypoint discovers sdkwork-space modules and writes imports', () => {
   const entrypoint = readFileSync(
-    path.join(appRoot, 'deployments', 'docker', 'scripts', 'entrypoint-standalone.sh'),
+    path.join(appRoot, 'bin', 'container', 'entrypoint-standalone.sh'),
     'utf8',
   );
   assert.match(entrypoint, /discover_importable_modules/u);
@@ -267,7 +265,7 @@ test('entrypoint discovers sdkwork-space modules and writes imports', () => {
 
 test('entrypoint materializes sibling Adaptive Web static roots in-container', () => {
   const entrypoint = readFileSync(
-    path.join(appRoot, 'deployments', 'docker', 'scripts', 'entrypoint-standalone.sh'),
+    path.join(appRoot, 'bin', 'container', 'entrypoint-standalone.sh'),
     'utf8',
   );
   // §13.6/§17: sidecar @pc/@h5 named locations dispatch to package roots that
@@ -285,7 +283,7 @@ test('entrypoint materializes sibling Adaptive Web static roots in-container', (
 
 test('imported sidecar TLS certificates bootstrap into the canonical ACME layout', () => {
   const entrypoint = readFileSync(
-    path.join(appRoot, 'deployments', 'docker', 'scripts', 'entrypoint-standalone.sh'),
+    path.join(appRoot, 'bin', 'container', 'entrypoint-standalone.sh'),
     'utf8',
   );
   assert.match(entrypoint, /ensure_imported_sidecar_certificates \|\| true/u);
@@ -297,7 +295,7 @@ test('imported sidecar TLS certificates bootstrap into the canonical ACME layout
 
 test('product edge emits production TLS blocks with health probe locations', () => {
   const entrypoint = readFileSync(
-    path.join(appRoot, 'deployments', 'docker', 'scripts', 'entrypoint-standalone.sh'),
+    path.join(appRoot, 'bin', 'container', 'entrypoint-standalone.sh'),
     'utf8',
   );
   // Production: one TLS server block per brand domain (W11/W25/W26).
@@ -365,7 +363,7 @@ test('module space import auto-discovery is the docker default', () => {
   // is imported when AUTO_DISCOVER=true; SDKWORK_SPACE_MODULES pins only when
   // AUTO_DISCOVER is false.
   const entrypoint = readFileSync(
-    path.join(appRoot, 'deployments', 'docker', 'scripts', 'entrypoint-standalone.sh'),
+    path.join(appRoot, 'bin', 'container', 'entrypoint-standalone.sh'),
     'utf8',
   );
   assert.match(entrypoint, /SDKWORK_SPACE_AUTO_DISCOVER/u);
@@ -420,7 +418,7 @@ test('drive delivery cache mount and env contract is complete (DRIVE_SPEC §17)'
 
   // Entrypoint: shared cache root bootstrap is fail-safe (warn, never fail).
   const entrypoint = readFileSync(
-    path.join(appRoot, 'deployments', 'docker', 'scripts', 'entrypoint-standalone.sh'),
+    path.join(appRoot, 'bin', 'container', 'entrypoint-standalone.sh'),
     'utf8',
   );
   assert.match(entrypoint, /ensure_drive_delivery_cache_root/u);
@@ -474,7 +472,7 @@ test('unified install bundle ships every lifecycle environment (DEPLOYMENT_SPEC 
   // deploy.sh accepts all five lifecycle environments; the installer copies each
   // env example into the bundle so operators never hand-craft one.
   const deployScript = readFileSync(
-    path.join(appRoot, 'deployments', 'docker', 'bundle', 'deploy.sh'),
+    path.join(appRoot, 'bin', 'docker-bundle-deploy.sh'),
     'utf8',
   );
   assert.match(deployScript, /development\|test\|staging\|demo\|production/u);
@@ -591,7 +589,7 @@ test('every environment CORS allowlist covers registered client origins (WEB_FRA
 
   // Entrypoint fallback defaults (no env file at all) also carry the origins.
   const entrypoint = readFileSync(
-    path.join(appRoot, 'deployments', 'docker', 'scripts', 'entrypoint-standalone.sh'),
+    path.join(appRoot, 'bin', 'container', 'entrypoint-standalone.sh'),
     'utf8',
   );
   for (const origin of registeredOrigins) {
@@ -689,7 +687,7 @@ test('every shipped compose service declares bounded log rotation (DEPLOYMENT_SP
 test('external host-system dependencies are the default (DEPLOYMENT_SPEC §6.1)', () => {
   // 1) bundle deploy.sh defaults to external and accepts --embedded opt-in.
   const deployScript = readFileSync(
-    path.join(appRoot, 'deployments', 'docker', 'bundle', 'deploy.sh'),
+    path.join(appRoot, 'bin', 'docker-bundle-deploy.sh'),
     'utf8',
   );
   assert.match(deployScript, /^EXTERNAL="1"$/mu, 'deploy.sh must default EXTERNAL="1"');
@@ -727,7 +725,7 @@ test('external host-system dependencies are the default (DEPLOYMENT_SPEC §6.1)'
   // 4) The provisioning script covers every lifecycle environment identity
   //    (staging included) from the env-file identities.
   const provisioning = readFileSync(
-    path.join(appRoot, 'deployments', 'docker', 'scripts', 'setup-host-external-deps.sh'),
+    path.join(appRoot, 'bin', 'host', 'setup-host-external-deps.sh'),
     'utf8',
   );
   for (const identity of ['sdkwork_ai_dev', 'sdkwork_ai_test', 'sdkwork_ai_staging', 'sdkwork_ai_prod']) {

@@ -100,10 +100,15 @@ export function validateDeploymentEnvironment(env, mode) {
 
   const hosts = expectedHosts(environment);
   const corsOrigins = csv(env.SDKWORK_CORS_ALLOWED_ORIGINS);
+  // The edge serves production over TLS only: `sdkwork-specs/tools/cors/registry.mjs`
+  // pushes `http://<host>` for every environment *except* production, and
+  // `check:cors-standard` rejects a non-https production origin. Demand the same
+  // exact origin the registry derives, otherwise the two gates contradict.
+  const scheme = environment === 'production' ? 'https' : 'http';
   for (const host of hosts) {
-    const httpOrigin = `http://${host}`;
-    if (!corsOrigins.includes(httpOrigin)) {
-      throw new Error(`SDKWORK_CORS_ALLOWED_ORIGINS is missing ${httpOrigin}`);
+    const expectedOrigin = `${scheme}://${host}`;
+    if (!corsOrigins.includes(expectedOrigin)) {
+      throw new Error(`SDKWORK_CORS_ALLOWED_ORIGINS is missing ${expectedOrigin}`);
     }
   }
 

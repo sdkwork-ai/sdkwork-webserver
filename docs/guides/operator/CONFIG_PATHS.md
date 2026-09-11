@@ -135,7 +135,7 @@ nginx-compat commands:
 
 Docker WSL site helper (**retired** — host nginx is replaced by the
 sdkwork-webserver Docker `serve-imports` data plane; the script now only
-uninstalls nginx): `deployments/docker/scripts/uninstall-wsl-nginx.sh`.
+uninstalls nginx): `bin/host/uninstall-wsl-nginx.sh`.
 
 Native Adaptive Web edge helper (maps to process bind from `config.toml`):
 `.sdkwork/wsl-point-server-sites-to-gateway.sh`.
@@ -147,7 +147,7 @@ Native Adaptive Web edge helper (maps to process bind from `config.toml`):
 | Path | Purpose |
 | --- | --- |
 | `deployments/docker/Dockerfile.standalone` | Image contract + default SPA env roots |
-| `deployments/docker/scripts/entrypoint-standalone.sh` | Writes `/etc/sdkwork/webserver/config.toml`, ensures secrets + SPA copy |
+| `bin/host/entrypoint-standalone.sh` | Writes `/etc/sdkwork/webserver/config.toml`, ensures secrets + SPA copy |
 | `deployments/docker/env/{development,test,staging,demo,production}.env` | Host ports, DB/Redis, URLs |
 | `deployments/docker/env/{development,test,production}.i1.env` | Per-instance overrides (snowflake node ids) |
 

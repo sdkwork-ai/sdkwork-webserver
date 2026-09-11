@@ -113,9 +113,10 @@ done
 #      PC login page. The test environment uses a locally generated unsigned
 #      fixture JWT (`@sdkwork/iam-credential-entry` dev-bootstrap shape,
 #      claims per sdkwork.app.config.json backend identity); the gateway
-#      injects it into the served index.html. Production MUST provision this
-#      token from a private secret source (iam-credential-entry contract) and
-#      is intentionally left unset by the installer.
+#      injects it into the served index.html only when the documented
+#      isolated-runner opt-in is set. Staging, demo, and production MUST
+#      provision this token from a private secret source (iam-credential-entry
+#      contract) and are intentionally left unset by the installer.
 if [ "${ENVIRONMENT}" = "test" ]; then
   BOOTSTRAP_TOKEN_FILE="${CONFIG_ROOT}/secrets/credential-entry-bootstrap-access-token"
   if [ ! -s "${BOOTSTRAP_TOKEN_FILE}" ]; then
@@ -141,6 +142,23 @@ for token_name in web-internal-api drive-internal-api knowledgebase-internal-api
     chmod 0600 "${token_file}"
   fi
 done
+
+# IAM_CREDENTIAL_ENTRY_SPEC.md §4/§5: the credential-entry bootstrap token is a
+# browser-only handoff, so the runtime config references it only where the
+# shared policy enables it (development, or test behind the documented
+# isolated-runner opt-in). Staging, demo, and production must never inject it,
+# so for those environments the installer neither provisions nor declares it.
+CREDENTIAL_ENTRY_BOOTSTRAP_FIELD=''
+case "${ENVIRONMENT}" in
+  development|dev)
+    CREDENTIAL_ENTRY_BOOTSTRAP_FIELD="credential_entry_bootstrap_access_token_file = \"${CONFIG_ROOT}/secrets/credential-entry-bootstrap-access-token\""
+    ;;
+  test)
+    if [ "${SDKWORK_WEBSERVER_CREDENTIAL_ENTRY_BOOTSTRAP_ALLOW_TEST:-0}" = "1" ]; then
+      CREDENTIAL_ENTRY_BOOTSTRAP_FIELD="credential_entry_bootstrap_access_token_file = \"${CONFIG_ROOT}/secrets/credential-entry-bootstrap-access-token\""
+    fi
+    ;;
+esac
 
 # 6. Typed runtime configuration (RUNTIME_DIRECTORY_SPEC section 4.1: the
 #    <application-code>.toml runtime config file). Loaded and materialized
@@ -217,7 +235,7 @@ auto_migrate = true
 [secrets]
 encryption_key_file = "${CONFIG_ROOT}/secrets/encryption-key"
 deploy_encryption_key_file = "${CONFIG_ROOT}/secrets/deploy-encryption-key"
-credential_entry_bootstrap_access_token_file = "${CONFIG_ROOT}/secrets/credential-entry-bootstrap-access-token"
+${CREDENTIAL_ENTRY_BOOTSTRAP_FIELD}
 
 [acme]
 profile = "__ACME_PROFILE__"

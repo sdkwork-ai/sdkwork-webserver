@@ -152,6 +152,12 @@ services:
       # Empty allow-list = accept all Host headers (platform API plane covers many brands).
       SDKWORK_API_CLOUD_GATEWAY_ALLOWED_HOSTS: ${SDKWORK_MODULE_API_GATEWAY_ALLOWED_HOSTS:-}
       SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_MODULE_API_GATEWAY_CORS_ALLOWED_ORIGINS:-${SDKWORK_CORS_ALLOWED_ORIGINS:-}}
+      # Registered console host pattern: the gateway has no sub-domain wildcard,
+      # so the module keys carry the pattern and the allow-list above carries
+      # only the exact seeds. Both must reach the sibling together.
+      SDKWORK_CORS_CONSOLE_HOST_LABELS: ${SDKWORK_MODULE_API_GATEWAY_CORS_CONSOLE_HOST_LABELS:-}
+      SDKWORK_CORS_CONSOLE_HOST_SUFFIX: ${SDKWORK_MODULE_API_GATEWAY_CORS_CONSOLE_HOST_SUFFIX:-}
+      SDKWORK_CORS_CONSOLE_HOST_SCHEMES: ${SDKWORK_MODULE_API_GATEWAY_CORS_CONSOLE_HOST_SCHEMES:-}
       # Prefer split fields (same as webserver). Do not inject a prebuilt
       # SDKWORK_DATABASE_URL here — URL embedding can diverge from the password
       # the webserver service actually uses after secret bootstrap.

@@ -34,7 +34,7 @@ esac
 
 echo "== platform API plane verification (${environment}) =="
 
-entrypoint="${repo_root}/deployments/docker/scripts/entrypoint-standalone.sh"
+entrypoint="${repo_root}/bin/container/entrypoint-standalone.sh"
 for pattern in \
   'is_platform_api_gateway_module' \
   'write_platform_api_gateway_locations_docker' \
@@ -105,7 +105,7 @@ report_probe "${brands_host}"
 report_probe "${cn_host}"
 
 if command -v nginx >/dev/null 2>&1 || [ -d /etc/nginx ]; then
-  echo "WARN: host nginx still present; run: sudo bash deployments/docker/scripts/uninstall-wsl-nginx.sh"
+  echo "WARN: host nginx still present; run: sudo bash bin/host/uninstall-wsl-nginx.sh"
 else
   echo "OK: host nginx not installed"
 fi

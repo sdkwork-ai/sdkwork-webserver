@@ -208,16 +208,25 @@
     }
   },
   "release": {
-    "currentVersion": "0.1.5",
+    "currentVersion": "0.1.6",
     "defaultChannel": "BETA",
     "latest": {
-      "BETA": "0.1.5"
+      "BETA": "0.1.6"
     },
     "notes": [
       {
-        "version": "0.1.5",
+        "version": "0.1.6",
         "channel": "BETA",
         "current": true,
+        "summary": "Universal import plane activated by default: the standalone entrypoint now commissions all five lifecycle environments (development,test,staging,demo,production) instead of defaulting to the instance's own SDKWORK_WEBSERVER_ENVIRONMENT, so one webserver instance routes every module's cloud sidecar for every environment and serves all imported environments' static file servers. The stock 0.1.5 image carried the older single-environment default, which is why a deployed instance reported 'Commissioned environments: development' while its environment peers already declared the full five. Import profile stays cloud and layout-imports.<profile>.toml is materialized alongside the nginx aggregator per SDKWORK_WEBSERVER_SPEC section 17.3 / ENVIRONMENT_SPEC section 6.2.2.",
+        "packageIds": [
+          "linux-x64-standalone-server-tar-gz"
+        ]
+      },
+      {
+        "version": "0.1.5",
+        "channel": "BETA",
+        "current": false,
         "summary": "Standalone edge re-release from the cleaned baseline: five-environment (development/test/staging/demo/production) container packaging through the bin/ single operator channel, plus offline-friendly image build (pnpm-free delegation, --no-pull).",
         "packageIds": [
           "linux-rhel-x64-standalone-server-rpm",

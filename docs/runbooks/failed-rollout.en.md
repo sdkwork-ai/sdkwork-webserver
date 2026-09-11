@@ -5,20 +5,32 @@ restorable within 30s), FR-026 (deployment status must be truthful). Symptoms:
 container-channel `release.sh` health gate failure, deb upgrade failing health
 probes, or application deployment records stuck in PENDING.
 
-## 1. Container channel (deploy.sh / release.sh)
+## 1. Container channel (bin/docker-deploy.sh)
+
+`bin/` is the single operator surface (MODULE_BIN_SPEC.md §1): the bundle's
+`deploy.sh` / `release.sh` are driven by that entrypoint. Calling them directly
+bypasses the pre-change backup gate and the evidence trail.
 
 ```bash
-cd /opt/deploy/sdkwork-webserver/bundle
-bash deploy.sh --environment production --ps
-tail -n 50 release-ledger.log 2>/dev/null || ls var/
+# Release status (drives the bundle's deploy.sh --ps internally)
+bin/docker-deploy.sh status --environment production
+# Per-instance health gate: the old instance keeps serving until the new one
+# passes wait_container_healthy
 docker ps --format '{{.Names}} {{.Status}}' | grep sdkwork
+# Ledger (on the deploy target: /opt/deploy/sdkwork-webserver/bundle/)
+tail -n 50 /opt/deploy/sdkwork-webserver/bundle/release-ledger.log 2>/dev/null
 ```
 
-- `release.sh` performs digest/sha256 bundle verification and **auto-rollback**:
-  when the new version fails its health gate, it falls back to the previous
-  image tag and appends the ledger. Manual rollback: re-run `deploy.sh` with
-  the previous `--image-tag` recorded in the ledger.
+- The entrypoint's `install`/`upgrade` run the **pre-change backup gate** on
+  staging/demo/production (`--skip-backup` records an evidence line), and the
+  bundle's `release.sh` adds digest/sha256 verification plus **auto-rollback**:
+  when the new version fails its health gate it falls back to the previous image
+  tag and appends the ledger.
+- Manual rollback goes through the same entrypoint:
+  `bin/docker-deploy.sh rollback --environment production`
+  (`--to <image-tag>` to pin a revision; without it the ledger's previous tag is used).
 - After rollback verify `/healthz` and a business route before re-attempting.
+- Live diagnostics: `bin/docker-deploy.sh logs --environment production --tail 200`.
 
 ## 2. deb/systemd channel
 

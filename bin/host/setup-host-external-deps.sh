@@ -13,7 +13,7 @@ log() {
 
 require_root() {
   if [ "$(id -u)" -ne 0 ]; then
-    log "run as root: sudo bash deployments/docker/scripts/setup-host-external-deps.sh"
+    log "run as root: sudo bash bin/host/setup-host-external-deps.sh"
     exit 1
   fi
 }

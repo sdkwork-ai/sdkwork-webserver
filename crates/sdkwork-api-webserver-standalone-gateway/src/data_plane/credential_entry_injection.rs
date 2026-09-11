@@ -17,6 +17,12 @@
 //! injected into served SPA `index.html` documents; every other environment
 //! fails closed exactly as the spec requires (no injection, no startup
 //! failure).
+//!
+//! [`resolve_injection_token`] and [`injection_environment`] are the **single**
+//! policy implementation shared by both injection paths. `app_shell.rs` must
+//! call them instead of re-deriving the environment predicate, otherwise the
+//! two paths drift and one of them silently starts leaking the token outside
+//! development (this is exactly the 2026-09-11 production leak).
 
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -31,6 +37,7 @@ const CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN_ENV: &str =
 const DEFAULT_CREDENTIAL_ENTRY_BOOTSTRAP_TOKEN_PATH: &str =
     "/etc/sdkwork/webserver/secrets/credential-entry-bootstrap-access-token";
 const ENVIRONMENT_ENV: &str = "SDKWORK_WEBSERVER_ENVIRONMENT";
+const ENVIRONMENT_CONFIG_PROFILE_ENV: &str = "SDKWORK_WEBSERVER_CONFIG_PROFILE";
 
 static INJECTION_TOKEN: OnceLock<Option<String>> = OnceLock::new();
 
@@ -44,7 +51,7 @@ pub(crate) fn injection_token() -> Option<&'static str> {
     INJECTION_TOKEN
         .get_or_init(|| {
             resolve_injection_token(
-                std::env::var(ENVIRONMENT_ENV).ok().as_deref(),
+                injection_environment().as_deref(),
                 std::env::var(CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN_ENV)
                     .ok()
                     .as_deref(),
@@ -54,19 +61,33 @@ pub(crate) fn injection_token() -> Option<&'static str> {
         .as_deref()
 }
 
+/// Raw lifecycle environment used by the browser-injection policy gate.
+///
+/// Fails closed: an unlabelled process (`SDKWORK_WEBSERVER_ENVIRONMENT` and
+/// `SDKWORK_WEBSERVER_CONFIG_PROFILE` both unset) yields `None` and therefore
+/// never receives the bootstrap token. The value is lower-cased so `DEVELOPMENT`
+/// and `development` behave identically.
+pub(crate) fn injection_environment() -> Option<String> {
+    std::env::var(ENVIRONMENT_ENV)
+        .or_else(|_| std::env::var(ENVIRONMENT_CONFIG_PROFILE_ENV))
+        .ok()
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty())
+}
+
 /// Pure resolution core so the environment policy stays unit-testable.
 ///
-/// Development only (`development` | `dev`); `test`, `staging`, and
-/// `production` must never receive the bootstrap token in browser artifacts
-/// (`IAM_CREDENTIAL_ENTRY_SPEC.md` §4/§5). Tokens that cannot be embedded
-/// safely into an HTML attribute are rejected (fail closed).
-fn resolve_injection_token(
+/// Development only (`development` | `dev`, case-insensitive); `test`,
+/// `staging`, and `production` must never receive the bootstrap token in
+/// browser artifacts (`IAM_CREDENTIAL_ENTRY_SPEC.md` §4/§5). Tokens that cannot
+/// be embedded safely into an HTML attribute are rejected (fail closed).
+pub(crate) fn resolve_injection_token(
     environment: Option<&str>,
     env_token: Option<&str>,
     file_token: Option<&str>,
 ) -> Option<String> {
-    let environment = environment?.trim();
-    if !matches!(environment, "development" | "dev") {
+    let environment = environment?.trim().to_ascii_lowercase();
+    if !matches!(environment.as_str(), "development" | "dev") {
         return None;
     }
     let token = env_token
@@ -138,7 +159,7 @@ mod tests {
             Some(token)
         );
         // Spec §4/§5: test/staging/production never inject.
-        for environment in ["test", "staging", "production", ""] {
+        for environment in ["test", "staging", "demo", "production", ""] {
             assert_eq!(
                 resolve_injection_token(Some(environment), Some(token), None),
                 None,
@@ -146,6 +167,28 @@ mod tests {
             );
         }
         assert_eq!(resolve_injection_token(None, Some(token), None), None);
+    }
+
+    /// The policy must not be case-sensitive: a container labelled
+    /// `DEVELOPMENT` is still development, and `PRODUCTION` must still fail
+    /// closed.
+    #[test]
+    fn injection_environment_match_is_case_insensitive() {
+        let token = "header.payload.signature";
+        for environment in ["DEVELOPMENT", "Development", "  dev  ", "DEV"] {
+            assert_eq!(
+                resolve_injection_token(Some(environment), Some(token), None).as_deref(),
+                Some(token),
+                "environment {environment:?} must inject"
+            );
+        }
+        for environment in ["PRODUCTION", "Production", "STAGING", "Demo", "TEST"] {
+            assert_eq!(
+                resolve_injection_token(Some(environment), Some(token), None),
+                None,
+                "environment {environment:?} must not inject"
+            );
+        }
     }
 
     #[test]

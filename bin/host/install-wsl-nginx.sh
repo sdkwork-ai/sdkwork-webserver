@@ -6,10 +6,10 @@
 # installing it.
 #
 # Usage:
-#   sudo bash deployments/docker/scripts/install-wsl-nginx.sh
+#   sudo bash bin/host/install-wsl-nginx.sh
 #
 # Prefer the explicit uninstall entrypoint:
-#   sudo bash deployments/docker/scripts/uninstall-wsl-nginx.sh
+#   sudo bash bin/host/uninstall-wsl-nginx.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -6,14 +6,14 @@
 # Host nginx is retired — do not reinstall for domain routing.
 #
 # Usage (WSL Ubuntu):
-#   sudo bash deployments/docker/scripts/uninstall-wsl-nginx.sh
+#   sudo bash bin/host/uninstall-wsl-nginx.sh
 set -euo pipefail
 
 log() { echo "[uninstall-wsl-nginx] $*"; }
 
 require_root() {
   if [ "$(id -u)" -ne 0 ]; then
-    log "run as root: sudo bash deployments/docker/scripts/uninstall-wsl-nginx.sh"
+    log "run as root: sudo bash bin/host/uninstall-wsl-nginx.sh"
     exit 1
   fi
 }

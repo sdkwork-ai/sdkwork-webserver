@@ -6,6 +6,6 @@
 # `deployments/webserver/` under each sibling module checkout.
 #
 # Uninstall any previously installed WSL nginx:
-#   sudo bash deployments/docker/scripts/uninstall-wsl-nginx.sh
+#   sudo bash bin/host/uninstall-wsl-nginx.sh
 #
 # Do not reintroduce hand-authored dual-authority conf files here.

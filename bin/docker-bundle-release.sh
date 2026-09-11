@@ -28,6 +28,10 @@
 # Common options (forwarded to deploy.sh where applicable):
 #   --image-tag <tag>   deploy target version (deploy only; default: env-file /
 #                       bundle image.env SDKWORK_WEBSERVER_IMAGE_TAG)
+#   --allow-version-mismatch
+#                       use the env-file tag even when it disagrees with this
+#                       bundle's image.env; without it a mismatch is a hard
+#                       error so a release can never silently change version.
 #   --to <version>      explicit rollback target (rollback only; default:
 #                       previous successful version from the ledger)
 #   --replicas <N>      webserver instances (default: env-file
@@ -74,9 +78,13 @@ if [ -f "${SCRIPT_DIR}/compose/docker-compose.bundle.yml" ]; then
   DEFAULT_STATE_ROOT="${SCRIPT_DIR}/release-state"
   BUNDLE_IMAGE_ENV="${SCRIPT_DIR}/image.env"
 else
-  REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+  # Authored flat as bin/docker-bundle-release.sh (MODULE_BIN_SPEC.md §2.2); the
+  # packaging step copies it to the bundle root under the artifact name
+  # release.sh, so repo mode resolves one level up and sibling-points the
+  # deploy executor by its source name.
+  REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
   BUNDLE_ROOT=""
-  DEPLOY_SCRIPT="${SCRIPT_DIR}/deploy.sh"
+  DEPLOY_SCRIPT="${SCRIPT_DIR}/docker-bundle-deploy.sh"
   DEFAULT_STATE_ROOT="${REPO_ROOT}/release-state"
   BUNDLE_IMAGE_ENV=""
 fi
@@ -85,6 +93,9 @@ fi
 ACTION=""
 ENVIRONMENT=""
 IMAGE_TAG=""
+# 0 = refuse a tag that disagrees with this bundle's image.env (fail-fast
+# against silent version drift); 1 = use the env-file tag anyway.
+ALLOW_VERSION_MISMATCH="0"
 ROLLBACK_TO=""
 REPLICAS=""
 DEPS_MODE_FLAG=""
@@ -105,6 +116,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --environment)      ENVIRONMENT="$2"; shift 2 ;;
     --image-tag)        IMAGE_TAG="$2"; shift 2 ;;
+    --allow-version-mismatch) ALLOW_VERSION_MISMATCH="1"; shift ;;
     --to)               ROLLBACK_TO="$2"; shift 2 ;;
     --replicas)         REPLICAS="$2"; shift 2 ;;
     --embedded)         DEPS_MODE_FLAG="embedded"; shift ;;
@@ -177,18 +189,35 @@ resolve_image_base() {
 
 resolve_image_tag() {
   # Priority: --image-tag > env-file SDKWORK_WEBSERVER_IMAGE_TAG tag >
-  # bundle image.env (same precedence order deploy.sh uses).
+  # bundle image.env. A disagreement between the env file and this bundle's
+  # image.env is fatal unless the operator asks for it explicitly: the env file
+  # is operator state that lags the bundle, and silently resolving it either way
+  # changes the deployed image version (deploy.sh carries the same guard).
   if [ -n "${IMAGE_TAG}" ]; then printf '%s' "${IMAGE_TAG}"; return; fi
-  local tag
-  tag="$(env_key SDKWORK_WEBSERVER_IMAGE_TAG | sed 's/.*://')"
-  if [ -n "${tag}" ] && [ "${tag}" != "$(env_key SDKWORK_WEBSERVER_IMAGE_TAG)" ]; then
-    printf '%s' "${tag}"; return
-  fi
+  local env_value env_tag bundle_tag tag
+  env_value="$(env_key SDKWORK_WEBSERVER_IMAGE_TAG)"
+  case "${env_value}" in
+    *:*) env_tag="${env_value##*:}" ;;
+    *)   env_tag="${env_value}" ;;
+  esac
+  bundle_tag=""
   if [ -n "${BUNDLE_IMAGE_ENV}" ] && [ -f "${BUNDLE_IMAGE_ENV}" ]; then
-    tag="$(sed -n 's/^SDKWORK_WEBSERVER_IMAGE_TAG=//p' "${BUNDLE_IMAGE_ENV}" | tail -1 | tr -d '\r')"
-    if [ -n "${tag}" ]; then printf '%s' "${tag}"; return; fi
+    bundle_tag="$(sed -n 's/^SDKWORK_WEBSERVER_IMAGE_TAG=//p' "${BUNDLE_IMAGE_ENV}" | tail -1 | tr -d '\r')"
   fi
-  printf '%s' "${tag:-0.1.0}"
+  if [ -n "${env_tag}" ] && [ -n "${bundle_tag}" ] && [ "${env_tag}" != "${bundle_tag}" ]; then
+    if [ "${ALLOW_VERSION_MISMATCH}" != "1" ]; then
+      die "version mismatch for environment ${ENVIRONMENT}: env/${ENVIRONMENT}.env pins SDKWORK_WEBSERVER_IMAGE_TAG=${env_tag} but this bundle ships ${bundle_tag}.
+    Refusing to silently change the deployed image version. Choose one:
+      --image-tag ${env_tag}                     keep the pinned version
+      --image-tag ${bundle_tag}                  adopt the bundle version
+      --allow-version-mismatch                   force the pinned version deliberately"
+    fi
+    info "WARN: env file pins ${env_tag} but this bundle ships ${bundle_tag}; using ${env_tag} (--allow-version-mismatch)"
+    printf '%s' "${env_tag}"; return
+  fi
+  if [ -n "${env_tag}" ]; then printf '%s' "${env_tag}"; return; fi
+  if [ -n "${bundle_tag}" ]; then printf '%s' "${bundle_tag}"; return; fi
+  printf '%s' "0.1.0"
 }
 
 IMAGE_BASE="$(resolve_image_base)"

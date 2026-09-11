@@ -35,6 +35,9 @@ import { createGzip } from 'node:zlib';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DOCKER_ROOT = path.join(REPO_ROOT, 'deployments', 'docker');
+// bin/ is the single script source root (MODULE_BIN_SPEC.md §1/§2.1): the bundle
+// receives copies of the executors and the postgres init scripts the build makes.
+const BIN_ROOT = path.join(REPO_ROOT, 'bin');
 const DEFAULT_OUTPUT_ROOT = path.join(REPO_ROOT, 'dist', 'docker-install');
 // staging is a first-class deployment environment (DEPLOYMENT_SPEC §2) and
 // ships in the bundle so production-like rehearsal uses the same installer.
@@ -209,7 +212,7 @@ Quick start on any Docker host:
 2. Default dependency mode is EXTERNAL: the webserver connects to the docker
    host's own PostgreSQL (host.docker.internal:5432) and Redis
    (host.docker.internal:6379). Provision host identities with
-   deployments/docker/scripts/setup-host-external-deps.sh (WSL/Ubuntu).
+   bin/host/setup-host-external-deps.sh (WSL/Ubuntu).
 3. deploy.sh loads image.tar.gz, then starts instances 1..N (instance 1 owns
    the 80/443 edge and runs migrations first). Use --embedded to run built-in
    postgres/redis containers instead.
@@ -225,24 +228,32 @@ async function main() {
     printHelp();
     return;
   }
-  const ref = await buildImage(settings);
+  // --dry-run reports what would be produced. It must not build the image:
+  // an expensive multi-minute docker build behind a "dry" flag defeats the
+  // point of being able to inspect the bundle plan offline.
   const bundleDir = path.join(
     settings.outputRoot,
     `sdkwork-webserver-install-${settings.version}.bundle`,
   );
-  console.log(`bundle directory: ${bundleDir}`);
   if (settings.dryRun) {
+    const ref = imageRef(settings.tag);
+    console.log(`bundle directory: ${bundleDir}`);
     console.log(`docker save ${ref} | gzip -> ${path.join(bundleDir, 'image.tar.gz')}`);
     console.log(`compose templates: ${DOCKER_ROOT}/docker-compose.bundle*.yml`);
     console.log(`env templates: ${DOCKER_ROOT}/env/*.env.example`);
-    console.log(`deploy script: ${DOCKER_ROOT}/bundle/deploy.sh`);
+    console.log(`deploy script: ${BIN_ROOT}/docker-bundle-deploy.sh -> deploy.sh`);
+    console.log(`release script: ${BIN_ROOT}/docker-bundle-release.sh -> release.sh`);
+    console.log(`postgres init: ${BIN_ROOT}/container/postgres-init`);
     return;
   }
+
+  const ref = await buildImage(settings);
+  console.log(`bundle directory: ${bundleDir}`);
 
   rmSync(bundleDir, { recursive: true, force: true });
   mkdirSync(path.join(bundleDir, 'compose'), { recursive: true });
   mkdirSync(path.join(bundleDir, 'env'), { recursive: true });
-  copyDir(path.join(DOCKER_ROOT, 'postgres', 'init'), path.join(bundleDir, 'postgres', 'init'));
+  copyDir(path.join(BIN_ROOT, 'container', 'postgres-init'), path.join(bundleDir, 'postgres', 'init'));
 
   console.log(`saving image ${ref} (gzip, this can take several minutes)...`);
   const imageTgz = path.join(bundleDir, 'image.tar.gz');
@@ -273,12 +284,14 @@ async function main() {
       path.join(bundleDir, 'env', `${environment}.env.example`),
     );
   }
+  // Source names are flat (MODULE_BIN_SPEC.md §2.2); the bundle root names are
+  // fixed by DOCKER_SPEC.md §4.1 / APPLICATION_DEPLOY_LAYOUT_SPEC.md §9.1.
   const deployScript = path.join(bundleDir, 'deploy.sh');
-  copyFileSync(path.join(DOCKER_ROOT, 'bundle', 'deploy.sh'), deployScript);
+  copyFileSync(path.join(BIN_ROOT, 'docker-bundle-deploy.sh'), deployScript);
   // Bundle-owned release channel (OPERATIONS_SPEC.md §1.2): versioned
   // deploy/rollback with a health gate, ledger, and release lock.
   const releaseScript = path.join(bundleDir, 'release.sh');
-  copyFileSync(path.join(DOCKER_ROOT, 'bundle', 'release.sh'), releaseScript);
+  copyFileSync(path.join(BIN_ROOT, 'docker-bundle-release.sh'), releaseScript);
   for (const script of [deployScript, releaseScript]) {
     const mode = statSync(script).mode | 0o755;
     const chmod = spawnSync('chmod', ['0755', script], { stdio: 'ignore' });

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# apps-static.sh — build-apps-static capability: build the Adaptive Web static
+# apps-static.sh — apps-static-build capability: build the Adaptive Web static
 # dist (PC / H5) of any independent sibling module in the sdkwork workspace.
+# Driven by bin/apps-static-build.sh (MODULE_BIN_SPEC.md §2.2).
 #
 # Delegation only: the actual build always goes through the canonical runner
 # `sdkwork-specs/tools/build-browser-client.mjs` (PNPM_SCRIPT_SPEC.md §4.2,
@@ -11,16 +12,16 @@
 # Shared primitives (sdkwork_die / sdkwork_log / sdkwork_run /
 # sdkwork_local_run / sdkwork_split_env_profile / sdkwork_tar_artifact /
 # evidence trap) come from bin/lib/bootstrap.sh, which dispatches here as
-# `sdkwork_entry_apps_static`.
+# `sdkwork_entry_apps_static_build`.
 
 # Vite config names mirrored from build-browser-client.mjs (VITE_CONFIG_NAMES).
 SDKWORK_APPS_STATIC_VITE_CONFIGS="vite.config.ts vite.config.mts vite.config.js vite.config.mjs vite.config.web.ts vite.config.web.mjs vite.config.browser.ts vite.config.browser.mjs"
 
 sdkwork_apps_static_usage() {
-  sdkwork_log "build-apps-static.sh — build PC/H5 static dist for a workspace sibling module's apps/"
+  sdkwork_log "apps-static-build.sh — build PC/H5 static dist for a workspace sibling module's apps/"
   sdkwork_log ""
   sdkwork_log "Usage:"
-  sdkwork_log "  bin/build-apps-static.sh <module> [pc|h5|all] [dev|test|staging|demo|prod[:standalone|cloud]] [options]"
+  sdkwork_log "  bin/apps-static-build.sh <module> [pc|h5|all] [dev|test|staging|demo|prod[:standalone|cloud]] [options]"
   sdkwork_log ""
   sdkwork_log "Arguments:"
   sdkwork_log "  <module>          sibling module under the workspace root ('sdkwork-im' or short 'im')"
@@ -41,10 +42,10 @@ sdkwork_apps_static_usage() {
   sdkwork_log "  -h|--help          this help"
   sdkwork_log ""
   sdkwork_log "Examples:"
-  sdkwork_log "  bin/build-apps-static.sh im                          # pc + h5, dev:standalone"
-  sdkwork_log "  bin/build-apps-static.sh sdkwork-im h5 prod          # h5 only, production standalone"
-  sdkwork_log "  bin/build-apps-static.sh im all test:cloud --out target/static"
-  sdkwork_log "  bin/build-apps-static.sh im --skip-typecheck --out target/static --tar"
+  sdkwork_log "  bin/apps-static-build.sh im                          # pc + h5, dev:standalone"
+  sdkwork_log "  bin/apps-static-build.sh sdkwork-im h5 prod          # h5 only, production standalone"
+  sdkwork_log "  bin/apps-static-build.sh im all test:cloud --out target/static"
+  sdkwork_log "  bin/apps-static-build.sh im --skip-typecheck --out target/static --tar"
   sdkwork_log ""
   sdkwork_log "The build delegates to the canonical runner (PNPM_SCRIPT_SPEC.md §4.2);"
   sdkwork_log "output lands in <module>/apps/<app>/dist/<profile>/<envAlias>/ and every"
@@ -129,7 +130,7 @@ sdkwork_apps_static_build_arch() {
   local module_root="$1" arch="$2" skip_typecheck="$3" do_clean="$4" out="$5" do_tar="$6"
   sdkwork_apps_static_detect_app "${module_root}" "${arch}" 1 \
     || sdkwork_die "${SDKWORK_BIN_E_STATE}" \
-      "no ${arch} browser app with a Vite config under ${module_root}/apps (run: bin/build-apps-static.sh <module> --list)"
+      "no ${arch} browser app with a Vite config under ${module_root}/apps (run: bin/apps-static-build.sh <module> --list)"
 
   local app_root="${SDKWORK_APPS_STATIC_APP_ROOT}"
   local alias dist_rel dist_dir
@@ -187,7 +188,7 @@ sdkwork_apps_static_build_arch() {
   fi
 }
 
-sdkwork_entry_apps_static() {
+sdkwork_entry_apps_static_build() {
   local module="" arch="all" spec="" profile_opt="" out="" ws=""
   local arch_given=0 do_list=0 do_tar=0 do_clean=0 skip_typecheck=0
   while (($#)); do
@@ -203,7 +204,7 @@ sdkwork_entry_apps_static() {
       --profile) profile_opt="$(sdkwork_validate_profile "$(sdkwork_need_value --profile "${2-}")")"; shift 2 ;;
       --arch|-a) arch="$(sdkwork_need_value --arch "${2-}")"; arch_given=1; shift 2 ;;
       -h|--help) sdkwork_apps_static_usage; return 0 ;;
-      -*) sdkwork_die "${SDKWORK_BIN_E_USAGE}" "unknown option '$1' for build-apps-static.sh" ;;
+      -*) sdkwork_die "${SDKWORK_BIN_E_USAGE}" "unknown option '$1' for apps-static-build.sh" ;;
       *)
         if [[ -z "${module}" ]]; then
           module="$1"
@@ -212,7 +213,7 @@ sdkwork_entry_apps_static() {
         elif [[ -z "${spec}" ]]; then
           spec="$1"
         else
-          sdkwork_die "${SDKWORK_BIN_E_USAGE}" "unexpected extra argument '$1' for build-apps-static.sh"
+          sdkwork_die "${SDKWORK_BIN_E_USAGE}" "unexpected extra argument '$1' for apps-static-build.sh"
         fi
         shift
         ;;

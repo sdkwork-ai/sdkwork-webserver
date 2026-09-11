@@ -91,11 +91,16 @@ Thumbs.db
 # ZCode CLI local session metadata (never committed)
 .zcode/
 
-# SDKWork local ops/debug scripts (scratch, not for commit)
-/.sdkwork/*.sh
-/.sdkwork/*.py
-/.sdkwork/*.conf
-/.sdkwork/*.mjs
+# SDKWork local ops/debug scratch (never committed). Default-deny: everything under
+# .sdkwork/ is untracked except the tracked metadata skeleton re-included below.
+# Without this, nested scratch (e.g. .sdkwork/audit/*.sh) leaks into the repo and the
+# script-placement gate rightly flags it (MODULE_BIN_SPEC §2.1).
+/.sdkwork/*
+!/.sdkwork/.gitignore
+!/.sdkwork/README.md
+!/.sdkwork/hosts.wsl.sdkwork
+!/.sdkwork/skills/
+!/.sdkwork/plugins/
 
 # Added during safe-commit pass: exclude runtime hot-reload env scratch
 .sdkwork/runtime-env*.json
