@@ -18,7 +18,8 @@ use crate::config_paths::{
     canonical_runtime_config_path, runtime_config_override_from_env, RUNTIME_CONFIG_FILE_ENV,
 };
 use crate::module_imports::{
-    is_nginx_conf_path, load_module_import_app_config, merge_import_specs, validate_imports,
+    is_nginx_conf_path, load_module_import_app_config, merge_import_specs,
+    module_dir_id_from_nginx_sidecar, sidecar_profile_environment, validate_imports,
     WebserverImportEntry, WebserverModuleImport,
 };
 use crate::nginx::merge_nginx_apps;
@@ -241,25 +242,21 @@ fn is_import_aggregator_conf(path: &Path) -> bool {
 }
 
 fn module_import_id_from_nginx_sidecar(path: &Path) -> Result<String, String> {
-    let components = path
-        .components()
-        .map(|component| component.as_os_str().to_string_lossy().into_owned())
-        .collect::<Vec<_>>();
-    // High-cohesion import (SDKWORK_WEBSERVER_SPEC.md §17.3): the aggregator
-    // includes the module's own checkout sidecar, so the module id is the
-    // path segment before deployments/webserver/.
-    for index in 0..components.len().saturating_sub(1) {
-        if components[index] == "deployments" && components[index + 1] == "webserver" {
-            if index > 0 {
-                let module_id = components[index - 1].clone();
-                if !module_id.is_empty() {
-                    return Ok(module_id);
-                }
-            }
-            break;
-        }
-    }
-    import_id_from_include_path(path)
+    let module_id = module_dir_id_from_nginx_sidecar(path)
+        .unwrap_or(import_id_from_include_path(path)?);
+    // Qualify with the sidecar's profile + lifecycle environment
+    // (SDKWORK_WEBSERVER_SPEC.md §17.3.2 universal import plane). The
+    // aggregator emits one include per `nginx.<profile>.<environment>.conf`
+    // sidecar so a single instance can route every commissioned domain edge,
+    // and `upsert_import_entry` replaces same-`id` entries — an unqualified
+    // module id would therefore collapse the commissioned environments down
+    // to whichever sidecar the aggregator lists last, leaving every other
+    // environment unroutable (requests silently fall through to the
+    // listener's default host).
+    Ok(match sidecar_profile_environment(path) {
+        Some((profile, environment)) => format!("{module_id}-{profile}-{environment}"),
+        None => module_id,
+    })
 }
 
 fn expand_import_aggregator_conf(aggregator: &Path) -> Result<Vec<WebserverImportEntry>, String> {
@@ -1503,7 +1500,7 @@ production = "deployments/webserver/static"
         let expanded =
             expand_webserver_import_includes(&config_path, &config.webserver).expect("expand");
         assert_eq!(expanded.len(), 1);
-        assert_eq!(expanded[0].id, "sdkwork-im");
+        assert_eq!(expanded[0].id, "sdkwork-im-standalone-development");
         assert_eq!(expanded[0].path, im_conf_pattern);
         let _ = std::fs::remove_dir_all(&temp);
     }
@@ -1543,7 +1540,70 @@ production = "deployments/webserver/static"
         let expanded =
             expand_webserver_import_includes(&config_path, &config.webserver).expect("expand");
         assert_eq!(expanded.len(), 1);
-        assert_eq!(expanded[0].id, "sdkwork-im");
+        assert_eq!(expanded[0].id, "sdkwork-im-standalone-development");
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    /// SDKWORK_WEBSERVER_SPEC.md §17.3.2 universal import plane: one
+    /// aggregator includes every commissioned environment's sidecar for the
+    /// same module, so each must keep a distinct import id — a bare module id
+    /// would be replaced by `upsert_import_entry` and collapse the whole
+    /// environment set down to the last-listed sidecar.
+    #[test]
+    fn import_aggregator_keeps_every_commissioned_environment() {
+        let temp = std::env::temp_dir().join(format!(
+            "sdkwork-webserver-import-universal-envs-{}",
+            std::process::id()
+        ));
+        let imports_dir = temp.join("imports.d");
+        let checkout = temp.join("sdkwork-space");
+        let im_ws = checkout.join("sdkwork-im/deployments/webserver");
+        std::fs::create_dir_all(&imports_dir).unwrap();
+        std::fs::create_dir_all(&im_ws).unwrap();
+
+        let environments = ["development", "test", "staging", "demo", "production"];
+        let mut aggregator = String::new();
+        for environment in environments {
+            let sidecar = im_ws.join(format!("nginx.cloud.{environment}.conf"));
+            std::fs::write(
+                &sidecar,
+                format!(
+                    "user sdkwork;\nevents {{}}\nhttp {{ server {{ listen 80; server_name im-{environment}.example.com; location / {{ return 200; }} }} }}\n"
+                ),
+            )
+            .unwrap();
+            aggregator.push_str(&format!(
+                "include {};\n",
+                sidecar.to_string_lossy().replace('\\', "/")
+            ));
+        }
+        std::fs::write(imports_dir.join("import.conf"), aggregator).unwrap();
+        let config_path = temp.join("config.toml");
+        std::fs::write(
+            &config_path,
+            "[webserver]\ninclude = [\"imports.d/import.conf\"]\n",
+        )
+        .unwrap();
+
+        let config = parse_runtime_toml_config(&config_path).expect("config must parse");
+        let expanded =
+            expand_webserver_import_includes(&config_path, &config.webserver).expect("expand");
+        assert_eq!(
+            expanded.len(),
+            environments.len(),
+            "every commissioned environment's sidecar must survive expansion"
+        );
+        let ids: Vec<&str> = expanded.iter().map(|entry| entry.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            vec![
+                "sdkwork-im-cloud-development",
+                "sdkwork-im-cloud-test",
+                "sdkwork-im-cloud-staging",
+                "sdkwork-im-cloud-demo",
+                "sdkwork-im-cloud-production",
+            ]
+        );
         let _ = std::fs::remove_dir_all(&temp);
     }
 

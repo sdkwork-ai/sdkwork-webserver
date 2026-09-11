@@ -9,8 +9,7 @@
   "vocabulary": {
     "deploymentProfile": {
       "allowed": [
-        "standalone",
-        "cloud"
+        "standalone"
       ]
     },
     "environment": {

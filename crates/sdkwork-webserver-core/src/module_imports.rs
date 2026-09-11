@@ -21,7 +21,7 @@ use std::{
 use serde::Deserialize;
 
 use crate::config::{
-    load_server_toml_app, ConfigFormat, ConfigLoadOptions, WebServerAppConfig,
+    load_server_toml_app, ConfigFormat, ConfigLoadOptions, ResourceConfig, WebServerAppConfig,
     WebServerConfigError, WebServerConfigLoader,
 };
 
@@ -147,6 +147,124 @@ fn layout_v2_webserver_dir(path: &Path) -> bool {
 
 pub(crate) fn is_nginx_conf_path(path: &Path) -> bool {
     path.extension().and_then(|value| value.to_str()) == Some("conf")
+}
+
+/// Module id for a `<module>/deployments/webserver/…` sidecar.
+///
+/// High-cohesion import (SDKWORK_WEBSERVER_SPEC.md §17.3): the import
+/// aggregator includes the module's own checkout sidecar, so the module id is
+/// the path segment before `deployments/webserver/`.
+pub(crate) fn module_dir_id_from_nginx_sidecar(path: &Path) -> Option<String> {
+    let components = path
+        .components()
+        .map(|component| component.as_os_str().to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    for index in 0..components.len().saturating_sub(1) {
+        if components[index] == "deployments" && components[index + 1] == "webserver" && index > 0 {
+            let module_id = components[index - 1].clone();
+            if !module_id.is_empty() {
+                return Some(module_id);
+            }
+            break;
+        }
+    }
+    None
+}
+
+/// Split a `nginx.<profile>.<environment>.conf` sidecar name into its profile
+/// and lifecycle environment. `None` for any other naming, so legacy
+/// single-file sidecars keep the bare module id.
+pub(crate) fn sidecar_profile_environment(path: &Path) -> Option<(&str, &str)> {
+    let stem = path.file_stem().and_then(|value| value.to_str())?.trim();
+    let mut parts = stem.strip_prefix("nginx.")?.split('.');
+    let profile = parts.next()?;
+    let environment = parts.next()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    if !matches!(profile, "standalone" | "cloud") {
+        return None;
+    }
+    if !matches!(
+        environment,
+        "development" | "test" | "staging" | "demo" | "production"
+    ) {
+        return None;
+    }
+    Some((profile, environment))
+}
+
+/// Adaptive Web dist alias for a lifecycle environment. Mirrors the
+/// entrypoint's `environment_dist_alias` (SDKWORK_WEBSERVER_SPEC.md §13.6).
+fn lifecycle_environment_dist_alias(environment: &str) -> Option<&'static str> {
+    Some(match environment {
+        "development" => "dev",
+        "test" => "test",
+        "staging" => "staging",
+        "demo" => "demo",
+        "production" => "prod",
+        _ => return None,
+    })
+}
+
+/// Environment-scoped sibling of a declared Adaptive Web package root:
+/// `<base>/<module>/web/<surface>` -> `<base>/<module>/web/<alias>/<surface>`.
+///
+/// `None` when the declared root is not an Adaptive Web package root, or when
+/// the environment-scoped root has not been materialized — a
+/// single-environment deployment therefore keeps serving the declared root
+/// exactly as before.
+fn environment_scoped_adaptive_root(declared: &str, module: &str, alias: &str) -> Option<String> {
+    let base = std::env::var("SDKWORK_WEBSERVER_MODULE_WEB_ROOT")
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "/usr/share/sdkwork".to_owned());
+    let prefix = format!("{}/{module}/web/", base.trim_end_matches('/'));
+    let surface = declared.trim().strip_prefix(&prefix)?;
+    if surface.is_empty() || surface.contains('/') {
+        return None;
+    }
+    let candidate = format!("{prefix}{alias}/{surface}");
+    Path::new(&candidate).exists().then_some(candidate)
+}
+
+/// Resolve a module sidecar's Adaptive Web static resources to the routed
+/// environment's dist tree (SDKWORK_WEBSERVER_SPEC.md §17.3.2 /
+/// ENVIRONMENT_SPEC.md §6.2.2 universal import plane).
+///
+/// A deployed instance is the shared edge for every commissioned lifecycle
+/// environment, but §8.1 of `SDKWORK_DEPLOY_SPEC.md` fixes every sidecar's
+/// `@pc`/`@h5` roots to one package path — so one process would serve one
+/// environment's PC/H5 bundle under every environment's domain. The
+/// entrypoint materializes an environment-scoped root next to each declared
+/// root for every commissioned environment; here the data plane binds each
+/// imported sidecar to its own environment's tree. Module configuration is
+/// never rewritten: this is resolution, not editing (§17.3).
+fn apply_environment_scoped_adaptive_roots(app: &mut WebServerAppConfig, sidecar: &Path) {
+    let Some((_profile, environment)) = sidecar_profile_environment(sidecar) else {
+        return;
+    };
+    let Some(module) = module_dir_id_from_nginx_sidecar(sidecar) else {
+        return;
+    };
+    let Some(alias) = lifecycle_environment_dist_alias(environment) else {
+        return;
+    };
+    for resource in &mut app.resources {
+        let ResourceConfig::Static { root, h5_root, .. } = resource else {
+            continue;
+        };
+        if let Some(scoped) = environment_scoped_adaptive_root(root, &module, alias) {
+            *root = scoped;
+        }
+        let declared_h5 = h5_root.clone();
+        if let Some(scoped) =
+            declared_h5.and_then(|value| environment_scoped_adaptive_root(&value, &module, alias))
+        {
+            *h5_root = Some(scoped);
+        }
+    }
 }
 
 fn resolve_conf_import_path(
@@ -440,14 +558,16 @@ pub fn load_module_import_app_config(
             app_key: Some(app_key),
             ..ConfigLoadOptions::default()
         };
-        return loader
+        let loaded = loader
             .load(&import.path, &options)
-            .map(|loaded| loaded.app)
             .map_err(|source| ModuleImportError::Validation {
                 id: import.id.clone(),
                 path: import.path.clone(),
                 source,
-            });
+            })?;
+        let mut app = loaded.app;
+        apply_environment_scoped_adaptive_roots(&mut app, &import.path);
+        return Ok(app);
     }
     let profile = resolve_import_profile(import)?;
     let environment = resolve_import_environment(import)?;

@@ -1661,6 +1661,8 @@ module_adaptive_named_root() {
 # content is never overwritten.
 link_module_web_static_root() {
   local module="$1" module_root="$2" surface="$3" root="$4"
+  local alias="${5:-${dist_alias:?}}"
+  local profile="${6:-${source_profile:?}}"
   local src parent
   case ",${seen_roots}," in
     *,"${root}",*) return 0 ;;
@@ -1675,7 +1677,7 @@ link_module_web_static_root() {
       src=""
     fi
   else
-    src="$(module_app_static_root_for_alias "${module}" "${surface}" "${dist_alias}" "${source_profile}")"
+    src="$(module_app_static_root_for_alias "${module}" "${surface}" "${alias}" "${profile}")"
   fi
   if [ -z "${src}" ]; then
     # Fail-closed static-root validation (compiled.rs canonical_directory)
@@ -1683,11 +1685,11 @@ link_module_web_static_root() {
     # placeholder shell so a missing module dist degrades to a placeholder
     # page instead of crashing the whole data plane at startup. A real build
     # replaces it later; non-symlink content is never overwritten (below).
-    log "warning: ${module} ${surface}: no apps/*-${surface}/dist/${source_profile}/${dist_alias} build under ${module_root}; seeding placeholder shell at ${root} (build with: pnpm --dir ${module} build:${surface}:${dist_alias}:${source_profile})"
+    log "warning: ${module} ${surface}: no apps/*-${surface}/dist/${profile}/${alias} build under ${module_root}; seeding placeholder shell at ${root} (build with: pnpm --dir ${module} build:${surface}:${alias}:${profile})"
     mkdir -p "${root}"
     if [ ! -f "${root}/index.html" ]; then
       printf '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>%s</title></head><body><h1>%s %s</h1><p>Static dist not built yet (%s/%s). Build with: pnpm --dir %s build:%s:%s:%s</p></body></html>\n' \
-        "${module}" "${module}" "${surface}" "${source_profile}" "${dist_alias}" "${module}" "${surface}" "${dist_alias}" "${source_profile}" \
+        "${module}" "${module}" "${surface}" "${profile}" "${alias}" "${module}" "${surface}" "${alias}" "${profile}" \
         > "${root}/index.html"
     fi
     chown -R "${SERVICE_USER}:${SERVICE_USER}" "${root}" 2>/dev/null || true
@@ -1705,7 +1707,7 @@ link_module_web_static_root() {
   mkdir -p "${parent}"
   chown "${SERVICE_USER}:${SERVICE_USER}" "${parent}" 2>/dev/null || true
   ln -sfn "${src}" "${root}"
-  log "linked ${root} -> ${src#${module_root}/} (${module} ${surface}, ${source_profile}/${dist_alias})"
+  log "linked ${root} -> ${src#${module_root}/} (${module} ${surface}, ${profile}/${alias})"
 }
 
 # Harvest the declared Adaptive Web roots of one sidecar. Emits
@@ -1736,9 +1738,14 @@ materialize_module_web_static_roots() {
   local environment dist_alias source_profile
   local modules_list module module_root conf profile surface
   local root src parent seen_roots pair
+  local import_environments import_environment import_alias env_root
   environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
   dist_alias="$(environment_dist_alias "${environment}")"
   source_profile="$(static_source_profile)"
+  # Universal import plane (ENVIRONMENT_SPEC.md §6.2.2): this instance is the
+  # shared edge for every commissioned environment, so every environment's
+  # PC/H5 dist tree must be materialized here — not just the instance's own.
+  import_environments="$(webserver_import_environments)"
   ensure_directory "${adaptive_base}"
   seen_roots=""
   IFS=',' read -r -a modules_list <<< "${SDKWORK_SPACE_IMPORT_MODULES:-}"
@@ -1761,11 +1768,31 @@ materialize_module_web_static_roots() {
           *) log "warning: ${module} ${profile} ${surface} root outside ${adaptive_base}: ${root}; skipped" ; continue ;;
         esac
         link_module_web_static_root "${module}" "${module_root}" "${surface}" "${root}"
+        # Environment-scoped sibling of the declared root
+        # (§17.3.2): SDKWORK_DEPLOY_SPEC.md §8.1 fixes the sidecar root, so the
+        # data plane resolves this per routed environment instead. Static
+        # fallback surfaces ship with the checkout and are environment-neutral.
+        [ "${surface}" = "static" ] && continue
+        for import_environment in ${import_environments}; do
+          import_alias="$(environment_dist_alias "${import_environment}")"
+          env_root="$(module_env_web_static_root "${root}" "${import_alias}")"
+          link_module_web_static_root "${module}" "${module_root}" "${surface}" \
+            "${env_root}" "${import_alias}" "${source_profile}"
+        done
       done <<MODULE_ROOT_PAIRS
 $(module_web_static_root_pairs "${conf}")
 MODULE_ROOT_PAIRS
     done
   done
+}
+
+# Environment-scoped sibling of a declared Adaptive Web package root:
+# `<base>/<module>/web/<surface>` -> `<base>/<module>/web/<alias>/<surface>`.
+# Kept byte-for-byte in step with
+# `module_imports.rs::environment_scoped_adaptive_root`.
+module_env_web_static_root() {
+  local declared="$1" alias="$2"
+  printf '%s/%s/%s' "${declared%/*}" "${alias}" "${declared##*/}"
 }
 
 # Seed a readable SPA shell when module static/ (or Docker copy) has no

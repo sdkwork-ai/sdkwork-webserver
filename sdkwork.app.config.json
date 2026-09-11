@@ -208,17 +208,26 @@
     }
   },
   "release": {
-    "currentVersion": "0.1.6",
+    "currentVersion": "0.1.7",
     "defaultChannel": "BETA",
     "latest": {
-      "BETA": "0.1.6"
+      "BETA": "0.1.7"
     },
     "notes": [
       {
-        "version": "0.1.6",
+        "version": "0.1.7",
         "channel": "BETA",
         "current": true,
-        "summary": "Universal import plane activated by default: the standalone entrypoint now commissions all five lifecycle environments (development,test,staging,demo,production) instead of defaulting to the instance's own SDKWORK_WEBSERVER_ENVIRONMENT, so one webserver instance routes every module's cloud sidecar for every environment and serves all imported environments' static file servers. The stock 0.1.5 image carried the older single-environment default, which is why a deployed instance reported 'Commissioned environments: development' while its environment peers already declared the full five. Import profile stays cloud and layout-imports.<profile>.toml is materialized alongside the nginx aggregator per SDKWORK_WEBSERVER_SPEC section 17.3 / ENVIRONMENT_SPEC section 6.2.2.",
+        "summary": "Universal import plane is now effective at runtime, not just aggregated. The import aggregator emits one include per module sidecar for all five commissioned environments, but every one of those includes resolved to the same module import id, and the import upsert replaces same-id entries -- so the runtime collapsed each module's five sidecars down to the last one listed (production) and every other environment's domain fell through to the listener default host. Import ids are now qualified as <module>-<profile>-<environment>, so a deployed instance really does route every commissioned domain edge (SDKWORK_WEBSERVER_SPEC section 17.3.2 / ENVIRONMENT_SPEC section 6.2.2). Per-environment Adaptive Web assets follow: the entrypoint materializes an environment-scoped sibling root (/usr/share/sdkwork/<module>/web/<alias>/<surface>) for every commissioned environment, and the data plane binds each imported sidecar's @pc/@h5 static resources to its own environment's dist tree, so im-test.* is served from the test build rather than the instance's own environment build. Env files now declare the explicit all-five SDKWORK_WEBSERVER_IMPORT_ENVIRONMENTS commission. Import profile stays cloud; the webserver's own build stays standalone-only.",
+        "packageIds": [
+          "linux-x64-standalone-server-tar-gz"
+        ]
+      },
+      {
+        "version": "0.1.6",
+        "channel": "BETA",
+        "current": false,
+        "summary": "Universal import plane activated by default: the standalone entrypoint now commissions all five lifecycle environments (development,test,staging,demo,production) instead of defaulting to the instance's own SDKWORK_WEBSERVER_ENVIRONMENT, so one webserver instance routes every module's cloud sidecar for every environment and serves all imported environments' static file servers. The stock 0.1.5 image carried the older single-environment default, which is why a deployed instance reported 'Commissioned environments: development' while its environment peers already declared the full five. Import profile stays cloud and layout-imports.<profile>.toml is materialized alongside the nginx aggregator per SDKWORK_WEBSERVER_SPEC section 17.3 / ENVIRONMENT_SPEC section 6.2.2. NOTE: the aggregator did commission all five, but the runtime import-id collision described in 0.1.7 meant only one environment per module was actually routable.",
         "packageIds": [
           "linux-x64-standalone-server-tar-gz"
         ]
