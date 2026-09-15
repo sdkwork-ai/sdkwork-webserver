@@ -35,12 +35,23 @@ export type WebserverResourceKey =
   | "audit"
   | "skills"
   | "mcp"
-  | "plugins";
+  | "plugins"
+  | "storage-providers"
+  | "storage-kinds"
+  | "storage-buckets"
+  | "storage-bindings";
 
 export interface WebserverModuleEntry {
   description: string;
   label: string;
   order: number;
+  /**
+   * Route segment under the surface base path. Defaults to `resource`; set it
+   * when a resource belongs to a module sub-path, e.g. `storage/providers`
+   * makes the route `/admin/storage/providers` while the resource key stays
+   * `storage-providers`.
+   */
+  path?: string;
   permission: string;
   resource: WebserverResourceKey;
 }

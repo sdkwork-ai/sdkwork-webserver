@@ -1,0 +1,30 @@
+{
+  "name": "@sdkwork/webserver-pc-admin-storage",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@sdkwork/sdk-common": "workspace:*",
+    "@sdkwork/webserver-pc-commons": "workspace:*",
+    "sdkwork-drive-pc-admin-core": "workspace:*",
+    "sdkwork-drive-pc-admin-storage-providers": "workspace:*",
+    "sdkwork-drive-pc-commons": "workspace:*",
+    "sdkwork-drive-pc-core": "workspace:*",
+    "react": "catalog:"
+  },
+  "sdkwork": {
+    "applicationCode": "webserver",
+    "architecture": "pc-react",
+    "capability": "storage",
+    "surface": "backend-admin",
+    "managedBy": "tools/materialize_webserver_pc.mjs"
+  }
+}

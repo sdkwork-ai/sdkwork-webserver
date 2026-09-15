@@ -1697,19 +1697,22 @@ fn default_proxy_cache_stale_ttl_seconds() -> u64 {
 pub struct AppDomainFallbackConfig {
     #[serde(default = "default_app_domain_fallback_enabled")]
     pub enabled: bool,
-    /// Platform app-domain suffixes (same 16-domain catalog as
-    /// sdkwork-deployments: sdkwork.com, sdkwork.cn, birdcoder.com,
-    /// birdcoder.cn, dtupay.com, dtupay.cn, noaper.com, noaper.cn,
-    /// skubc.com, skubc.cn,
-    /// zowalk.com, zowalk.cn, offer86.com, offer86.cn, 86offer.com,
-    /// 86offer.cn). Requests for `<slug>.app[-<env>].<suffix>` are
-    /// classified as default app domains; every other hostname is treated
-    /// as a user custom domain.
+    /// Platform app-domain suffixes. Defaults to the control plane's catalog
+    /// (14 domains: sdkwork.com/.cn, birdcoder.com/.cn, dtupay.com/.cn,
+    /// skubc.com/.cn, zowalk.com/.cn, offer86.com/.cn, 86offer.com/.cn) and
+    /// must stay a subset of it: the Deploy control plane only ever
+    /// provisions hostnames under those suffixes. Requests for
+    /// `<appLabel>.app[-<env>].<suffix>` are classified as default app
+    /// domains; every other hostname is treated as a user custom domain.
     #[serde(default = "default_app_domain_suffixes")]
     pub suffixes: Vec<String>,
-    /// Lookup channel: `embedded` resolves through the shared Deploy
-    /// database (standalone deployment); `http` calls the control plane
-    /// API (cloud deployment).
+    /// Lookup channel. The Web Server is a standalone-only product
+    /// (`SDKWORK_WEBSERVER_SPEC.md` §17.4): its data plane shares the process
+    /// with the Deploy control plane, so the app-domain lookup is always
+    /// resolved through the shared Deploy database. There is deliberately no
+    /// HTTP control-plane channel — a mode that silently degraded to "no
+    /// fallback at all" on an edge without a shared pool was worse than the
+    /// configuration surface it pretended to offer.
     #[serde(default)]
     pub lookup: AppDomainFallbackLookup,
     /// Upper bound for a control-plane resolution call.
@@ -1724,26 +1727,19 @@ pub struct AppDomainFallbackConfig {
 }
 
 /// Fallback lookup channel configuration.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "mode", rename_all = "lowercase")]
+///
+/// Only the embedded channel exists: the standalone Web Server resolves
+/// unmatched hosts against the shared Deploy database in the same process.
+/// `deny_unknown_fields` keeps the typed model exactly as strict as the
+/// published schema (`lookup` has `additionalProperties: false`), so the
+/// in-memory compile path cannot accept a section the file path rejects.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "lowercase", deny_unknown_fields)]
 pub enum AppDomainFallbackLookup {
-    /// Resolve through the shared Deploy database (`deploy_site_binding` /
-    /// `deploy_site_revision`). Requires the process database connection.
+    /// Resolve through the shared Deploy database (`deploy_app_binding` /
+    /// `deploy_app_revision`). Requires the process database connection.
+    #[default]
     Embedded,
-    /// Resolve through the Deploy control-plane API (cloud deployment).
-    Http {
-        /// Absolute control-plane resolve endpoint base URL.
-        endpoint: String,
-        /// Optional file whose trimmed content is the API access token.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        auth_token_file: Option<String>,
-    },
-}
-
-impl Default for AppDomainFallbackLookup {
-    fn default() -> Self {
-        Self::Embedded
-    }
 }
 
 impl Default for AppDomainFallbackConfig {
@@ -1763,30 +1759,13 @@ fn default_app_domain_fallback_enabled() -> bool {
     true
 }
 
-/// Default platform app-domain suffixes; the Deploy control plane
-/// provisions these per app and the Web Server resolves them on miss.
+/// Default platform app-domain suffixes. Delegates to the control plane that
+/// provisions them (`sdkwork-deployments` `sdkwork-deploy-core`), so the
+/// catalog has exactly one definition: a suffix the control plane does not
+/// provision can never be classified as a default app domain here, which
+/// would produce a permanent 404 documented as a "default app" host.
 pub fn default_app_domain_suffixes() -> Vec<String> {
-    [
-        "sdkwork.com",
-        "sdkwork.cn",
-        "birdcoder.com",
-        "birdcoder.cn",
-        "dtupay.com",
-        "dtupay.cn",
-        "noaper.com",
-        "noaper.cn",
-        "skubc.com",
-        "skubc.cn",
-        "zowalk.com",
-        "zowalk.cn",
-        "offer86.com",
-        "offer86.cn",
-        "86offer.com",
-        "86offer.cn",
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect()
+    sdkwork_deploy_core::platform_app_domain_suffixes()
 }
 
 fn default_app_domain_timeout_ms() -> u64 {

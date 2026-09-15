@@ -152,6 +152,10 @@
         "export": "sdkwork_api_drive_assembly::assemble_app_api_contribution"
       },
       {
+        "name": "driveAdminStorageContribution",
+        "export": "sdkwork_api_drive_assembly::assemble_backend_admin_storage_contribution_with_pool"
+      },
+      {
         "name": "webserverHttpHost",
         "export": "crate-root",
         "provider": "sdkwork-webserver-http-host"
@@ -293,6 +297,19 @@
         "embeddedExecutableExport": "sdkwork_api_drive_assembly::assemble_app_api_contribution",
         "profileCoverage": ["standalone"],
         "coverageEvidence": ["src/profile.rs"]
+      },
+      {
+        "workspace": "sdkwork-drive",
+        "sdkFamily": "sdkwork-drive-admin-storage-sdk",
+        "apiAuthority": "sdkwork-drive.admin.storage",
+        "surface": "backend-api",
+        "apiPrefix": "/backend/v3/api",
+        "runtimeMode": "same-origin",
+        "sameOriginAllowed": true,
+        "cargoDependency": "sdkwork-api-drive-assembly",
+        "embeddedExecutableExport": "sdkwork_api_drive_assembly::assemble_backend_admin_storage_contribution_with_pool",
+        "profileCoverage": ["standalone"],
+        "coverageEvidence": ["src/dependency_assembly.rs", "src/profile.rs"]
       },
       {
         "workspace": "sdkwork-webserver-internal-sdk",

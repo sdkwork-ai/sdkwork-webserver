@@ -503,6 +503,20 @@ async fn route_admitted_request(
         return response;
     }
 
+    // App-domain fallback parity for the app-config path (see the 404 handling
+    // after the resource dispatch): a route selected locally can still end in
+    // 404 because its static root or provider object is missing, and that is
+    // the same "no server configuration can serve this" situation the
+    // website-runtime path above already falls back on. The request body is
+    // consumed by the dispatch below, so snapshot the pieces the fallback
+    // needs first. Nothing is cloned when no fallback resolver is installed.
+    let deploy_fallback_input = state.deploy_fallback.as_ref().map(|_| {
+        (
+            request.method().clone(),
+            request.headers().clone(),
+            request.uri().query().map(str::to_owned),
+        )
+    });
     let request_failure = RequestBodyFailure::default();
     let (parts, body) = request.into_parts();
     let limits = &generation.app.config().limits;
@@ -727,6 +741,39 @@ async fn route_admitted_request(
         }
     };
 
+    // A *resource-backed* route that resolved nothing locally (missing static
+    // root, absent Drive object, unpublished wiki page) is the same situation
+    // the website-runtime path falls back on, so consult Deploy before
+    // answering 404. Deliberate `Respond` routes and upstream `Proxy` replies
+    // are never second-guessed: their status is authoritative, and a 404 from
+    // an upstream is a real answer rather than a local configuration miss.
+    if response.status() == StatusCode::NOT_FOUND
+        && matches!(
+            selected.resource,
+            ResourceConfig::Static { .. }
+                | ResourceConfig::Drive { .. }
+                | ResourceConfig::Knowledgebase { .. }
+        )
+    {
+        if let Some((fallback_method, fallback_headers, fallback_query)) =
+            deploy_fallback_input.as_ref()
+        {
+            if let Some(fallback_response) = serve_deploy_fallback(
+                &state,
+                scheme.website_delivery_scheme(),
+                authority.clone(),
+                path.clone(),
+                fallback_query.clone(),
+                fallback_method,
+                fallback_headers,
+                transport_peer,
+            )
+            .await
+            {
+                return fallback_response;
+            }
+        }
+    }
     if generation.app.config().observability.access_log {
         tracing::info!(
             config_generation = generation.id,

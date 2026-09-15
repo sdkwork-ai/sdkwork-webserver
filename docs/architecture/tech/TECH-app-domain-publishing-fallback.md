@@ -3,17 +3,18 @@
 ## Purpose
 
 Every user app gets automatically publishable default domains
-(`<slug>.app[-<env>].<suffix>`) and can additionally bind user custom
+(`<appLabel>.app[-<env>].<suffix>`) and can additionally bind user custom
 domains. The Web Server data plane only knows its local configuration
 (virtual hosts, website runtime bindings). When a request host matches no
-local configuration, the data plane now resolves the server through the
+local configuration, the data plane resolves the server through the
 **sdkwork-deployments control plane** and serves the app's latest compiled
 website runtime descriptor — instead of returning 404 immediately.
 
 ## Platform domain catalog
 
 The default app domain catalog is the same 14-domain inventory the
-IM/drive/knowledgebase modules use:
+IM/drive/knowledgebase modules use, i.e. the registered base domains of
+`APP_RUNTIME_TOPOLOGY_NAMING.md` §9.3:
 
 ```
 sdkwork.com  sdkwork.cn  birdcoder.com  birdcoder.cn  dtupay.com  dtupay.cn
@@ -21,33 +22,91 @@ skubc.com    skubc.cn    zowalk.com     zowalk.cn     offer86.com offer86.cn
 86offer.com  86offer.cn
 ```
 
+`PLATFORM_APP_DOMAIN_SUFFIXES` (`sdkwork-deploy-core::app_domains`) is the only
+definition of this catalog. The Web Server does not hardcode it: its
+`appDomainFallback.suffixes` default **delegates** to
+`sdkwork_deploy_core::platform_app_domain_suffixes()`, and config validation
+rejects any suffix outside the catalog, so a retired brand domain (for example
+`noaper.com`) can never be re-introduced through configuration.
+
+## App label (`<appId>`) and custom prefix
+
+`deploy_app.app_domain_label` (a single DNS label) is the `<appLabel>` the
+default hostnames are built from. `NULL` falls back to `deploy_app.slug`,
+which keeps the historical catalog working. Setting it replaces the prefix
+with any label — including the app's own uuid — which is the supported way to
+publish on `<appId>.app.<suffix>` when the slug is taken or when a short
+stable id is preferred. `deploy_app.app_domain_suffixes` optionally narrows
+the catalog per app; `NULL`/empty means the platform catalog.
+
 Default hostnames per lifecycle environment (production uses `app`, other
 environments use `app-<env>` so every environment is publishable):
 
 | Environment | Hostname |
 | --- | --- |
-| production | `<slug>.app.<suffix>` |
-| development | `<slug>.app-dev.<suffix>` |
-| test | `<slug>.app-test.<suffix>` |
-| staging | `<slug>.app-staging.<suffix>` |
+| production | `<appLabel>.app.<suffix>` |
+| development | `<appLabel>.app-dev.<suffix>` |
+| test | `<appLabel>.app-test.<suffix>` |
+| staging | `<appLabel>.app-staging.<suffix>` |
+| demo | `<appLabel>.app-demo.<suffix>` |
+
+## App nginx configuration
+
+`deploy_app.nginx_conf` carries the app's nginx-compatible configuration
+(app-level base), with `nginx_conf_sha256` and `nginx_conf_updated_at` as its
+digest and audit stamp. `deploy_nginx_config` provides environment- and/or
+hostname-scoped overrides; the lookup resolves the precedence
+
+```
+hostname + environment  >  environment  >  app base (`deploy_app.nginx_conf`)
+```
+
+and returns the winning pair on the resolved server. The data plane then hands
+it to the edge through `NginxSiteSink`
+(`crate::deploy_nginx_sink::EdgeNginxSiteSink`, built from the edge node
+environment): the candidate is validated with `nginx -t` and activated by an
+atomic rename under the edge deployment lock, exactly like any other edge
+deployment material. Application happens once per `(hostname, configuration
+digest)` — a materialized configuration is not rewritten, and a re-published
+one (new digest) supersedes it — and never changes the served response. A
+failed materialization is logged and swallowed, then retried at most once per
+30 s per host (`DeployFallbackResolver`'s `NGINX_SITE_APPLY_RETRY_BACKOFF`):
+a transient failure recovers without an operator restarting the node, while a
+permanently invalid configuration cannot cost one `nginx -t` subprocess per
+request. When the node does not materialize nginx site files
+(`SDKWORK_WEBSERVER_NGINX_ENABLED=false`) the configuration is still resolved,
+cached and logged, and nothing is written.
+
 
 ## Deploy control plane (sdkwork-deployments)
 
 - `sdkwork-deploy-core::app_domains` owns the catalog, hostname generation
   and parsing (`PLATFORM_APP_DOMAIN_SUFFIXES`,
-  `default_app_hostname(slug, suffix, environment)`,
-  `parse_default_app_hostname`).
-- App creation auto-provisions default publishing domains
-  (`DeployService::provision_app_default_domains`): one platform DNS zone
-  per suffix (`app.<suffix>`, idempotent), 14 EXACT `deploy_domain` rows per
-  app (auto-`VERIFIED` because the platform owns the apex) and 14 `SERVE`
+  `effective_app_domain_label`, `effective_app_domain_suffixes`,
+  `default_app_hostname(label, suffix, environment)`,
+  `parse_default_app_hostname`, `app_domain_label(environment)`,
+  `environment_for_app_domain_label(label)`).
+- App creation provisions default publishing domains for **all five**
+  lifecycle environments (`DeployService::provision_app_default_domains_all_environments`,
+  called from `create_app`), so `<appLabel>.app-dev|app-test|app-staging|app-demo.<suffix>`
+  resolve from the moment the app exists. Per environment: one platform DNS
+  zone per suffix (`app.<suffix>`, idempotent), 14 EXACT `deploy_domain` rows
+  (auto-`VERIFIED` because the platform owns the apex) and 14 `SERVE`
   `deploy_app_binding` rows (first suffix canonical). Hostnames are unique
-  across tenants (`uk_deploy_domain_active_hostname`); a slug claimed by
+  across tenants (`uk_deploy_domain_active_hostname`); a label claimed by
   another tenant fails provisioning with a clear conflict.
-- `DeployService::resolve_server_by_hostname(hostname, environment)`
-  resolves an ACTIVE binding to the app's latest VALID compiled revision
-  (`deploy_app_revision.descriptor_json` + `descriptor_sha256`) — the
-  lookup never recompiles.
+- `DeployService::resolve_server_by_hostname(hostname, environment)` resolves
+  an ACTIVE binding of an `app_status = 'ACTIVE'` app to the newest `VALID`
+  revision **of that same environment** (`deploy_app_revision`, filtered on
+  `revision.environment = binding.environment`) — the app-level
+  `current_revision_id` pointer is deliberately not used, because it is
+  written by whichever environment converged its runtime assignments last.
+  The lookup never recompiles.
+- The compiled descriptor's binding set is read back from `deploy_app_binding`
+  for the same environment, so the routing bindings and the lookup rows are
+  the same rows: "the domain is ACTIVE in the control plane" and "the hostname
+  is routable" cannot disagree, and the auto-provisioned platform domains are
+  compiled into the descriptor like any declared binding.
 - Repository integration tests: `tests/platform_app_domains.rs`.
 
 ## Web Server data plane (sdkwork-webserver)
@@ -58,18 +117,24 @@ environments use `app-<env>` so every environment is publishable):
 "appDomainFallback": {
   "enabled": true,
   "suffixes": ["sdkwork.com", "sdkwork.cn", /* …14 suffixes… */, "86offer.cn"],
-  "lookup": { "mode": "embedded" },          // embedded | http
+  "lookup": { "mode": "embedded" },          // only "embedded" exists
   "timeoutMs": 2000,
   "cacheTtlMs": 60000,
   "negativeCacheTtlMs": 5000
 }
 ```
 
-- `suffixes` defaults to the 14-suffix platform catalog.
-- `lookup.mode = embedded` resolves through the shared Deploy database
-  (standalone deployment, same process as the deploy control plane).
-- `lookup.mode = http` is the cloud control-plane API channel (endpoint +
-  optional `authTokenFile`).
+- `suffixes` defaults to the 14-suffix platform catalog
+  (`sdkwork_deploy_core::platform_app_domain_suffixes()`); every configured
+  entry must be a member of that catalog.
+- `lookup.mode` has exactly one variant, `embedded`: the shared Deploy
+  database (standalone deployment, same process as the deploy control plane).
+  There is no HTTP lookup channel: the variant is not declared, the schema
+  pins `mode` to `const: "embedded"` (`additionalProperties: false`, so the
+  retired `endpoint` / `authTokenFile` keys are rejected too), and the enum
+  carries `deny_unknown_fields`. Any other `mode` therefore fails config
+  validation with a `/appDomainFallback/lookup/mode` diagnostic instead of
+  silently disabling the fallback.
 - Schema: `specs/sdkwork.webserver.config.schema.json`; semantic validation
   in `crates/sdkwork-webserver-core/src/config/validate.rs`.
 - Example: `etc/data-plane/website.cloud.config.json`,
@@ -79,18 +144,27 @@ environments use `app-<env>` so every environment is publishable):
 
 `DeployFallbackResolver` (`crates/sdkwork-api-webserver-standalone-gateway/src/deploy_fallback.rs`):
 
-1. Host classification: `<slug>.app[-<env>].<suffix>` over the configured
-   suffixes is a default app domain; everything else is a custom domain.
+1. Host classification: `<appLabel>.app[-<env>].<suffix>` over the configured
+   suffixes is a default app domain; everything else is a custom domain. This
+   is load-bearing, not a log label: a platform hostname whose encoded
+   lifecycle environment is not the one this node serves is refused outright
+   (the lookup could only miss, and a match would serve one environment's
+   revision on another environment's hostname). Both the accepted label set
+   and the label → environment mapping come from `sdkwork-deploy-core`, so
+   they can never drift from what the control plane provisions.
 2. Cache (positive TTL / negative TTL) keyed by normalized hostname.
-3. Lookup through `DeployServerLookup` (embedded repository adapter or HTTP
-   client) → site descriptor.
-4. Compiled-site fast path: descriptors already compiled (LRU keyed by
+3. Lookup through `DeployServerLookup` (embedded repository adapter) →
+   environment-scoped site descriptor + the app's nginx configuration.
+4. The app's nginx configuration is handed to the edge sink if one is
+   installed (see "App nginx configuration" above), once per
+   `(hostname, digest)` and at most once per 30 s after a failed attempt.
+5. Compiled-site fast path: descriptors already compiled (LRU keyed by
    `descriptor_sha256`, 32 entries) skip straight to serving. Otherwise the
    descriptor is compiled into a single-site website runtime set and
    activated on a dedicated fallback `WebsiteRuntimeRegistry` (monotonic
    generations) under the activation lock, which covers only
    compile/activate — request execution runs after the lock is released.
-5. The request executes against the pinned compiled set
+6. The request executes against the pinned compiled set
    (`WebsiteDeliveryExecutor::execute_compiled`), so a concurrent activation
    of a different host can never swap the served runtime set between route
    selection and provider dispatch. Bindings, variants, mounts
@@ -98,8 +172,17 @@ environments use `app-<env>` so every environment is publishable):
    the website delivery machinery (shared Drive/Knowledgebase provider
    registry).
 
-Hook points (`data_plane/handler.rs`): the website-delivery path falls back
-on 404; the app-config path falls back when `select_route` returns nothing.
+Hook points (`data_plane/handler.rs`):
+
+- **website-runtime path** — any 404 from `serve_website_request` falls back.
+- **app-config path** — the fallback runs when `select_route` returns nothing
+  *and* when a resource-backed route (`Static` / `Drive` / `Knowledgebase`)
+  ends in 404, i.e. the local resource could not be resolved. Deliberate
+  `Respond` routes and upstream `Proxy` replies are never second-guessed:
+  their status is authoritative. The two paths are therefore semantically
+  consistent — a host that is declared locally but whose resource is missing
+  still has a chance of recovery through Deploy.
+
 Only GET/HEAD participate; other methods keep the regular 404. Resolver or
 lookup failures degrade to 404 (never 5xx) and never affect gateway startup.
 
@@ -111,6 +194,9 @@ lookup failures degrade to 404 (never 5xx) and never affect gateway startup.
 - The embedded lookup uses `DeployRepository::new_lookup(pool)` +
   `resolve_server_by_hostname_lookup` (read-only, no control-plane service
   dependency).
+- The same builder installs `EdgeNginxSiteSink` (`deploy_nginx_sink.rs`) from
+  the edge node environment so `deploy_app.nginx_conf` reaches the edge; see
+  "App nginx configuration".
 - TLS: TLS listeners must cover the app domains (wildcard certificates for
   `*.app[-<env>].<suffix>`, provisioned through the existing certificate
   material flow); plaintext listeners need no certificates.
@@ -121,19 +207,27 @@ lookup failures degrade to 404 (never 5xx) and never affect gateway startup.
 | --- | --- | --- | --- |
 | `myapp.app.sdkwork.com` | miss | deploy ACTIVE binding + VALID revision | site content |
 | `mysite.example.com` (custom) | miss | deploy ACTIVE binding | site content |
-| `myapp.app.sdkwork.com` | miss | no binding / invalid revision | 404 |
-| any host | hit | not consulted | local route |
+| `myapp.app.sdkwork.com` | miss | no binding / invalid revision / app not ACTIVE | 404 |
+| `myapp.app-dev.sdkwork.com` on a production node | miss | refused by classification | 404 (no lookup) |
+| any host | hit, resource resolves | not consulted | local route |
+| any host | hit, resource-backed route 404s | consulted | site content or 404 |
+| any host | hit, `Respond`/`Proxy` 404 | not consulted | local 404 |
 | non-GET/HEAD | miss | not consulted | 404 (or local route) |
 | fallback disabled / no DB | miss | skipped | 404 |
 
 ## Verification
 
 - Deploy: `cargo test -p sdkwork-deploy-core app_domains`;
-  repository integration tests `tests/platform_app_domains.rs`
-  (require `SDKWORK_DATABASE_TEST_POSTGRES_URL`).
+  `cargo test -p sdkwork-deploy-runtime-compiler`;
+  repository integration tests `tests/platform_app_domains.rs` and
+  `tests/app_composition.rs` (require `SDKWORK_DATABASE_TEST_POSTGRES_URL`).
+  `tests/app_composition.rs` asserts that a composition replace preserves
+  other environments' bindings and the auto-provisioned default domains.
 - Web Server: `cargo test -p sdkwork-webserver-core --test webserver_config
   app_domain_fallback`; `cargo test -p sdkwork-api-webserver-standalone-gateway
-  --lib deploy_fallback`.
+  --lib deploy_fallback`; `tests/app_domain_fallback_contract.rs` feeds a
+  Deploy-compiled descriptor into the Web Server drive/knowledgebase
+  providers.
 - Config schema: `etc/data-plane/website.cloud.config.json` and
   `etc/examples/sdkwork.webserver.config.json` validate against
   `specs/sdkwork.webserver.config.schema.json`.

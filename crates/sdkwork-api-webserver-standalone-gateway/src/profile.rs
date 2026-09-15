@@ -26,7 +26,10 @@ pub(crate) enum StandaloneProfileError {
 }
 
 impl StandaloneProfileError {
-    fn assembly_unavailable(owner: &'static str, detail: impl Into<String>) -> Self {
+    /// Typed dependency-unavailable error (code 50301). Shared with
+    /// `dependency_assembly` so a missing composition prerequisite is reported
+    /// the same way as a dependency bootstrap failure.
+    pub(crate) fn assembly_unavailable(owner: &'static str, detail: impl Into<String>) -> Self {
         Self::AssemblyUnavailable {
             owner,
             code: DEPENDENCY_UNAVAILABLE_CODE,
@@ -60,7 +63,11 @@ pub(crate) async fn assemble_standalone_profile(
     )
     .await
     .map_err(|error| StandaloneProfileError::assembly_unavailable("sdkwork-iam", error))?;
-    let drive = sdkwork_api_drive_assembly::assemble_app_api_contribution()
+    // Drive App API (`/app/v3/api/drive/*`). The drive **backend** admin
+    // storage surface (`/backend/v3/api/drive/storage/*`) is a separate
+    // contribution composed by `dependency_assembly`, because the drive
+    // assembly crate is outside the webserver assembly crate graph.
+    let drive_app_api = sdkwork_api_drive_assembly::assemble_app_api_contribution()
         .await
         .map_err(|error| StandaloneProfileError::assembly_unavailable("sdkwork-drive", error))?;
     let dependency_contributions =
@@ -69,7 +76,7 @@ pub(crate) async fn assemble_standalone_profile(
     let audit_emitter = web.audit_emitter.clone();
     let security_event_emitter = web.security_event_emitter.clone();
 
-    let mut contributions = vec![web.into_contribution(), iam, drive];
+    let mut contributions = vec![web.into_contribution(), iam, drive_app_api];
     contributions.extend(dependency_contributions);
 
     compose_owner_contributions(

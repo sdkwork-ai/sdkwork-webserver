@@ -47,6 +47,18 @@ packages:
   - "../sdkwork-utils/packages/sdkwork-utils-typescript"
   - "../sdkwork-app-topology"
   - "../sdkwork-drive/sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-typescript"
+  # Storage Center: the drive-owned admin storage plane is consumed as a shared
+  # module rather than forked. `sdkwork-drive-pc-admin-storage-providers` owns
+  # the pages/service/types/i18n and `sdkwork-drive-pc-admin-core` owns the
+  # host-agnostic admin storage SDK client; both are `workspace:*` deps of
+  # `@sdkwork/webserver-pc-admin-storage`, so their own workspace deps must be
+  # resolvable from this workspace too.
+  - "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-commons"
+  - "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-core"
+  - "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-admin-core"
+  - "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-admin-storage-providers"
+  - "../sdkwork-drive/sdks/sdkwork-drive-admin-storage-sdk/sdkwork-drive-admin-storage-sdk-typescript"
+  - "../sdkwork-drive/sdks/sdkwork-drive-backend-sdk/sdkwork-drive-backend-sdk-typescript"
 
 catalog:
   react: ^19.2.8

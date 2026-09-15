@@ -100,7 +100,7 @@ describe("webserver workspace theme styles", () => {
       /\.workspace > \*\s*\{[^}]*height:\s*100%/s,
     );
     expect(stylesheet).toMatch(
-      /\.skills-console-surface,[\s\S]*\.plugins-admin-surface\s*\{[^}]*height:\s*100%[^}]*display:\s*flex[^}]*overflow:\s*hidden/s,
+      /\.skills-console-surface,[\s\S]*\.storage-center-surface\s*\{[^}]*height:\s*100%[^}]*display:\s*flex[^}]*overflow:\s*hidden/s,
     );
     expect(stylesheet).toMatch(
       /\.plugin-source-toggle\s*\{[^}]*width:\s*max-content/s,

@@ -423,13 +423,7 @@ mod tests {
         environment: WebsiteRuntimeEnvironment,
         identity: &str,
     ) -> LoadedWebsiteRuntimeSet {
-        let environment_value = match environment {
-            WebsiteRuntimeEnvironment::Development => "development",
-            WebsiteRuntimeEnvironment::Test => "test",
-            WebsiteRuntimeEnvironment::Staging => "staging",
-            WebsiteRuntimeEnvironment::Demo => "demo",
-            WebsiteRuntimeEnvironment::Production => "production",
-        };
+        let environment_value = environment.as_str();
         let mut value = json!({
             "schemaVersion": "sdkwork.website-runtime-set.v1",
             "kind": "sdkwork.website-runtime-set.snapshot",

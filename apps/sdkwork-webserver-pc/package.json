@@ -74,7 +74,8 @@
     "@sdkwork/webserver-pc-console-mcp": "workspace:*",
     "@sdkwork/webserver-pc-admin-plugins": "workspace:*",
     "@sdkwork/webserver-pc-admin-skills": "workspace:*",
-    "@sdkwork/webserver-pc-admin-mcp": "workspace:*"
+    "@sdkwork/webserver-pc-admin-mcp": "workspace:*",
+    "@sdkwork/webserver-pc-admin-storage": "workspace:*"
   },
   "devDependencies": {
     "@testing-library/react": "catalog:",

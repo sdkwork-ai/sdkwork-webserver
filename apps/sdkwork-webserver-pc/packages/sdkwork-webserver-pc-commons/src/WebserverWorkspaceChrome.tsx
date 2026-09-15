@@ -3,8 +3,10 @@ import {
   AppWindow,
   Bell,
   Boxes,
+  CloudCog,
   FolderOpen,
   Globe2,
+  HardDrive,
   House,
   Layers3,
   LogOut,
@@ -27,9 +29,24 @@ import type { WebserverResourceKey } from "./types.ts";
 type WorkspaceSurface = "app-console" | "backend-admin";
 type WorkspaceTranslator = (key: WebserverMessageKey, values?: Record<string, string | number>) => string;
 
+/**
+ * A resolved module tab. The workspace owns resolution (visible entries,
+ * permission filtering, landing path) so the chrome stays presentational.
+ */
+export interface WorkspaceModuleTab {
+  id: string;
+  /** Landing route for the tab — the first entry the operator can open. */
+  href: string;
+  label: string;
+  /** Tooltip text; falls back to the label when absent. */
+  description?: string;
+}
+
 interface WorkspaceHeaderProps {
   adminRole?: string;
   basePath: string;
+  /** Admin modules rendered as tabs. Omitted or single-entry → no tab bar. */
+  moduleTabs?: readonly WorkspaceModuleTab[];
   notificationsHref?: string;
   onSignOut?(): void;
   portalHref?: string;
@@ -40,7 +57,7 @@ interface WorkspaceHeaderProps {
 
 interface WorkspaceSidebarProps {
   basePath: string;
-  entries: readonly { label?: string; resource: WebserverResourceKey }[];
+  entries: readonly { label?: string; path?: string; resource: WebserverResourceKey }[];
   surface: WorkspaceSurface;
   t: WorkspaceTranslator;
 }
@@ -48,6 +65,7 @@ interface WorkspaceSidebarProps {
 export function WorkspaceHeader({
   adminRole,
   basePath,
+  moduleTabs,
   notificationsHref,
   onSignOut,
   portalHref,
@@ -58,6 +76,7 @@ export function WorkspaceHeader({
   const accountLabel = userLabel?.trim() || t("auth.user");
   const accountInitial = Array.from(accountLabel)[0]?.toLocaleUpperCase() ?? "U";
   const brandHref = portalHref ?? basePath;
+  const hasModuleTabs = (moduleTabs?.length ?? 0) > 0;
 
   return (
     <header className="workspace-header">
@@ -73,42 +92,59 @@ export function WorkspaceHeader({
         </span>
       </a>
 
-      <div className="workspace-header-actions">
-        {portalHref ? (
-          <a className="workspace-header-command" href={portalHref}>
-            <House aria-hidden="true" size={17} />
-            <span>{t("navigation.portal")}</span>
-          </a>
+      <div className={`workspace-header-actions${hasModuleTabs ? " has-modules" : ""}`}>
+        {hasModuleTabs ? (
+          <nav aria-label={t("nav.modules")} className="workspace-header-nav">
+            {moduleTabs?.map((tab) => (
+              <NavLink
+                className={({ isActive }) => `workspace-module-tab${isActive ? " is-active" : ""}`}
+                key={tab.id}
+                title={tab.description ?? tab.label}
+                to={tab.href}
+              >
+                <ModuleIcon moduleId={tab.id} />
+                <span>{tab.label}</span>
+              </NavLink>
+            ))}
+          </nav>
         ) : null}
-        {notificationsHref ? (
-          <a
-            aria-label={t("navigation.notifications")}
-            className="workspace-header-icon"
-            href={notificationsHref}
-            title={t("navigation.notifications")}
-          >
-            <Bell aria-hidden="true" size={18} />
-          </a>
-        ) : null}
-        <span aria-hidden="true" className="workspace-header-divider" />
-        <div className="workspace-account" title={t("auth.account", { user: accountLabel })}>
-          <span aria-hidden="true" className="workspace-account-avatar">{accountInitial}</span>
-          <span className="workspace-account-copy">
-            <strong>{accountLabel}</strong>
-            <small>{adminRole ?? t(`surface.${surface}`)}</small>
-          </span>
+        <div className="workspace-header-account-group">
+          {portalHref ? (
+            <a className="workspace-header-command" href={portalHref}>
+              <House aria-hidden="true" size={17} />
+              <span>{t("navigation.portal")}</span>
+            </a>
+          ) : null}
+          {notificationsHref ? (
+            <a
+              aria-label={t("navigation.notifications")}
+              className="workspace-header-icon"
+              href={notificationsHref}
+              title={t("navigation.notifications")}
+            >
+              <Bell aria-hidden="true" size={18} />
+            </a>
+          ) : null}
+          <span aria-hidden="true" className="workspace-header-divider" />
+          <div className="workspace-account" title={t("auth.account", { user: accountLabel })}>
+            <span aria-hidden="true" className="workspace-account-avatar">{accountInitial}</span>
+            <span className="workspace-account-copy">
+              <strong>{accountLabel}</strong>
+              <small>{adminRole ?? t(`surface.${surface}`)}</small>
+            </span>
+          </div>
+          {onSignOut ? (
+            <button
+              aria-label={t("auth.signOut")}
+              className="workspace-header-icon"
+              onClick={onSignOut}
+              title={t("auth.signOut")}
+              type="button"
+            >
+              <LogOut aria-hidden="true" size={17} />
+            </button>
+          ) : null}
         </div>
-        {onSignOut ? (
-          <button
-            aria-label={t("auth.signOut")}
-            className="workspace-header-icon"
-            onClick={onSignOut}
-            title={t("auth.signOut")}
-            type="button"
-          >
-            <LogOut aria-hidden="true" size={17} />
-          </button>
-        ) : null}
       </div>
     </header>
   );
@@ -121,12 +157,13 @@ export function WorkspaceSidebar({ basePath, entries, surface, t }: WorkspaceSid
       <nav aria-label={t("nav.primary")}>
         {entries.map((entry) => {
           const label = resourceText(t, entry.resource, entry.label, surface);
+          const segment = entry.path?.trim() || entry.resource;
           return (
             <NavLink
               aria-label={label}
               key={entry.resource}
               title={label}
-              to={`${basePath}/${entry.resource}`}
+              to={`${basePath}/${segment}`}
             >
               <ResourceIcon resource={entry.resource} />
               <span>{label}</span>
@@ -136,6 +173,17 @@ export function WorkspaceSidebar({ basePath, entries, surface, t }: WorkspaceSid
       </nav>
     </aside>
   );
+}
+
+/** Module tab icon, keyed by `WebserverAdminModuleId` (unknown ids fall back). */
+function ModuleIcon({ moduleId }: { moduleId: string }): ReactNode {
+  const iconProps = { "aria-hidden": true, size: 16 } as const;
+  switch (moduleId) {
+    case "storageCenter":
+      return <CloudCog {...iconProps} />;
+    default:
+      return <House {...iconProps} />;
+  }
 }
 
 function ResourceIcon({ resource }: { resource: WebserverResourceKey }): ReactNode {
@@ -173,6 +221,14 @@ function ResourceIcon({ resource }: { resource: WebserverResourceKey }): ReactNo
       return <ScrollText {...iconProps} />;
     case "diagnostics":
       return <Activity {...iconProps} />;
+    case "storage-providers":
+      return <HardDrive {...iconProps} />;
+    case "storage-kinds":
+      return <CloudCog {...iconProps} />;
+    case "storage-buckets":
+      return <Boxes {...iconProps} />;
+    case "storage-bindings":
+      return <Plug {...iconProps} />;
     default:
       return <Activity {...iconProps} />;
   }

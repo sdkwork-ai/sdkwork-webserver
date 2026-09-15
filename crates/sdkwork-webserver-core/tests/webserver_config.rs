@@ -2487,18 +2487,35 @@ fn app_domain_fallback_section_compiles_and_validates() {
     assert_eq!(fallback.timeout_ms, 1500);
     assert!(matches!(fallback.lookup, AppDomainFallbackLookup::Embedded));
 
-    // HTTP lookup requires an absolute endpoint.
+    // The `http` control-plane channel is deliberately not part of this
+    // standalone-only product: declaring it must fail loudly instead of
+    // silently disabling the fallback (REVIEW-20260915 P1-5).
     let mut config = base_config();
     config["appDomainFallback"] = json!({
         "enabled": true,
-        "lookup": {"mode": "http", "endpoint": "not-a-url"}
+        "lookup": {"mode": "http", "endpoint": "https://control.example.com"}
     });
     let path = write_config(directory.path(), &config);
-    let error = load_and_compile_webserver_config(path).expect_err("bad endpoint must fail");
+    let error = load_and_compile_webserver_config(path).expect_err("http lookup must be rejected");
+    assert!(
+        !error.diagnostics().is_empty(),
+        "rejecting the removed lookup mode must produce a diagnostic"
+    );
+
+    // A suffix outside the Deploy platform catalog can never be provisioned,
+    // so it is a configuration error rather than a permanent 404
+    // (REVIEW-20260915 P1-7).
+    let mut config = base_config();
+    config["appDomainFallback"] = json!({
+        "enabled": true,
+        "suffixes": ["sdkwork.com", "noaper.com"]
+    });
+    let path = write_config(directory.path(), &config);
+    let error = load_and_compile_webserver_config(path).expect_err("off-catalog suffix must fail");
     assert!(error
         .diagnostics()
         .iter()
-        .any(|diagnostic| { diagnostic.message.contains("absolute http(s) endpoint URL") }));
+        .any(|diagnostic| diagnostic.message.contains("noaper.com")));
 
     // Wildcard or malformed suffixes are rejected.
     let mut config = base_config();

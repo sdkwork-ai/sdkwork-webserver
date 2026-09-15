@@ -470,7 +470,7 @@ default_docker_cors_allowed_origins() {
   # every deployment binds the whole remaining family by default so browser
   # Origins are accepted regardless of which product base domain serves the
   # console.
-  local base_domains="sdkwork.com birdcoder.com dtupay.com noaper.com sdkwork.cn birdcoder.cn dtupay.cn noaper.cn skubc.com skubc.cn zowalk.com zowalk.cn offer86.com offer86.cn 86offer.com 86offer.cn"
+  local base_domains="sdkwork.com birdcoder.com dtupay.com sdkwork.cn birdcoder.cn dtupay.cn skubc.com skubc.cn zowalk.com zowalk.cn offer86.com offer86.cn 86offer.com 86offer.cn"
   local suffix=""
   case "${environment}" in
     development) suffix="-dev" ;;

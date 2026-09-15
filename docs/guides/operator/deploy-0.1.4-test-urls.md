@@ -16,7 +16,11 @@ Windows 测试机请先在 `C:\Windows\System32\drivers\etc\hosts`（管理员�
 ```
 
 - 本机（Windows）访问用 `127.0.0.1`；局域网其它设备把上述 IP 换成 `192.168.31.116`。
-- 每个环境另有 13 个品牌备用域（birdcoder/dtupay/noaper/skubc/zowalk/offer86/86offer × .com/.cn），同样规则可加。
+- 每个环境另有 13 个品牌备用域（birdcoder/dtupay/skubc/zowalk/offer86/86offer × .com/.cn），同样规则可加。
+
+> 品牌域清单以 `APP_RUNTIME_TOPOLOGY_NAMING.md` §9.3「Base Domain Registry」为准（共 14 个基础域）。
+> 已退役的 `noaper.com` / `noaper.cn` 不再出现在 `etc/`、`deployments/` 的 nginx sidecar、`server.toml`
+> 与 CORS 白名单中；证书材料与 DNS 也应随之撤下。
 
 ## 二、五环境域名 URL（HTTP 已全量验证 200）
 

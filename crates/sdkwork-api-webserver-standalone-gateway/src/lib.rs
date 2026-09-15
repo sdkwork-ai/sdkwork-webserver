@@ -11,6 +11,8 @@ mod data_plane;
 mod dependency_assembly;
 mod deploy_fallback;
 #[cfg(feature = "management")]
+mod deploy_nginx_sink;
+#[cfg(feature = "management")]
 mod iam_module_bootstrap;
 mod metric_dimensions;
 #[cfg(feature = "management")]
@@ -40,8 +42,11 @@ pub use data_plane::{
 #[cfg(feature = "management")]
 pub use deploy_fallback::EmbeddedDeployServerLookup;
 pub use deploy_fallback::{
-    classify_host, DeployFallbackResolver, DeployServerLookup, HostClass, ResolvedDeployServer,
+    classify_host, DeployFallbackResolver, DeployServerLookup, HostClass, NginxConfMaterial,
+    NginxSiteSink, ResolvedDeployServer,
 };
+#[cfg(feature = "management")]
+pub use deploy_nginx_sink::EdgeNginxSiteSink;
 #[cfg(feature = "management")]
 pub use packaged_runtime::configure_packaged_runtime_roots_from_env;
 #[cfg(feature = "management")]

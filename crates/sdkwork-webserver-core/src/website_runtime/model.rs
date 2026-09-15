@@ -37,6 +37,59 @@ pub enum WebsiteRuntimeEnvironment {
     Production,
 }
 
+impl WebsiteRuntimeEnvironment {
+    /// The five lifecycle environments, in lifecycle order. Single authority
+    /// for the Web Server: mirrors
+    /// `sdkwork_deploy_contract::APP_PUBLISH_ENVIRONMENTS` and
+    /// `sdkwork_deploy_runtime_compiler::RuntimeEnvironment`, and the app
+    /// domain labels `app`/`app-dev`/`app-test`/`app-staging`/`app-demo`.
+    pub const ALL: [Self; 5] = [
+        Self::Development,
+        Self::Test,
+        Self::Staging,
+        Self::Demo,
+        Self::Production,
+    ];
+
+    /// The canonical lifecycle key, identical to the serde representation.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Development => "development",
+            Self::Test => "test",
+            Self::Staging => "staging",
+            Self::Demo => "demo",
+            Self::Production => "production",
+        }
+    }
+
+    /// Parse a canonical lifecycle key. Anything else — including the
+    /// historical short aliases `dev` / `stage` / `prod` — is rejected; use
+    /// [`Self::parse_with_aliases`] where the operator-facing environment
+    /// variable is the input.
+    pub fn parse(value: &str) -> Result<Self, String> {
+        let value = value.trim();
+        Self::ALL
+            .into_iter()
+            .find(|environment| environment.as_str() == value)
+            .ok_or_else(|| {
+                format!(
+                    "environment must be one of development, test, staging, demo, production: {value}"
+                )
+            })
+    }
+
+    /// Parse an operator-facing environment name, additionally accepting the
+    /// historical short aliases `dev`, `stage` and `prod`.
+    pub fn parse_with_aliases(value: &str) -> Result<Self, String> {
+        match value.trim() {
+            "dev" => Ok(Self::Development),
+            "stage" => Ok(Self::Staging),
+            "prod" => Ok(Self::Production),
+            other => Self::parse(other),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WebsiteBinding {

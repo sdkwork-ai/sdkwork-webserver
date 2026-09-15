@@ -660,26 +660,11 @@ fn required_env(key: &'static str) -> Result<String, WebsiteDataPlaneBootstrapEr
 fn parse_runtime_environment(
     value: &str,
 ) -> Result<WebsiteRuntimeEnvironment, WebsiteDataPlaneBootstrapError> {
-    match value {
-        "development" => Ok(WebsiteRuntimeEnvironment::Development),
-        "test" => Ok(WebsiteRuntimeEnvironment::Test),
-        "staging" => Ok(WebsiteRuntimeEnvironment::Staging),
-        "demo" => Ok(WebsiteRuntimeEnvironment::Demo),
-        "production" => Ok(WebsiteRuntimeEnvironment::Production),
-        _ => Err(WebsiteDataPlaneBootstrapError::RuntimeAssignmentConfig(
+    WebsiteRuntimeEnvironment::parse(value).map_err(|_| {
+        WebsiteDataPlaneBootstrapError::RuntimeAssignmentConfig(
             format!("{WEBSITE_RUNTIME_ENVIRONMENT_ENV} is invalid"),
-        )),
-    }
-}
-
-fn runtime_environment_name(environment: WebsiteRuntimeEnvironment) -> &'static str {
-    match environment {
-        WebsiteRuntimeEnvironment::Development => "development",
-        WebsiteRuntimeEnvironment::Test => "test",
-        WebsiteRuntimeEnvironment::Staging => "staging",
-        WebsiteRuntimeEnvironment::Demo => "demo",
-        WebsiteRuntimeEnvironment::Production => "production",
-    }
+        )
+    })
 }
 
 fn validate_opaque_config_id(
@@ -726,7 +711,7 @@ fn load_cloud_runtime_delivery(
     let loaded = LoadedWebsiteRuntimeSet::compile(bytes)?;
     let runtime_set = loaded.runtime_set();
     if runtime_set.node_uuid() != delivery.assignment.node_uuid
-        || runtime_environment_name(runtime_set.environment()) != delivery.assignment.environment
+        || runtime_set.environment().as_str() != delivery.assignment.environment
         || runtime_set.generation().to_string() != delivery.assignment.generation
         || runtime_set.snapshot_uuid() != delivery.assignment.snapshot_uuid
         || runtime_set.snapshot_sha256() != delivery.assignment.snapshot_sha256
@@ -742,7 +727,7 @@ fn validate_cloud_runtime_scope(
     tenant_scope_hash: &str,
 ) -> Result<(), WebsiteDataPlaneBootstrapError> {
     if loaded.runtime_set().node_uuid() != source.node_uuid()
-        || runtime_environment_name(loaded.runtime_set().environment()) != source.environment()
+        || loaded.runtime_set().environment().as_str() != source.environment()
     {
         return Err(CloudRuntimeAssignmentError::Response.into());
     }
@@ -1097,16 +1082,11 @@ pub(crate) async fn build_app_config_provider_executor(
 fn app_config_runtime_environment(
 ) -> Result<WebsiteRuntimeEnvironment, WebsiteDataPlaneBootstrapError> {
     let name = web_environment_name();
-    match name.as_str() {
-        "development" | "dev" => Ok(WebsiteRuntimeEnvironment::Development),
-        "test" => Ok(WebsiteRuntimeEnvironment::Test),
-        "staging" | "stage" => Ok(WebsiteRuntimeEnvironment::Staging),
-        "demo" => Ok(WebsiteRuntimeEnvironment::Demo),
-        "production" | "prod" => Ok(WebsiteRuntimeEnvironment::Production),
-        other => Err(WebsiteDataPlaneBootstrapError::ProviderConfig(format!(
-            "SDKWORK_WEBSERVER_ENVIRONMENT is invalid: {other}"
-        ))),
-    }
+    WebsiteRuntimeEnvironment::parse_with_aliases(&name).map_err(|_| {
+        WebsiteDataPlaneBootstrapError::ProviderConfig(format!(
+            "SDKWORK_WEBSERVER_ENVIRONMENT is invalid: {name}"
+        ))
+    })
 }
 
 struct ProviderSdkConfig {
@@ -2555,13 +2535,7 @@ mod tests {
         environment: WebsiteRuntimeEnvironment,
         identity: &str,
     ) -> Vec<u8> {
-        let environment = match environment {
-            WebsiteRuntimeEnvironment::Development => "development",
-            WebsiteRuntimeEnvironment::Test => "test",
-            WebsiteRuntimeEnvironment::Staging => "staging",
-            WebsiteRuntimeEnvironment::Demo => "demo",
-            WebsiteRuntimeEnvironment::Production => "production",
-        };
+        let environment = environment.as_str();
         let mut value = json!({
             "schemaVersion": "sdkwork.website-runtime-set.v1",
             "kind": "sdkwork.website-runtime-set.snapshot",
@@ -2613,15 +2587,22 @@ fn build_deploy_fallback(
     let lookup = std::sync::Arc::new(crate::deploy_fallback::EmbeddedDeployServerLookup::new(
         sdkwork_api_webserver_assembly::DeployRepository::new_lookup(pool),
     ));
-    Some(std::sync::Arc::new(
-        crate::deploy_fallback::DeployFallbackResolver::new(
-            std::sync::Arc::new(config.clone()),
-            lookup,
-            providers,
-            node_uuid,
-            environment,
-        ),
-    ))
+    let resolver = crate::deploy_fallback::DeployFallbackResolver::new(
+        std::sync::Arc::new(config.clone()),
+        lookup,
+        providers,
+        node_uuid,
+        environment,
+    );
+    // `deploy_app.nginx_conf` (and its `deploy_nginx_config` overrides) is
+    // materialized onto the edge through the edge node runtime, the same plane
+    // the node agent uses. When this node does not materialize nginx site files
+    // the resolver keeps the configuration cached and observable only.
+    let resolver = match crate::deploy_nginx_sink::EdgeNginxSiteSink::from_env() {
+        Some(sink) => resolver.with_nginx_site_sink(sink),
+        None => resolver,
+    };
+    Some(std::sync::Arc::new(resolver))
 }
 
 /// Non-management builds never construct the embedded Deploy lookup; the

@@ -12,6 +12,11 @@ const WEBSERVER_ADMIN_PERMISSIONS = [
   "mcp.admin.server.manage",
   "mcp.admin.category.manage",
   "mcp.admin.invocation.read",
+  // Storage Center is an operations capability of this edge: the drive-owned
+  // admin storage plane is only reachable through the webserver gateway, so a
+  // storage operator must be able to open the backend-admin surface at all —
+  // otherwise the module is permanently filtered out of their menu.
+  "drive.storage.admin",
 ] as const;
 
 const WEBSERVER_SUPER_ADMIN_PERMISSIONS = [

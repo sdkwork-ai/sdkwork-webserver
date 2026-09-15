@@ -52,8 +52,13 @@ database:
 - New `web_application` table: the tenant-facing application entity owns the
   resource identity (name/slug/description). `web_site` remains the internal
   site carrier row (runtime type, status, runtime config, domains,
-  deployments); `web_application.site_id` links the two (1:1, mirroring the
-  `deploy_app.site_id` model in sdkwork-deployments).
+  deployments); `web_application.site_id` links the two (1:1).
+- This two-row split is **Web Server-local**. sdkwork-deployments does not
+  mirror it: its former `deploy_site` carrier was folded into `deploy_app`
+  (see `0007_deploy_app_delivery`), so there is no `deploy_app.site_id`
+  column — `deploy_app` carries the publishing surface (`slug`,
+  `app_domain_label`, `app_domain_suffixes`, `nginx_conf`) directly, and
+  domains/bindings/revisions hang off `deploy_app`.
 - Creating an application creates its backing site row in one transaction;
   child resources (domains, source versions, deployments, env variables,
   health checks) are resolved through the application's site.

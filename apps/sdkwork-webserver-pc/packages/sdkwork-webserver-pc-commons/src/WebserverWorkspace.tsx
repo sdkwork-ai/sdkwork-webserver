@@ -43,7 +43,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { uuid } from "@sdkwork/utils/id";
 
 import { translateWebserver, type WebserverLocale, type WebserverMessageKey } from "./i18n/index.ts";
@@ -89,7 +89,15 @@ import type {
   WebserverResourceRegistry,
   ApplicationWizardSkips,
 } from "./types.ts";
-import { WorkspaceHeader, WorkspaceSidebar } from "./WebserverWorkspaceChrome.tsx";
+import { WorkspaceHeader, WorkspaceSidebar, type WorkspaceModuleTab } from "./WebserverWorkspaceChrome.tsx";
+import {
+  DEFAULT_ADMIN_MODULE_ID,
+  adminEntryPathSegment,
+  groupAdminModuleEntries,
+  resolveAdminModuleDefinition,
+  resolveAdminModuleFromPath,
+  resolveAdminModuleLandingPath,
+} from "./admin-modules.ts";
 
 export interface WebserverWorkspaceProps {
   locale: WebserverLocale;
@@ -120,6 +128,7 @@ export function WebserverWorkspace({
   surface,
   userLabel,
 }: WebserverWorkspaceProps) {
+  const { pathname } = useLocation();
   const t = (key: WebserverMessageKey, values?: Record<string, string | number>) =>
     translateWebserver(locale, key, values);
   const entries = useMemo(() => {
@@ -132,7 +141,37 @@ export function WebserverWorkspace({
       .sort((a, b) => a.order - b.order);
   }, [modules, permissionScope, surface]);
   const basePath = surface === "backend-admin" ? "/admin" : "/console";
-  const defaultResource = entries[0]?.resource;
+  // Modules group the same flat resource routes into header tabs; the sidebar
+  // then lists only the active module's entries. A surface that resolves to a
+  // single module (the console) renders no tab bar at all.
+  const moduleGroups = useMemo(
+    () => groupAdminModuleEntries(basePath, entries),
+    [basePath, entries],
+  );
+  const visibleModuleGroups = moduleGroups.filter((group) => group.entries.length > 0);
+  const moduleTabs: readonly WorkspaceModuleTab[] = visibleModuleGroups.length > 1
+    ? visibleModuleGroups.map((group) => {
+        const module = resolveAdminModuleDefinition(group.moduleId);
+        return {
+          id: module.id,
+          href: resolveAdminModuleLandingPath(basePath, group.entries) ?? basePath,
+          label: t(module.labelKey),
+          description: t(module.descriptionKey),
+        };
+      })
+    : [];
+  const activeModuleId = surface === "backend-admin"
+    ? resolveAdminModuleFromPath(pathname)
+    : DEFAULT_ADMIN_MODULE_ID;
+  const activeModuleEntries = moduleGroups.find((group) => group.moduleId === activeModuleId)?.entries
+    ?? [];
+  // An operator routed to a module they cannot see lands on the first module
+  // that actually has entries, so the fallback can never self-redirect.
+  const landingPath = resolveAdminModuleLandingPath(
+    basePath,
+    activeModuleEntries.length > 0 ? activeModuleEntries : (visibleModuleGroups[0]?.entries ?? []),
+  );
+  const hasVisibleEntries = visibleModuleGroups.length > 0;
   const adminRole = surface === "backend-admin"
     ? hasPlatformSuperAdminAccess(permissionScope)
       ? t("auth.platformSuperAdmin")
@@ -146,6 +185,7 @@ export function WebserverWorkspace({
       <WorkspaceHeader
         adminRole={adminRole}
         basePath={basePath}
+        moduleTabs={moduleTabs}
         notificationsHref={notificationsHref}
         onSignOut={onSignOut}
         portalHref={portalHref}
@@ -153,14 +193,21 @@ export function WebserverWorkspace({
         t={t}
         userLabel={userLabel}
       />
-      <WorkspaceSidebar basePath={basePath} entries={entries} surface={surface} t={t} />
+      <WorkspaceSidebar
+        basePath={basePath}
+        entries={activeModuleEntries}
+        surface={surface}
+        t={t}
+      />
       <main className="workspace">
-        {defaultResource ? (
+        {hasVisibleEntries ? (
           <Routes>
+            {/* Every visible entry keeps a route regardless of the active
+                module, so cross-module deep links stay resolvable. */}
             {entries.map((entry) => (
               <Route
                 key={entry.resource}
-                path={`/${entry.resource}/*`}
+                path={`/${adminEntryPathSegment(entry)}/*`}
                 element={resourceRenderers?.[entry.resource] ?? (
                   <ResourcePage
                     entry={entry}
@@ -173,7 +220,10 @@ export function WebserverWorkspace({
                 )}
               />
             ))}
-            <Route path="*" element={<Navigate to={`${basePath}/${defaultResource}`} replace />} />
+            <Route
+              path="*"
+              element={<Navigate to={landingPath ?? basePath} replace />}
+            />
           </Routes>
         ) : (
           <SurfaceAccessState locale={locale} />

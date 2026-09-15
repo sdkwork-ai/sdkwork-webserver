@@ -11,6 +11,11 @@
 @source "../../../../sdkwork-mcp/apps/sdkwork-mcp-pc/packages/sdkwork-mcp-pc-admin/src";
 @source "../packages/sdkwork-webserver-pc-console-plugins/src";
 @source "../packages/sdkwork-webserver-pc-admin-plugins/src";
+/* Storage Center embeds the drive-owned admin storage pages, which live outside
+   this app root: Tailwind v4 only scans the project root by default, so the
+   shared package's source must be declared explicitly or its utilities would be
+   missing from the emitted stylesheet. */
+@source "../../../../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-admin-storage-providers/src";
 
 /* Shared packages use explicit dark: utilities driven by the theme provider. */
 @variant dark (&:is(.dark *));
@@ -114,6 +119,15 @@ textarea:focus-visible {
 .workspace-brand-copy strong { font-size: 13px; }
 .workspace-brand-copy small { display: none; }
 .workspace-header-actions { min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 0 clamp(12px, 1.8vw, 24px); white-space: nowrap; }
+.workspace-header-actions.has-modules { justify-content: space-between; }
+.workspace-header-nav { min-width: 0; align-self: stretch; display: flex; align-items: center; gap: 2px; overflow: hidden; }
+.workspace-module-tab { position: relative; min-width: 0; height: 100%; display: inline-flex; align-items: center; gap: 7px; padding: 0 12px; color: var(--sdk-color-text-secondary); text-decoration: none; font-size: 12.5px; font-weight: 650; white-space: nowrap; transition: color .16s ease, background .16s ease; }
+.workspace-module-tab svg { flex: 0 0 auto; }
+.workspace-module-tab span { overflow: hidden; text-overflow: ellipsis; }
+.workspace-module-tab:hover { color: var(--sdk-color-text-primary); background: var(--sdk-color-surface-panel-muted); }
+.workspace-module-tab.is-active { color: var(--webserver-color-accent-text); }
+.workspace-module-tab.is-active::after { content: ""; position: absolute; inset-inline: 8px; bottom: 0; height: 2px; background: var(--webserver-color-accent-text); border-radius: 2px 2px 0 0; }
+.workspace-header-account-group { min-width: 0; display: flex; align-items: center; gap: 6px; }
 .workspace-header-command, .workspace-header-icon { min-height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; color: var(--sdk-color-text-secondary); background: transparent; border: 0; border-radius: 4px; text-decoration: none; white-space: nowrap; transition: color .16s ease, background .16s ease; }
 .workspace-header-command { padding: 0 10px; font-size: 12px; font-weight: 650; }
 .workspace-header-icon { width: 32px; padding: 0; }
@@ -660,6 +674,9 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   .workspace-brand { justify-content: flex-start; padding: 0 10px; }
   .workspace-brand-copy small, .workspace-header-command span, .workspace-account-copy { display: none; }
   .workspace-header-actions { gap: 4px; padding-inline: 8px; }
+  .workspace-header-nav { gap: 0; }
+  .workspace-module-tab { padding: 0 9px; }
+  .workspace-module-tab span { display: none; }
   .workspace-header-command { width: 32px; padding: 0; }
   .workspace-header-divider { margin-inline: 0; }
   .sidebar { padding-inline: 8px; overflow-x: hidden; }
@@ -720,6 +737,7 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
 @media (max-width: 420px) {
   .workspace-header-divider { display: none; }
   .workspace-header-actions { gap: 2px; padding-inline: 4px; }
+  .workspace-module-tab { padding: 0 7px; }
   .workspace-header-command, .workspace-header-icon { width: 30px; min-height: 30px; }
   .workspace-account-avatar { width: 28px; height: 28px; }
   .dialog-backdrop { padding: 10px; }
@@ -1849,13 +1867,14 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   cursor: pointer;
 }
 
-/* Shared list-CRUD drawer / confirm modal (Skills + MCP + Plugins embeds) */
+/* Shared list-CRUD drawer / confirm modal (Skills + MCP + Plugins + Storage embeds) */
 .skills-console-surface,
 .mcp-console-surface,
 .plugins-console-surface,
 .skills-admin-surface,
 .mcp-admin-surface,
-.plugins-admin-surface {
+.plugins-admin-surface,
+.storage-center-surface {
   position: relative;
 }
 .sdkwork-surface-drawer-root,

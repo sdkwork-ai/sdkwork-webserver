@@ -2478,20 +2478,10 @@
         "lookup": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Deploy control-plane lookup channel: embedded (shared Deploy database, standalone) or http (control-plane API, cloud).",
+          "description": "Deploy control-plane lookup channel. Only `embedded` exists: the Web Server is a standalone-only product whose data plane shares the process with the Deploy control plane, so unmatched hosts are resolved through the shared Deploy database. An `http` channel was declared but never implemented; it is deliberately rejected rather than silently disabling the fallback.",
           "properties": {
             "mode": {
-              "type": "string",
-              "enum": [
-                "embedded",
-                "http"
-              ]
-            },
-            "endpoint": {
-              "type": "string"
-            },
-            "authTokenFile": {
-              "type": "string"
+              "const": "embedded"
             }
           },
           "required": [

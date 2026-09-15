@@ -182,7 +182,14 @@ zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2
 # Production binaries benefit from LTO and a single codegen unit; panic=unwind
 # keeps a panicked Tokio task from terminating the long-running process.
 sdkwork_intelligence_deploy_repository_sqlx = { path = "../sdkwork-deployments/crates/sdkwork-intelligence-deploy-repository-sqlx", package = "sdkwork-intelligence-deploy-repository-sqlx" }
+sdkwork-deploy-runtime-compiler = { path = "../sdkwork-deployments/crates/sdkwork-deploy-runtime-compiler" }
 sdkwork_deploy_contract = { path = "../sdkwork-deployments/crates/sdkwork-deploy-contract", package = "sdkwork-deploy-contract" }
+# Platform app-publishing domain catalog (suffixes + environment labels) is
+# owned by sdkwork-deployments: the control plane provisions exactly these
+# hostnames, so the Web Server must classify against the same constants
+# instead of keeping a second copy (`SDKWORK_WEBSERVER_SPEC.md` domain
+# inventory has a single authority).
+sdkwork_deploy_core = { path = "../sdkwork-deployments/crates/sdkwork-deploy-core", package = "sdkwork-deploy-core" }
 [profile.release]
 opt-level = 3
 lto = "thin"

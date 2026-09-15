@@ -27,6 +27,35 @@ const packages = [
   { id: "admin-webserver-config", surface: "backend-admin", capability: "webserver-config", deps: { "@sdkwork/webserver-pc-admin-core": "workspace:*", "@sdkwork/sdk-common": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", "@monaco-editor/react": "catalog:", "monaco-editor": "catalog:", "lucide-react": "catalog:", react: "catalog:", "react-router-dom": "^7.15.0" }, sdkPolicy: "This package consumes the backend admin SDK exclusively through @sdkwork/webserver-pc-admin-core public exports (createWebserverAdminSdkClient and wire types); raw HTTP and direct generated-SDK imports are forbidden in authored UI code.", module: [["webserver-config", "Server Config", "Edit the deployed default config, import plane, and module sidecar configuration online", "web.servers.files.read"]], extraIndexExports: ['export * from "./WebserverConfigSurface.tsx";', 'export * from "./webserver-config-client.ts";', 'export * from "./config-language.ts";'] },
   { id: "admin-diagnostics", surface: "backend-admin", capability: "diagnostics", deps: { "@sdkwork/webserver-pc-commons": "workspace:*" }, module: [["diagnostics", "Diagnostics", "Runtime status and convergence diagnostics", "web.servers.read"]] },
   { id: "admin-audit", surface: "backend-admin", capability: "audit", deps: { "@sdkwork/webserver-pc-commons": "workspace:*" }, module: [["audit", "Audit", "Operator action evidence", "web.auditLogs.read"]] },
+  // Storage Center hosts the drive-owned admin storage plane (providers, kinds,
+  // buckets, bindings) inside the Web Server edge. The surface is a thin host
+  // adapter: the pages, service, types, and i18n all come from the shared
+  // `sdkwork-drive-pc-admin-storage-providers` package that cloudrouter mounts
+  // too, so the two applications reuse one module instead of forking it.
+  {
+    id: "admin-storage",
+    surface: "backend-admin",
+    capability: "storage",
+    deps: {
+      "@sdkwork/sdk-common": "workspace:*",
+      "@sdkwork/webserver-pc-commons": "workspace:*",
+      "sdkwork-drive-pc-admin-core": "workspace:*",
+      "sdkwork-drive-pc-admin-storage-providers": "workspace:*",
+      "sdkwork-drive-pc-commons": "workspace:*",
+      "sdkwork-drive-pc-core": "workspace:*",
+      react: "catalog:",
+    },
+    sdkPolicy: "The drive-owned admin storage SDK is composed through createDriveAdminStorageHostClient from sdkwork-drive-pc-admin-core, which accepts the host API base URL directly; raw HTTP and direct generated-SDK imports are forbidden in authored UI code.",
+    dependencyPolicy: "Host adapter only. Pages, components, service, types, and i18n are consumed from the shared sdkwork-drive-pc-admin-storage-providers package, and the drive session snapshot is adapted from host session primitives at the surface boundary; no drive page is copied or re-implemented here.",
+    readme: "This package owns the storage capability on the backend-admin surface. It is a thin host adapter over the drive-owned admin storage plane: the Storage Providers / Provider Catalog / Buckets / Bindings pages, their service, types, and i18n all come from `sdkwork-drive-pc-admin-storage-providers` + `sdkwork-drive-pc-commons`, which cloudrouter consumes as well. The adapter only composes the shared admin storage SDK client (`createDriveAdminStorageHostClient`), supplies the host API base URL, and adapts the host session into the drive session snapshot the shared pages expect.",
+    module: [
+      ["storage-providers", "Storage Providers", "Configure and manage the object storage backends Drive writes to", "drive.storage.admin", "storage/providers"],
+      ["storage-kinds", "Provider Catalog", "Enable or disable the storage provider kinds operators may choose", "drive.storage.admin", "storage/kinds"],
+      ["storage-buckets", "Buckets", "Inspect and create the bucket behind each storage provider", "drive.storage.admin", "storage/buckets"],
+      ["storage-bindings", "Bindings", "Route each space type to a default storage provider", "drive.storage.admin", "storage/bindings"],
+    ],
+    extraIndexExports: ['export * from "./StorageCenterSurface.tsx";'],
+  },
 ];
 
 for (const definition of packages) {
@@ -209,7 +238,15 @@ function sdkInventorySource(definition) {
 }
 
 function moduleSource(definition) {
-  const entries = definition.module.map(([resource, label, description, permission], index) => `    { resource: "${resource}", label: "${label}", description: "${description}", permission: "${permission}", order: ${index + 1} }`).join(",\n");
+  // `module` tuples are [resource, label, description, permission, path?].
+  // `path` is the route segment under the surface base path; omit it when the
+  // route segment equals the resource key. A module sub-path (`storage/providers`)
+  // is what lets a module group entries under its own URL subtree while keeping
+  // a stable, slash-free resource key for i18n and the data-source registry.
+  const entries = definition.module.map(([resource, label, description, permission, path], index) => {
+    const pathField = path ? `, path: "${path}"` : "";
+    return `    { resource: "${resource}", label: "${label}", description: "${description}", permission: "${permission}", order: ${index + 1}${pathField} }`;
+  }).join(",\n");
   return `import type { WebserverPcModuleDefinition } from "@sdkwork/webserver-pc-commons";\n\nexport const webserverModule = {\n  id: "${definition.capability}",\n  label: "${definition.capability.replaceAll("-", " ")}",\n  surface: "${definition.surface}",\n  entries: [\n${entries}\n  ],\n} as const satisfies WebserverPcModuleDefinition;\n`;
 }
 

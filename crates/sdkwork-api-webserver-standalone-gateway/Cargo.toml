@@ -18,6 +18,7 @@ management = [
   "dep:sdkwork-web-store-sqlx",
   "dep:sdkwork-webserver-http-host",
   "dep:sdkwork-api-deployments-assembly",
+  "dep:sdkwork-webserver-edge-runtime",
 ]
 
 [lib]
@@ -83,7 +84,9 @@ sdkwork-database-sqlx = { workspace = true, optional = true }
 sdkwork-webserver-http-host = { workspace = true, optional = true }
 sdkwork-api-deployments-assembly = { workspace = true, optional = true }
 sdkwork_deploy_contract = { workspace = true }
+sdkwork_deploy_core = { workspace = true }
 sdkwork-webserver-core.workspace = true
+sdkwork-webserver-edge-runtime = { workspace = true, optional = true }
 sdkwork-webserver-resolver-cache = { workspace = true, features = ["redis"] }
 sdkwork-webserver-contract.workspace = true
 sdkwork-webserver-delivery-runtime.workspace = true
@@ -110,6 +113,7 @@ http-body-util = { workspace = true, features = ["channel"] }
 jsonschema.workspace = true
 rcgen.workspace = true
 reqwest.workspace = true
+sdkwork-deploy-runtime-compiler.workspace = true
 tempfile.workspace = true
 
 [lints]

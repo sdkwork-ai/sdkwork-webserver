@@ -994,19 +994,24 @@ impl SemanticValidator {
             if !seen.insert(suffix.clone()) {
                 self.push(&path, format!("duplicate app-domain suffix {suffix}"));
             }
+            // The Deploy control plane only ever provisions
+            // `<appLabel>.app[-<env>].<suffix>` under its own catalog, so a
+            // suffix outside it can never resolve: rejecting it here turns a
+            // permanently-404 configuration into a startup error instead of a
+            // misleading "default app domain" classification.
+            if !sdkwork_deploy_core::PLATFORM_APP_DOMAIN_SUFFIXES.contains(&suffix.as_str()) {
+                self.push(
+                    &path,
+                    format!(
+                        "suffix {suffix} is not part of the Deploy platform app-domain catalog \
+                         ({}); the control plane never provisions hostnames under it",
+                        sdkwork_deploy_core::PLATFORM_APP_DOMAIN_SUFFIXES.join(", ")
+                    ),
+                );
+            }
         }
         match &fallback.lookup {
             AppDomainFallbackLookup::Embedded => {}
-            AppDomainFallbackLookup::Http { endpoint, .. } => {
-                if endpoint.trim().is_empty()
-                    || !endpoint.starts_with("https://") && !endpoint.starts_with("http://")
-                {
-                    self.push(
-                        "/appDomainFallback/lookup/endpoint",
-                        "http lookup requires an absolute http(s) endpoint URL",
-                    );
-                }
-            }
         }
         if !(100..=30_000).contains(&fallback.timeout_ms) {
             self.push(

@@ -435,7 +435,14 @@ fn write_self_signed_certificate(directory: &Path, stem: &str, names: &[&str]) {
         .expect("write test private key");
 }
 
+// Reviewed exception to the workspace `unsafe_code = "deny"` baseline
+// (RUST_CODE_SPEC.md §13): the admission test asserts that the data plane
+// releases its file descriptors, which on Windows can only be observed through
+// the Win32 process-handle counter. This mirrors the reviewed sampler in
+// `src/data_plane/resource_pressure.rs`; both calls carry their own SAFETY
+// proof and the surface is limited to these two pseudo-handle queries.
 #[cfg(target_os = "windows")]
+#[allow(unsafe_code)]
 fn current_open_handles() -> u64 {
     use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetProcessHandleCount};
 

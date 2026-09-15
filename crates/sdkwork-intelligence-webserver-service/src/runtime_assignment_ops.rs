@@ -194,16 +194,9 @@ impl WebInternalApi for WebService {
 }
 
 fn parse_environment(value: &str) -> WebServiceResult<WebsiteRuntimeEnvironment> {
-    match value {
-        "development" => Ok(WebsiteRuntimeEnvironment::Development),
-        "test" => Ok(WebsiteRuntimeEnvironment::Test),
-        "staging" => Ok(WebsiteRuntimeEnvironment::Staging),
-        "demo" => Ok(WebsiteRuntimeEnvironment::Demo),
-        "production" => Ok(WebsiteRuntimeEnvironment::Production),
-        _ => Err(WebServiceError::validation(
-            "unsupported runtime environment",
-        )),
-    }
+    WebsiteRuntimeEnvironment::parse(value).map_err(|_| {
+        WebServiceError::validation("unsupported runtime environment")
+    })
 }
 
 fn parse_generation(value: &str) -> WebServiceResult<u64> {
