@@ -2,7 +2,7 @@
 
 - 日期：2026-09-05
 - 宿主：Windows + WSL `Ubuntu-22.04`（Docker 29.3.0 在 WSL 内）
-- 源码：`E:\sdkwork-space\sdkwork-webserver` @ `6c362d9b`（工作区含 ~20 个未提交改动）
+- 源码：`<workspace-root>/sdkwork-webserver` @ `6c362d9b`（工作区含 ~20 个未提交改动）
 - 构建副本（ext4）：`~/sdkwork-build/sdkwork-webserver`
 - 范围：development / test / production 三环境的 Docker 部署安装更新，并附带修复 staging
 
@@ -101,7 +101,7 @@ test.env 同一配置面（attach 网络/主机/非必需、DB 与 Redis 键、A
 
 ```bash
 rsync -a --exclude node_modules --exclude target --exclude dist ... \
-  /mnt/e/sdkwork-space/sdkwork-webserver/ ~/sdkwork-build/sdkwork-webserver/
+  <workspace-root>/sdkwork-webserver/ ~/sdkwork-build/sdkwork-webserver/
 cd ~/sdkwork-build/sdkwork-webserver
 pnpm install                       # 工作区新增 @monaco-editor/react / monaco-editor
 npx rebuild esbuild   # 补 native postinstall（pnpm 默认忽略构建脚本，需显式重建）

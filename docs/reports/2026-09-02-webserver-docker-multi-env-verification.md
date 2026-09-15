@@ -2,7 +2,7 @@
 
 - 日期：2026-09-02
 - 环境：Windows 宿主 + WSL Ubuntu-22.04（Docker in WSL）
-- 工作区：`/mnt/e/sdkwork-space/sdkwork-webserver`
+- 工作区：`<workspace-root>/sdkwork-webserver`
 - 结论：**同一镜像在 development / test / production 三环境部署全部 healthy，域名访问矩阵验证通过（详见下表）**
 
 ## 1. 镜像与部署拓扑

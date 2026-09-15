@@ -1,3 +1,4 @@
+// WORKSPACE-PATH:allow-fixture: fixtures name a foreign checkout root, drive, or home directory to exercise path handling, so the literal is the value under assertion rather than a binding this build resolves
 use sdkwork_webserver_core::website_runtime::{
     compile_website_runtime_descriptor, website_runtime_descriptor_sha256, WebsiteClientClass,
     WebsiteClientClassificationSource, WebsiteRequestRoutingContext, WebsiteRouteSelection,

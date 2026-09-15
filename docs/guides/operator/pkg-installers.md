@@ -37,7 +37,7 @@ bridged into WSL Ubuntu automatically (path translation included). WSL Ubuntu
 must be installed.
 
 ```bash
-cd /e/sdkwork-space/sdkwork-webserver
+cd <workspace-root>/sdkwork-webserver
 bin/apps-pkg-installer.sh server linux test
 ```
 

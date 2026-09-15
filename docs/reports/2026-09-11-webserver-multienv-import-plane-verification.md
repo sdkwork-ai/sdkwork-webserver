@@ -344,7 +344,7 @@ production 实测 start 16:33:12 → 校验 16:33:38 → `serving merged module-
 
 ```bash
 # ---- 打包（WSL，复用 PC/H5 静态产物以绕开既存 typecheck 漂移）----
-cd /mnt/e/sdkwork-space/sdkwork-webserver
+cd <workspace-root>/sdkwork-webserver
 export SDKWORK_IMAGE_NO_PULL=1 SDKWORK_BROWSER_SKIP_TYPECHECK=1
 export SDKWORK_RELEASE_STAGE_PARENT="$HOME/sdkwork-release-stage"   # 必须 ext4
 node scripts/webserver-release.mjs package --deployment-profile standalone \

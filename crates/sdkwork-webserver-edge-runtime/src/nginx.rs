@@ -438,7 +438,7 @@ pub(crate) fn sync_directory(_path: &Path) -> EdgeRuntimeResult<()> {
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(test)] // WORKSPACE-PATH:allow-fixture-block: this module is the file's #[cfg(test)] unit-test fixture data
 mod tests {
     use std::sync::Mutex;
 

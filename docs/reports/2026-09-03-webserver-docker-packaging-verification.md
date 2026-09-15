@@ -1,7 +1,7 @@
 # sdkwork-webserver Docker 三环境打包部署验证报告
 
 - 日期：2026-09-03
-- 范围：`E:\sdkwork-space\sdkwork-webserver`（WSL Ubuntu-22.04，/mnt/e 挂载）
+- 范围：`<workspace-root>/sdkwork-webserver`（WSL Ubuntu-22.04，/mnt/e 挂载）
 - 结论：**通过**。同一镜像/同一安装包已部署 development / test / production 三个环境，全部容器 healthy，HTTP 层（healthz + 域名 Host 头 SPA）逐项 200。
 
 ## 1. 产物
@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | standalone 安装包 | `~/sdkwork-build/sdkwork-webserver/dist/release/sdkwork-webserver-linux-x64-standalone-server-0.1.0.tar.gz`（ext4 构建副本） | 61,902,608 B，440 entries，SBOM 567 components |
 | Docker 镜像 | `registry.sdkwork.com/apps/sdkwork-webserver-standalone:0.1.0`（三环境共用同一镜像） | — |
-| webserver 二进制（宿主 bind-mount 混合模式） | `/mnt/e/sdkwork-space/sdkwork-webserver/target/release/sdkwork-api-webserver-standalone-gateway` | 84,295,536 B |
+| webserver 二进制（宿主 bind-mount 混合模式） | `<workspace-root>/sdkwork-webserver/target/release/sdkwork-api-webserver-standalone-gateway` | 84,295,536 B |
 
 构建链（全部在 WSL ext4 副本 `~/sdkwork-build/` 执行，DrvFS 上 pnpm 会 `disk I/O error`）：
 
@@ -89,7 +89,7 @@ WSL 内/宿主机 localhost（Windows 侧可直接访问 WSL 端口转发）：
 
 ## 6. 已知约束与后续建议
 
-- webserver 二进制为宿主 bind-mount 混合模式：镜像升级时需同步将新二进制拷贝至 `/mnt/e/.../target/release/sdkwork-api-webserver-standalone-gateway`。
+- webserver 二进制为宿主 bind-mount 混合模式：镜像升级时需同步将新二进制拷贝至 `<workspace-root>/.../target/release/sdkwork-api-webserver-standalone-gateway`。
 - 并行会话运行网关 bundle `deploy.sh` 会回退 production.env（镜像/DB URL）与 attach override；建议将 attach 契约参数化合并进网关 bundle。
 - `deployments/docker/env/<env>.env` 的 attach 网络名与网关 bundle 网络命名耦合（`sdkwork-api-cloud-gateway-<env>`），网关舰队重建/改名时需同步。
 - ext4 构建副本 `~/sdkwork-build/` 与 /mnt/e 源码可能漂移；正式出包前建议重新 rsync 增量同步。

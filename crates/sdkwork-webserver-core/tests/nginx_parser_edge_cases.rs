@@ -4,6 +4,7 @@
 //! tab whitespace, multi-line directives, comments in every position,
 //! quoted strings (per-type closing, escapes, empty values), `${var}`
 //! tokens, and error line reporting.
+// WORKSPACE-PATH:allow-fixture: fixtures name a foreign checkout root, drive, or home directory to exercise path handling, so the literal is the value under assertion rather than a binding this build resolves
 
 use std::path::Path;
 

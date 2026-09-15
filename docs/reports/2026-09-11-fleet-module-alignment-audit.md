@@ -1,7 +1,7 @@
 # sdkwork-space 全舰队模块完整性与对齐审计
 
 - 日期：2026-09-11
-- 范围：`E:/sdkwork-space` 下**全部 100 个受治理仓**（不再只审 79 个）
+- 范围：`<workspace-root>` 下**全部 100 个受治理仓**（不再只审 79 个）
 - 触发：`逐个模块检查 sdkwork-space，确保 sdkwork-space 下的所有的独立模块都已经完整并确保对齐`
 - 结论一句话：**舰队口径此前是错的（79 ≠ 100）；修好口径后又发现 4 个门禁层缺陷（含 1 对自相矛盾的门禁、1 处死代码常量）；拉平口径后的诚实基线是 58 条门禁 30 红、脚本落位 137 违规 / 76 仓对齐；剩余 137 条里 55% 卡在 3 个规范歧义上，必须先裁决再动手。**
 
@@ -142,7 +142,7 @@ tracked vs untracked-but-not-ignored 两种"会被提交"的状态）；一个 g
 
 ### 3.2 门禁全量回归（58 条）
 
-- **根聚合 16 条**（`/e/sdkwork-space/.gate-names.txt`）：10 绿 / **6 红**
+- **根聚合 16 条**（`<workspace-root>/.gate-names.txt`）：10 绿 / **6 红**
 - **其余 `--workspace` 能力门禁 42 条**：18 绿 / **24 红**
 - 合计 **28 绿 / 30 红**
 
@@ -218,7 +218,7 @@ tracked vs untracked-but-not-ignored 两种"会被提交"的状态）；一个 g
 | `sdkwork-llm/tools/verify_openapi_operation_ids.ps1`（92 行） | 断言 OpenAPI 里 operationId 清单 | 纯断言 → 违 L131 |
 | `sdkwork-specs/scripts/verify.ps1`（23 行） | 是个**编排器**（循环跑 node checker） | 不是断言，但**标准入口家族里没有 `verify` 这个入口**（§2 家族 = docker-image/docker-deploy/config/doctor/backup/apps-*）→ 仍是自造入口 |
 | `sdkwork-canvas/scripts/verify-standards.ps1` | 文件头写着 **`# SDKWork Settings 验证脚本索引`** | **复制粘贴从未改名** —— 与 `sdkwork-settings/scripts/verify-standards.ps1` 逐字重复 |
-| `sdkwork-im/tools/converge-repo.sh`（19 行） | 写死 `C:/Users/admin/AppData/Local/Temp/` 与 `E:/sdkwork-space/sdkwork-im/tools/fix-sqlx09-sites.py` | 违反 §2.1 L84–85（禁绝对机器路径）；一次性调试残留 |
+| `sdkwork-im/tools/converge-repo.sh`（19 行） | 写死 `<home>/AppData/Local/Temp/` 与 `<workspace-root>/sdkwork-im/tools/fix-sqlx09-sites.py` | 违反 §2.1 L84–85（禁绝对机器路径）；一次性调试残留 |
 | `sdkwork-im/scripts/verify-deployment.sh`（185 行） | 文件头是**乱码**（`鏂囦欢`/`鎻忚堪`，GBK 被当 UTF-8 读），且是 verify | 已损坏的死件 |
 
 **"verify 脚本族"是模板批量复制**（`by basename` 统计）：
@@ -370,13 +370,13 @@ webserver 已把 compose/env 提到 `deployments/docker/`；本轮 api-cloud-gat
 
 ```bash
 # 舰队口径
-node -e "const f=require('fs'),p=require('path');const ws='E:/sdkwork-space';\
+node -e "const f=require('fs'),p=require('path');const ws='<workspace-root>';\
 const g=f.readdirSync(ws,{withFileTypes:true}).filter(e=>e.isDirectory()&&e.name.startsWith('sdkwork-'))\
 .map(e=>e.name).filter(n=>f.existsSync(p.join(ws,n,'AGENTS.md')));\
 console.log('governed',g.length)"
 
 # 脚本落位（唯一门禁）
-node sdkwork-specs/tools/check-script-placement.mjs --workspace E:/sdkwork-space --json
+node sdkwork-specs/tools/check-script-placement.mjs --workspace <workspace-root> --json
 
 # 残差分类（§4.1）：按扩展名 / 顶层目录 / 模板重复度分桶
 node sdkwork-specs/.tmp/placement-residual-analysis.mjs
@@ -388,7 +388,7 @@ node sdkwork-specs/.tmp/placement-tracking-split.mjs
 node sdkwork-specs/tools/check-operations-conformance.mjs --root sdkwork-cloudrouter
 
 # 门禁全量回归
-cd /e/sdkwork-space && while IFS= read -r g; do pnpm run "$g"; done < .gate-names.txt
+cd <workspace-root> && while IFS= read -r g; do pnpm run "$g"; done < .gate-names.txt
 ```
 
 > 单仓 `check-deploy-standard` 必须带 `--deployment-profile`，否则会刷大量 domain/web-surface 假错。

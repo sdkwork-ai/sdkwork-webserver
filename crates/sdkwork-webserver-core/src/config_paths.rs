@@ -176,7 +176,7 @@ pub fn config_root_join(config_root: &Path, file_name: &str) -> PathBuf {
     config_root.join(file_name)
 }
 
-#[cfg(test)]
+#[cfg(test)] // WORKSPACE-PATH:allow-fixture-block: this module is the file's #[cfg(test)] unit-test fixture data
 mod tests {
     use super::*;
 

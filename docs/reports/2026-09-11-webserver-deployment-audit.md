@@ -2,7 +2,7 @@
 
 - 日期：2026-09-11
 - 宿主：Windows + WSL `Ubuntu-22.04`（Docker 29.3.0 在 WSL 内）
-- 源码：`E:\sdkwork-space\sdkwork-webserver` @ `b7dca2f0`（工作树含 19 处未提交改动）
+- 源码：`<workspace-root>/sdkwork-webserver` @ `b7dca2f0`（工作树含 19 处未提交改动）
 - 范围：development / test / staging / demo / production 五环境的**实况**、`sdkwork-specs` 门禁对齐、运营能力完整性
 - 审计脚本与原始证据：`.sdkwork/audit/`（`gates*.txt`、`ops.json`、各 `*.sh` 探针）
 

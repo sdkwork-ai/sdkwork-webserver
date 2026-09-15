@@ -119,7 +119,7 @@ fn hex(byte: u8) -> Option<u8> {
     }
 }
 
-#[cfg(test)]
+#[cfg(test)] // WORKSPACE-PATH:allow-fixture-block: this module is the file's #[cfg(test)] unit-test fixture data
 mod tests {
     use super::{normalize_uri_path, validate_canonical_uri_path, UriPathNormalizationError};
 

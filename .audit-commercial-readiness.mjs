@@ -14,7 +14,9 @@ const { ADAPTIVE_SNIPPET_PATHS } = await import(pathToFileURL(path.join(specsToo
 const { GATEWAY_SNIPPET_PATHS } = await import(pathToFileURL(path.join(specsTools, 'gateway-snippets.mjs')).href);
 const { LIFECYCLE_ENVIRONMENTS, DEPLOYMENT_PROFILES } = await import(pathToFileURL(path.join(specsTools, 'layout-v3.mjs')).href);
 
-const workspace = process.argv[2] ?? 'E:/sdkwork-space';
+// Defaults to the checkout root this script lives in, so the audit follows the
+// workspace to whatever directory it is checked out under.
+const workspace = process.argv[2] ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const SIDECARS = [];
 for (const profile of DEPLOYMENT_PROFILES) {

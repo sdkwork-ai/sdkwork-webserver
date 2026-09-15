@@ -15,7 +15,11 @@ log() {
 
 link_local_checkout() {
   if [ -z "${LOCAL_PATH}" ]; then
-    for candidate in /mnt/e/sdkwork-space /mnt/c/sdkwork-space; do
+    # Probe the conventional WSL mount points instead of naming one volume. The
+    # workspace is relocatable, so a hardcoded drive made this discovery fail
+    # silently the moment the checkout moved (DEPENDENCY_MANAGEMENT_SPEC.md
+    # section 1). An unmatched glob stays literal and is skipped by the guard.
+    for candidate in /mnt/*/sdkwork-space; do
       if [ -d "${candidate}/.git" ] || [ -d "${candidate}/sdkwork-webserver" ]; then
         LOCAL_PATH="${candidate}"
         break

@@ -13,10 +13,13 @@ log() {
 }
 
 if [ -z "${SEED_ROOT}" ]; then
+  # `/mnt/*/sdkwork-space` probes every WSL mount rather than naming one volume:
+  # a hardcoded drive silently stopped matching once the workspace moved
+  # (DEPENDENCY_MANAGEMENT_SPEC.md section 1). An unmatched glob stays literal
+  # and is rejected by the directory guard below.
   for candidate in \
     "${SDKWORK_SPACE_LOCAL_PATH:-}" \
-    /mnt/e/sdkwork-space \
-    /mnt/c/sdkwork-space \
+    /mnt/*/sdkwork-space \
     "$(dirname "${CHECKOUT}")/../.."
   do
     [ -n "${candidate}" ] || continue
