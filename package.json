@@ -162,6 +162,7 @@
     "sbom:check": "node scripts/webserver-sbom.mjs validate",
     "check:app-composition": "node ../sdkwork-specs/tools/verify-repo.mjs --root .",
     "check:edge-exposure-governance": "node tools/check-edge-exposure-governance.mjs --root .",
+    "check:database-prefix-ownership": "node scripts/check-database-prefix-ownership.mjs",
     "api:assembly:materialize": "node ../sdkwork-specs/tools/materialize-api-assembly.mjs --root .",
     "api:assembly:validate": "node ../sdkwork-specs/tools/validate-api-assembly.mjs --root .",
     "_sdkwork:gateway:standalone": "node scripts/webserver-dev.mjs --database postgres --deployment-profile standalone --environment development",
