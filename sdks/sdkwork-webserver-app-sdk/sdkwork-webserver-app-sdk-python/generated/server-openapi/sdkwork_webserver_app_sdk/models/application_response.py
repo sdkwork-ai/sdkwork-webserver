@@ -16,6 +16,7 @@ class ApplicationResponse:
     app_kind: Optional[str] = None
     site_type: Optional[int] = None
     status: Optional[int] = None
+    has_source_version: Optional[bool] = None
     runtime_config: Optional[Dict[str, Any]] = None
     store_listing: Optional[ApplicationStoreListing] = None
     created_at: Optional[str] = None

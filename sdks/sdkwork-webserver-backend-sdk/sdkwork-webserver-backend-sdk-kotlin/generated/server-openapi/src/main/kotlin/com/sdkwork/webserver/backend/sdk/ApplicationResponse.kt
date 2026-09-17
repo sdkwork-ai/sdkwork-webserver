@@ -8,6 +8,7 @@ data class ApplicationResponse(
     val appKind: String? = null,
     val siteType: Int? = null,
     val status: Int? = null,
+    val hasSourceVersion: Boolean? = null,
     val runtimeConfig: Map<String, Any>? = null,
     val storeListing: ApplicationStoreListing? = null,
     val createdAt: String? = null,

@@ -321,6 +321,13 @@ pub struct ApplicationResponse {
     #[serde(rename = "siteType", skip_serializing_if = "Option::is_none")]
     pub site_type: Option<i32>,
     pub status: i32,
+    /// Whether the application already owns a source version.
+    ///
+    /// Filled by the application list/retrieve projections in the same
+    /// statement (`EXISTS` over `web_source_version`) so callers never have to
+    /// probe `applications/{applicationId}/source_versions` row by row.
+    #[serde(rename = "hasSourceVersion")]
+    pub has_source_version: bool,
     #[serde(rename = "runtimeConfig", skip_serializing_if = "Option::is_none")]
     pub runtime_config: Option<Value>,
     #[serde(rename = "storeListing", skip_serializing_if = "Option::is_none")]

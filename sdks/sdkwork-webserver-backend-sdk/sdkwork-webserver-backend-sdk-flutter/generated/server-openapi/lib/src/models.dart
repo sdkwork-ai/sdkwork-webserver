@@ -661,6 +661,7 @@ class ApplicationResponse {
   final String? appKind;
   final int siteType;
   final int status;
+  final bool? hasSourceVersion;
   final Map<String, dynamic>? runtimeConfig;
   final ApplicationStoreListing? storeListing;
   final String createdAt;
@@ -674,6 +675,7 @@ class ApplicationResponse {
     this.appKind,
     required this.siteType,
     required this.status,
+    this.hasSourceVersion,
     this.runtimeConfig,
     this.storeListing,
     required this.createdAt,
@@ -719,6 +721,7 @@ class ApplicationResponse {
         }
         return value;
       })(),
+      hasSourceVersion: json['hasSourceVersion'] is bool ? json['hasSourceVersion'] : null,
       runtimeConfig: _sdkworkAsMap(json['runtimeConfig']),
       storeListing: (() {
         final map = _sdkworkAsMap(json['storeListing']);
@@ -750,6 +753,7 @@ class ApplicationResponse {
       'appKind': appKind,
       'siteType': siteType,
       'status': status,
+      'hasSourceVersion': hasSourceVersion,
       'runtimeConfig': runtimeConfig,
       'storeListing': storeListing?.toJson(),
       'createdAt': createdAt,

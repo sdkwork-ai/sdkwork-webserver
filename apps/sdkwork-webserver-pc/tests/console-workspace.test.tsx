@@ -847,7 +847,7 @@ describe("console workspace deferred application create", () => {
 
   it("shows Add source code for applications without a source version", async () => {
     const registry = createWebserverConsoleRegistry(consoleClient({
-      applicationItems: [{ id: "site-1", name: "Portal", status: 2 }],
+      applicationItems: [{ hasSourceVersion: false, id: "site-1", name: "Portal", status: 2 }],
     }), testSourceStorage(), testMediaStorage());
     renderWorkspace("/console/sites", registry, appUserPermissionScope);
 
@@ -857,7 +857,9 @@ describe("console workspace deferred application create", () => {
 
   it("shows Modify source code after a source version exists", async () => {
     const registry = createWebserverConsoleRegistry(consoleClient({
-      applicationItems: [{ id: "site-1", name: "Portal", status: 2 }],
+      // `hasSourceVersion` is part of the application list projection, so the row action
+      // label follows the list response directly (no per-row `sourceVersions.list` probe).
+      applicationItems: [{ hasSourceVersion: true, id: "site-1", name: "Portal", status: 2 }],
       sourceVersionItems: [{ id: "source-version-1", versionTag: "v1.0.0", sourceType: "ARCHIVE" }],
     }), testSourceStorage(), testMediaStorage());
     renderWorkspace("/console/sites", registry, appUserPermissionScope);

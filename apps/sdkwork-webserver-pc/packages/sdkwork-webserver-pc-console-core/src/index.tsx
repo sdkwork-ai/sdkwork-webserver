@@ -228,26 +228,53 @@ export function createWebserverConsoleRegistry(
 ): WebserverResourceRegistry {
   const client = clients.web;
   return {
-    applications: source(async (query) => enrichApplicationsWithSourceVersionFlag(
-      client,
+    applications: source(
       // Wire search param is `q` (API_SPEC §16.4); the SDK renames it for TS as `q`.
-      await client.application.list({ page: query.page, pageSize: query.pageSize, q: query.search }),
-    ), [
-      action(
-        "create",
-        "Create application",
-        {
+      // `hasSourceVersion` is part of the list projection, so no per-row probe.
+      (query) => client.application.list({ page: query.page, pageSize: query.pageSize, q: query.search }),
+      [
+        action(
+          "create",
+          "Create application",
+          {
+            name: "",
+            description: "",
+            applicationType: "WEB",
+            siteType: 1,
+            environment: "production",
+            versionTag: "v1.0.0",
+            sourceVersionRetentionLimit: 5,
+            appConfigPath: "sdkwork.app.config.json",
+            deploymentConfigPath: "etc/sdkwork.deployment.config.json",
+            publicRoot: "dist",
+            spaFallback: "index.html",
+            shortDescription: "",
+            fullDescription: "",
+            releaseNotes: "",
+            category: "",
+            keywords: "",
+            supportUrl: "",
+            privacyPolicyUrl: "",
+            officialWebsiteUrl: "",
+          },
+          (context) => createApplicationWithInitialVersion(clients, sourceStorage, mediaStorage, context),
+          {
+            applicationMediaOptional: true,
+            applicationSubmission: "create",
+            fieldOptions: {
+              applicationType: ["WEB", "API"],
+              siteType: [1, 2, 3, 4, 5, 6],
+              environment: ["production", "staging", "test", "development"],
+            },
+            permission: "web.applications.write",
+            requiredFields: ["name"],
+            sourceInput: "archive-directory-or-git",
+            sourceInputOptional: true,
+          },
+        ),
+        action("update", "Update", {
           name: "",
           description: "",
-          applicationType: "WEB",
-          siteType: 1,
-          environment: "production",
-          versionTag: "v1.0.0",
-          sourceVersionRetentionLimit: 5,
-          appConfigPath: "sdkwork.app.config.json",
-          deploymentConfigPath: "etc/sdkwork.deployment.config.json",
-          publicRoot: "dist",
-          spaFallback: "index.html",
           shortDescription: "",
           fullDescription: "",
           releaseNotes: "",
@@ -256,100 +283,73 @@ export function createWebserverConsoleRegistry(
           supportUrl: "",
           privacyPolicyUrl: "",
           officialWebsiteUrl: "",
-        },
-        (context) => createApplicationWithInitialVersion(clients, sourceStorage, mediaStorage, context),
-        {
-          applicationMediaOptional: true,
-          applicationSubmission: "create",
-          fieldOptions: {
-            applicationType: ["WEB", "API"],
-            siteType: [1, 2, 3, 4, 5, 6],
-            environment: ["production", "staging", "test", "development"],
+        }, (context) => updateApplicationListing(clients, mediaStorage, context), { applicationSubmission: "update", permission: "web.applications.write", selection: true }),
+        action("update-source", "Update code", { versionTag: "" }, (context) => storeApplicationSourceVersion(clients, sourceStorage, context), {
+          loadSourceInputDefaults: async (context) => {
+            const versions = await client.sourceVersion.applications.sourceVersions.list(
+              selectedId(context, "siteId"),
+              { pageSize: 1 },
+            );
+            const latest = versions.items[0];
+            return latest?.sourceType === "GIT" && latest.sourceRef?.trim()
+              ? { mode: "git", repository: latest.sourceRef }
+              : {};
           },
           permission: "web.applications.write",
-          requiredFields: ["name"],
+          requiredFields: ["versionTag"],
+          resolveActionLabelKey: ({ selectedItem }) => (
+            applicationHasSourceVersion(selectedItem)
+              ? "action.applications.update-source"
+              : "action.applications.add-source"
+          ),
+          selection: true,
           sourceInput: "archive-directory-or-git",
-          sourceInputOptional: true,
-        },
-      ),
-      action("update", "Update", {
-        name: "",
-        description: "",
-        shortDescription: "",
-        fullDescription: "",
-        releaseNotes: "",
-        category: "",
-        keywords: "",
-        supportUrl: "",
-        privacyPolicyUrl: "",
-        officialWebsiteUrl: "",
-      }, (context) => updateApplicationListing(clients, mediaStorage, context), { applicationSubmission: "update", permission: "web.applications.write", selection: true }),
-      action("update-source", "Update code", { versionTag: "" }, (context) => storeApplicationSourceVersion(clients, sourceStorage, context), {
-        loadSourceInputDefaults: async (context) => {
-          const versions = await client.sourceVersion.applications.sourceVersions.list(
-            selectedId(context, "siteId"),
-            { pageSize: 1 },
-          );
-          const latest = versions.items[0];
-          return latest?.sourceType === "GIT" && latest.sourceRef?.trim()
-            ? { mode: "git", repository: latest.sourceRef }
-            : {};
-        },
-        permission: "web.applications.write",
-        requiredFields: ["versionTag"],
-        resolveActionLabelKey: ({ selectedItem }) => (
-          applicationHasSourceVersion(selectedItem)
-            ? "action.applications.update-source"
-            : "action.applications.add-source"
-        ),
-        selection: true,
-        sourceInput: "archive-directory-or-git",
-      }),
-      action("publish", "Publish", { deployType: 1, sourceVersionId: "", environment: "production", versionTag: "" }, (context) => deployApplication(clients, context), {
-        availableWhen: ({ selectedItem }) => applicationHasSourceVersion(selectedItem),
-        confirmation: true,
-        fieldOptions: { deployType: [1], sourceVersionId: [], environment: ["production", "staging", "test", "development"] },
-        loadFieldOptions: async (context) => {
-          const versions = await client.sourceVersion.applications.sourceVersions.list(selectedId(context, "siteId"), { pageSize: 100 });
-          return {
-            sourceVersionId: versions.items
-              .filter((version) => version.status === 1 && version.retained)
-              .map((version) => ({
-                label: `${version.versionTag} · ${version.sourceType}`,
-                relatedValues: { versionTag: version.versionTag },
-                value: version.id,
-              })),
-          };
-        },
-        permission: "web.applications.write",
-        readOnlyFields: ["versionTag"],
-        requiredFields: ["sourceVersionId", "versionTag"],
-        selection: true,
-      }),
-      action("activate", "Activate", {}, (context) => client.application.activate(selectedId(context, "siteId")), { availableWhen: ({ selectedItem }) => Number(selectedItem?.status) !== 1, permission: "web.applications.write", selection: true }),
-      action("pause", "Disable", {}, (context) => client.application.pause(selectedId(context, "siteId")), { availableWhen: ({ selectedItem }) => Number(selectedItem?.status) === 1, dangerous: true, permission: "web.applications.write", selection: true }),
-      action("delete", "Delete", {}, (context) => client.application.delete(selectedId(context, "siteId")), { availableWhen: ({ selectedItem }) => Number(selectedItem?.status) !== 1, dangerous: true, permission: "web.applications.write", selection: true }),
-    ]),
-    configuration: scopedSource((query) => client.envVariable.applications.envVariables.list(requiredScope(query.scopeId)), [
-      action("create-variable", "Add variable", { key: "", value: "", environment: "production", isSecret: false }, async (context) => client.envVariable.applications.envVariables.create(requiredScope(context.scopeId), createEnvVariableRequest(context.body), idempotencyParams(context)), { permission: "web.applications.write", scope: true }),
-      action("create-check", "Add health check", { checkType: 1, checkUrl: "/health", checkInterval: 30, timeoutMs: 5_000, retryCount: 3 }, async (context) => client.monitor.applications.healthChecks.create(requiredScope(context.scopeId), createHealthCheckRequest(context.body), idempotencyParams(context)), { fieldOptions: { checkType: [1, 2, 3] }, permission: "web.applications.write", scope: true }),
-    ]),
-    "source-versions": scopedSource(
-      (query) => client.sourceVersion.applications.sourceVersions.list(requiredScope(query.scopeId), { cursor: query.cursor, pageSize: query.pageSize }),
-      [
-        action(
-          "create",
-          "Save source version",
-          { versionTag: "" },
-          (context) => storeApplicationSourceVersion(clients, sourceStorage, context),
-          {
-            permission: "web.applications.write",
-            requiredFields: ["versionTag"],
-            scope: true,
-            sourceInput: "archive-directory-or-git",
+        }),
+        action("publish", "Publish", { deployType: 1, sourceVersionId: "", environment: "production", versionTag: "" }, (context) => deployApplication(clients, context), {
+          availableWhen: ({ selectedItem }) => applicationHasSourceVersion(selectedItem),
+          confirmation: true,
+          fieldOptions: { deployType: [1], sourceVersionId: [], environment: ["production", "staging", "test", "development"] },
+          loadFieldOptions: async (context) => {
+            const versions = await client.sourceVersion.applications.sourceVersions.list(selectedId(context, "siteId"), { pageSize: 100 });
+            return {
+              sourceVersionId: versions.items
+                .filter((version) => version.status === 1 && version.retained)
+                .map((version) => ({
+                  label: `${version.versionTag} · ${version.sourceType}`,
+                  relatedValues: { versionTag: version.versionTag },
+                  value: version.id,
+                })),
+            };
           },
-        ),
-      ],
+          permission: "web.applications.write",
+          readOnlyFields: ["versionTag"],
+          requiredFields: ["sourceVersionId", "versionTag"],
+          selection: true,
+        }),
+        action("activate", "Activate", {}, (context) => client.application.activate(selectedId(context, "siteId")), { availableWhen: ({ selectedItem }) => Number(selectedItem?.status) !== 1, permission: "web.applications.write", selection: true }),
+        action("pause", "Disable", {}, (context) => client.application.pause(selectedId(context, "siteId")), { availableWhen: ({ selectedItem }) => Number(selectedItem?.status) === 1, dangerous: true, permission: "web.applications.write", selection: true }),
+        action("delete", "Delete", {}, (context) => client.application.delete(selectedId(context, "siteId")), { availableWhen: ({ selectedItem }) => Number(selectedItem?.status) !== 1, dangerous: true, permission: "web.applications.write", selection: true }),
+      ]),
+      configuration: scopedSource((query) => client.envVariable.applications.envVariables.list(requiredScope(query.scopeId)), [
+        action("create-variable", "Add variable", { key: "", value: "", environment: "production", isSecret: false }, async (context) => client.envVariable.applications.envVariables.create(requiredScope(context.scopeId), createEnvVariableRequest(context.body), idempotencyParams(context)), { permission: "web.applications.write", scope: true }),
+        action("create-check", "Add health check", { checkType: 1, checkUrl: "/health", checkInterval: 30, timeoutMs: 5_000, retryCount: 3 }, async (context) => client.monitor.applications.healthChecks.create(requiredScope(context.scopeId), createHealthCheckRequest(context.body), idempotencyParams(context)), { fieldOptions: { checkType: [1, 2, 3] }, permission: "web.applications.write", scope: true }),
+      ]),
+      "source-versions": scopedSource(
+        (query) => client.sourceVersion.applications.sourceVersions.list(requiredScope(query.scopeId), { cursor: query.cursor, pageSize: query.pageSize }),
+        [
+          action(
+            "create",
+            "Save source version",
+            { versionTag: "" },
+            (context) => storeApplicationSourceVersion(clients, sourceStorage, context),
+            {
+              permission: "web.applications.write",
+              requiredFields: ["versionTag"],
+              scope: true,
+              sourceInput: "archive-directory-or-git",
+            },
+          ),
+        ],
     ),
     deployments: scopedSource((query) => client.deployment.applications.deployments.list(requiredScope(query.scopeId), { cursor: query.cursor, pageSize: query.pageSize }), [
       action("deploy", "Deploy", { deployType: 1, sourceVersionId: "", environment: "production", versionTag: "" }, (context) => deployApplication(clients, context), {
@@ -546,25 +546,6 @@ async function createApplicationWithInitialVersion(
       { cause: error },
     );
   }
-}
-
-async function enrichApplicationsWithSourceVersionFlag(
-  client: SdkworkWebAppClient,
-  page: Awaited<ReturnType<SdkworkWebAppClient["application"]["list"]>>,
-) {
-  const items = await Promise.all(page.items.map(async (item) => {
-    const applicationId = item.id?.trim();
-    if (!applicationId) {
-      return { ...item, hasSourceVersion: false };
-    }
-    try {
-      const versions = await client.sourceVersion.applications.sourceVersions.list(applicationId, { pageSize: 1 });
-      return { ...item, hasSourceVersion: versions.items.length > 0 };
-    } catch {
-      return { ...item, hasSourceVersion: false };
-    }
-  }));
-  return { ...page, items };
 }
 
 async function updateApplicationListing(

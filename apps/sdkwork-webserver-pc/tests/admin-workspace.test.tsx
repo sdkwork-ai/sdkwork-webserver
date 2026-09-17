@@ -614,7 +614,7 @@ describe("admin workspace application controls", () => {
 
   it("shows Add source code for applications without a source version", async () => {
     const registry = createWebserverAdminApplicationRegistry(client({
-      applicationItems: [{ id: "app-1", name: "Public API", status: 2 }],
+      applicationItems: [{ hasSourceVersion: false, id: "app-1", name: "Public API", status: 2 }],
     }), testSourceStorage(), testMediaStorage());
     renderWorkspace("/admin/applications", registry);
 
@@ -623,7 +623,9 @@ describe("admin workspace application controls", () => {
 
   it("shows Modify source code after a source version exists", async () => {
     const registry = createWebserverAdminApplicationRegistry(client({
-      applicationItems: [{ id: "app-1", name: "Public API", status: 2 }],
+      // `hasSourceVersion` is part of the application list projection, so the row action
+      // label follows the list response directly (no per-row `sourceVersions.list` probe).
+      applicationItems: [{ hasSourceVersion: true, id: "app-1", name: "Public API", status: 2 }],
       sourceVersionItems: [{ id: "source-version-1", versionTag: "v1.0.0", sourceType: "ARCHIVE" }],
     }), testSourceStorage(), testMediaStorage());
     renderWorkspace("/admin/applications", registry);
@@ -671,7 +673,7 @@ describe("admin workspace application controls", () => {
   it("prefills the latest Git source and refreshes it as a new version", async () => {
     const importGitSourceVersion = vi.fn().mockResolvedValue({ id: "source-version-3", status: 1 });
     const registry = createWebserverAdminApplicationRegistry(client({
-      applicationItems: [{ id: "app-1", name: "Public API", status: 2 }],
+      applicationItems: [{ hasSourceVersion: true, id: "app-1", name: "Public API", status: 2 }],
       importGitSourceVersion,
       sourceVersionItems: [{
         id: "source-version-2",
@@ -702,7 +704,7 @@ describe("admin workspace application controls", () => {
   it("publishes a retained source version from the application row and synchronizes its version tag", async () => {
     const createDeployment = vi.fn().mockResolvedValue({ id: "deployment-1", status: 0 });
     const registry = createWebserverAdminApplicationRegistry(client({
-      applicationItems: [{ id: "app-1", name: "Public API", status: 2 }],
+      applicationItems: [{ hasSourceVersion: true, id: "app-1", name: "Public API", status: 2 }],
       createDeployment,
       sourceVersionItems: [{
         id: "source-version-2",

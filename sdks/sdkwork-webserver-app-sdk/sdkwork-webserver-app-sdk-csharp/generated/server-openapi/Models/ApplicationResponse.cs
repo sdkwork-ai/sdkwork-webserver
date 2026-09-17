@@ -14,6 +14,7 @@ namespace SDKWork.WebserverAppSdk.Models
         public string? AppKind { get; set; }
         public int? SiteType { get; set; }
         public int? Status { get; set; }
+        public bool? HasSourceVersion { get; set; }
         public Dictionary<string, object>? RuntimeConfig { get; set; }
         public ApplicationStoreListing? StoreListing { get; set; }
         public string? CreatedAt { get; set; }

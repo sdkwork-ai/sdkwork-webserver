@@ -8,16 +8,26 @@ use sdkwork_webserver_contract::{
 use sqlx::Row;
 
 use super::support::{
-    instant_from_row, instant_write_expression, json_from_row, json_write_expression, new_uuid,
-    next_id, now_rfc3339, pagination, resolve_site_internal_id, store_error,
+    bool_from_row, instant_from_row, instant_write_expression, json_from_row,
+    json_write_expression, new_uuid, next_id, now_rfc3339, pagination, resolve_site_internal_id,
+    store_error,
 };
 
 /// SELECT projection joining the application resource row with its backing
 /// site carrier row. The application owns the resource identity (name/slug);
 /// the site owns the technical runtime state (type, status, runtime config).
+///
+/// `has_source_version` is derived in the same statement rather than by a
+/// follow-up query per row: the console renders a source badge for every
+/// application on the page and previously issued one
+/// `applications/{applicationId}/source_versions` request per row (N+1).
+/// The predicate mirrors that endpoint's filter exactly — any row in
+/// `web_source_version` for the backing site counts.
 const APPLICATION_SELECT: &str = "SELECT a.uuid AS application_id, a.name AS name, a.slug AS slug,
                     a.description AS description, a.application_kind AS app_kind,
                     s.uuid AS site_id, s.application_type, s.site_type, s.status,
+                    EXISTS (SELECT 1 FROM web_source_version v
+                            WHERE v.tenant_id = a.tenant_id AND v.site_id = a.site_id) AS has_source_version,
                     CAST(s.runtime_config AS TEXT) AS runtime_config,
                     CAST(s.metadata AS TEXT) AS metadata,
                     CAST(a.created_at AS TEXT) AS created_at,
@@ -608,6 +618,7 @@ fn map_application_row(row: &EngineRow) -> Result<ApplicationResponse, sqlx::Err
         app_kind: row.try_get("app_kind")?,
         site_type: row.try_get("site_type")?,
         status: row.try_get("status")?,
+        has_source_version: bool_from_row(row, "has_source_version")?,
         runtime_config: json_from_row(row, "runtime_config")?,
         store_listing: store_listing_from_row(row)?,
         created_at: instant_from_row(row, "created_at")?,

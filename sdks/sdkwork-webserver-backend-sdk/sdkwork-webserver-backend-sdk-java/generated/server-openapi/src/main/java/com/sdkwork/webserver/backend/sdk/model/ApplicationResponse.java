@@ -10,6 +10,7 @@ public class ApplicationResponse {
     private String appKind;
     private Integer siteType;
     private Integer status;
+    private Boolean hasSourceVersion;
     private Map<String, Object> runtimeConfig;
     private ApplicationStoreListing storeListing;
     private String createdAt;
@@ -69,6 +70,14 @@ public class ApplicationResponse {
 
     public void setStatus(Integer status) {
         this.status = status;
+    }
+
+    public Boolean getHasSourceVersion() {
+        return this.hasSourceVersion;
+    }
+
+    public void setHasSourceVersion(Boolean hasSourceVersion) {
+        this.hasSourceVersion = hasSourceVersion;
     }
 
     public Map<String, Object> getRuntimeConfig() {

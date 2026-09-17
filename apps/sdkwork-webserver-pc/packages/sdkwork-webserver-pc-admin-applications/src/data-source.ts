@@ -33,11 +33,11 @@ export function createWebserverAdminApplicationRegistry(
   mediaStorage: ApplicationMediaStorage,
 ): WebserverResourceRegistry {
   return {
-    applications: source(async (query) => enrichApplicationsWithSourceVersionFlag(
-      client,
+    applications: source(
       // Wire search param is `q` (API_SPEC §16.4); the SDK renames it for TS as `q`.
-      await client.application.list({ page: query.page, pageSize: query.pageSize, q: query.search }),
-    ), [
+      // `hasSourceVersion` is part of the list projection, so no per-row probe.
+      (query) => client.application.list({ page: query.page, pageSize: query.pageSize, q: query.search }),
+      [
         action(
           "create",
           "Create application",
@@ -433,25 +433,6 @@ async function createApplicationWithInitialVersion(
       { cause: error },
     );
   }
-}
-
-async function enrichApplicationsWithSourceVersionFlag(
-  client: WebserverAdminSdkClient,
-  page: Awaited<ReturnType<WebserverAdminSdkClient["application"]["list"]>>,
-) {
-  const items = await Promise.all(page.items.map(async (item) => {
-    const applicationId = item.id?.trim();
-    if (!applicationId) {
-      return { ...item, hasSourceVersion: false };
-    }
-    try {
-      const versions = await client.applicationSourceVersion.applications.sourceVersions.list(applicationId, { pageSize: 1 });
-      return { ...item, hasSourceVersion: versions.items.length > 0 };
-    } catch {
-      return { ...item, hasSourceVersion: false };
-    }
-  }));
-  return { ...page, items };
 }
 
 async function updateApplicationListing(

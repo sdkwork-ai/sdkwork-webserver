@@ -33,6 +33,13 @@ pub struct ApplicationResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<i64>,
 
+    /// 该应用是否已有源码版本。由 application 列表/详情投影用一次查询算出
+（`EXISTS` over `web_source_version`），调用方无需再逐行探测
+`applications/{applicationId}/source_versions`。
+    #[serde(rename = "hasSourceVersion")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub has_source_version: Option<bool>,
+
     #[serde(rename = "runtimeConfig")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_config: Option<std::collections::HashMap<String, serde_json::Value>>,

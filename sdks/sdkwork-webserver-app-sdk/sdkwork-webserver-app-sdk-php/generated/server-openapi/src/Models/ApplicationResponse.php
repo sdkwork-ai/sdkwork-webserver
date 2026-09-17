@@ -26,6 +26,11 @@ final class ApplicationResponse
 
     public ?int $status = null;
 
+    /** 该应用是否已有源码版本。由 application 列表/详情投影用一次查询算出
+（`EXISTS` over `web_source_version`），调用方无需再逐行探测
+`applications/{applicationId}/source_versions`。 */
+    public ?bool $hasSourceVersion = null;
+
     public array $runtimeConfig = [];
 
     public ?ApplicationStoreListing $storeListing = null;
@@ -60,6 +65,9 @@ final class ApplicationResponse
         $this->status = array_key_exists('status', $data)
             ? $data['status']
             : null;
+        $this->hasSourceVersion = array_key_exists('hasSourceVersion', $data)
+            ? $data['hasSourceVersion']
+            : null;
         $this->runtimeConfig = array_key_exists('runtimeConfig', $data)
             ? is_array($data['runtimeConfig']) ? $data['runtimeConfig'] : []
             : [];
@@ -90,6 +98,7 @@ final class ApplicationResponse
             'appKind' => $this->appKind,
             'siteType' => $this->siteType,
             'status' => $this->status,
+            'hasSourceVersion' => $this->hasSourceVersion,
             'runtimeConfig' => $this->runtimeConfig,
             'storeListing' => $this->storeListing instanceof ApplicationStoreListing ? $this->storeListing->toArray() : $this->storeListing,
             'createdAt' => $this->createdAt,

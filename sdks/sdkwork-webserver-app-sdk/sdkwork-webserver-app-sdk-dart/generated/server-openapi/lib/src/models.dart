@@ -504,6 +504,7 @@ class ApplicationResponse {
   final String? appKind;
   final int? siteType;
   final int? status;
+  final bool? hasSourceVersion;
   final Map<String, dynamic>? runtimeConfig;
   final ApplicationStoreListing? storeListing;
   final String? createdAt;
@@ -518,6 +519,7 @@ class ApplicationResponse {
     this.appKind,
     this.siteType,
     this.status,
+    this.hasSourceVersion,
     this.runtimeConfig,
     this.storeListing,
     this.createdAt,
@@ -534,6 +536,7 @@ class ApplicationResponse {
       appKind: json['appKind']?.toString(),
       siteType: json['siteType'] is int ? json['siteType'] : null,
       status: json['status'] is int ? json['status'] : null,
+      hasSourceVersion: json['hasSourceVersion'] is bool ? json['hasSourceVersion'] : null,
       runtimeConfig: _sdkworkAsMap(json['runtimeConfig']),
       storeListing: (() {
         final map = _sdkworkAsMap(json['storeListing']);
@@ -554,6 +557,7 @@ class ApplicationResponse {
       'appKind': appKind,
       'siteType': siteType,
       'status': status,
+      'hasSourceVersion': hasSourceVersion,
       'runtimeConfig': runtimeConfig,
       'storeListing': storeListing?.toJson(),
       'createdAt': createdAt,

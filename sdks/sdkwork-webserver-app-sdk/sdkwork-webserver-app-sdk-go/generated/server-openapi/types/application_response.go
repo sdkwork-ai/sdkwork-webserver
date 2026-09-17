@@ -10,6 +10,7 @@ type ApplicationResponse struct {
 	AppKind AppKind `json:"appKind"`
 	SiteType int `json:"siteType"`
 	Status int `json:"status"`
+	HasSourceVersion bool `json:"hasSourceVersion"`
 	RuntimeConfig map[string]interface{} `json:"runtimeConfig"`
 	StoreListing ApplicationStoreListing `json:"storeListing"`
 	CreatedAt string `json:"createdAt"`
