@@ -789,42 +789,14 @@ COMMENT ON COLUMN web_health_check.retry_count IS 'Retry count on failure';
 CREATE INDEX IF NOT EXISTS idx_web_health_check_site
     ON web_health_check (site_id);
 
--- source: migrations/008_create_web_health_result.sql
--- Migration: 008_create_web_health_result
--- Description: Web health check result table
--- Author: SDKWork Web Server
--- Date: 2026-06-14
-
-CREATE TABLE IF NOT EXISTS web_health_result (
-    id              BIGINT       NOT NULL,
-    uuid            VARCHAR(64)  NOT NULL,
-    tenant_id       BIGINT       NOT NULL DEFAULT 0,
-    health_check_id BIGINT       NOT NULL,
-    site_id         BIGINT       NOT NULL,
-    is_healthy      BOOLEAN      NOT NULL,
-    response_ms     INTEGER,
-    status_code     INTEGER,
-    error_message   VARCHAR(1000),
-    checked_at      TIMESTAMPTZ  NOT NULL,
-    created_at      TIMESTAMPTZ  NOT NULL,
-    PRIMARY KEY (id),
-    CONSTRAINT uk_web_health_result_uuid UNIQUE (uuid),
-    CONSTRAINT fk_web_health_result_check FOREIGN KEY (health_check_id)
-        REFERENCES web_health_check(id),
-    CONSTRAINT fk_web_health_result_site FOREIGN KEY (site_id) REFERENCES web_site(id)
-);
-
-COMMENT ON TABLE web_health_result IS 'Web health check result';
-COMMENT ON COLUMN web_health_result.is_healthy IS 'Whether the check was healthy';
-COMMENT ON COLUMN web_health_result.response_ms IS 'Response time in milliseconds';
-COMMENT ON COLUMN web_health_result.status_code IS 'HTTP status code';
-COMMENT ON COLUMN web_health_result.checked_at IS 'Check execution timestamp';
-
-CREATE INDEX IF NOT EXISTS idx_web_health_result_check_time
-    ON web_health_result (health_check_id, checked_at DESC);
-
-CREATE INDEX IF NOT EXISTS idx_web_health_result_site_time
-    ON web_health_result (site_id, checked_at DESC);
+-- RETIRED (Phase 3): the former web_health_result table is gone.
+--   Reason: zero rows, zero readers (no `crates/**/*.rs` reference), zero inbound
+--   foreign keys, and no live route served it. Its capability lives in
+--   sdkwork-deployments as `deploy_health_result` (see `deploy/app-api/deploy`).
+--   Removal is applied to already-installed databases by
+--   migrations/postgres/0009_retire_web_health_result.up.sql.
+--   Do not re-add: DATABASE_SPEC §7 forbids new tables under the unregistered
+--   `web_` prefix.
 
 -- source: migrations/009_create_web_audit_log.sql
 -- Migration: 009_create_web_audit_log
@@ -1101,49 +1073,6 @@ BEGIN
     ) THEN
         ALTER TABLE web_env_variable
             ADD CONSTRAINT fk_web_env_variable_site
-            FOREIGN KEY (site_id) REFERENCES web_site(id);
-    END IF;
-END
-$$;
-
--- Health results need stable identities and referential integrity.
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conrelid = 'web_health_result'::regclass
-          AND conname = 'uk_web_health_result_uuid'
-    ) THEN
-        ALTER TABLE web_health_result
-            ADD CONSTRAINT uk_web_health_result_uuid UNIQUE (uuid);
-    END IF;
-END
-$$;
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conrelid = 'web_health_result'::regclass
-          AND conname = 'fk_web_health_result_check'
-    ) THEN
-        ALTER TABLE web_health_result
-            ADD CONSTRAINT fk_web_health_result_check
-            FOREIGN KEY (health_check_id) REFERENCES web_health_check(id);
-    END IF;
-END
-$$;
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conrelid = 'web_health_result'::regclass
-          AND conname = 'fk_web_health_result_site'
-    ) THEN
-        ALTER TABLE web_health_result
-            ADD CONSTRAINT fk_web_health_result_site
             FOREIGN KEY (site_id) REFERENCES web_site(id);
     END IF;
 END

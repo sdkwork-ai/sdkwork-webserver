@@ -678,37 +678,6 @@ tables:
     indexes:
       - { name: uk_web_health_check_uuid, columns: [uuid], unique: true }
       - { name: idx_web_health_check_site, columns: [site_id] }
-  - name: web_health_result
-    lifecycle_status: active
-    owner: web-platform
-    columns:
-      id: { type: int64, required: true }
-      uuid: { type: string, required: true }
-      tenant_id: { type: int64, required: true }
-      health_check_id: { type: int64, required: true }
-      site_id: { type: int64, required: true }
-      is_healthy: { type: bool, required: true }
-      response_ms: { type: int32, required: false }
-      status_code: { type: int32, required: false }
-      error_message: { type: string, required: false }
-      checked_at: { type: instant, required: true }
-      created_at: { type: instant, required: true }
-    constraints:
-      - { name: web_health_result_pkey, type: primary_key, columns: [id] }
-      - { name: uk_web_health_result_uuid, type: unique, columns: [uuid] }
-      - name: fk_web_health_result_check
-        type: foreign_key
-        columns: [health_check_id]
-        references_table: web_health_check
-        references_columns: [id]
-      - name: fk_web_health_result_site
-        type: foreign_key
-        columns: [site_id]
-        references_table: web_site
-        references_columns: [id]
-    indexes:
-      - { name: idx_web_health_result_check_time, columns: [health_check_id, checked_at] }
-      - { name: idx_web_health_result_site_time, columns: [site_id, checked_at] }
   - name: web_audit_log
     lifecycle_status: active
     owner: web-platform

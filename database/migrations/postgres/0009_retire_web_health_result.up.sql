@@ -1,0 +1,21 @@
+-- sdkwork:migration
+-- version: 0009
+-- engine: postgres
+-- module: web
+-- description: Retires the legacy web_health_result table as the first slice of
+--   Phase 3 (application-system standardisation). Evidence for removal: the
+--   table holds zero rows in the dev database, is read by zero files under
+--   crates/**/*.rs, has zero inbound foreign keys, and no published route
+--   served it (the only health surface is /applications/{id}/health_checks,
+--   which stores checks, not results). The capability is owned by
+--   sdkwork-deployments as `deploy_health_result`. DATABASE_SPEC §7 forbids
+--   pre-launch tables under the unregistered `web_` prefix, so the table is
+--   removed rather than renamed.
+-- reversible: true
+-- rollback: down-migration
+-- transactional: true
+-- lock: access-exclusive
+-- lock_timeout: 30s
+-- statement_timeout: 120s
+
+DROP TABLE IF EXISTS web_health_result;
