@@ -1,0 +1,202 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "@sdkwork/webserver-h5-core",
+    "displayName": "SDKWork Webserver H5 Core",
+    "version": "0.1.0",
+    "type": "typescript-package",
+    "root": "sdkwork-webserver/apps/sdkwork-webserver-h5/packages/sdkwork-webserver-h5-core",
+    "domain": "infrastructure",
+    "capability": "core",
+    "surface": "h5",
+    "languages": [
+      "typescript"
+    ],
+    "generated": false,
+    "private": true,
+    "status": "active",
+    "manifests": [
+      "package.json",
+      "specs/component.spec.json"
+    ]
+  },
+  "canonicalSpecs": [
+    {
+      "file": "CODE_STYLE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/CODE_STYLE_SPEC.md",
+      "purpose": "Authored source structure and generated code boundaries."
+    },
+    {
+      "file": "NAMING_SPEC.md",
+      "path": "../../../../../sdkwork-specs/NAMING_SPEC.md",
+      "purpose": "Canonical SDKWork naming rules."
+    },
+    {
+      "file": "TYPESCRIPT_CODE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/TYPESCRIPT_CODE_SPEC.md",
+      "purpose": "TypeScript package structure."
+    },
+    {
+      "file": "FRONTEND_SPEC.md",
+      "path": "../../../../../sdkwork-specs/FRONTEND_SPEC.md",
+      "purpose": "Frontend package layering and SDK injection boundaries."
+    },
+    {
+      "file": "COMPONENT_SPEC.md",
+      "path": "../../../../../sdkwork-specs/COMPONENT_SPEC.md",
+      "purpose": "Component contract."
+    },
+    {
+      "file": "APP_H5_ARCHITECTURE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_H5_ARCHITECTURE_SPEC.md",
+      "purpose": "H5 application root architecture standard."
+    },
+    {
+      "file": "APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "purpose": "Cross-client package taxonomy and dependency direction."
+    },
+    {
+      "file": "APP_COMPOSITION_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_COMPOSITION_SPEC.md",
+      "purpose": "Native-authority application composition."
+    },
+    {
+      "file": "APP_SDK_INTEGRATION_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md",
+      "purpose": "Generated app SDK integration and injected client ownership."
+    },
+    {
+      "file": "APP_PERMISSION_COMPOSITION_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_PERMISSION_COMPOSITION_SPEC.md",
+      "purpose": "Permission catalog inheritance for dependency domains."
+    },
+    {
+      "file": "SDK_SPEC.md",
+      "path": "../../../../../sdkwork-specs/SDK_SPEC.md",
+      "purpose": "Generated SDK consumption."
+    },
+    {
+      "file": "TEST_SPEC.md",
+      "path": "../../../../../sdkwork-specs/TEST_SPEC.md",
+      "purpose": "Contract and conformance verification rules."
+    }
+  ],
+  "contracts": {
+    "layerRole": "frontend-core",
+    "publicExports": [
+      ".",
+      "./sdk",
+      "./modules",
+      "./host",
+      "./session",
+      "./composition"
+    ],
+    "providedPorts": [
+      {
+        "name": "webserverH5ApplicationSdk",
+        "export": "./sdk"
+      },
+      {
+        "name": "webserverH5Session",
+        "export": "./session"
+      }
+    ],
+    "requiredPorts": [],
+    "runtimeEntrypoints": [],
+    "routeManifest": null,
+    "sdkClients": [
+      "@sdkwork/webserver-app-sdk",
+      "@sdkwork/drive-app-sdk",
+      "@sdkwork/deployments-app-sdk"
+    ],
+    "sdkDependencies": [
+      {
+        "workspace": "sdkwork-webserver-app-sdk",
+        "permissionModuleId": "web",
+        "surface": "app-api",
+        "credentialMode": "authenticated-app-api"
+      },
+      {
+        "workspace": "sdkwork-drive-app-sdk",
+        "permissionModuleId": "drive",
+        "surface": "app-api",
+        "credentialMode": "authenticated-app-api"
+      },
+      {
+        "workspace": "sdkwork-deployments-app-sdk",
+        "permissionModuleId": "deployments",
+        "surface": "app-api",
+        "credentialMode": "authenticated-app-api"
+      }
+    ],
+    "permissionComposition": {
+      "inheritanceMode": "module-catalog-with-overrides",
+      "moduleCatalogRefs": [
+        {
+          "moduleId": "web",
+          "manifestRef": "../../../../specs/iam.module.manifest.json",
+          "inheritPermissions": true,
+          "inheritRoles": true
+        },
+        {
+          "moduleId": "drive",
+          "manifestRef": "../../../../../sdkwork-iam/iam/modules/drive/iam.module.manifest.json",
+          "inheritPermissions": true,
+          "inheritRoles": true
+        },
+        {
+          "moduleId": "deployments",
+          "manifestRef": "../../../../../sdkwork-deployments/specs/iam.module.manifest.json",
+          "inheritPermissions": true,
+          "inheritRoles": true
+        }
+      ],
+      "bootstrapAccessTokenScope": {
+        "inheritFrom": "sdkwork.app.config.json#backend.accessTokenPermissionScope",
+        "supplement": [],
+        "overrideReplace": false
+      },
+      "routePermissionHints": {
+        "inheritFromOpenApi": true,
+        "inheritFromModuleManifests": true,
+        "overrides": []
+      },
+      "consumerPolicy": {
+        "forbidLocalPermissionCatalogForDependencyDomains": true,
+        "allowExplicitOverridesOnly": true,
+        "allowFrontendHintsWithoutServerDuplication": true
+      }
+    },
+    "dependencyApiExports": [],
+    "dependencyApiSurfaces": [],
+    "events": [],
+    "configKeys": [
+      "appApiBaseUrl",
+      "deployAppApiBaseUrl",
+      "driveAppApiBaseUrl",
+      "deploymentProfile",
+      "environment",
+      "profileId",
+      "supportedLocales",
+      "activeLocales",
+      "defaultLocale",
+      "fallbackLocale"
+    ]
+  },
+  "integration": {
+    "authority": "Root SDKWork specs remain authoritative.",
+    "dependencyPolicy": "Consume sibling packages through public exports only.",
+    "sdkPolicy": "Every generated app SDK client is constructed here and injected into feature packages; feature code never builds a transport."
+  },
+  "verification": {
+    "commands": [
+      "pnpm --dir apps/sdkwork-webserver-h5 typecheck",
+      "pnpm --dir apps/sdkwork-webserver-h5 test"
+    ]
+  },
+  "metadata": {
+    "standardVersion": "2026-09-17"
+  }
+}

@@ -9,8 +9,9 @@ use sqlx::Row;
 
 use super::agents::{generate_agent_token, hash_agent_token, parse_last_heartbeat_at};
 use super::support::{
-    decode_keyset_cursor, encode_keyset_cursor, instant_from_row, instant_write_expression,
-    json_from_row, json_write_expression, new_uuid, next_id, now_rfc3339, pagination, store_error,
+    cursor_instant_from_row, decode_keyset_cursor, encode_keyset_cursor, instant_from_row,
+    instant_write_expression, json_from_row, json_write_expression, new_uuid, next_id, now_rfc3339,
+    pagination, store_error,
 };
 
 impl WebRepository {
@@ -96,7 +97,7 @@ impl WebRepository {
                     CAST(created_at AS TEXT) AS created_at
              FROM web_server
              WHERE tenant_id = $1
-               AND (updated_at, id) < ($2, $3)
+               AND (updated_at, id) < (CAST($2 AS TIMESTAMPTZ), $3)
              ORDER BY updated_at DESC, id DESC LIMIT $4".to_string();
         let fetch_size = i64::from(page_size) + 1;
         let rows = sqlx::query(audited_sql(&sql))
@@ -118,8 +119,7 @@ impl WebRepository {
         let next_cursor = has_more
             .then(|| {
                 let last = page_rows.last().expect("non-empty page when has_more");
-                let updated_at: String = last
-                    .try_get("updated_at")
+                let updated_at = cursor_instant_from_row(last, "updated_at")
                     .map_err(|error| store_error("map web_server cursor instant", error))?;
                 let id: i64 = last
                     .try_get("id")

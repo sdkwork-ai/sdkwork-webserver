@@ -100,7 +100,9 @@ pub fn validate_nginx_config(
     config: &EdgeRuntimeConfig,
     config_content: &str,
 ) -> EdgeRuntimeResult<()> {
-    require_nginx_enabled(config)?;
+    if nginx_disabled(config, "validate_nginx_config") {
+        return Ok(());
+    }
     validate_candidate_content(config_content)?;
 
     let directory = Builder::new()
@@ -165,7 +167,9 @@ fn validate_nginx_file(config: &EdgeRuntimeConfig, candidate: &Path) -> EdgeRunt
 }
 
 pub fn reload_nginx(config: &EdgeRuntimeConfig) -> EdgeRuntimeResult<()> {
-    require_nginx_enabled(config)?;
+    if nginx_disabled(config, "reload_nginx") {
+        return Ok(());
+    }
     run_nginx_command(
         config,
         "reload",
@@ -184,11 +188,17 @@ pub fn reload_nginx(config: &EdgeRuntimeConfig) -> EdgeRuntimeResult<()> {
 /// `nginx -T` dumps the *loaded* configuration with includes expanded. A
 /// reload that fails validation keeps the previous revision serving, so the
 /// fragment check fails instead of reporting a false success.
+///
+/// On a node without Nginx there is no Nginx-served revision to prove, so the
+/// check is skipped and reports success without producing evidence. Served
+/// revision evidence on such a node comes from the Rust data plane instead.
 pub fn verify_served_config(
     config: &EdgeRuntimeConfig,
     expected_fragment: &str,
 ) -> EdgeRuntimeResult<()> {
-    require_nginx_enabled(config)?;
+    if nginx_disabled(config, "verify_served_config") {
+        return Ok(());
+    }
     let fragment = expected_fragment.trim();
     if fragment.is_empty() {
         return Err(EdgeRuntimeError::Config(
@@ -214,7 +224,9 @@ pub fn verify_served_config(
 }
 
 pub fn validate_active_nginx_config(config: &EdgeRuntimeConfig) -> EdgeRuntimeResult<()> {
-    require_nginx_enabled(config)?;
+    if nginx_disabled(config, "validate_active_nginx_config") {
+        return Ok(());
+    }
     run_nginx_command(
         config,
         "active configuration validation",
@@ -396,6 +408,30 @@ fn require_nginx_enabled(config: &EdgeRuntimeConfig) -> EdgeRuntimeResult<()> {
     }
 }
 
+/// Reports whether this node runs without Nginx, logging the work that is
+/// consequently skipped.
+///
+/// A standalone deployment retires stock Nginx for public domains and lets the
+/// Rust data plane own request-path serving, so `SDKWORK_WEBSERVER_NGINX_ENABLED`
+/// is false there. The Nginx entry points that merely *assert* something stay
+/// callable in that mode and become explicit no-ops: the node daemon can then
+/// finish its manifest, certificate observation, and served-certificate
+/// reporting work instead of aborting the whole sync on the first Nginx step.
+///
+/// The skip is never silent - the skipped operation is logged - and anything
+/// that must hand back a Nginx artifact keeps failing loudly through
+/// [`require_nginx_enabled`], because there is no safe empty result to return.
+pub(crate) fn nginx_disabled(config: &EdgeRuntimeConfig, operation: &str) -> bool {
+    if config.nginx_enabled {
+        return false;
+    }
+    tracing::info!(
+        operation,
+        "skipping Nginx work: SDKWORK_WEBSERVER_NGINX_ENABLED is false"
+    );
+    true
+}
+
 fn write_and_sync(file: &mut File, bytes: &[u8], label: &str) -> EdgeRuntimeResult<()> {
     file.write_all(bytes)
         .and_then(|_| file.flush())
@@ -478,12 +514,23 @@ mod tests {
             })
     }
 
+    /// Two distinct situations that must not be conflated. A node *configured*
+    /// without Nginx skips the Nginx assertions, because the Rust data plane
+    /// owns request-path serving there and the node daemon still has to finish
+    /// its certificate work. A node configured *with* Nginx that cannot run the
+    /// binary stays fail-closed.
     #[test]
-    fn disabled_and_unavailable_nginx_fail_closed() {
+    fn disabled_nginx_skips_assertions_and_unavailable_nginx_fails_closed() {
         let root = TempDir::new().unwrap();
         let mut disabled = config(root.path(), "nginx".to_string());
         disabled.nginx_enabled = false;
-        assert!(validate_nginx_config(&disabled, "server { listen 8080; }").is_err());
+        assert!(validate_nginx_config(&disabled, "server { listen 8080; }").is_ok());
+        assert!(reload_nginx(&disabled).is_ok());
+        assert!(validate_active_nginx_config(&disabled).is_ok());
+        assert!(verify_served_config(&disabled, "server_name example.com").is_ok());
+        // Staging has to hand back a real staged file, so it has no safe empty
+        // result and keeps failing.
+        assert!(stage_nginx_config(&disabled, "example.com", "server { }").is_err());
 
         let unavailable = config(
             root.path(),

@@ -1,0 +1,21 @@
+name: sdkwork_webserver_flutter_mobile_core
+description: SDKWork Web Server Flutter mobile core package
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  sdkwork_webserver_app_sdk:
+    path: ../../../../sdks/sdkwork-webserver-app-sdk/sdkwork-webserver-app-sdk-flutter/generated/server-openapi
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+dependency_overrides:
+  sdkwork_common_flutter:
+    path: ../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-flutter

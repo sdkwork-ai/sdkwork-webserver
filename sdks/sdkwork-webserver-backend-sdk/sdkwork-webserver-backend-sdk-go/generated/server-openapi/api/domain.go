@@ -18,12 +18,12 @@ func NewDomainApi(client *sdkhttp.Client) *DomainApi {
 }
 
 // List tenant root-domain Zones
-func (a *DomainApi) RootDomainsList(page *int, pageSize *int, status *int, keyword *string) (sdktypes.RootDomainsListResponse, error) {
+func (a *DomainApi) RootDomainsList(page *int, pageSize *int, status *int, q *string) (sdktypes.RootDomainsListResponse, error) {
     query := BuildQueryString([]QueryParameterSpec{
         {Name: "page", Value: func() interface{} { if page == nil { return nil }; return *page }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "page_size", Value: func() interface{} { if pageSize == nil { return nil }; return *pageSize }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "status", Value: func() interface{} { if status == nil { return nil }; return *status }(), Style: "form", Explode: true, AllowReserved: false},
-        {Name: "keyword", Value: func() interface{} { if keyword == nil { return nil }; return *keyword }(), Style: "form", Explode: true, AllowReserved: false},
+        {Name: "q", Value: func() interface{} { if q == nil { return nil }; return *q }(), Style: "form", Explode: true, AllowReserved: false},
     })
     raw, err := a.client.Get(AppendQueryString(BackendApiPath("/root_domains"), query), nil, nil)
     if err != nil {

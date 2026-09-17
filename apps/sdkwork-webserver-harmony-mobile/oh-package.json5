@@ -1,0 +1,19 @@
+{
+  "modelVersion": "5.0.0",
+  "name": "sdkwork-webserver-harmony-mobile",
+  "version": "0.1.0",
+  "description": "SDKWork Web Server HarmonyOS native mobile application",
+  "main": "",
+  "author": "SDKWork",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@sdkwork/sdkwork-webserver-harmony-mobile-core": "file:./packages/sdkwork-webserver-harmony-mobile-core",
+    "@sdkwork/sdkwork-webserver-harmony-mobile-commons": "file:./packages/sdkwork-webserver-harmony-mobile-commons",
+    "@sdkwork/sdkwork-webserver-harmony-mobile-shell": "file:./packages/sdkwork-webserver-harmony-mobile-shell",
+    "@sdkwork/sdkwork-webserver-harmony-mobile-host": "file:./packages/sdkwork-webserver-harmony-mobile-host",
+    "@sdkwork/sdkwork-webserver-harmony-mobile-applications": "file:./packages/sdkwork-webserver-harmony-mobile-applications"
+  },
+  "devDependencies": {
+    "@ohos/hypium": "1.0.19"
+  }
+}

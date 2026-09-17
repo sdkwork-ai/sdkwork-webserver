@@ -1,0 +1,9 @@
+{
+  "name": "@sdkwork/sdkwork-webserver-harmony-mobile-commons",
+  "version": "0.1.0",
+  "description": "SDKWork Web Server HarmonyOS mobile commons: domain-neutral ArkUI primitives, design tokens, and locale helpers.",
+  "main": "src/main/ets/Index.ets",
+  "author": "SDKWork",
+  "license": "Apache-2.0",
+  "dependencies": {}
+}

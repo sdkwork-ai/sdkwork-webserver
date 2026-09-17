@@ -1,0 +1,18 @@
+{
+  "environment": "development",
+  "deploymentProfile": "standalone",
+  "profileId": "standalone.development",
+  "runtimeTarget": "harmony-native",
+  "webserver": {
+    "apiBaseUrl": "http://127.0.0.1:3800/app/v3/api",
+    "backendApiBaseUrl": "http://127.0.0.1:3800/backend/v3/api"
+  },
+  "appbase": {
+    "appApiBaseUrl": "http://127.0.0.1:3800",
+    "loginUrl": "http://127.0.0.1:3800"
+  },
+  "metadata": {
+    "profileBinding": "runtime-configurable",
+    "applicationPublicHttpUrl": "http://127.0.0.1:3800"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "sdkwork_webserver_flutter_mobile_commons",
+    "displayName": "SDKWork Webserver Flutter Mobile Commons",
+    "version": "0.1.0",
+    "type": "dart-package",
+    "root": "sdkwork-webserver/apps/sdkwork-webserver-flutter-mobile/packages/sdkwork_webserver_flutter_mobile_commons",
+    "domain": "webserver",
+    "capability": "commons",
+    "surface": "app",
+    "languages": [
+      "dart"
+    ],
+    "generated": false,
+    "manifests": [
+      "pubspec.yaml",
+      "specs/component.spec.json"
+    ]
+  },
+  "canonicalSpecs": [
+    {
+      "file": "FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md",
+      "purpose": "Flutter mobile application root architecture."
+    },
+    {
+      "file": "APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "purpose": "Cross-client package taxonomy and dependency direction."
+    },
+    {
+      "file": "FRONTEND_SPEC.md",
+      "path": "../../../../../sdkwork-specs/FRONTEND_SPEC.md",
+      "purpose": "Frontend package layering and SDK injection boundaries."
+    },
+    {
+      "file": "APP_FLUTTER_UI_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_FLUTTER_UI_SPEC.md",
+      "purpose": "Flutter UI package rules."
+    },
+    {
+      "file": "I18N_SPEC.md",
+      "path": "../../../../../sdkwork-specs/I18N_SPEC.md",
+      "purpose": "Runtime locale configuration and message catalog rules."
+    }
+  ],
+  "contracts": {
+    "layerRole": "frontend-commons",
+    "publicExports": [
+      "."
+    ],
+    "sdkClients": [],
+    "sdkDependencies": [],
+    "dependencyApiExports": [],
+    "dependencyApiSurfaces": []
+  },
+  "verification": {
+    "commands": [
+      "flutter analyze apps/sdkwork-webserver-flutter-mobile/packages/sdkwork_webserver_flutter_mobile_commons"
+    ]
+  }
+}

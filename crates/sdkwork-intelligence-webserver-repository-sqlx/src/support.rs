@@ -183,13 +183,37 @@ pub(crate) fn optional_instant_from_row(
         .transpose()
 }
 
+/// Reads a keyset page-boundary instant with full database precision.
+///
+/// The API payload form ([`normalize_database_instant`]) collapses to the
+/// canonical millisecond wire format, which is lossy as a page boundary: two
+/// rows inside the same millisecond make `(instant, id) < (boundary, id)` skip
+/// whichever row has the larger sub-millisecond fraction. PostgreSQL stores
+/// microseconds, so the cursor keeps every one of them while staying RFC 3339
+/// for [`decode_keyset_cursor`].
+pub(crate) fn cursor_instant_from_row(row: &EngineRow, column: &str) -> Result<String, SqlxError> {
+    let value: String = row.try_get(column)?;
+    parse_database_instant(&value)
+        .map(|parsed| {
+            parsed
+                .with_timezone(&chrono::Utc)
+                .to_rfc3339_opts(chrono::SecondsFormat::Micros, true)
+        })
+        .ok_or_else(|| invalid_instant_error(column, &value))
+}
+
 fn normalize_database_instant(value: &str) -> Option<String> {
+    parse_database_instant(value).map(|value| {
+        sdkwork_utils_rust::datetime::format_datetime(value.with_timezone(&chrono::Utc), None)
+    })
+}
+
+/// Parses either an RFC 3339 instant or PostgreSQL's `timestamp with time zone`
+/// text form (`2026-09-16 10:47:00.123456+00`).
+fn parse_database_instant(value: &str) -> Option<chrono::DateTime<chrono::FixedOffset>> {
     chrono::DateTime::parse_from_rfc3339(value)
         .or_else(|_| chrono::DateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f%#z"))
         .ok()
-        .map(|value| {
-            sdkwork_utils_rust::datetime::format_datetime(value.with_timezone(&chrono::Utc), None)
-        })
 }
 
 fn invalid_instant_error(column: &str, value: &str) -> SqlxError {

@@ -21,14 +21,14 @@ use SDKWork\Webserver\BackendSdk\Models\UpdateDomainApplicationBindingRequest;
 final class DomainApi extends BaseApi
 {
     /** List tenant root-domain Zones */
-    public function rootDomainsList(?int $page = null, ?int $pageSize = null, ?int $status = null, ?string $keyword = null): ?RootDomainsListResponse
+    public function rootDomainsList(?int $page = null, ?int $pageSize = null, ?int $status = null, ?string $q = null): ?RootDomainsListResponse
     {
         $path = '/backend/v3/api/root_domains';
         $query = $this->buildQueryString([
             new QueryParameterSpec('page', $page, 'form', true, false, null),
             new QueryParameterSpec('page_size', $pageSize, 'form', true, false, null),
             new QueryParameterSpec('status', $status, 'form', true, false, null),
-            new QueryParameterSpec('keyword', $keyword, 'form', true, false, null),
+            new QueryParameterSpec('q', $q, 'form', true, false, null),
         ]);
         $path = $this->appendQueryString($path, $query);
         $result = $this->client->request('GET', $path, []);

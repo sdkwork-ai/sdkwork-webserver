@@ -1,0 +1,97 @@
+.page {
+  min-height: 100vh;
+  padding: 24rpx 32rpx 48rpx;
+  box-sizing: border-box;
+}
+
+.status {
+  display: block;
+  padding: 48rpx 0;
+  text-align: center;
+  color: #64748b;
+  font-size: 28rpx;
+}
+
+.status.error {
+  color: #dc2626;
+}
+
+.status__message {
+  display: block;
+}
+
+.status__detail {
+  display: block;
+  margin-top: 8rpx;
+  color: #94a3b8;
+  font-size: 24rpx;
+}
+
+.status__retry {
+  margin-top: 24rpx;
+}
+
+.list__summary {
+  margin-bottom: 16rpx;
+  color: #64748b;
+  font-size: 24rpx;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.card {
+  background: #ffffff;
+  border: 1rpx solid #e2e8f0;
+  border-radius: 16rpx;
+  padding: 24rpx;
+}
+
+.card__name {
+  display: block;
+  color: #0f172a;
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.card__slug {
+  display: block;
+  margin-top: 4rpx;
+  color: #64748b;
+  font-size: 24rpx;
+}
+
+.card__desc {
+  display: block;
+  margin-top: 12rpx;
+  color: #475569;
+  font-size: 26rpx;
+  line-height: 1.5;
+}
+
+.card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.card__tag {
+  padding: 4rpx 16rpx;
+  border-radius: 999rpx;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 22rpx;
+}
+
+.card__tag--status {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
+.load-more {
+  margin-top: 16rpx;
+}

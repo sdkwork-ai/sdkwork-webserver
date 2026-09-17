@@ -1,0 +1,19 @@
+# HarmonyOS / DevEco build output
+/build/
+/entry/build/
+/packages/*/build/
+/oh_modules/
+/entry/oh_modules/
+/packages/*/oh_modules/
+/.hvigor/
+/.idea/
+/.cxx/
+local.properties
+*.har
+*.hap
+*.hsp
+*.app
+
+# SDKWork generated runtime projection
+/entry/src/main/ets/generated/
+/entry/src/main/resources/rawfile/runtime-env.json

@@ -1,0 +1,7 @@
+{
+  "projectname": "sdkwork-webserver-mini-program",
+  "setting": {
+    "compileHotReLoad": true
+  },
+  "libVersion": "3.5.0"
+}

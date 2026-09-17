@@ -9,12 +9,12 @@ import com.sdkwork.webserver.backend.sdk.http.HttpClient
 class DomainApi(private val client: HttpClient) {
 
     /** List tenant root-domain Zones */
-    suspend fun rootDomainsList(page: Int? = null, pageSize: Int? = null, status: Int? = null, keyword: String? = null): RootDomainsListResponse? {
+    suspend fun rootDomainsList(page: Int? = null, pageSize: Int? = null, status: Int? = null, q: String? = null): RootDomainsListResponse? {
         val query = buildQueryString(listOf(
             QueryParameterSpec("page", page, "form", true, false, null),
             QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             QueryParameterSpec("status", status, "form", true, false, null),
-            QueryParameterSpec("keyword", keyword, "form", true, false, null)
+            QueryParameterSpec("q", q, "form", true, false, null)
         ))
         val raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/root_domains"), query))
         return client.convertValue(raw, object : TypeReference<RootDomainsListResponse>() {})

@@ -40,12 +40,15 @@ test('credential entry uses the PC manifest identity in every client profile', (
   assert.equal(client?.applicationRoot, 'apps/sdkwork-webserver-pc');
 });
 
-test('standalone startup embeds IAM App API through its owner assembly', () => {
+test('standalone startup embeds every IAM owner surface through one contribution', () => {
   const gatewayBootstrap = read(
     'crates/sdkwork-api-webserver-standalone-gateway/src/bootstrap.rs',
   );
   const profile = read(
     'crates/sdkwork-api-webserver-standalone-gateway/src/profile.rs',
+  );
+  const dependencyAssembly = read(
+    'crates/sdkwork-api-webserver-standalone-gateway/src/dependency_assembly.rs',
   );
   const iamModuleBootstrap = read(
     'crates/sdkwork-api-webserver-standalone-gateway/src/iam_module_bootstrap.rs',
@@ -53,18 +56,15 @@ test('standalone startup embeds IAM App API through its owner assembly', () => {
   const gatewayCargo = read('crates/sdkwork-api-webserver-standalone-gateway/Cargo.toml');
   const workspaceCargo = read('Cargo.toml');
 
+  assert.match(profile, /crate::dependency_assembly::same_origin_dependency_modules\(\)/u);
+  assert.match(dependencyAssembly, /crate::iam_module_bootstrap::federated_iam_module_manifest_paths\(\)/u);
   assert.match(
-    profile,
-    /crate::iam_module_bootstrap::federated_iam_module_manifest_paths\(\)/u,
+    dependencyAssembly,
+    /sdkwork_api_iam_assembly::assemble_owner_api_surfaces_with_pool_and_module_manifests\(\s*pool,\s*&manifest_paths,?\s*\)/u,
   );
-  assert.match(
-    profile,
-    /sdkwork_api_iam_assembly::assemble_app_api_contribution_with_module_manifests\(\s*&federated_iam_manifests,?\s*\)/u,
-  );
-  assert.match(profile, /sdkwork_api_drive_assembly::assemble_app_api_contribution\(\)/u);
-  assert.match(profile, /compose_owner_contributions/u);
+  assert.match(profile, /compose_owner_modules/u);
   assert.match(profile, /const DEPENDENCY_UNAVAILABLE_CODE: i32 = 50301/u);
-  assert.match(profile, /assembly_unavailable\("sdkwork-iam"/u);
+  assert.match(dependencyAssembly, /const IAM_OWNER: &str = "sdkwork-iam"/u);
   assert.match(iamModuleBootstrap, /specs\/iam\.module\.manifest\.json/u);
   assert.match(gatewayBootstrap, /assemble_standalone_profile\(\)\s*\.await/u);
   assert.match(gatewayBootstrap, /iam_web_request_context_resolver_from_env/u);
@@ -74,6 +74,47 @@ test('standalone startup embeds IAM App API through its owner assembly', () => {
   assert.match(workspaceCargo, /sdkwork-api-iam-assembly/u);
   assert.match(workspaceCargo, /sdkwork-api-drive-assembly/u);
   assert.doesNotMatch(gatewayCargo, /sdkwork-iam-standalone-gateway/u);
+});
+
+test('the gateway declares both IAM surfaces against one owner contribution', () => {
+  // The platform cloud account center lives on the IAM **backend** surface
+  // (`/backend/v3/api/iam/provider_accounts`, `/iam/provider_credentials/*`),
+  // not the App API surface. Declaring only `app-api` left the account center
+  // unmounted while the component contract still declared it as served: the
+  // gateway composed the App API contribution, so startup, readiness, and the
+  // static assembly gates all stayed green and the console received an empty
+  // 404 from the axum fallback. Both surfaces must therefore be declared, and
+  // they must resolve to the *same* executable export, because
+  // API_ASSEMBLY_SPEC §4.1.1 gives one served owner exactly one contribution —
+  // two exports would fail composition (or silently drop one surface).
+  const component = readJson(
+    'crates/sdkwork-api-webserver-standalone-gateway/specs/component.spec.json',
+  );
+  const iamSurfaces = component.contracts.dependencyApiSurfaces.filter(
+    (surface) => surface.workspace === 'sdkwork-iam' && surface.runtimeMode === 'same-origin',
+  );
+
+  assert.deepEqual(
+    iamSurfaces.map((surface) => surface.surface).sort(),
+    ['app-api', 'backend-api'],
+    'the standalone gateway must declare every same-origin IAM surface it serves',
+  );
+
+  const executableExports = new Set(
+    iamSurfaces.map((surface) => surface.embeddedExecutableExport),
+  );
+  assert.equal(
+    executableExports.size,
+    1,
+    'both IAM surfaces must arrive as one owner contribution, not one export per surface',
+  );
+
+  const [iamExport] = executableExports;
+  const requiredPortExports = (component.contracts.requiredPorts ?? []).map((port) => port.export);
+  assert.ok(
+    requiredPortExports.includes(iamExport),
+    `the IAM surface export ${iamExport} needs a matching requiredPorts entry`,
+  );
 });
 
 test('standalone profiles no longer carry the temporary Drive AnyPool driver exception', () => {

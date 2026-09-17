@@ -7,8 +7,8 @@ use sdkwork_webserver_contract::{
 use sqlx::Row;
 
 use super::support::{
-    decode_keyset_cursor, encode_keyset_cursor, instant_from_row, instant_write_expression,
-    json_write_expression, new_uuid, next_id, now_rfc3339, store_error,
+    cursor_instant_from_row, decode_keyset_cursor, encode_keyset_cursor, instant_from_row,
+    instant_write_expression, json_write_expression, new_uuid, next_id, now_rfc3339, store_error,
 };
 
 /// Upper bound for the first audit-log keyset page when no opaque cursor is
@@ -49,8 +49,26 @@ impl AuditFilter {
         sql: &str,
         bindings: Vec<AuditBindValue>,
     ) {
-        let numbered = sql.replace('$', &format!("${next_index}"));
-        *next_index += bindings.len();
+        // Each `$` in the fragment is one bound value, numbered in binding
+        // order, so a fragment may carry several placeholders (the keyset
+        // tuple `(created_at, id) < (…, …)` needs two). Numbering all `$`
+        // with the same index left such a fragment unparseable.
+        let mut numbered = String::with_capacity(sql.len() + 2 * bindings.len());
+        let mut index = *next_index;
+        for character in sql.chars() {
+            if character == '$' {
+                numbered.push_str(&format!("${index}"));
+                index += 1;
+            } else {
+                numbered.push(character);
+            }
+        }
+        debug_assert_eq!(
+            index - *next_index,
+            bindings.len(),
+            "audit filter placeholders must match its bind values: {sql}"
+        );
+        *next_index = index;
         filters.push(AuditFilter {
             sql: numbered,
             bindings,
@@ -106,7 +124,7 @@ fn push_audit_filters(
         AuditFilter::push(
             filters,
             next_index,
-            "created_at >= $",
+            "created_at >= CAST($ AS TIMESTAMPTZ)",
             vec![AuditBindValue::Text(start_date.to_string())],
         );
     }
@@ -115,7 +133,7 @@ fn push_audit_filters(
         AuditFilter::push(
             filters,
             next_index,
-            "created_at < $",
+            "created_at < CAST($ AS TIMESTAMPTZ)",
             vec![AuditBindValue::Text(end_date.to_string())],
         );
     }
@@ -200,7 +218,9 @@ impl WebRepository {
         AuditFilter::push(
             &mut filters,
             &mut next_index,
-            "(created_at, id) < ($",
+            // The cursor instant binds as text, so it must be cast: PostgreSQL
+            // has no `timestamp with time zone < text` operator.
+            "(created_at, id) < (CAST($ AS TIMESTAMPTZ), $)",
             vec![
                 AuditBindValue::Text(cursor_created_at),
                 AuditBindValue::Int(cursor_id),
@@ -231,8 +251,9 @@ impl WebRepository {
             }
         }
         let fetch_size = i64::from(page_size) + 1;
-        let fetch_size_bind = fetch_size.to_string();
-        list_query = list_query.bind(&fetch_size_bind);
+        // PostgreSQL requires the LIMIT argument to be `bigint`; a text-typed
+        // bind is rejected with "argument of LIMIT must be type bigint".
+        list_query = list_query.bind(fetch_size);
 
         let rows = list_query
             .fetch_all(&self.pool)
@@ -253,8 +274,7 @@ impl WebRepository {
         let next_cursor = has_more
             .then(|| {
                 let last = page_rows.last().expect("non-empty page when has_more");
-                let created_at: String = last
-                    .try_get("created_at")
+                let created_at = cursor_instant_from_row(last, "created_at")
                     .map_err(|error| store_error("map web_audit_log cursor instant", error))?;
                 let id: i64 = last
                     .try_get("id")

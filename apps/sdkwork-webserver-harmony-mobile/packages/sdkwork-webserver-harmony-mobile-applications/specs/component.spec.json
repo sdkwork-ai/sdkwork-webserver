@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "sdkwork-webserver-harmony-mobile-applications",
+    "displayName": "SDKWork Web Server HarmonyOS Mobile Applications",
+    "version": "0.1.0",
+    "type": "arkts-package",
+    "root": "apps/sdkwork-webserver-harmony-mobile/packages/sdkwork-webserver-harmony-mobile-applications",
+    "domain": "infrastructure",
+    "capability": "applications",
+    "surface": "app",
+    "languages": [
+      "arkts"
+    ],
+    "generated": false,
+    "manifests": [
+      "oh-package.json5",
+      "specs/component.spec.json"
+    ]
+  },
+  "canonicalSpecs": [
+    {
+      "file": "HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md",
+      "purpose": "HarmonyOS mobile capability package shape and route placement."
+    },
+    {
+      "file": "APP_HARMONY_NATIVE_UI_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_HARMONY_NATIVE_UI_SPEC.md",
+      "purpose": "Harmony native ArkUI capability package rules."
+    },
+    {
+      "file": "APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "purpose": "Cross-client route-id and capability alignment."
+    },
+    {
+      "file": "APP_COMPOSITION_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_COMPOSITION_SPEC.md",
+      "purpose": "Native-authority application composition."
+    },
+    {
+      "file": "APP_SDK_INTEGRATION_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md",
+      "purpose": "Injected generated SDK clients; capability packages never build transports."
+    },
+    {
+      "file": "APP_PERMISSION_COMPOSITION_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_PERMISSION_COMPOSITION_SPEC.md",
+      "purpose": "Permission hints inherited from the owning module catalog."
+    },
+    {
+      "file": "PAGINATION_SPEC.md",
+      "path": "../../../../../sdkwork-specs/PAGINATION_SPEC.md",
+      "purpose": "Interactive list pagination contract."
+    },
+    {
+      "file": "I18N_SPEC.md",
+      "path": "../../../../../sdkwork-specs/I18N_SPEC.md",
+      "purpose": "Authored fragment layout for capability copy."
+    },
+    {
+      "file": "NAMING_SPEC.md",
+      "path": "../../../../../sdkwork-specs/NAMING_SPEC.md",
+      "purpose": "Canonical SDKWork naming rules."
+    }
+  ],
+  "contracts": {
+    "layerRole": "frontend-feature",
+    "publicExports": [
+      "Index.ets"
+    ],
+    "sdkClients": [],
+    "sdkDependencies": [],
+    "dependencyApiExports": [],
+    "dependencyApiSurfaces": [],
+    "providedPorts": [
+      {
+        "name": "webserverHarmonyApplicationsViews",
+        "export": "Index.ets"
+      },
+      {
+        "name": "webserverHarmonyApplicationsRoutes",
+        "export": "Index.ets"
+      }
+    ],
+    "requiredPorts": [
+      {
+        "name": "webserverHarmonyApplicationSdk",
+        "package": "@sdkwork/sdkwork-webserver-harmony-mobile-core",
+        "export": "src/main/ets/sdk/Index.ets"
+      },
+      {
+        "name": "webserverHarmonyCommons",
+        "package": "@sdkwork/sdkwork-webserver-harmony-mobile-commons",
+        "export": "Index.ets"
+      },
+      {
+        "name": "webserverHarmonyShell",
+        "package": "@sdkwork/sdkwork-webserver-harmony-mobile-shell",
+        "export": "Index.ets"
+      }
+    ]
+  },
+  "verification": {
+    "commands": [
+      "node ../sdkwork-specs/tools/check-frontend-composition.mjs --root .",
+      "node --test apps/sdkwork-webserver-harmony-mobile/tests/harmony-surface-contract.test.mjs"
+    ]
+  },
+  "metadata": {
+    "standardVersion": "2026-09-17",
+    "deployAppAuthority": "The console's application screen reads the deployments deploy_app list, matching the PC console and the mini program root; the webserver-native applications entity is being retired."
+  }
+}

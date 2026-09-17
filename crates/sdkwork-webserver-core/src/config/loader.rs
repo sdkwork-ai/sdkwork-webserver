@@ -2,19 +2,22 @@ use std::{
     fs::{self, File},
     io::Read,
     path::Path,
+    sync::LazyLock,
 };
 
 use sdkwork_utils_rust::crypto::sha256_hash;
 use serde_json::Value;
 
+use crate::json_schema::{compile_schema, schema_diagnostics};
+
 use super::{
-    validate_webserver_config, CompiledWebServerApp, ConfigDiagnostic, WebServerAppConfig,
-    WebServerConfigError,
+    validate_webserver_config, CompiledWebServerApp, WebServerAppConfig, WebServerConfigError,
 };
 
 pub const MAX_CONFIG_BYTES: u64 = 1024 * 1024;
-const MAX_SCHEMA_DIAGNOSTICS: usize = 64;
 const SCHEMA: &str = include_str!("../../../../specs/sdkwork.webserver.config.schema.json");
+static SCHEMA_VALIDATOR: LazyLock<Result<jsonschema::Validator, String>> =
+    LazyLock::new(|| compile_schema(SCHEMA));
 
 #[derive(Debug)]
 pub struct CompiledWebServerRevision {
@@ -185,37 +188,14 @@ pub fn load_and_compile_webserver_config_json(
 }
 
 fn validate_schema(instance: &Value) -> Result<(), WebServerConfigError> {
-    let schema: Value = serde_json::from_str(SCHEMA)
-        .map_err(|error| WebServerConfigError::InvalidSchema(error.to_string()))?;
-    let validator = jsonschema::draft202012::new(&schema)
-        .map_err(|error| WebServerConfigError::InvalidSchema(error.to_string()))?;
-
-    let diagnostics = validator
-        .iter_errors(instance)
-        .take(MAX_SCHEMA_DIAGNOSTICS)
-        .map(|error| {
-            ConfigDiagnostic::new(
-                error.instance_path().as_str(),
-                truncate_diagnostic(&error.to_string()),
-            )
-        })
-        .collect::<Vec<_>>();
+    let validator = SCHEMA_VALIDATOR
+        .as_ref()
+        .map_err(|error| WebServerConfigError::InvalidSchema(error.clone()))?;
+    let diagnostics = schema_diagnostics(validator, instance);
 
     if diagnostics.is_empty() {
         Ok(())
     } else {
         Err(WebServerConfigError::Validation { diagnostics })
     }
-}
-
-fn truncate_diagnostic(message: &str) -> String {
-    const MAX_DIAGNOSTIC_BYTES: usize = 512;
-    if message.len() <= MAX_DIAGNOSTIC_BYTES {
-        return message.to_owned();
-    }
-    let mut end = MAX_DIAGNOSTIC_BYTES;
-    while !message.is_char_boundary(end) {
-        end -= 1;
-    }
-    format!("{}...", &message[..end])
 }

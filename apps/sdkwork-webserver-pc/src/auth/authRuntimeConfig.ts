@@ -222,13 +222,18 @@ export function createWebserverAuthRuntimeConfigLoader(
     if (!tokenManager) {
       return;
     }
-    // Login metadata routes are access-token-only. A stale persisted Access-Token
-    // from an expired session must not override the gateway-injected bootstrap
-    // credential on /auth/login.
-    resetTokenManagerToBootstrapAccessToken(
-      tokenManager,
-      readBootstrapAccessTokenFromProcessEnv(),
-    );
+    const bootstrapAccessToken = readBootstrapAccessTokenFromProcessEnv();
+    // Login metadata routes are access-token-only. When the gateway injects a
+    // bootstrap credential, it must win over a stale persisted Access-Token from
+    // an expired session. Without one there is nothing to prefer: clearing the
+    // TokenManager here would discard the session credential that
+    // `hydrateTokenManager()` just restored and make every metadata call fail
+    // before network dispatch, which `IAM_CREDENTIAL_ENTRY_SPEC.md` section 3
+    // forbids. Fail closed on the request instead of on the credentials.
+    if (!bootstrapAccessToken) {
+      return;
+    }
+    resetTokenManagerToBootstrapAccessToken(tokenManager, bootstrapAccessToken);
   };
 
   return () => {

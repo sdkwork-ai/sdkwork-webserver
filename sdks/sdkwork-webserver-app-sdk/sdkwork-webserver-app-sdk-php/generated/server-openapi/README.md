@@ -67,7 +67,7 @@ $client->setHeader('X-Custom-Header', 'value');
 <?php
 
 // 获取应用列表
-$params = ['page' => 1, 'page_size' => 2, 'status' => 0, 'application_type' => 'WEB', 'site_type' => 1, 'keyword' => 'keyword'];
+$params = ['page' => 1, 'page_size' => 2, 'status' => 0, 'application_type' => 'WEB', 'site_type' => 1, 'q' => 'q'];
 $result = $client->application->applicationsList($params);
 var_dump($result);
 ```

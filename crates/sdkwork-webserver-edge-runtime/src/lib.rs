@@ -188,16 +188,23 @@ impl EdgeRuntime {
         validate_nginx_config(&self.config, config_content)
     }
 
+    /// Reloads Nginx. A no-op on a node without Nginx.
     pub fn reload(&self) -> Result<(), EdgeRuntimeError> {
         reload_nginx(&self.config)
     }
 
     /// Proves the loaded Nginx configuration contains `expected_fragment`
     /// (PRD-FR-020 served-revision evidence for reload convergence).
+    ///
+    /// On a node without Nginx, request-path serving belongs to the Rust data
+    /// plane, so this reports success without producing Nginx evidence.
     pub fn verify_served_config(&self, expected_fragment: &str) -> Result<(), EdgeRuntimeError> {
         verify_served_config(&self.config, expected_fragment)
     }
 
+    /// Validates the active Nginx configuration. A no-op on a node without
+    /// Nginx, which lets the node daemon finish a sync instead of aborting on
+    /// a step that has nothing to validate.
     pub fn validate_active_config(&self) -> Result<(), EdgeRuntimeError> {
         validate_active_nginx_config(&self.config)
     }

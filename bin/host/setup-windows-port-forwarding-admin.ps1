@@ -5,7 +5,7 @@ $wslDistro = "Ubuntu-22.04"
 # sdkwork-webserver Docker publishes host :80 / :443 for the public data plane.
 # WSL mirrors those ports to Windows localhost — no portproxy to a side port.
 # The sibling discovery script runs inside WSL, so translate this script's own
-# location (E:\...\bin\host) into its /mnt/<drive>/... form instead of pinning
+# location (the script directory itself) into its /mnt/<drive>/... form instead of pinning
 # a machine-specific absolute path.
 $drive = $PSScriptRoot.Substring(0, 1).ToLower()
 $rest = $PSScriptRoot.Substring(2).Replace('\', '/')

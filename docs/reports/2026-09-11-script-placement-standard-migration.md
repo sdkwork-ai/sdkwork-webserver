@@ -58,7 +58,7 @@ bundle 根的执行器由打包器从 `bin/bundle/` 拷贝；deb/rpm 维护脚�
   内置 postgres init 挂载 → `../../bin/container/postgres-init`（bundle 版 `${POSTGRES_INIT_HOST_DIR:-}` 兜底同步）
 - `scripts/docker/deployment-contract.test.mjs` — 15 处路径断言
 - `bin/bundle/deploy.sh` / `release.sh` — **repo 模式分支的 `../..` 深度重算**（`deployments/docker/bundle/` → `bin/bundle/`）
-- `bin/host/*` — 互相引用的文案前缀；`setup-windows-port-forwarding-admin.ps1` 去掉硬编码 `/mnt/e/...` 绝对路径，改由 `$PSScriptRoot` 推导
+- `bin/host/*` — 互相引用的文案前缀；`setup-windows-port-forwarding-admin.ps1` 去掉硬编码的 `/mnt/<drive>/...` 绝对路径，改由 `$PSScriptRoot` 推导
 
 ## 4. 规范与文档
 

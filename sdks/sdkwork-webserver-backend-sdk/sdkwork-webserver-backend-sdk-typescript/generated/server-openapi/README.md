@@ -80,7 +80,7 @@ const params = {
   application_type: 'WEB',
   site_type: 4,
   status: 5,
-  keyword: 'keyword',
+  q: 'q',
 };
 const result = await client.application.list(params);
 ```

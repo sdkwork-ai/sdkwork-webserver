@@ -16,7 +16,7 @@ use SDKWork\Webserver\BackendSdk\Models\UpdateApplicationRequest;
 final class ApplicationApi extends BaseApi
 {
     /** List managed applications */
-    public function applicationsList(?int $page = null, ?int $pageSize = null, ?string $applicationType = null, ?int $siteType = null, ?int $status = null, ?string $keyword = null): ?ApplicationsListResponse
+    public function applicationsList(?int $page = null, ?int $pageSize = null, ?string $applicationType = null, ?int $siteType = null, ?int $status = null, ?string $q = null): ?ApplicationsListResponse
     {
         $path = '/backend/v3/api/applications';
         $query = $this->buildQueryString([
@@ -25,7 +25,7 @@ final class ApplicationApi extends BaseApi
             new QueryParameterSpec('application_type', $applicationType, 'form', true, false, null),
             new QueryParameterSpec('site_type', $siteType, 'form', true, false, null),
             new QueryParameterSpec('status', $status, 'form', true, false, null),
-            new QueryParameterSpec('keyword', $keyword, 'form', true, false, null),
+            new QueryParameterSpec('q', $q, 'form', true, false, null),
         ]);
         $path = $this->appendQueryString($path, $query);
         $result = $this->client->request('GET', $path, []);

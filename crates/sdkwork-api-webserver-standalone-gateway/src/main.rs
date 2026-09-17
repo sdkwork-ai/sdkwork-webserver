@@ -2,9 +2,10 @@ use std::{error::Error, io, path::PathBuf};
 
 use sdkwork_api_webserver_standalone_gateway::{
     build_router, configure_packaged_runtime_roots_from_env,
-    issue_credential_entry_bootstrap_token_to_file,
+    issue_credential_entry_bootstrap_token_to_file, reset_admin_account_from_env,
     run_data_plane_from_config_with_operations_until, run_data_plane_with_operations_until,
-    run_database_migrate_only, validate_adaptive_app_shell_from_env, DataPlaneOperationsConfig,
+    run_database_migrate_only, validate_adaptive_app_shell_from_env, AdminResetOptions,
+    DataPlaneOperationsConfig,
 };
 use sdkwork_webserver_core::{
     compile_merged_imports_app, imported_certificate_names, resolve_nginx_sidecar_path,
@@ -38,30 +39,45 @@ async fn run() -> MainResult<()> {
     sdkwork_webserver_core::runtime_config::load_runtime_toml_config().map_err(|error| {
         io::Error::other(format!("runtime TOML configuration is invalid: {error}"))
     })?;
-    validate_imported_module_webserver_configs()?;
     let raw_arguments = std::env::args().skip(1).collect::<Vec<_>>();
     let (format_override, arguments) = extract_format_override(&raw_arguments)?;
-    let mut arguments = arguments.into_iter();
-    let nginx_compat_command = {
-        let mut peek = arguments.clone();
-        matches!(
-            peek.next().as_deref(),
-            Some("serve-nginx") | Some("validate-nginx")
-        )
-    };
+    let leading_command = arguments.first().map(String::as_str);
+    let nginx_compat_command = matches!(leading_command, Some("serve-nginx") | Some("validate-nginx"));
+    // `reset-admin` is an operator recovery command. It has to keep working when
+    // the imported-module sidecars or the packaged dependency roots are
+    // themselves part of what the operator is trying to get past, so it skips
+    // both preflights the serving operations require.
+    let standalone_operator_command = leading_command == Some("reset-admin");
     // The nginx compatibility mode serves stock nginx configuration and does
     // not require the application's packaged dependency roots (IAM/Drive).
-    if !nginx_compat_command {
+    if !nginx_compat_command && !standalone_operator_command {
         configure_packaged_runtime_roots_from_env().map_err(|error| {
             io::Error::other(format!("packaged runtime roots are invalid: {error}"))
         })?;
     }
+    if !standalone_operator_command {
+        validate_imported_module_webserver_configs()?;
+    }
+    let mut arguments = arguments.into_iter();
     match arguments.next().as_deref() {
         None => run_default_gateway(arguments.next()).await?,
         Some("serve-management") => run_management_plane().await?,
         Some("db-migrate") => run_database_migrate_only()
             .await
             .map_err(|error| io::Error::other(format!("database migration failed: {error}")))?,
+        Some("reset-admin") => {
+            let options = AdminResetOptions::from_arguments(&arguments.collect::<Vec<_>>())
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+            let output = reset_admin_account_from_env(options).await.map_err(|error| {
+                io::Error::other(format!("admin password reset failed: {error}"))
+            })?;
+            println!(
+                "{}",
+                serde_json::to_string(&output).map_err(|error| io::Error::other(format!(
+                    "failed to render the admin password reset result: {error}"
+                )))?
+            );
+        }
         Some("issue-credential-entry-bootstrap-token") => {
             let output = arguments
                 .next()
@@ -511,6 +527,10 @@ fn print_help() {
            serve-nginx [path]     Same as default; optional explicit nginx.conf or sites-enabled directory.\n\
            serve-management       Start the management API (control plane).\n\
            db-migrate             Run database migration and exit.\n\
+           reset-admin            Reset the bootstrap administrator password and exit.\n\
+                                  Reads the new secret from SDKWORK_WEBSERVER_ADMIN_RESET_PASSWORD;\n\
+                                  optional --username <username> / --tenant-id <tenant-id>.\n\
+                                  Use the `pnpm admin:reset:*` scripts instead of calling it directly.\n\
            issue-credential-entry-bootstrap-token [path]\n\
                                   Issue an IAM-signed credential-entry bootstrap Access-Token\n\
                                   for the login page (default secrets path).\n\

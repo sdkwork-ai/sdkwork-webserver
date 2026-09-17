@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "sdkwork-webserver-flutter-mobile",
+    "displayName": "SDKWork Webserver Flutter Mobile",
+    "version": "0.1.0",
+    "type": "flutter-mobile-app-root",
+    "root": "sdkwork-webserver/apps/sdkwork-webserver-flutter-mobile",
+    "domain": "webserver",
+    "capability": "applications",
+    "surface": "app",
+    "languages": [
+      "dart"
+    ],
+    "generated": false,
+    "manifests": [
+      "pubspec.yaml",
+      "sdkwork.app.config.json"
+    ]
+  },
+  "canonicalSpecs": [
+    {
+      "file": "FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md",
+      "path": "../../../sdkwork-specs/FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md",
+      "purpose": "Flutter mobile application root architecture."
+    },
+    {
+      "file": "APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "path": "../../../sdkwork-specs/APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "purpose": "Cross-client package taxonomy and dependency direction."
+    },
+    {
+      "file": "APP_COMPOSITION_SPEC.md",
+      "path": "../../../sdkwork-specs/APP_COMPOSITION_SPEC.md",
+      "purpose": "Native-authority application composition."
+    },
+    {
+      "file": "APP_SDK_INTEGRATION_SPEC.md",
+      "path": "../../../sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md",
+      "purpose": "Generated app SDK integration."
+    },
+    {
+      "file": "CODE_STYLE_SPEC.md",
+      "path": "../../../sdkwork-specs/CODE_STYLE_SPEC.md",
+      "purpose": "Authored source structure and generated code boundaries."
+    },
+    {
+      "file": "NAMING_SPEC.md",
+      "path": "../../../sdkwork-specs/NAMING_SPEC.md",
+      "purpose": "Canonical SDKWork naming rules."
+    }
+  ],
+  "contracts": {
+    "sdkClients": [
+      "SdkworkAppClient"
+    ],
+    "sdkDependencies": [
+      {
+        "workspace": "sdkwork-webserver-app-sdk",
+        "surface": "app-api",
+        "credentialMode": "authenticated-app-api",
+        "packageName": "sdkwork_webserver_app_sdk",
+        "status": "active"
+      },
+      {
+        "workspace": "sdkwork-drive-app-sdk",
+        "surface": "app-api",
+        "credentialMode": "authenticated-app-api",
+        "packageName": "sdkwork_drive_app_sdk",
+        "status": "pending-dart-artifact"
+      },
+      {
+        "workspace": "sdkwork-deployments-app-sdk",
+        "surface": "app-api",
+        "credentialMode": "authenticated-app-api",
+        "packageName": "sdkwork_deployments_app_sdk",
+        "status": "pending-dart-artifact"
+      }
+    ]
+  },
+  "verification": {
+    "commands": [
+      "flutter analyze",
+      "flutter test"
+    ]
+  },
+  "metadata": {
+    "dartSdkCoverage": [
+      {
+        "workspace": "sdkwork-webserver-app-sdk",
+        "variantPath": "sdks/sdkwork-webserver-app-sdk/sdkwork-webserver-app-sdk-flutter/generated/server-openapi",
+        "packageName": "sdkwork_webserver_app_sdk",
+        "available": true
+      },
+      {
+        "workspace": "sdkwork-drive-app-sdk",
+        "variantPath": "sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-flutter/generated/server-openapi",
+        "packageName": "sdkwork_drive_app_sdk",
+        "available": false
+      },
+      {
+        "workspace": "sdkwork-deployments-app-sdk",
+        "variantPath": "sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-flutter/generated/server-openapi",
+        "packageName": "sdkwork_deployments_app_sdk",
+        "available": false
+      }
+    ]
+  }
+}

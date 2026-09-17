@@ -90,7 +90,12 @@ pub const DRIVE_INTERNAL_API_BASE_URL_ENV: &str = "SDKWORK_WEBSERVER_DRIVE_INTER
 pub const DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV: &str =
     "SDKWORK_WEBSERVER_DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE";
 pub const TLS_RUNTIME_SOURCE_ENV: &str = "SDKWORK_WEBSERVER_TLS_RUNTIME_SOURCE";
-pub const TLS_RUNTIME_SNAPSHOT_FILE_ENV: &str = "SDKWORK_WEBSERVER_TLS_RUNTIME_SNAPSHOT_FILE";
+/// The data plane's TLS runtime snapshot, shared with the node daemon.
+///
+/// The daemon derives the served-certificate report's path from this file,
+/// so the name is re-exported from the shared runtime environment rather
+/// than declared here: two declarations would agree only until one moved.
+pub use sdkwork_webserver_core::runtime_env::TLS_RUNTIME_SNAPSHOT_FILE_ENV;
 pub const TLS_MATERIAL_ROOT_ENV: &str = "SDKWORK_WEBSERVER_TLS_MATERIAL_ROOT";
 pub const TLS_LISTENER_ID_ENV: &str = "SDKWORK_WEBSERVER_TLS_LISTENER_ID";
 pub const TLS_RUNTIME_POLL_INTERVAL_MS_ENV: &str = "SDKWORK_WEBSERVER_TLS_RUNTIME_POLL_INTERVAL_MS";

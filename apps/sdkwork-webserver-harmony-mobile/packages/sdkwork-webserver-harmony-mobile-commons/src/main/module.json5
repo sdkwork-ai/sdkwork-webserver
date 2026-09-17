@@ -1,0 +1,7 @@
+{
+  "module": {
+    "name": "sdkwork_webserver_harmony_mobile_commons",
+    "type": "har",
+    "deviceTypes": ["phone", "tablet"]
+  }
+}

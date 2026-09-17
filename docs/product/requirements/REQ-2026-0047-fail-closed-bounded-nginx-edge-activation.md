@@ -7,13 +7,17 @@ title: Replace fake Nginx validation and reload success with bounded fail-closed
 # (sdkwork-webserver-edge-runtime). The certificate lifecycle main path is the
 # self-hosted data plane TLS runtime (versioned material root + tls-runtime
 # snapshot) and does not involve Nginx.
+# note: REQ-2026-0070 narrows the disabled case only. With
+# SDKWORK_WEBSERVER_NGINX_ENABLED false, the entry points that merely assert something
+# become logged no-ops instead of errors; unavailable, timeout, rejected candidate, and
+# rejected reload still fail closed. See Supersession.
 owner: sdkwork-webserver
 status: accepted
 source: nginx-edge-commercial-readiness
 problem: The edge adapter runs nginx -t against the default main config instead of the candidate site content, accepts any non-empty candidate after validation failure, and converts reload failure into success. The control plane can therefore report valid, deployed, or reloaded while Nginx rejected the configuration or never reloaded.
 goals:
   - Test the exact candidate site content inside a generated minimal Nginx main configuration before activation.
-  - Fail closed when Nginx is disabled, unavailable, times out, rejects the candidate, or rejects reload.
+  - Fail closed when Nginx is unavailable, times out, rejects the candidate, or rejects reload, and keep failing closed on a disabled node for every step that must hand back a real Nginx artifact.
   - Bound candidate bytes, command duration, diagnostic bytes, temporary files, and process count.
   - Validate domain-derived file names and prevent path traversal outside the configured sites root.
   - Use unique same-directory staging files and atomic persistence so concurrent deploy attempts do not share a fixed .tmp path.
@@ -30,7 +34,7 @@ users:
 acceptance_criteria:
   - Validation writes the exact candidate to an isolated temporary file and invokes nginx -t with a generated main config that includes that file inside http context.
   - Empty or greater-than-1-MiB candidate content fails before filesystem or process execution.
-  - nginx disabled, spawn failure, non-zero exit, signal termination, and timeout all return errors; no degraded non-empty fallback exists.
+  - Spawn failure, non-zero exit, signal termination, and timeout all return errors, and no degraded non-empty fallback exists; on a disabled node a step that must return a real artifact still errors while a step that only asserts something becomes a logged no-op (REQ-2026-0070).
   - Command execution retains at most 8 KiB of diagnostic output and has a configurable 100..60000 ms timeout with a 10000 ms default.
   - Domain file names are 1..253 safe ASCII DNS-style characters with no separator, dot-segment, control, drive, or alternate-path syntax.
   - Deployment stages to a unique file in the target directory, validates that exact file, syncs it, and atomically persists only after validation succeeds.
@@ -72,7 +76,7 @@ verification:
 
 Returning success after failed syntax validation or reload is not a compatibility behavior; it is false state. This requirement deliberately changes those cases to errors without changing the public OpenAPI shape. `NginxValidateResponse.valid` remains the validation result contract, while deploy and reload operations now fail through the existing standard problem envelope when the host capability cannot complete.
 
-External Nginx remains optional. Operators that do not run it must keep this edge capability disabled and must not call its deploy/reload operations. Disabled capability is represented as unavailable, not as a successful no-op.
+External Nginx remains optional. Operators that do not run it keep this edge capability disabled. A disabled capability still fails closed for anything that has to produce an Nginx artifact, because `stage_nginx_config` has no safe empty result, but the steps that only assert something about a configuration become logged no-ops, so a node serving through the Rust data plane can finish its manifest, certificate, and served-certificate work. REQ-2026-0070 takes that assertion-only set out of the "unavailable" reading; see Supersession.
 
 ## Implementation Evidence
 
@@ -87,7 +91,7 @@ External Nginx remains optional. Operators that do not run it must keep this edg
 ## Verification Evidence
 
 - `cargo test -p sdkwork-webserver-edge-runtime` passes 8/8 unit/integration tests. The installed `nginx/1.26.2` accepts a valid exact candidate, rejects an unknown directive, preserves the previous active file after rejection, replaces it with a second valid candidate, and leaves one target file only.
-- Edge tests also prove strict enable tokens, path traversal/DNS rejection, empty and over-1-MiB rejection, 8-KiB diagnostic truncation, disabled/unavailable failure, reload spawn failure, and a 100-ms child timeout that kills a five-second process.
+- Edge tests also prove strict enable tokens, path traversal/DNS rejection, empty and over-1-MiB rejection, 8-KiB diagnostic truncation, disabled-node assertion skipping alongside unavailable-node failure, reload spawn failure, and a 100-ms child timeout that kills a five-second process. REQ-2026-0070 re-pointed the disabled case: the test that asserted the old "disabled is an error" contract for the assertion-only steps now asserts the two-case contract instead.
 - `cargo test -p sdkwork-intelligence-webserver-service` passes 2/2 tests and compiles the async Nginx orchestration. PostgreSQL Repository parity passes with the conservative legacy validation result while retaining transaction, tenant, pagination, Nginx activation, certificate, agent, and audit coverage.
 - Strict all-target Clippy passes for edge runtime, business service, and SQLx Repository with `-D warnings`.
 - Strict component-port binding, application-layering, and route-collision validators pass after all nine missing Rust component contracts were added; no Cargo member remains without `specs/component.spec.json` or `specs/README.md`.
@@ -95,5 +99,20 @@ External Nginx remains optional. Operators that do not run it must keep this edg
 - `cargo fmt --all -- --check` and `git diff --check` pass.
 
 ## Remaining Boundary
+
+## Supersession
+
+REQ-2026-0070 narrows one case in this requirement. When `SDKWORK_WEBSERVER_NGINX_ENABLED` is
+false, the entry points that only assert something about a configuration - `validate_nginx_config`,
+`reload_nginx`, `verify_served_config`, and `validate_active_nginx_config` - are logged no-ops
+rather than errors, because a node whose Rust request path owns the listener has nothing for them
+to validate and aborting there stops the sync before its certificate work. `stage_nginx_config`
+keeps failing loudly. Unavailable, timeout, rejected-candidate, and rejected-reload behavior is
+unchanged, and the deploy and reload operations still cannot report success after an edge operation
+failed.
+
+This supersedes the two statements above that read a disabled node as uniformly unavailable: the
+acceptance criterion that listed `nginx disabled` beside the failure cases, and the sentence
+stating a disabled capability is never a successful no-op.
 
 This requirement cannot make database active-state mutation and a separate Nginx master reload one atomic transaction. A durable activation generation, desired/observed state, rollback target, node acknowledgement, and reconciliation loop require a reviewed database/API/Agent contract and remain a commercial HA gate. Complete Nginx directive compatibility, fuzz/differential testing, signed configuration provenance, multi-node rollout, and chaos evidence also remain separate gates.

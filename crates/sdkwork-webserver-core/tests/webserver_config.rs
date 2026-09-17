@@ -2595,3 +2595,165 @@ fn usage_metering_section_compiles_and_validates() {
         .iter()
         .any(|diagnostic| diagnostic.path.contains("usageMetering/windowSeconds")));
 }
+
+/// A `policy-first` listener serves the configured files for the names they
+/// cover and the assigned certificate set for every name they do not, so a
+/// virtual host whose name no configured certificate covers is a supported
+/// configuration rather than a validation error.
+#[test]
+fn policy_first_listener_leaves_uncovered_server_names_to_the_assigned_set() {
+    let directory = TempDir::new().expect("create temp directory");
+    for file in ["configured.pem", "configured.key"] {
+        fs::write(directory.path().join(file), b"test material").expect("write TLS material");
+    }
+    let mut config = base_config();
+    config["listeners"][0]["tlsPolicyRef"] = json!("public-tls");
+    config["listeners"][0]["tlsRuntime"] = json!("assignment");
+    config["listeners"][0]["tlsCertificateResolution"] = json!("policy-first");
+    config["certificates"] = json!([{
+        "id": "configured-cert",
+        "serverNames": ["configured.example.com"],
+        "source": {
+            "type": "protected-file",
+            "certificateFile": "configured.pem",
+            "privateKeyFile": "configured.key"
+        }
+    }]);
+    config["tlsPolicies"] = json!([{
+        "id": "public-tls",
+        "certificateRef": "configured-cert",
+        "minimumVersion": "tls1.2",
+        "maximumVersion": "tls1.3",
+        "alpn": ["http/1.1"]
+    }]);
+    // The base fixture's virtual hosts are `example.com` and `*.example.net`.
+    // Neither is covered by `configured-cert`, which is exactly the case the
+    // assigned certificate set exists to serve.
+    let path = write_config(directory.path(), &config);
+    let compiled = load_and_compile_webserver_config(path)
+        .expect("a policy-first listener may leave server names to the assigned certificate set");
+    assert_eq!(
+        compiled.config().listeners[0].tls_certificate_resolution,
+        Some(sdkwork_webserver_core::TlsCertificateResolution::PolicyFirst)
+    );
+}
+
+/// `policy-only` has no lower layer, so every virtual host name on its listener
+/// must be covered by a configured certificate file.
+#[test]
+fn policy_only_requires_a_configured_certificate_for_every_server_name() {
+    let directory = TempDir::new().expect("create temp directory");
+    for file in ["configured.pem", "configured.key"] {
+        fs::write(directory.path().join(file), b"test material").expect("write TLS material");
+    }
+    let mut config = base_config();
+    config["listeners"][0]["tlsPolicyRef"] = json!("public-tls");
+    config["certificates"] = json!([{
+        "id": "configured-cert",
+        "serverNames": ["configured.example.com"],
+        "source": {
+            "type": "protected-file",
+            "certificateFile": "configured.pem",
+            "privateKeyFile": "configured.key"
+        }
+    }]);
+    config["tlsPolicies"] = json!([{
+        "id": "public-tls",
+        "certificateRef": "configured-cert",
+        "minimumVersion": "tls1.2",
+        "maximumVersion": "tls1.3",
+        "alpn": ["http/1.1"]
+    }]);
+    let path = write_config(directory.path(), &config);
+    let error = load_and_compile_webserver_config(path)
+        .expect_err("policy-only must cover every listener server name");
+    assert!(error.diagnostics().iter().any(|diagnostic| diagnostic
+        .message
+        .contains("has no certificate covering server name")));
+}
+
+/// A certificate is only ever selected through SNI, and RFC 6066 forbids an IP
+/// literal in that extension, so an IP address cannot be a certificate server
+/// name. Accepting one would produce a listener that can never start.
+#[test]
+fn a_certificate_cannot_declare_an_ip_address_server_name() {
+    let directory = TempDir::new().expect("create temp directory");
+    for file in ["configured.pem", "configured.key"] {
+        fs::write(directory.path().join(file), b"test material").expect("write TLS material");
+    }
+    let mut config = base_config();
+    config["certificates"] = json!([{
+        "id": "ip-cert",
+        "serverNames": ["192.0.2.10"],
+        "source": {
+            "type": "protected-file",
+            "certificateFile": "configured.pem",
+            "privateKeyFile": "configured.key"
+        }
+    }]);
+    let path = write_config(directory.path(), &config);
+    let error = load_and_compile_webserver_config(path)
+        .expect_err("an IP address cannot be a certificate server name");
+    assert!(error
+        .diagnostics()
+        .iter()
+        .any(|diagnostic| diagnostic.message.contains("not IP address")));
+}
+
+/// Certificate SAN coverage, SNI selection and website host selection all
+/// answer "does this wildcard cover this name" with one rule, so the rule has
+/// one test, next to its only implementation.
+#[test]
+fn a_wildcard_covers_exactly_one_label_below_its_suffix() {
+    use sdkwork_webserver_core::wildcard_server_name_covers;
+    assert!(wildcard_server_name_covers(
+        "example.test",
+        "www.example.test"
+    ));
+    assert!(!wildcard_server_name_covers("example.test", "example.test"));
+    assert!(!wildcard_server_name_covers(
+        "example.test",
+        "a.b.example.test"
+    ));
+}
+
+/// A certificate SAN name and a declared server name are both patterns, so
+/// "does this wildcard cover that name" and "does this wildcard cover that
+/// wildcard" are different questions. The answer to the second is only ever yes
+/// for an identical wildcard, which the equality check already accepts.
+#[test]
+fn a_wildcard_certificate_does_not_cover_a_different_wildcard_server_name() {
+    use sdkwork_webserver_core::server_name_covers;
+    assert!(server_name_covers("*.example.test", "*.example.test"));
+    assert!(!server_name_covers("*.example.test", "*.www.example.test"));
+    assert!(!server_name_covers("*.example.test", "*.test"));
+    assert!(!server_name_covers("*.www.example.test", "*.example.test"));
+}
+
+/// `normalize_server_name` accepts an IP literal because an HTTP virtual host
+/// may be addressed by one. A certificate cannot be: it is chosen through SNI,
+/// which RFC 6066 confines to DNS names. `normalize_tls_server_name` is the rule
+/// configuration validation, assignment snapshot validation and the certificate
+/// index all use, so none of them can accept a name another cannot load.
+#[test]
+fn a_tls_server_name_is_a_dns_name_and_never_an_ip_literal() {
+    use sdkwork_webserver_core::{normalize_server_name, normalize_tls_server_name};
+    assert_eq!(
+        normalize_tls_server_name("WWW.Example.COM.").as_deref(),
+        Some("www.example.com")
+    );
+    assert_eq!(
+        normalize_tls_server_name("*.example.com").as_deref(),
+        Some("*.example.com")
+    );
+    assert_eq!(normalize_tls_server_name("192.0.2.10"), None);
+    assert_eq!(normalize_tls_server_name("2001:db8::1"), None);
+    // The looser normalization is what makes the narrower one worth naming.
+    assert_eq!(
+        normalize_server_name("192.0.2.10").as_deref(),
+        Some("192.0.2.10")
+    );
+    for malformed in ["_dmarc.example.com", "-bad.example.com", "a..b.example.com"] {
+        assert_eq!(normalize_tls_server_name(malformed), None, "{malformed}");
+    }
+}

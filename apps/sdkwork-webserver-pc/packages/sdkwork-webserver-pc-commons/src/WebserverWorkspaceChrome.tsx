@@ -189,22 +189,12 @@ function ModuleIcon({ moduleId }: { moduleId: string }): ReactNode {
 function ResourceIcon({ resource }: { resource: WebserverResourceKey }): ReactNode {
   const iconProps = { "aria-hidden": true, size: 17 } as const;
   switch (resource) {
-    case "applications":
+    case "apps":
       return <AppWindow {...iconProps} />;
-    case "sites":
-      return <Globe2 {...iconProps} />;
-    case "configuration":
-      return <Settings2 {...iconProps} />;
     case "domains":
       return <Globe2 {...iconProps} />;
     case "certificates":
       return <ShieldCheck {...iconProps} />;
-    case "deployments":
-    case "application-deployments":
-      return <Rocket {...iconProps} />;
-    case "source-versions":
-    case "application-source-versions":
-      return <Layers3 {...iconProps} />;
     case "plugins":
       return <Puzzle {...iconProps} />;
     case "skills":

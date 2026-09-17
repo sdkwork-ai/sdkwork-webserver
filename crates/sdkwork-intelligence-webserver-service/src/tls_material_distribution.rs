@@ -155,6 +155,15 @@ fn publish_node_tls_material_blocking(
     assignments: &[TlsCertificateAssignmentMaterial],
 ) -> WebServiceResult<()> {
     let node_uuid = config.node_uuid.as_deref().expect("enabled config");
+    // Each version uuid names the directory its material is written to, and it
+    // arrives from a database column with no shape constraint. Validating here
+    // rather than only inside `build_snapshot` matters because that check runs
+    // after the projection has already written: an unsafe uuid would already
+    // have chosen its own write target. Nothing is created before this pass,
+    // not even the material root or the distribution lock.
+    for assignment in assignments {
+        validate_version_uuid(&assignment.version_uuid)?;
+    }
     let _lock = DistributionLock::acquire(&config.material_root)?;
     create_private_directory(&config.material_root).map_err(|error| {
         WebServiceError::Internal(format!(
@@ -186,6 +195,29 @@ fn publish_node_tls_material_blocking(
     Ok(())
 }
 
+/// Keeps one version uuid a single ordinary path component.
+///
+/// The data plane resolves the same identifier out of `file:<uuid>` and applies
+/// the same rule, so the two sides agree on which references are usable. Dot
+/// segments are rejected explicitly: `.` and `..` consist solely of characters
+/// the allowed set accepts, and `..` would escape the material root while
+/// looking like an opaque id.
+fn validate_version_uuid(version_uuid: &str) -> WebServiceResult<()> {
+    if version_uuid.is_empty()
+        || version_uuid.len() > 128
+        || version_uuid == "."
+        || version_uuid == ".."
+        || !version_uuid
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+    {
+        return Err(WebServiceError::Internal(
+            "TLS assignment version uuid is not a safe opaque identifier".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 fn build_snapshot(
     node_uuid: &str,
     alpn: &[String],
@@ -199,17 +231,7 @@ fn build_snapshot(
     }
     let mut assignments = Vec::with_capacity(materials.len());
     for material in &materials {
-        if material.version_uuid.is_empty()
-            || material.version_uuid.len() > 128
-            || !material
-                .version_uuid
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
-        {
-            return Err(WebServiceError::Internal(
-                "TLS assignment version uuid is not a safe opaque identifier".to_string(),
-            ));
-        }
+        validate_version_uuid(&material.version_uuid)?;
         let mut server_names = material
             .hostnames
             .iter()
@@ -438,19 +460,33 @@ fn write_snapshot_atomically(snapshot_file: &Path, serialized: &[u8]) -> WebServ
     Ok(())
 }
 
+/// Makes an atomic rename durable where the platform can express it.
+///
+/// The helper serves both the versioned material directory and the snapshot
+/// directory, so it names neither. Windows cannot open a directory as a file
+/// handle, and there the rename is left to the filesystem's own metadata
+/// ordering; every other atomic writer in this workspace makes the same
+/// trade-off, and the alternative - refusing to distribute TLS material at all
+/// on Windows - would fail a platform the data plane itself supports.
+#[cfg(unix)]
 fn sync_directory(directory: &Path) -> WebServiceResult<()> {
     let handle = fs::File::open(directory).map_err(|error| {
         WebServiceError::Internal(format!(
-            "open TLS snapshot directory {}: {error}",
+            "open TLS material directory {}: {error}",
             directory.display()
         ))
     })?;
     handle.sync_all().map_err(|error| {
         WebServiceError::Internal(format!(
-            "sync TLS snapshot directory {}: {error}",
+            "sync TLS material directory {}: {error}",
             directory.display()
         ))
     })
+}
+
+#[cfg(not(unix))]
+fn sync_directory(_directory: &Path) -> WebServiceResult<()> {
+    Ok(())
 }
 
 /// Grace period before an unreferenced versioned material directory is
@@ -718,6 +754,106 @@ mod tests {
     #[test]
     fn snapshot_rejects_empty_assignments() {
         assert!(build_snapshot("node-1", &["h2".to_string()], 1, vec![]).is_err());
+    }
+
+    /// One writable directory per test, under the OS temporary root.
+    fn scratch_directory() -> PathBuf {
+        let directory =
+            std::env::temp_dir().join(format!("sdkwork-tls-distribution-{}", uuid_v4()));
+        fs::create_dir_all(&directory).expect("create scratch directory");
+        directory
+    }
+
+    fn scratch_config(directory: &Path) -> TlsMaterialDistributionConfig {
+        let material_root = directory.join("tls-materials");
+        TlsMaterialDistributionConfig {
+            snapshot_file: material_root.join("tls-runtime.json"),
+            material_root,
+            node_uuid: Some("node-1".to_string()),
+            alpn: vec!["h2".to_string()],
+        }
+    }
+
+    fn read_snapshot(config: &TlsMaterialDistributionConfig) -> TlsAssignmentSnapshot {
+        serde_json::from_slice(&fs::read(&config.snapshot_file).expect("read snapshot"))
+            .expect("parse snapshot")
+    }
+
+    /// The snapshot-shape tests are pure functions; this is the only test that
+    /// reaches staging, the atomic rename, and the durability sync.
+    #[test]
+    fn publication_writes_material_and_snapshot_and_leaves_no_staging_file() {
+        let directory = scratch_directory();
+        let config = scratch_config(&directory);
+        let assignments = [material("version-a", &["www.example.com", "example.com"])];
+
+        publish_node_tls_material_blocking(&config, &assignments).expect("publish");
+        let snapshot = read_snapshot(&config);
+        assert_eq!(snapshot.node_uuid, "node-1");
+        assert_eq!(snapshot.assignments.len(), 1);
+        assert_eq!(snapshot.assignments[0].material_reference, "file:version-a");
+        assert_eq!(
+            snapshot.assignments[0].server_names,
+            vec!["example.com", "www.example.com"]
+        );
+        let version_directory = config.material_root.join("version-a");
+        assert!(version_directory.join("fullchain.pem").is_file());
+        assert!(version_directory.join("privkey.pem").is_file());
+
+        // A second publication of the same assignment set succeeds and rewrites
+        // the snapshot. The generation advances even though the material did not
+        // change, because the digest covers the generation and a freshly
+        // generated assignment uuid, so this test records the rewrite rather
+        // than an idempotence the producer does not implement.
+        publish_node_tls_material_blocking(&config, &assignments).expect("republish");
+        assert!(read_snapshot(&config).generation > snapshot.generation);
+        assert_eq!(read_snapshot(&config).assignments.len(), 1);
+
+        for root in [&config.material_root, &version_directory] {
+            for entry in fs::read_dir(root).expect("list directory") {
+                let name = entry.expect("dir entry").file_name();
+                assert!(
+                    !name.to_string_lossy().contains(".tmp-"),
+                    "staging file left behind in {}",
+                    root.display()
+                );
+            }
+        }
+        let _ = fs::remove_dir_all(&directory);
+    }
+
+    /// A stored version uuid must not choose where its material is written.
+    #[test]
+    fn publication_refuses_a_version_uuid_that_escapes_the_material_root() {
+        let directory = scratch_directory();
+        let config = scratch_config(&directory);
+        let outside = directory.join("escaped");
+        for version_uuid in [
+            // An absolute path makes `Path::join` discard the material root.
+            outside.to_string_lossy().into_owned(),
+            // Dot segments survive the allowed character set.
+            "..".to_string(),
+            ".".to_string(),
+            // A separator is rejected by the character set.
+            "a/b".to_string(),
+        ] {
+            let mut assignment = material("version-a", &["www.example.com"]);
+            assignment.version_uuid = version_uuid.clone();
+            let error = publish_node_tls_material_blocking(&config, &[assignment])
+                .expect_err("an unsafe version uuid must be refused");
+            assert!(
+                matches!(error, WebServiceError::Internal(_)),
+                "unexpected error for {version_uuid}: {error:?}"
+            );
+        }
+        assert!(
+            !outside.exists(),
+            "an unsafe version uuid must not create {}",
+            outside.display()
+        );
+        assert!(!config.material_root.join("a").exists());
+        assert!(!config.material_root.exists());
+        let _ = fs::remove_dir_all(&directory);
     }
 
     #[test]

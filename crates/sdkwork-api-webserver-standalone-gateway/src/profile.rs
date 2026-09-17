@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use sdkwork_web_bootstrap::{ApiAssemblyContribution, ApiModuleRegistry, ComposedApiAssembly};
+use sdkwork_web_bootstrap::{ApiModuleRegistry, ComposedApiAssembly, WebModule};
 use sdkwork_web_core::{AuditEmitter, SecurityEventEmitter};
 use sdkwork_webserver_contract::MachineCredentialAuthenticator;
 
@@ -55,46 +55,55 @@ pub(crate) async fn assemble_standalone_profile(
     .map_err(|error| {
         StandaloneProfileError::assembly_unavailable("sdkwork-webserver", error.to_string())
     })?;
-    let federated_iam_manifests =
-        crate::iam_module_bootstrap::federated_iam_module_manifest_paths()
-            .map_err(|error| StandaloneProfileError::assembly_unavailable("sdkwork-iam", error))?;
-    let iam = sdkwork_api_iam_assembly::assemble_app_api_contribution_with_module_manifests(
-        &federated_iam_manifests,
-    )
-    .await
-    .map_err(|error| StandaloneProfileError::assembly_unavailable("sdkwork-iam", error))?;
-    // Drive App API (`/app/v3/api/drive/*`). The drive **backend** admin
-    // storage surface (`/backend/v3/api/drive/storage/*`) is a separate
-    // contribution composed by `dependency_assembly`, because the drive
-    // assembly crate is outside the webserver assembly crate graph.
-    let drive_app_api = sdkwork_api_drive_assembly::assemble_app_api_contribution()
-        .await
-        .map_err(|error| StandaloneProfileError::assembly_unavailable("sdkwork-drive", error))?;
-    let dependency_contributions =
-        crate::dependency_assembly::optional_same_origin_dependency_contributions().await?;
+    // Drive (`/app/v3/api/drive/*` + `/backend/v3/api/drive/storage/*`) and IAM
+    // (`/app/v3/api/iam/*` + `/backend/v3/api/iam/*` + the IAM open surface) are
+    // each exactly one contributed module: both owners ship their surfaces as
+    // one already-composed contribution, because the drive and IAM assembly
+    // crates are outside the webserver assembly crate graph (API_ASSEMBLY_SPEC
+    // §4.1.1). Fetching either owner surface-by-surface here would drop the
+    // second surface through the registry's duplicate-owner tolerance.
+    let dependency_modules = crate::dependency_assembly::same_origin_dependency_modules().await?;
     let machine_authenticator = web.machine_credential_authenticator.clone();
     let audit_emitter = web.audit_emitter.clone();
     let security_event_emitter = web.security_event_emitter.clone();
 
-    let mut contributions = vec![web.into_contribution(), iam, drive_app_api];
-    contributions.extend(dependency_contributions);
+    // One module per served owner (API_ASSEMBLY_SPEC §4.1.1). Registering the
+    // same owner as two modules makes the registry drop the second one and
+    // serve a partial route surface.
+    let mut modules = vec![WebModule::from_contribution(web.into_contribution())];
+    modules.extend(dependency_modules);
 
-    compose_owner_contributions(
-        contributions,
+    compose_owner_modules(
+        modules,
         machine_authenticator,
         audit_emitter,
         security_event_emitter,
     )
 }
 
-fn compose_owner_contributions(
-    contributions: Vec<ApiAssemblyContribution>,
+fn compose_owner_modules(
+    modules: Vec<WebModule>,
     machine_authenticator: Arc<dyn MachineCredentialAuthenticator>,
     audit_emitter: Arc<dyn AuditEmitter>,
     security_event_emitter: Arc<dyn SecurityEventEmitter>,
 ) -> Result<StandaloneApiProfile, StandaloneProfileError> {
     let mut module_registry = ApiModuleRegistry::new();
-    module_registry.add_modules(contributions);
+    module_registry.add_modules(modules);
+    // `ApiModuleRegistry` ignores a module owner that is registered twice
+    // instead of failing composition. That silently removes the second
+    // registration's routes and reaches the operator as a 404 on a surface this
+    // gateway's component contract declares as served, which API_ASSEMBLY_SPEC
+    // §6.1 forbids. Fail closed: a duplicate owner is a startup error, never a
+    // partial route surface.
+    let ignored_duplicates: Vec<&'static str> = module_registry.ignored_duplicates().to_vec();
+    if !ignored_duplicates.is_empty() {
+        return Err(StandaloneProfileError::InvalidComposition {
+            detail: format!(
+                "module owners registered more than once: {}; each served owner must install exactly one module (API_ASSEMBLY_SPEC §4.1.1)",
+                ignored_duplicates.join(", ")
+            ),
+        });
+    }
     let assembly = module_registry
         .try_compose("SDKWork Web Server Standalone API")
         .map_err(|detail| StandaloneProfileError::InvalidComposition { detail })?;
@@ -111,7 +120,9 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use axum::Router;
-    use sdkwork_web_bootstrap::{AlwaysReady, ReadinessCheck, ReadinessFuture};
+    use sdkwork_web_bootstrap::{
+        AlwaysReady, ApiAssemblyContribution, ReadinessCheck, ReadinessFuture,
+    };
     use sdkwork_web_contract::{HttpMethod, HttpRoute};
     use sdkwork_web_core::{
         DomainContextInjector, HttpRouteManifest, NoOpAuditEmitter, NoOpSecurityEventEmitter,
@@ -165,15 +176,99 @@ mod tests {
         .expect("valid test contribution")
     }
 
-    fn compose_test_contributions(
-        contributions: Vec<ApiAssemblyContribution>,
+    fn one_module_per_contribution(contributions: Vec<ApiAssemblyContribution>) -> Vec<WebModule> {
+        contributions
+            .into_iter()
+            .map(WebModule::from_contribution)
+            .collect()
+    }
+
+    fn compose_test_modules(
+        modules: Vec<WebModule>,
     ) -> Result<StandaloneApiProfile, StandaloneProfileError> {
-        compose_owner_contributions(
-            contributions,
+        compose_owner_modules(
+            modules,
             Arc::new(NoopMachineAuthenticator),
             Arc::new(NoOpAuditEmitter),
             Arc::new(NoOpSecurityEventEmitter),
         )
+    }
+
+    fn compose_test_contributions(
+        contributions: Vec<ApiAssemblyContribution>,
+    ) -> Result<StandaloneApiProfile, StandaloneProfileError> {
+        compose_test_modules(one_module_per_contribution(contributions))
+    }
+
+    #[test]
+    fn one_owner_split_across_two_contributions_fails_closed() {
+        // API_ASSEMBLY_SPEC §4.1.1 keeps one indivisible contribution per
+        // served owner. An application's app surface and backend surface must
+        // therefore arrive already composed as one contribution; splitting one
+        // owner across two contributions must fail instead of mounting a
+        // partial route surface.
+        let app_surface = contribution(
+            "sdkwork-drive",
+            "/app/v3/api/drive/files",
+            "drive.files.list",
+            "drive.files.read",
+            Arc::new(AlwaysReady),
+        );
+        let backend_surface = contribution(
+            "sdkwork-drive",
+            "/backend/v3/api/drive/storage/provider-kinds",
+            "drive.storage.providerKinds.list",
+            "drive.storage.read",
+            Arc::new(AlwaysReady),
+        );
+        let module = WebModule::new("sdkwork-drive", "SDKWork Drive API")
+            .with_surface(app_surface)
+            .with_surface(backend_surface);
+
+        let error = compose_test_modules(vec![module])
+            .err()
+            .expect("one owner split across two contributions must fail closed");
+        assert!(
+            error.to_string().contains("sdkwork-drive"),
+            "the offending owner must be named: {error}"
+        );
+        assert!(
+            error.to_string().contains("selected more than once"),
+            "the failure must name the duplicate-owner cause: {error}"
+        );
+    }
+
+    #[test]
+    fn duplicate_module_owner_fails_closed_instead_of_dropping_routes() {
+        // A second module for an owner the registry already mounted would have
+        // its routes dropped silently, leaving a partial route surface that
+        // returns 404 for a declared dependency (API_ASSEMBLY_SPEC §6.1).
+        let app_module = WebModule::from_contribution(contribution(
+            "sdkwork-drive",
+            "/app/v3/api/drive/files",
+            "drive.files.list",
+            "drive.files.read",
+            Arc::new(AlwaysReady),
+        ));
+        let storage_module = WebModule::from_contribution(contribution(
+            "sdkwork-drive",
+            "/backend/v3/api/drive/storage/provider-kinds",
+            "drive.storage.providerKinds.list",
+            "drive.storage.read",
+            Arc::new(AlwaysReady),
+        ));
+
+        let error = compose_test_modules(vec![app_module, storage_module])
+            .err()
+            .expect("a duplicate module owner must fail closed");
+        assert!(
+            error.to_string().contains("sdkwork-drive"),
+            "the duplicate owner must be named: {error}"
+        );
+        assert!(
+            error.to_string().contains("registered more than once"),
+            "the failure must name the duplicate-registration cause: {error}"
+        );
     }
 
     #[test]

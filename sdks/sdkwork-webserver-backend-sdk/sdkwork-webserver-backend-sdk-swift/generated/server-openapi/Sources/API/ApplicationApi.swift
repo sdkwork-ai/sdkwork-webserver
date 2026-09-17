@@ -8,14 +8,14 @@ public class ApplicationApi {
     }
 
     /// List managed applications
-    public func applicationsList(page: Int? = nil, pageSize: Int? = nil, applicationType: String? = nil, siteType: Int? = nil, status: Int? = nil, keyword: String? = nil) async throws -> ApplicationsListResponse? {
+    public func applicationsList(page: Int? = nil, pageSize: Int? = nil, applicationType: String? = nil, siteType: Int? = nil, status: Int? = nil, q: String? = nil) async throws -> ApplicationsListResponse? {
         let query = buildQueryString([
             QueryParameterSpec(name: "page", value: page, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "page_size", value: pageSize, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "application_type", value: applicationType, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "site_type", value: siteType, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "status", value: status, style: "form", explode: true, allowReserved: false, contentType: nil),
-            QueryParameterSpec(name: "keyword", value: keyword, style: "form", explode: true, allowReserved: false, contentType: nil)
+            QueryParameterSpec(name: "q", value: q, style: "form", explode: true, allowReserved: false, contentType: nil)
         ])
         return try await client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/applications"), query), responseType: ApplicationsListResponse.self)
     }

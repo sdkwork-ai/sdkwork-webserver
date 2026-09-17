@@ -42,13 +42,13 @@ export interface ServerFilesExplorerSurfaceProps {
 }
 
 const PROJECT_TYPE_BADGE: Record<ServerProjectType, string> = {
-  "h5-app": "bg-sky-100 text-sky-800",
-  "pc-app": "bg-indigo-100 text-indigo-800",
-  "flutter-app": "bg-teal-100 text-teal-800",
-  "rust-backend": "bg-orange-100 text-orange-800",
-  "node-backend": "bg-emerald-100 text-emerald-800",
-  "sdkwork-workspace": "bg-violet-100 text-violet-800",
-  generic: "bg-slate-100 text-slate-600",
+  "h5-app": "bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-300",
+  "pc-app": "bg-indigo-100 text-indigo-800 dark:bg-indigo-500/15 dark:text-indigo-300",
+  "flutter-app": "bg-teal-100 text-teal-800 dark:bg-teal-500/15 dark:text-teal-300",
+  "rust-backend": "bg-orange-100 text-orange-800 dark:bg-orange-500/15 dark:text-orange-300",
+  "node-backend": "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300",
+  "sdkwork-workspace": "bg-violet-100 text-violet-800 dark:bg-violet-500/15 dark:text-violet-300",
+  generic: "bg-slate-100 text-slate-600 dark:bg-slate-500/15 dark:text-slate-300",
 };
 
 const TEXT_FILE_EXTENSIONS = new Set([
@@ -245,19 +245,19 @@ export function ServerFilesExplorerSurface({
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">Server Files Explorer</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Server Files Explorer</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             Browse, classify, and operate project directories on deployment nodes.
           </p>
         </div>
         <div className="flex items-center gap-2">
           {!canWrite && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+            <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 dark:bg-amber-400/10 dark:text-amber-300">
               <TriangleAlert size={13} /> Read-only access
             </span>
           )}
           <button
-            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             disabled={loading}
             onClick={() => {
               setCurrentPath((path) => path);
@@ -271,11 +271,11 @@ export function ServerFilesExplorerSurface({
       </div>
 
       {/* Node selector */}
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-3">
-        <Server className="text-slate-400" size={16} />
-        <span className="text-sm font-medium text-slate-600">Node</span>
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+        <Server className="text-slate-400 dark:text-slate-500" size={16} />
+        <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Node</span>
         <select
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-800"
+          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
           value={selectedNodeId}
           onChange={(event) => {
             const next = nodes.find((node) => node.id === event.target.value);
@@ -293,22 +293,22 @@ export function ServerFilesExplorerSurface({
           ))}
         </select>
         {selectedNode && (
-          <span className="ml-auto inline-flex items-center gap-2 text-xs text-slate-500">
+          <span className="ml-auto inline-flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             <span className="inline-flex items-center gap-1">
               <span
                 className={`inline-block h-2 w-2 rounded-full ${
-                  selectedNode.status === "online" ? "bg-emerald-500" : "bg-slate-300"
+                  selectedNode.status === "online" ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"
                 }`}
               />
               {selectedNode.status}
             </span>
-            <code className="rounded bg-slate-100 px-1.5 py-0.5">{selectedNode.filesystemRoot}</code>
+            <code className="rounded bg-slate-100 px-1.5 py-0.5 dark:bg-slate-800 dark:text-slate-200">{selectedNode.filesystemRoot}</code>
           </span>
         )}
       </div>
 
       {error && (
-        <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
           <TriangleAlert size={16} className="mt-0.5 shrink-0" />
           <span>{error}</span>
           <button className="ml-auto" onClick={() => setError("")} type="button" aria-label="Dismiss">
@@ -327,9 +327,9 @@ export function ServerFilesExplorerSurface({
       />
 
       {/* Directory listing */}
-      <div className="flex-1 overflow-auto rounded-lg border border-slate-200 bg-white">
+      <div className="flex-1 overflow-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         {loading ? (
-          <div className="flex items-center justify-center gap-2 p-10 text-sm text-slate-500">
+          <div className="flex items-center justify-center gap-2 p-10 text-sm text-slate-500 dark:text-slate-400">
             <Loader2 className="animate-spin" size={16} /> Loading directory...
           </div>
         ) : listing ? (
@@ -341,7 +341,7 @@ export function ServerFilesExplorerSurface({
             canWrite={canWrite}
           />
         ) : (
-          <div className="p-10 text-center text-sm text-slate-400">No directory selected.</div>
+          <div className="p-10 text-center text-sm text-slate-400 dark:text-slate-500">No directory selected.</div>
         )}
       </div>
 
@@ -413,10 +413,10 @@ function BreadcrumbTrail({
     path: `/${segments.slice(0, index + 1).join("/")}`,
   }));
   return (
-    <div className="flex items-center gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+    <div className="flex items-center gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-900">
       {canGoUp && (
         <button
-          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-slate-500 hover:bg-slate-100"
+          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
           onClick={onUp}
           title="Up one level"
           type="button"
@@ -425,7 +425,7 @@ function BreadcrumbTrail({
         </button>
       )}
       <button
-        className="font-medium text-slate-600 hover:text-blue-600"
+        className="font-medium text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400"
         onClick={() => onNavigate("/")}
         type="button"
       >
@@ -433,9 +433,9 @@ function BreadcrumbTrail({
       </button>
       {crumbs.map((crumb, index) => (
         <span className="inline-flex items-center" key={crumb.path}>
-          <ChevronRight size={14} className="text-slate-300" />
+          <ChevronRight size={14} className="text-slate-300 dark:text-slate-600" />
           <button
-            className="rounded px-1.5 py-0.5 text-slate-600 hover:bg-slate-100 hover:text-blue-600"
+            className="rounded px-1.5 py-0.5 text-slate-600 hover:bg-slate-100 hover:text-blue-600 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-blue-400"
             onClick={() => onNavigate(crumb.path)}
             type="button"
           >
@@ -468,7 +468,7 @@ function EntryTable({
   return (
     <table className="w-full border-collapse text-sm">
       <thead>
-        <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-400">
           <th className="px-3 py-2">Name</th>
           <th className="px-3 py-2">Kind</th>
           <th className="px-3 py-2">Project</th>
@@ -479,12 +479,12 @@ function EntryTable({
       <tbody>
         {sorted.map((entry) => (
           <tr
-            className="border-b border-slate-100 hover:bg-slate-50"
+            className="border-b border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
             key={entry.path}
           >
             <td className="px-3 py-2">
               <button
-                className="inline-flex items-center gap-2 font-medium text-slate-700 hover:text-blue-600"
+                className="inline-flex items-center gap-2 font-medium text-slate-700 hover:text-blue-600 dark:text-slate-200 dark:hover:text-blue-400"
                 onClick={() => onOpen(entry)}
                 title={entry.path}
                 type="button"
@@ -497,7 +497,7 @@ function EntryTable({
                 {entry.name}
               </button>
             </td>
-            <td className="px-3 py-2 text-xs text-slate-400">{entry.kind}</td>
+            <td className="px-3 py-2 text-xs text-slate-400 dark:text-slate-500">{entry.kind}</td>
             <td className="px-3 py-2">
               {entry.projectType && entry.projectType !== "generic" ? (
                 <span
@@ -507,14 +507,14 @@ function EntryTable({
                   {PROJECT_TYPE_LABEL[entry.projectType]}
                 </span>
               ) : (
-                <span className="text-xs text-slate-300">—</span>
+                <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
               )}
             </td>
-            <td className="px-3 py-2 text-xs text-slate-500">{formatBytes(entry.size)}</td>
+            <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">{formatBytes(entry.size)}</td>
             <td className="px-3 py-2 text-right">
               {entry.kind === "directory" ? (
                 <button
-                  className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                  className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
                   disabled={operationsLoading}
                   onClick={() => void onInspectOperations(entry)}
                   type="button"
@@ -527,7 +527,7 @@ function EntryTable({
         ))}
         {sorted.length === 0 && (
           <tr>
-            <td className="px-3 py-8 text-center text-slate-400" colSpan={5}>
+            <td className="px-3 py-8 text-center text-slate-400 dark:text-slate-500" colSpan={5}>
               Empty directory.
             </td>
           </tr>
@@ -543,8 +543,8 @@ function FileIcon({ name }: { name: string }) {
   if (lower.endsWith(".ts") || lower.endsWith(".tsx") || lower.endsWith(".js") || lower.endsWith(".jsx")) {
     return <FileCode2 className="text-sky-500" size={16} />;
   }
-  if (lower.endsWith(".md")) return <FileText className="text-slate-400" size={16} />;
-  return <File className="text-slate-300" size={16} />;
+  if (lower.endsWith(".md")) return <FileText className="text-slate-400 dark:text-slate-500" size={16} />;
+  return <File className="text-slate-300 dark:text-slate-600" size={16} />;
 }
 
 function FileInspector({
@@ -562,19 +562,19 @@ function FileInspector({
 }) {
   const previewable = isTextFile(entry.name);
   return (
-    <section className="rounded-lg border border-slate-200 bg-white">
-      <header className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
-        <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
-          <FileCode2 size={15} className="text-slate-400" />
+    <section className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <header className="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-800">
+        <div className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+          <FileCode2 size={15} className="text-slate-400 dark:text-slate-500" />
           <span className="max-w-64 truncate" title={entry.path}>
             {entry.path}
           </span>
-          <span className="text-xs font-normal text-slate-400">
+          <span className="text-xs font-normal text-slate-400 dark:text-slate-500">
             {entry.size !== undefined ? formatBytes(entry.size) : ""}
           </span>
         </div>
         <button
-          className="rounded p-1 text-slate-400 hover:bg-slate-100"
+          className="rounded p-1 text-slate-400 hover:bg-slate-100 dark:text-slate-500 dark:hover:bg-slate-800"
           onClick={onClose}
           type="button"
           aria-label="Close file"
@@ -584,22 +584,22 @@ function FileInspector({
       </header>
       <div className="p-3">
         {!previewable ? (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             This file type is not previewable in the browser. Download or operate on it via the
             project actions.
           </p>
         ) : loading ? (
-          <div className="flex items-center gap-2 text-sm text-slate-500">
+          <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <Loader2 className="animate-spin" size={15} /> Loading file...
           </div>
         ) : error ? (
-          <p className="text-sm text-red-600">{error}</p>
+          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
         ) : content ? (
-          <pre className="max-h-80 overflow-auto rounded-md bg-slate-950 p-3 text-xs leading-relaxed text-slate-100">
+          <pre className="max-h-80 overflow-auto rounded-md bg-slate-950 p-3 text-xs leading-relaxed text-slate-100 dark:bg-slate-950/70">
             {content.content.length > 40_000 ? `${content.content.slice(0, 40_000)}\n… truncated` : content.content}
           </pre>
         ) : (
-          <p className="text-sm text-slate-400">No content.</p>
+          <p className="text-sm text-slate-400 dark:text-slate-500">No content.</p>
         )}
       </div>
     </section>
@@ -633,10 +633,10 @@ function OperationsPanel({
   onRun(operation: ServerProjectOperation): void;
 }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white">
-      <header className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
-        <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
-          <Activity size={15} className="text-slate-400" />
+    <section className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <header className="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-800">
+        <div className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+          <Activity size={15} className="text-slate-400 dark:text-slate-500" />
           <span className="max-w-64 truncate" title={operations.path}>
             {operations.path}
           </span>
@@ -648,7 +648,7 @@ function OperationsPanel({
           </span>
         </div>
         <button
-          className="rounded p-1 text-slate-400 hover:bg-slate-100"
+          className="rounded p-1 text-slate-400 hover:bg-slate-100 dark:text-slate-500 dark:hover:bg-slate-800"
           onClick={onClose}
           type="button"
           aria-label="Close operations"
@@ -658,12 +658,12 @@ function OperationsPanel({
       </header>
       <div className="p-3">
         {!canWrite ? (
-          <p className="text-sm text-slate-500">
-            You need the <code className="text-slate-700">web.servers.files.write</code> permission
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            You need the <code className="text-slate-700 dark:text-slate-200">web.servers.files.write</code> permission
             to run project operations.
           </p>
         ) : operations.operations.length === 0 ? (
-          <p className="text-sm text-slate-400">No operations are available for this project type.</p>
+          <p className="text-sm text-slate-400 dark:text-slate-500">No operations are available for this project type.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {operations.operations.map((operation) => {
@@ -673,8 +673,8 @@ function OperationsPanel({
                 <button
                   className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50 ${
                     operation.dangerous
-                      ? "border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
-                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                      ? "border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/20"
+                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                   }`}
                   disabled={Boolean(runningId)}
                   key={operation.id}
@@ -689,9 +689,9 @@ function OperationsPanel({
             })}
           </div>
         )}
-        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+        {error && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
         {output && (
-          <pre className="mt-3 max-h-64 overflow-auto rounded-md bg-slate-950 p-3 text-xs leading-relaxed text-slate-100">
+          <pre className="mt-3 max-h-64 overflow-auto rounded-md bg-slate-950 p-3 text-xs leading-relaxed text-slate-100 dark:bg-slate-950/70">
             {output}
           </pre>
         )}

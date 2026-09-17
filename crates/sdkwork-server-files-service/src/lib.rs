@@ -29,11 +29,13 @@ pub use operations::{
     ServerProjectOperations,
 };
 pub use path_security::{
-    is_sensitive_file_name, resolve_contained_path, validate_allowed_root, PathContainmentError,
+    display_path, is_sensitive_file_name, resolve_contained_path, validate_allowed_root,
+    PathContainmentError,
 };
 pub use project::{classify_directory, classify_entry_names, ProjectClassification, ProjectType};
 pub use service::{
-    BrowseDirectoryError, ReadFileError, ServerFilesService, ServerFilesServiceConfig,
+    BrowseDirectoryError, DirectoryListing, EntryKind, FileContent, ReadFileError, ServerEntry,
+    ServerFilesService, ServerFilesServiceConfig,
 };
 pub use startup_clone::{
     ensure_space_repository, SpaceCloneError, SDKWORK_SPACE_DIRECTORY, SDKWORK_SPACE_REPOSITORY,

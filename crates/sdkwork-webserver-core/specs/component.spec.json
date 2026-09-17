@@ -39,8 +39,7 @@
       {"name": "websiteRuntimeDescriptorCompiler", "export": "website_runtime"},
       {"name": "websiteRuntimeRouteIndex", "export": "website_runtime"},
       {"name": "websiteRuntimeSetRegistry", "export": "website_runtime"},
-      {"name": "tlsAssignmentSnapshotCompiler", "export": "tls_runtime"},
-      {"name": "tlsSniAssignmentIndex", "export": "tls_runtime"}
+      {"name": "tlsAssignmentSnapshotCompiler", "export": "tls_runtime"}
     ],
     "requiredPorts": [],
     "runtimeEntrypoints": [],

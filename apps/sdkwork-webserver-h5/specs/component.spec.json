@@ -1,12 +1,151 @@
 {
   "schemaVersion": 1,
-  "kind": "sdkwork.component",
-  "id": "sdkwork-webserver-h5",
-  "name": "SDKWork Webserver H5",
-  "surface": "h5",
-  "architecture": "react-h5",
-  "ownership": {
-    "module": "sdkwork-webserver",
-    "applicationRoot": "apps/sdkwork-webserver-h5"
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "@sdkwork/webserver-h5",
+    "displayName": "SDKWork Webserver H5",
+    "version": "0.1.0",
+    "type": "application",
+    "root": "sdkwork-webserver/apps/sdkwork-webserver-h5",
+    "domain": "infrastructure",
+    "capability": "webserver",
+    "surface": "h5",
+    "languages": [
+      "typescript"
+    ],
+    "generated": false,
+    "private": true,
+    "status": "active",
+    "manifests": [
+      "package.json",
+      "sdkwork.app.config.json",
+      "specs/component.spec.json"
+    ]
+  },
+  "canonicalSpecs": [
+    {
+      "file": "SOUL.md",
+      "path": "../../../sdkwork-specs/SOUL.md",
+      "purpose": "SDKWork execution principles."
+    },
+    {
+      "file": "CODE_STYLE_SPEC.md",
+      "path": "../../../sdkwork-specs/CODE_STYLE_SPEC.md",
+      "purpose": "Build source integrity and authored source boundaries."
+    },
+    {
+      "file": "NAMING_SPEC.md",
+      "path": "../../../sdkwork-specs/NAMING_SPEC.md",
+      "purpose": "Canonical application and package naming."
+    },
+    {
+      "file": "TYPESCRIPT_CODE_SPEC.md",
+      "path": "../../../sdkwork-specs/TYPESCRIPT_CODE_SPEC.md",
+      "purpose": "TypeScript package and build runner contracts."
+    },
+    {
+      "file": "PNPM_SCRIPT_SPEC.md",
+      "path": "../../../sdkwork-specs/PNPM_SCRIPT_SPEC.md",
+      "purpose": "Delegated app-surface pnpm command contracts."
+    },
+    {
+      "file": "APP_H5_ARCHITECTURE_SPEC.md",
+      "path": "../../../sdkwork-specs/APP_H5_ARCHITECTURE_SPEC.md",
+      "purpose": "H5 package taxonomy and root responsibilities."
+    },
+    {
+      "file": "APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "path": "../../../sdkwork-specs/APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "purpose": "Cross-client capability alignment."
+    },
+    {
+      "file": "APP_MOBILE_REACT_UI_SPEC.md",
+      "path": "../../../sdkwork-specs/APP_MOBILE_REACT_UI_SPEC.md",
+      "purpose": "React mobile UI architecture."
+    },
+    {
+      "file": "APP_SDK_INTEGRATION_SPEC.md",
+      "path": "../../../sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md",
+      "purpose": "SDK and IAM composition."
+    },
+    {
+      "file": "I18N_SPEC.md",
+      "path": "../../../sdkwork-specs/I18N_SPEC.md",
+      "purpose": "Locale negotiation and authored fragment layout."
+    },
+    {
+      "file": "CONFIG_SPEC.md",
+      "path": "../../../sdkwork-specs/CONFIG_SPEC.md",
+      "purpose": "Runtime configuration."
+    },
+    {
+      "file": "SOURCE_CONFIG_SPEC.md",
+      "path": "../../../sdkwork-specs/SOURCE_CONFIG_SPEC.md",
+      "purpose": "Parent topology delegation and runtime materialization."
+    },
+    {
+      "file": "TEST_SPEC.md",
+      "path": "../../../sdkwork-specs/TEST_SPEC.md",
+      "purpose": "Verification."
+    }
+  ],
+  "contracts": {
+    "publicExports": [],
+    "runtimeEntrypoints": [
+      "src/main.tsx"
+    ],
+    "routeManifest": null,
+    "sdkClients": [
+      "SdkworkAppClient",
+      "SdkworkDriveAppClient",
+      "SdkworkDeployAppClient"
+    ],
+    "sdkDependencies": [
+      {
+        "workspace": "sdkwork-webserver-app-sdk",
+        "surface": "app-api",
+        "credentialMode": "authenticated-app-api"
+      },
+      {
+        "workspace": "sdkwork-drive-app-sdk",
+        "surface": "app-api",
+        "credentialMode": "authenticated-app-api"
+      },
+      {
+        "workspace": "sdkwork-deployments-app-sdk",
+        "surface": "app-api",
+        "credentialMode": "authenticated-app-api"
+      }
+    ],
+    "events": [],
+    "configKeys": [
+      "appApiBaseUrl",
+      "deployAppApiBaseUrl",
+      "driveAppApiBaseUrl",
+      "browserOriginMode",
+      "environment",
+      "deploymentProfile",
+      "profileId",
+      "supportedLocales",
+      "activeLocales",
+      "defaultLocale",
+      "fallbackLocale"
+    ]
+  },
+  "integration": {
+    "authority": "Root SDKWork specs remain authoritative.",
+    "sdkPolicy": "Bootstrap resolves the runtime configuration, creates one TokenManager, and lets h5-core build every generated client; feature packages receive clients by prop.",
+    "compositionPolicy": "The root owns routing, locale, and the message catalog; the shell owns navigation; feature packages own their screens."
+  },
+  "verification": {
+    "commands": [
+      "pnpm --dir apps/sdkwork-webserver-h5 check",
+      "node ../sdkwork-specs/tools/check-app-sdk-consumer-imports.mjs --workspace .",
+      "node ../sdkwork-specs/tools/check-source-config-standard.mjs --root apps/sdkwork-webserver-h5"
+    ]
+  },
+  "metadata": {
+    "managedBy": "sdkwork-webserver",
+    "standardVersion": "2026-09-17"
   }
 }

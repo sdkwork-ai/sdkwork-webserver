@@ -3,9 +3,12 @@
 //! The whole feature is only safe if a caller can never reach a file or
 //! directory outside the node's authorized root. This module enforces that:
 //!
-//! 1. The requested path is canonicalized (symlinks and `..` resolved).
-//! 2. The canonical path must lexically and physically start with the
-//!    canonical root, otherwise the request is rejected as a traversal.
+//! 1. The requested path is canonicalized (`..` collapsed, symlinks and short
+//!    names resolved).
+//! 2. The canonical path must start with the canonical root, otherwise the
+//!    request is rejected as a traversal. The canonical form is the sole
+//!    authority: a lexical comparison would reject alias spellings the
+//!    operating system itself accepts for an authorized directory.
 //! 3. The root itself is validated to be an absolute path (or explicit
 //!    virtual root such as `/` for the host gateway).
 //!
@@ -80,18 +83,18 @@ pub fn resolve_contained_path(
         root_reference.join(requested_path)
     };
 
-    // Collapse `.` and `..` lexically first so we can reject traversal without
-    // touching the disk (fast, deterministic, and safe even before the root
-    // directory exists).
+    // Collapse `.` and `..` lexically first so a path that climbs above the
+    // filesystem root is rejected without touching the disk, and so the
+    // remainder resolved below is a plain, traversal-free name sequence.
     candidate = lexically_normalize(&candidate).ok_or(PathContainmentError::InvalidPath)?;
 
-    if !path_within(&candidate, &root_reference, root_is_fs_root) {
-        return Err(PathContainmentError::EscapesRoot);
-    }
-
     // Canonicalize against the live filesystem to defeat symlink escapes and
-    // case/alias tricks. If the candidate doesn't exist yet, canonicalize the
-    // deepest existing ancestor and re-append the remainder lexically.
+    // every alias spelling the OS accepts for the same location: Windows
+    // short names (`CHARLE~1`), `\\?\` verbatim prefixes, and case
+    // differences. The canonical form is the sole authority for containment --
+    // an additional lexical comparison would reject a caller that spelled an
+    // authorized directory exactly the way the OS itself does, which is what
+    // stranded the explorer on the node's own root.
     let canonical =
         canonicalize_or_ancestor(&candidate).map_err(|_| PathContainmentError::Unresolvable)?;
 
@@ -140,16 +143,42 @@ fn lexically_normalize(path: &Path) -> Option<PathBuf> {
     Some(out)
 }
 
+/// Containment test for two canonical paths: every root component must be
+/// matched, in order, by the candidate, and a candidate shorter than the root
+/// is outside it.
 fn path_within(candidate: &Path, root: &Path, root_is_fs_root: bool) -> bool {
     if root_is_fs_root {
         // The root is `/` or a drive root; any absolute path is inside.
         return candidate.is_absolute();
     }
-    candidate
-        .components()
-        .zip(root.components())
-        .all(|(left, right)| left == right)
-        && candidate.components().count() >= root.components().count()
+    let mut candidate_components = candidate.components();
+    for root_component in root.components() {
+        match candidate_components.next() {
+            Some(candidate_component) if candidate_component == root_component => {}
+            _ => return false,
+        }
+    }
+    true
+}
+
+/// Render a path for the wire in the form an operator recognizes.
+///
+/// Canonicalization answers with the Windows verbatim prefix (`\\?\C:\deploy`),
+/// which is an internal spelling of the same location. The explorer displays
+/// and echoes these strings back, so transport the plain form; containment
+/// accepts either spelling.
+pub fn display_path(path: &Path) -> String {
+    let raw = path.to_string_lossy();
+    #[cfg(windows)]
+    {
+        if let Some(rest) = raw.strip_prefix(r"\\?\UNC\") {
+            return format!(r"\\{rest}");
+        }
+        if let Some(rest) = raw.strip_prefix(r"\\?\") {
+            return rest.to_owned();
+        }
+    }
+    raw.into_owned()
 }
 
 /// Canonicalize `path`, falling back to the deepest existing ancestor so that
@@ -281,6 +310,58 @@ mod tests {
         assert_eq!(
             resolve_contained_path(root, "link").unwrap_err(),
             PathContainmentError::EscapesRoot
+        );
+    }
+
+    /// The root a node advertises is spelled by the operator (or by the
+    /// deployment layout: `/opt/deploy`), while canonicalization answers with
+    /// the host's own spelling -- on Windows that includes verbatim prefixes
+    /// and expanded short names (`CHARLE~1` -> `Charlesluo`). Every spelling
+    /// the OS accepts for the node's own root must resolve, otherwise the
+    /// explorer cannot open the node it was handed.
+    #[test]
+    fn plain_and_canonical_spellings_of_the_root_both_resolve() {
+        let dir = tempdir().unwrap();
+        let plain = dir.path().to_string_lossy().into_owned();
+        let root = validate_allowed_root(&plain).unwrap();
+
+        assert_eq!(resolve_contained_path(&root, &plain).unwrap(), root);
+        assert_eq!(
+            resolve_contained_path(&root, &display_path(&root)).unwrap(),
+            root
+        );
+
+        std::fs::create_dir_all(dir.path().join("apps")).unwrap();
+        let child_plain = dir.path().join("apps").to_string_lossy().into_owned();
+        assert_eq!(
+            resolve_contained_path(&root, &child_plain).unwrap(),
+            resolve_contained_path(&root, "apps").unwrap()
+        );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn windows_paths_compare_case_insensitively() {
+        let dir = tempdir().unwrap();
+        let plain = dir.path().to_string_lossy().into_owned();
+        let root = validate_allowed_root(&plain).unwrap();
+
+        assert_eq!(
+            resolve_contained_path(&root, &plain.to_ascii_uppercase()).unwrap(),
+            root
+        );
+    }
+
+    #[test]
+    fn display_path_hides_the_internal_canonical_spelling() {
+        let dir = tempdir().unwrap();
+        let root = validate_allowed_root(dir.path().to_str().unwrap()).unwrap();
+        let shown = display_path(&root);
+
+        assert!(!shown.contains(r"\\?\"), "verbatim prefix leaked: {shown}");
+        assert_eq!(
+            std::fs::canonicalize(&shown).unwrap(),
+            std::fs::canonicalize(dir.path()).unwrap()
         );
     }
 }

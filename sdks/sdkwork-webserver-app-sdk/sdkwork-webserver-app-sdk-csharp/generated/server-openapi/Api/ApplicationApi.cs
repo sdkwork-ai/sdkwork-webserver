@@ -18,7 +18,7 @@ namespace SDKWork.WebserverAppSdk.Api
         /// <summary>
         /// 获取应用列表
         /// </summary>
-        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsListResponse?> ApplicationsListAsync(int? page = null, int? pageSize = null, int? status = null, string? applicationType = null, int? siteType = null, string? keyword = null)
+        public async Task<SDKWork.WebserverAppSdk.Models.ApplicationsListResponse?> ApplicationsListAsync(int? page = null, int? pageSize = null, int? status = null, string? applicationType = null, int? siteType = null, string? q = null)
         {
             var queryString = BuildQueryString(new[]
             {
@@ -27,7 +27,7 @@ namespace SDKWork.WebserverAppSdk.Api
                 new QueryParameterSpec("status", status, "form", true, false, null),
                 new QueryParameterSpec("application_type", applicationType, "form", true, false, null),
                 new QueryParameterSpec("site_type", siteType, "form", true, false, null),
-                new QueryParameterSpec("keyword", keyword, "form", true, false, null),
+                new QueryParameterSpec("q", q, "form", true, false, null),
             });
             return await _client.GetAsync<SDKWork.WebserverAppSdk.Models.ApplicationsListResponse>(ApiPaths.AppendQueryString(ApiPaths.AppPath("/applications"), queryString));
         }

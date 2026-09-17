@@ -1,0 +1,17 @@
+{
+  "name": "@sdkwork/webserver-mp-shell",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@sdkwork/webserver-mp-commons": "workspace:*"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "name": "@sdkwork/webserver-mini-program",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "pnpm dev:standalone",
+    "dev:standalone": "node scripts/build-runtime.mjs --deployment-profile standalone --environment development --watch",
+    "stop": "pnpm exec sdkwork-app stop --root ../..",
+    "build": "pnpm build:mini-program",
+    "build:mini-program": "node scripts/build-runtime.mjs",
+    "build:mini-program:test": "node scripts/build-runtime.mjs --environment test",
+    "build:mini-program:staging": "node scripts/build-runtime.mjs --environment staging",
+    "build:mini-program:demo": "node scripts/build-runtime.mjs --environment demo",
+    "build:mini-program:prod": "node scripts/build-runtime.mjs --environment production",
+    "preview:mini-program": "node scripts/build-runtime.mjs --deployment-profile standalone --environment development --print-host-open-hint",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node scripts/build-runtime.mjs && node --test \"tests/*.test.mjs\"",
+    "test:config": "node --test tests/mini-program-config-contract.test.mjs",
+    "test:routes": "node --test tests/mini-program-route-projection.test.mjs",
+    "check:runtime": "node scripts/build-runtime.mjs --check",
+    "check:source-config": "node ../../../sdkwork-specs/tools/check-source-config-standard.mjs --root .",
+    "check:pnpm-script-standard": "node ../../../sdkwork-specs/tools/check-pnpm-script-standard.mjs --root . --product-prefix webserver",
+    "check": "pnpm typecheck && pnpm test && pnpm check:runtime && pnpm check:source-config && pnpm check:pnpm-script-standard",
+    "verify": "pnpm check",
+    "clean": "node -e \"const fs=require('node:fs'); for (const path of ['src/runtime','.cache']) fs.rmSync(path,{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "@sdkwork/sdk-common": "workspace:*",
+    "@sdkwork/webserver-mp-applications": "workspace:*",
+    "@sdkwork/webserver-mp-commons": "workspace:*",
+    "@sdkwork/webserver-mp-core": "workspace:*",
+    "@sdkwork/webserver-mp-host": "workspace:*",
+    "@sdkwork/webserver-mp-shell": "workspace:*"
+  },
+  "devDependencies": {
+    "@sdkwork/app-topology": "workspace:*",
+    "esbuild": "0.28.1",
+    "miniprogram-api-typings": "^4.1.0",
+    "typescript": "catalog:"
+  }
+}

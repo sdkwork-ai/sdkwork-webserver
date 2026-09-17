@@ -1,32 +1,16 @@
 export type WebserverPcSurface = "app-console" | "backend-admin";
 
-export type WebserverActionErrorCode =
-  | "application-draft-media-failed"
-  | "application-draft-source-failed"
-  | "application-draft-deployment-failed"
-  | "deployment-source-stored";
-
-export class WebserverActionError extends Error {
-  constructor(
-    readonly code: WebserverActionErrorCode,
-    readonly details: Readonly<Record<string, string | number>> = {},
-    options?: ErrorOptions,
-  ) {
-    super(code, options);
-    this.name = "WebserverActionError";
-  }
-}
-
+/**
+ * Resource keys the Web Server workspace can route to. `apps`, `domains`, and
+ * `certificates` are bridged from sdkwork-deployments; the rest are rendered
+ * either by an owning package's surface or by the admin registry. The retired
+ * `applications` / `configuration` / `source-versions` / `deployments` /
+ * `sites` / `application-*` keys went with the local application lifecycle.
+ */
 export type WebserverResourceKey =
-  | "applications"
-  | "configuration"
-  | "source-versions"
+  | "apps"
   | "domains"
   | "certificates"
-  | "deployments"
-  | "sites"
-  | "application-source-versions"
-  | "application-deployments"
   | "nginx"
   | "servers"
   | "servers-explorer"
@@ -86,7 +70,6 @@ export interface WebserverResourceQuery {
   filters?: Readonly<Record<string, string>>;
   page: number;
   pageSize: number;
-  scopeId?: string;
   search?: string;
 }
 
@@ -96,32 +79,18 @@ export interface WebserverResourceFilter {
   type: "date" | "select" | "text";
 }
 
-export type ApplicationDeploymentSourceMode = "archive" | "directory" | "git";
-
-export interface ApplicationDeploymentSourceDefaults {
-  mode?: ApplicationDeploymentSourceMode;
-  repository?: string;
-}
-
-export interface ApplicationWizardSkips {
-  deployment?: boolean;
-  media?: boolean;
-  source?: boolean;
-}
-
+/**
+ * Everything a resource action receives when it runs. The dialog owns the body,
+ * the optional upload, the idempotency key, the progress channel, and the
+ * selected row; the action owns what to do with them.
+ */
 export interface WebserverResourceActionContext {
-  applicationSubmission?: import("./application-media.ts").ApplicationSubmissionInput;
   body: Record<string, unknown>;
   file?: File;
-  files?: readonly File[];
   idempotencyKey?: string;
   onProgress?(progress: number): void;
   selectedItem?: Record<string, unknown>;
   signal?: AbortSignal;
-  sourceInputMode?: ApplicationDeploymentSourceMode;
-  sourceRepository?: string;
-  scopeId?: string;
-  wizardSkips?: ApplicationWizardSkips;
 }
 
 export interface WebserverResourceFieldOption {
@@ -151,8 +120,6 @@ export interface WebserverResourceFieldOptionPage {
 
 export interface WebserverResourceAction {
   acceptedFileTypes?: string;
-  applicationMediaOptional?: boolean;
-  applicationSubmission?: "create" | "update";
   availableWhen?(context: WebserverResourceActionContext): boolean;
   bodyTemplate: Record<string, unknown>;
   dangerous?: boolean;
@@ -162,14 +129,15 @@ export interface WebserverResourceAction {
   fieldSelectionLimits?: Readonly<Record<string, number>>;
   id: string;
   label: string;
+  /**
+   * Server-side option paging for fields whose option set is too large to
+   * inline. Pair with `paginatedFields` to name the fields it applies to.
+   */
   loadFieldOptionPage?(
     field: string,
     context: WebserverResourceFieldOptionPageContext,
   ): Promise<WebserverResourceFieldOptionPage>;
   loadFieldOptions?(context: WebserverResourceActionContext): Promise<WebserverResourceFieldOptions>;
-  loadSourceInputDefaults?(
-    context: WebserverResourceActionContext,
-  ): Promise<ApplicationDeploymentSourceDefaults>;
   multipleFields?: readonly string[];
   paginatedFields?: readonly string[];
   permission?: string;
@@ -179,18 +147,13 @@ export interface WebserverResourceAction {
   resultFields?: readonly string[];
   requiresConfirmation?: boolean;
   requiresFile?: boolean;
-  requiresScope?: boolean;
   requiresSelection?: boolean;
-  sourceInput?: "archive-directory-or-git";
-  sourceInputOptional?: boolean;
 }
 
 export interface WebserverResourceDataSource {
   actions: readonly WebserverResourceAction[];
   filters?: readonly WebserverResourceFilter[];
   load(query: WebserverResourceQuery): Promise<WebserverResourcePage>;
-  requiresScope?: boolean;
-  scopeKind?: "application";
 }
 
 export type WebserverResourceRegistry = Partial<Record<WebserverResourceKey, WebserverResourceDataSource>>;

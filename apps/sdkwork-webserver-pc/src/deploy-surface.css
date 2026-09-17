@@ -1,0 +1,179 @@
+/* Scoped stylesheet for every sdkwork-deployments surface bridged into the Web
+   Server console (Applications, Domains, Certificates).
+
+   Source of truth: sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css.
+   That file is global while this one is scoped, because the deployments pages
+   render inside the Web Server workspace and must not restyle the host chrome.
+   Every rule therefore carries a `.deploy-surface` prefix — a rule added
+   upstream has to be added here too, or the page is styled in one console and
+   not the other. The scope class is deliberately neutral (not per-page) so one
+   copy covers all bridged pages; the deployed `:root` rule below is kept
+   verbatim even though `:root` can never be a descendant of the scope element,
+   which makes it inert here (the host supplies those base properties instead).
+
+   Consumed by src/main.tsx and applied by the bridge components in
+   packages/sdkwork-webserver-pc-console-delivery and
+   packages/sdkwork-webserver-pc-admin-apps. */
+.deploy-surface :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--sdk-color-text-primary);background:var(--sdk-color-surface-canvas);font-synthesis:none}.deploy-surface *{box-sizing:border-box}.deploy-surface body{margin:0;min-width:320px;min-height:100vh}.deploy-surface button, .deploy-surface input, .deploy-surface textarea, .deploy-surface select{font:inherit;letter-spacing:0}.deploy-surface button{cursor:pointer}.deploy-surface .bootstrap-state, .deploy-surface .fatal-state, .deploy-surface .empty-access{min-height:100vh;display:grid;place-content:center;text-align:center}.deploy-surface .fatal-state{color:var(--sdk-color-state-danger)}.deploy-surface .app-layout{min-height:100vh;display:grid;grid-template-columns:238px minmax(0,1fr)}.deploy-surface .sidebar{background:var(--sdk-color-surface-elevated);color:var(--sdk-color-text-primary);padding:18px 12px;display:flex;flex-direction:column}.deploy-surface .brand{display:flex;align-items:center;gap:10px;padding:4px 8px 22px}.deploy-surface .brand-mark{width:34px;height:34px;display:grid;place-content:center;background:var(--sdk-color-brand-primary);color:var(--sdk-color-text-inverse);border-radius:6px}.deploy-surface .brand div{display:grid;gap:2px}.deploy-surface .brand small{color:var(--sdk-color-text-muted)}.deploy-surface .sidebar nav{display:grid;gap:4px}.deploy-surface .sidebar nav a{color:var(--sdk-color-text-secondary);text-decoration:none;display:flex;align-items:center;gap:10px;min-height:40px;padding:0 10px;border-radius:5px}.deploy-surface .sidebar nav a:hover, .deploy-surface .sidebar nav a.active{color:var(--sdk-color-text-primary);background:var(--sdk-color-surface-panel-muted)}.deploy-surface .nav-icon{width:20px;display:inline-flex;align-items:center;justify-content:center;flex:0 0 20px}.deploy-surface .sidebar-footer{margin-top:auto;border-top:1px solid var(--sdk-color-border-default);padding:16px 8px 0;display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--sdk-color-text-secondary)}.deploy-surface .sidebar-footer span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.deploy-surface .workspace{min-width:0}.deploy-surface{height:100%;min-height:0;display:flex;flex-direction:column}.deploy-surface .resource-page{min-height:0;flex:1 1 auto;padding:28px clamp(18px,3vw,42px)}.deploy-surface .dialog h2{margin:4px 0 6px;font-size:24px;line-height:1.2;letter-spacing:0}.deploy-surface .resource-identity h1{max-width:none}.deploy-surface .search-box, .deploy-surface .scope-input{height:38px;min-width:210px;display:flex;align-items:center;gap:8px;background:var(--sdk-color-surface-panel);border:1px solid var(--sdk-color-border-default);padding:0 10px;border-radius:5px}.deploy-surface .search-box input, .deploy-surface .scope-input input{min-width:0;border:0;outline:none;background:transparent;width:100%}.deploy-surface .actions{margin-left:auto;display:flex;flex-wrap:wrap;gap:8px}.deploy-surface .icon-button, .deploy-surface .command-button, .deploy-surface .secondary-button, .deploy-surface .danger-button{border:1px solid transparent;border-radius:5px;min-height:36px;display:inline-flex;align-items:center;justify-content:center;gap:7px}.deploy-surface .icon-button{width:36px;padding:0;color:inherit;background:transparent}.deploy-surface .icon-button:hover{background:var(--sdk-color-surface-elevated)}.deploy-surface .command-button{color:var(--webserver-color-on-accent);background:var(--webserver-color-command-background);padding:0 13px}.deploy-surface .secondary-button{border-color:var(--sdk-color-border-default);background:var(--sdk-color-surface-panel);padding:0 13px}.deploy-surface .danger-button{color:var(--webserver-color-on-danger);background:var(--webserver-color-danger-text);padding:0 13px}.deploy-surface button:disabled{cursor:not-allowed;opacity:.48}.deploy-surface .table-frame{background:var(--sdk-color-surface-panel);border:1px solid var(--sdk-color-border-default);overflow:auto;min-height:260px}.deploy-surface table{width:100%;border-collapse:collapse}.deploy-surface th, .deploy-surface td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--sdk-color-border-subtle);max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}.deploy-surface th{color:var(--sdk-color-text-secondary);background:var(--sdk-color-surface-panel-muted);text-transform:capitalize}.deploy-surface tbody tr{cursor:pointer}.deploy-surface tbody tr:hover, .deploy-surface tbody tr.selected{background:color-mix(in srgb, var(--sdk-color-brand-primary) 10%, var(--sdk-color-surface-panel))}.deploy-surface .empty-state{width:100%;height:100%;min-height:220px;display:grid;place-content:center;gap:10px;color:var(--sdk-color-text-muted)}.deploy-surface .pagination{min-height:50px;display:flex;justify-content:flex-end;align-items:center;gap:8px;color:var(--sdk-color-text-secondary)}.deploy-surface .error-banner, .deploy-surface .warning{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;margin:8px 0;border:1px solid var(--webserver-color-danger-border);background:var(--webserver-color-danger-surface);color:var(--webserver-color-danger-text);border-radius:5px}.deploy-surface .warning{background:var(--webserver-color-warning-surface);border-color:var(--webserver-color-warning-border);color:var(--webserver-color-warning-text)}.deploy-surface .dialog-backdrop{position:fixed;inset:0;background:color-mix(in srgb, var(--sdk-color-surface-overlay) 72%, rgba(0, 0, 0, .54));display:grid;place-items:center;padding:18px;z-index:50}.deploy-surface .dialog{width:min(620px,100%);max-height:calc(100vh - 36px);overflow:auto;background:var(--sdk-color-surface-panel);padding:20px;border-radius:7px;box-shadow:var(--sdk-shadow-lg)}.deploy-surface .dialog header, .deploy-surface .dialog footer{display:flex;justify-content:space-between;align-items:center;gap:10px}.deploy-surface .dialog label{display:grid;gap:7px;margin:16px 0;font-size:13px;font-weight:650}.deploy-surface .dialog footer{justify-content:flex-end}.deploy-surface .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 16px;align-items:start;margin:16px 0}.deploy-surface .form-grid label{display:grid;align-content:start;gap:7px;margin:0;min-width:0}.deploy-surface .form-grid input:not([type="checkbox"]), .deploy-surface .form-grid textarea, .deploy-surface .form-grid select, .deploy-surface .dialog>label input[type="file"]{width:100%;min-height:40px;border:1px solid var(--sdk-color-border-default);border-radius:5px;padding:9px 10px;background:var(--sdk-color-surface-panel)}.deploy-surface .form-grid textarea{min-height:104px;resize:vertical;font-family:inherit;font-size:13px;line-height:1.45}.deploy-surface .form-grid label:has(textarea){grid-column:1/-1}.deploy-surface .checkbox-field, .deploy-surface .confirm-check{display:flex!important;align-items:center;gap:9px!important}.deploy-surface .checkbox-field input, .deploy-surface .confirm-check input{width:16px;height:16px;margin:0}.deploy-surface .confirm-check{padding:11px 12px;border:1px solid var(--webserver-color-warning-border);background:var(--webserver-color-warning-surface);border-radius:5px}.deploy-surface .status-badge{display:inline-flex;align-items:center;min-height:24px;padding:2px 8px;border-radius:999px;background:var(--sdk-color-surface-elevated);color:var(--sdk-color-text-secondary);font-size:12px;font-weight:650}.deploy-surface .status-active, .deploy-surface .status-success, .deploy-surface .status-verified, .deploy-surface .status-1{background:var(--webserver-color-success-surface);color:var(--webserver-color-success-text)}.deploy-surface .status-failed, .deploy-surface .status-error, .deploy-surface .status-expired, .deploy-surface .status-revoked, .deploy-surface .status-3{background:var(--webserver-color-danger-surface);color:var(--webserver-color-danger-text)}.deploy-surface .status-pending, .deploy-surface .status-issuing, .deploy-surface .status-0{background:var(--webserver-color-warning-surface);color:var(--webserver-color-warning-text)}.deploy-surface .status-paused{background:var(--sdk-color-surface-elevated);color:var(--sdk-color-text-secondary)}.deploy-surface .auth-brand{display:flex;gap:8px;align-items:center;color:var(--sdk-color-brand-primary)}
+
+.deploy-surface .resource-loading{min-height:50vh;display:grid;place-content:center;color:var(--sdk-color-text-secondary)}.deploy-surface .resource-loading svg{animation:resource-spin 1s linear infinite}@keyframes resource-spin{to{transform:rotate(360deg)}}.deploy-surface .domain-page{width:100%}.deploy-surface .segmented-control{display:inline-flex;align-items:center;border:1px solid var(--sdk-color-border-default);border-radius:5px;background:var(--sdk-color-surface-panel);overflow:hidden}.deploy-surface .segmented-control button{min-height:36px;padding:0 13px;border:0;border-right:1px solid var(--sdk-color-border-subtle);background:var(--sdk-color-surface-panel);color:var(--sdk-color-text-secondary)}.deploy-surface .segmented-control button:last-child{border-right:0}.deploy-surface .segmented-control button[aria-pressed="true"]{background:var(--sdk-color-brand-primary);color:var(--webserver-color-on-accent)}.deploy-surface .domain-table-frame{flex:1 1 auto;min-height:0;margin-top:12px}.deploy-surface .domain-table{min-width:980px}.deploy-surface .domain-table th:first-child, .deploy-surface .domain-table td:first-child{width:auto;max-width:360px;padding:11px 12px}.deploy-surface .domain-table tbody tr{cursor:default}.deploy-surface .domain-table td{height:62px}.deploy-surface .operations-column{text-align:right;min-width:144px}.deploy-surface .primary-cell-link, .deploy-surface .hostname-cell, .deploy-surface .certificate-name{display:inline-flex;align-items:center;gap:9px;color:var(--sdk-color-text-primary);text-decoration:none}.deploy-surface .primary-cell-link:hover strong{text-decoration:underline}.deploy-surface .primary-cell-link span{display:grid;gap:3px}.deploy-surface .primary-cell-link small, .deploy-surface .cell-subtitle{display:block;color:var(--sdk-color-text-muted);font-size:11px;font-weight:400}.deploy-surface .row-actions{display:flex;justify-content:flex-end;gap:3px}.deploy-surface .table-action{width:32px;height:32px;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--sdk-color-text-secondary);display:inline-flex;align-items:center;justify-content:center;text-decoration:none;padding:0;flex:0 0 32px}.deploy-surface .table-action:hover{border-color:var(--sdk-color-border-default);background:var(--sdk-color-surface-elevated);color:var(--sdk-color-text-primary)}.deploy-surface .danger-action{color:var(--webserver-color-danger-text)}.deploy-surface .danger-action:hover{border-color:var(--webserver-color-danger-border);background:var(--webserver-color-danger-surface);color:var(--webserver-color-danger-text)}.deploy-surface .back-link{display:inline-flex;align-items:center;gap:7px;margin-bottom:17px;color:var(--sdk-color-text-secondary);text-decoration:none;font-size:13px}.deploy-surface .back-link:hover{color:var(--sdk-color-text-primary)}.deploy-surface .metric-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--sdk-color-border-default);background:var(--sdk-color-surface-panel);margin:18px 0 12px}.deploy-surface .domain-metric{min-height:76px;padding:14px 16px;border-right:1px solid var(--sdk-color-border-subtle);display:grid;align-content:center;gap:5px}.deploy-surface .domain-metric:last-child{border-right:0}.deploy-surface .domain-metric span{font-size:12px;color:var(--sdk-color-text-secondary)}.deploy-surface .domain-metric strong{font-size:17px;font-weight:680}.deploy-surface .delivery-dialog-wide{width:min(860px,100%)}.deploy-surface .delivery-dialog .single-column{grid-template-columns:1fr}.deploy-surface .dialog-footer{margin-top:18px}.deploy-surface .confirmation-message{margin:20px 0;color:var(--sdk-color-text-secondary);line-height:1.55}.deploy-surface .dangerous-confirmation{padding:12px;border:1px solid var(--webserver-color-danger-border);background:var(--webserver-color-danger-surface);color:var(--webserver-color-danger-text);border-radius:5px}.deploy-surface .verification-success, .deploy-surface .verification-pending{display:flex;align-items:center;gap:9px;padding:12px;margin:16px 0;border:1px solid color-mix(in srgb, var(--webserver-color-success-text) 45%, transparent);background:var(--webserver-color-success-surface);color:var(--webserver-color-success-text);border-radius:5px}.deploy-surface .verification-pending{border-color:var(--webserver-color-warning-border);background:var(--webserver-color-warning-surface);color:var(--webserver-color-warning-text)}.deploy-surface .copy-field{display:grid;grid-template-columns:minmax(120px,.35fr) minmax(0,1fr) 32px;align-items:center;gap:10px;margin:10px 0}.deploy-surface .copy-field>span, .deploy-surface .verification-expiry span{font-size:12px;color:var(--sdk-color-text-secondary)}.deploy-surface .copy-field code{min-width:0;overflow:auto;padding:9px 10px;border:1px solid var(--sdk-color-border-default);background:var(--sdk-color-surface-panel-muted);border-radius:4px;font-size:12px}.deploy-surface .verification-expiry{display:grid;grid-template-columns:minmax(120px,.35fr) minmax(0,1fr);gap:10px;padding:9px 0}.deploy-surface .form-fieldset{border:1px solid var(--sdk-color-border-default);border-radius:5px;margin:14px 0;padding:14px}.deploy-surface .form-fieldset legend{padding:0 6px;color:var(--sdk-color-text-secondary);font-size:12px;font-weight:700}.deploy-surface .algorithm-control button{min-width:88px}.deploy-surface .selector-search{width:min(360px,100%);margin-bottom:12px}.deploy-surface .selector-search .table-action{margin-right:-7px}.deploy-surface .selector-zone{display:grid!important;grid-template-columns:120px minmax(0,1fr);align-items:center;gap:12px!important;margin:10px 0!important}.deploy-surface .selector-zone select{height:38px;border:1px solid var(--sdk-color-border-default);border-radius:5px;padding:0 9px;background:var(--sdk-color-surface-panel)}.deploy-surface .hostname-selector-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;min-height:116px;max-height:248px;overflow:auto;padding:8px 0}.deploy-surface .hostname-selector-list label{display:flex!important;align-items:center;gap:9px!important;margin:0!important;padding:9px 10px;border:1px solid var(--sdk-color-border-default);border-radius:4px;font-weight:400!important}.deploy-surface .hostname-selector-list label:has(input:checked){border-color:var(--sdk-color-brand-primary);background:color-mix(in srgb, var(--sdk-color-brand-primary) 10%, var(--sdk-color-surface-panel))}.deploy-surface .hostname-selector-list label.disabled{background:var(--sdk-color-surface-elevated)}.deploy-surface .hostname-selector-list label span{display:grid;gap:2px;min-width:0}.deploy-surface .hostname-selector-list label strong{overflow:hidden;text-overflow:ellipsis}.deploy-surface .hostname-selector-list label small{font-size:11px;color:var(--sdk-color-text-muted)}.deploy-surface .selector-empty{grid-column:1/-1;display:grid;place-content:center;color:var(--sdk-color-text-muted)}.deploy-surface .selector-pagination{display:flex;justify-content:flex-end;align-items:center;gap:7px;color:var(--sdk-color-text-secondary);font-size:12px}.deploy-surface .selected-hostnames{border-top:1px solid var(--sdk-color-border-subtle);margin-top:8px;padding-top:11px}.deploy-surface .selected-hostnames>span{font-size:12px;color:var(--sdk-color-text-secondary)}.deploy-surface .selected-hostnames>div{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.deploy-surface .selected-hostnames>div>span, .deploy-surface .identifier-list span{display:inline-flex;align-items:center;gap:4px;max-width:100%;padding:4px 7px;background:var(--sdk-color-surface-elevated);border-radius:4px;font-size:12px}.deploy-surface .selected-hostnames button{width:18px;height:18px;display:grid;place-content:center;border:0;background:transparent;padding:0}.deploy-surface .identifier-list{display:flex;flex-wrap:wrap;gap:4px;max-width:360px;white-space:normal}.deploy-surface .certificate-table-frame .domain-table{min-width:1200px}.deploy-surface .form-hint{display:block;margin:0;font-size:12px;line-height:1.5;color:var(--sdk-color-text-secondary);font-weight:400}
+
+@media(max-width:960px){.deploy-surface .metric-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.deploy-surface .domain-metric:nth-child(2){border-right:0}.deploy-surface .domain-metric:nth-child(-n+2){border-bottom:1px solid var(--sdk-color-border-subtle)}.deploy-surface .hostname-selector-list{grid-template-columns:1fr}}
+@media(max-width:760px){.deploy-surface .app-layout{grid-template-columns:68px minmax(0,1fr)}.deploy-surface .brand div, .deploy-surface .sidebar nav .nav-label, .deploy-surface .sidebar-footer>span{display:none}.deploy-surface .sidebar nav a{justify-content:center}.deploy-surface .resource-page{padding:20px 14px}.deploy-surface .search-box, .deploy-surface .scope-input{flex:1 1 180px;min-width:0}.deploy-surface .actions{margin-left:0;width:100%}.deploy-surface .form-grid{grid-template-columns:1fr}.deploy-surface .form-grid label:has(textarea){grid-column:auto}.deploy-surface .metric-strip{grid-template-columns:1fr}.deploy-surface .domain-metric, .deploy-surface .domain-metric:nth-child(2){border-right:0;border-bottom:1px solid var(--sdk-color-border-subtle)}.deploy-surface .domain-metric:last-child{border-bottom:0}.deploy-surface .copy-field, .deploy-surface .verification-expiry{grid-template-columns:minmax(0,1fr) 32px}.deploy-surface .copy-field>span, .deploy-surface .verification-expiry span{grid-column:1/-1}.deploy-surface .selector-zone{grid-template-columns:1fr}.deploy-surface .delivery-dialog{padding:16px}.deploy-surface .certificate-form-grid{grid-template-columns:1fr}}
+
+/* Form control polish: the field caption keeps the bold 13px label voice while the
+   control itself renders at normal weight, and focus / disabled states use the host
+   design tokens instead of the browser defaults. Appended after the media queries so
+   nothing here re-declares a responsive column track. The full-row modifier mirrors
+   the host `form-field-wide` convention so a field whose hint or value needs the
+   whole track can opt out of the two-column pairing. */
+.deploy-surface .form-grid input:not([type="checkbox"]), .deploy-surface .form-grid select, .deploy-surface .form-grid textarea{font-weight:400}
+.deploy-surface .form-grid input:not([type="checkbox"]):focus-visible, .deploy-surface .form-grid select:focus-visible, .deploy-surface .form-grid textarea:focus-visible{border-color:var(--sdk-color-border-focus);outline:none;box-shadow:0 0 0 3px color-mix(in srgb, var(--sdk-color-border-focus) 30%, transparent)}
+.deploy-surface .form-grid input:not([type="checkbox"]):disabled, .deploy-surface .form-grid select:disabled, .deploy-surface .form-grid textarea:disabled{color:var(--sdk-color-text-secondary);background:var(--sdk-color-surface-elevated);cursor:not-allowed}
+.deploy-surface .form-grid .form-field-wide{grid-column:1/-1}
+.deploy-surface .form-error{display:block;margin:0;font-size:12px;line-height:1.5;color:var(--sdk-color-state-danger);font-weight:500}
+.deploy-surface .form-grid input[aria-invalid="true"], .deploy-surface .form-grid select[aria-invalid="true"], .deploy-surface .form-grid textarea[aria-invalid="true"]{border-color:var(--sdk-color-state-danger);background:color-mix(in srgb, var(--sdk-color-state-danger) 10%, var(--sdk-color-surface-panel))}
+.deploy-surface .row-actions .table-action-text{width:auto;flex:0 0 auto;gap:5px;padding:0 9px;margin-right:0;font-size:12px;font-weight:500;white-space:nowrap;border-color:var(--sdk-color-border-default);background:var(--sdk-color-surface-panel)}
+.deploy-surface .row-actions .table-action-text:hover{border-color:var(--sdk-color-border-strong);background:var(--sdk-color-surface-elevated);color:var(--sdk-color-text-primary)}
+.deploy-surface .delivery-dialog.delivery-dialog-history{width:min(1120px,100%)}
+
+
+.deploy-surface .selected-hostnames>div>span small{color:var(--sdk-color-text-muted);font-size:11px}
+
+/* The submit row is pinned here for the same reason the source of truth pins it:
+   this form is taller than the dialog's scrollport, so a footer that only exists
+   at the end of the scroll reads as "there is no submit button" until the operator
+   scrolls. Colours are the scoped copy's tokens rather than the upstream literals,
+   and the surface token matches .dialog's own background so the pinned row does not
+   read as a band floating over the form. */
+.deploy-surface .delivery-dialog .dialog-footer{position:sticky;bottom:-16px;z-index:1;margin-top:16px;padding:12px 0 4px;background:var(--sdk-color-surface-panel);border-top:1px solid var(--sdk-color-border-subtle)}
+
+/* Density pass for the certificate request wizard, which shares its dialog with
+   the root-domain form. The wizard asks for eight things and measured 1455px
+   against a 864px scrollport at 1440x900: a third of it was reachable only by
+   scrolling, and the fields that fell below the fold were the ones an operator
+   must fill in, not tail settings. Nothing here changes what the form asks —
+   only how much room the chrome around it takes. */
+
+/* Sections lose their box. Five bordered fieldsets cost 180px of border and
+   padding that carried no information: the legend already names the group, and a
+   border drawn around two controls reads as a card rather than as a step. The
+   legend keeps its caption voice and gains a bottom margin so it still separates
+   the groups once the frame is gone. */
+.deploy-surface .delivery-dialog .form-fieldset{border:0;border-radius:0;margin:8px 0;padding:0}
+.deploy-surface .delivery-dialog .form-fieldset legend{padding:0;margin:0 0 6px;font-size:12px;font-weight:650;color:var(--sdk-color-text-secondary)}
+.deploy-surface .delivery-dialog{padding:16px}
+.deploy-surface .delivery-dialog h2{margin:0;font-size:18px}
+
+/* A 116px floor was sized for a six-row list; with two declared hostnames it
+   reserved four empty rows, which is height the fields below it needed. The list
+   still scrolls once it passes four rows. */
+.deploy-surface .delivery-dialog .hostname-selector-list{min-height:0;max-height:184px;padding:0}
+
+/* Certificate parameters in three columns over two rows instead of two columns
+   over four. The two children declared `form-field-wide` give up their span so
+   the grid can pair them — the certificate name is the widest field here and
+   still gets a full third. */
+.deploy-surface .certificate-form-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 14px;margin:8px 0}
+.deploy-surface .certificate-form-grid>.form-field-wide{grid-column:auto}
+
+/* The covered-hostname block is a caption plus one row of chips; its 11px lead-in
+   and 8px gap only pushed the retention line further down. */
+.deploy-surface .delivery-dialog .selected-hostnames{margin-top:6px;padding-top:8px}
+.deploy-surface .delivery-dialog .selected-hostnames>div{margin-top:6px}
+
+/* The pinned submit row does not need a full 16px gap on top of the last field's
+   own margin. */
+.deploy-surface .delivery-dialog .dialog-footer{margin-top:8px;padding-top:8px}
+
+
+/* The scope and the root domain now share a row: they answer one question, and the
+   pair costs one line where two blocks cost two. The root domain's usual
+   caption-beside-control arrangement is dropped inside the pair, because half the
+   dialog cannot hold a 120px caption and a usable select side by side. */
+.deploy-surface .delivery-dialog .dialog-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 18px;align-items:start}
+.deploy-surface .delivery-dialog .dialog-pair .form-fieldset{margin:10px 0}
+.deploy-surface .delivery-dialog .dialog-pair .selector-zone{grid-template-columns:minmax(0,1fr);gap:7px!important}
+
+/* The covered-hostname caption and its chips are one statement, so they share a
+   line; only the retention note drops below them. */
+.deploy-surface .delivery-dialog .selected-hostnames{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px}
+.deploy-surface .delivery-dialog .selected-hostnames>div{margin-top:0}
+.deploy-surface .delivery-dialog .selected-hostnames>small{flex:1 1 100%}
+
+@media(max-width:900px){.deploy-surface .delivery-dialog .dialog-pair{grid-template-columns:minmax(0,1fr)}}
+
+
+/* A settings pair is not an even split: the validation segmented control needs
+   room for three labels, and the account needs the rest for a summary line plus
+   its buttons. */
+.deploy-surface .delivery-dialog .dialog-pair-settings{grid-template-columns:minmax(0,300px) minmax(0,1fr)}
+/* The covered-hostname field is one trigger plus the result it produced. The set
+   itself is edited in the picker, so this row only has to answer "what is covered,
+   and how do I change it" — which is why the root domain is stated on the line
+   instead of getting a select of its own. Mirrors the same rule set in
+   sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css. */
+.deploy-surface .hostname-summary{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.deploy-surface .hostname-summary .form-hint{flex:1 1 auto;min-width:0}
+@media(max-width:760px){.deploy-surface .hostname-summary .secondary-button{width:100%}}
+
+/* The picker: root domains down the left, that root domain's own hostnames on the
+   right. Two columns rather than a select plus a grid, because the root domain and
+   its hostnames are one decision, and the left column is what turns choosing among
+   several root domains into a comparison instead of a sequence of dropdowns. */
+.deploy-surface .hostname-picker{display:grid;grid-template-columns:minmax(0,232px) minmax(0,1fr);gap:0 16px;align-items:start}
+.deploy-surface .hostname-picker-caption{display:block;margin-bottom:7px;font-size:12px;font-weight:700;color:var(--sdk-color-text-secondary)}
+.deploy-surface .hostname-picker-zones{display:grid;gap:4px;align-content:start;max-height:min(54vh,420px);overflow:auto;padding:0 12px 0 0;border-right:1px solid var(--sdk-color-border-subtle)}
+.deploy-surface .hostname-picker-zone{display:grid;gap:2px;width:100%;padding:8px 10px;border:1px solid transparent;border-radius:5px;background:transparent;color:var(--sdk-color-text-primary);text-align:left}
+.deploy-surface .hostname-picker-zone:hover{border-color:var(--sdk-color-border-default);background:var(--sdk-color-surface-elevated)}
+.deploy-surface .hostname-picker-zone[aria-pressed="true"]{border-color:var(--sdk-color-brand-primary);background:color-mix(in srgb, var(--sdk-color-brand-primary) 10%, var(--sdk-color-surface-panel))}
+.deploy-surface .hostname-picker-zone strong{overflow:hidden;text-overflow:ellipsis;font-size:13px}
+.deploy-surface .hostname-picker-zone small{font-size:11px;color:var(--sdk-color-text-muted)}
+.deploy-surface .hostname-picker-hostnames{min-width:0}
+.deploy-surface .hostname-picker-head{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;margin-bottom:6px}
+.deploy-surface .hostname-picker-head .hostname-picker-caption{margin-bottom:0}
+.deploy-surface .hostname-picker-hostnames>.form-hint{display:block;margin:0 0 9px}
+/* The count leads the footer rather than trailing the buttons: it reports on the
+   set the buttons will act on, so it belongs on the side the reading starts. */
+.deploy-surface .hostname-picker-count{margin-right:auto;align-self:center;font-size:12px;color:var(--sdk-color-text-secondary)}
+/* The picker's list is the dialog's whole content, so it gets the room the inline
+   candidate list never had: the wizard's own floor of 184px clips it to about four
+   rows, which is fewer than the dialog exists to show. */
+.deploy-surface .hostname-picker-frame{min-height:180px;max-height:min(52vh,400px)}
+.deploy-surface .hostname-picker-table{min-width:660px}
+.deploy-surface .hostname-picker-table thead th{position:sticky;top:0;z-index:1;box-shadow:inset 0 -1px 0 var(--sdk-color-border-subtle)}
+.deploy-surface .hostname-picker-table th, .deploy-surface .hostname-picker-table td{height:auto;padding:8px 10px;max-width:280px}
+/* Landed on `td.selection-column` rather than `.selection-column`: the ledger's
+   `td:first-child` rule is one class heavier, and the checkbox column is the first
+   cell of every row. */
+.deploy-surface .hostname-picker-table th.selection-column, .deploy-surface .hostname-picker-table td.selection-column{width:34px;max-width:34px;padding:8px 10px;text-align:center}
+.deploy-surface .hostname-picker-table .selection-column input{width:16px;height:16px;margin:0;cursor:pointer}
+.deploy-surface .hostname-picker-table tbody tr{cursor:pointer}
+.deploy-surface .hostname-picker-table .hostname-cell>span{display:grid;gap:2px;min-width:0}
+.deploy-surface .hostname-picker-table .operations-column{min-width:130px}
+.deploy-surface .delivery-dialog-picker{width:min(1040px,100%)}
+@media(max-width:900px){.deploy-surface .hostname-picker{grid-template-columns:minmax(0,1fr)}.deploy-surface .hostname-picker-zones{max-height:180px;padding:0 0 10px;border-right:0;border-bottom:1px solid var(--sdk-color-border-subtle)}}
+
+/* Suggestion field (the root-domain form's DNS provider).
+   The list is drawn by the page inside the field's own box instead of by a native
+   `<datalist>` popup, because that popup is positioned by Chrome and not by the
+   page: on the root-domain form at 150% device scale it opened 45px to the right of
+   the field and 23px wider than it. Nothing in a stylesheet can move it, so the
+   markup stopped asking for one. Mirrors the same rule set in
+   sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css, which is the
+   source of truth; colours here are the host tokens rather than the literals. */
+.deploy-surface .suggest-field{position:relative;display:grid;align-content:start;gap:7px;min-width:0}
+/* Only the room for the toggle is added; the input keeps the `.form-grid input` box
+   so the control still reads as the same field as the ones beside it. */
+.deploy-surface .suggest-field .suggest-control{position:relative;min-width:0}
+.deploy-surface .suggest-field .suggest-control input{padding-right:34px}
+.deploy-surface .suggest-toggle{position:absolute;right:5px;top:50%;width:28px;height:28px;transform:translateY(-50%);display:grid;place-content:center;border:0;border-radius:4px;background:transparent;color:var(--sdk-color-text-secondary)}
+.deploy-surface .suggest-toggle:hover{background:var(--sdk-color-surface-elevated);color:var(--sdk-color-text-primary)}
+/* Above the pinned submit row, which is the only other stacked thing in the dialog,
+   and capped so a long list scrolls instead of running off the dialog. */
+.deploy-surface .suggest-list{position:absolute;left:0;right:0;z-index:2;margin:0;padding:4px;list-style:none;max-height:216px;overflow:auto;border:1px solid var(--sdk-color-border-default);border-radius:5px;background:var(--sdk-color-surface-elevated);box-shadow:var(--sdk-shadow-lg)}
+.deploy-surface .suggest-list[data-placement="down"]{top:calc(100% + 4px)}
+.deploy-surface .suggest-list[data-placement="up"]{bottom:calc(100% + 4px)}
+.deploy-surface .suggest-option{padding:8px 9px;border-radius:4px;color:var(--sdk-color-text-primary);font-size:13px;font-weight:400;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.deploy-surface .suggest-option[data-active="true"],.deploy-surface .suggest-option:hover{background:var(--sdk-color-surface-panel-muted)}
+.deploy-surface .suggest-option[aria-selected="true"]{background:color-mix(in srgb, var(--sdk-color-brand-primary) 10%, var(--sdk-color-surface-elevated));font-weight:650}

@@ -85,7 +85,7 @@ export interface DomainRootDomainsListParams {
   page?: number;
   pageSize?: number;
   status?: number;
-  keyword?: string;
+  q?: string;
 }
 
 export interface DomainRootDomainsCreateParams {
@@ -112,7 +112,7 @@ export class DomainRootDomainsApi {
       { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
       { name: 'status', value: params?.status, style: 'form', explode: true, allowReserved: false },
-      { name: 'keyword', value: params?.keyword, style: 'form', explode: true, allowReserved: false },
+      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: RootDomainResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/root_domains`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }

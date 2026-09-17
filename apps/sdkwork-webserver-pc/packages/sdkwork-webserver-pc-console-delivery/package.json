@@ -15,6 +15,7 @@
     "@sdkwork/deployments-pc-commons": "workspace:*",
     "@sdkwork/deployments-pc-console-core": "workspace:*",
     "@sdkwork/deployments-pc-console-delivery": "workspace:*",
+    "@sdkwork/deployments-pc-console-publishing": "workspace:*",
     "@sdkwork/sdk-common": "workspace:*",
     "@sdkwork/webserver-pc-commons": "workspace:*",
     "react": "catalog:"

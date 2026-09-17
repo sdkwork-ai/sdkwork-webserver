@@ -3,6 +3,9 @@ packages:
   - "apps/sdkwork-webserver-pc"
   - "apps/sdkwork-webserver-pc/packages/*"
   - "apps/sdkwork-webserver-h5"
+  - "apps/sdkwork-webserver-h5/packages/*"
+  - "apps/sdkwork-webserver-mini-program"
+  - "apps/sdkwork-webserver-mini-program/packages/*"
   - "sdks/*/*-typescript"
   - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-contracts"
   - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-runtime"
@@ -19,6 +22,13 @@ packages:
   - "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-commons"
   - "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-core"
   - "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-delivery"
+  # Applications: the `deploy_app` publishing page is host-agnostic (its two
+  # generated clients arrive as props), so the Web Server console and backend
+  # admin mount the canonical page instead of re-implementing the application
+  # lifecycle. The package is a `workspace:*` dep of
+  # `@sdkwork/webserver-pc-console-delivery` and
+  # `@sdkwork/webserver-pc-admin-apps`.
+  - "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-publishing"
   - "../sdkwork-deployments/sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-typescript"
   - "../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-commons"
   - "../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-core"

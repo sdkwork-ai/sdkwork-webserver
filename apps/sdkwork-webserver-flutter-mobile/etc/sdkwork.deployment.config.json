@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component-deployment",
+  "application": "sdkwork-webserver-flutter-mobile",
+  "parentDeploymentConfig": "../../../etc/sdkwork.deployment.config.json",
+  "parentTopologySpec": "../../../specs/topology.spec.json",
+  "materialization": {
+    "authority": "../../../etc/sdkwork.deployment.config.json",
+    "command": "pnpm workflow:materialize-client-env",
+    "format": "dart-define-json",
+    "outputPattern": "../env/sdkwork.{deploymentProfile}.{environment}.json",
+    "profiles": [
+      "standalone.development",
+      "standalone.test",
+      "standalone.staging",
+      "standalone.demo",
+      "standalone.production"
+    ]
+  }
+}

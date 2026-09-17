@@ -252,8 +252,8 @@ body.dialog-open { overflow: hidden; }
 .dialog header > h2 { min-width: 0; }
 .dialog label { display: grid; gap: 7px; margin: 16px 0; font-size: 13px; font-weight: 650; }
 .dialog textarea { width: 100%; min-height: 260px; resize: vertical; border: 1px solid var(--sdk-color-border-strong); border-radius: 5px; padding: 12px; font-family: "Cascadia Code", Consolas, monospace; font-size: 12px; line-height: 1.55; }
-.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
-.form-grid label { margin: 0; min-width: 0; }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; align-items: start; margin: 16px 0; }
+.form-grid label { display: grid; align-content: start; gap: 7px; margin: 0; min-width: 0; }
 .field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .field-required { color: var(--webserver-color-danger-text); font-size: 10px; font-weight: 650; }
 .field-required::after { content: attr(data-label); }
@@ -262,6 +262,11 @@ body.dialog-open { overflow: hidden; }
 .form-grid input[readonly], .form-grid textarea[readonly] { color: var(--sdk-color-text-secondary); background: var(--sdk-color-surface-elevated); cursor: default; }
 .form-grid textarea { min-height: 104px; font-family: inherit; font-size: 13px; line-height: 1.45; }
 .form-grid label:has(textarea) { grid-column: 1 / -1; }
+.form-grid input:not([type="checkbox"]), .form-grid select, .form-grid textarea { font-weight: 400; }
+.form-grid input:not([type="checkbox"]):focus-visible, .form-grid select:focus-visible, .form-grid textarea:focus-visible { border-color: var(--sdk-color-border-focus); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--sdk-color-border-focus) 30%, transparent); }
+.form-grid input:not([type="checkbox"]):disabled, .form-grid select:disabled, .form-grid textarea:disabled { color: var(--sdk-color-text-secondary); background: var(--sdk-color-surface-elevated); cursor: not-allowed; }
+.form-error { display: block; margin: 0; font-size: 12px; line-height: 1.5; color: var(--webserver-color-danger-text); font-weight: 500; }
+.form-grid input[aria-invalid="true"], .form-grid select[aria-invalid="true"], .form-grid textarea[aria-invalid="true"] { border-color: var(--webserver-color-danger-border); background: var(--webserver-color-danger-surface); }
 .paginated-option-field { min-width: 0; grid-column: 1 / -1; display: grid; align-content: start; gap: 7px; }
 .paginated-option-field > label { min-width: 0; margin: 0; font-size: 13px; font-weight: 650; }
 .paginated-option-field > select { width: 100%; height: 132px; min-height: 132px; padding: 6px; color: var(--sdk-color-text-primary); background: var(--sdk-color-surface-panel-muted); border: 1px solid var(--sdk-color-border-strong); border-radius: 5px; }
@@ -1659,7 +1664,8 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
 .plugins-console-surface,
 .skills-admin-surface,
 .mcp-admin-surface,
-.plugins-admin-surface {
+.plugins-admin-surface,
+.storage-center-surface {
   height: 100%;
   min-height: 0;
   display: flex;
@@ -1668,6 +1674,12 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   padding: 18px clamp(16px, 2.2vw, 30px) 24px;
   color: var(--sdk-color-text-primary);
   background: var(--sdk-color-surface-panel);
+}
+/* The drive-owned storage pages render their own full-bleed chrome, so the
+   canonical embed padding/panel background is neutralized for them. */
+.storage-center-surface {
+  padding: 0;
+  background: transparent;
 }
 .skills-admin-surface > nav,
 .mcp-admin-surface > nav {

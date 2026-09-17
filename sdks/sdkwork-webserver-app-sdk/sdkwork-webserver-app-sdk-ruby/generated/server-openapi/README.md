@@ -15,7 +15,7 @@ require 'sdkwork/app_sdk'
 
 config = Sdkwork::AppSdk::SdkConfig.new(base_url: 'http://localhost:3800')
 client = Sdkwork::AppSdk::SdkworkAppClient.new(config)
-params = { 'page' => 1, 'page_size' => 2, 'status' => 0, 'application_type' => 'WEB', 'site_type' => 1, 'keyword' => 'keyword' }
+params = { 'page' => 1, 'page_size' => 2, 'status' => 0, 'application_type' => 'WEB', 'site_type' => 1, 'q' => 'q' }
 result = client.application.applications_list(params: params)
 
 
@@ -56,7 +56,7 @@ client.set_header('X-Custom-Header', 'value')
 
 ```ruby
 # 获取应用列表
-params = { 'page' => 1, 'page_size' => 2, 'status' => 0, 'application_type' => 'WEB', 'site_type' => 1, 'keyword' => 'keyword' }
+params = { 'page' => 1, 'page_size' => 2, 'status' => 0, 'application_type' => 'WEB', 'site_type' => 1, 'q' => 'q' }
 result = client.application.applications_list(params: params)
 puts result.inspect
 ```
@@ -124,7 +124,7 @@ puts result.inspect
 
 ```ruby
 begin
-  params = { 'page' => 1, 'page_size' => 2, 'status' => 0, 'application_type' => 'WEB', 'site_type' => 1, 'keyword' => 'keyword' }
+  params = { 'page' => 1, 'page_size' => 2, 'status' => 0, 'application_type' => 'WEB', 'site_type' => 1, 'q' => 'q' }
   client.application.applications_list(params: params)
 rescue StandardError => e
   warn("Error: #{e.message}")

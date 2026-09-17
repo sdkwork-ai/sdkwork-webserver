@@ -60,27 +60,17 @@ fn signed_snapshot(mut value: Value) -> Vec<u8> {
 }
 
 #[test]
-fn compiles_node_scoped_snapshot_and_selects_exact_before_wildcard_sni() {
+fn compiles_a_node_scoped_snapshot_and_reports_its_content_hash() {
     let compiled = compile_tls_assignment_snapshot(&signed_snapshot(snapshot_fixture()))
         .expect("fixture must compile");
     assert_eq!(compiled.snapshot().node_uuid, "web-node-0001");
-    assert_eq!(compiled.snapshot_sha256().len(), 64);
-
-    let exact = compiled
-        .select_assignment("API.EXAMPLE.COM.")
-        .unwrap()
-        .unwrap();
-    assert_eq!(exact.assignment_uuid, "assignment-exact");
-
-    let wildcard = compiled
-        .select_assignment("www.example.com")
-        .unwrap()
-        .unwrap();
-    assert_eq!(wildcard.assignment_uuid, "assignment-wildcard");
-    assert!(compiled
-        .select_assignment("deep.www.example.com")
-        .unwrap()
-        .is_none());
+    assert_eq!(compiled.snapshot().assignments.len(), 2);
+    // The reported hash is the one the document carries: compiling re-derives
+    // it from the canonical form and rejects the document when they disagree.
+    assert_eq!(
+        compiled.snapshot_sha256(),
+        compiled.snapshot().snapshot_sha256
+    );
 }
 
 #[test]
@@ -165,4 +155,27 @@ fn rejects_zero_or_non_json_safe_generation() {
             .iter()
             .any(|diagnostic| diagnostic.path == "/generation"));
     }
+}
+
+/// The snapshot is installed by the same code that indexes certificates for SNI,
+/// so a name that normalizes as a website hostname but cannot be indexed has to
+/// be refused here rather than when the assignment is installed.
+#[test]
+fn rejects_a_canonical_name_the_certificate_index_cannot_hold() {
+    let mut underscore = snapshot_fixture();
+    underscore["assignments"][0]["serverNames"] = json!(["_dmarc.example.com"]);
+    let error = compile_tls_assignment_snapshot(&signed_snapshot(underscore))
+        .expect_err("a name the data plane cannot index must fail");
+    assert!(error
+        .diagnostics()
+        .iter()
+        .any(|diagnostic| diagnostic.message.contains("the data plane can index")));
+
+    let mut ip = snapshot_fixture();
+    ip["assignments"][0]["serverNames"] = json!(["192.0.2.10"]);
+    let error = compile_tls_assignment_snapshot(&signed_snapshot(ip))
+        .expect_err("an IP literal cannot be a certificate server name");
+    assert!(error.diagnostics().iter().any(|diagnostic| diagnostic
+        .message
+        .contains("must be an exact or leading-wildcard")));
 }

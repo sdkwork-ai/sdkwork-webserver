@@ -19,6 +19,10 @@ management = [
   "dep:sdkwork-webserver-http-host",
   "dep:sdkwork-api-deployments-assembly",
   "dep:sdkwork-webserver-edge-runtime",
+  "dep:argon2",
+  "dep:chrono",
+  "dep:sqlx",
+  "dep:sdkwork-iam-bootstrap",
 ]
 
 [lib]
@@ -103,6 +107,15 @@ sdkwork-web-store-sqlx = { workspace = true, optional = true }
 sdkwork-utils-rust.workspace = true
 sdkwork-web-core.workspace = true
 sdkwork-iam-web-adapter.workspace = true
+# `reset-admin` (bootstrap administrator password recovery) hashes the
+# replacement secret with the same Argon2id parameters IAM uses, and reads the
+# canonical tenant/administrator subject from the shared IAM bootstrap crate.
+# All three are management-plane only: the standalone data plane never hashes or
+# resets credentials.
+argon2 = { workspace = true, optional = true }
+chrono = { workspace = true, optional = true }
+sqlx = { workspace = true, optional = true }
+sdkwork-iam-bootstrap = { workspace = true, optional = true }
 
 [dev-dependencies]
 async-trait.workspace = true

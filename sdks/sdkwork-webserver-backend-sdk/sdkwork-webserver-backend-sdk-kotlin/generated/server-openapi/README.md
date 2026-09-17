@@ -79,7 +79,7 @@ val params = linkedMapOf<String, Any>(
     "application_type" to "WEB",
     "site_type" to 4,
     "status" to 5,
-    "keyword" to "keyword"
+    "q" to "q"
 )
 val result = client.application.applicationsList(params)
 println(result)

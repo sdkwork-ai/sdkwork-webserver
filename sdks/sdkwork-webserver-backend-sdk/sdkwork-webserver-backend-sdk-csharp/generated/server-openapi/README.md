@@ -77,7 +77,7 @@ var query = new Dictionary<string, object>
     ["application_type"] = "WEB",
     ["site_type"] = 4,
     ["status"] = 5,
-    ["keyword"] = "keyword",
+    ["q"] = "q",
 };
 var result = await client.Application.ApplicationsListAsync(query);
 Console.WriteLine(result);

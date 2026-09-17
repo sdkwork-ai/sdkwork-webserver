@@ -1,4 +1,5 @@
-//! Web runtime environment helpers shared by routers and the API server.
+//! Web runtime environment helpers shared by the Web Server's routers, its
+//! API server, and the node daemon.
 
 use sdkwork_utils_rust::parse_bool;
 
@@ -24,6 +25,15 @@ pub fn web_is_production_like_environment() -> bool {
         "production" | "prod" | "staging" | "stage" | "test"
     )
 }
+
+/// The TLS runtime state file the node's data plane reads.
+///
+/// Shared because two processes read one setting: the data plane locates
+/// its snapshot with it, and the node daemon derives the served-certificate
+/// report's path from that same file, so the two cannot disagree about where
+/// the handoff lives. Names that only one process reads stay with that
+/// process.
+pub const TLS_RUNTIME_SNAPSHOT_FILE_ENV: &str = "SDKWORK_WEBSERVER_TLS_RUNTIME_SNAPSHOT_FILE";
 
 fn env_truthy(key: &str) -> bool {
     std::env::var(key)

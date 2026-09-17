@@ -1,0 +1,9 @@
+{
+  "name": "@sdkwork/sdkwork-webserver-harmony-mobile-applications",
+  "version": "0.1.0",
+  "description": "SDKWork Web Server HarmonyOS mobile applications capability: tenant application catalog list.",
+  "main": "src/main/ets/Index.ets",
+  "author": "SDKWork",
+  "license": "Apache-2.0",
+  "dependencies": {}
+}

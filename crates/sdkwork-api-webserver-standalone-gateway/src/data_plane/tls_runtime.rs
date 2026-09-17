@@ -6,10 +6,11 @@ use std::{
 };
 
 use axum_server::tls_rustls::RustlsConfig;
+use sdkwork_utils_rust::{crypto::sha256_hash, datetime};
 use sdkwork_webserver_core::{
     tls_runtime::{
-        compile_tls_assignment_snapshot, TlsRuntimeSnapshotError, TlsRuntimeVersion,
-        MAX_TLS_RUNTIME_SNAPSHOT_BYTES,
+        compile_tls_assignment_snapshot, served_certificate_report_path, TlsRuntimeSnapshotError,
+        TlsRuntimeVersion, MAX_TLS_RUNTIME_SNAPSHOT_BYTES,
     },
     ListenerConfig, ListenerProtocol, TlsVersion,
 };
@@ -17,7 +18,17 @@ use thiserror::Error;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use tokio::{sync::watch, time::MissedTickBehavior};
 
-use super::tls_material::{build_sni_server_config, install_crypto_provider, load_certified_key};
+use super::{
+    tls::CompiledPolicyTlsMaterial,
+    tls_material::{
+        build_layered_server_config, build_source_index, install_crypto_provider,
+        load_certified_key,
+    },
+    tls_resolver::ResolverLayers,
+    tls_served_report::{
+        build_served_certificate_report, write_served_certificate_report, AssignedCertificate,
+    },
+};
 
 const CERTIFICATE_FILE_NAME: &str = "fullchain.pem";
 const PRIVATE_KEY_FILE_NAME: &str = "privkey.pem";
@@ -82,6 +93,8 @@ pub enum FileTlsRuntimeError {
     CandidateConflict,
     #[error("TLS runtime ALPN policy is incompatible with listener {listener_id}")]
     ListenerProtocol { listener_id: String },
+    #[error("TLS runtime is already bound to listener {listener_id}")]
+    ListenerAlreadyConfigured { listener_id: String },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -92,18 +105,80 @@ struct SourceFingerprint {
 
 struct Candidate {
     server_config: Arc<rustls::ServerConfig>,
+    /// The assigned-certificate layer this candidate materializes. Kept apart
+    /// from `server_config` so a `policy-first` listener can compose it beneath
+    /// its configured files while the assigned set keeps rotating.
+    assignment_layers: Arc<ResolverLayers>,
+    /// Identity and claimed names of each assignment, retained so the
+    /// served-certificate report can describe them without re-parsing the
+    /// snapshot on every rotation.
+    assigned: Vec<AssignedCertificate>,
+    /// SHA-256 of the snapshot bytes this candidate was compiled from, carried
+    /// so activation can publish it as the next poll's "unchanged" test.
+    source_sha256: String,
     snapshot_sha256: String,
     generation: u64,
     bytes: Vec<u8>,
     alpn: Vec<String>,
 }
 
+/// A configuration and the exact layer set it was built from.
+///
+/// The two travel together so the served-certificate report can describe the
+/// layers a listener actually installed instead of rebuilding an equivalent
+/// set that could drift from it.
+struct ComposedTls {
+    server_config: Arc<rustls::ServerConfig>,
+    layers: Arc<ResolverLayers>,
+}
+
+/// The snapshot identity and resolution inputs of the configuration currently
+/// installed in the listener.
+///
+/// These are one value rather than independent fields because they are one
+/// invariant: the resolver layers, the assignment identities, and both
+/// snapshot digests must always describe the same generation. Splitting them
+/// would let a rotation be observed with one snapshot's layers and another's
+/// identity, which is exactly the confusion the served-certificate report
+/// exists to prevent.
+struct ActiveTls {
+    /// The assigned-certificate layer currently installed. Retained so a
+    /// `policy-first` listener can recompose without re-reading the snapshot.
+    assignment_layers: Arc<ResolverLayers>,
+    /// Identity and claimed server names of every certificate in the active
+    /// snapshot, retained so publishing the served-certificate report never has
+    /// to re-parse the snapshot.
+    assigned: Arc<Vec<AssignedCertificate>>,
+    /// SHA-256 of the raw snapshot bytes this generation was compiled from.
+    ///
+    /// A poll that finds the file byte-identical to this has nothing to do, and
+    /// hashing the bytes is how it reaches that conclusion without parsing
+    /// them.
+    source_sha256: String,
+    /// The compiled snapshot's own content hash, which names the generation in
+    /// logs, in the served-certificate report, and in recovery state.
+    snapshot_sha256: String,
+    generation: u64,
+}
+
 pub struct FileTlsRuntimeController {
     config: FileTlsRuntimeConfig,
     canonical_material_root: PathBuf,
     rustls: RustlsConfig,
-    active_snapshot_sha256: Mutex<String>,
-    active_generation: Mutex<u64>,
+    /// The configuration the listener is serving right now.
+    ///
+    /// Lock order: `policy_material` is taken before `active` and never the
+    /// other way round, so a rotation and a listener binding cannot deadlock.
+    active: Mutex<ActiveTls>,
+    /// The listener's configured certificate layer, installed by
+    /// `configure_listener` once the data plane has resolved the TLS policy.
+    /// `None` for a listener that serves assigned certificates only.
+    policy_material: Mutex<Option<CompiledPolicyTlsMaterial>>,
+    /// Where this listener publishes what it serves.
+    ///
+    /// Derived once from the snapshot location, so a producer and a reader
+    /// cannot disagree about where the report lives.
+    served_report_path: PathBuf,
     recovery: Option<Mutex<TlsRecoveryStore>>,
     listener_protocols: Mutex<Option<(bool, bool)>>,
 }
@@ -175,15 +250,29 @@ impl FileTlsRuntimeController {
                 "TLS runtime restored from node recovery state"
             );
         }
+        let report_path = served_certificate_report_path(&config.snapshot_file);
         let controller = Self {
             config,
             canonical_material_root,
             rustls: RustlsConfig::from_config(candidate.server_config),
-            active_snapshot_sha256: Mutex::new(candidate.snapshot_sha256),
-            active_generation: Mutex::new(candidate.generation),
+            active: Mutex::new(ActiveTls {
+                assignment_layers: Arc::clone(&candidate.assignment_layers),
+                assigned: Arc::new(candidate.assigned),
+                source_sha256: candidate.source_sha256,
+                snapshot_sha256: candidate.snapshot_sha256,
+                generation: candidate.generation,
+            }),
+            policy_material: Mutex::new(None),
+            served_report_path: report_path,
             recovery: recovery.map(Mutex::new),
             listener_protocols: Mutex::new(None),
         };
+        // A report left behind by a previous process describes a configuration
+        // this process has not installed. Discarding it makes "a report exists"
+        // mean "the process owning this listener published it for its active
+        // snapshot", which is the only reading the observation plane can act
+        // on. `configure_listener` publishes the current one moments later.
+        discard_previous_served_report(&controller.served_report_path);
         Ok(Arc::new(controller))
     }
 
@@ -195,9 +284,17 @@ impl FileTlsRuntimeController {
         self.rustls.clone()
     }
 
+    /// Binds this controller to the listener that owns it.
+    ///
+    /// `policy_material` carries the listener's configured certificate files
+    /// when the listener serves both sources. The controller then keeps the
+    /// assigned certificates as the lower layer of a single resolver, so a
+    /// configured file can win per server name without a second listener or a
+    /// second handshake path.
     pub(crate) fn configure_listener(
         &self,
         listener: &ListenerConfig,
+        policy_material: Option<CompiledPolicyTlsMaterial>,
     ) -> Result<(), FileTlsRuntimeError> {
         let protocols = (
             listener.protocols.contains(&ListenerProtocol::Http1),
@@ -209,16 +306,79 @@ impl FileTlsRuntimeController {
                 listener_id: listener.id.clone(),
             });
         }
-        let mut configured = lock_unpoisoned(&self.listener_protocols);
-        match *configured {
-            Some(existing) if existing != protocols => Err(FileTlsRuntimeError::ListenerProtocol {
-                listener_id: listener.id.clone(),
-            }),
-            _ => {
-                *configured = Some(protocols);
-                Ok(())
+        if let Some(material) = policy_material.as_ref() {
+            let policy_alpn = material
+                .alpn
+                .iter()
+                .map(|protocol| protocol.as_bytes().to_vec())
+                .collect::<Vec<_>>();
+            if !alpn_is_compatible(&policy_alpn, protocols) {
+                return Err(FileTlsRuntimeError::ListenerProtocol {
+                    listener_id: listener.id.clone(),
+                });
             }
         }
+        {
+            let mut configured = lock_unpoisoned(&self.listener_protocols);
+            match *configured {
+                Some(existing) if existing != protocols => {
+                    return Err(FileTlsRuntimeError::ListenerProtocol {
+                        listener_id: listener.id.clone(),
+                    });
+                }
+                _ => *configured = Some(protocols),
+            }
+        }
+        {
+            let mut policy = lock_unpoisoned(&self.policy_material);
+            // A listener's certificate source set is fixed by
+            // `tlsCertificateResolution` at config load, and the data-plane
+            // reload path rejects every candidate that would change listener
+            // topology or static TLS policy, so this controller is bound to its
+            // listener exactly once. A second binding is a wiring defect:
+            // accepting it would leave a running listener serving a certificate
+            // layer the active configuration no longer declares.
+            if policy.is_some() {
+                return Err(FileTlsRuntimeError::ListenerAlreadyConfigured {
+                    listener_id: self.config.listener_id.clone(),
+                });
+            }
+            *policy = policy_material;
+        }
+        self.recompose_active()
+    }
+
+    /// Rebuilds the active configuration from the retained assigned layer plus
+    /// whichever configured layer is installed, then republishes what the
+    /// listener serves.
+    ///
+    /// A listener that serves assigned certificates only keeps the
+    /// configuration its candidate already produced, so only the report is
+    /// brought up to date. Either way the report is published here, because
+    /// this is the instant the listener becomes fully wired and therefore the
+    /// first instant its answer is meaningful.
+    fn recompose_active(&self) -> Result<(), FileTlsRuntimeError> {
+        let policy = lock_unpoisoned(&self.policy_material);
+        let active = lock_unpoisoned(&self.active);
+        let snapshot_sha256 = active.snapshot_sha256.clone();
+        let generation = active.generation;
+        let assigned = Arc::clone(&active.assigned);
+        let composed = match policy.as_ref() {
+            Some(material) => Some(compose_layers(material, &active.assignment_layers)?),
+            None => None,
+        };
+        let layers = match composed.as_ref() {
+            Some(composed) => {
+                self.rustls
+                    .reload_from_config(Arc::clone(&composed.server_config));
+                Arc::clone(&composed.layers)
+            }
+            None => Arc::clone(&active.assignment_layers),
+        };
+        drop(active);
+        drop(policy);
+        self.publish_served_report(&layers, &snapshot_sha256, generation, &assigned);
+        Ok(())
     }
 
     pub(crate) async fn watch_until(
@@ -236,13 +396,15 @@ impl FileTlsRuntimeController {
                 }
                 _ = ticker.tick() => {
                     let controller = Arc::clone(&self);
-                    let active_snapshot_sha256 =
-                        lock_unpoisoned(&self.active_snapshot_sha256).clone();
+                    let active_source_sha256 = {
+                        let active = lock_unpoisoned(&self.active);
+                        active.source_sha256.clone()
+                    };
                     let candidate = tokio::task::spawn_blocking(move || {
                         let candidate = load_candidate(
                             &controller.config,
                             &controller.canonical_material_root,
-                            Some(&active_snapshot_sha256),
+                            Some(&active_source_sha256),
                         )?;
                         if let Some(candidate) = candidate.as_ref() {
                             controller.validate_candidate_order(candidate)?;
@@ -264,19 +426,106 @@ impl FileTlsRuntimeController {
     }
 
     fn activate(&self, candidate: Candidate) {
-        let mut active_snapshot_sha256 = lock_unpoisoned(&self.active_snapshot_sha256);
-        if *active_snapshot_sha256 == candidate.snapshot_sha256 {
+        let mut active = lock_unpoisoned(&self.active);
+        if active.snapshot_sha256 == candidate.snapshot_sha256 {
+            // The file changed bytes without changing the snapshot it compiles
+            // to. Recording its digest is what stops the next poll from reading
+            // and compiling the same file again; the listener keeps serving the
+            // configuration it already has.
+            active.source_sha256 = candidate.source_sha256;
             return;
         }
-        self.rustls.reload_from_config(candidate.server_config);
-        *active_snapshot_sha256 = candidate.snapshot_sha256;
-        *lock_unpoisoned(&self.active_generation) = candidate.generation;
+        drop(active);
+        // Composed outside the active lock because composing takes the policy
+        // lock, and holding both in the opposite order to `recompose_active`
+        // would let a rotation and a listener binding deadlock.
+        let composed = match self.compose(&candidate) {
+            Ok(composed) => composed,
+            Err(error) => {
+                tracing::warn!(
+                    error = %error,
+                    "TLS runtime candidate could not be composed; retaining last-known-good configuration"
+                );
+                return;
+            }
+        };
+        self.rustls
+            .reload_from_config(Arc::clone(&composed.server_config));
+        // The listener is already serving the new configuration at this point,
+        // so the recorded identity has to be the one that was installed.
+        let mut active = lock_unpoisoned(&self.active);
+        *active = ActiveTls {
+            assignment_layers: Arc::clone(&candidate.assignment_layers),
+            assigned: Arc::new(candidate.assigned),
+            source_sha256: candidate.source_sha256,
+            snapshot_sha256: candidate.snapshot_sha256,
+            generation: candidate.generation,
+        };
         tracing::info!(
-            tls_runtime_snapshot_sha256 = %*active_snapshot_sha256,
-            tls_runtime_generation = candidate.generation,
+            tls_runtime_snapshot_sha256 = %active.snapshot_sha256,
+            tls_runtime_generation = active.generation,
             listener_id = %self.config.listener_id,
+            served_certificate_report = %self.served_report_path.display(),
             "TLS runtime snapshot activated"
         );
+        let snapshot_sha256 = active.snapshot_sha256.clone();
+        let generation = active.generation;
+        let assigned = Arc::clone(&active.assigned);
+        drop(active);
+        self.publish_served_report(&composed.layers, &snapshot_sha256, generation, &assigned);
+    }
+
+    /// Publishes what this listener serves for every server name the given
+    /// snapshot assigns.
+    ///
+    /// Publication is best effort on purpose. The report feeds the node's
+    /// certificate observations, while a filesystem that refuses the write says
+    /// nothing about whether the listener is serving correctly — so a failure
+    /// is reported and the rotation stands rather than being rolled back.
+    ///
+    /// The caller passes the same layer set it just installed, so the report can
+    /// never describe a resolution the listener is not performing.
+    fn publish_served_report(
+        &self,
+        layers: &ResolverLayers,
+        snapshot_sha256: &str,
+        generation: u64,
+        assigned: &[AssignedCertificate],
+    ) {
+        let now = datetime::now();
+        let report = build_served_certificate_report(
+            &self.config.listener_id,
+            snapshot_sha256,
+            generation,
+            datetime::format_datetime(now, None),
+            assigned,
+            layers,
+            now.timestamp(),
+        );
+        if let Err(error) = write_served_certificate_report(&self.served_report_path, &report) {
+            tracing::warn!(
+                error = %error,
+                listener_id = %self.config.listener_id,
+                "served certificate report was not published; the listener keeps serving the active configuration"
+            );
+        }
+    }
+
+    /// The configuration a candidate should activate, together with the layers
+    /// it was built from.
+    ///
+    /// Without a configured layer this is the candidate's own configuration.
+    /// With one, the candidate's assigned certificates are re-layered beneath
+    /// the configured files so the precedence survives every rotation.
+    fn compose(&self, candidate: &Candidate) -> Result<ComposedTls, FileTlsRuntimeError> {
+        let policy = lock_unpoisoned(&self.policy_material);
+        let Some(material) = policy.as_ref() else {
+            return Ok(ComposedTls {
+                server_config: Arc::clone(&candidate.server_config),
+                layers: Arc::clone(&candidate.assignment_layers),
+            });
+        };
+        compose_layers(material, &candidate.assignment_layers)
     }
 
     fn persist_recovery(&self, candidate: &Candidate) -> Result<(), FileTlsRuntimeError> {
@@ -306,7 +555,7 @@ impl FileTlsRuntimeController {
     }
 
     fn validate_candidate_order(&self, candidate: &Candidate) -> Result<(), FileTlsRuntimeError> {
-        let active_generation = lock_unpoisoned(&self.active_generation);
+        let active_generation = lock_unpoisoned(&self.active).generation;
         match candidate.generation.cmp(&active_generation) {
             std::cmp::Ordering::Less => Err(FileTlsRuntimeError::CandidateStale),
             std::cmp::Ordering::Equal => Err(FileTlsRuntimeError::CandidateConflict),
@@ -335,8 +584,9 @@ impl TlsRecoveryStore {
                 _ => return Err(FileTlsRuntimeError::Recovery),
             };
             if let Ok(bytes) = read_recovery_slot(&entry.path()) {
-                if let Ok(Some(candidate)) =
-                    compile_candidate(config, canonical_material_root, bytes, None)
+                let source_sha256 = sha256_hash(&bytes);
+                if let Ok(candidate) =
+                    compile_candidate(config, canonical_material_root, bytes, source_sha256)
                 {
                     candidates.push((slot, candidate));
                 }
@@ -450,30 +700,39 @@ fn validate_config(config: &FileTlsRuntimeConfig) -> Result<(), FileTlsRuntimeEr
     Ok(())
 }
 
+/// Reads the snapshot and compiles it, unless it has not changed at all.
+///
+/// "Unchanged" is decided on the raw bytes, and it comes first for a reason:
+/// reading and hashing the file costs about seventy microseconds, while
+/// compiling it costs a JSON parse, a schema check, a canonical re-hash, and a
+/// name index over every assigned server name. The watcher asks once per poll
+/// interval and the answer is almost always that nothing happened, so the cheap
+/// test is the one that must win.
 fn load_candidate(
     config: &FileTlsRuntimeConfig,
     canonical_material_root: &Path,
-    unchanged_snapshot_sha256: Option<&str>,
+    unchanged_source_sha256: Option<&str>,
 ) -> Result<Option<Candidate>, FileTlsRuntimeError> {
     let bytes = read_stable_snapshot(&config.snapshot_file)?;
-    compile_candidate(
-        config,
-        canonical_material_root,
-        bytes,
-        unchanged_snapshot_sha256,
-    )
+    let source_sha256 = sha256_hash(&bytes);
+    if unchanged_source_sha256 == Some(source_sha256.as_str()) {
+        return Ok(None);
+    }
+    compile_candidate(config, canonical_material_root, bytes, source_sha256).map(Some)
 }
 
+/// Compiles snapshot bytes into everything activation needs.
+///
+/// Whether the compiled snapshot is one the listener already serves is decided
+/// by [`FileTlsRuntimeController::activate`], which owns the reload decision;
+/// this function only turns bytes into a candidate.
 fn compile_candidate(
     config: &FileTlsRuntimeConfig,
     canonical_material_root: &Path,
     bytes: Vec<u8>,
-    unchanged_snapshot_sha256: Option<&str>,
-) -> Result<Option<Candidate>, FileTlsRuntimeError> {
+    source_sha256: String,
+) -> Result<Candidate, FileTlsRuntimeError> {
     let compiled = compile_tls_assignment_snapshot(&bytes)?;
-    if unchanged_snapshot_sha256 == Some(compiled.snapshot_sha256()) {
-        return Ok(None);
-    }
     let snapshot = compiled.snapshot();
     if snapshot.node_uuid != config.node_uuid {
         return Err(FileTlsRuntimeError::NodeScope {
@@ -496,6 +755,7 @@ fn compile_candidate(
     let provider = rustls::crypto::CryptoProvider::get_default()
         .expect("the Rustls crypto provider is installed before TLS material is loaded");
     let mut certificates = Vec::with_capacity(snapshot.assignments.len());
+    let mut assigned = Vec::with_capacity(snapshot.assignments.len());
     for assignment in &snapshot.assignments {
         let (certificate_file, private_key_file) =
             resolve_material_paths(canonical_material_root, &assignment.material_reference)?;
@@ -523,23 +783,88 @@ fn compile_candidate(
                 assignment_uuid: assignment.assignment_uuid.clone(),
             });
         }
-        certificates.push((assignment.server_names.clone(), loaded.certified_key));
+        certificates.push((assignment.server_names.clone(), loaded));
+        assigned.push(AssignedCertificate {
+            certificate_id: assignment.certificate_uuid.clone(),
+            server_names: assignment.server_names.clone(),
+        });
     }
-    let server_config = build_sni_server_config(
-        certificates,
+    let assignment_layers = Arc::new(ResolverLayers::assignment_only(
+        build_source_index(certificates)
+            .map_err(|server_name| FileTlsRuntimeError::AmbiguousServerName { server_name })?,
+    ));
+    let server_config = build_layered_server_config(
+        Arc::clone(&assignment_layers),
         map_version(policy.minimum_version),
         map_version(policy.maximum_version),
         &policy.alpn,
         None,
     )
     .map_err(|server_name| FileTlsRuntimeError::AmbiguousServerName { server_name })?;
-    Ok(Some(Candidate {
+    Ok(Candidate {
         server_config,
+        assignment_layers,
+        assigned,
+        source_sha256,
         snapshot_sha256: compiled.snapshot_sha256().to_owned(),
         generation: snapshot.generation,
         bytes,
         alpn: policy.alpn,
-    }))
+    })
+}
+
+/// Layers the configured certificate files above an assigned-certificate set.
+///
+/// The resulting configuration serves the configured file for each server name
+/// it covers and is usable for, and the assigned certificate for every other
+/// name. Protocol parameters come from the policy, because the operator's
+/// `tlsPolicyRef` is what declared them.
+///
+/// The layer set is returned alongside the configuration so the caller reports
+/// on the very layers it installed rather than on an equal-looking rebuild.
+fn compose_layers(
+    material: &CompiledPolicyTlsMaterial,
+    assignment: &Arc<ResolverLayers>,
+) -> Result<ComposedTls, FileTlsRuntimeError> {
+    let layers = Arc::new(ResolverLayers::new(
+        material.layers.clone(),
+        assignment.assignments().clone(),
+    ));
+    let server_config = build_layered_server_config(
+        Arc::clone(&layers),
+        material.minimum_version,
+        material.maximum_version,
+        &material.alpn,
+        material.client_auth.as_ref(),
+    )
+    .map_err(|server_name| FileTlsRuntimeError::AmbiguousServerName { server_name })?;
+    Ok(ComposedTls {
+        server_config,
+        layers,
+    })
+}
+
+/// Removes the served-certificate report of a previous process, if there is one.
+///
+/// A leftover report describes a configuration this process has not installed
+/// yet. Removing it makes "the report is present" mean "the process that owns
+/// this listener published it for the snapshot it is serving", which is the only
+/// reading the observation plane can act on. A missing file is the expected case
+/// and is not reported; any other failure is, because the observation plane
+/// would otherwise read a stale authority as current.
+fn discard_previous_served_report(path: &Path) {
+    match fs::remove_file(path) {
+        Ok(()) => tracing::info!(
+            served_certificate_report = %path.display(),
+            "discarded the served certificate report of a previous process"
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => tracing::warn!(
+            served_certificate_report = %path.display(),
+            error = %error,
+            "a served certificate report of a previous process could not be discarded and will be read as current until this process publishes one"
+        ),
+    }
 }
 
 fn alpn_is_compatible(alpn: &[Vec<u8>], protocols: (bool, bool)) -> bool {
@@ -828,6 +1153,40 @@ mod tests {
         assert!(!Arc::ptr_eq(&before, &after));
     }
 
+    /// A file that changes bytes without changing the snapshot it compiles to
+    /// must not reload the listener, and must not leave the watcher re-reading
+    /// and re-compiling that same file on every following tick either.
+    #[test]
+    fn a_content_identical_snapshot_is_absorbed_without_reloading_the_listener() {
+        let fixture = tls_fixture("node-0001", "certificate-v1", "compiler/1");
+        let controller = FileTlsRuntimeController::load(fixture.config.clone()).unwrap();
+        let before = controller.rustls.get_inner();
+        let recorded = lock_unpoisoned(&controller.active).source_sha256.clone();
+
+        // Pretty printing preserves every value, and therefore the canonical
+        // hash, while changing the bytes on disk.
+        let rewritten = serde_json::to_vec_pretty(&fixture.snapshot).unwrap();
+        fs::write(&fixture.snapshot_file, &rewritten).unwrap();
+        assert_ne!(recorded, sha256_hash(&rewritten));
+
+        let candidate = load_candidate(&fixture.config, &fixture.material_root, Some(&recorded))
+            .unwrap()
+            .expect("rewritten bytes are not the bytes the active generation came from");
+        controller.activate(candidate);
+
+        assert!(
+            Arc::ptr_eq(&before, &controller.rustls.get_inner()),
+            "a content-identical snapshot must not reload the listener"
+        );
+        let updated = lock_unpoisoned(&controller.active).source_sha256.clone();
+        assert_eq!(updated, sha256_hash(&rewritten));
+        assert!(
+            load_candidate(&fixture.config, &fixture.material_root, Some(&updated))
+                .unwrap()
+                .is_none()
+        );
+    }
+
     #[tokio::test]
     async fn dynamic_tls_config_completes_a_real_sni_handshake_with_the_declared_version() {
         let mut fixture = tls_fixture("node-0001", "certificate-v1", "compiler/1");
@@ -878,7 +1237,7 @@ mod tests {
         let expected_sha256 = fixture.snapshot.snapshot_sha256.clone();
         let controller = FileTlsRuntimeController::load(fixture.config.clone()).unwrap();
         assert_eq!(
-            *lock_unpoisoned(&controller.active_snapshot_sha256),
+            lock_unpoisoned(&controller.active).snapshot_sha256,
             expected_sha256
         );
         assert!(recovery_directory.join(RECOVERY_SLOT_A_FILE).is_file());
@@ -886,7 +1245,7 @@ mod tests {
         fs::write(&fixture.snapshot_file, b"corrupt source").unwrap();
         let recovered = FileTlsRuntimeController::load(fixture.config).unwrap();
         assert_eq!(
-            *lock_unpoisoned(&recovered.active_snapshot_sha256),
+            lock_unpoisoned(&recovered.active).snapshot_sha256,
             fixture.snapshot.snapshot_sha256
         );
     }

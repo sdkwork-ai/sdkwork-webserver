@@ -1,0 +1,182 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "sdkwork-webserver-harmony-mobile-core",
+    "displayName": "SDKWork Web Server HarmonyOS Mobile Core",
+    "version": "0.1.0",
+    "type": "arkts-package",
+    "root": "apps/sdkwork-webserver-harmony-mobile/packages/sdkwork-webserver-harmony-mobile-core",
+    "domain": "infrastructure",
+    "capability": "core",
+    "surface": "app",
+    "languages": [
+      "arkts"
+    ],
+    "generated": false,
+    "manifests": [
+      "oh-package.json5",
+      "specs/component.spec.json"
+    ]
+  },
+  "canonicalSpecs": [
+    {
+      "file": "HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md",
+      "purpose": "HarmonyOS mobile application root architecture."
+    },
+    {
+      "file": "APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "purpose": "Cross-client package taxonomy and dependency direction."
+    },
+    {
+      "file": "APP_COMPOSITION_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_COMPOSITION_SPEC.md",
+      "purpose": "Native-authority application composition."
+    },
+    {
+      "file": "APP_SDK_INTEGRATION_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md",
+      "purpose": "Generated app SDK and TokenManager integration."
+    },
+    {
+      "file": "APP_PERMISSION_COMPOSITION_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_PERMISSION_COMPOSITION_SPEC.md",
+      "purpose": "Permission catalog inheritance for dependency domains."
+    },
+    {
+      "file": "CODE_STYLE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/CODE_STYLE_SPEC.md",
+      "purpose": "Authored source structure and generated code boundaries."
+    },
+    {
+      "file": "NAMING_SPEC.md",
+      "path": "../../../../../sdkwork-specs/NAMING_SPEC.md",
+      "purpose": "Canonical SDKWork naming rules."
+    }
+  ],
+  "contracts": {
+    "layerRole": "frontend-core",
+    "publicExports": [
+      ".",
+      "./sdk",
+      "./modules",
+      "./host",
+      "./session",
+      "./composition"
+    ],
+    "providedPorts": [
+      {
+        "name": "webserverHarmonyApplicationSdk",
+        "export": "./sdk"
+      },
+      {
+        "name": "webserverHarmonySession",
+        "export": "./session"
+      }
+    ],
+    "requiredPorts": [],
+    "runtimeEntrypoints": [],
+    "routeManifest": null,
+    "sdkClients": [
+      "@sdkwork/webserver-app-sdk",
+      "@sdkwork/drive-app-sdk",
+      "@sdkwork/deployments-app-sdk"
+    ],
+    "sdkDependencies": [
+      {
+        "workspace": "sdkwork-webserver-app-sdk",
+        "permissionModuleId": "web",
+        "surface": "app-api",
+        "credentialMode": "authenticated-app-api",
+        "runtimeAdaptation": "arkts-port-pending"
+      },
+      {
+        "workspace": "sdkwork-drive-app-sdk",
+        "permissionModuleId": "drive",
+        "surface": "app-api",
+        "credentialMode": "authenticated-app-api",
+        "runtimeAdaptation": "arkts-port-pending"
+      },
+      {
+        "workspace": "sdkwork-deployments-app-sdk",
+        "permissionModuleId": "deployments",
+        "surface": "app-api",
+        "credentialMode": "authenticated-app-api",
+        "runtimeAdaptation": "arkts-port-pending"
+      }
+    ],
+    "permissionComposition": {
+      "inheritanceMode": "module-catalog-with-overrides",
+      "moduleCatalogRefs": [
+        {
+          "moduleId": "web",
+          "manifestRef": "../../../../specs/iam.module.manifest.json",
+          "inheritPermissions": true,
+          "inheritRoles": true
+        },
+        {
+          "moduleId": "drive",
+          "manifestRef": "../../../../../sdkwork-iam/iam/modules/drive/iam.module.manifest.json",
+          "inheritPermissions": true,
+          "inheritRoles": true
+        },
+        {
+          "moduleId": "deployments",
+          "manifestRef": "../../../../../sdkwork-deployments/specs/iam.module.manifest.json",
+          "inheritPermissions": true,
+          "inheritRoles": true
+        }
+      ],
+      "applicationModule": {
+        "manifestRef": "../../../../specs/iam.module.manifest.json"
+      },
+      "bootstrapAccessTokenScope": {
+        "inheritFrom": "sdkwork.app.config.json#backend.accessTokenPermissionScope",
+        "supplement": [],
+        "overrideReplace": false
+      },
+      "routePermissionHints": {
+        "inheritFromOpenApi": true,
+        "inheritFromModuleManifests": true,
+        "overrides": []
+      },
+      "consumerPolicy": {
+        "forbidLocalPermissionCatalogForDependencyDomains": true,
+        "allowExplicitOverridesOnly": true,
+        "allowFrontendHintsWithoutServerDuplication": true
+      }
+    },
+    "dependencyApiExports": [],
+    "dependencyApiSurfaces": [],
+    "events": [],
+    "configKeys": [
+      "webserverApiBaseUrl",
+      "webserverBackendApiBaseUrl",
+      "applicationPublicHttpUrl",
+      "appbaseAppApiBaseUrl",
+      "appbaseLoginUrl",
+      "deploymentProfile",
+      "environment",
+      "profileId",
+      "runtimeTarget"
+    ]
+  },
+  "integration": {
+    "authority": "Root SDKWork specs remain authoritative.",
+    "dependencyPolicy": "Consume sibling packages through public exports only.",
+    "sdkPolicy": "No ArkTS target is generated for the composed app SDK families yet, so every family is reached through an injected arkts-pending port declared here; the concrete transport is constructed only by entry bootstrap, and capability packages never build one.",
+    "hostPolicy": "Platform calls are bound once, through typed adapters implemented in @sdkwork/sdkwork-webserver-harmony-mobile-host."
+  },
+  "verification": {
+    "commands": [
+      "node ../sdkwork-specs/tools/check-frontend-composition.mjs --root .",
+      "node --test apps/sdkwork-webserver-harmony-mobile/tests/harmony-surface-contract.test.mjs"
+    ]
+  },
+  "metadata": {
+    "standardVersion": "2026-09-17",
+    "arktsSdkGap": "The SDK generation chain emits typescript and flutter targets for sdkwork-webserver-app-sdk only; no arkts target exists in the workspace."
+  }
+}

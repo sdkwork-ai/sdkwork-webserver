@@ -1,0 +1,11 @@
+{
+  "pages": [
+    "pages/applications/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "SDKWork Web Server",
+    "navigationBarBackgroundColor": "#0f766e",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#f8fafc"
+  }
+}

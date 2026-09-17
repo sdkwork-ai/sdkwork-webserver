@@ -53,7 +53,7 @@
     "requiredPorts": [
       {"name": "webServerRepositoryRuntime", "export": "crate-root", "provider": "sdkwork-intelligence-webserver-repository-sqlx"},
       {"name": "webServerDatabaseLifecycle", "export": "crate-root", "provider": "sdkwork-webserver-database-host"},
-      {"name": "deploymentsDomainCertificateBlocks", "export": "sdkwork_api_deployments_assembly::assemble_domain_certificate_blocks", "provider": "sdkwork-api-deployments-assembly"},
+      {"name": "deploymentsAppApiContribution", "export": "sdkwork_api_deployments_assembly::assemble_same_origin_contribution_with_pool", "provider": "sdkwork-api-deployments-assembly"},
       {"name": "skillsAppApiContribution", "export": "sdkwork_api_skills_assembly::assemble_app_api_contribution", "provider": "sdkwork-api-skills-assembly"},
       {"name": "skillsBackendApiContribution", "export": "sdkwork_api_skills_assembly::assemble_backend_api_contribution", "provider": "sdkwork-api-skills-assembly"},
       {"name": "mcpAppApiContribution", "export": "sdkwork_api_mcp_assembly::assemble_app_api_contribution", "provider": "sdkwork-api-mcp-assembly"},
@@ -72,6 +72,19 @@
     "sdkDependencies": [],
     "dependencyApiExports": [],
     "dependencyApiSurfaces": [
+      {
+        "workspace": "sdkwork-deployments",
+        "sdkFamily": "deployments-app-sdk",
+        "apiAuthority": "sdkwork-deployments-app-api",
+        "surface": "app-api",
+        "apiPrefix": "/app/v3/api",
+        "runtimeMode": "same-origin",
+        "sameOriginAllowed": true,
+        "cargoDependency": "sdkwork-api-deployments-assembly",
+        "embeddedExecutableExport": "sdkwork_api_deployments_assembly::assemble_same_origin_contribution_with_pool",
+        "profileCoverage": ["standalone"],
+        "coverageEvidence": ["src/bootstrap.rs"]
+      },
       {
         "workspace": "sdkwork-skills",
         "sdkFamily": "sdkwork-skills-app-sdk",

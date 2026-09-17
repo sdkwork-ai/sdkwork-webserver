@@ -33,6 +33,7 @@ url.workspace = true
 sdkwork-webserver-backend-sdk.workspace = true
 sdkwork-webserver-edge-runtime.workspace = true
 sdkwork-webserver-contract.workspace = true
+sdkwork-webserver-core.workspace = true
 sdkwork-utils-rust.workspace = true
 
 [lints]

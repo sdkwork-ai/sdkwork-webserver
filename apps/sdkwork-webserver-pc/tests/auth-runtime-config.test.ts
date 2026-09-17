@@ -92,6 +92,24 @@ describe("webserver IAM runtime config", () => {
     vi.unstubAllGlobals();
   });
 
+  it("keeps a hydrated session Access-Token when no bootstrap credential is injected", async () => {
+    const tokenManager = createTokenManager();
+    tokenManager.setAccessToken("hydrated-session-access-token");
+    const runtimeRetrieve = vi.fn().mockResolvedValue(runtimeMetadata);
+    const policyRetrieve = vi.fn().mockResolvedValue(verificationPolicyMetadata);
+    const load = createWebserverAuthRuntimeConfigLoader({
+      system: {
+        iam: {
+          runtime: { retrieve: runtimeRetrieve },
+          verificationPolicy: { retrieve: policyRetrieve },
+        },
+      },
+    }, tokenManager);
+
+    await expect(load()).resolves.toMatchObject({ qrLoginEnabled: true });
+    expect(tokenManager.getAccessToken()).toBe("hydrated-session-access-token");
+  });
+
   it("clears a failed metadata request so retry performs fresh SDK calls", async () => {
     const runtimeRetrieve = vi.fn()
       .mockRejectedValueOnce(new Error("offline"))

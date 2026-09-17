@@ -14,14 +14,14 @@ public class ApplicationApi {
     }
 
     /** 获取应用列表 */
-    public ApplicationsListResponse applicationsList(Integer page, Integer pageSize, Integer status, String applicationType, Integer siteType, String keyword) throws Exception {
+    public ApplicationsListResponse applicationsList(Integer page, Integer pageSize, Integer status, String applicationType, Integer siteType, String q) throws Exception {
         String query = buildQueryString(List.of(
             new QueryParameterSpec("page", page, "form", true, false, null),
             new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             new QueryParameterSpec("status", status, "form", true, false, null),
             new QueryParameterSpec("application_type", applicationType, "form", true, false, null),
             new QueryParameterSpec("site_type", siteType, "form", true, false, null),
-            new QueryParameterSpec("keyword", keyword, "form", true, false, null)
+            new QueryParameterSpec("q", q, "form", true, false, null)
         ));
         Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/applications"), query));
         return client.convertValue(raw, new TypeReference<ApplicationsListResponse>() {});

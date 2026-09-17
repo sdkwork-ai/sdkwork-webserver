@@ -9,7 +9,7 @@ export const webserverModule = {
       resource: "plugins",
       label: "My Plugins",
       description: "Register plugins from Git or archive uploads",
-      permission: "web.applications.read",
+      permission: "web.plugins.read",
       order: 40,
     },
   ],

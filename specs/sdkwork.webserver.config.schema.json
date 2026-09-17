@@ -624,12 +624,22 @@
           }
         },
         "tlsPolicyRef": {
-          "$ref": "#/$defs/id"
+          "$ref": "#/$defs/id",
+          "description": "Static TLS policy whose `certificateRefs` supply the listener certificate chain and key. A listener may declare `tlsPolicyRef` and `tlsRuntime` together when `tlsCertificateResolution` is `policy-first`."
         },
         "tlsRuntime": {
           "enum": [
             "assignment"
-          ]
+          ],
+          "description": "Opts the listener into the dynamic certificate assignment runtime. A listener may declare `tlsPolicyRef` and `tlsRuntime` together when `tlsCertificateResolution` is `policy-first`."
+        },
+        "tlsCertificateResolution": {
+          "enum": [
+            "policy-only",
+            "assignment-only",
+            "policy-first"
+          ],
+          "description": "Which certificate sources this TLS listener serves. `policy-only` serves only the static `tlsPolicyRef` material, `assignment-only` serves only the assigned certificate set, and `policy-first` serves the static policy material first and then falls back, per requested server name, to the assigned certificate set whenever the configured certificate file is missing, unusable, or does not cover that server name. Defaults to `policy-only` when only `tlsPolicyRef` is declared, to `assignment-only` when only `tlsRuntime` is declared, and must be declared explicitly as `policy-first` when both are present."
         },
         "defaultVirtualHostRef": {
           "$ref": "#/$defs/id"

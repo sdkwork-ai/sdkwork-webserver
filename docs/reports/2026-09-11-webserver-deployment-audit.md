@@ -41,6 +41,13 @@
 
 ### P0-1 生产环境向匿名访客下发「系统级」访问令牌（安全）
 
+> **处置状态（2026-09-15 复核）— 已修复。** 本条描述的「全环境无条件签发 + 注入」已不成立，下列成因链与规范冲突保留作为当日审计记录：
+>
+> - **注入点已加门禁**：`data_plane/credential_entry_injection.rs` 的 `resolve_injection_token(environment, env_token, file_token)` 仅在 `development` / `dev`（大小写归一）返回令牌，且 `injection_environment()` 对未标注环境**默认 fail closed**；`app_shell.rs` 已改为共用同一策略函数，不再有独立的无门禁读取。
+> - **容器入口已加门禁**：`bin/container/entrypoint-standalone.sh`（当日路径为 `deployments/docker/scripts/entrypoint-standalone.sh`，文件已迁移）新增 `credential_entry_bootstrap_token_is_enabled()` 单一策略谓词，并在禁用环境调用 `purge_credential_entry_bootstrap_token()` 清理持久卷上的历史令牌。
+> - **复核实测**：`standalone.development` 网关在 development 下注入；`crates/.../app_shell.rs` 单测 `index_injects_credential_entry_bootstrap_access_token_when_configured` 覆盖注入契约。
+> - 遗留项见本文 §7「中」档：把 Rust 注入路径纳入 `check-credential-entry-bootstrap-standard.mjs` 的审计面（该工具目前只审计 `apps/*/vite.config.ts`，本次复核仍 PASS 且仍对 webserver 的 Rust 注入点失明）。
+
 **证据**（直接 HTTP 抓取，无需认证）：
 
 ```
@@ -277,7 +284,7 @@ production  FAIL config :: configuration drift: PLACEHOLDER WEBSERVER_REDIS_PASS
 
 | 优先级 | 动作 |
 | --- | --- |
-| **立即** | 为 `app_shell` 的令牌注入加上与数据面一致的环境门禁（仅 development/dev）；同时让 `ensure_credential_entry_bootstrap_token` 在 staging/demo/production 不签发（或改为按需签发 + 短 TTL 自动刷新）。修好前不要在 production 暴露该控制台入口。 |
+| **立即** | ~~为 `app_shell` 的令牌注入加上与数据面一致的环境门禁（仅 development/dev）；同时让 `ensure_credential_entry_bootstrap_token` 在 staging/demo/production 不签发（或改为按需签发 + 短 TTL 自动刷新）。修好前不要在 production 暴露该控制台入口。~~ **已完成（2026-09-15 复核，见 §2 P0-1 处置状态）**；TTL 自动刷新仍为待办。 |
 | **立即** | 补齐版本一致性守卫：`bin/docker-deploy.sh` 解析出的 tag 必须与 `sdkwork.app.config.json release.currentVersion` 一致，否则 fail-fast；把仓库 `deployments/docker/env/*.env` 的 IMAGE_TAG 复位到 0.1.5 并重发五环境。 |
 | **高** | 让 upgrade 也写 release 台账（补齐四环境的 rollback 能力）；并把「绕过 bin/ 的实际部署」纳入可检测范围（例如部署面落地一次性 nonce/证据标记）。 |
 | **高** | 节点租约自愈：心跳被 fence 后允许重新分配，或让 `/readyz` 不因该依赖永久 fail-closed；补注册表 GC。 |

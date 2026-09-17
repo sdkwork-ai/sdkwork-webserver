@@ -1,0 +1,18 @@
+{
+  "environment": "staging",
+  "deploymentProfile": "standalone",
+  "profileId": "standalone.staging",
+  "runtimeTarget": "harmony-native",
+  "webserver": {
+    "apiBaseUrl": "https://server-staging.sdkwork.com/app/v3/api",
+    "backendApiBaseUrl": "https://server-staging.sdkwork.com/backend/v3/api"
+  },
+  "appbase": {
+    "appApiBaseUrl": "https://server-staging.sdkwork.com",
+    "loginUrl": "https://server-staging.sdkwork.com"
+  },
+  "metadata": {
+    "profileBinding": "runtime-configurable",
+    "applicationPublicHttpUrl": "https://server-staging.sdkwork.com"
+  }
+}

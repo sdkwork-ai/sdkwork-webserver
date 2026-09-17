@@ -9,8 +9,9 @@ use tokio::sync::Semaphore;
 use crate::account_store::{AcmeAccountStore, MemoryAcmeAccountStore};
 use crate::challenge_store::ChallengeStore;
 use crate::config::AcmeConfig;
+use crate::dns::Dns01Presenter;
 use crate::http_client::{AcmeHttpClientFactory, PlatformVerifierClientFactory};
-use crate::lets_encrypt::issue_lets_encrypt;
+use crate::lets_encrypt::{issue_lets_encrypt, AcmeChallengeMode};
 use crate::model::IssuedCertificateMaterial;
 use crate::self_signed::{certificate_evidence_from_pem, issue_self_signed};
 use crate::{AcmeServiceError, AcmeServiceResult};
@@ -19,7 +20,14 @@ use crate::{
 };
 
 const MAX_CONCURRENT_CERTIFICATE_ISSUANCE: usize = 8;
-const MAX_CERTIFICATE_IDENTIFIERS: usize = 8;
+
+/// Certificate identifier ceiling.
+///
+/// Aligned with the deployment contract's `MAX_CERTIFICATE_IDENTIFIERS` and the
+/// CA's own per-certificate name limit. The previous value of 8 was a local
+/// choice, not a CA constraint, and it silently made a 20-name certificate
+/// unrepresentable in the control plane.
+const MAX_CERTIFICATE_IDENTIFIERS: usize = 100;
 
 pub struct CertificateIssuer {
     pub(crate) config: AcmeConfig,
@@ -126,6 +134,24 @@ impl CertificateIssuer {
         cert_name: &str,
         key_algorithm: &str,
     ) -> AcmeServiceResult<IssuedCertificateMaterial> {
+        self.issue_with_challenge(cert_type, hostnames, cert_name, key_algorithm, None)
+            .await
+    }
+
+    /// Issue with an explicit challenge strategy.
+    ///
+    /// `dns01` selects DNS-01 validation and is required for any wildcard
+    /// identifier. Passing `None` keeps the historical HTTP-01 behaviour, which
+    /// is exact-identifier only; a wildcard request on that path fails with a
+    /// validation error before an order is created.
+    pub async fn issue_with_challenge(
+        &self,
+        cert_type: i32,
+        hostnames: &[String],
+        cert_name: &str,
+        key_algorithm: &str,
+        dns01: Option<AcmeDns01Context<'_>>,
+    ) -> AcmeServiceResult<IssuedCertificateMaterial> {
         if hostnames.is_empty() || hostnames.len() > MAX_CERTIFICATE_IDENTIFIERS {
             return Err(AcmeServiceError::validation(format!(
                 "certificate identifiers must contain 1..{MAX_CERTIFICATE_IDENTIFIERS} hostnames"
@@ -151,6 +177,13 @@ impl CertificateIssuer {
                 "certificate issuance capacity exhausted; maximum concurrent operations: {MAX_CONCURRENT_CERTIFICATE_ISSUANCE}"
             ))
         })?;
+        let mode = match dns01 {
+            Some(context) => AcmeChallengeMode::Dns01 {
+                presenter: context.presenter,
+                zone_apex: context.zone_apex,
+            },
+            None => AcmeChallengeMode::Http01,
+        };
         let material = match cert_type {
             1 => {
                 issue_lets_encrypt(
@@ -163,6 +196,7 @@ impl CertificateIssuer {
                         cert_name,
                         cert_root: &self.cert_root,
                         key_algorithm,
+                        mode,
                     },
                     self.operation_timeout,
                 )
@@ -175,6 +209,17 @@ impl CertificateIssuer {
         }?;
         validate_issued_material(material, cert_type, hostnames, cert_name, key_algorithm)
     }
+}
+
+/// DNS-01 presentation context for one issuance.
+///
+/// The presenter is supplied by the caller because only the caller knows which
+/// DNS provider owns the zone and holds the resolved credential; the engine
+/// never reads a secret store.
+pub struct AcmeDns01Context<'a> {
+    pub presenter: &'a dyn Dns01Presenter,
+    /// Hosted zone apex that owns the `_acme-challenge` records.
+    pub zone_apex: &'a str,
 }
 
 fn validate_issued_material(
@@ -410,6 +455,63 @@ mod tests {
         )
         .expect_err("certificate and key mismatch must fail closed");
         assert!(error.to_string().contains("does not match the leaf"));
+    }
+
+    /// PLAN-2026-0003 §14 phase 3d requires the validity mismatch case of the
+    /// rejection table to be exercised, not only SAN and SPKI. The certificate
+    /// below is well-formed and correctly keyed but its window starts in the
+    /// future, so `validate_issued_material` must refuse to store it.
+    #[test]
+    fn rejects_issued_certificate_that_is_not_yet_valid() {
+        use rcgen::{CertificateParams, DistinguishedName, DnType};
+        use time::OffsetDateTime;
+
+        let key_pair = generate_key_pair("ECDSA").expect("issuance key pair");
+        let mut params =
+            CertificateParams::new(vec!["dev.localhost".to_string()]).expect("certificate params");
+        params.distinguished_name = DistinguishedName::new();
+        params
+            .distinguished_name
+            .push(DnType::CommonName, "dev.localhost");
+        let not_before = OffsetDateTime::now_utc() + time::Duration::days(1);
+        params.not_before = not_before;
+        params.not_after = not_before + time::Duration::days(90);
+        let cert_pem = params
+            .self_signed(&key_pair)
+            .expect("future-dated self-signed certificate")
+            .pem();
+        let evidence = certificate_evidence_from_pem(&cert_pem).expect("leaf evidence");
+
+        let material = IssuedCertificateMaterial {
+            cert_name: "dev-localhost".to_string(),
+            cert_type: 3,
+            issuer: evidence.issuer,
+            subject: evidence.subject,
+            san_list: evidence.san_list,
+            serial_sha256: evidence.serial_sha256,
+            fingerprint_sha256: evidence.fingerprint_sha256,
+            spki_sha256: evidence.spki_sha256,
+            chain_sha256: evidence.chain_sha256,
+            key_algorithm: evidence.key_algorithm,
+            cert_pem,
+            private_key_pem: key_pair.serialize_pem(),
+            chain_pem: None,
+            not_before: evidence.not_before,
+            not_after: evidence.not_after,
+            cert_path: "/tmp/certs/dev-localhost/fullchain.pem".to_string(),
+            key_path: "/tmp/certs/dev-localhost/privkey.pem".to_string(),
+            chain_path: None,
+        };
+
+        let error = validate_issued_material(
+            material,
+            3,
+            &["dev.localhost".to_string()],
+            "dev-localhost",
+            "ECDSA",
+        )
+        .expect_err("a certificate that is not yet valid must fail closed");
+        assert!(error.to_string().contains("not currently valid"));
     }
 
     #[test]

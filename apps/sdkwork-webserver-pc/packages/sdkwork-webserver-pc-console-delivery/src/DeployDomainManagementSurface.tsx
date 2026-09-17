@@ -32,7 +32,7 @@ export function DeployDomainManagementSurface({
   );
   const Page = resource === "domains" ? DomainManagementPage : CertificateManagementPage;
   return (
-    <div className="deploy-domains-surface">
+    <div className="deploy-surface">
       <DeploymentsConsoleProvider clients={clients}>
         <Page locale={locale} />
       </DeploymentsConsoleProvider>

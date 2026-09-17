@@ -1,0 +1,12 @@
+{
+  "app": {
+    "bundleName": "com.sdkwork.webserver.mobile",
+    "vendor": "SDKWork",
+    "versionCode": 1000000,
+    "versionName": "0.1.0",
+    "label": "$string:app_name",
+    "minAPIVersion": 12,
+    "targetAPIVersion": 12,
+    "apiReleaseType": "Release"
+  }
+}

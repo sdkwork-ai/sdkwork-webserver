@@ -1,0 +1,9 @@
+{
+  "name": "@sdkwork/sdkwork-webserver-harmony-mobile-shell",
+  "version": "0.1.0",
+  "description": "SDKWork Web Server HarmonyOS mobile shell: page stack, navigation model, and auth gate.",
+  "main": "src/main/ets/Index.ets",
+  "author": "SDKWork",
+  "license": "Apache-2.0",
+  "dependencies": {}
+}

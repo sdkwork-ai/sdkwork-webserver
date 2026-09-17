@@ -132,11 +132,23 @@ namespace SDKWork.WebserverBackendSdk.Http
 
         private static void StripCredentialHeaders(HttpRequestMessage request)
         {
+            // Identity projection headers forbidden by the Web Framework server
+            // guard (sdkwork-web-core::constants::FORBIDDEN_CLIENT_IDENTITY_HEADERS,
+            // API_SPEC §10.2 / SECURITY_SPEC §5.1 / spec B9). The server rejects
+            // any request carrying them with 400/40001 (surface classification).
             foreach (var header in new[]
             {
                 "Authorization", "Access-Token", "X-API-Key", "X-Tenant-Id",
-                "X-Organization-Id", "X-Platform", "X-User-Id",
-                "X-Sdkwork-Tenant-Id", "X-Sdkwork-Organization-Id", "X-Sdkwork-User-Id"
+                "X-App-Id", "X-Organization-Id", "X-Platform", "X-User-Id",
+                "X-Sdkwork-Tenant-Id", "X-Sdkwork-App-Id", "X-Sdkwork-User-Id",
+                "X-Sdkwork-Organization-Id", "X-Sdkwork-Actor-Id", "X-Sdkwork-Actor-Kind",
+                "X-Sdkwork-Session-Id", "X-Sdkwork-Environment", "X-Sdkwork-Deployment-Profile",
+                "X-Sdkwork-Deployment-Mode", "X-Sdkwork-Runtime-Target", "X-Sdkwork-Auth-Level",
+                "X-Sdkwork-Data-Scope", "X-Sdkwork-Permission-Scope", "X-Sdkwork-Device-Id",
+                "X-Sdkwork-Context-Signature", "X-Sdkwork-Operation-Id",
+                "X-Sdkwork-Subject-Tenant-Id", "X-Sdkwork-Subject-Organization-Id",
+                "X-Sdkwork-Subject-User-Id", "X-Sdkwork-Subject-Timestamp",
+                "X-Sdkwork-Subject-Signature"
             })
             {
                 request.Headers.Remove(header);

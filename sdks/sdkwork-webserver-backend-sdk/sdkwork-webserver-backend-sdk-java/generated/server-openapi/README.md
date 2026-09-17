@@ -87,7 +87,7 @@ params.put("page_size", 2);
 params.put("application_type", "WEB");
 params.put("site_type", 4);
 params.put("status", 5);
-params.put("keyword", "keyword");
+params.put("q", "q");
 ApplicationsListResponse result = client.getApplication().applicationsList(params);
 System.out.println(result);
 ```

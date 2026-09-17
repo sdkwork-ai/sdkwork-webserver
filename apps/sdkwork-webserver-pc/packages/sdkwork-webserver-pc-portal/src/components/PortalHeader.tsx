@@ -2,14 +2,21 @@ import { Bell, Boxes, Menu, SquareTerminal, X } from "lucide-react";
 import { useState } from "react";
 import type { PortalMessageKey } from "../i18n/index.ts";
 import type { PortalTranslator } from "../services/portal-translator.ts";
-import type { PortalNavigation, PortalViewer } from "../types.ts";
+import type { PortalLocale, PortalNavigation, PortalViewer } from "../types.ts";
+import { PortalLocaleSwitcher } from "./PortalLocaleSwitcher.tsx";
 
 export function PortalHeader({
+  availableLocales,
+  locale,
   navigation,
+  onLocaleChange,
   t,
   viewer,
 }: {
+  availableLocales: readonly PortalLocale[];
+  locale: PortalLocale;
   navigation: PortalNavigation;
+  onLocaleChange?: (locale: PortalLocale) => void;
   t: PortalTranslator;
   viewer?: PortalViewer;
 }) {
@@ -59,6 +66,13 @@ export function PortalHeader({
           >
             {navigationOpen ? <X aria-hidden="true" size={18} /> : <Menu aria-hidden="true" size={18} />}
           </button>
+
+          <PortalLocaleSwitcher
+            locale={locale}
+            locales={availableLocales}
+            onLocaleChange={onLocaleChange}
+            t={t}
+          />
 
           <a
             aria-label={t("header.notifications")}

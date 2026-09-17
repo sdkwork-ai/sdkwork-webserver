@@ -128,7 +128,7 @@ model. The principal objects are:
 
 | Object | Purpose |
 | --- | --- |
-| `listeners[]` | Bind address, HTTP/1 and HTTP/2 policy, trusted proxy, PROXY protocol, static `tlsPolicyRef`, or dynamic `tlsRuntime: assignment`. |
+| `listeners[]` | Bind address, HTTP/1 and HTTP/2 policy, trusted proxy, PROXY protocol, static `tlsPolicyRef`, dynamic `tlsRuntime: assignment`, and the `tlsCertificateResolution` that selects which certificate sources the listener serves. |
 | `virtualHosts[]` | Hostname ownership and ordered route references. |
 | `routes[]` | Exact/prefix routing to static, fixed response, redirect, or reverse-proxy resources. |
 | `resources[]` | Local static root, fixed response, redirect, or upstream resource definition. |

@@ -12,14 +12,14 @@ class ApplicationApi {
   ApplicationApi(this._client);
 
   /// List managed applications
-  Future<ApplicationsListResponse?> applicationsList([int? page, int? pageSize, String? applicationType, int? siteType, int? status, String? keyword]) async {
+  Future<ApplicationsListResponse?> applicationsList([int? page, int? pageSize, String? applicationType, int? siteType, int? status, String? q]) async {
     final query = buildQueryString([
       QueryParameterSpec('page', page, 'form', true, false, null),
       QueryParameterSpec('page_size', pageSize, 'form', true, false, null),
       QueryParameterSpec('application_type', applicationType, 'form', true, false, null),
       QueryParameterSpec('site_type', siteType, 'form', true, false, null),
       QueryParameterSpec('status', status, 'form', true, false, null),
-      QueryParameterSpec('keyword', keyword, 'form', true, false, null)
+      QueryParameterSpec('q', q, 'form', true, false, null)
     ]);
     final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.backendPath('/applications'), query));
     return (() {

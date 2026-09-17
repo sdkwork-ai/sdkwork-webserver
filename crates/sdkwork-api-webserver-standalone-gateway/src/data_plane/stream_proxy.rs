@@ -429,13 +429,17 @@ fn build_stream_tls_acceptor(
         provider,
     )
     .map_err(|error| error.to_string())?;
-    let server_names = if certificate.server_names.is_empty() {
-        vec!["localhost".to_owned()]
-    } else {
-        certificate.server_names.clone()
-    };
+    // A certificate always declares at least one server name, and the schema
+    // enforces it. Substituting a name would index this certificate under a name
+    // it need not cover, so an empty declaration is refused rather than guessed.
+    if certificate.server_names.is_empty() {
+        return Err(format!(
+            "stream certificate {certificate_ref} declares no server name"
+        ));
+    }
+    let server_names = certificate.server_names.clone();
     let server_config = build_sni_server_config(
-        vec![(server_names, loaded.certified_key)],
+        vec![(server_names, loaded)],
         TlsVersion::Tls12,
         TlsVersion::Tls13,
         &[],

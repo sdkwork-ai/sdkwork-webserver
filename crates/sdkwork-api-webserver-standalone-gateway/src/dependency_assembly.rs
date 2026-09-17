@@ -1,92 +1,160 @@
-use std::path::{Path, PathBuf};
+//! Same-origin dependency API modules composed by the standalone gateway.
+//!
+//! API_ASSEMBLY_SPEC §6.1: the standalone gateway is the only application-plane
+//! HTTP listener, and it composes every dependency it declares as same-origin by
+//! calling that dependency's **own** assembly entrypoint. The same section
+//! forbids the host from reclassifying dependency ownership, so a dependency's
+//! surfaces are never merged into the web server's own contribution: each
+//! dependency arrives here as one [`WebModule`] whose owner stays the dependency
+//! (API_ASSEMBLY_SPEC §4.1.1).
+//!
+//! Every module is built on the gateway's process-shared PostgreSQL pool — the
+//! same pool handed to IAM and the web store — so this edge keeps exactly one
+//! canonical server pool and one schema bootstrap per dependency. A dependency
+//! that cannot initialize fails startup with the typed 50301 error instead of
+//! leaving a partial route surface that returns 404 for a dependency the
+//! component contract declares as served (§6.1).
 
-use sdkwork_database_sqlx::process_shared_database_pool;
-use sdkwork_web_bootstrap::ApiAssemblyContribution;
+use sdkwork_database_sqlx::{process_shared_database_pool, DatabasePool};
+use sdkwork_web_bootstrap::WebModule;
 
 use crate::profile::StandaloneProfileError;
 
-/// Owner id reported when the drive admin storage surface cannot be composed.
-const DRIVE_ADMIN_STORAGE_OWNER: &str = "sdkwork-drive";
+/// Owner ids reported when a dependency module cannot be composed. They are the
+/// dependency's api-assembly owner, never the hosting application.
+const IAM_OWNER: &str = "sdkwork-iam";
+const DRIVE_OWNER: &str = "sdkwork-drive";
+const SKILLS_OWNER: &str = "sdkwork-skills";
+const MCP_OWNER: &str = "sdkwork-mcp";
+const DEPLOYMENTS_OWNER: &str = "sdkwork-deployments";
 
-fn source_web_app_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+/// Every same-origin dependency module this edge serves — one module per owner.
+///
+/// Order is the composition order of the composed manifest and OpenAPI
+/// inventory. Each module is complete: it carries all of its owner's surfaces,
+/// its own route manifest, OpenAPI document, permission catalog, domain context
+/// injectors, and readiness check.
+pub(crate) async fn same_origin_dependency_modules(
+) -> Result<Vec<WebModule>, StandaloneProfileError> {
+    Ok(vec![
+        iam_module().await?,
+        drive_module().await?,
+        skills_module().await?,
+        mcp_module().await?,
+        deployments_module().await?,
+    ])
 }
 
-fn sibling_app_root(repo_name: &str) -> PathBuf {
-    std::env::var_os("SDKWORK_APP_ROOT")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(source_web_app_root)
-        .join("..")
-        .join(repo_name)
-}
-
-/// Returns true when a sibling SDKWork application root is present on disk.
-pub(crate) fn sibling_application_available(repo_name: &str) -> bool {
-    sibling_app_root(repo_name)
-        .join("sdkwork.app.config.json")
-        .is_file()
-}
-
-/// Optional same-origin dependency contributions that are **not** already
-/// merged into `sdkwork-api-webserver-assembly`.
+/// IAM App API (`/app/v3/api/iam/*`), the Backend API cloud account center
+/// (`/backend/v3/api/iam/provider_accounts`, `/iam/provider_credentials/*`), and
+/// the IAM Open API surface — every IAM-owned surface, as one module.
 ///
-/// Skills and MCP app/backend surfaces are owned by the webserver assembly
-/// (`assemble_api_router` → `merge_same_origin_dependency_contribution`).
-/// Re-adding them here when sibling checkouts exist would duplicate route
-/// paths and fail `ComposedApiAssembly::try_compose` / OpenAPI inventory
-/// validation, so this hook contributes neither.
+/// IAM ships its surfaces as one already-composed contribution for the same
+/// reason drive does. Fetching the App API surface and the Backend API surface
+/// from two IAM entrypoints would either fail composition (two contributions,
+/// one owner) or — through `ApiModuleRegistry`'s duplicate-owner tolerance —
+/// drop the second surface. That failure mode is silent at startup and reaches
+/// the operator as a 404 on a surface this gateway's component contract
+/// declares as served (§6.1); here it would strand the admin console's cloud
+/// account center, because the account center lives on the backend surface.
 ///
-/// The drive **admin storage** backend surface is the one dependency that does
-/// belong here:
-///
-/// - `sdkwork-api-drive-assembly` sits outside the webserver assembly crate
-///   graph, so the webserver assembly cannot mount it;
-/// - it owns a route inventory disjoint from the drive App API that
-///   `profile.rs` already composes — storage serves
-///   `/backend/v3/api/drive/storage/*` while the App API serves
-///   `/app/v3/api/drive/*` — so composing both cannot collide;
-/// - its routes are dual-token with no explicit permission of their own, so it
-///   contributes nothing to this edge's permission catalog and cannot drift
-///   against the Web module's IAM catalog.
-///
-/// It is bootstrapped on the gateway's process-shared PostgreSQL pool, the same
-/// pool handed to IAM and the web store, so this edge keeps exactly one
-/// canonical server pool and one drive schema bootstrap.
-pub(crate) async fn optional_same_origin_dependency_contributions(
-) -> Result<Vec<ApiAssemblyContribution>, StandaloneProfileError> {
-    let _ = (
-        sibling_application_available("sdkwork-skills"),
-        sibling_application_available("sdkwork-mcp"),
-    );
-    Ok(vec![assemble_drive_admin_storage_contribution().await?])
-}
-
-/// Composes the drive admin storage surface on the process-shared pool.
-///
-/// Uses the host-framework variant of the drive router so the request context
-/// comes from this gateway's single Web Framework layer instead of a
-/// drive-owned domain injector (API_ASSEMBLY_SPEC §3/§6.1).
-async fn assemble_drive_admin_storage_contribution(
-) -> Result<ApiAssemblyContribution, StandaloneProfileError> {
-    let pool = process_shared_database_pool().ok_or_else(missing_process_pool_error)?;
-    sdkwork_api_drive_assembly::assemble_backend_admin_storage_contribution_with_pool(&pool)
+/// `federated_iam_module_manifest_paths` is resolved here rather than by the
+/// caller so the module is complete on its own: the entrypoint materializes the
+/// consumer-owned IAM catalog (web, skills, mcp) before it builds the routes.
+async fn iam_module() -> Result<WebModule, StandaloneProfileError> {
+    let pool = shared_pool(IAM_OWNER)?;
+    let manifest_paths = crate::iam_module_bootstrap::federated_iam_module_manifest_paths()
+        .map_err(|detail| unavailable(IAM_OWNER, detail))?;
+    let contribution =
+        sdkwork_api_iam_assembly::assemble_owner_api_surfaces_with_pool_and_module_manifests(
+            pool,
+            &manifest_paths,
+        )
         .await
-        .map_err(|detail| {
-            StandaloneProfileError::assembly_unavailable(DRIVE_ADMIN_STORAGE_OWNER, detail)
-        })
+        .map_err(|detail| unavailable(IAM_OWNER, detail))?;
+    Ok(WebModule::from_contribution(contribution))
 }
 
-/// Fails closed when the database lifecycle has not installed the pool yet.
+/// Drive App API (`/app/v3/api/drive/*`) **and** Admin Storage backend surface
+/// (`/backend/v3/api/drive/storage/*`) as one module.
 ///
-/// Serving the Storage Center without its route inventory would otherwise show
-/// up as an opaque 404 on an authenticated operator action, so the missing
-/// prerequisite is reported as the typed 50301 dependency-unavailable error.
-fn missing_process_pool_error() -> StandaloneProfileError {
-    StandaloneProfileError::assembly_unavailable(
-        DRIVE_ADMIN_STORAGE_OWNER,
-        "the process-shared PostgreSQL pool is unavailable; the standalone gateway must bootstrap its database lifecycle before composing the drive admin storage surface",
-    )
+/// API_ASSEMBLY_SPEC §4.1.1 owns one contribution per served owner, and
+/// `ComposedApiAssembly::try_compose` enforces it: an owner selected twice fails
+/// composition outright. Both drive surfaces therefore arrive as one
+/// already-composed contribution from the drive assembly. Fetching them from two
+/// drive entrypoints and installing them here would either fail composition (two
+/// contributions, one owner) or — through `ApiModuleRegistry`'s duplicate-owner
+/// tolerance — drop the second surface and serve a partial route surface that
+/// returns 404 for a dependency the gateway component contract declares as served
+/// (§6.1).
+async fn drive_module() -> Result<WebModule, StandaloneProfileError> {
+    let pool = shared_pool(DRIVE_OWNER)?;
+    let contribution =
+        sdkwork_api_drive_assembly::assemble_same_origin_contribution_with_pool(&pool)
+            .await
+            .map_err(|detail| unavailable(DRIVE_OWNER, detail))?;
+    Ok(WebModule::from_contribution(contribution))
+}
+
+/// Skills App API (`/app/v3/api/skills/*`) and Backend API
+/// (`/backend/v3/api/skills/*`).
+///
+/// The skills assembly already hands both surfaces over as one contribution
+/// (`assemble_api_router_with_pool`), and its router is host-neutral: the
+/// assembly installs no Web Framework layer, so this edge's single framework
+/// layer authenticates skills requests like every other composed surface.
+async fn skills_module() -> Result<WebModule, StandaloneProfileError> {
+    let pool = shared_pool(SKILLS_OWNER)?;
+    sdkwork_api_skills_assembly::web_module_with_pool(pool)
+        .await
+        .map_err(|detail| unavailable(SKILLS_OWNER, detail))
+}
+
+/// MCP App API (`/app/v3/api/mcp/*`) and Backend API
+/// (`/backend/v3/api/mcp/*`), also handed over as one host-neutral contribution.
+async fn mcp_module() -> Result<WebModule, StandaloneProfileError> {
+    let pool = shared_pool(MCP_OWNER)?;
+    sdkwork_api_mcp_assembly::web_module_with_pool(pool)
+        .await
+        .map_err(|detail| unavailable(MCP_OWNER, detail))
+}
+
+/// Deployments domain and certificate management, the standalone control plane.
+///
+/// This uses the assembly's same-origin entrypoint rather than
+/// `web_module_with_pool`: the deployments [`WebModule`] is the **Deploy**
+/// application surface (app + backend routes for deploy itself) and its routers
+/// already carry their own Web Framework layer. The standalone edge needs the
+/// un-wrapped domain/certificate blocks so they authenticate through this
+/// gateway's single framework layer, together with every other composed surface.
+async fn deployments_module() -> Result<WebModule, StandaloneProfileError> {
+    let pool = shared_pool(DEPLOYMENTS_OWNER)?;
+    let contribution =
+        sdkwork_api_deployments_assembly::assemble_same_origin_contribution_with_pool(pool)
+            .await
+            .map_err(|detail| unavailable(DEPLOYMENTS_OWNER, detail))?;
+    Ok(WebModule::from_contribution(contribution))
+}
+
+fn unavailable(owner: &'static str, detail: impl Into<String>) -> StandaloneProfileError {
+    StandaloneProfileError::assembly_unavailable(owner, detail)
+}
+
+/// Returns the canonical process pool or fails closed.
+///
+/// Serving a declared same-origin dependency without its route inventory would
+/// otherwise show up as an opaque 404 on an authenticated operator action, so a
+/// missing prerequisite is reported as the typed 50301 dependency-unavailable
+/// error naming the dependency that could not be composed.
+fn shared_pool(owner: &'static str) -> Result<DatabasePool, StandaloneProfileError> {
+    process_shared_database_pool().ok_or_else(|| {
+        unavailable(
+            owner,
+            "the process-shared PostgreSQL pool is unavailable; the standalone gateway must \
+             bootstrap its database lifecycle before composing its same-origin dependency \
+             modules (API_ASSEMBLY_SPEC §6.1)",
+        )
+    })
 }
 
 #[cfg(test)]
@@ -94,23 +162,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn sibling_application_availability_checks_app_manifest() {
-        assert!(sibling_application_available("sdkwork-skills"));
-        assert!(sibling_application_available("sdkwork-mcp"));
-    }
-
-    #[test]
     fn missing_process_pool_fails_closed_as_dependency_unavailable() {
-        match missing_process_pool_error() {
-            StandaloneProfileError::AssemblyUnavailable { owner, code, detail } => {
-                assert_eq!(owner, "sdkwork-drive");
-                assert_eq!(code, 50301);
-                assert!(
-                    detail.contains("process-shared PostgreSQL pool"),
-                    "operator must learn which prerequisite is missing: {detail}"
-                );
+        // The pool is not installed in a unit test process, so every dependency
+        // must report the typed 50301 error under its own owner.
+        for owner in [
+            IAM_OWNER,
+            DRIVE_OWNER,
+            SKILLS_OWNER,
+            MCP_OWNER,
+            DEPLOYMENTS_OWNER,
+        ] {
+            match shared_pool(owner) {
+                Err(StandaloneProfileError::AssemblyUnavailable {
+                    owner: reported,
+                    code,
+                    detail,
+                }) => {
+                    assert_eq!(reported, owner);
+                    assert_eq!(code, 50301);
+                    assert!(
+                        detail.contains("process-shared PostgreSQL pool"),
+                        "operator must learn which prerequisite is missing: {detail}"
+                    );
+                }
+                other => panic!("{owner} composition must fail closed; got {other:?}"),
             }
-            other => panic!("drive admin storage composition must fail closed; got {other:?}"),
         }
     }
 }

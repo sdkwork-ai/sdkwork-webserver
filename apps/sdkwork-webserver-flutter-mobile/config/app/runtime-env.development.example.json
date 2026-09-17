@@ -1,0 +1,9 @@
+{
+  "webserver": {
+    "appApiBaseUrl": "http://127.0.0.1:3800/app/v3/api",
+    "dartDefine": "SDKWORK_WEBSERVER_APP_API_BASE_URL"
+  },
+  "appbase": {
+    "loginUrl": "http://127.0.0.1:3800"
+  }
+}

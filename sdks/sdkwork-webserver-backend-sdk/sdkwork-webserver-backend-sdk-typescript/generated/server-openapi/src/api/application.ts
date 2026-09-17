@@ -10,7 +10,7 @@ export interface ApplicationListParams {
   applicationType?: 'WEB' | 'API';
   siteType?: number;
   status?: number;
-  keyword?: string;
+  q?: string;
 }
 
 export interface ApplicationCreateParams {
@@ -49,7 +49,7 @@ export class ApplicationApi {
       { name: 'application_type', value: params?.applicationType, style: 'form', explode: true, allowReserved: false },
       { name: 'site_type', value: params?.siteType, style: 'form', explode: true, allowReserved: false },
       { name: 'status', value: params?.status, style: 'form', explode: true, allowReserved: false },
-      { name: 'keyword', value: params?.keyword, style: 'form', explode: true, allowReserved: false },
+      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: ApplicationResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/applications`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }

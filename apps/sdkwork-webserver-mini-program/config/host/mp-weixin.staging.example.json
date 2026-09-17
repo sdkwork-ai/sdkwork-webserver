@@ -1,0 +1,14 @@
+{
+  "platform": "mp-weixin",
+  "environment": "staging",
+  "deploymentProfile": "standalone",
+  "appid": "touristappid",
+  "projectName": "sdkwork-webserver-mini-program",
+  "uploadEnvironment": "staging",
+  "setting": {
+    "urlCheck": true,
+    "es6": true,
+    "minified": true,
+    "postcss": true
+  }
+}

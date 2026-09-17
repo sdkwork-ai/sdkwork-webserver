@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "@sdkwork/webserver-mp-host",
+    "displayName": "SDKWork Webserver Mini Program Host",
+    "version": "0.1.0",
+    "type": "typescript-package",
+    "root": "sdkwork-webserver/apps/sdkwork-webserver-mini-program/packages/sdkwork-webserver-mp-host",
+    "domain": "infrastructure",
+    "capability": "host",
+    "surface": "app",
+    "languages": [
+      "typescript"
+    ],
+    "generated": false,
+    "private": true,
+    "status": "active",
+    "manifests": [
+      "package.json",
+      "specs/component.spec.json"
+    ]
+  },
+  "canonicalSpecs": [
+    {
+      "file": "CODE_STYLE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/CODE_STYLE_SPEC.md",
+      "purpose": "Authored source structure and generated code boundaries."
+    },
+    {
+      "file": "NAMING_SPEC.md",
+      "path": "../../../../../sdkwork-specs/NAMING_SPEC.md",
+      "purpose": "Canonical SDKWork naming rules."
+    },
+    {
+      "file": "TYPESCRIPT_CODE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/TYPESCRIPT_CODE_SPEC.md",
+      "purpose": "TypeScript package structure."
+    },
+    {
+      "file": "COMPONENT_SPEC.md",
+      "path": "../../../../../sdkwork-specs/COMPONENT_SPEC.md",
+      "purpose": "Component contract."
+    },
+    {
+      "file": "MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md",
+      "purpose": "Host adapter boundary and standard adapter categories."
+    },
+    {
+      "file": "APP_SDK_INTEGRATION_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md",
+      "purpose": "Platform login facts must be exchanged through approved app-api flows."
+    },
+    {
+      "file": "TEST_SPEC.md",
+      "path": "../../../../../sdkwork-specs/TEST_SPEC.md",
+      "purpose": "Host adapter fakes and contract verification rules."
+    }
+  ],
+  "contracts": {
+    "layerRole": "frontend-host",
+    "publicExports": [
+      ".",
+      "./testing"
+    ],
+    "providedPorts": [
+      {
+        "name": "webserverMpHost",
+        "export": "."
+      }
+    ],
+    "requiredPorts": [],
+    "runtimeEntrypoints": [],
+    "routeManifest": null,
+    "sdkClients": [],
+    "sdkDependencies": [],
+    "dependencyApiExports": [],
+    "dependencyApiSurfaces": [],
+    "events": [],
+    "configKeys": []
+  },
+  "integration": {
+    "authority": "Root SDKWork specs remain authoritative.",
+    "dependencyPolicy": "The host adapter depends on no sibling package; the root bootstrap injects it downward.",
+    "sdkPolicy": "The host adapter owns no SDK client and performs no business API transport."
+  },
+  "verification": {
+    "commands": [
+      "pnpm --dir apps/sdkwork-webserver-mini-program typecheck",
+      "pnpm --dir apps/sdkwork-webserver-mini-program test"
+    ]
+  },
+  "metadata": {
+    "standardVersion": "2026-09-17"
+  }
+}

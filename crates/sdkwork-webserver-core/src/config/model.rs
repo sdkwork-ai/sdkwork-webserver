@@ -768,6 +768,11 @@ pub struct ListenerConfig {
     pub protocols: Vec<ListenerProtocol>,
     pub tls_policy_ref: Option<String>,
     pub tls_runtime: Option<ListenerTlsRuntime>,
+    /// Combines the configured certificate files with the dynamically assigned
+    /// certificate set. When absent the resolution is derived from the declared
+    /// sources, which preserves the historical one-of semantics.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls_certificate_resolution: Option<TlsCertificateResolution>,
     pub default_virtual_host_ref: Option<String>,
     pub max_connections: Option<usize>,
     pub trusted_proxy: Option<TrustedProxyConfig>,
@@ -799,6 +804,57 @@ pub enum ListenerProtocol {
 #[serde(rename_all = "kebab-case")]
 pub enum ListenerTlsRuntime {
     Assignment,
+}
+
+/// How a listener combines its configured certificate files with the
+/// dynamically assigned (database-backed) certificate set.
+///
+/// `policy-first` is the layered strategy: a configured file wins for a server
+/// name when it exists and is usable, and the assigned set covers every server
+/// name the files do not. It is the only resolution that declares both a
+/// `tlsPolicyRef` and a `tlsRuntime`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TlsCertificateResolution {
+    /// Serve only the certificate files referenced by `tlsPolicyRef`.
+    PolicyOnly,
+    /// Serve only the assigned certificate set.
+    AssignmentOnly,
+    /// Prefer a configured certificate file for each server name, falling back
+    /// to the assigned certificate set per server name.
+    PolicyFirst,
+}
+
+impl TlsCertificateResolution {
+    /// Derives the resolution implied by the declared sources. Declaring both
+    /// sources has no implied value: it requires an explicit `policy-first`.
+    pub fn from_sources(has_policy_ref: bool, has_tls_runtime: bool) -> Option<Self> {
+        match (has_policy_ref, has_tls_runtime) {
+            (true, false) => Some(Self::PolicyOnly),
+            (false, true) => Some(Self::AssignmentOnly),
+            _ => None,
+        }
+    }
+
+    /// Resolves the effective strategy: an explicit declaration wins, otherwise
+    /// the declared sources imply one.
+    pub fn effective(
+        declared: Option<Self>,
+        has_policy_ref: bool,
+        has_tls_runtime: bool,
+    ) -> Option<Self> {
+        declared.or_else(|| Self::from_sources(has_policy_ref, has_tls_runtime))
+    }
+
+    /// Whether this listener serves configured certificate files.
+    pub fn serves_policy_files(self) -> bool {
+        matches!(self, Self::PolicyOnly | Self::PolicyFirst)
+    }
+
+    /// Whether this listener serves the dynamically assigned certificate set.
+    pub fn serves_assignments(self) -> bool {
+        matches!(self, Self::AssignmentOnly | Self::PolicyFirst)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

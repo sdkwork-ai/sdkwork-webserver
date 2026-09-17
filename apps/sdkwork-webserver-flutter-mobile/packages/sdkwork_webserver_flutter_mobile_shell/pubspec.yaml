@@ -1,0 +1,15 @@
+name: sdkwork_webserver_flutter_mobile_shell
+description: SDKWork Web Server Flutter mobile shell package
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

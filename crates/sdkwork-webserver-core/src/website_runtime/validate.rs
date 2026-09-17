@@ -1,8 +1,8 @@
-﻿use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 use url::Host;
 
-use crate::{normalize_uri_path, ConfigDiagnostic};
+use crate::{normalize_uri_path, wildcard_server_name_covers, ConfigDiagnostic};
 
 use super::{
     WebsiteBindingAction, WebsiteHandler, WebsiteProviderType, WebsiteRuntimeDescriptor,
@@ -854,7 +854,7 @@ fn select_binding_for_redirect(
             binding
                 .hostname
                 .strip_prefix("*.")
-                .is_some_and(|suffix| wildcard_matches(suffix, hostname))
+                .is_some_and(|suffix| wildcard_server_name_covers(suffix, hostname))
         })
         .filter(|(_, binding)| segment_prefix_matches(&binding.path_prefix, path))
         .max_by_key(|(_, binding)| (binding.hostname.len(), binding.path_prefix.len()))
@@ -867,10 +867,4 @@ fn segment_prefix_matches(prefix: &str, path: &str) -> bool {
         || path
             .strip_prefix(prefix)
             .is_some_and(|remainder| remainder.starts_with('/'))
-}
-
-fn wildcard_matches(suffix: &str, hostname: &str) -> bool {
-    hostname.strip_suffix(suffix).is_some_and(|prefix| {
-        prefix.ends_with('.') && prefix.len() > 1 && !prefix[..prefix.len() - 1].contains('.')
-    })
 }

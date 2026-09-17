@@ -1,9 +1,26 @@
+/*
+ * The `h5-*` class layer for the Web Server H5 console.
+ *
+ * The application root owns this stylesheet because a mobile console has exactly
+ * one theme: shell chrome, shared primitives, and feature cards are all expressed
+ * against one set of custom properties. Packages reference these class names
+ * (never Tailwind utilities) so the PC console's Tailwind build and this mobile
+ * build can diverge without either one dragging the other's toolchain along.
+ */
 :root {
   color-scheme: light;
   font-family: "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
   line-height: 1.5;
   color: #0f172a;
-  background: linear-gradient(160deg, #f8fafc 0%, #e2e8f0 100%);
+  background: #f1f5f9;
+
+  --h5-surface: #ffffff;
+  --h5-canvas: #f1f5f9;
+  --h5-border: #e2e8f0;
+  --h5-text: #0f172a;
+  --h5-text-muted: #64748b;
+  --h5-accent: #0f766e;
+  --h5-danger: #b91c1c;
 }
 
 * {
@@ -17,44 +34,273 @@ body,
   min-height: 100%;
 }
 
-.shell {
-  min-height: 100vh;
-  padding: 2.5rem 1.25rem 3rem;
-  max-width: 40rem;
-}
+/* ---------------- shell chrome ---------------- */
 
-.eyebrow {
-  margin: 0 0 0.5rem;
-  font-size: 0.85rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #475569;
-}
-
-h1 {
-  margin: 0 0 0.75rem;
-  font-size: 1.75rem;
-  font-weight: 650;
-}
-
-.lede {
-  margin: 0 0 1.5rem;
-  color: #334155;
-}
-
-.actions {
+.h5-app {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1.25rem;
+  min-height: 100vh;
+  flex-direction: column;
+  background: var(--h5-canvas);
 }
 
-.actions a {
-  color: #0f766e;
+.h5-app__header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid var(--h5-border);
+  background: var(--h5-surface);
+  padding: 0.75rem 1rem;
+}
+
+.h5-app__brand {
+  margin: 0;
+  font-size: 0.75rem;
   font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--h5-text-muted);
+}
+
+.h5-app__main {
+  flex: 1;
+  min-height: 0;
+  padding: 1rem 1rem 5rem;
+}
+
+.h5-app__nav {
+  position: fixed;
+  inset: auto 0 0 0;
+  border-top: 1px solid var(--h5-border);
+  background: var(--h5-surface);
+}
+
+.h5-app__nav-list {
+  display: flex;
+  align-items: stretch;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.h5-app__nav-item {
+  flex: 1;
+}
+
+.h5-app__nav-link {
+  display: flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--h5-text-muted);
   text-decoration: none;
 }
 
-.actions a:hover,
-.actions a:focus-visible {
-  text-decoration: underline;
+.h5-app__nav-link--active {
+  color: var(--h5-text);
+  box-shadow: inset 0 2px 0 0 var(--h5-accent);
+}
+
+/* ---------------- shared primitives ---------------- */
+
+.h5-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.h5-screen__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.h5-screen__heading {
+  min-width: 0;
+}
+
+.h5-screen__eyebrow {
+  margin: 0 0 0.25rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--h5-text-muted);
+}
+
+.h5-screen__title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 650;
+}
+
+.h5-screen__lede {
+  margin: 0.25rem 0 0;
+  color: #334155;
+}
+
+.h5-screen__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.h5-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  border: 1px solid var(--h5-border);
+  border-radius: 0.75rem;
+  background: var(--h5-surface);
+  padding: 1.25rem;
+}
+
+.h5-state--error {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.h5-state--loading {
+  color: var(--h5-text-muted);
+}
+
+.h5-state__message {
+  margin: 0;
+}
+
+.h5-state--error .h5-state__message {
+  color: var(--h5-danger);
+}
+
+.h5-state__retry {
+  border: 1px solid currentColor;
+  border-radius: 0.5rem;
+  background: transparent;
+  padding: 0.375rem 0.875rem;
+  font: inherit;
+  font-weight: 600;
+  color: var(--h5-accent);
+  cursor: pointer;
+}
+
+/* ---------------- applications list ---------------- */
+
+.h5-app-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.h5-app-card {
+  border: 1px solid var(--h5-border);
+  border-radius: 0.75rem;
+  background: var(--h5-surface);
+  padding: 0.875rem 1rem;
+}
+
+.h5-app-card__button {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.h5-app-card__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.h5-app-card__name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.h5-app-card__status {
+  flex: none;
+  border-radius: 999px;
+  background: #e2e8f0;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.h5-app-card__status--active {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
+.h5-app-card__status--failed {
+  background: #fee2e2;
+  color: var(--h5-danger);
+}
+
+.h5-app-card__status--archived {
+  background: #e5e7eb;
+  color: #4b5563;
+}
+
+.h5-app-card__slug {
+  margin: 0.125rem 0 0.625rem;
+  font-size: 0.8125rem;
+  color: var(--h5-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.h5-app-card__meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem 0.75rem;
+  margin: 0;
+}
+
+.h5-app-card__meta dt {
+  font-size: 0.6875rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--h5-text-muted);
+}
+
+.h5-app-card__meta dd {
+  margin: 0.125rem 0 0;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.h5-app-list__detail,
+.h5-bootstrap__detail {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--h5-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.h5-app-list__more {
+  align-self: stretch;
+  border: 1px solid var(--h5-border);
+  border-radius: 0.75rem;
+  background: var(--h5-surface);
+  padding: 0.75rem;
+  font: inherit;
+  font-weight: 600;
+  color: var(--h5-accent);
+  cursor: pointer;
+}
+
+.h5-app-list__more:disabled {
+  color: var(--h5-text-muted);
+  cursor: progress;
 }

@@ -68,7 +68,7 @@ query.insert("page_size".to_string(), serde_json::json!(2));
 query.insert("status".to_string(), serde_json::json!(0));
 query.insert("application_type".to_string(), serde_json::json!("WEB"));
 query.insert("site_type".to_string(), serde_json::json!(1));
-query.insert("keyword".to_string(), serde_json::json!("keyword"));
+query.insert("q".to_string(), serde_json::json!("q"));
 let result = client.application().applications_list(Some(&query)).await?;
 println!("{result:?}");
 ```

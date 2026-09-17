@@ -1,0 +1,4 @@
+# Container profile template for the SDKWork Web Server HarmonyOS mobile surface.
+[runtime]
+target = "harmony-native"
+profile = "development"

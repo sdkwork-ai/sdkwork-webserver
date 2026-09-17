@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "@sdkwork/webserver-h5-shell",
+    "displayName": "SDKWork Webserver H5 Shell",
+    "version": "0.1.0",
+    "type": "typescript-package",
+    "root": "sdkwork-webserver/apps/sdkwork-webserver-h5/packages/sdkwork-webserver-h5-shell",
+    "domain": "infrastructure",
+    "capability": "shell",
+    "surface": "h5",
+    "languages": [
+      "typescript"
+    ],
+    "generated": false,
+    "private": true,
+    "status": "active",
+    "manifests": [
+      "package.json",
+      "specs/component.spec.json"
+    ]
+  },
+  "canonicalSpecs": [
+    {
+      "file": "CODE_STYLE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/CODE_STYLE_SPEC.md",
+      "purpose": "Authored source structure and generated code boundaries."
+    },
+    {
+      "file": "NAMING_SPEC.md",
+      "path": "../../../../../sdkwork-specs/NAMING_SPEC.md",
+      "purpose": "Canonical SDKWork naming rules."
+    },
+    {
+      "file": "TYPESCRIPT_CODE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/TYPESCRIPT_CODE_SPEC.md",
+      "purpose": "TypeScript package structure."
+    },
+    {
+      "file": "FRONTEND_CODE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/FRONTEND_CODE_SPEC.md",
+      "purpose": "Frontend implementation and verification."
+    },
+    {
+      "file": "FRONTEND_SPEC.md",
+      "path": "../../../../../sdkwork-specs/FRONTEND_SPEC.md",
+      "purpose": "Frontend package layering and SDK injection boundaries."
+    },
+    {
+      "file": "COMPONENT_SPEC.md",
+      "path": "../../../../../sdkwork-specs/COMPONENT_SPEC.md",
+      "purpose": "Component contract."
+    },
+    {
+      "file": "APP_H5_ARCHITECTURE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_H5_ARCHITECTURE_SPEC.md",
+      "purpose": "H5 application root architecture."
+    },
+    {
+      "file": "APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "purpose": "Cross-client package taxonomy and dependency direction."
+    },
+    {
+      "file": "APP_MOBILE_REACT_UI_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_MOBILE_REACT_UI_SPEC.md",
+      "purpose": "Mobile shell and UI package rules."
+    },
+    {
+      "file": "TEST_SPEC.md",
+      "path": "../../../../../sdkwork-specs/TEST_SPEC.md",
+      "purpose": "Contract and conformance verification rules."
+    }
+  ],
+  "contracts": {
+    "layerRole": "frontend-shell",
+    "publicExports": [
+      "."
+    ],
+    "providedPorts": [
+      {
+        "name": "webserverH5Shell",
+        "export": "."
+      }
+    ],
+    "requiredPorts": [
+      {
+        "name": "webserverH5Commons",
+        "export": ".",
+        "provider": "@sdkwork/webserver-h5-commons"
+      }
+    ],
+    "runtimeEntrypoints": [],
+    "routeManifest": null,
+    "sdkClients": [],
+    "sdkDependencies": [],
+    "dependencyApiExports": [],
+    "dependencyApiSurfaces": [],
+    "events": [],
+    "configKeys": []
+  },
+  "integration": {
+    "authority": "Root SDKWork specs remain authoritative.",
+    "dependencyPolicy": "The shell consumes the H5 commons package through its public root export and owns the ordered navigation model.",
+    "sdkPolicy": "The shell owns no SDK client; application SDK access stays isolated behind the H5 core package."
+  },
+  "verification": {
+    "commands": [
+      "pnpm --dir apps/sdkwork-webserver-h5 typecheck",
+      "pnpm --dir apps/sdkwork-webserver-h5 test"
+    ]
+  },
+  "metadata": {
+    "standardVersion": "2026-09-17"
+  }
+}

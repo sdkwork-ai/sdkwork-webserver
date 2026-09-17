@@ -1,4 +1,8 @@
-#!/usr/bin/env node
+// Invoked as `node scripts/materialize-runtime-env.mjs` (see package.json).
+// Deliberately no `#!` shebang: this module is also imported by vitest, and a
+// shebang combined with CRLF checkouts breaks the esbuild transform
+// (SyntaxError "Invalid or unexpected token"), the same class of failure
+// documented in sdkwork-specs/tools/vite-runtime-profile.mjs.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';

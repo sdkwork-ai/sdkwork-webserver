@@ -30,11 +30,17 @@
     "build:demo": "node ../../../sdkwork-specs/tools/build-browser-client.mjs --app-root . --environment demo"
   },
   "dependencies": {
+    "@sdkwork/sdk-common": "workspace:*",
+    "@sdkwork/webserver-h5-applications": "workspace:*",
+    "@sdkwork/webserver-h5-commons": "workspace:*",
+    "@sdkwork/webserver-h5-core": "workspace:*",
+    "@sdkwork/webserver-h5-shell": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-router-dom": "^7.15.0"
   },
   "devDependencies": {
+    "@sdkwork/app-topology": "workspace:*",
     "@testing-library/react": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",

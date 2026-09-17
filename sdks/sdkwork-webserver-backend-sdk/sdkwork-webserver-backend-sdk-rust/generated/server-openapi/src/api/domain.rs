@@ -17,12 +17,12 @@ impl DomainApi {
     }
 
     /// List tenant root-domain Zones
-    pub async fn root_domains_list(&self, page: Option<i64>, page_size: Option<i64>, status: Option<i64>, keyword: Option<&str>) -> Result<serde_json::Value, SdkworkError> {
+    pub async fn root_domains_list(&self, page: Option<i64>, page_size: Option<i64>, status: Option<i64>, q: Option<&str>) -> Result<serde_json::Value, SdkworkError> {
         let query = build_query_string(&[
             QueryParameterSpec::new("page", page, "form", true, false, None),
             QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
             QueryParameterSpec::new("status", status, "form", true, false, None),
-            QueryParameterSpec::new("keyword", keyword, "form", true, false, None),
+            QueryParameterSpec::new("q", q, "form", true, false, None),
         ]);
         let path = append_query_string(backend_path(&"/root_domains".to_string()), &query);
         self.client.get(&path, None, None).await

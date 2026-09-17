@@ -1,0 +1,15 @@
+# Flutter/Dart build output and tool state
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Per-package tool state (path packages under packages/ are resolved locally)
+packages/*/.dart_tool/
+packages/*/build/
+packages/*/pubspec.lock
+
+# Local environment overrides; the committed matrix lives in env/
+.env
+env/*.local.json

@@ -245,7 +245,7 @@ class ApplicationApi:
         self.platform_targets = ApplicationPlatformTargetsApi(client)
 
 
-    def list(self, page: Optional[int] = None, page_size: Optional[int] = None, status: Optional[int] = None, application_type: Optional[str] = None, site_type: Optional[int] = None, keyword: Optional[str] = None) -> ApplicationsListResponse:
+    def list(self, page: Optional[int] = None, page_size: Optional[int] = None, status: Optional[int] = None, application_type: Optional[str] = None, site_type: Optional[int] = None, q: Optional[str] = None) -> ApplicationsListResponse:
         """获取应用列表"""
         query = build_query_string([
             {'name': 'page', 'value': page, 'style': 'form', 'explode': True, 'allow_reserved': False},
@@ -253,7 +253,7 @@ class ApplicationApi:
             {'name': 'status', 'value': status, 'style': 'form', 'explode': True, 'allow_reserved': False},
             {'name': 'application_type', 'value': application_type, 'style': 'form', 'explode': True, 'allow_reserved': False},
             {'name': 'site_type', 'value': site_type, 'style': 'form', 'explode': True, 'allow_reserved': False},
-            {'name': 'keyword', 'value': keyword, 'style': 'form', 'explode': True, 'allow_reserved': False},
+            {'name': 'q', 'value': q, 'style': 'form', 'explode': True, 'allow_reserved': False},
         ])
         return self._client.get(_append_query_string(f"/app/v3/api/applications", query))
 

@@ -23,6 +23,7 @@ pub enum ProjectOperationKind {
 
 /// An operation offered for a project root.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectOperation {
     pub id: String,
     pub kind: ProjectOperationKind,
@@ -45,6 +46,7 @@ pub struct ProjectOperationCommand {
 
 /// The full operation manifest for a browsed project directory.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ServerProjectOperations {
     pub node_id: String,
     pub path: String,

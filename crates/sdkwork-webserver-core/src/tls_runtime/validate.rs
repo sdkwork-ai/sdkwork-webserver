@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 
-use crate::{website_runtime::normalize_website_hostname, ConfigDiagnostic};
+use crate::{
+    normalize_tls_server_name, website_runtime::normalize_website_hostname, ConfigDiagnostic,
+};
 
 use super::{
     TlsAssignmentSnapshot, TlsRuntimeSnapshotError, TLS_RUNTIME_SCHEMA_VERSION,
@@ -163,12 +165,22 @@ impl TlsRuntimeValidator {
                 );
             }
             for (name_index, server_name) in assignment.server_names.iter().enumerate() {
+                // The website normalizer is consulted for its IDNA conversion:
+                // it is what names the canonical ASCII form a control plane has
+                // to send for a Unicode name. What the data plane can index is
+                // narrower than that, so a canonical name it cannot index - an
+                // underscore label, say - is refused here instead of failing the
+                // install of an assignment that passed validation.
                 match normalize_website_hostname(server_name) {
-                    Some(normalized) if normalized == *server_name => {}
-                    Some(normalized) => self.push(
+                    Some(normalized) if normalized != *server_name => self.push(
                         format!("{path}/serverNames/{name_index}"),
                         format!("must use canonical lowercase ASCII server name {normalized}"),
                     ),
+                    Some(_) if normalize_tls_server_name(server_name).is_none() => self.push(
+                        format!("{path}/serverNames/{name_index}"),
+                        "must be an exact or leading-wildcard DNS server name the data plane can index",
+                    ),
+                    Some(_) => {}
                     None => self.push(
                         format!("{path}/serverNames/{name_index}"),
                         "must be an exact or leading-wildcard DNS server name",

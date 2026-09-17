@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "sdkwork-webserver-harmony-mobile",
+    "displayName": "SDKWork Web Server HarmonyOS Mobile",
+    "version": "0.1.0",
+    "type": "harmony-mobile-app-root",
+    "root": "sdkwork-webserver/apps/sdkwork-webserver-harmony-mobile",
+    "domain": "infrastructure",
+    "capability": "webserver",
+    "surface": "app",
+    "languages": [
+      "arkts"
+    ],
+    "generated": false,
+    "private": true,
+    "status": "active",
+    "manifests": [
+      "oh-package.json5",
+      "build-profile.json5",
+      "sdkwork.app.config.json",
+      "specs/component.spec.json"
+    ]
+  },
+  "canonicalSpecs": [
+    {
+      "file": "SOUL.md",
+      "path": "../../../sdkwork-specs/SOUL.md",
+      "purpose": "SDKWork execution principles."
+    },
+    {
+      "file": "CODE_STYLE_SPEC.md",
+      "path": "../../../sdkwork-specs/CODE_STYLE_SPEC.md",
+      "purpose": "Authored source structure and generated code boundaries."
+    },
+    {
+      "file": "NAMING_SPEC.md",
+      "path": "../../../sdkwork-specs/NAMING_SPEC.md",
+      "purpose": "Canonical application and package naming."
+    },
+    {
+      "file": "HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md",
+      "path": "../../../sdkwork-specs/HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md",
+      "purpose": "HarmonyOS native mobile application root architecture."
+    },
+    {
+      "file": "APP_HARMONY_NATIVE_UI_SPEC.md",
+      "path": "../../../sdkwork-specs/APP_HARMONY_NATIVE_UI_SPEC.md",
+      "purpose": "Harmony native ArkUI package rules."
+    },
+    {
+      "file": "APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "path": "../../../sdkwork-specs/APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "purpose": "Cross-client package taxonomy and dependency direction."
+    },
+    {
+      "file": "APP_COMPOSITION_SPEC.md",
+      "path": "../../../sdkwork-specs/APP_COMPOSITION_SPEC.md",
+      "purpose": "Native-authority application composition."
+    },
+    {
+      "file": "APP_SDK_INTEGRATION_SPEC.md",
+      "path": "../../../sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md",
+      "purpose": "Generated ArkTS/TypeScript app SDK and TokenManager integration."
+    },
+    {
+      "file": "APP_PERMISSION_COMPOSITION_SPEC.md",
+      "path": "../../../sdkwork-specs/APP_PERMISSION_COMPOSITION_SPEC.md",
+      "purpose": "Permission and route-hint inheritance."
+    },
+    {
+      "file": "PAGINATION_SPEC.md",
+      "path": "../../../sdkwork-specs/PAGINATION_SPEC.md",
+      "purpose": "Interactive list pagination contract."
+    },
+    {
+      "file": "I18N_SPEC.md",
+      "path": "../../../sdkwork-specs/I18N_SPEC.md",
+      "purpose": "Locale negotiation and authored fragment layout."
+    },
+    {
+      "file": "CONFIG_SPEC.md",
+      "path": "../../../sdkwork-specs/CONFIG_SPEC.md",
+      "purpose": "Runtime configuration."
+    },
+    {
+      "file": "SOURCE_CONFIG_SPEC.md",
+      "path": "../../../sdkwork-specs/SOURCE_CONFIG_SPEC.md",
+      "purpose": "Parent topology delegation and runtime profile selection."
+    },
+    {
+      "file": "PNPM_SCRIPT_SPEC.md",
+      "path": "../../../sdkwork-specs/PNPM_SCRIPT_SPEC.md",
+      "purpose": "Delegated app-surface pnpm command contracts."
+    },
+    {
+      "file": "TEST_SPEC.md",
+      "path": "../../../sdkwork-specs/TEST_SPEC.md",
+      "purpose": "Verification."
+    }
+  ],
+  "contracts": {
+    "publicExports": [
+      "entry/src/main/ets/entryability/EntryAbility.ets"
+    ],
+    "runtimeEntrypoints": [],
+    "routeManifest": null,
+    "sdkClients": [
+      "SdkworkAppClient"
+    ],
+    "sdkDependencies": [
+      {
+        "workspace": "sdkwork-webserver-app-sdk",
+        "surface": "app-api",
+        "credentialMode": "authenticated-app-api"
+      },
+      {
+        "workspace": "sdkwork-drive-app-sdk",
+        "surface": "app-api",
+        "credentialMode": "authenticated-app-api"
+      },
+      {
+        "workspace": "sdkwork-deployments-app-sdk",
+        "surface": "app-api",
+        "credentialMode": "authenticated-app-api"
+      }
+    ],
+    "events": [],
+    "configKeys": [
+      "webserverApiBaseUrl",
+      "webserverBackendApiBaseUrl",
+      "applicationPublicHttpUrl",
+      "appbaseAppApiBaseUrl",
+      "appbaseLoginUrl",
+      "deploymentProfile",
+      "environment",
+      "profileId",
+      "runtimeTarget"
+    ]
+  },
+  "integration": {
+    "authority": "Root SDKWork specs remain authoritative.",
+    "sdkPolicy": "Bootstrap selects one runtime profile and lets core build every injected app SDK port; capability packages receive the port and never construct a transport.",
+    "compositionPolicy": "The root owns launch, environment resolution, the SDK port, the IAM runtime, and the route registry; the shell owns navigation and the auth gate; capability packages own their screen models; host owns every platform call.",
+    "hostPolicy": "A HarmonyOS package calls only the injected host adapter; platform APIs are bound once, in @sdkwork/sdkwork-webserver-harmony-mobile-host."
+  },
+  "verification": {
+    "commands": [
+      "node --test apps/sdkwork-webserver-harmony-mobile/tests/harmony-surface-contract.test.mjs",
+      "node ../sdkwork-specs/tools/check-frontend-composition.mjs --root .",
+      "node ../sdkwork-specs/tools/check-component-port-bindings.mjs --root ."
+    ]
+  },
+  "metadata": {
+    "managedBy": "sdkwork-webserver",
+    "standardVersion": "2026-09-17",
+    "arktsSdkGap": "No ArkTS target is produced by the SDK generation chain for any composed app SDK family, so core declares arkts-port-pending ports and bootstrap fails fast until a generated ArkTS adapter is injected."
+  }
+}

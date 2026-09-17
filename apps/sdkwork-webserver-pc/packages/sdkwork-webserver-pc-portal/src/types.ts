@@ -34,9 +34,11 @@ export interface PortalViewer {
 }
 
 export interface WebserverPortalProps {
+  availableLocales?: readonly PortalLocale[];
   clipboard: PortalClipboardPort;
   locale: PortalLocale;
   navigation: PortalNavigation;
+  onLocaleChange?: (locale: PortalLocale) => void;
   statistics?: PortalStatisticsPort;
   viewer?: PortalViewer;
 }

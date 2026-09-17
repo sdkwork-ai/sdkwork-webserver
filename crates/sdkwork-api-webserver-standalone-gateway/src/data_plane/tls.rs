@@ -1,18 +1,72 @@
 use std::sync::Arc;
 
 use axum_server::tls_rustls::RustlsConfig;
-use sdkwork_webserver_core::ListenerConfig;
+use sdkwork_webserver_core::{ClientAuthConfig, ListenerConfig, TlsVersion};
 
 use super::{
     runtime::RuntimeGeneration,
-    tls_material::{build_sni_server_config, install_crypto_provider, load_certified_key},
+    tls_material::{
+        build_layered_server_config, build_source_index, install_crypto_provider,
+        load_certified_key,
+    },
+    tls_resolver::{CertificateSourceIndex, ResolverLayers},
     DataPlaneError,
 };
+
+/// The certificate files a listener's TLS policy references, together with the
+/// protocol parameters that policy owns.
+///
+/// These form the upper layer of a `policy-first` listener: a configured file
+/// wins for a server name while it is usable, and the assigned certificate set
+/// covers every name the files do not.
+pub(crate) struct CompiledPolicyTlsMaterial {
+    pub(crate) layers: CertificateSourceIndex,
+    pub(crate) minimum_version: TlsVersion,
+    pub(crate) maximum_version: TlsVersion,
+    pub(crate) alpn: Vec<String>,
+    pub(crate) client_auth: Option<ClientAuthConfig>,
+}
 
 pub(crate) fn build_tls_config(
     generation: &Arc<RuntimeGeneration>,
     listener: &ListenerConfig,
 ) -> Result<Option<RustlsConfig>, DataPlaneError> {
+    let Some(material) = compile_policy_tls_material(generation, listener, false)? else {
+        return Ok(None);
+    };
+    let policy_id = listener.tls_policy_ref.clone().unwrap_or_default();
+    let server_config = build_layered_server_config(
+        Arc::new(ResolverLayers::policy_only(material.layers)),
+        material.minimum_version,
+        material.maximum_version,
+        &material.alpn,
+        material.client_auth.as_ref(),
+    )
+    .map_err(|server_name| DataPlaneError::AmbiguousTlsServerName {
+        policy_id,
+        server_name,
+    })?;
+    Ok(Some(RustlsConfig::from_config(server_config)))
+}
+
+/// Resolves a listener's TLS policy into loadable certificate material.
+///
+/// Returns `None` when the listener references no policy. Separated from
+/// [`build_tls_config`] because a `policy-first` listener feeds these layers
+/// into a shared resolver instead of building its own `ServerConfig`.
+///
+/// `tolerate_unavailable_material` decides what an unreadable, malformed or
+/// expired referenced file does. A `policy-first` listener passes `true`: the
+/// file drops out of the upper layer and the assigned certificate set covers
+/// its server names, which is precisely the "a configured file wins when it is
+/// present and usable" contract. Every other listener passes `false`, because
+/// with no lower layer a dropped file would leave the listener serving nothing
+/// — a silent outage rather than a fallback.
+pub(crate) fn compile_policy_tls_material(
+    generation: &Arc<RuntimeGeneration>,
+    listener: &ListenerConfig,
+    tolerate_unavailable_material: bool,
+) -> Result<Option<CompiledPolicyTlsMaterial>, DataPlaneError> {
     let Some(policy_id) = &listener.tls_policy_ref else {
         return Ok(None);
     };
@@ -42,13 +96,24 @@ pub(crate) fn build_tls_config(
             .ok_or_else(|| DataPlaneError::MissingCertificateFiles {
                 certificate_id: certificate.id.clone(),
             })?;
-        let loaded = load_certified_key(
+        let loaded = match load_certified_key(
             certificate_file,
             private_key_file,
             &certificate.server_names,
             provider,
-        )?;
-        certificates.push((certificate.server_names.clone(), loaded.certified_key));
+        ) {
+            Ok(loaded) => loaded,
+            Err(error) if tolerate_unavailable_material => {
+                tracing::warn!(
+                    certificate_id = %certificate.id,
+                    error = %error,
+                    "configured TLS certificate file is unavailable; the assigned certificate set covers its server names"
+                );
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
+        certificates.push((certificate.server_names.clone(), loaded));
     }
     // Relative `clientAuth.caCertificateFiles` are chrooted to the config
     // directory by the compiler; substitute the resolved paths.
@@ -63,21 +128,22 @@ pub(crate) fn build_tls_config(
                     .collect::<Vec<_>>()
             })
             .unwrap_or_else(|| auth.ca_certificate_files.clone());
-        sdkwork_webserver_core::ClientAuthConfig {
+        ClientAuthConfig {
             mode: auth.mode,
             ca_certificate_files: resolved,
         }
     });
-    let server_config = build_sni_server_config(
-        certificates,
-        policy.minimum_version,
-        policy.maximum_version,
-        &policy.alpn,
-        client_auth.as_ref(),
-    )
-    .map_err(|server_name| DataPlaneError::AmbiguousTlsServerName {
-        policy_id: policy.id.clone(),
-        server_name,
+    let layers = build_source_index(certificates).map_err(|server_name| {
+        DataPlaneError::AmbiguousTlsServerName {
+            policy_id: policy.id.clone(),
+            server_name,
+        }
     })?;
-    Ok(Some(RustlsConfig::from_config(server_config)))
+    Ok(Some(CompiledPolicyTlsMaterial {
+        layers,
+        minimum_version: policy.minimum_version,
+        maximum_version: policy.maximum_version,
+        alpn: policy.alpn.clone(),
+        client_auth,
+    }))
 }

@@ -20,7 +20,7 @@ use SDKWork\Webserver\AppSdk\Models\UpdateApplicationRequest;
 final class ApplicationApi extends BaseApi
 {
     /** 获取应用列表 */
-    public function applicationsList(?int $page = null, ?int $pageSize = null, ?int $status = null, ?string $applicationType = null, ?int $siteType = null, ?string $keyword = null): ?ApplicationsListResponse
+    public function applicationsList(?int $page = null, ?int $pageSize = null, ?int $status = null, ?string $applicationType = null, ?int $siteType = null, ?string $q = null): ?ApplicationsListResponse
     {
         $path = '/app/v3/api/applications';
         $query = $this->buildQueryString([
@@ -29,7 +29,7 @@ final class ApplicationApi extends BaseApi
             new QueryParameterSpec('status', $status, 'form', true, false, null),
             new QueryParameterSpec('application_type', $applicationType, 'form', true, false, null),
             new QueryParameterSpec('site_type', $siteType, 'form', true, false, null),
-            new QueryParameterSpec('keyword', $keyword, 'form', true, false, null),
+            new QueryParameterSpec('q', $q, 'form', true, false, null),
         ]);
         $path = $this->appendQueryString($path, $query);
         $result = $this->client->request('GET', $path, []);

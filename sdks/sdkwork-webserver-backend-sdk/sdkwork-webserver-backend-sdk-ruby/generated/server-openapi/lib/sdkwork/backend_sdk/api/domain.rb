@@ -18,13 +18,13 @@ module Sdkwork
     module Api
       class DomainApi < BaseApi
           # List tenant root-domain Zones
-          def root_domains_list(page: nil, page_size: nil, status: nil, keyword: nil)
+          def root_domains_list(page: nil, page_size: nil, status: nil, q: nil)
             path = '/backend/v3/api/root_domains'
             query = build_query_string([
               QueryParameterSpec.new('page', page, 'form', true, false, nil),
               QueryParameterSpec.new('page_size', page_size, 'form', true, false, nil),
               QueryParameterSpec.new('status', status, 'form', true, false, nil),
-              QueryParameterSpec.new('keyword', keyword, 'form', true, false, nil),
+              QueryParameterSpec.new('q', q, 'form', true, false, nil),
             ])
             path = append_query_string(path, query)
             options = {}

@@ -52,12 +52,93 @@ export function parseWebserverPcRuntimeConfig(
   return { activeLocales, ...baseUrls, browserOriginMode, defaultLocale, deploymentProfile, environment, fallbackLocale, messagingPcUrl, profileId, runtimeTarget, supportedLocales };
 }
 
+export const WEBSERVER_LOCALE_STORAGE_KEY = "sdkwork.webserver.locale";
+
+/**
+ * The locale preference store is a port rather than a direct `localStorage`
+ * read so the browser host, tests, and future native hosts each supply their
+ * own persistence. `setItem` is optional: a host that cannot persist a
+ * preference still supports switching for the current session.
+ */
+export interface WebserverLocaleStorage {
+  getItem(key: string): string | null;
+  setItem?(key: string, value: string): void;
+}
+
 export function resolveWebserverLocale(config: WebserverPcRuntimeConfig, preferredLocales: readonly string[]): WebserverLocale {
   for (const preferred of preferredLocales) {
-    const normalized = preferred.toLowerCase().startsWith("zh") ? "zh-CN" : preferred.toLowerCase().startsWith("en") ? "en-US" : undefined;
+    const normalized = normalizeLocaleTag(preferred);
     if (normalized && config.activeLocales.includes(normalized)) return normalized;
   }
   return config.activeLocales.includes(config.defaultLocale) ? config.defaultLocale : config.fallbackLocale;
+}
+
+/**
+ * Narrows any incoming locale tag onto an active deployment locale.
+ * Unsupported or malformed tags resolve through the deployment default and
+ * fallback instead of producing handler-local ad hoc behavior, per
+ * `I18N_SPEC.md` section 2.
+ */
+export function toWebserverLocale(
+  value: string | null | undefined,
+  config: WebserverPcRuntimeConfig,
+): WebserverLocale {
+  const normalized = normalizeLocaleTag(value);
+  if (normalized && config.activeLocales.includes(normalized)) return normalized;
+  return config.activeLocales.includes(config.defaultLocale) ? config.defaultLocale : config.fallbackLocale;
+}
+
+/** Whether a runtime locale is one this deployment can render. */
+export function isActiveWebserverLocale(
+  value: string | null | undefined,
+  config: WebserverPcRuntimeConfig,
+): boolean {
+  const normalized = normalizeLocaleTag(value);
+  return Boolean(normalized) && config.activeLocales.includes(normalized as WebserverLocale);
+}
+
+/**
+ * Reads the explicit language preference a user selected in the product.
+ * `I18N_SPEC.md` section 2 ranks this above every negotiation source, so an
+ * explicit choice survives reloads instead of being re-derived from the
+ * browser each time.
+ */
+export function readWebserverLocalePreference(
+  storage: WebserverLocaleStorage | null | undefined,
+): WebserverLocale | undefined {
+  try {
+    return normalizeLocaleTag(storage?.getItem(WEBSERVER_LOCALE_STORAGE_KEY));
+  } catch {
+    // Storage can be unavailable in privacy-restricted browser contexts.
+    return undefined;
+  }
+}
+
+/** Persists the explicit language preference; a storage failure must not break switching. */
+export function commitWebserverLocalePreference(
+  locale: WebserverLocale,
+  storage: WebserverLocaleStorage | null | undefined,
+): WebserverLocale {
+  try {
+    storage?.setItem?.(WEBSERVER_LOCALE_STORAGE_KEY, locale);
+  } catch {
+    // Storage can be unavailable in privacy-restricted browser contexts.
+  }
+  return locale;
+}
+
+/**
+ * Resolves the bootstrap locale in the `I18N_SPEC.md` section 2 order:
+ * stored user preference, then the browser's preferred languages, then the
+ * deployment default.
+ */
+export function resolveInitialWebserverLocale(
+  config: WebserverPcRuntimeConfig,
+  preferredLocales: readonly string[],
+  storage?: WebserverLocaleStorage | null,
+): WebserverLocale {
+  const preference = readWebserverLocalePreference(storage);
+  return preference ? toWebserverLocale(preference, config) : resolveWebserverLocale(config, preferredLocales);
 }
 
 function readStandaloneBaseUrls(value: Record<string, unknown>, browserOrigin: string | undefined, browserOriginMode: WebserverBrowserOriginMode, environment: WebserverLifecycleEnvironment) {
@@ -87,6 +168,7 @@ function readBrowserOrigin(value: string | undefined): string { if (typeof value
 function readUrl(value: unknown, field: string, environment: WebserverLifecycleEnvironment): string { if (typeof value !== "string" || !value.trim()) throw new Error(`${field} is required`); let url: URL; try { url = new URL(value); } catch { throw new Error(`${field} must be an absolute HTTP(S) URL`); } if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new Error(`${field} must be an absolute HTTP(S) URL`); if (environment === "production" && ["localhost", "127.0.0.1", "::1"].includes(url.hostname)) throw new Error(`${field} cannot use a loopback host in production`); return url.toString().replace(/\/$/, ""); }
 function readProfileId(value: unknown, deploymentProfile: WebserverDeploymentProfile, environment: WebserverLifecycleEnvironment): `${WebserverDeploymentProfile}.${WebserverLifecycleEnvironment}` { const expected = `${deploymentProfile}.${environment}` as const; if (value !== expected) throw new Error(`profileId must equal ${expected}`); return expected; }
 function readLocales(value: unknown, field: string): WebserverLocale[] { if (!Array.isArray(value) || value.length === 0) throw new Error(`${field} is required`); return [...new Set(value.map((locale) => readEnum(locale, ["en-US", "zh-CN"] as const, field)))]; }
+function normalizeLocaleTag(value: string | null | undefined): WebserverLocale | undefined { const candidate = typeof value === "string" ? value.trim().toLowerCase() : ""; if (candidate.startsWith("zh")) return "zh-CN"; if (candidate.startsWith("en")) return "en-US"; return undefined; }
 function readEnum<const T extends readonly string[]>(value: unknown, allowed: T, field: string): T[number] { if (typeof value !== "string" || !allowed.includes(value)) throw new Error(`${field} is invalid`); return value as T[number]; }
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 function currentBrowserOrigin(): string | undefined { return typeof window === "undefined" ? undefined : window.location.origin; }

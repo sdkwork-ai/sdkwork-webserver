@@ -9,7 +9,9 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::{
-    canonical_json::canonical_sha256_excluding_field, normalize_uri_path, ConfigDiagnostic,
+    canonical_json::canonical_sha256_excluding_field,
+    json_schema::{compile_schema, schema_diagnostics},
+    normalize_uri_path, ConfigDiagnostic,
 };
 
 use super::{
@@ -23,17 +25,14 @@ use super::{
 pub const WEBSITE_RUNTIME_SET_SCHEMA_VERSION: &str = "sdkwork.website-runtime-set.v1";
 pub const WEBSITE_RUNTIME_SET_KIND: &str = "sdkwork.website-runtime-set.snapshot";
 pub const MAX_WEBSITE_RUNTIME_SET_BYTES: usize = 64 * 1024 * 1024;
-const MAX_SCHEMA_DIAGNOSTICS: usize = 64;
 const HARD_MAXIMUM_SITES: usize = 10_000;
 const HARD_MAXIMUM_GENERATION: u64 = 9_007_199_254_740_991;
 const HARD_MAXIMUM_PATH_BYTES: usize = 4_096;
 const HARD_MAXIMUM_PATH_SEGMENTS: usize = 128;
 const SCHEMA: &str =
     include_str!("../../../../specs/sdkwork.website-runtime-set.snapshot.schema.json");
-static SCHEMA_VALIDATOR: LazyLock<Result<jsonschema::Validator, String>> = LazyLock::new(|| {
-    let schema: Value = serde_json::from_str(SCHEMA).map_err(|error| error.to_string())?;
-    jsonschema::draft202012::new(&schema).map_err(|error| error.to_string())
-});
+static SCHEMA_VALIDATOR: LazyLock<Result<jsonschema::Validator, String>> =
+    LazyLock::new(|| compile_schema(SCHEMA));
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -452,16 +451,7 @@ fn validate_schema(instance: &Value) -> Result<(), WebsiteRuntimeSetError> {
     let validator = SCHEMA_VALIDATOR
         .as_ref()
         .map_err(|error| WebsiteRuntimeSetError::InvalidSchema(error.clone()))?;
-    let diagnostics = validator
-        .iter_errors(instance)
-        .take(MAX_SCHEMA_DIAGNOSTICS)
-        .map(|error| {
-            ConfigDiagnostic::new(
-                error.instance_path().as_str(),
-                truncate_diagnostic(&error.to_string()),
-            )
-        })
-        .collect::<Vec<_>>();
+    let diagnostics = schema_diagnostics(validator, instance);
     if diagnostics.is_empty() {
         Ok(())
     } else {
@@ -574,16 +564,4 @@ fn valid_canonical_timestamp(value: &str) -> bool {
         && value.bytes().enumerate().all(|(index, byte)| {
             matches!(index, 4 | 7 | 10 | 13 | 16 | 19) || byte.is_ascii_digit()
         })
-}
-
-fn truncate_diagnostic(message: &str) -> String {
-    const MAX_DIAGNOSTIC_BYTES: usize = 512;
-    if message.len() <= MAX_DIAGNOSTIC_BYTES {
-        return message.to_owned();
-    }
-    let mut end = MAX_DIAGNOSTIC_BYTES;
-    while !message.is_char_boundary(end) {
-        end -= 1;
-    }
-    format!("{}...", &message[..end])
 }

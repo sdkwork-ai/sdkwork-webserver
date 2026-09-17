@@ -1,0 +1,18 @@
+{
+  "environment": "test",
+  "deploymentProfile": "standalone",
+  "profileId": "standalone.test",
+  "runtimeTarget": "harmony-native",
+  "webserver": {
+    "apiBaseUrl": "http://server-test.sdkwork.com:8888/app/v3/api",
+    "backendApiBaseUrl": "http://server-test.sdkwork.com:8888/backend/v3/api"
+  },
+  "appbase": {
+    "appApiBaseUrl": "http://server-test.sdkwork.com:8888",
+    "loginUrl": "http://server-test.sdkwork.com:8888"
+  },
+  "metadata": {
+    "profileBinding": "runtime-configurable",
+    "applicationPublicHttpUrl": "http://server-test.sdkwork.com:8888"
+  }
+}

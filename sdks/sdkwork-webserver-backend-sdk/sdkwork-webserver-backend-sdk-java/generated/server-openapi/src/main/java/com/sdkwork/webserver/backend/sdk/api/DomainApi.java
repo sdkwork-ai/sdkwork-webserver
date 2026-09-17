@@ -14,12 +14,12 @@ public class DomainApi {
     }
 
     /** List tenant root-domain Zones */
-    public RootDomainsListResponse rootDomainsList(Integer page, Integer pageSize, Integer status, String keyword) throws Exception {
+    public RootDomainsListResponse rootDomainsList(Integer page, Integer pageSize, Integer status, String q) throws Exception {
         String query = buildQueryString(List.of(
             new QueryParameterSpec("page", page, "form", true, false, null),
             new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             new QueryParameterSpec("status", status, "form", true, false, null),
-            new QueryParameterSpec("keyword", keyword, "form", true, false, null)
+            new QueryParameterSpec("q", q, "form", true, false, null)
         ));
         Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/root_domains"), query));
         return client.convertValue(raw, new TypeReference<RootDomainsListResponse>() {});

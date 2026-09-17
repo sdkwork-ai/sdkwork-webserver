@@ -1,12 +1,12 @@
 import {
-  isValidApplicationGitRepositoryUrl,
-  normalizeApplicationGitRepositoryUrl,
+  isValidGitRepositoryUrl,
+  normalizeGitRepositoryUrl,
 } from "@sdkwork/webserver-pc-commons";
 import { describe, expect, it } from "vitest";
 
 describe("application Git repository source", () => {
   it("normalizes a valid HTTPS repository URL", () => {
-    expect(normalizeApplicationGitRepositoryUrl(
+    expect(normalizeGitRepositoryUrl(
       "  https://github.com/sdkwork/example.git  ",
     )).toBe("https://github.com/sdkwork/example.git");
   });
@@ -19,7 +19,7 @@ describe("application Git repository source", () => {
     "https://github.com/sdkwork/example.git#main",
     "https://github.com/",
   ])("rejects an unsafe or incomplete repository URL: %s", (repository) => {
-    expect(isValidApplicationGitRepositoryUrl(repository)).toBe(false);
-    expect(() => normalizeApplicationGitRepositoryUrl(repository)).toThrow();
+    expect(isValidGitRepositoryUrl(repository)).toBe(false);
+    expect(() => normalizeGitRepositoryUrl(repository)).toThrow();
   });
 });

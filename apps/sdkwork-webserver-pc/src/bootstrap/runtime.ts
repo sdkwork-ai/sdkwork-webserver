@@ -1,4 +1,7 @@
-import { createSdkworkIamRuntimeAuthController, type SdkworkIamRuntimeAuthRuntimeLike } from "@sdkwork/auth-pc-react";
+import {
+  createSdkworkIamRuntimeAuthController,
+  type SdkworkIamRuntimeAuthRuntimeLike,
+} from "@sdkwork/auth-pc-react";
 import {
   createSdkworkAppbasePcAuthRuntime,
   createSdkworkSessionAuthUnauthorizedIntegration,
@@ -8,15 +11,21 @@ import { createClient as createIamAppClient } from "@sdkwork/iam-app-sdk";
 import { createPersistentIamTokenStore, resetTokenManagerToBootstrapAccessToken } from "@sdkwork/iam-runtime";
 import { createTokenManager } from "@sdkwork/sdk-common";
 import type { WebserverConsoleSdkClients } from "@sdkwork/webserver-pc-console-core";
-import { loadWebserverPcRuntimeConfig, resolveWebserverLocale } from "@sdkwork/webserver-pc-core";
+import { loadWebserverPcRuntimeConfig, type WebserverLocale } from "@sdkwork/webserver-pc-core";
 import { createWebserverAuthRuntimeConfigLoader } from "../auth/authRuntimeConfig.ts";
 import { dedupeAuthControllerBootstrap } from "./authBootstrapDedupe.ts";
+import { resolveBrowserInitialLocale } from "./locale.ts";
 
 const WEBSERVER_PC_APP_ID = "sdkwork-webserver-pc";
 
 export async function bootstrapWebserverPcRuntime() {
   const config = await loadWebserverPcRuntimeConfig();
-  const locale = resolveWebserverLocale(config, navigator.languages);
+  const locale = resolveBrowserInitialLocale(config);
+  // SDK transports call the locale provider once per request, so the runtime
+  // holds the active locale in a mutable slot: switching language in the shell
+  // changes the Accept-Language of the next call instead of only the visible
+  // copy (I18N_SPEC.md section 10).
+  const localeState = { current: locale };
   const tokenManager = createTokenManager();
   // The shared IAM store owns authToken/accessToken persistence; app code never reads credentials.
   const tokenStore = createPersistentIamTokenStore({
@@ -27,7 +36,7 @@ export async function bootstrapWebserverPcRuntime() {
     app: { appId: WEBSERVER_PC_APP_ID, deploymentMode: config.deploymentProfile === "cloud" ? "saas" : "local", environment: config.environment === "development" ? "dev" : config.environment === "test" ? "test" : "prod", platform: "pc" },
     baseUrls: { appbaseAppApiBaseUrl: config.appbaseAppApiBaseUrl },
     createAppbaseAppClient: (clientConfig) => createIamAppClient({ ...clientConfig, timeout: config.environment === "production" || config.environment === "staging" ? 10_000 : 5_000 }),
-    localeProvider: () => locale,
+    localeProvider: () => localeState.current,
     sessionAuth: true,
     tokenManager,
     tokenStore,
@@ -75,6 +84,9 @@ export async function bootstrapWebserverPcRuntime() {
     loadAuthRuntimeConfig,
     loadConsoleClients,
     locale,
+    setLocale(next: WebserverLocale) {
+      localeState.current = next;
+    },
     tokenManager,
   } as const;
 }

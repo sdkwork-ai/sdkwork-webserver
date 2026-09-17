@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "@sdkwork/webserver-mini-program",
+    "displayName": "SDKWork Webserver Mini Program",
+    "version": "0.1.0",
+    "type": "mini-program-app-root",
+    "root": "sdkwork-webserver/apps/sdkwork-webserver-mini-program",
+    "domain": "infrastructure",
+    "capability": "webserver",
+    "surface": "app",
+    "languages": [
+      "typescript"
+    ],
+    "generated": false,
+    "private": true,
+    "status": "active",
+    "manifests": [
+      "package.json",
+      "sdkwork.app.config.json",
+      "project.config.json",
+      "specs/component.spec.json"
+    ]
+  },
+  "canonicalSpecs": [
+    {
+      "file": "SOUL.md",
+      "path": "../../../sdkwork-specs/SOUL.md",
+      "purpose": "SDKWork execution principles."
+    },
+    {
+      "file": "CODE_STYLE_SPEC.md",
+      "path": "../../../sdkwork-specs/CODE_STYLE_SPEC.md",
+      "purpose": "Authored source structure and generated code boundaries."
+    },
+    {
+      "file": "NAMING_SPEC.md",
+      "path": "../../../sdkwork-specs/NAMING_SPEC.md",
+      "purpose": "Canonical application and package naming."
+    },
+    {
+      "file": "TYPESCRIPT_CODE_SPEC.md",
+      "path": "../../../sdkwork-specs/TYPESCRIPT_CODE_SPEC.md",
+      "purpose": "TypeScript package and build runner contracts."
+    },
+    {
+      "file": "PNPM_SCRIPT_SPEC.md",
+      "path": "../../../sdkwork-specs/PNPM_SCRIPT_SPEC.md",
+      "purpose": "Delegated app-surface pnpm command contracts."
+    },
+    {
+      "file": "MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md",
+      "path": "../../../sdkwork-specs/MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md",
+      "purpose": "Mini program root layout, package taxonomy, and platform projection."
+    },
+    {
+      "file": "APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "path": "../../../sdkwork-specs/APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "purpose": "Cross-client package taxonomy and capability alignment."
+    },
+    {
+      "file": "APP_COMPOSITION_SPEC.md",
+      "path": "../../../sdkwork-specs/APP_COMPOSITION_SPEC.md",
+      "purpose": "Native-authority application composition."
+    },
+    {
+      "file": "APP_MINI_PROGRAM_UI_SPEC.md",
+      "path": "../../../sdkwork-specs/APP_MINI_PROGRAM_UI_SPEC.md",
+      "purpose": "Mini program UI and design-token architecture."
+    },
+    {
+      "file": "APP_SDK_INTEGRATION_SPEC.md",
+      "path": "../../../sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md",
+      "purpose": "SDK and IAM composition."
+    },
+    {
+      "file": "APP_PERMISSION_COMPOSITION_SPEC.md",
+      "path": "../../../sdkwork-specs/APP_PERMISSION_COMPOSITION_SPEC.md",
+      "purpose": "Permission and route-hint inheritance."
+    },
+    {
+      "file": "PAGINATION_SPEC.md",
+      "path": "../../../sdkwork-specs/PAGINATION_SPEC.md",
+      "purpose": "Interactive list pagination contract."
+    },
+    {
+      "file": "I18N_SPEC.md",
+      "path": "../../../sdkwork-specs/I18N_SPEC.md",
+      "purpose": "Locale negotiation and authored fragment layout."
+    },
+    {
+      "file": "CONFIG_SPEC.md",
+      "path": "../../../sdkwork-specs/CONFIG_SPEC.md",
+      "purpose": "Runtime configuration."
+    },
+    {
+      "file": "SOURCE_CONFIG_SPEC.md",
+      "path": "../../../sdkwork-specs/SOURCE_CONFIG_SPEC.md",
+      "purpose": "Parent topology delegation and runtime profile selection."
+    },
+    {
+      "file": "TEST_SPEC.md",
+      "path": "../../../sdkwork-specs/TEST_SPEC.md",
+      "purpose": "Verification."
+    }
+  ],
+  "contracts": {
+    "publicExports": [],
+    "runtimeEntrypoints": [
+      "src/app.js"
+    ],
+    "routeManifest": "src/runtime/route-projection.json",
+    "sdkClients": [
+      "SdkworkAppClient",
+      "SdkworkDriveAppClient",
+      "SdkworkDeployAppClient"
+    ],
+    "sdkDependencies": [
+      {
+        "workspace": "sdkwork-webserver-app-sdk",
+        "surface": "app-api",
+        "credentialMode": "authenticated-app-api"
+      },
+      {
+        "workspace": "sdkwork-drive-app-sdk",
+        "surface": "app-api",
+        "credentialMode": "authenticated-app-api"
+      },
+      {
+        "workspace": "sdkwork-deployments-app-sdk",
+        "surface": "app-api",
+        "credentialMode": "authenticated-app-api"
+      }
+    ],
+    "events": [],
+    "configKeys": [
+      "appApiBaseUrl",
+      "applicationPublicHttpUrl",
+      "deployAppApiBaseUrl",
+      "driveAppApiBaseUrl",
+      "deploymentProfile",
+      "environment",
+      "profileId",
+      "runtimeTarget",
+      "supportedLocales",
+      "activeLocales",
+      "defaultLocale",
+      "fallbackLocale"
+    ]
+  },
+  "integration": {
+    "authority": "Root SDKWork specs remain authoritative.",
+    "sdkPolicy": "Bootstrap selects one runtime profile and lets mp-core build every generated client; capability packages receive an injected client and never construct transport.",
+    "compositionPolicy": "The root owns launch, locale, the route projection, and the message catalog; the shell owns navigation and the auth gate; capability packages own their page models; mp-host owns every platform call.",
+    "hostPolicy": "A native mini program calls only the injected host adapter; platform globals are bound once, in @sdkwork/webserver-mp-host."
+  },
+  "verification": {
+    "commands": [
+      "pnpm --dir apps/sdkwork-webserver-mini-program check",
+      "node ../sdkwork-specs/tools/check-source-config-standard.mjs --root apps/sdkwork-webserver-mini-program"
+    ]
+  },
+  "metadata": {
+    "managedBy": "sdkwork-webserver",
+    "standardVersion": "2026-09-17",
+    "appTypeNote": "PlusProjectType exposes no native mini program value, so sdkwork.app.config.json#app.appType uses APP_UNIAPP while runtime.framework stays mp-weixin."
+  }
+}

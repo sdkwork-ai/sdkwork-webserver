@@ -18,7 +18,7 @@ namespace SDKWork.WebserverBackendSdk.Api
         /// <summary>
         /// List managed applications
         /// </summary>
-        public async Task<SDKWork.WebserverBackendSdk.Models.ApplicationsListResponse?> ApplicationsListAsync(int? page = null, int? pageSize = null, string? applicationType = null, int? siteType = null, int? status = null, string? keyword = null)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ApplicationsListResponse?> ApplicationsListAsync(int? page = null, int? pageSize = null, string? applicationType = null, int? siteType = null, int? status = null, string? q = null)
         {
             var queryString = BuildQueryString(new[]
             {
@@ -27,7 +27,7 @@ namespace SDKWork.WebserverBackendSdk.Api
                 new QueryParameterSpec("application_type", applicationType, "form", true, false, null),
                 new QueryParameterSpec("site_type", siteType, "form", true, false, null),
                 new QueryParameterSpec("status", status, "form", true, false, null),
-                new QueryParameterSpec("keyword", keyword, "form", true, false, null),
+                new QueryParameterSpec("q", q, "form", true, false, null),
             });
             return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ApplicationsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath("/applications"), queryString));
         }

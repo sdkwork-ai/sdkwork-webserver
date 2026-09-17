@@ -1,7 +1,6 @@
 import {
   formatWebserverErrorMessage,
   translateWebserver,
-  WebserverActionError,
   type WebserverLocale,
   type WebserverMessageKey,
 } from "@sdkwork/webserver-pc-commons";
@@ -64,25 +63,6 @@ describe("webserver error messages", () => {
       { message: "The operation was aborted", name: "AbortError" },
       translator("en-US"),
     )).toContain("cancelled");
-  });
-
-  it("keeps staged recovery guidance and appends a safe nested cause", () => {
-    const error = new WebserverActionError(
-      "application-draft-source-failed",
-      { applicationId: "application-42" },
-      {
-        cause: {
-          code: "SERVICE_UNAVAILABLE",
-          httpStatus: 503,
-          problem: { code: 50301, status: 503, traceId: "trace-source-50301" },
-        },
-      },
-    );
-    const message = formatWebserverErrorMessage(error, translator("zh-CN"));
-
-    expect(message).toContain("应用 application-42 已创建为草稿");
-    expect(message).toContain("服务暂时不可用");
-    expect(message).toContain("支持参考号：trace-source-50301");
   });
 
   it("uses safe 4xx detail without exposing SQL, secrets, stacks, or raw 5xx detail", () => {

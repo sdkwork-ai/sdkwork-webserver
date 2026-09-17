@@ -1,8 +1,8 @@
 import { useRef, useState, type FormEvent } from "react";
 import type { SdkworkDriveAppClient } from "@sdkwork/webserver-pc-console-core";
 import {
-  isValidApplicationGitRepositoryUrl,
-  normalizeApplicationGitRepositoryUrl,
+  isValidGitRepositoryUrl,
+  normalizeGitRepositoryUrl,
 } from "@sdkwork/webserver-pc-commons";
 import { usePluginsT } from "./locale.tsx";
 import { CheckIcon } from "./plugin-icons.tsx";
@@ -47,7 +47,7 @@ export function EditPluginForm({
 
   const gitLooksValid = plugin.sourceKind !== "git"
     || gitRepository.trim().length === 0
-    || isValidApplicationGitRepositoryUrl(gitRepository);
+    || isValidGitRepositoryUrl(gitRepository);
 
   async function onUpload() {
     const file = fileInputRef.current?.files?.[0];
@@ -90,7 +90,7 @@ export function EditPluginForm({
         contributedCapabilities: [...contributedCapabilities],
         updatedAt: new Date().toISOString(),
         gitRepository: plugin.sourceKind === "git"
-          ? normalizeApplicationGitRepositoryUrl(gitRepository)
+          ? normalizeGitRepositoryUrl(gitRepository)
           : plugin.gitRepository,
         gitRef: plugin.sourceKind === "git" ? normalizePluginGitRef(gitRef) : plugin.gitRef,
         artifactRef: plugin.sourceKind === "archive" ? artifactRef : plugin.artifactRef,
@@ -114,7 +114,7 @@ export function EditPluginForm({
     && !uploading
     && supportedHostTools.length > 0
     && (plugin.sourceKind === "git"
-      ? isValidApplicationGitRepositoryUrl(gitRepository)
+      ? isValidGitRepositoryUrl(gitRepository)
       : artifactRef.startsWith("drive://"));
 
   return (

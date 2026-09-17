@@ -87,7 +87,7 @@
       "apiAuthority": "sdkwork-deployments-app-api",
       "sdkFamily": "deployments-app-sdk",
       "prefix": "/app/v3/api",
-      "executableAssemblyExport": "sdkwork_api_deployments_assembly::assemble_domain_certificate_blocks",
+      "executableAssemblyExport": "sdkwork_api_deployments_assembly::assemble_same_origin_contribution_with_pool",
       "profileCoverage": [
         "standalone.development",
         "standalone.test",

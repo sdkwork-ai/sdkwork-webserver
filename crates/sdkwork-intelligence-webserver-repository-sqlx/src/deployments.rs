@@ -6,9 +6,9 @@ use sdkwork_webserver_contract::{
 use sqlx::Row;
 
 use super::support::{
-    decode_keyset_cursor, encode_keyset_cursor, instant_from_row, instant_write_expression,
-    is_unique_violation, new_uuid, next_id, now_rfc3339, optional_instant_from_row, pagination,
-    resolve_site_internal_id, sha256_hex, store_error,
+    cursor_instant_from_row, decode_keyset_cursor, encode_keyset_cursor, instant_from_row,
+    instant_write_expression, is_unique_violation, new_uuid, next_id, now_rfc3339,
+    optional_instant_from_row, pagination, resolve_site_internal_id, sha256_hex, store_error,
 };
 
 struct DeploymentIdempotencyLookup<'a> {
@@ -184,7 +184,7 @@ impl WebRepository {
             "{DEPLOYMENT_LIST_SELECT}
              WHERE deployment.tenant_id = $1 AND deployment.site_id = $2
                AND ($3 IS NULL OR deployment.status = $3)
-               AND (deployment.created_at, deployment.id) < ($4, $5)
+               AND (deployment.created_at, deployment.id) < (CAST($4 AS TIMESTAMPTZ), $5)
              ORDER BY deployment.created_at DESC, deployment.id DESC LIMIT $6"
         );
         let fetch_size = i64::from(page_size) + 1;
@@ -209,8 +209,7 @@ impl WebRepository {
         let next_cursor = has_more
             .then(|| {
                 let last = page_rows.last().expect("non-empty page when has_more");
-                let created_at: String = last
-                    .try_get("created_at")
+                let created_at = cursor_instant_from_row(last, "created_at")
                     .map_err(|error| store_error("map web_deployment cursor instant", error))?;
                 let id: i64 = last
                     .try_get("id")

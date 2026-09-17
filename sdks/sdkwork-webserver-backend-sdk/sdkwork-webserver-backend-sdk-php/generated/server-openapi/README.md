@@ -72,7 +72,7 @@ $client->setHeader('X-Custom-Header', 'value');
 <?php
 
 // List managed applications
-$params = ['page' => 1, 'page_size' => 2, 'application_type' => 'WEB', 'site_type' => 4, 'status' => 5, 'keyword' => 'keyword'];
+$params = ['page' => 1, 'page_size' => 2, 'application_type' => 'WEB', 'site_type' => 4, 'status' => 5, 'q' => 'q'];
 $result = $client->application->applicationsList($params);
 var_dump($result);
 ```

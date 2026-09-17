@@ -1,7 +1,6 @@
 import { createWebserverAdminRegistry, createWebserverAdminSdkClient, WebserverAdminSdkProvider } from "@sdkwork/webserver-pc-admin-core";
-import { createWebserverAdminApplicationRegistry } from "@sdkwork/webserver-pc-admin-applications";
 import { WebserverAdminShell } from "@sdkwork/webserver-pc-admin-shell";
-import type { ApplicationMediaStorage, ApplicationSourceStorage, WebserverLocale, WebserverPcModuleDefinition, WebserverResourceKey } from "@sdkwork/webserver-pc-commons";
+import type { WebserverLocale, WebserverPcModuleDefinition, WebserverResourceKey } from "@sdkwork/webserver-pc-commons";
 import type { AuthTokenManager } from "@sdkwork/sdk-common";
 import type { ReactNode } from "react";
 import { useMemo } from "react";
@@ -9,22 +8,25 @@ import { useMemo } from "react";
 export interface WebserverAdminSurfaceProps {
   backendApiBaseUrl: string;
   locale: WebserverLocale;
-  mediaStorage: ApplicationMediaStorage;
   modules: readonly WebserverPcModuleDefinition[];
   onSignOut(): void;
   permissionScope: readonly string[];
   resourceRenderers?: Partial<Record<WebserverResourceKey, ReactNode>>;
-  sourceStorage: ApplicationSourceStorage;
   tokenManager: AuthTokenManager;
   userLabel?: string;
 }
 
-export function WebserverAdminSurface({ backendApiBaseUrl, locale, mediaStorage, modules, onSignOut, permissionScope, resourceRenderers, sourceStorage, tokenManager, userLabel }: WebserverAdminSurfaceProps) {
+/**
+ * Backend-admin host surface. It owns the admin registry for the resources that
+ * still render themselves from it (nginx, servers, diagnostics, audit); every
+ * capability bridged from another module — Applications from sdkwork-deployments,
+ * Plugins / Skills / MCP / Storage Center from their owning packages — arrives
+ * pre-built through `resourceRenderers`. No application lifecycle is
+ * implemented on this surface any more.
+ */
+export function WebserverAdminSurface({ backendApiBaseUrl, locale, modules, onSignOut, permissionScope, resourceRenderers, tokenManager, userLabel }: WebserverAdminSurfaceProps) {
   const client = useMemo(() => createWebserverAdminSdkClient(backendApiBaseUrl, tokenManager), [backendApiBaseUrl, tokenManager]);
-  const registry = useMemo(() => ({
-    ...createWebserverAdminRegistry(client),
-    ...createWebserverAdminApplicationRegistry(client, sourceStorage, mediaStorage),
-  }), [client, mediaStorage, sourceStorage]);
+  const registry = useMemo(() => createWebserverAdminRegistry(client), [client]);
   return (
     <WebserverAdminSdkProvider client={client}>
       <WebserverAdminShell

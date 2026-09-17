@@ -30,7 +30,3 @@ impl TlsRuntimeSnapshotError {
         }
     }
 }
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
-#[error("SNI server name is invalid")]
-pub struct InvalidSniServerName;

@@ -1,7 +1,6 @@
 import type { WebserverMessageKey } from "./i18n/index.ts";
 import { isRecord } from "./normalize.ts";
 import { WebserverOperationError } from "./operation-polling.ts";
-import { WebserverActionError } from "./types.ts";
 
 export type WebserverErrorTranslate = (
   key: WebserverMessageKey,
@@ -11,13 +10,6 @@ export type WebserverErrorTranslate = (
 export interface WebserverErrorMessageOptions {
   fallbackKey?: WebserverMessageKey;
 }
-
-const ACTION_ERROR_KEYS: Record<WebserverActionError["code"], WebserverMessageKey> = {
-  "application-draft-media-failed": "error.applicationDraftMedia",
-  "application-draft-source-failed": "error.applicationDraftSource",
-  "application-draft-deployment-failed": "error.applicationDraftDeployment",
-  "deployment-source-stored": "error.deploymentSourceStored",
-};
 
 const RESULT_CODE_KEYS: Readonly<Record<number, WebserverMessageKey>> = {
   40001: "errors.result.40001",
@@ -111,12 +103,6 @@ export function formatWebserverErrorMessage(
   translate: WebserverErrorTranslate,
   options: WebserverErrorMessageOptions = {},
 ): string {
-  if (error instanceof WebserverActionError) {
-    const actionMessage = translate(ACTION_ERROR_KEYS[error.code], { ...error.details });
-    const causeMessage = structuredErrorMessage(error.cause, translate);
-    return joinDistinctMessages(actionMessage, causeMessage);
-  }
-
   if (error instanceof WebserverOperationError) {
     const key = error.kind === "timeout"
       ? "error.asyncOperationTimeout"
@@ -286,9 +272,4 @@ function isKnownBrowserTransportError(error: Record<string, unknown>): boolean {
 
 function arrayValue(value: unknown): readonly unknown[] {
   return Array.isArray(value) ? value : [];
-}
-
-function joinDistinctMessages(primary: string, secondary?: string): string {
-  if (!secondary || primary.includes(secondary)) return primary;
-  return `${primary} ${secondary}`;
 }

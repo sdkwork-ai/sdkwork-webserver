@@ -1,0 +1,21 @@
+name: sdkwork_webserver_flutter_mobile_applications
+description: SDKWork Web Server Flutter mobile applications capability
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  sdkwork_webserver_flutter_mobile_core:
+    path: ../sdkwork_webserver_flutter_mobile_core
+  sdkwork_webserver_flutter_mobile_commons:
+    path: ../sdkwork_webserver_flutter_mobile_commons
+  sdkwork_webserver_flutter_mobile_shell:
+    path: ../sdkwork_webserver_flutter_mobile_shell
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

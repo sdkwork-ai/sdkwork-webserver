@@ -7,8 +7,9 @@ use sdkwork_webserver_contract::{
 use sqlx::Row;
 
 use super::support::{
-    decode_keyset_cursor, encode_keyset_cursor, instant_from_row, json_from_row, new_uuid,
-    next_id, now_rfc3339, pagination, resolve_site_internal_id, store_error,
+    cursor_instant_from_row, decode_keyset_cursor, encode_keyset_cursor, instant_from_row,
+    json_from_row, new_uuid, next_id, now_rfc3339, pagination, resolve_site_internal_id,
+    store_error,
 };
 
 impl WebRepository {
@@ -100,7 +101,7 @@ impl WebRepository {
                     status, CAST(created_at AS TEXT) AS created_at
              FROM web_source_version
              WHERE tenant_id = $1 AND site_id = $2
-               AND (created_at, id) < ($3, $4)
+               AND (created_at, id) < (CAST($3 AS TIMESTAMPTZ), $4)
              ORDER BY created_at DESC, id DESC LIMIT $5".to_string();
         let fetch_size = i64::from(page_size) + 1;
         let rows = sqlx::query(audited_sql(&sql))
@@ -122,8 +123,7 @@ impl WebRepository {
         let next_cursor = has_more
             .then(|| {
                 let last = page_rows.last().expect("non-empty page when has_more");
-                let created_at: String = last
-                    .try_get("created_at")
+                let created_at = cursor_instant_from_row(last, "created_at")
                     .map_err(|error| store_error("map web_source_version cursor instant", error))?;
                 let id: i64 = last
                     .try_get("id")

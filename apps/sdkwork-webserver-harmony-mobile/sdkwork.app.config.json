@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 3,
+  "kind": "sdkwork.app",
+  "app": {
+    "key": "sdkwork-webserver-harmony-mobile",
+    "name": "SDKWork Webserver HarmonyOS Mobile",
+    "displayName": "SDKWork Web Server",
+    "description": "Native HarmonyOS (ArkTS/ArkUI) console for enterprise application publishing, managed cloud and private delivery, and secure customer ingress.",
+    "vendor": "SDKWork",
+    "officialWebsiteUrl": "https://sdkwork.com/apps/sdkwork-webserver-harmony-mobile",
+    "supportUrl": "https://sdkwork.com/support",
+    "privacyPolicyUrl": "https://sdkwork.com/privacy",
+    "termsOfServiceUrl": "https://sdkwork.com/terms",
+    "appType": "APP_HARMONY",
+    "versionSource": "oh-package.json5",
+    "identifiers": {
+      "packageName": "com.sdkwork.webserver.mobile",
+      "bundleId": "com.sdkwork.webserver.mobile",
+      "desktopAppId": null,
+      "containerImage": "registry.sdkwork.com/apps/sdkwork-webserver-harmony-mobile"
+    }
+  },
+  "backend": {
+    "profileKey": "backend-root-admin",
+    "ownerMode": "tenant",
+    "grantMode": "current",
+    "platform": "APP_HARMONY",
+    "appId": "sdkwork-webserver-harmony-mobile",
+    "tenantId": "100001",
+    "organizationId": "0",
+    "accessTokenPermissionScope": [
+      "web.applications.read",
+      "web.servers.read",
+      "web.auditLogs.read"
+    ]
+  },
+  "runtime": {
+    "family": "mobile",
+    "framework": "harmony-native",
+    "runtimes": [
+      "APP_HARMONY"
+    ],
+    "deliveryModes": [
+      "APP_GALLERY",
+      "DIRECT_DOWNLOAD"
+    ],
+    "defaultPlatform": "APP_HARMONY",
+    "defaultArchitecture": "harmony-native",
+    "supportedDeploymentProfiles": [
+      "standalone"
+    ],
+    "defaultDeploymentProfile": "standalone"
+  },
+  "media": {
+    "icons": {
+      "primary": {
+        "id": "sdkwork-webserver-harmony-mobile-primary-icon",
+        "type": "ICON",
+        "purpose": "PRIMARY",
+        "url": "https://cdn.sdkwork.com/apps/sdkwork-webserver-harmony-mobile/assets/icon-1024.png",
+        "platform": "APP",
+        "locale": "en-US",
+        "width": 1024,
+        "height": 1024,
+        "format": "PNG",
+        "fileSizeBytes": 524288,
+        "alphaChannel": false,
+        "sortOrder": 0,
+        "enabled": true,
+        "metadata": {
+          "generatedPlaceholder": true
+        }
+      },
+      "platform": [],
+      "metadata": {
+        "generatedPlaceholder": true
+      }
+    },
+    "screenshots": [],
+    "previews": [],
+    "metadata": {
+      "assetVersion": "0.1.0",
+      "defaultLocale": "en-US"
+    }
+  },
+  "publish": {
+    "status": "DRAFT",
+    "installSkill": false,
+    "platforms": [
+      "APP_HARMONY"
+    ],
+    "installPlatforms": [
+      "APP_HARMONY"
+    ],
+    "config": {
+      "workspaceRoot": "apps/sdkwork-webserver-harmony-mobile",
+      "framework": "harmony-native",
+      "managedBy": "sdkwork-webserver",
+      "distribution": {
+        "appGallery": {
+          "appIdPlaceholder": "<appgallery-app-id>",
+          "signingReference": "<deveco-signing-profile-name>"
+        },
+        "privateDistribution": {
+          "channelPlaceholder": "<private-distribution-channel>"
+        }
+      }
+    },
+    "stores": [],
+    "storeUrl": "https://sdkwork.com/apps/sdkwork-webserver-harmony-mobile"
+  },
+  "artifacts": {
+    "installConfig": {
+      "packages": [],
+      "metadata": {
+        "workspaceRoot": "apps/sdkwork-webserver-harmony-mobile",
+        "framework": "harmony-native",
+        "packageManager": "ohpm",
+        "deferred": true,
+        "deferredReason": "The HarmonyOS SDK, hvigor, and ohpm toolchains plus a signing profile are not available in the current workspace environment."
+      }
+    }
+  },
+  "release": {
+    "currentVersion": "0.1.0",
+    "defaultChannel": "DEV",
+    "latest": {
+      "DEV": "0.1.0"
+    },
+    "notes": [
+      {
+        "version": "0.1.0",
+        "releaseChannel": "DEV",
+        "title": "SDKWork Web Server HarmonyOS mobile 0.1.0",
+        "summary": "Native HarmonyOS console initialized against the webserver app API.",
+        "content": "Initial SDKWork App Standard v3 manifest for the SDKWork Web Server HarmonyOS mobile surface.",
+        "highlights": [
+          "Harmony root layout follows HARMONY_APP_MOBILE_ARCHITECTURE_SPEC",
+          "Generated webserver app SDK is reached through an injected ArkTS port declared in core",
+          "Runtime profile identity is validated before the HAP resource projection lands"
+        ],
+        "packageIds": [],
+        "publishedAt": "2026-09-17T00:00:00Z",
+        "current": true,
+        "forceUpdate": false,
+        "minSupportedVersion": "0.1.0",
+        "metadata": {}
+      }
+    ]
+  },
+  "security": {
+    "checksumRequired": true,
+    "signatureRequired": true,
+    "sbomRequired": true
+  },
+  "devApp": {
+    "build": {
+      "targets": []
+    },
+    "sourceRoot": "apps/sdkwork-webserver-harmony-mobile"
+  },
+  "metadata": {
+    "standardOwner": "sdkwork-webserver",
+    "component": "sdkwork-webserver-harmony-mobile",
+    "surface": "harmony-mobile",
+    "architectureSpec": "HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md",
+    "runtimeTarget": "harmony-native",
+    "deploymentConfig": "etc/sdkwork.deployment.config.json"
+  }
+}

@@ -1,7 +1,6 @@
 //! Business-only gateway bootstrap for sdkwork-webserver.
 
 use axum::{Extension, Router};
-use sdkwork_api_deployments_assembly::assemble_domain_certificate_blocks;
 use sdkwork_intelligence_webserver_repository_sqlx::bootstrap_web_runtime_from_env;
 use sdkwork_intelligence_webserver_service::WebService;
 use sdkwork_routes_webserver_app_api::{
@@ -125,7 +124,7 @@ pub async fn assemble_business_routes(
         Arc::new(WebFrameworkAuditEmitter::new(service.clone()));
     let security_event_emitter: Arc<dyn SecurityEventEmitter> =
         Arc::new(WebFrameworkSecurityEventEmitter::new(service.clone()));
-    let mut route_manifest = selected_route_manifest(context);
+    let route_manifest = selected_route_manifest(context);
     let mut router = Router::new();
     let mut domain_context_injectors = Vec::new();
     let mut readiness_checks: Vec<Arc<dyn ReadinessCheck>> =
@@ -133,56 +132,15 @@ pub async fn assemble_business_routes(
             service: service.clone(),
         })];
     if context.includes_standalone_control_plane() {
-        // SDKWork Deployments domain/certificate management composes the Web
-        // Server standalone surface as a same-origin dependency assembly
-        // (API_ASSEMBLY_SPEC §6.1). The Deployments service host runs inside
-        // this process; its composable blocks merge before the single Web
-        // Framework layer is installed and authenticate through it. The
-        // Deployments assembly is profile-selected (standalone embeds it;
-        // cloud keeps the declared external base URL).
-        let deploy_blocks = assemble_domain_certificate_blocks()
-            .await
-            .map_err(|detail| ApiAssemblyError::Initialization { detail })?;
-        route_manifest = compose_route_manifests(&route_manifest, &deploy_blocks.route_manifest);
-        domain_context_injectors.extend(deploy_blocks.domain_context_injectors);
-        readiness_checks.push(deploy_blocks.readiness_check);
-        router = router.merge(deploy_blocks.router);
-        merge_same_origin_dependency_contribution(
-            &mut router,
-            &mut route_manifest,
-            &mut domain_context_injectors,
-            &mut readiness_checks,
-            sdkwork_api_skills_assembly::assemble_app_api_contribution()
-                .await
-                .map_err(|detail| ApiAssemblyError::Initialization { detail })?,
-        )?;
-        merge_same_origin_dependency_contribution(
-            &mut router,
-            &mut route_manifest,
-            &mut domain_context_injectors,
-            &mut readiness_checks,
-            sdkwork_api_skills_assembly::assemble_backend_api_contribution()
-                .await
-                .map_err(|detail| ApiAssemblyError::Initialization { detail })?,
-        )?;
-        merge_same_origin_dependency_contribution(
-            &mut router,
-            &mut route_manifest,
-            &mut domain_context_injectors,
-            &mut readiness_checks,
-            sdkwork_api_mcp_assembly::assemble_app_api_contribution()
-                .await
-                .map_err(|detail| ApiAssemblyError::Initialization { detail })?,
-        )?;
-        merge_same_origin_dependency_contribution(
-            &mut router,
-            &mut route_manifest,
-            &mut domain_context_injectors,
-            &mut readiness_checks,
-            sdkwork_api_mcp_assembly::assemble_backend_api_contribution()
-                .await
-                .map_err(|detail| ApiAssemblyError::Initialization { detail })?,
-        )?;
+        // Same-origin dependency surfaces are deliberately **not** composed
+        // here. API_ASSEMBLY_SPEC §6.1 makes the standalone gateway the
+        // composition point for every dependency it declares as same-origin and
+        // forbids the host assembly from reclassifying dependency ownership by
+        // folding dependency routes into this application's own contribution.
+        // The gateway installs the Deployments domain/certificate blocks, Skills,
+        // MCP, and Drive each as their own `WebModule` beside this one (see the
+        // gateway's `dependency_assembly`), so every dependency keeps its own
+        // owner, route manifest, OpenAPI document, and permission catalog.
         router = router
             .merge(mount_app(service.clone()))
             .merge(mount_backend(service.clone()))
@@ -269,9 +227,9 @@ pub async fn seed_space_repository() -> Result<std::path::PathBuf, String> {
 pub async fn migrate_database_from_env() -> Result<(), ApiAssemblyError> {
     // Migrate every in-process database module in startup order
     // (DATABASE_FRAMEWORK_SPEC §4.3): the Web module first, then the
-    // Deployments domain/certificate blocks composed by the standalone
-    // gateway, then the Skills and MCP modules. Each module's baseline
-    // bootstraps empty databases; versioned forward migrations converge
+    // Deployments domain/certificate blocks, Skills, and MCP modules that the
+    // standalone gateway composes as same-origin dependencies. Each module's
+    // baseline bootstraps empty databases; versioned forward migrations converge
     // existing ones.
     std::env::set_var("SDKWORK_DATABASE_AUTO_MIGRATE", "true");
     sdkwork_webserver_database_host::bootstrap_web_database_from_env()
@@ -301,39 +259,6 @@ fn permission_catalog(routes: &[HttpRoute]) -> Vec<&'static str> {
         }
     }
     permissions.into_iter().collect()
-}
-
-/// Combines the host route inventory with a dependency assembly contribution
-/// (API_ASSEMBLY_SPEC §4/§6.1). The host builds one combined manifest before
-/// the single Web Framework layer is installed; OpenAPI and the permission
-/// catalog are derived from this combined inventory.
-fn compose_route_manifests(
-    base: &HttpRouteManifest,
-    dependency: &HttpRouteManifest,
-) -> HttpRouteManifest {
-    HttpRouteManifest::from_owned_routes(
-        base.routes()
-            .iter()
-            .copied()
-            .chain(dependency.routes().iter().copied())
-            .collect(),
-    )
-}
-
-/// Merges a same-origin dependency contribution into the host assembly before
-/// the single Web Framework layer is installed (API_ASSEMBLY_SPEC §6.1).
-fn merge_same_origin_dependency_contribution(
-    router: &mut Router,
-    route_manifest: &mut HttpRouteManifest,
-    domain_context_injectors: &mut Vec<Arc<dyn sdkwork_web_core::DomainContextInjector>>,
-    readiness_checks: &mut Vec<Arc<dyn ReadinessCheck>>,
-    contribution: ApiAssemblyContribution,
-) -> Result<(), ApiAssemblyError> {
-    *route_manifest = compose_route_manifests(route_manifest, &contribution.route_manifest);
-    domain_context_injectors.extend(contribution.domain_context_injectors);
-    readiness_checks.push(contribution.readiness_check);
-    *router = router.clone().merge(contribution.router);
-    Ok(())
 }
 
 fn selected_route_manifest(context: ApiAssemblyContext) -> HttpRouteManifest {
@@ -369,8 +294,7 @@ pub async fn web_module() -> Result<WebModule, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{compose_route_manifests, selected_route_manifest, ApiAssemblyContext};
-    use sdkwork_web_core::HttpMethod;
+    use super::{selected_route_manifest, ApiAssemblyContext};
 
     #[test]
     fn cloud_gateway_profile_exposes_only_web_internal_routes() {
@@ -384,72 +308,49 @@ mod tests {
     }
 
     #[test]
-    fn composed_manifest_and_openapi_inventories_match() {
-        // API_ASSEMBLY_SPEC §4: the host builds the served OpenAPI from the
-        // same combined inventory as the executable router; the two
-        // inventories must be identical (no duplicates, no orphans).
-        let base = selected_route_manifest(ApiAssemblyContext::default());
-        let dependency = sdkwork_api_deployments_assembly::domain_certificate_route_manifest();
-        let composed = compose_route_manifests(&base, &dependency);
-        let openapi = sdkwork_web_contract::build_openapi_document("debug", composed.routes());
-        let manifest_inventory =
-            sdkwork_web_contract::route_inventory_from_routes(composed.routes());
-        let openapi_inventory =
-            sdkwork_web_contract::route_inventory_from_openapi(&openapi).unwrap();
+    fn standalone_manifest_and_openapi_inventories_match() {
+        // API_ASSEMBLY_SPEC §4: this assembly publishes its route inventory and
+        // the served OpenAPI from the same routes; the two must be identical
+        // (no duplicates, no orphans).
+        let manifest = selected_route_manifest(ApiAssemblyContext::default());
+        let openapi = sdkwork_web_contract::build_openapi_document("debug", manifest.routes());
+
         assert_eq!(
-            manifest_inventory, openapi_inventory,
-            "combined route manifest and OpenAPI inventories diverged"
-        );
-        // The dependency operation keeps its permission metadata through the
-        // combined inventory into the served OpenAPI. The Deployments
-        // contract marks the blocks permission-free (`x-sdkwork-permission:
-        // false` in its API source), so the served OpenAPI must not invent a
-        // permission extension for them.
-        assert!(
-            openapi["paths"]["/app/v3/api/domain_zones"]["get"]["x-sdkwork-permission"].is_null()
+            sdkwork_web_contract::route_inventory_from_routes(manifest.routes()),
+            sdkwork_web_contract::route_inventory_from_openapi(&openapi).unwrap(),
+            "route manifest and OpenAPI inventories diverged"
         );
     }
 
     #[test]
-    fn composed_manifest_includes_the_deployments_dependency_blocks() {
-        // API_ASSEMBLY_SPEC §6.1: the standalone gateway combines the
-        // dependency-owned assembly contribution (domain/certificate blocks)
-        // into one route inventory before framework installation. The blocks
-        // are open to every authenticated user: no permission is required.
-        let base = selected_route_manifest(ApiAssemblyContext::default());
-        let dependency = sdkwork_api_deployments_assembly::domain_certificate_route_manifest();
-        let composed = compose_route_manifests(&base, &dependency);
+    fn standalone_manifest_owns_no_same_origin_dependency_routes() {
+        // API_ASSEMBLY_SPEC §6.1: the standalone gateway composes same-origin
+        // dependencies as their own modules and must not reclassify dependency
+        // ownership by folding dependency routes into this application's
+        // contribution. A dependency route present here would be composed twice
+        // by the gateway and fail route-collision validation, or — through the
+        // module registry's duplicate-owner tolerance — silently drop a surface
+        // the gateway contract declares as served.
+        let manifest = selected_route_manifest(ApiAssemblyContext::default());
 
-        for (path, method) in [
-            ("/app/v3/api/domain_zones", HttpMethod::Get),
-            ("/app/v3/api/certificates", HttpMethod::Get),
+        for prefix in [
+            "/app/v3/api/skills",
+            "/backend/v3/api/skills",
+            "/app/v3/api/mcp",
+            "/backend/v3/api/mcp",
+            "/app/v3/api/drive",
+            "/backend/v3/api/drive",
+            "/app/v3/api/domain_zones",
+            "/app/v3/api/certificates",
         ] {
-            let route = composed
-                .routes()
-                .iter()
-                .find(|route| route.path == path && route.method == method)
-                .unwrap_or_else(|| panic!("missing composed route {path}"));
-            assert_eq!(
-                route.required_permission, None,
-                "{path} must not require a permission"
+            assert!(
+                !manifest
+                    .routes()
+                    .iter()
+                    .any(|route| route.path.starts_with(prefix)),
+                "the web server assembly must not own same-origin dependency route {prefix}"
             );
         }
-    }
-
-    #[test]
-    fn composed_manifest_includes_skills_dependency_blocks() {
-        let base = selected_route_manifest(ApiAssemblyContext::default());
-        let skills = sdkwork_api_skills_assembly::skills_api_route_manifest();
-        let composed = compose_route_manifests(&base, &skills);
-
-        assert!(composed
-            .routes()
-            .iter()
-            .any(|route| route.path.starts_with("/app/v3/api/skills")));
-        assert!(composed
-            .routes()
-            .iter()
-            .any(|route| route.path.starts_with("/backend/v3/api/skills")));
     }
 
     #[test]

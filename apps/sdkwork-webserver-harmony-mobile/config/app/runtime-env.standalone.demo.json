@@ -1,0 +1,18 @@
+{
+  "environment": "demo",
+  "deploymentProfile": "standalone",
+  "profileId": "standalone.demo",
+  "runtimeTarget": "harmony-native",
+  "webserver": {
+    "apiBaseUrl": "http://server-demo.sdkwork.com:19080/app/v3/api",
+    "backendApiBaseUrl": "http://server-demo.sdkwork.com:19080/backend/v3/api"
+  },
+  "appbase": {
+    "appApiBaseUrl": "http://server-demo.sdkwork.com:19080",
+    "loginUrl": "http://server-demo.sdkwork.com:19080"
+  },
+  "metadata": {
+    "profileBinding": "runtime-configurable",
+    "applicationPublicHttpUrl": "http://server-demo.sdkwork.com:19080"
+  }
+}

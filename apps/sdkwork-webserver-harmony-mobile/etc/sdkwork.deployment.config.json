@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component-deployment",
+  "application": "sdkwork-webserver-harmony-mobile",
+  "parentDeploymentConfig": "../../../etc/sdkwork.deployment.config.json",
+  "parentTopologySpec": "../../../specs/topology.spec.json",
+  "materialization": {
+    "authority": "../../../etc/sdkwork.deployment.config.json",
+    "command": "pnpm workflow:materialize-client-env",
+    "format": "json",
+    "outputPattern": "../config/app/runtime-env.{deploymentProfile}.{environment}.json",
+    "profiles": [
+      "standalone.development",
+      "standalone.test",
+      "standalone.staging",
+      "standalone.demo",
+      "standalone.production"
+    ],
+    "runtimeTarget": "harmony-native"
+  },
+  "profiles": {
+    "standalone.development": {
+      "source": "../config/app/runtime-env.standalone.development.json"
+    },
+    "standalone.test": {
+      "source": "../config/app/runtime-env.standalone.test.json"
+    },
+    "standalone.staging": {
+      "source": "../config/app/runtime-env.standalone.staging.json"
+    },
+    "standalone.demo": {
+      "source": "../config/app/runtime-env.standalone.demo.json"
+    },
+    "standalone.production": {
+      "source": "../config/app/runtime-env.standalone.production.json"
+    }
+  }
+}

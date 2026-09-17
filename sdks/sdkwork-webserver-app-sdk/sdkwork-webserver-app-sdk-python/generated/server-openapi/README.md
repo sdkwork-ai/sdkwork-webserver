@@ -72,7 +72,7 @@ params = {
     'status': 0,
     'application_type': 'WEB',
     'site_type': 1,
-    'keyword': 'keyword',
+    'q': 'q',
 }
 result = client.application.list(params)
 print(result)

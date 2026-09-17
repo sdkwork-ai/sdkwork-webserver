@@ -90,3 +90,49 @@ describe('Vite browser topology', () => {
     expect(viteConfig).toMatch(/dedupe:\s*\["react",\s*"react-dom",\s*"react-router",\s*"react-router-dom",\s*"@sdkwork\/utils"\]/u);
   });
 });
+
+describe('Credential-entry bootstrap handoff', () => {
+  const BOOTSTRAP_GLOBAL = '__SDKWORK_CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN__';
+
+  async function resolvePlugin(options) {
+    const viteConfig = (await import('../vite.config.ts')).default;
+    const config = typeof viteConfig === 'function' ? await viteConfig(options) : viteConfig;
+    const plugins = (Array.isArray(config.plugins) ? config.plugins : [config.plugins]).flat();
+    return plugins.find((plugin) => (
+      plugin && plugin.name === 'sdkwork-iam-credential-entry-bootstrap'
+    ));
+  }
+
+  function readInjectedToken(plugin) {
+    const transformed = plugin.transformIndexHtml.handler(
+      '<!doctype html><html><head><title>x</title></head><body></body></html>',
+    );
+    const script = transformed.tags.find((tag) => tag.tag === 'script');
+    return script ? script.children : '';
+  }
+
+  it('injects a development bootstrap Access-Token for the IAM login renderer', async () => {
+    const restore = process.env.SDKWORK_ACCESS_TOKEN;
+    delete process.env.SDKWORK_ACCESS_TOKEN;
+    try {
+      const plugin = await resolvePlugin({ command: 'serve', mode: 'standalone.development' });
+      expect(plugin).toBeDefined();
+
+      const script = readInjectedToken(plugin);
+      expect(script).toContain(`globalThis.${BOOTSTRAP_GLOBAL} =`);
+      const token = script.match(/= "([^"]+)";/u)?.[1] ?? '';
+      const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
+      expect(claims.app_id).toBe('sdkwork-webserver-pc');
+      expect(claims.environment).toBe('development');
+      expect(claims.token_type).toBe('access');
+    } finally {
+      if (restore === undefined) delete process.env.SDKWORK_ACCESS_TOKEN;
+      else process.env.SDKWORK_ACCESS_TOKEN = restore;
+    }
+  });
+
+  it('never installs the injection plugin outside development', async () => {
+    expect(await resolvePlugin({ command: 'serve', mode: 'standalone.production' })).toBeUndefined();
+    expect(await resolvePlugin({ command: 'build', mode: 'standalone.development' })).toBeUndefined();
+  });
+});

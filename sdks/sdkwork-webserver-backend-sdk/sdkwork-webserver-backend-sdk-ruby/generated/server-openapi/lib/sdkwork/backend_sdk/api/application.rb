@@ -13,7 +13,7 @@ module Sdkwork
     module Api
       class ApplicationApi < BaseApi
           # List managed applications
-          def applications_list(page: nil, page_size: nil, application_type: nil, site_type: nil, status: nil, keyword: nil)
+          def applications_list(page: nil, page_size: nil, application_type: nil, site_type: nil, status: nil, q: nil)
             path = '/backend/v3/api/applications'
             query = build_query_string([
               QueryParameterSpec.new('page', page, 'form', true, false, nil),
@@ -21,7 +21,7 @@ module Sdkwork
               QueryParameterSpec.new('application_type', application_type, 'form', true, false, nil),
               QueryParameterSpec.new('site_type', site_type, 'form', true, false, nil),
               QueryParameterSpec.new('status', status, 'form', true, false, nil),
-              QueryParameterSpec.new('keyword', keyword, 'form', true, false, nil),
+              QueryParameterSpec.new('q', q, 'form', true, false, nil),
             ])
             path = append_query_string(path, query)
             options = {}

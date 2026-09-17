@@ -1,0 +1,19 @@
+{
+  "name": "@sdkwork/sdkwork-webserver-harmony-mobile-core",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "sdkwork": {
+    "role": "harmony-arkts-composition-contract",
+    "toolchain": "ohpm",
+    "note": "Composition contract entry for check-frontend-composition. Not a pnpm workspace member."
+  },
+  "exports": {
+    ".": "./src/main/ets/Index.ets",
+    "./sdk": "./src/main/ets/sdk/Index.ets",
+    "./modules": "./src/main/ets/composition/ModuleRegistry.ets",
+    "./host": "./src/main/ets/host/HostAdapterContracts.ets",
+    "./session": "./src/main/ets/session/SessionStore.ets",
+    "./composition": "./src/composition/index.ets"
+  }
+}

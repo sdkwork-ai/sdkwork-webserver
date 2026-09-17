@@ -1,8 +1,8 @@
 import { useRef, useState, type FormEvent } from "react";
 import type { SdkworkDriveAppClient } from "@sdkwork/webserver-pc-console-core";
 import {
-  isValidApplicationGitRepositoryUrl,
-  normalizeApplicationGitRepositoryUrl,
+  isValidGitRepositoryUrl,
+  normalizeGitRepositoryUrl,
 } from "@sdkwork/webserver-pc-commons";
 import { usePluginsT } from "./locale.tsx";
 import { ArchiveIcon, CheckIcon, GitBranchIcon, UploadIcon } from "./plugin-icons.tsx";
@@ -52,7 +52,7 @@ export function CreatePluginForm({
   const [submitting, setSubmitting] = useState(false);
 
   const gitLooksValid = gitRepository.trim().length === 0
-    || isValidApplicationGitRepositoryUrl(gitRepository);
+    || isValidGitRepositoryUrl(gitRepository);
   const keyTrimmed = pluginKey.trim();
   const keyHint = !keyTrimmed
     ? t("create.hint.pluginKey")
@@ -128,7 +128,7 @@ export function CreatePluginForm({
           setError(t("create.error.gitRequired"));
           return;
         }
-        const repository = normalizeApplicationGitRepositoryUrl(gitRepository);
+        const repository = normalizeGitRepositoryUrl(gitRepository);
         record = {
           id: createPluginId(),
           pluginKey: key,
@@ -184,7 +184,7 @@ export function CreatePluginForm({
     && !uploading
     && supportedHostTools.length > 0
     && (sourceKind === "git"
-      ? isValidApplicationGitRepositoryUrl(gitRepository)
+      ? isValidGitRepositoryUrl(gitRepository)
       : artifactRef.startsWith("drive://"));
 
   return (

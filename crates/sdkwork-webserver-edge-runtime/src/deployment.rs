@@ -124,7 +124,12 @@ pub(crate) fn activate_edge_deployment(
 ) -> EdgeRuntimeResult<EdgeDeploymentActivation> {
     validate_deployment_bounds(nginx_configs, certificates)?;
 
-    let nginx_lock = if nginx_configs.is_empty() {
+    // Nginx-less nodes neither stage Nginx configuration nor take the Nginx
+    // deployment lock: the Rust data plane owns request-path serving, so the
+    // lock would only create unused directories and serialize against work
+    // that is not happening. Certificate staging is unaffected because the
+    // node daemon still verifies and reports certificate delivery.
+    let nginx_lock = if nginx_configs.is_empty() || !config.nginx_enabled {
         None
     } else {
         Some(nginx::acquire_nginx_deployment_lock(config)?)
@@ -246,6 +251,9 @@ fn stage_nginx_configs(
     config: &EdgeRuntimeConfig,
     materials: &[NginxSiteConfigMaterial],
 ) -> EdgeRuntimeResult<Vec<StagedNginxConfig>> {
+    if materials.is_empty() || nginx::nginx_disabled(config, "stage_nginx_configs") {
+        return Ok(Vec::new());
+    }
     materials
         .iter()
         .map(|material| {

@@ -18,14 +18,14 @@ namespace SDKWork.WebserverBackendSdk.Api
         /// <summary>
         /// List tenant root-domain Zones
         /// </summary>
-        public async Task<SDKWork.WebserverBackendSdk.Models.RootDomainsListResponse?> RootDomainsListAsync(int? page = null, int? pageSize = null, int? status = null, string? keyword = null)
+        public async Task<SDKWork.WebserverBackendSdk.Models.RootDomainsListResponse?> RootDomainsListAsync(int? page = null, int? pageSize = null, int? status = null, string? q = null)
         {
             var queryString = BuildQueryString(new[]
             {
                 new QueryParameterSpec("page", page, "form", true, false, null),
                 new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
                 new QueryParameterSpec("status", status, "form", true, false, null),
-                new QueryParameterSpec("keyword", keyword, "form", true, false, null),
+                new QueryParameterSpec("q", q, "form", true, false, null),
             });
             return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.RootDomainsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath("/root_domains"), queryString));
         }

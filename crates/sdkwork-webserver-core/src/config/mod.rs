@@ -47,13 +47,13 @@ pub use model::{
     ResourceConfig, ResourcePressureConfig, ResourceSampleFailurePolicy, RewriteFlag,
     RewriteRuleConfig, RouteConfig, RouteMatchConfig, RoutePathType, SecureLinkMode,
     SecurityHeadersConfig, StreamProtocol, StreamServerConfig, StreamTargetConfig, StreamTlsMode,
-    StrictTransportSecurityConfig, SubFilterConfig, SubFilterRule, TlsPolicyConfig, TlsVersion,
-    TrustedProxyConfig, TrustedProxyHeader, UpstreamActiveHealthConfig, UpstreamActiveHealthMethod,
-    UpstreamAddressPolicyConfig, UpstreamConfig, UpstreamHashConfig, UpstreamHashKeyVar,
-    UpstreamLoadBalancingStrategy, UpstreamPassiveHealthConfig, UpstreamRetryCondition,
-    UpstreamRetryConfig, UpstreamTargetConfig, UpstreamTlsConfig, UpstreamTlsTrustMode,
-    UsageMeteringChannel, UsageMeteringConfig, VirtualHostConfig, WebServerAppConfig,
-    WebServerLimits, XFrameOptions,
+    StrictTransportSecurityConfig, SubFilterConfig, SubFilterRule, TlsCertificateResolution,
+    TlsPolicyConfig, TlsVersion, TrustedProxyConfig, TrustedProxyHeader,
+    UpstreamActiveHealthConfig, UpstreamActiveHealthMethod, UpstreamAddressPolicyConfig,
+    UpstreamConfig, UpstreamHashConfig, UpstreamHashKeyVar, UpstreamLoadBalancingStrategy,
+    UpstreamPassiveHealthConfig, UpstreamRetryCondition, UpstreamRetryConfig, UpstreamTargetConfig,
+    UpstreamTlsConfig, UpstreamTlsTrustMode, UsageMeteringChannel, UsageMeteringConfig,
+    VirtualHostConfig, WebServerAppConfig, WebServerLimits, XFrameOptions,
 };
 pub use network::{
     hostname_upstream_allowed_cidrs, is_supported_upstream_allowed_cidr, upstream_ip_is_allowed,
@@ -85,6 +85,9 @@ pub use sub_filter::{
     apply_sub_filters, sub_filter_content_type_matches, MAX_SUB_FILTER_BODY_BYTES,
 };
 pub use uri::{normalize_uri_path, UriPathNormalizationError};
-pub use validate::{normalize_server_name, server_name_covers};
+pub use validate::{
+    normalize_server_name, normalize_tls_server_name, server_name_covers,
+    wildcard_server_name_covers,
+};
 
 pub(crate) use validate::validate_webserver_config;

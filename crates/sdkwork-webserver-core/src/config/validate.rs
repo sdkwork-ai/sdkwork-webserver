@@ -10,9 +10,9 @@ use url::Url;
 use super::{
     is_supported_upstream_allowed_cidr, upstream_ip_is_allowed, AppDomainFallbackLookup,
     CertificateSource, ConfigDiagnostic, ListenerProtocol, ResourceConfig, RouteConfig,
-    RoutePathType, SecurityHeadersConfig, StreamTargetConfig, TlsVersion, UpstreamConfig,
-    UpstreamLoadBalancingStrategy, UpstreamTlsTrustMode, UsageMeteringChannel, WebServerAppConfig,
-    WebServerConfigError, WebServerLimits,
+    RoutePathType, SecurityHeadersConfig, StreamTargetConfig, TlsCertificateResolution, TlsVersion,
+    UpstreamConfig, UpstreamLoadBalancingStrategy, UpstreamTlsTrustMode, UsageMeteringChannel,
+    WebServerAppConfig, WebServerConfigError, WebServerLimits,
 };
 
 const MAX_DIAGNOSTICS: usize = 128;
@@ -158,11 +158,43 @@ impl SemanticValidator {
                     );
                 }
             }
-            if listener.tls_policy_ref.is_some() && listener.tls_runtime.is_some() {
+            if listener.tls_policy_ref.is_some()
+                && listener.tls_runtime.is_some()
+                && listener.tls_certificate_resolution
+                    != Some(TlsCertificateResolution::PolicyFirst)
+            {
                 self.push(
                     format!("{path}/tlsRuntime"),
                     "tlsRuntime cannot be combined with tlsPolicyRef",
                 );
+            }
+            if let Some(resolution) = listener.tls_certificate_resolution {
+                if !resolution.serves_policy_files() && listener.tls_policy_ref.is_some() {
+                    self.push(
+                        format!("{path}/tlsCertificateResolution"),
+                        "declared resolution does not serve tlsPolicyRef certificate files",
+                    );
+                }
+                if !resolution.serves_assignments() && listener.tls_runtime.is_some() {
+                    self.push(
+                        format!("{path}/tlsCertificateResolution"),
+                        "declared resolution does not serve tlsRuntime assignments",
+                    );
+                }
+                if listener.tls_policy_ref.is_none() && listener.tls_runtime.is_none() {
+                    self.push(
+                        format!("{path}/tlsCertificateResolution"),
+                        "tlsCertificateResolution requires tlsPolicyRef or tlsRuntime",
+                    );
+                }
+                if resolution == TlsCertificateResolution::PolicyFirst
+                    && (listener.tls_policy_ref.is_none() || listener.tls_runtime.is_none())
+                {
+                    self.push(
+                        format!("{path}/tlsCertificateResolution"),
+                        "policy-first requires both tlsPolicyRef and tlsRuntime",
+                    );
+                }
             }
             if let Some(policy_ref) = &listener.tls_policy_ref {
                 if !tls_policies.contains_key(policy_ref.as_str()) {
@@ -352,19 +384,25 @@ impl SemanticValidator {
             let path = format!("/certificates/{index}");
             let mut normalized_names = HashSet::new();
             for (name_index, server_name) in certificate.server_names.iter().enumerate() {
-                match normalize_server_name(server_name) {
-                    Some(normalized) => {
-                        if !normalized_names.insert(normalized) {
-                            self.push(
-                                format!("{path}/serverNames/{name_index}"),
-                                "duplicate certificate server name after DNS normalization",
-                            );
-                        }
-                    }
-                    None => self.push(
+                let Some(normalized) = normalize_tls_server_name(server_name) else {
+                    // A name `normalize_server_name` accepts but this rejects can
+                    // only be an IP literal; saying so is more useful than calling
+                    // it malformed.
+                    let message = if normalize_server_name(server_name).is_some() {
+                        format!(
+                            "certificate server name {server_name} must be a DNS name, not IP address"
+                        )
+                    } else {
+                        "invalid exact or leading-wildcard DNS server name".to_owned()
+                    };
+                    self.push(format!("{path}/serverNames/{name_index}"), message);
+                    continue;
+                };
+                if !normalized_names.insert(normalized) {
+                    self.push(
                         format!("{path}/serverNames/{name_index}"),
-                        "invalid exact or leading-wildcard DNS server name",
-                    ),
+                        "duplicate certificate server name after DNS normalization",
+                    );
                 }
             }
             let CertificateSource::ProtectedFile {
@@ -891,6 +929,18 @@ impl SemanticValidator {
                 .certificate_refs()
                 .filter_map(|certificate_ref| certificates.get(certificate_ref))
                 .collect::<Vec<_>>();
+            // A listener that also serves the assigned certificate set is
+            // expected to leave server names to it. `policy-first` exists so a
+            // configured file wins for the names it covers while the assigned set
+            // covers every other name, which makes an uncovered name here a
+            // supported configuration rather than a gap. Only a listener with no
+            // lower layer has to be complete.
+            let assignments_cover_unlisted_names = TlsCertificateResolution::effective(
+                listener.tls_certificate_resolution,
+                listener.tls_policy_ref.is_some(),
+                listener.tls_runtime.is_some(),
+            )
+            .is_some_and(TlsCertificateResolution::serves_assignments);
             for virtual_host in config.virtual_hosts.iter().filter(|virtual_host| {
                 virtual_host
                     .listener_refs
@@ -907,6 +957,9 @@ impl SemanticValidator {
                                 "strict SNI certificate selection requires a DNS server name, not IP address {server_name}"
                             ),
                         );
+                        continue;
+                    }
+                    if assignments_cover_unlisted_names {
                         continue;
                     }
                     if !policy_certificates.iter().any(|certificate| {
@@ -1999,6 +2052,33 @@ fn valid_dns_label(label: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
 }
 
+/// The single definition of a server name a certificate can be selected for.
+///
+/// [`normalize_server_name`] also accepts an IP literal, because an HTTP virtual
+/// host may legitimately be addressed by one. A certificate cannot be: it is
+/// chosen through SNI, and RFC 6066 confines that extension to DNS names.
+/// Configuration validation, assignment snapshot validation and the certificate
+/// index all call this function, so a name that validates is a name the data
+/// plane can index - which is what keeps a snapshot that passed validation from
+/// failing to install.
+pub fn normalize_tls_server_name(value: &str) -> Option<String> {
+    normalize_server_name(value).filter(|name| name.parse::<IpAddr>().is_err())
+}
+
+/// Whether `*.suffix` covers exactly one additional label of `server_name`.
+///
+/// `*.example.com` covers `www.example.com` but neither `example.com` nor
+/// `a.b.example.com`. A wildcard pins the number of labels below its suffix, so
+/// two wildcards can never cover one name and no lookup order between them is
+/// observable. Certificate SAN coverage, SNI selection and website host
+/// selection all answer this same question, so they share this one rule rather
+/// than each deciding it for itself; this is its only implementation.
+pub fn wildcard_server_name_covers(suffix: &str, server_name: &str) -> bool {
+    server_name.strip_suffix(suffix).is_some_and(|prefix| {
+        prefix.ends_with('.') && prefix.len() > 1 && !prefix[..prefix.len() - 1].contains('.')
+    })
+}
+
 pub fn server_name_covers(certificate_name: &str, server_name: &str) -> bool {
     let Some(certificate_name) = normalize_server_name(certificate_name) else {
         return false;
@@ -2012,7 +2092,5 @@ pub fn server_name_covers(certificate_name: &str, server_name: &str) -> bool {
     let Some(suffix) = certificate_name.strip_prefix("*.") else {
         return false;
     };
-    server_name
-        .strip_suffix(suffix)
-        .is_some_and(|prefix| prefix.ends_with('.') && !prefix[..prefix.len() - 1].contains('.'))
+    wildcard_server_name_covers(suffix, &server_name)
 }

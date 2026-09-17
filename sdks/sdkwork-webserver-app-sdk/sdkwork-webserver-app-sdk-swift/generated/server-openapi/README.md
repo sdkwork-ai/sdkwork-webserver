@@ -72,7 +72,7 @@ let params: [String: Any] = [
     "status": 0,
     "application_type": "WEB",
     "site_type": 1,
-    "keyword": "keyword"
+    "q": "q"
 ]
 let result = try await client.application.applicationsList(params: params)
 print(result)

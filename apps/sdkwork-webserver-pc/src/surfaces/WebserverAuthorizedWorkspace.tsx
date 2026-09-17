@@ -1,6 +1,6 @@
 import { useSdkworkAuthControllerState } from "@sdkwork/auth-pc-react";
+import { DeployAppsAdminSurface, webserverModule as appsAdminModule } from "@sdkwork/webserver-pc-admin-apps";
 import { webserverModule as auditModule } from "@sdkwork/webserver-pc-admin-audit";
-import { webserverModule as applicationsModule } from "@sdkwork/webserver-pc-admin-applications";
 import { webserverModule as diagnosticsModule } from "@sdkwork/webserver-pc-admin-diagnostics";
 import { webserverModule as mcpAdminModule, McpAdminSurface, type McpAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-mcp";
 import { webserverModule as nginxModule } from "@sdkwork/webserver-pc-admin-nginx";
@@ -11,38 +11,31 @@ import { webserverModule as webserverConfigModule, WebserverConfigSurface } from
 import { webserverModule as skillsAdminModule, SkillsAdminSurface, type SkillsAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-skills";
 import { StorageCenterSurface, webserverModule as storageModule, type StorageCenterResource } from "@sdkwork/webserver-pc-admin-storage";
 import { hasWebserverAdminAccess, type WebserverPcModuleDefinition } from "@sdkwork/webserver-pc-commons";
-import { createApplicationMediaStorage, createApplicationSourceStorage, createWebserverConsoleRegistry, WebserverConsoleSdkProvider } from "@sdkwork/webserver-pc-console-core";
-import { DeployDomainManagementSurface, webserverModule as deliveryModule } from "@sdkwork/webserver-pc-console-delivery";
-import { webserverModule as deploymentsModule } from "@sdkwork/webserver-pc-console-deployments";
+import type { WebserverLocale } from "@sdkwork/webserver-pc-core";
+import { WebserverConsoleSdkProvider } from "@sdkwork/webserver-pc-console-core";
+import { DeployAppsManagementSurface, DeployDomainManagementSurface, webserverModule as deliveryModule } from "@sdkwork/webserver-pc-console-delivery";
 import { webserverModule as mcpModule, McpConsoleSurface, type McpConsoleSurfaceProps } from "@sdkwork/webserver-pc-console-mcp";
 import { webserverModule as pluginsModule, PluginsConsoleSurface, type PluginsConsoleSurfaceProps } from "@sdkwork/webserver-pc-console-plugins";
 import { WebserverConsoleShell } from "@sdkwork/webserver-pc-console-shell";
-import { webserverModule as configurationModule } from "@sdkwork/webserver-pc-console-site-configuration";
-import { webserverModule as sitesModule } from "@sdkwork/webserver-pc-console-sites";
 import { webserverModule as skillsModule, SkillsConsoleSurface, type SkillsConsoleSurfaceProps } from "@sdkwork/webserver-pc-console-skills";
 import { lazy, Suspense, use, useMemo } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import type { BootstrappedWebserverPcRuntime } from "../bootstrap/runtime.ts";
+import { webserverApplicationCatalog } from "../i18n/index.ts";
+import { useSdkworkModuleMessages } from "@sdkwork/i18n-pc-react";
 
-const consoleModules = [sitesModule, configurationModule, deliveryModule, deploymentsModule, pluginsModule, skillsModule, mcpModule] satisfies readonly WebserverPcModuleDefinition[];
-const adminModules = [applicationsModule, nginxModule, serversModule, serversExplorerModule, webserverConfigModule, diagnosticsModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule, storageModule] satisfies readonly WebserverPcModuleDefinition[];
+// Applications / Domains / Certificates all render the canonical
+// sdkwork-deployments pages over `deploy_app`, `deploy_domain_zone`, and the
+// certificate entities. `delivery` therefore owns those three menu entries and
+// nothing else: the Web Server console keeps no local application lifecycle.
+const consoleModules = [deliveryModule, pluginsModule, skillsModule, mcpModule] satisfies readonly WebserverPcModuleDefinition[];
+const adminModules = [appsAdminModule, nginxModule, serversModule, serversExplorerModule, webserverConfigModule, diagnosticsModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule, storageModule] satisfies readonly WebserverPcModuleDefinition[];
 const LazyAdminSurface = lazy(() => import("./WebserverAdminSurface.tsx").then((module) => ({ default: module.WebserverAdminSurface })));
 
-export function WebserverAuthorizedWorkspace({ runtime }: { runtime: BootstrappedWebserverPcRuntime }) {
+export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: WebserverLocale; runtime: BootstrappedWebserverPcRuntime }) {
+  const messages = useSdkworkModuleMessages(webserverApplicationCatalog);
   const authState = useSdkworkAuthControllerState(runtime.authController);
   const consoleClients = use(runtime.loadConsoleClients());
-  const sourceStorage = useMemo(
-    () => createApplicationSourceStorage(consoleClients.drive),
-    [consoleClients.drive],
-  );
-  const mediaStorage = useMemo(
-    () => createApplicationMediaStorage(consoleClients.drive),
-    [consoleClients.drive],
-  );
-  const registry = useMemo(
-    () => createWebserverConsoleRegistry(consoleClients, sourceStorage, mediaStorage),
-    [consoleClients, mediaStorage, sourceStorage],
-  );
   const permissionScope = authState.session?.context?.permissionScope ?? [];
   // Storage Center is a tenant-scoped drive plane: the shared pages take the
   // tenant they administer and the operator their mutations are attributed to,
@@ -54,26 +47,29 @@ export function WebserverAuthorizedWorkspace({ runtime }: { runtime: Bootstrappe
   const landingPath = adminAccess ? "/admin" : "/console";
   const userLabel = authState.user?.displayName || authState.user?.email;
   const signOut = () => { void runtime.authController.signOut(); };
-  // Domain and certificate management is the canonical sdkwork-deployments
-  // surface; the Web Server console keeps the menu entries and renders the
-  // Deploy pages with the shared IAM session.
+  // Applications, domains, and certificates are the canonical sdkwork-deployments
+  // surfaces; the menu entries stay in this host and the pages take the shared
+  // IAM session plus the two generated clients built from the injected token
+  // manager. There is no local re-implementation on either side of the console.
   const deployBaseUrl = runtime.config.deployAppApiBaseUrl;
+  const driveBaseUrl = runtime.config.driveAppApiBaseUrl;
   const resourceRenderers = {
-    domains: <DeployDomainManagementSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={runtime.config.driveAppApiBaseUrl} locale={runtime.locale} resource="domains" tokenManager={runtime.tokenManager} />,
-    certificates: <DeployDomainManagementSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={runtime.config.driveAppApiBaseUrl} locale={runtime.locale} resource="certificates" tokenManager={runtime.tokenManager} />,
+    apps: <DeployAppsManagementSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={driveBaseUrl} locale={locale} tokenManager={runtime.tokenManager} />,
+    domains: <DeployDomainManagementSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={driveBaseUrl} locale={locale} resource="domains" tokenManager={runtime.tokenManager} />,
+    certificates: <DeployDomainManagementSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={driveBaseUrl} locale={locale} resource="certificates" tokenManager={runtime.tokenManager} />,
     // Plugins / Skills / MCP are module self-service surfaces; menu entries stay
     // in the host while pages share the IAM dual-token session via tokenManager.
-    plugins: <PluginsConsoleSurface attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as PluginsConsoleSurfaceProps["attachSdkClientBoundaries"]} driveAppApiBaseUrl={runtime.config.driveAppApiBaseUrl} locale={runtime.locale} resource="plugins" tokenManager={runtime.tokenManager} />,
-    skills: <SkillsConsoleSurface appApiBaseUrl={runtime.config.appApiBaseUrl} attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as SkillsConsoleSurfaceProps["attachSdkClientBoundaries"]} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={runtime.config.driveAppApiBaseUrl} locale={runtime.locale} resource="skills" tokenManager={runtime.tokenManager} />,
-    mcp: <McpConsoleSurface appApiBaseUrl={runtime.config.appApiBaseUrl} attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as McpConsoleSurfaceProps["attachSdkClientBoundaries"]} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={runtime.config.driveAppApiBaseUrl} locale={runtime.locale} resource="mcp" tokenManager={runtime.tokenManager} />,
+    plugins: <PluginsConsoleSurface attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as PluginsConsoleSurfaceProps["attachSdkClientBoundaries"]} driveAppApiBaseUrl={driveBaseUrl} locale={locale} resource="plugins" tokenManager={runtime.tokenManager} />,
+    skills: <SkillsConsoleSurface appApiBaseUrl={runtime.config.appApiBaseUrl} attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as SkillsConsoleSurfaceProps["attachSdkClientBoundaries"]} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={driveBaseUrl} locale={locale} resource="skills" tokenManager={runtime.tokenManager} />,
+    mcp: <McpConsoleSurface appApiBaseUrl={runtime.config.appApiBaseUrl} attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as McpConsoleSurfaceProps["attachSdkClientBoundaries"]} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={driveBaseUrl} locale={locale} resource="mcp" tokenManager={runtime.tokenManager} />,
   };
   // Storage Center mounts the drive-owned admin storage pages. The surface
   // picks the page from `resource`, so the host owns the menu entry and the
   // route while the pages stay the shared implementation.
   const storageCenterSurface = (resource: StorageCenterResource) => (
     <StorageCenterSurface
-      adminStorageApiBaseUrl={runtime.config.driveAppApiBaseUrl}
-      locale={runtime.locale}
+      adminStorageApiBaseUrl={driveBaseUrl}
+      locale={locale}
       operatorId={operatorId}
       resource={resource}
       tenantId={tenantId}
@@ -81,9 +77,10 @@ export function WebserverAuthorizedWorkspace({ runtime }: { runtime: Bootstrappe
     />
   );
   const adminResourceRenderers = {
-    plugins: <PluginsAdminSurface attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as PluginsAdminSurfaceProps["attachSdkClientBoundaries"]} driveAppApiBaseUrl={runtime.config.driveAppApiBaseUrl} locale={runtime.locale} resource="plugins" tokenManager={runtime.tokenManager} />,
-    skills: <SkillsAdminSurface appApiBaseUrl={runtime.config.appApiBaseUrl} attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as SkillsAdminSurfaceProps["attachSdkClientBoundaries"]} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={runtime.config.driveAppApiBaseUrl} resource="skills" tokenManager={runtime.tokenManager} permissionScope={permissionScope} />,
-    mcp: <McpAdminSurface appApiBaseUrl={runtime.config.appApiBaseUrl} attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as McpAdminSurfaceProps["attachSdkClientBoundaries"]} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={runtime.config.driveAppApiBaseUrl} resource="mcp" tokenManager={runtime.tokenManager} />,
+    apps: <DeployAppsAdminSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={driveBaseUrl} locale={locale} tokenManager={runtime.tokenManager} />,
+    plugins: <PluginsAdminSurface attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as PluginsAdminSurfaceProps["attachSdkClientBoundaries"]} driveAppApiBaseUrl={driveBaseUrl} locale={locale} resource="plugins" tokenManager={runtime.tokenManager} />,
+    skills: <SkillsAdminSurface appApiBaseUrl={runtime.config.appApiBaseUrl} attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as SkillsAdminSurfaceProps["attachSdkClientBoundaries"]} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={driveBaseUrl} resource="skills" tokenManager={runtime.tokenManager} permissionScope={permissionScope} />,
+    mcp: <McpAdminSurface appApiBaseUrl={runtime.config.appApiBaseUrl} attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as McpAdminSurfaceProps["attachSdkClientBoundaries"]} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={driveBaseUrl} resource="mcp" tokenManager={runtime.tokenManager} />,
     "servers-explorer": <ServerFilesExplorerSurface backendApiBaseUrl={runtime.config.backendApiBaseUrl} permissionScope={permissionScope} resource="servers-explorer" tokenManager={runtime.tokenManager} />,
     "webserver-config": <WebserverConfigSurface backendApiBaseUrl={runtime.config.backendApiBaseUrl} permissionScope={permissionScope} resource="webserver-config" tokenManager={runtime.tokenManager} />,
     "storage-providers": storageCenterSurface("storage-providers"),
@@ -99,13 +96,12 @@ export function WebserverAuthorizedWorkspace({ runtime }: { runtime: Bootstrappe
           path="/console/*"
           element={(
             <WebserverConsoleShell
-              locale={runtime.locale}
+              locale={locale}
               modules={consoleModules}
               notificationsHref={runtime.config.messagingPcUrl}
               onSignOut={signOut}
               permissionScope={permissionScope}
               portalHref="/"
-              registry={registry}
               resourceRenderers={resourceRenderers}
               userLabel={userLabel}
             />
@@ -114,16 +110,14 @@ export function WebserverAuthorizedWorkspace({ runtime }: { runtime: Bootstrappe
         <Route
           path="/admin/*"
           element={adminAccess ? (
-            <Suspense fallback={<div className="bootstrap-state">SDKWork Web Server</div>}>
+            <Suspense fallback={<div className="bootstrap-state" role="status">{messages["shell.status.loadingWorkspace"]}</div>}>
               <LazyAdminSurface
                 backendApiBaseUrl={runtime.config.backendApiBaseUrl}
-                locale={runtime.locale}
-                mediaStorage={mediaStorage}
+                locale={locale}
                 modules={adminModules}
                 onSignOut={signOut}
                 permissionScope={permissionScope}
                 resourceRenderers={adminResourceRenderers}
-                sourceStorage={sourceStorage}
                 tokenManager={runtime.tokenManager}
                 userLabel={userLabel}
               />

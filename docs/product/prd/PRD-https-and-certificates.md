@@ -277,6 +277,16 @@ rotation, failed-candidate last-known-good retention, and staging/production A/B
 Existing connections retain the Rustls context captured at acceptance; new handshakes use the
 atomically replaced context.
 
+[REQ-2026-0070](../requirements/REQ-2026-0070-layered-certificate-resolution.md) lets one listener
+serve both sources at once. A listener that declares `tlsCertificateResolution: policy-first` keeps
+its configured certificate files as the upper layer and the assigned certificate set as the lower
+layer of one resolver, so a configured file wins for each server name it covers and is usable for,
+and the assigned set covers every other name. A configured file that is missing, malformed, or
+outside its validity window degrades that server name to the assigned set instead of failing the
+listener, and an assigned-certificate rotation is re-layered beneath the configured files so the
+precedence survives every rotation. Certificate file content remains restart-only, as REQ-2026-0006
+accepted.
+
 This still does not complete this PRD. Explicit default-certificate policy, same-name RSA/ECDSA
 negotiation, full public trust-chain and revocation validation, Deploy-owned certificate-version
 assignment/distribution/observation, KMS/Vault/CSI authorization and decryption, public

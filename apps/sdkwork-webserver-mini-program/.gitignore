@@ -1,0 +1,9 @@
+# Build output: the runtime bundle is produced by `pnpm build:mini-program`.
+src/runtime/
+.cache/
+dist/
+
+# WeChat devtools keeps developer settings per machine (spec section 2).
+project.private.config.json
+
+node_modules/

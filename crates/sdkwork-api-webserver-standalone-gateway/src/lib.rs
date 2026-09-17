@@ -1,6 +1,8 @@
 #[cfg(feature = "management")]
 mod adaptive_surface;
 #[cfg(feature = "management")]
+mod admin_reset;
+#[cfg(feature = "management")]
 mod app_shell;
 #[cfg(feature = "management")]
 mod bootstrap;
@@ -25,6 +27,11 @@ mod website;
 mod website_runtime_cloud;
 mod website_runtime_recovery;
 
+#[cfg(feature = "management")]
+pub use admin_reset::{
+    reset_admin_account_from_env, AdminResetOptions, AdminResetOutput,
+    SDKWORK_WEBSERVER_ADMIN_RESET_PASSWORD_ENV,
+};
 #[cfg(feature = "management")]
 pub use app_shell::validate_adaptive_app_shell_from_env;
 #[cfg(feature = "management")]

@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "@sdkwork/webserver-mp-shell",
+    "displayName": "SDKWork Webserver Mini Program Shell",
+    "version": "0.1.0",
+    "type": "typescript-package",
+    "root": "sdkwork-webserver/apps/sdkwork-webserver-mini-program/packages/sdkwork-webserver-mp-shell",
+    "domain": "infrastructure",
+    "capability": "shell",
+    "surface": "app",
+    "languages": [
+      "typescript"
+    ],
+    "generated": false,
+    "private": true,
+    "status": "active",
+    "manifests": [
+      "package.json",
+      "specs/component.spec.json"
+    ]
+  },
+  "canonicalSpecs": [
+    {
+      "file": "CODE_STYLE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/CODE_STYLE_SPEC.md",
+      "purpose": "Authored source structure and generated code boundaries."
+    },
+    {
+      "file": "NAMING_SPEC.md",
+      "path": "../../../../../sdkwork-specs/NAMING_SPEC.md",
+      "purpose": "Canonical SDKWork naming rules."
+    },
+    {
+      "file": "TYPESCRIPT_CODE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/TYPESCRIPT_CODE_SPEC.md",
+      "purpose": "TypeScript package structure."
+    },
+    {
+      "file": "FRONTEND_CODE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/FRONTEND_CODE_SPEC.md",
+      "purpose": "Frontend implementation and verification."
+    },
+    {
+      "file": "COMPONENT_SPEC.md",
+      "path": "../../../../../sdkwork-specs/COMPONENT_SPEC.md",
+      "purpose": "Component contract."
+    },
+    {
+      "file": "MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md",
+      "purpose": "Mini program shell, route projection, and auth-gate duties."
+    },
+    {
+      "file": "APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "purpose": "Cross-client route-id and capability alignment."
+    },
+    {
+      "file": "APP_MINI_PROGRAM_UI_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_MINI_PROGRAM_UI_SPEC.md",
+      "purpose": "Mini program shell and UI rules."
+    },
+    {
+      "file": "TEST_SPEC.md",
+      "path": "../../../../../sdkwork-specs/TEST_SPEC.md",
+      "purpose": "Contract and conformance verification rules."
+    }
+  ],
+  "contracts": {
+    "layerRole": "frontend-shell",
+    "publicExports": [
+      "."
+    ],
+    "providedPorts": [
+      {
+        "name": "webserverMpShell",
+        "export": "."
+      }
+    ],
+    "requiredPorts": [
+      {
+        "name": "webserverMpCommons",
+        "export": ".",
+        "provider": "@sdkwork/webserver-mp-commons"
+      }
+    ],
+    "runtimeEntrypoints": [],
+    "routeManifest": null,
+    "sdkClients": [],
+    "sdkDependencies": [],
+    "dependencyApiExports": [],
+    "dependencyApiSurfaces": [],
+    "events": [],
+    "configKeys": []
+  },
+  "integration": {
+    "authority": "Root SDKWork specs remain authoritative.",
+    "dependencyPolicy": "The shell consumes the mini program commons package through its public root export and owns the navigation model and route projection.",
+    "sdkPolicy": "The shell owns no SDK client; application SDK access stays isolated behind the mini program core package.",
+    "hostPolicy": "The shell never binds a platform global."
+  },
+  "verification": {
+    "commands": [
+      "pnpm --dir apps/sdkwork-webserver-mini-program typecheck",
+      "pnpm --dir apps/sdkwork-webserver-mini-program test"
+    ]
+  },
+  "metadata": {
+    "standardVersion": "2026-09-17"
+  }
+}

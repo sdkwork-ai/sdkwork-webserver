@@ -27,7 +27,7 @@ use hyper_util::{
 };
 use sdkwork_webserver_core::{
     CompiledWebServerApp, ListenerConfig, ListenerProtocol, ListenerTlsRuntime,
-    ProxyProtocolConfig, WebServerLimits,
+    ProxyProtocolConfig, TlsCertificateResolution, WebServerLimits,
 };
 use sdkwork_webserver_delivery_runtime::{AppConfigResourceExecutor, WebsiteDeliveryExecutor};
 use tokio::{
@@ -54,7 +54,7 @@ use super::{
     proxy_protocol::{resolve_connection_info, DownstreamConnectionInfo},
     runtime::RuntimeGeneration,
     stream_proxy::{prepare_stream_listener, serve_stream_listener},
-    tls::build_tls_config,
+    tls::{build_tls_config, compile_policy_tls_material},
     tls_runtime::FileTlsRuntimeController,
     udp_stream_proxy::{prepare_udp_stream_listener, serve_udp_stream_listener},
     DataPlaneError, DataPlaneRuntime, ListenerState,
@@ -446,16 +446,18 @@ async fn prepare_listener(
             listener_id: listener.id.clone(),
             source,
         })?;
+    // A listener serves the assigned certificate set when it declares a TLS
+    // runtime, the configured certificate files when it declares a policy, and
+    // both — configured files layered above the assigned set — when it declares
+    // `tlsCertificateResolution: policy-first`. Which sources combine is
+    // validated at config load; here the resolution only selects the wiring.
+    let resolution = TlsCertificateResolution::effective(
+        listener.tls_certificate_resolution,
+        listener.tls_policy_ref.is_some(),
+        listener.tls_runtime.is_some(),
+    );
     let tls = match tls_runtime.filter(|runtime| runtime.listener_id() == listener.id) {
         Some(runtime) => {
-            if listener.tls_policy_ref.is_some() {
-                return Err(DataPlaneError::DynamicTlsConfiguration {
-                    detail: format!(
-                        "listener {} cannot combine tlsPolicyRef with dynamic TLS",
-                        listener.id
-                    ),
-                });
-            }
             if listener.tls_runtime != Some(ListenerTlsRuntime::Assignment) {
                 return Err(DataPlaneError::DynamicTlsConfiguration {
                     detail: format!(
@@ -464,11 +466,45 @@ async fn prepare_listener(
                     ),
                 });
             }
-            runtime.configure_listener(listener).map_err(|error| {
-                DataPlaneError::DynamicTlsConfiguration {
-                    detail: error.to_string(),
+            let policy_material = match resolution {
+                Some(TlsCertificateResolution::AssignmentOnly) => None,
+                Some(TlsCertificateResolution::PolicyFirst) => {
+                    let policy_id = listener.tls_policy_ref.clone().ok_or_else(|| {
+                        DataPlaneError::DynamicTlsConfiguration {
+                            detail: format!(
+                                "listener {} declares policy-first without tlsPolicyRef",
+                                listener.id
+                            ),
+                        }
+                    })?;
+                    Some(
+                        compile_policy_tls_material(
+                            generation, listener,
+                            // A policy-first listener has the assigned set
+                            // underneath, so an unusable file degrades that
+                            // server name instead of failing the listener.
+                            true,
+                        )?
+                        .ok_or(DataPlaneError::MissingTlsPolicy {
+                            listener_id: listener.id.clone(),
+                            policy_id,
+                        })?,
+                    )
                 }
-            })?;
+                _ => {
+                    return Err(DataPlaneError::DynamicTlsConfiguration {
+                        detail: format!(
+                            "listener {} must declare tlsRuntime=assignment for dynamic TLS",
+                            listener.id
+                        ),
+                    });
+                }
+            };
+            runtime
+                .configure_listener(listener, policy_material)
+                .map_err(|error| DataPlaneError::DynamicTlsConfiguration {
+                    detail: error.to_string(),
+                })?;
             Some(runtime.rustls_config())
         }
         None if listener.tls_runtime.is_some() => {

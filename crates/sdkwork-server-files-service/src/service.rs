@@ -7,7 +7,8 @@ use tokio::io::AsyncReadExt;
 
 use super::operations::{operations_for, ProjectClassification};
 use super::path_security::{
-    is_sensitive_file_name, resolve_contained_path, validate_allowed_root, PathContainmentError,
+    display_path, is_sensitive_file_name, resolve_contained_path, validate_allowed_root,
+    PathContainmentError,
 };
 use super::project::{classify_directory, ProjectType};
 
@@ -36,13 +37,22 @@ impl Default for ServerFilesServiceConfig {
 }
 
 /// A single directory entry returned by browse.
+///
+/// The wire shape is the OpenAPI authority's camelCase contract with the
+/// int64-as-string closure (`API_SPEC.md` §13.6), matching every generated
+/// SDK and the browser client.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ServerEntry {
     pub name: String,
     pub kind: EntryKind,
     pub path: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub size: Option<u64>,
+    #[serde(
+        default,
+        with = "sdkwork_utils_rust::serde_int64::option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub size: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_type: Option<ProjectType>,
     #[serde(default)]
@@ -59,6 +69,7 @@ pub enum EntryKind {
 
 /// A directory listing response.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DirectoryListing {
     pub node_id: String,
     pub path: String,
@@ -68,19 +79,37 @@ pub struct DirectoryListing {
 
 /// A file content response.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FileContent {
     pub node_id: String,
     pub path: String,
     pub content: String,
-    pub size: usize,
+    #[serde(with = "sdkwork_utils_rust::serde_int64")]
+    pub size: i64,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum BrowseDirectoryError {
     #[error(transparent)]
     Containment(#[from] PathContainmentError),
-    #[error("The directory could not be read: {0}")]
-    Io(String),
+    /// The directory could not be read. The `io::ErrorKind` is carried so the
+    /// transport layer can answer with the matching status (a missing
+    /// directory is a client-visible `404`, not an internal `500`) instead of
+    /// collapsing every failure into an opaque internal error.
+    #[error("The directory could not be read: {detail}")]
+    Io {
+        kind: std::io::ErrorKind,
+        detail: String,
+    },
+}
+
+impl BrowseDirectoryError {
+    fn io(error: &std::io::Error) -> Self {
+        Self::Io {
+            kind: error.kind(),
+            detail: error.to_string(),
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -127,19 +156,17 @@ impl ServerFilesService {
         requested_path: &str,
     ) -> Result<DirectoryListing, BrowseDirectoryError> {
         let resolved = self.contained_path(requested_path)?;
-        let parent_path = resolved
-            .parent()
-            .map(|parent| parent.to_string_lossy().into_owned());
+        let parent_path = resolved.parent().map(display_path);
 
         let mut read_dir = tokio::fs::read_dir(&resolved)
             .await
-            .map_err(|error| BrowseDirectoryError::Io(error.to_string()))?;
+            .map_err(|error| BrowseDirectoryError::io(&error))?;
 
         let mut entries = Vec::new();
         while let Some(entry) = read_dir
             .next_entry()
             .await
-            .map_err(|error| BrowseDirectoryError::Io(error.to_string()))?
+            .map_err(|error| BrowseDirectoryError::io(&error))?
         {
             if entries.len() >= self.config.maximum_entries {
                 break;
@@ -157,12 +184,14 @@ impl ServerFilesService {
             } else {
                 EntryKind::File
             };
-            let path_string = path.to_string_lossy().into_owned();
+            let path_string = display_path(&path);
             let mut server_entry = ServerEntry {
                 name,
                 kind,
                 path: path_string,
-                size: metadata.is_file().then_some(metadata.len()),
+                size: metadata
+                    .is_file()
+                    .then(|| i64::try_from(metadata.len()).unwrap_or(i64::MAX)),
                 project_type: None,
                 is_project_root: false,
             };
@@ -177,7 +206,7 @@ impl ServerFilesService {
 
         Ok(DirectoryListing {
             node_id: self.config.node_id.clone(),
-            path: resolved.to_string_lossy().into_owned(),
+            path: display_path(&resolved),
             parent_path,
             entries,
         })
@@ -227,9 +256,9 @@ impl ServerFilesService {
         let content = String::from_utf8_lossy(&bytes).into_owned();
         Ok(FileContent {
             node_id: self.config.node_id.clone(),
-            path: resolved.to_string_lossy().into_owned(),
+            path: display_path(&resolved),
             content,
-            size: bytes.len(),
+            size: i64::try_from(bytes.len()).unwrap_or(i64::MAX),
         })
     }
 
@@ -242,7 +271,7 @@ impl ServerFilesService {
         let resolved = self.contained_path(requested_path)?;
         Ok(operations_for(
             &self.config.node_id,
-            &resolved.to_string_lossy(),
+            &display_path(&resolved),
             classification,
         ))
     }

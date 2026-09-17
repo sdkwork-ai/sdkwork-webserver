@@ -9,14 +9,14 @@ import com.sdkwork.webserver.app.sdk.http.HttpClient
 class ApplicationApi(private val client: HttpClient) {
 
     /** 获取应用列表 */
-    suspend fun applicationsList(page: Int? = null, pageSize: Int? = null, status: Int? = null, applicationType: String? = null, siteType: Int? = null, keyword: String? = null): ApplicationsListResponse? {
+    suspend fun applicationsList(page: Int? = null, pageSize: Int? = null, status: Int? = null, applicationType: String? = null, siteType: Int? = null, q: String? = null): ApplicationsListResponse? {
         val query = buildQueryString(listOf(
             QueryParameterSpec("page", page, "form", true, false, null),
             QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             QueryParameterSpec("status", status, "form", true, false, null),
             QueryParameterSpec("application_type", applicationType, "form", true, false, null),
             QueryParameterSpec("site_type", siteType, "form", true, false, null),
-            QueryParameterSpec("keyword", keyword, "form", true, false, null)
+            QueryParameterSpec("q", q, "form", true, false, null)
         ))
         val raw = client.get(ApiPaths.appendQueryString(ApiPaths.appPath("/applications"), query))
         return client.convertValue(raw, object : TypeReference<ApplicationsListResponse>() {})

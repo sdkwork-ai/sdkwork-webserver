@@ -61,7 +61,7 @@ client.set_header('X-Custom-Header', 'value')
 
 ```ruby
 # List managed applications
-params = { 'page' => 1, 'page_size' => 2, 'application_type' => 'WEB', 'site_type' => 4, 'status' => 5, 'keyword' => 'keyword' }
+params = { 'page' => 1, 'page_size' => 2, 'application_type' => 'WEB', 'site_type' => 4, 'status' => 5, 'q' => 'q' }
 result = client.application.applications_list(params: params)
 puts result.inspect
 ```

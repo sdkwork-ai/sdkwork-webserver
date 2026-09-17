@@ -156,7 +156,7 @@ pub fn expand_includes(
 fn expand_glob_pattern(pattern: &Path) -> Result<Vec<PathBuf>, NginxParseError> {
     let text = pattern.to_string_lossy().replace('\\', "/");
     let absolute = text.starts_with('/');
-    // Windows drive prefix (`C:/...`): start the walk at the drive root so
+    // Windows drive prefix: start the walk at the drive root so
     // joined paths stay absolute instead of drive-relative.
     let drive_prefix =
         (text.len() >= 3 && text.as_bytes()[1] == b':' && text.as_bytes()[2] == b'/')

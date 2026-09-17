@@ -1,0 +1,12 @@
+{
+  "SDKWORK_DEPLOYMENT_PROFILE": "standalone",
+  "SDKWORK_ENVIRONMENT": "demo",
+  "SDKWORK_PROFILE_ID": "standalone.demo",
+  "SDKWORK_RUNTIME_TARGET": "flutter-android",
+  "SDKWORK_WEBSERVER_APP_API_BASE_URL": "http://server-demo.sdkwork.com:19080/app/v3/api",
+  "SDKWORK_WEBSERVER_APPLICATION_PUBLIC_HTTP_URL": "http://server-demo.sdkwork.com:19080",
+  "SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE": "standalone",
+  "SDKWORK_WEBSERVER_ENVIRONMENT": "demo",
+  "SDKWORK_WEBSERVER_PROFILE_ID": "standalone.demo",
+  "SDKWORK_WEBSERVER_RUNTIME_TARGET": "flutter-android"
+}

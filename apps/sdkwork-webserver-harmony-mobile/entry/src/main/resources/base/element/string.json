@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "SDKWork Web Server HarmonyOS entry module"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "SDKWork Web Server"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "SDKWork Web Server"
+    }
+  ]
+}

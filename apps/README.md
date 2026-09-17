@@ -16,6 +16,9 @@ The repository root `sdkwork.app.config.json` governs the primary application ma
 | --- | --- | --- | --- | --- |
 | sdkwork-webserver-pc | pc | yes | SDKWork Web Server Console and backend-admin management application | [README](sdkwork-webserver-pc/README.md) |
 | sdkwork-webserver-h5 | h5 | yes | Adaptive Web mobile browser surface (fallback pair with PC) | [README](sdkwork-webserver-h5/README.md) |
+| sdkwork-webserver-mini-program | mini-program | yes | WeChat mini program surface for application publishing and delivery | [README](sdkwork-webserver-mini-program/README.md) |
+| sdkwork-webserver-harmony-mobile | harmony-mobile | yes | HarmonyOS (ArkTS) mobile surface for application publishing and delivery | [README](sdkwork-webserver-harmony-mobile/README.md) |
+| sdkwork-webserver-flutter-mobile | flutter-mobile | yes | Flutter mobile surface for application publishing and delivery | [README](sdkwork-webserver-flutter-mobile/README.md) |
 
 ## Allowed Content
 

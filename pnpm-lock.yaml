@@ -33,6 +33,9 @@ catalogs:
     '@vitejs/plugin-react':
       specifier: ^6.0.5
       version: 6.1.1
+    clsx:
+      specifier: ^2.1.1
+      version: 2.1.1
     jsdom:
       specifier: 29.1.1
       version: 29.1.1
@@ -51,6 +54,9 @@ catalogs:
     react-dom:
       specifier: ^19.2.8
       version: 19.2.8
+    tailwind-merge:
+      specifier: ^3.6.0
+      version: 3.6.0
     tailwindcss:
       specifier: ^4.3.3
       version: 4.3.3
@@ -267,6 +273,28 @@ importers:
       react-router-dom:
         specifier: ^7.15.0
         version: 7.18.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.14
+
+  ../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-publishing:
+    dependencies:
+      '@sdkwork/deployments-app-sdk':
+        specifier: workspace:*
+        version: link:../../../../sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-typescript
+      '@sdkwork/deployments-pc-commons':
+        specifier: workspace:*
+        version: link:../sdkwork-deployments-pc-commons
+      '@sdkwork/drive-app-sdk':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-drive/sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-typescript
+      '@sdkwork/utils':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-utils/packages/sdkwork-utils-typescript
+      react:
+        specifier: 'catalog:'
+        version: 19.2.8
     devDependencies:
       '@types/react':
         specifier: 'catalog:'
@@ -1147,6 +1175,21 @@ importers:
 
   apps/sdkwork-webserver-h5:
     dependencies:
+      '@sdkwork/sdk-common':
+        specifier: workspace:*
+        version: link:../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      '@sdkwork/webserver-h5-applications':
+        specifier: workspace:*
+        version: link:packages/sdkwork-webserver-h5-applications
+      '@sdkwork/webserver-h5-commons':
+        specifier: workspace:*
+        version: link:packages/sdkwork-webserver-h5-commons
+      '@sdkwork/webserver-h5-core':
+        specifier: workspace:*
+        version: link:packages/sdkwork-webserver-h5-core
+      '@sdkwork/webserver-h5-shell':
+        specifier: workspace:*
+        version: link:packages/sdkwork-webserver-h5-shell
       react:
         specifier: 'catalog:'
         version: 19.2.8
@@ -1157,6 +1200,9 @@ importers:
         specifier: ^7.15.0
         version: 7.18.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
     devDependencies:
+      '@sdkwork/app-topology':
+        specifier: workspace:*
+        version: link:../../../sdkwork-app-topology
       '@testing-library/react':
         specifier: 'catalog:'
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -1181,6 +1227,131 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@types/node@25.9.5)(jsdom@29.1.1)(vite@8.1.5(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
+
+  apps/sdkwork-webserver-h5/packages/sdkwork-webserver-h5-applications:
+    dependencies:
+      '@sdkwork/webserver-h5-commons':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-h5-commons
+      '@sdkwork/webserver-h5-core':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-h5-core
+      react:
+        specifier: 'catalog:'
+        version: 19.2.8
+
+  apps/sdkwork-webserver-h5/packages/sdkwork-webserver-h5-commons:
+    dependencies:
+      clsx:
+        specifier: 'catalog:'
+        version: 2.1.1
+      react:
+        specifier: 'catalog:'
+        version: 19.2.8
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.8(react@19.2.8)
+      tailwind-merge:
+        specifier: 'catalog:'
+        version: 3.6.0
+
+  apps/sdkwork-webserver-h5/packages/sdkwork-webserver-h5-core:
+    dependencies:
+      '@sdkwork/deployments-app-sdk':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-deployments/sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-typescript
+      '@sdkwork/drive-app-sdk':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-drive/sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-typescript
+      '@sdkwork/sdk-common':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      '@sdkwork/webserver-app-sdk':
+        specifier: workspace:*
+        version: link:../../../../sdks/sdkwork-webserver-app-sdk/sdkwork-webserver-app-sdk-typescript
+
+  apps/sdkwork-webserver-h5/packages/sdkwork-webserver-h5-shell:
+    dependencies:
+      '@sdkwork/webserver-h5-commons':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-h5-commons
+      react:
+        specifier: 'catalog:'
+        version: 19.2.8
+      react-router-dom:
+        specifier: ^7.15.0
+        version: 7.18.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+
+  apps/sdkwork-webserver-mini-program:
+    dependencies:
+      '@sdkwork/sdk-common':
+        specifier: workspace:*
+        version: link:../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      '@sdkwork/webserver-mp-applications':
+        specifier: workspace:*
+        version: link:packages/sdkwork-webserver-mp-applications
+      '@sdkwork/webserver-mp-commons':
+        specifier: workspace:*
+        version: link:packages/sdkwork-webserver-mp-commons
+      '@sdkwork/webserver-mp-core':
+        specifier: workspace:*
+        version: link:packages/sdkwork-webserver-mp-core
+      '@sdkwork/webserver-mp-host':
+        specifier: workspace:*
+        version: link:packages/sdkwork-webserver-mp-host
+      '@sdkwork/webserver-mp-shell':
+        specifier: workspace:*
+        version: link:packages/sdkwork-webserver-mp-shell
+    devDependencies:
+      '@sdkwork/app-topology':
+        specifier: workspace:*
+        version: link:../../../sdkwork-app-topology
+      esbuild:
+        specifier: 0.28.1
+        version: 0.28.1
+      miniprogram-api-typings:
+        specifier: ^4.1.0
+        version: 4.1.3
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+
+  apps/sdkwork-webserver-mini-program/packages/sdkwork-webserver-mp-applications:
+    dependencies:
+      '@sdkwork/webserver-mp-commons':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-mp-commons
+      '@sdkwork/webserver-mp-core':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-mp-core
+      '@sdkwork/webserver-mp-shell':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-mp-shell
+
+  apps/sdkwork-webserver-mini-program/packages/sdkwork-webserver-mp-commons: {}
+
+  apps/sdkwork-webserver-mini-program/packages/sdkwork-webserver-mp-core:
+    dependencies:
+      '@sdkwork/deployments-app-sdk':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-deployments/sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-typescript
+      '@sdkwork/drive-app-sdk':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-drive/sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-typescript
+      '@sdkwork/sdk-common':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      '@sdkwork/webserver-app-sdk':
+        specifier: workspace:*
+        version: link:../../../../sdks/sdkwork-webserver-app-sdk/sdkwork-webserver-app-sdk-typescript
+
+  apps/sdkwork-webserver-mini-program/packages/sdkwork-webserver-mp-host: {}
+
+  apps/sdkwork-webserver-mini-program/packages/sdkwork-webserver-mp-shell:
+    dependencies:
+      '@sdkwork/webserver-mp-commons':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-mp-commons
 
   apps/sdkwork-webserver-pc:
     dependencies:
@@ -1223,9 +1394,9 @@ importers:
       '@sdkwork/webserver-backend-sdk':
         specifier: workspace:*
         version: link:../../sdks/sdkwork-webserver-backend-sdk/sdkwork-webserver-backend-sdk-typescript
-      '@sdkwork/webserver-pc-admin-applications':
+      '@sdkwork/webserver-pc-admin-apps':
         specifier: workspace:*
-        version: link:packages/sdkwork-webserver-pc-admin-applications
+        version: link:packages/sdkwork-webserver-pc-admin-apps
       '@sdkwork/webserver-pc-admin-audit':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-admin-audit
@@ -1271,9 +1442,6 @@ importers:
       '@sdkwork/webserver-pc-console-delivery':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-console-delivery
-      '@sdkwork/webserver-pc-console-deployments':
-        specifier: workspace:*
-        version: link:packages/sdkwork-webserver-pc-console-deployments
       '@sdkwork/webserver-pc-console-mcp':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-console-mcp
@@ -1283,12 +1451,6 @@ importers:
       '@sdkwork/webserver-pc-console-shell':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-console-shell
-      '@sdkwork/webserver-pc-console-site-configuration':
-        specifier: workspace:*
-        version: link:packages/sdkwork-webserver-pc-console-site-configuration
-      '@sdkwork/webserver-pc-console-sites':
-        specifier: workspace:*
-        version: link:packages/sdkwork-webserver-pc-console-sites
       '@sdkwork/webserver-pc-console-skills':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-console-skills
@@ -1323,6 +1485,9 @@ importers:
         specifier: 'catalog:'
         version: 4.3.3
     devDependencies:
+      '@sdkwork/app-topology':
+        specifier: workspace:*
+        version: link:../../../sdkwork-app-topology
       '@testing-library/react':
         specifier: 'catalog:'
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -1335,9 +1500,6 @@ importers:
       '@vitejs/plugin-react':
         specifier: 'catalog:'
         version: 6.1.1(vite@8.1.5(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
-      fflate:
-        specifier: ^0.8.2
-        version: 0.8.3
       jsdom:
         specifier: 'catalog:'
         version: 29.1.1
@@ -1351,14 +1513,26 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(@types/node@25.9.5)(jsdom@29.1.1)(vite@8.1.5(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
 
-  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-applications:
+  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-apps:
     dependencies:
-      '@sdkwork/webserver-pc-admin-core':
+      '@sdkwork/deployments-pc-commons':
         specifier: workspace:*
-        version: link:../sdkwork-webserver-pc-admin-core
+        version: link:../../../../../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-commons
+      '@sdkwork/deployments-pc-console-core':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-core
+      '@sdkwork/deployments-pc-console-publishing':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-publishing
+      '@sdkwork/sdk-common':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
       '@sdkwork/webserver-pc-commons':
         specifier: workspace:*
         version: link:../sdkwork-webserver-pc-commons
+      react:
+        specifier: 'catalog:'
+        version: 19.2.8
 
   apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-audit:
     dependencies:
@@ -1596,6 +1770,9 @@ importers:
       '@sdkwork/deployments-pc-console-delivery':
         specifier: workspace:*
         version: link:../../../../../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-delivery
+      '@sdkwork/deployments-pc-console-publishing':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-publishing
       '@sdkwork/sdk-common':
         specifier: workspace:*
         version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
@@ -1605,12 +1782,6 @@ importers:
       react:
         specifier: 'catalog:'
         version: 19.2.8
-
-  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-console-deployments:
-    dependencies:
-      '@sdkwork/webserver-pc-commons':
-        specifier: workspace:*
-        version: link:../sdkwork-webserver-pc-commons
 
   apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-console-mcp:
     dependencies:
@@ -1659,18 +1830,6 @@ importers:
       react:
         specifier: 'catalog:'
         version: 19.2.8
-
-  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-console-site-configuration:
-    dependencies:
-      '@sdkwork/webserver-pc-commons':
-        specifier: workspace:*
-        version: link:../sdkwork-webserver-pc-commons
-
-  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-console-sites:
-    dependencies:
-      '@sdkwork/webserver-pc-commons':
-        specifier: workspace:*
-        version: link:../sdkwork-webserver-pc-commons
 
   apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-console-skills:
     dependencies:
@@ -4605,6 +4764,9 @@ packages:
   minipass@7.1.3:
     resolution: {integrity: sha512-tEBHqDnIoM/1rXME1zgka9g6Q2lcoCkxHLuc7ODJ5BxbP5d4c2Z5cGgtXAku59200Cx7diuHTOYfSBD8n6mm8A==}
     engines: {node: '>=16 || 14 >=14.17'}
+
+  miniprogram-api-typings@4.1.3:
+    resolution: {integrity: sha512-5mobiXzDS3KFJMM20cIg5m7hiFSJY0YGpgm5yzFeIJ+UP15RGOtW/ztqAhRfOQIvPBD0WyYB+WFCWaeeTTEZTQ==}
 
   minisearch@7.2.0:
     resolution: {integrity: sha512-dqT2XBYUOZOiC5t2HRnwADjhNS2cecp9u+TJRiJ1Qp/f5qjkeT5APcGPjHw+bz89Ms8Jp+cG4AlE+QZ/QnDglg==}
@@ -8277,6 +8439,8 @@ snapshots:
       yallist: 4.0.0
 
   minipass@7.1.3: {}
+
+  miniprogram-api-typings@4.1.3: {}
 
   minisearch@7.2.0: {}
 

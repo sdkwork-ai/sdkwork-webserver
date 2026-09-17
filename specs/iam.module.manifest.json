@@ -9,6 +9,15 @@
   "permissions": {
     "catalog": [
       {
+        "code": "web.plugins.read",
+        "name": "Read plugins",
+        "resource": "plugins",
+        "action": "read",
+        "status": "active",
+        "since": "0.1.5",
+        "replacementCode": null
+      },
+      {
         "code": "web.applications.read",
         "name": "Read sites and applications",
         "resource": "applications",

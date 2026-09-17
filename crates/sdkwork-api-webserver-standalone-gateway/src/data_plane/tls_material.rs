@@ -1,21 +1,25 @@
-use std::{collections::HashMap, io, path::Path, sync::Arc};
+use std::{io, path::Path, sync::Arc};
 
 use rustls::{
     pki_types::{
         pem::{PemObject, SectionKind},
         CertificateDer, PrivateKeyDer,
     },
-    server::{ClientHello, ResolvesServerCert, WebPkiClientVerifier},
+    server::WebPkiClientVerifier,
     sign::CertifiedKey,
     RootCertStore, ServerConfig,
 };
-use sdkwork_webserver_core::{
-    normalize_server_name, server_name_covers, ClientAuthConfig, ClientAuthMode, TlsVersion,
-};
+use sdkwork_webserver_core::{server_name_covers, ClientAuthConfig, ClientAuthMode, TlsVersion};
 use sha2::{Digest, Sha256};
 use x509_parser::prelude::{FromDer, GeneralName, X509Certificate};
 
-use super::{runtime::read_bounded_tls_material, DataPlaneError};
+use super::{
+    runtime::read_bounded_tls_material,
+    tls_resolver::{
+        CertificateSourceIndex, LayeredCertificateResolver, ResolvableCertificate, ResolverLayers,
+    },
+    DataPlaneError,
+};
 
 pub(crate) struct LoadedCertifiedKey {
     pub certified_key: CertifiedKey,
@@ -24,70 +28,55 @@ pub(crate) struct LoadedCertifiedKey {
     pub not_after_unix_seconds: i64,
 }
 
-#[derive(Debug)]
-struct SniCertificateResolver {
-    exact: HashMap<String, Arc<CertifiedKey>>,
-    wildcards: Vec<(String, Arc<CertifiedKey>)>,
-}
-
-impl ResolvesServerCert for SniCertificateResolver {
-    fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
-        // Fail closed: a missing or unknown SNI gets no certificate, so the
-        // handshake is rejected instead of serving a default certificate to
-        // a host the operator never authorized.
-        let Some(raw_name) = client_hello.server_name() else {
-            return None;
-        };
-        let Some(server_name) = normalize_server_name(raw_name) else {
-            return None;
-        };
-        if let Some(certified_key) = self.exact.get(&server_name) {
-            return Some(certified_key.clone());
-        }
-        self.wildcards
-            .iter()
-            .find(|(suffix, _)| wildcard_matches(suffix, &server_name))
-            .map(|(_, certified_key)| certified_key.clone())
+impl LoadedCertifiedKey {
+    /// Moves the key into the resolver's validity-aware wrapper.
+    ///
+    /// The leaf validity window travels with the key so the resolver can rank
+    /// two sources for the same server name without re-parsing the certificate.
+    pub(crate) fn into_resolvable(self) -> Arc<ResolvableCertificate> {
+        Arc::new(ResolvableCertificate::new(
+            Arc::new(self.certified_key),
+            self.leaf_fingerprint_sha256,
+            self.not_before_unix_seconds,
+            self.not_after_unix_seconds,
+        ))
     }
 }
 
+/// Builds a server configuration that serves exactly one certificate source.
+///
+/// Listeners that declare a single source use this; listeners that combine a
+/// configured policy with assigned certificates go through
+/// [`build_layered_server_config`].
 pub(crate) fn build_sni_server_config(
-    certificates: Vec<(Vec<String>, CertifiedKey)>,
+    certificates: Vec<(Vec<String>, LoadedCertifiedKey)>,
     minimum_version: TlsVersion,
     maximum_version: TlsVersion,
     alpn: &[String],
     client_auth: Option<&ClientAuthConfig>,
 ) -> Result<Arc<ServerConfig>, String> {
-    let mut exact = HashMap::new();
-    let mut wildcards = Vec::new();
-    for (server_names, certified_key) in certificates {
-        let certified_key = Arc::new(certified_key);
-        for server_name in server_names {
-            let normalized = normalize_server_name(&server_name)
-                .ok_or_else(|| format!("invalid TLS server name {server_name}"))?;
-            if let Some(suffix) = normalized.strip_prefix("*.") {
-                if wildcards.iter().any(|(existing, _)| existing == suffix) {
-                    return Err(normalized);
-                }
-                wildcards.push((suffix.to_owned(), certified_key.clone()));
-            } else if exact
-                .insert(normalized.clone(), certified_key.clone())
-                .is_some()
-            {
-                return Err(normalized);
-            }
-        }
-    }
-    wildcards.sort_unstable_by(|left, right| {
-        right
-            .0
-            .len()
-            .cmp(&left.0.len())
-            .then_with(|| left.0.cmp(&right.0))
-    });
+    let layers = Arc::new(ResolverLayers::policy_only(build_source_index(
+        certificates,
+    )?));
+    build_layered_server_config(layers, minimum_version, maximum_version, alpn, client_auth)
+}
+
+/// Builds a server configuration from a full layer set.
+///
+/// The resulting `ServerConfig` is immutable: a rotation builds a new one with
+/// a new resolver and publishes it atomically, which is what lets a rotation
+/// carry its own protocol parameters instead of being limited to a certificate
+/// swap.
+pub(crate) fn build_layered_server_config(
+    layers: Arc<ResolverLayers>,
+    minimum_version: TlsVersion,
+    maximum_version: TlsVersion,
+    alpn: &[String],
+    client_auth: Option<&ClientAuthConfig>,
+) -> Result<Arc<ServerConfig>, String> {
     let protocol_versions = tls_protocol_versions(minimum_version, maximum_version);
     let builder = ServerConfig::builder_with_protocol_versions(&protocol_versions);
-    let resolver = Arc::new(SniCertificateResolver { exact, wildcards });
+    let resolver = Arc::new(LayeredCertificateResolver::new(layers));
     let mut server_config = match client_auth {
         Some(auth) if auth.mode != ClientAuthMode::Off => {
             let verifier = build_client_cert_verifier(auth)?;
@@ -102,6 +91,17 @@ pub(crate) fn build_sni_server_config(
         .map(|protocol| protocol.as_bytes().to_vec())
         .collect();
     Ok(Arc::new(server_config))
+}
+
+/// Indexes loaded material by server name, rejecting ambiguous claims.
+pub(crate) fn build_source_index(
+    certificates: Vec<(Vec<String>, LoadedCertifiedKey)>,
+) -> Result<CertificateSourceIndex, String> {
+    let mut index = CertificateSourceIndex::default();
+    for (server_names, loaded) in certificates {
+        index.insert(&server_names, loaded.into_resolvable())?;
+    }
+    Ok(index)
 }
 
 fn build_client_cert_verifier(
@@ -346,12 +346,6 @@ fn tls_files_error(
     }
 }
 
-fn wildcard_matches(suffix: &str, server_name: &str) -> bool {
-    server_name
-        .strip_suffix(suffix)
-        .is_some_and(|prefix| prefix.ends_with('.') && !prefix[..prefix.len() - 1].contains('.'))
-}
-
 #[cfg(test)]
 mod tests {
     use rcgen::{date_time_ymd, CertificateParams, KeyPair};
@@ -359,7 +353,7 @@ mod tests {
 
     use super::{
         parse_certificate_chain, parse_single_private_key, tls_protocol_versions,
-        validate_leaf_certificate, wildcard_matches,
+        validate_leaf_certificate,
     };
 
     #[test]
@@ -417,12 +411,5 @@ mod tests {
     fn empty_or_malformed_pem_material_is_rejected() {
         assert!(parse_certificate_chain(b"not a PEM certificate").is_err());
         assert!(parse_single_private_key(b"not a PEM private key").is_err());
-    }
-
-    #[test]
-    fn wildcard_matches_exactly_one_left_label() {
-        assert!(wildcard_matches("example.test", "www.example.test"));
-        assert!(!wildcard_matches("example.test", "example.test"));
-        assert!(!wildcard_matches("example.test", "a.b.example.test"));
     }
 }

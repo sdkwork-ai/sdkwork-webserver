@@ -223,6 +223,28 @@ slots contain only bounded hash-verified snapshots; certificate material remains
 material provider root. `data-plane/website.native-tls.config.json` and
 `data-plane/website.native-tls.development.env.example` are the non-secret native TLS examples.
 
+One listener can serve configured certificate files and assigned certificates at once. Declaring both
+`tlsPolicyRef` and `tlsRuntime` requires the explicit resolution `tlsCertificateResolution: policy-first`:
+
+```json
+{
+  "id": "public-https",
+  "bind": "0.0.0.0",
+  "port": 443,
+  "protocols": ["http1", "http2"],
+  "tlsPolicyRef": "public-tls",
+  "tlsRuntime": "assignment",
+  "tlsCertificateResolution": "policy-first"
+}
+```
+
+`policy-first` serves the configured file for every server name it covers and is currently usable for,
+and the assigned certificate for every other name, so a missing, malformed, or expired configured file
+degrades that name to the assigned set instead of failing the listener. `policy-only` and
+`assignment-only` are the explicit spellings of the original single-source behavior and are also
+implied when only one source is declared. Changing a configured certificate file's content is a
+restart-only change; assigned certificates rotate without a restart.
+
 `data-plane/website-provider-events.development.json.example` is the provider-event ingress
 instance selected by `SDKWORK_WEBSERVER_WEBSITE_PROVIDER_EVENT_CONFIG_FILE` and validated by
 `../specs/sdkwork.website-provider-event-ingress.schema.json`. It binds only to loopback, maps each

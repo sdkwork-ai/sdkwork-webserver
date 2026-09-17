@@ -1,0 +1,41 @@
+<view class="page">
+  <view wx:if="{{fatalError}}" class="status error">{{fatalError}}</view>
+
+  <block wx:else>
+    <view wx:if="{{loading}}" class="status">{{loadingMessage}}</view>
+    <view wx:elif="{{errorMessage}}" class="status error">
+      <text class="status__message">{{errorMessage}}</text>
+      <text wx:if="{{errorDetail}}" class="status__detail">{{errorDetail}}</text>
+      <button class="status__retry" size="mini" bindtap="onRetry">{{retryLabel}}</button>
+    </view>
+    <view wx:elif="{{items.length === 0}}" class="status">{{emptyMessage}}</view>
+
+    <view wx:else class="list">
+      <view class="list__summary">{{totalItems}}</view>
+      <block wx:for="{{items}}" wx:key="id">
+        <view class="card">
+          <text class="card__name">{{item.name}}</text>
+          <text class="card__slug">{{item.slug}}</text>
+          <text wx:if="{{item.description}}" class="card__desc">{{item.description}}</text>
+          <view class="card__meta">
+            <text class="card__tag">{{item.kindLabel}}</text>
+            <text class="card__tag card__tag--status">{{item.statusLabel}}</text>
+            <text wx:if="{{item.latestReleaseTag}}" class="card__tag">{{item.latestReleaseTag}}</text>
+            <text wx:if="{{item.defaultEnvironment}}" class="card__tag">{{item.defaultEnvironment}}</text>
+          </view>
+        </view>
+      </block>
+
+      <button
+        wx:if="{{hasMore}}"
+        class="load-more"
+        size="mini"
+        loading="{{appending}}"
+        disabled="{{appending}}"
+        bindtap="onReachBottom"
+      >
+        {{appending ? loadingMoreMessage : loadMoreLabel}}
+      </button>
+    </view>
+  </block>
+</view>

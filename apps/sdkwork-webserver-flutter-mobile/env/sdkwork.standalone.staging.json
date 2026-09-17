@@ -1,0 +1,12 @@
+{
+  "SDKWORK_DEPLOYMENT_PROFILE": "standalone",
+  "SDKWORK_ENVIRONMENT": "staging",
+  "SDKWORK_PROFILE_ID": "standalone.staging",
+  "SDKWORK_RUNTIME_TARGET": "flutter-android",
+  "SDKWORK_WEBSERVER_APP_API_BASE_URL": "https://server-staging.sdkwork.com/app/v3/api",
+  "SDKWORK_WEBSERVER_APPLICATION_PUBLIC_HTTP_URL": "https://server-staging.sdkwork.com",
+  "SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE": "standalone",
+  "SDKWORK_WEBSERVER_ENVIRONMENT": "staging",
+  "SDKWORK_WEBSERVER_PROFILE_ID": "standalone.staging",
+  "SDKWORK_WEBSERVER_RUNTIME_TARGET": "flutter-android"
+}

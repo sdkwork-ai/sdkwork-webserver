@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "@sdkwork/webserver-mp-applications",
+    "displayName": "SDKWork Webserver Mini Program Applications",
+    "version": "0.1.0",
+    "type": "typescript-package",
+    "root": "sdkwork-webserver/apps/sdkwork-webserver-mini-program/packages/sdkwork-webserver-mp-applications",
+    "domain": "infrastructure",
+    "capability": "applications",
+    "surface": "app",
+    "languages": [
+      "typescript"
+    ],
+    "generated": false,
+    "private": true,
+    "status": "active",
+    "manifests": [
+      "package.json",
+      "specs/component.spec.json"
+    ]
+  },
+  "canonicalSpecs": [
+    {
+      "file": "CODE_STYLE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/CODE_STYLE_SPEC.md",
+      "purpose": "Authored source structure and generated code boundaries."
+    },
+    {
+      "file": "NAMING_SPEC.md",
+      "path": "../../../../../sdkwork-specs/NAMING_SPEC.md",
+      "purpose": "Canonical SDKWork naming rules."
+    },
+    {
+      "file": "TYPESCRIPT_CODE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/TYPESCRIPT_CODE_SPEC.md",
+      "purpose": "TypeScript package structure."
+    },
+    {
+      "file": "FRONTEND_CODE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/FRONTEND_CODE_SPEC.md",
+      "purpose": "Frontend authored-source structure."
+    },
+    {
+      "file": "COMPONENT_SPEC.md",
+      "path": "../../../../../sdkwork-specs/COMPONENT_SPEC.md",
+      "purpose": "Component contract."
+    },
+    {
+      "file": "MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md",
+      "purpose": "Mini program capability package shape, host boundary, and route placement."
+    },
+    {
+      "file": "APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "purpose": "Cross-client route-id and capability alignment."
+    },
+    {
+      "file": "APP_MINI_PROGRAM_UI_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_MINI_PROGRAM_UI_SPEC.md",
+      "purpose": "Mini program capability UI rules."
+    },
+    {
+      "file": "APP_SDK_INTEGRATION_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md",
+      "purpose": "Injected generated SDK clients; capability packages never build transports."
+    },
+    {
+      "file": "APP_PERMISSION_COMPOSITION_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_PERMISSION_COMPOSITION_SPEC.md",
+      "purpose": "Permission hints inherited from the owning module catalog."
+    },
+    {
+      "file": "PAGINATION_SPEC.md",
+      "path": "../../../../../sdkwork-specs/PAGINATION_SPEC.md",
+      "purpose": "Interactive list pagination contract."
+    },
+    {
+      "file": "I18N_SPEC.md",
+      "path": "../../../../../sdkwork-specs/I18N_SPEC.md",
+      "purpose": "Authored fragment layout for capability copy."
+    },
+    {
+      "file": "TEST_SPEC.md",
+      "path": "../../../../../sdkwork-specs/TEST_SPEC.md",
+      "purpose": "Contract and conformance verification rules."
+    }
+  ],
+  "contracts": {
+    "layerRole": "frontend-feature",
+    "publicExports": [
+      "."
+    ],
+    "providedPorts": [
+      {
+        "name": "webserverMpApplications",
+        "export": "."
+      }
+    ],
+    "requiredPorts": [
+      {
+        "name": "webserverMpCommons",
+        "export": ".",
+        "provider": "@sdkwork/webserver-mp-commons"
+      },
+      {
+        "name": "webserverMpShell",
+        "export": ".",
+        "provider": "@sdkwork/webserver-mp-shell"
+      },
+      {
+        "name": "webserverMpApplicationSdk",
+        "export": "./sdk",
+        "provider": "@sdkwork/webserver-mp-core"
+      }
+    ],
+    "runtimeEntrypoints": [],
+    "routeManifest": null,
+    "sdkClients": [],
+    "sdkDependencies": [],
+    "dependencyApiExports": [],
+    "dependencyApiSurfaces": [],
+    "events": [],
+    "configKeys": []
+  },
+  "integration": {
+    "authority": "Root SDKWork specs remain authoritative.",
+    "dependencyPolicy": "Consumes shared mini program primitives, the shell's route contract, and the injected deployments app SDK client through public exports only.",
+    "sdkPolicy": "The capability package receives its generated client by prop and never constructs one; SDK construction stays in @sdkwork/webserver-mp-core.",
+    "hostPolicy": "The capability package never binds a platform global; host access arrives through the injected host adapter."
+  },
+  "verification": {
+    "commands": [
+      "pnpm --dir apps/sdkwork-webserver-mini-program typecheck",
+      "pnpm --dir apps/sdkwork-webserver-mini-program test"
+    ]
+  },
+  "metadata": {
+    "standardVersion": "2026-09-17"
+  }
+}

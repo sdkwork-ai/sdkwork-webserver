@@ -264,8 +264,11 @@ served by the self-hosted data plane through the narrow `acmeHttp01.webroot` lis
 operation the worker projects the node's listener certificate bindings into versioned TLS material
 under `SDKWORK_WEBSERVER_TLS_MATERIAL_ROOT` and publishes a monotonic `tls-runtime.json` snapshot; the
 data plane's `FileTlsRuntimeController` hot-loads the new Rustls configuration without dropping
-existing connections. External Nginx artifact activation is a documented optional legacy path and
-is not part of the certificate lifecycle.
+existing connections. Both the versioned material and the snapshot are written by staging beside
+the target and renaming into place, and the directory sync that makes such a rename durable is
+skipped where the platform cannot open a directory as a file handle, so distribution also completes
+on Windows - a platform the data plane itself supports. External Nginx artifact activation is a
+documented optional legacy path and is not part of the certificate lifecycle.
 
 `sdkwork-web` owns the mutable Zone, hostname, verification, route, certificate, listener, and Web
 deployment intent. `sdkwork-deploy` is being aligned to immutable rollout, distribution, snapshot,
@@ -299,6 +302,7 @@ names the workflow "site pause", the route names are application-scoped.)
 - Public application traffic uses explicit host/route policy and HTTPS requirements from the PRD.
 - Private keys and credentials remain references to protected runtime sources and are never serialized into app config or logs.
 - Static roots, upstream destinations, trusted proxy networks, headers, bodies, timeouts, connections, queues, and configuration size are validated and bounded.
+- A certificate version uuid may only be a single ordinary path component. It names the directory the version's key material is written to, and it arrives from a storage column that carries no shape constraint, so an absolute path, a separator, or a dot segment is refused before any directory, lock, or file is created. The data plane resolves the same `file:<uuid>` reference under the same rule, so the producer and the consumer agree on which references are usable.
 - Request data-plane telemetry is redacted and low-cardinality.
 - No lock may be held across asynchronous external I/O.
 

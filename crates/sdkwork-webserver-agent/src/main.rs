@@ -1,5 +1,7 @@
 //! SDKWork Web Node Daemon control-plane synchronization runtime.
 
+#[path = "served_certificates.rs"]
+mod served_certificates;
 #[path = "state.rs"]
 mod state;
 
@@ -21,8 +23,12 @@ use sdkwork_webserver_contract::{
 use sdkwork_webserver_edge_runtime::{
     CertificateBundleMaterial, EdgeRuntime, NginxSiteConfigMaterial, PendingEdgeDeployment,
 };
+use served_certificates::{
+    read_served_certificate_report, reconcile_served_certificate_observations,
+    ServedCertificateAuthority, ServedCertificateReportError,
+};
 use state::{resolve_state_path, NodeDaemonLock, NodeDaemonState};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 const NODE_DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEFAULT_SYNC_INTERVAL_SECS: u64 = 30;
@@ -99,12 +105,14 @@ pub async fn run() -> anyhow::Result<()> {
         .init();
 
     let edge = EdgeRuntime::from_env()?;
+    let served_certificates = ServedCertificateAuthority::from_env();
     let runtime = NodeDaemonRuntimeConfig::from_env()?;
     let state_path = resolve_state_path()?;
     let _node_daemon_lock = NodeDaemonLock::acquire(&state_path)?;
     let mut local_state = NodeDaemonState::load(&state_path)?;
     let clients = NodeDaemonSdkClients::new(&runtime)?;
 
+    served_certificates.log_selection();
     info!(
         interval_secs = runtime.interval_secs,
         nginx_enabled = edge.config().nginx_enabled,
@@ -124,7 +132,9 @@ pub async fn run() -> anyhow::Result<()> {
 
     let mut consecutive_failures: u32 = 0;
     loop {
-        if let Err(error) = sync_once(&edge, &clients, &state_path, &mut local_state).await {
+        if let Err(error) =
+            sync_once(&edge, &clients, &state_path, &mut local_state, &served_certificates).await
+        {
             warn!(error = %error, "node sync cycle failed");
             consecutive_failures = consecutive_failures.saturating_add(1);
         } else {
@@ -166,6 +176,7 @@ async fn sync_once(
     clients: &NodeDaemonSdkClients,
     state_path: &std::path::Path,
     local_state: &mut NodeDaemonState,
+    authority: &ServedCertificateAuthority,
 ) -> anyhow::Result<()> {
     let heartbeat_ack = report_heartbeat(edge, clients, local_state).await?;
 
@@ -187,6 +198,17 @@ async fn sync_once(
                 "control plane reported unchanged for a version the Web Node Daemon has not observed"
             );
         }
+        // The data plane adopts a rotation on its own schedule, so SERVED is
+        // reconciled on every cycle rather than only when the manifest changes.
+        reconcile_served_certificates(
+            edge,
+            clients,
+            state_path,
+            local_state,
+            &manifest,
+            authority,
+        )
+        .await?;
         info!(
             server_id = %manifest.server_id,
             sync_version = %manifest.sync_version,
@@ -291,39 +313,16 @@ async fn sync_once(
             return Err(rollback_deployment(edge, deployment, true, error).await);
         }
 
-        for certificate in &manifest.certificates {
-            for hostname in &certificate.hostnames {
-                if let Err(error) = edge
-                    .verify_served_certificate_async(hostname, &certificate.fingerprint)
-                    .await
-                {
-                    let failure = record_deployment_failure(
-                        state_path,
-                        local_state,
-                        &manifest,
-                        "TLS_SNI_PROBE_FAILED",
-                        edge,
-                        clients,
-                    )
-                    .await;
-                    let error = append_error(
-                        anyhow::anyhow!(
-                            "verify served certificate {} for {hostname}: {error}",
-                            certificate.certificate_id
-                        ),
-                        "persist deployment failure",
-                        failure,
-                    );
-                    return Err(rollback_deployment(edge, deployment, true, error).await);
-                }
-            }
-        }
-
-        if let Err(error) = persist_certificate_observations(
+        if let Err(error) = reconcile_served_certificates(
+            edge,
+            clients,
             state_path,
             local_state,
-            certificate_observations(&manifest, "SERVED", None),
-        ) {
+            &manifest,
+            authority,
+        )
+        .await
+        {
             return Err(rollback_deployment(edge, deployment, true, error).await);
         }
     }
@@ -416,6 +415,104 @@ fn certificate_observations(
             failure_code: failure_code.map(str::to_string),
         })
         .collect()
+}
+
+/// Establishes what the listener serves for this generation, using the
+/// authority this node is configured with.
+///
+/// The report authority records an observation only once the data plane has
+/// published a report newer than this node's own deployment step, so a
+/// rotation that is still propagating is never mistaken for a failure. The
+/// probe authority confirms it directly, which is exact for a listener that
+/// serves assigned certificates alone.
+async fn reconcile_served_certificates(
+    edge: &EdgeRuntime,
+    clients: &NodeDaemonSdkClients,
+    state_path: &std::path::Path,
+    local_state: &mut NodeDaemonState,
+    manifest: &AgentSyncResponse,
+    authority: &ServedCertificateAuthority,
+) -> anyhow::Result<()> {
+    let Some(report_path) = authority.report_path() else {
+        return probe_served_certificates(edge, clients, state_path, local_state, manifest)
+            .await;
+    };
+    let report = match read_served_certificate_report(report_path) {
+        Ok(report) => report,
+        Err(ServedCertificateReportError::Absent) => {
+            debug!(
+                served_certificate_report = %report_path.display(),
+                "the data plane has not published a served certificate report yet"
+            );
+            return Ok(());
+        }
+        Err(ServedCertificateReportError::Invalid(reason)) => {
+            warn!(
+                served_certificate_report = %report_path.display(),
+                reason = %reason,
+                "the served certificate report was rejected; the certificates it describes stay unconfirmed"
+            );
+            return Ok(());
+        }
+    };
+    let Some(observations) = reconcile_served_certificate_observations(
+        manifest,
+        &report,
+        local_state.certificate_observations(),
+        &Utc::now().to_rfc3339(),
+    ) else {
+        return Ok(());
+    };
+    persist_certificate_observations(state_path, local_state, observations)?;
+    report_heartbeat(edge, clients, local_state).await?;
+    Ok(())
+}
+
+/// Confirms every assigned certificate by probing the local listener.
+///
+/// The fallback authority, used by deployments that configure no TLS
+/// runtime. It asserts one fingerprint per hostname, so it cannot express a
+/// name the operator's configured files legitimately won.
+async fn probe_served_certificates(
+    edge: &EdgeRuntime,
+    clients: &NodeDaemonSdkClients,
+    state_path: &std::path::Path,
+    local_state: &mut NodeDaemonState,
+    manifest: &AgentSyncResponse,
+) -> anyhow::Result<()> {
+    for certificate in &manifest.certificates {
+        for hostname in &certificate.hostnames {
+            if let Err(error) = edge
+                .verify_served_certificate_async(hostname, &certificate.fingerprint)
+                .await
+            {
+                let failure = record_deployment_failure(
+                    state_path,
+                    local_state,
+                    manifest,
+                    "TLS_SNI_PROBE_FAILED",
+                    edge,
+                    clients,
+                )
+                .await;
+                return Err(append_error(
+                    anyhow::anyhow!(
+                        "verify served certificate {} for {hostname}: {error}",
+                        certificate.certificate_id
+                    ),
+                    "persist deployment failure",
+                    failure,
+                ));
+            }
+        }
+    }
+    persist_certificate_observations(
+        state_path,
+        local_state,
+        certificate_observations(manifest, "SERVED", None),
+    )?;
+    report_heartbeat(edge, clients, local_state).await?;
+    Ok(())
 }
 
 fn deployment_materials(

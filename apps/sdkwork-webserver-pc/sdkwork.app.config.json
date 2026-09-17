@@ -31,6 +31,11 @@
     "accessTokenPermissionScope": [
       "web.applications.read",
       "web.applications.write",
+      "deploy.apps.read",
+      "deploy.apps.write",
+      "deploy.domainZones.read",
+      "deploy.certificates.read",
+      "web.plugins.read",
       "web.certificates.read",
       "web.certificates.write",
       "web.nginx.write",

@@ -140,20 +140,28 @@
         "export": "sdkwork_api_webserver_assembly::assemble_api_router"
       },
       {
-        "name": "iamAppApiContribution",
-        "export": "sdkwork_api_iam_assembly::assemble_app_api_contribution_with_module_manifests"
+        "name": "iamOwnerApiSurfaceSet",
+        "export": "sdkwork_api_iam_assembly::assemble_owner_api_surfaces_with_pool_and_module_manifests"
       },
       {
         "name": "iamDatabaseLifecycle",
         "export": "sdkwork_api_iam_assembly::bootstrap_database_with_pool"
       },
       {
-        "name": "driveAppApiContribution",
-        "export": "sdkwork_api_drive_assembly::assemble_app_api_contribution"
+        "name": "driveSameOriginContribution",
+        "export": "sdkwork_api_drive_assembly::assemble_same_origin_contribution_with_pool"
       },
       {
-        "name": "driveAdminStorageContribution",
-        "export": "sdkwork_api_drive_assembly::assemble_backend_admin_storage_contribution_with_pool"
+        "name": "skillsSameOriginModule",
+        "export": "sdkwork_api_skills_assembly::web_module_with_pool"
+      },
+      {
+        "name": "mcpSameOriginModule",
+        "export": "sdkwork_api_mcp_assembly::web_module_with_pool"
+      },
+      {
+        "name": "deploymentsSameOriginContribution",
+        "export": "sdkwork_api_deployments_assembly::assemble_same_origin_contribution_with_pool"
       },
       {
         "name": "webserverHttpHost",
@@ -281,9 +289,22 @@
         "runtimeMode": "same-origin",
         "sameOriginAllowed": true,
         "cargoDependency": "sdkwork-api-iam-assembly",
-        "embeddedExecutableExport": "sdkwork_api_iam_assembly::assemble_app_api_contribution_with_module_manifests",
+        "embeddedExecutableExport": "sdkwork_api_iam_assembly::assemble_owner_api_surfaces_with_pool_and_module_manifests",
         "profileCoverage": ["standalone"],
-        "coverageEvidence": ["src/profile.rs"]
+        "coverageEvidence": ["src/dependency_assembly.rs", "src/profile.rs"]
+      },
+      {
+        "workspace": "sdkwork-iam",
+        "sdkFamily": "sdkwork-iam-backend-sdk",
+        "apiAuthority": "sdkwork-iam-backend-api",
+        "surface": "backend-api",
+        "apiPrefix": "/backend/v3/api",
+        "runtimeMode": "same-origin",
+        "sameOriginAllowed": true,
+        "cargoDependency": "sdkwork-api-iam-assembly",
+        "embeddedExecutableExport": "sdkwork_api_iam_assembly::assemble_owner_api_surfaces_with_pool_and_module_manifests",
+        "profileCoverage": ["standalone"],
+        "coverageEvidence": ["src/dependency_assembly.rs", "src/profile.rs"]
       },
       {
         "workspace": "sdkwork-drive",
@@ -294,9 +315,9 @@
         "runtimeMode": "same-origin",
         "sameOriginAllowed": true,
         "cargoDependency": "sdkwork-api-drive-assembly",
-        "embeddedExecutableExport": "sdkwork_api_drive_assembly::assemble_app_api_contribution",
+        "embeddedExecutableExport": "sdkwork_api_drive_assembly::assemble_same_origin_contribution_with_pool",
         "profileCoverage": ["standalone"],
-        "coverageEvidence": ["src/profile.rs"]
+        "coverageEvidence": ["src/dependency_assembly.rs", "src/profile.rs"]
       },
       {
         "workspace": "sdkwork-drive",
@@ -307,7 +328,72 @@
         "runtimeMode": "same-origin",
         "sameOriginAllowed": true,
         "cargoDependency": "sdkwork-api-drive-assembly",
-        "embeddedExecutableExport": "sdkwork_api_drive_assembly::assemble_backend_admin_storage_contribution_with_pool",
+        "embeddedExecutableExport": "sdkwork_api_drive_assembly::assemble_same_origin_contribution_with_pool",
+        "profileCoverage": ["standalone"],
+        "coverageEvidence": ["src/dependency_assembly.rs", "src/profile.rs"]
+      },
+      {
+        "workspace": "sdkwork-skills",
+        "sdkFamily": "sdkwork-skills-app-sdk",
+        "apiAuthority": "sdkwork-skills-app-api",
+        "surface": "app-api",
+        "apiPrefix": "/app/v3/api",
+        "runtimeMode": "same-origin",
+        "sameOriginAllowed": true,
+        "cargoDependency": "sdkwork-api-skills-assembly",
+        "embeddedExecutableExport": "sdkwork_api_skills_assembly::web_module_with_pool",
+        "profileCoverage": ["standalone"],
+        "coverageEvidence": ["src/dependency_assembly.rs", "src/profile.rs"]
+      },
+      {
+        "workspace": "sdkwork-skills",
+        "sdkFamily": "sdkwork-skills-backend-sdk",
+        "apiAuthority": "sdkwork-skills-backend-api",
+        "surface": "backend-api",
+        "apiPrefix": "/backend/v3/api",
+        "runtimeMode": "same-origin",
+        "sameOriginAllowed": true,
+        "cargoDependency": "sdkwork-api-skills-assembly",
+        "embeddedExecutableExport": "sdkwork_api_skills_assembly::web_module_with_pool",
+        "profileCoverage": ["standalone"],
+        "coverageEvidence": ["src/dependency_assembly.rs", "src/profile.rs"]
+      },
+      {
+        "workspace": "sdkwork-mcp",
+        "sdkFamily": "sdkwork-mcp-app-sdk",
+        "apiAuthority": "sdkwork-mcp.app",
+        "surface": "app-api",
+        "apiPrefix": "/app/v3/api",
+        "runtimeMode": "same-origin",
+        "sameOriginAllowed": true,
+        "cargoDependency": "sdkwork-api-mcp-assembly",
+        "embeddedExecutableExport": "sdkwork_api_mcp_assembly::web_module_with_pool",
+        "profileCoverage": ["standalone"],
+        "coverageEvidence": ["src/dependency_assembly.rs", "src/profile.rs"]
+      },
+      {
+        "workspace": "sdkwork-mcp",
+        "sdkFamily": "sdkwork-mcp-backend-sdk",
+        "apiAuthority": "sdkwork-mcp.backend",
+        "surface": "backend-api",
+        "apiPrefix": "/backend/v3/api",
+        "runtimeMode": "same-origin",
+        "sameOriginAllowed": true,
+        "cargoDependency": "sdkwork-api-mcp-assembly",
+        "embeddedExecutableExport": "sdkwork_api_mcp_assembly::web_module_with_pool",
+        "profileCoverage": ["standalone"],
+        "coverageEvidence": ["src/dependency_assembly.rs", "src/profile.rs"]
+      },
+      {
+        "workspace": "sdkwork-deployments",
+        "sdkFamily": "sdkwork-deployments-app-sdk",
+        "apiAuthority": "sdkwork-deployments-app-api",
+        "surface": "app-api",
+        "apiPrefix": "/app/v3/api",
+        "runtimeMode": "same-origin",
+        "sameOriginAllowed": true,
+        "cargoDependency": "sdkwork-api-deployments-assembly",
+        "embeddedExecutableExport": "sdkwork_api_deployments_assembly::assemble_same_origin_contribution_with_pool",
         "profileCoverage": ["standalone"],
         "coverageEvidence": ["src/dependency_assembly.rs", "src/profile.rs"]
       },

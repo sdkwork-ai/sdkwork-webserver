@@ -1,0 +1,29 @@
+{
+  "environment": "test",
+  "bundleName": "com.sdkwork.webserver.mobile",
+  "vendor": "SDKWork",
+  "deviceTypes": [
+    "phone",
+    "tablet"
+  ],
+  "permissions": [
+    "ohos.permission.INTERNET",
+    "ohos.permission.GET_NETWORK_INFO"
+  ],
+  "signingReference": "<deveco-signing-profile-name>",
+  "distribution": {
+    "appGallery": {
+      "appIdPlaceholder": "<appgallery-app-id>"
+    },
+    "privateDistribution": {
+      "channelPlaceholder": "<private-distribution-channel>"
+    }
+  },
+  "wants": [
+    {
+      "scheme": "sdkwork-webserver",
+      "host": "app",
+      "pathPrefix": "/app/webserver"
+    }
+  ]
+}

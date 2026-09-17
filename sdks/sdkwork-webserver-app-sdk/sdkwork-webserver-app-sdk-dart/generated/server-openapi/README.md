@@ -67,7 +67,7 @@ final params = <String, dynamic>{
   'status': 0,
   'application_type': 'WEB',
   'site_type': 1,
-  'keyword': 'keyword',
+  'q': 'q',
 };
 final result = await client.application.applicationsList(params);
 print(result);
