@@ -10,6 +10,7 @@ import { createTokenManager } from "@sdkwork/sdk-common";
 import type { WebserverConsoleSdkClients } from "@sdkwork/webserver-pc-console-core";
 import { loadWebserverPcRuntimeConfig, resolveWebserverLocale } from "@sdkwork/webserver-pc-core";
 import { createWebserverAuthRuntimeConfigLoader } from "../auth/authRuntimeConfig.ts";
+import { dedupeAuthControllerBootstrap } from "./authBootstrapDedupe.ts";
 
 const WEBSERVER_PC_APP_ID = "sdkwork-webserver-pc";
 
@@ -62,7 +63,9 @@ export async function bootstrapWebserverPcRuntime() {
     );
   }
   const getAuthRuntime = () => auth.getRuntime() as unknown as SdkworkIamRuntimeAuthRuntimeLike;
-  const authController = createSdkworkIamRuntimeAuthController({ getRuntime: getAuthRuntime });
+  const authController = dedupeAuthControllerBootstrap(
+    createSdkworkIamRuntimeAuthController({ getRuntime: getAuthRuntime }),
+  );
   const loadAuthRuntimeConfig = createWebserverAuthRuntimeConfigLoader(auth.appbaseApp, tokenManager);
   return {
     attachSdkClientBoundaries,
