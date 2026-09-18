@@ -853,6 +853,15 @@ const permissionHints = [...routeSource.matchAll(/permissionHint:\s*'([^']+)'/gu
 const navigationPermissions = [...routeSource.matchAll(/\bpermission:\s*'([^']+)'/gu)].map((m) => m[1]);
 
 assert.ok(routeIds.length > 0, "the applications capability must contribute a route");
+// Every other field is pinned to `routeIds.length`, so two identical entries
+// would keep all of those equalities intact and pass. Uniqueness is the one
+// property the column-count checks cannot express, and a duplicated route id
+// would let one screen silently shadow another.
+assert.equal(
+  new Set(routeIds).size,
+  routeIds.length,
+  "route ids must be unique across the contribution",
+);
 assert.equal(routeDomains.length, routeIds.length);
 assert.equal(routeCapabilities.length, routeIds.length);
 assert.equal(routeScreens.length, routeIds.length);
@@ -889,9 +898,10 @@ assert.deepEqual(
 );
 
 // Cross-root parity. The mini program root is the anchor the HarmonyOS root is
-// already pinned to; PC and H5 are read opportunistically and reported, because
-// a missing declaration in someone else's root is a finding, not this root's
-// failure to build.
+// already pinned to; H5 is pinned here too, now that its registry composes the
+// same four-segment id. PC is not included: the PC renderer does not declare an
+// applications route at all, it bridges the deployments console package, so PC
+// has no declaration to compare against on this capability.
 const miniProgramRoutesPath = path.join(
   repoRoot,
   "apps",
@@ -915,6 +925,60 @@ for (const route of routes) {
   assert.ok(
     miniProgramRoutes.includes(`"${route.permissionHint}"`),
     `route ${route.id} permission hint must match the mini program root's hint`,
+  );
+}
+
+/**
+ * The H5 registry composes its id from four exported constants rather than
+ * spelling the id out, so a literal substring search would prove nothing about
+ * it. Rebuilding the id from the same constants H5 exports is what actually
+ * pins the two roots together: a drift in any single segment fails here.
+ */
+const h5RouteRegistryPath = path.join(
+  repoRoot,
+  "apps",
+  "sdkwork-webserver-h5",
+  "packages",
+  "sdkwork-webserver-h5-shell",
+  "src",
+  "navigation",
+  "routeRegistry.ts",
+);
+assert.ok(
+  fs.existsSync(h5RouteRegistryPath),
+  "the H5 route registry must exist to anchor cross-root parity",
+);
+const h5RouteRegistry = fs.readFileSync(h5RouteRegistryPath, "utf8");
+const h5Constant = (name) => {
+  const match = h5RouteRegistry.match(
+    new RegExp(`export const ${name}\\s*=\\s*"([^"]+)"`, "u"),
+  );
+  assert.ok(match, `the H5 registry must export ${name} as a string literal`);
+  return match[1];
+};
+const h5RouteId = [
+  h5Constant("WEBSERVER_H5_ROUTE_SURFACE"),
+  h5Constant("WEBSERVER_H5_ROUTE_DOMAIN"),
+  h5Constant("APPLICATIONS_ROUTE"),
+  h5Constant("APPLICATIONS_SCREEN"),
+].join(".");
+const h5PermissionHints = [
+  ...h5RouteRegistry.matchAll(/permissionHint:\s*"([^"]+)"/gu),
+].map((match) => match[1]);
+assert.ok(
+  h5PermissionHints.length > 0,
+  "the H5 registry must gate its entry on a permission hint",
+);
+
+for (const route of routes) {
+  assert.equal(
+    h5RouteId,
+    route.id,
+    "the H5 root and this root must agree on the canonical route id",
+  );
+  assert.ok(
+    h5PermissionHints.includes(route.permissionHint),
+    `the H5 root must gate route ${route.id} on ${route.permissionHint}`,
   );
 }
 

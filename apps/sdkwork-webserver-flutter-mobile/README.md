@@ -180,6 +180,30 @@ Two consequences worth stating plainly, because both are silent:
   package to reason about, which is why the contract test asserts the same rule
   over `.dart` sources.
 
+### Cross-root parity
+
+Route identity is the one thing the client roots must agree on, and
+`APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` §7 makes that agreement normative
+("aligned by route identity, **not by identical physical paths**"). §10 asserts
+it in every direction the tree allows:
+
+- **Against the mini program root** — the anchor this root was already pinned to:
+  each id and permission hint must also appear in
+  `apps/sdkwork-webserver-mini-program/.../routes/routeContributions.ts`.
+- **Against the H5 root** — the H5 registry composes its id from four exported
+  constants instead of spelling it out, so a substring search would prove
+  nothing. §10 rebuilds the id from the same constants
+  (`WEBSERVER_H5_ROUTE_SURFACE`, `WEBSERVER_H5_ROUTE_DOMAIN`,
+  `APPLICATIONS_ROUTE`, `APPLICATIONS_SCREEN`) and compares, so a drift in any
+  single segment fails the gate.
+- **Route ids must be unique.** Every other field is pinned to `routeIds.length`,
+  so a duplicated entry kept all of those equalities intact and passed; uniqueness
+  is the one property column counts cannot express.
+
+PC is deliberately not compared: the PC renderer declares no applications route —
+it bridges the deployments console package — so there is no declaration on this
+capability to compare against.
+
 From the repository root, `pnpm check:client-native-roots` runs this contract
 test alongside the HarmonyOS one, and `pnpm run _sdkwork:check` includes it.
 

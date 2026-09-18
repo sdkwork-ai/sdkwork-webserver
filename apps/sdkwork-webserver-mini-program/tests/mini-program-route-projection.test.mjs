@@ -78,3 +78,61 @@ test("route metadata declares no transport detail", () => {
   assert.doesNotMatch(source, /\/app\/v3\/api/u, "route metadata must not declare an API path");
   assert.doesNotMatch(source, /\bclient\./u, "route metadata must not declare an SDK method");
 });
+
+/**
+ * H5 parity.
+ *
+ * The H5 registry composes its id from four exported constants instead of
+ * spelling the id out, so a literal substring search would prove nothing about
+ * it; the id is rebuilt from the same constants H5 exports, which means a drift
+ * in any one segment fails this test. PC is not compared: the PC renderer does
+ * not declare an applications route, it bridges the deployments console package.
+ */
+test("the H5 root agrees on the canonical route id and permission hint", async () => {
+  const projection = await projectWebserverMiniProgramRoutes(APP_ROOT);
+  const repoRoot = path.resolve(APP_ROOT, "..", "..");
+  const h5RouteRegistryPath = path.join(
+    repoRoot,
+    "apps/sdkwork-webserver-h5/packages/sdkwork-webserver-h5-shell",
+    "src/navigation/routeRegistry.ts",
+  );
+  assert.ok(
+    fs.existsSync(h5RouteRegistryPath),
+    "the H5 route registry must exist to anchor cross-root parity",
+  );
+  const h5RouteRegistry = fs.readFileSync(h5RouteRegistryPath, "utf8");
+  const h5Constant = (name) => {
+    const match = h5RouteRegistry.match(
+      new RegExp(`export const ${name}\\s*=\\s*"([^"]+)"`, "u"),
+    );
+    assert.ok(match, `the H5 registry must export ${name} as a string literal`);
+    return match[1];
+  };
+  const h5RouteId = [
+    h5Constant("WEBSERVER_H5_ROUTE_SURFACE"),
+    h5Constant("WEBSERVER_H5_ROUTE_DOMAIN"),
+    h5Constant("APPLICATIONS_ROUTE"),
+    h5Constant("APPLICATIONS_SCREEN"),
+  ].join(".");
+  const h5PermissionHints = [
+    ...h5RouteRegistry.matchAll(/permissionHint:\s*"([^"]+)"/gu),
+  ].map((match) => match[1]);
+  assert.ok(
+    h5PermissionHints.length > 0,
+    "the H5 registry must gate its entry on a permission hint",
+  );
+
+  for (const routeId of projection.routeIds) {
+    assert.equal(
+      h5RouteId,
+      routeId,
+      "the H5 root and the mini program root must agree on the canonical route id",
+    );
+  }
+  for (const entry of projection.navigation) {
+    assert.ok(
+      h5PermissionHints.includes(entry.permission),
+      `the H5 root must gate ${entry.id} on ${entry.permission}`,
+    );
+  }
+});

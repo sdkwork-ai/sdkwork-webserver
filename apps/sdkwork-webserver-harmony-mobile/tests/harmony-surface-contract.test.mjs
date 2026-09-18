@@ -506,6 +506,69 @@ for (const route of routes) {
 }
 
 /**
+ * H5 parity. The H5 registry composes its id from four exported constants
+ * instead of spelling the id out, so a literal substring search would prove
+ * nothing about it; the id is rebuilt from the same constants H5 exports so a
+ * drift in any one segment fails here. PC is not compared: the PC renderer does
+ * not declare an applications route, it bridges the deployments console package.
+ */
+const h5RouteRegistryPath = path.join(
+  repoRoot,
+  "apps",
+  "sdkwork-webserver-h5",
+  "packages",
+  "sdkwork-webserver-h5-shell",
+  "src",
+  "navigation",
+  "routeRegistry.ts",
+);
+assert.ok(
+  fs.existsSync(h5RouteRegistryPath),
+  "the H5 route registry must exist to anchor cross-root parity",
+);
+const h5RouteRegistry = fs.readFileSync(h5RouteRegistryPath, "utf8");
+const h5Constant = (name) => {
+  const match = h5RouteRegistry.match(
+    new RegExp(`export const ${name}\\s*=\\s*"([^"]+)"`, "u"),
+  );
+  assert.ok(match, `the H5 registry must export ${name} as a string literal`);
+  return match[1];
+};
+const h5RouteId = [
+  h5Constant("WEBSERVER_H5_ROUTE_SURFACE"),
+  h5Constant("WEBSERVER_H5_ROUTE_DOMAIN"),
+  h5Constant("APPLICATIONS_ROUTE"),
+  h5Constant("APPLICATIONS_SCREEN"),
+].join(".");
+const h5PermissionHints = [
+  ...h5RouteRegistry.matchAll(/permissionHint:\s*"([^"]+)"/gu),
+].map((match) => match[1]);
+assert.ok(
+  h5PermissionHints.length > 0,
+  "the H5 registry must gate its entry on a permission hint",
+);
+
+for (const route of routes) {
+  assert.equal(
+    h5RouteId,
+    route.id,
+    "the H5 root and this root must agree on the canonical route id",
+  );
+  assert.ok(
+    h5PermissionHints.includes(route.permissionHint),
+    `the H5 root must gate route ${route.id} on ${route.permissionHint}`,
+  );
+}
+
+// Two identical entries would keep every per-field check above intact, so
+// uniqueness is the one property those checks cannot express.
+assert.equal(
+  new Set(routes.map((entry) => entry.id)).size,
+  routes.length,
+  "route ids must be unique across the contribution",
+);
+
+/**
  * The screens gate on `deploy.apps.read`, so the code must be a real authority
  * code. `API_SPEC.md` derives a permission from the operationId
  * (`[resource, action] = operationId.split(".")`, `list|retrieve` => read), while
