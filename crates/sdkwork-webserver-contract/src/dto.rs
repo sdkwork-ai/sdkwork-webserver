@@ -148,7 +148,7 @@ impl AppKind {
         }
     }
 
-    /// Derived internal site carrier type (web_site.site_type 1..=6).
+    /// Derived internal site carrier type (webserver_site.site_type 1..=6).
     pub fn carrier_site_type(self) -> i32 {
         match self {
             AppKind::StaticWeb => 1,
@@ -157,7 +157,7 @@ impl AppKind {
         }
     }
 
-    /// Derived internal carrier application type (web_site.application_type).
+    /// Derived internal carrier application type (webserver_site.application_type).
     pub fn carrier_application_type(self) -> &'static str {
         match self {
             AppKind::ApiService => "API",
@@ -324,7 +324,7 @@ pub struct ApplicationResponse {
     /// Whether the application already owns a source version.
     ///
     /// Filled by the application list/retrieve projections in the same
-    /// statement (`EXISTS` over `web_source_version`) so callers never have to
+    /// statement (`EXISTS` over `webserver_source_version`) so callers never have to
     /// probe `applications/{applicationId}/source_versions` row by row.
     #[serde(rename = "hasSourceVersion")]
     pub has_source_version: bool,

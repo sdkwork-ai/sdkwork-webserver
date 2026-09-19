@@ -17,11 +17,14 @@ const WEBSERVER_ADMIN_PERMISSIONS = [
   // storage operator must be able to open the backend-admin surface at all —
   // otherwise the module is permanently filtered out of their menu.
   "drive.storage.admin",
+  // The cluster plane is a platform-operations capability of this edge: a
+  // cluster operator must be able to open the backend-admin surface, or the
+  // module is permanently filtered out of their menu.
+  "web.cluster.read",
+  "web.cluster.write",
 ] as const;
 
 const WEBSERVER_SUPER_ADMIN_PERMISSIONS = [
-  "web.applications.read",
-  "web.applications.write",
   "web.certificates.read",
   "web.certificates.write",
   "web.nginx.write",

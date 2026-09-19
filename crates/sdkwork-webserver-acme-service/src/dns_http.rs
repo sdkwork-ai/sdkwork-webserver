@@ -29,8 +29,7 @@ pub(crate) const DEFAULT_DNS_REQUEST_TIMEOUT: Duration = Duration::from_secs(15)
 
 pub(crate) const USER_AGENT_VALUE: &str = "sdkwork-webserver-acme-service/0.1";
 
-type DnsHyperClient =
-    Client<hyper_rustls::HttpsConnector<HttpConnector>, Full<Bytes>>;
+type DnsHyperClient = Client<hyper_rustls::HttpsConnector<HttpConnector>, Full<Bytes>>;
 
 /// A completed DNS API response with its body already bounded.
 pub(crate) struct DnsApiResponse {
@@ -47,7 +46,10 @@ impl DnsApiResponse {
     ///
     /// DNS API error bodies routinely quote the token or the record value back,
     /// so only the byte length is reported when parsing fails.
-    pub(crate) fn json<T: DeserializeOwned>(&self, provider: DnsProviderKind) -> AcmeServiceResult<T> {
+    pub(crate) fn json<T: DeserializeOwned>(
+        &self,
+        provider: DnsProviderKind,
+    ) -> AcmeServiceResult<T> {
         serde_json::from_slice(&self.body).map_err(|error| {
             AcmeServiceError::provider(format!(
                 "{provider} returned a body of {} bytes that is not the expected JSON: {error}",
@@ -144,7 +146,10 @@ impl DnsApiClient {
     }
 
     /// Sends a request and returns a bounded response.
-    pub(crate) async fn send(&self, request: Request<Full<Bytes>>) -> AcmeServiceResult<DnsApiResponse> {
+    pub(crate) async fn send(
+        &self,
+        request: Request<Full<Bytes>>,
+    ) -> AcmeServiceResult<DnsApiResponse> {
         let response = tokio::time::timeout(self.timeout, self.client.request(request))
             .await
             .map_err(|_| {
@@ -153,7 +158,9 @@ impl DnsApiClient {
                     self.timeout.as_millis()
                 ))
             })?
-            .map_err(|error| AcmeServiceError::provider(format!("DNS provider request: {error}")))?;
+            .map_err(|error| {
+                AcmeServiceError::provider(format!("DNS provider request: {error}"))
+            })?;
         bounded_response(response).await
     }
 }
@@ -197,7 +204,13 @@ pub(crate) fn form_request(
 ) -> AcmeServiceResult<Request<Full<Bytes>>> {
     let encoded = fields
         .iter()
-        .map(|(key, value)| format!("{}={}", encode_form_component(key), encode_form_component(value)))
+        .map(|(key, value)| {
+            format!(
+                "{}={}",
+                encode_form_component(key),
+                encode_form_component(value)
+            )
+        })
         .collect::<Vec<_>>()
         .join("&");
     Request::builder()
@@ -226,7 +239,9 @@ async fn bounded_response(response: Response<Incoming>) -> AcmeServiceResult<Dns
         .into_body()
         .collect()
         .await
-        .map_err(|error| AcmeServiceError::provider(format!("read DNS provider response: {error}")))?
+        .map_err(|error| {
+            AcmeServiceError::provider(format!("read DNS provider response: {error}"))
+        })?
         .to_bytes();
     if body.len() > MAX_DNS_RESPONSE_BODY_BYTES {
         return Err(AcmeServiceError::provider(format!(
@@ -275,7 +290,9 @@ mod tests {
             status: StatusCode::UNAUTHORIZED,
             body: Bytes::from(vec![b'a'; 4_096]),
         };
-        let message = response.ensure_success(DnsProviderKind::Dnspod).expect_err("must fail");
+        let message = response
+            .ensure_success(DnsProviderKind::Dnspod)
+            .expect_err("must fail");
         let text = message.to_string();
         assert!(text.contains("HTTP 401"));
         // 512-byte excerpt plus the surrounding sentence, never the full body.

@@ -22,18 +22,18 @@ use super::support::{
 /// application on the page and previously issued one
 /// `applications/{applicationId}/source_versions` request per row (N+1).
 /// The predicate mirrors that endpoint's filter exactly — any row in
-/// `web_source_version` for the backing site counts.
+/// `webserver_source_version` for the backing site counts.
 const APPLICATION_SELECT: &str = "SELECT a.uuid AS application_id, a.name AS name, a.slug AS slug,
                     a.description AS description, a.application_kind AS app_kind,
                     s.uuid AS site_id, s.application_type, s.site_type, s.status,
-                    EXISTS (SELECT 1 FROM web_source_version v
+                    EXISTS (SELECT 1 FROM webserver_source_version v
                             WHERE v.tenant_id = a.tenant_id AND v.site_id = a.site_id) AS has_source_version,
                     CAST(s.runtime_config AS TEXT) AS runtime_config,
                     CAST(s.metadata AS TEXT) AS metadata,
                     CAST(a.created_at AS TEXT) AS created_at,
                     CAST(a.updated_at AS TEXT) AS updated_at
-             FROM web_application a
-             JOIN web_site s ON s.id = a.site_id AND s.tenant_id = a.tenant_id";
+             FROM webserver_application a
+             JOIN webserver_site s ON s.id = a.site_id AND s.tenant_id = a.tenant_id";
 
 impl WebRepository {
     pub(super) async fn list_applications_repo(
@@ -49,8 +49,8 @@ impl WebRepository {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(|value| format!("%{value}%"));
-        let count_sql = "SELECT COUNT(*) AS total FROM web_application a
-             JOIN web_site s ON s.id = a.site_id AND s.tenant_id = a.tenant_id
+        let count_sql = "SELECT COUNT(*) AS total FROM webserver_application a
+             JOIN webserver_site s ON s.id = a.site_id AND s.tenant_id = a.tenant_id
              WHERE a.tenant_id = $1 AND a.deleted_at IS NULL AND s.deleted_at IS NULL
                AND ($2 IS NULL OR s.status = $2)
                AND ($3 IS NULL OR s.application_type = $3)
@@ -88,20 +88,20 @@ impl WebRepository {
         let count_row = count_query
             .fetch_one(&self.pool)
             .await
-            .map_err(|error| store_error("count web_application", error))?;
+            .map_err(|error| store_error("count webserver_application", error))?;
         let total: i64 = count_row
             .try_get("total")
-            .map_err(|error| store_error("map web_application count", error))?;
+            .map_err(|error| store_error("map webserver_application count", error))?;
 
         let rows = list_query
             .fetch_all(&self.pool)
             .await
-            .map_err(|error| store_error("list web_application", error))?;
+            .map_err(|error| store_error("list webserver_application", error))?;
 
         let mut items = Vec::with_capacity(rows.len());
         for row in &rows {
             items.push(map_application_row(row).map_err(|error| {
-                WebServiceError::Internal(format!("map web_application row: {error}"))
+                WebServiceError::Internal(format!("map webserver_application row: {error}"))
             })?);
         }
 
@@ -114,7 +114,7 @@ impl WebRepository {
     }
 
     /// Creates the application resource together with its backing site
-    /// carrier row in one transaction, then links `web_application.site_id`.
+    /// carrier row in one transaction, then links `webserver_application.site_id`.
     pub(super) async fn create_application_repo(
         &self,
         tenant_id: i64,
@@ -160,7 +160,7 @@ impl WebRepository {
         let metadata_expression = json_write_expression("$13");
         let now_expression = instant_write_expression("$14");
         let insert_site_sql = format!(
-            "INSERT INTO web_site (
+            "INSERT INTO webserver_site (
                 id, uuid, tenant_id, organization_id, data_scope, user_id, name, slug, description,
                 application_type, site_type, status, runtime_config, metadata, created_at, updated_at, version
              ) VALUES (
@@ -173,7 +173,7 @@ impl WebRepository {
             .pool
             .begin()
             .await
-            .map_err(|error| store_error("begin create web_application transaction", error))?;
+            .map_err(|error| store_error("begin create webserver_application transaction", error))?;
 
         sqlx::query(audited_sql(&insert_site_sql))
             .bind(site_id)
@@ -192,11 +192,11 @@ impl WebRepository {
             .bind(&now)
             .execute(&mut *tx)
             .await
-            .map_err(|error| store_error("insert web_site for application", error))?;
+            .map_err(|error| store_error("insert webserver_site for application", error))?;
 
         let application_now_expression = instant_write_expression("$12");
         sqlx::query(audited_sql(&format!(
-            "INSERT INTO web_application (
+            "INSERT INTO webserver_application (
                 id, uuid, tenant_id, organization_id, data_scope, user_id, name, slug, description,
                 application_kind, status, site_id, default_environment, created_at, updated_at, version
              ) VALUES (
@@ -218,11 +218,11 @@ impl WebRepository {
         .bind(&now)
         .execute(&mut *tx)
         .await
-        .map_err(|error| store_error("insert web_application", error))?;
+        .map_err(|error| store_error("insert webserver_application", error))?;
 
         tx.commit()
             .await
-            .map_err(|error| store_error("commit create web_application transaction", error))?;
+            .map_err(|error| store_error("commit create webserver_application transaction", error))?;
 
         self.retrieve_application_repo(tenant_id, owner_id, &application_uuid)
             .await
@@ -244,7 +244,7 @@ impl WebRepository {
         .bind(owner_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("retrieve web_application", error))?
+        .map_err(|error| store_error("retrieve webserver_application", error))?
         .ok_or_else(|| WebServiceError::not_found("application not found"))?;
 
         map_application_row(&row).map_err(|error| WebServiceError::Internal(error.to_string()))
@@ -290,7 +290,7 @@ impl WebRepository {
                 .to_string();
         let now_expression = instant_write_expression("$7");
         let update_site_sql = format!(
-            "UPDATE web_site
+            "UPDATE webserver_site
              SET name = $3, description = $4, runtime_config = {runtime_config_expression},
                  metadata = {metadata_expression},
                  updated_at = {now_expression}, version = version + 1
@@ -301,7 +301,7 @@ impl WebRepository {
             .pool
             .begin()
             .await
-            .map_err(|error| store_error("begin update web_application transaction", error))?;
+            .map_err(|error| store_error("begin update webserver_application transaction", error))?;
 
         let updated = sqlx::query(audited_sql(&update_site_sql))
             .bind(tenant_id)
@@ -314,11 +314,11 @@ impl WebRepository {
             .bind(current_version)
             .execute(&mut *tx)
             .await
-            .map_err(|error| store_error("update web_site for application", error))?;
+            .map_err(|error| store_error("update webserver_site for application", error))?;
 
         if updated.rows_affected() == 0 {
             tx.rollback().await.map_err(|error| {
-                store_error("rollback update web_application transaction", error)
+                store_error("rollback update webserver_application transaction", error)
             })?;
             return self
                 .conflict_or_missing_site(tenant_id, &existing_site_id)
@@ -330,11 +330,15 @@ impl WebRepository {
         // update-vs-delete interleaving (the delete flow marks the
         // application row without CAS) instead of committing a half-updated
         // aggregate.
-        let application_update = sqlx::query(audited_sql(
-            "UPDATE web_application
-             SET name = $3, description = $4, updated_at = $5, version = version + 1
-             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
-        ))
+        // The instant column needs the explicit TIMESTAMPTZ cast like every
+        // other write (text binds are rejected by PostgreSQL).
+        let application_now_expression = instant_write_expression("$5");
+        let application_update_sql = format!(
+            "UPDATE webserver_application
+             SET name = $3, description = $4, updated_at = {application_now_expression}, version = version + 1
+             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL"
+        );
+        let application_update = sqlx::query(audited_sql(&application_update_sql))
         .bind(tenant_id)
         .bind(application_id)
         .bind(name)
@@ -342,11 +346,11 @@ impl WebRepository {
         .bind(&now)
         .execute(&mut *tx)
         .await
-        .map_err(|error| store_error("update web_application", error))?;
+        .map_err(|error| store_error("update webserver_application", error))?;
 
         if application_update.rows_affected() == 0 {
             tx.rollback().await.map_err(|error| {
-                store_error("rollback update web_application transaction", error)
+                store_error("rollback update webserver_application transaction", error)
             })?;
             return Err(WebServiceError::conflict(
                 "application was concurrently modified; retry with the current state",
@@ -355,7 +359,7 @@ impl WebRepository {
 
         tx.commit()
             .await
-            .map_err(|error| store_error("commit update web_application transaction", error))?;
+            .map_err(|error| store_error("commit update webserver_application transaction", error))?;
 
         self.retrieve_application_repo(tenant_id, None, application_id)
             .await
@@ -370,14 +374,14 @@ impl WebRepository {
         let site_id = self.resolve_site_id_repo(tenant_id, application_id).await?;
         let status: i32 = sqlx::query_scalar(
             "SELECT status
-             FROM web_site
+             FROM webserver_site
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
         )
         .bind(tenant_id)
         .bind(&site_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("delete web_application status lookup", error))?
+        .map_err(|error| store_error("delete webserver_application status lookup", error))?
         .ok_or_else(|| WebServiceError::not_found("application not found"))?;
 
         if status == 1 {
@@ -394,10 +398,10 @@ impl WebRepository {
             .pool
             .begin()
             .await
-            .map_err(|error| store_error("begin delete web_application transaction", error))?;
+            .map_err(|error| store_error("begin delete webserver_application transaction", error))?;
 
         let application_update = sqlx::query(audited_sql(&format!(
-            "UPDATE web_application
+            "UPDATE webserver_application
              SET deleted_at = {now_expression}, deleted_by = $4,
                  updated_at = {now_expression}, version = version + 1
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL"
@@ -408,17 +412,17 @@ impl WebRepository {
         .bind(actor_id)
         .execute(&mut *tx)
         .await
-        .map_err(|error| store_error("delete web_application", error))?;
+        .map_err(|error| store_error("delete webserver_application", error))?;
 
         if application_update.rows_affected() == 0 {
             tx.rollback().await.map_err(|error| {
-                store_error("rollback delete web_application transaction", error)
+                store_error("rollback delete webserver_application transaction", error)
             })?;
             return Err(WebServiceError::not_found("application not found"));
         }
 
         let site_update = sqlx::query(audited_sql(&format!(
-            "UPDATE web_site
+            "UPDATE webserver_site
              SET deleted_at = {now_expression}, deleted_by = $4,
                  updated_at = {now_expression}, version = version + 1
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL AND status <> 1"
@@ -429,12 +433,12 @@ impl WebRepository {
         .bind(actor_id)
         .execute(&mut *tx)
         .await
-        .map_err(|error| store_error("delete web_site for application", error))?;
+        .map_err(|error| store_error("delete webserver_site for application", error))?;
 
         if site_update.rows_affected() == 0 {
             tx.rollback()
                 .await
-                .map_err(|error| store_error("rollback delete web_site for application", error))?;
+                .map_err(|error| store_error("rollback delete webserver_site for application", error))?;
             return Err(WebServiceError::conflict(
                 "application state changed; disable it before deletion",
             ));
@@ -443,7 +447,7 @@ impl WebRepository {
         // Archive the site's owned route surface so deleted applications never
         // keep occupying domain routes, TLS policies, or listener bindings.
         sqlx::query(audited_sql(&format!(
-            "UPDATE web_site_binding
+            "UPDATE webserver_site_binding
              SET status = 'ARCHIVED', deleted_at = {now_expression},
                  updated_at = {now_expression}, version = version + 1
              WHERE tenant_id = $1 AND site_id = $2 AND deleted_at IS NULL"
@@ -453,12 +457,12 @@ impl WebRepository {
         .bind(&now)
         .execute(&mut *tx)
         .await
-        .map_err(|error| store_error("archive web_site bindings", error))?;
+        .map_err(|error| store_error("archive webserver_site bindings", error))?;
         sqlx::query(audited_sql(&format!(
-            "UPDATE web_tls_policy policy
+            "UPDATE webserver_tls_policy policy
              SET status = 'ARCHIVED', deleted_at = {now_expression},
-                 updated_at = {now_expression}, version = version + 1
-             FROM web_site_binding binding
+                 updated_at = {now_expression}, version = policy.version + 1
+             FROM webserver_site_binding binding
              WHERE binding.tenant_id = policy.tenant_id
                AND binding.id = policy.site_binding_id
                AND binding.tenant_id = $1 AND binding.site_id = $2
@@ -469,12 +473,12 @@ impl WebRepository {
         .bind(&now)
         .execute(&mut *tx)
         .await
-        .map_err(|error| store_error("archive web_site TLS policies", error))?;
+        .map_err(|error| store_error("archive webserver_site TLS policies", error))?;
         sqlx::query(audited_sql(&format!(
-            "UPDATE web_listener_certificate_binding listener
+            "UPDATE webserver_listener_certificate_binding listener
              SET status = 'ARCHIVED', deleted_at = {now_expression},
-                 updated_at = {now_expression}, version = version + 1
-             FROM web_site_binding binding
+                 updated_at = {now_expression}, version = listener.version + 1
+             FROM webserver_site_binding binding
              WHERE binding.tenant_id = listener.tenant_id
                AND binding.id = listener.site_binding_id
                AND binding.tenant_id = $1 AND binding.site_id = $2
@@ -485,10 +489,10 @@ impl WebRepository {
         .bind(&now)
         .execute(&mut *tx)
         .await
-        .map_err(|error| store_error("archive web_site listener certificate bindings", error))?;
+        .map_err(|error| store_error("archive webserver_site listener certificate bindings", error))?;
         // Deactivate the site's environment variables and health checks.
         sqlx::query(audited_sql(&format!(
-            "UPDATE web_env_variable
+            "UPDATE webserver_env_variable
              SET status = 0, updated_at = {now_expression}, version = version + 1
              WHERE tenant_id = $1 AND site_id = $2 AND status = 1"
         )))
@@ -497,9 +501,9 @@ impl WebRepository {
         .bind(&now)
         .execute(&mut *tx)
         .await
-        .map_err(|error| store_error("deactivate web_site environment variables", error))?;
+        .map_err(|error| store_error("deactivate webserver_site environment variables", error))?;
         sqlx::query(audited_sql(&format!(
-            "UPDATE web_health_check
+            "UPDATE webserver_health_check
              SET status = 0, updated_at = {now_expression}, version = version + 1
              WHERE tenant_id = $1 AND site_id = $2 AND status = 1"
         )))
@@ -508,11 +512,11 @@ impl WebRepository {
         .bind(&now)
         .execute(&mut *tx)
         .await
-        .map_err(|error| store_error("deactivate web_site health checks", error))?;
+        .map_err(|error| store_error("deactivate webserver_site health checks", error))?;
 
         tx.commit()
             .await
-            .map_err(|error| store_error("commit delete web_application transaction", error))?;
+            .map_err(|error| store_error("commit delete webserver_application transaction", error))?;
         Ok(())
     }
 
@@ -528,7 +532,7 @@ impl WebRepository {
 
         let now_expression = instant_write_expression("$4");
         let update_sql = format!(
-            "UPDATE web_site
+            "UPDATE webserver_site
              SET status = $3, updated_at = {now_expression}, version = version + 1
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL AND version = $5"
         );
@@ -540,12 +544,88 @@ impl WebRepository {
             .bind(current_version)
             .execute(&self.pool)
             .await
-            .map_err(|error| store_error("update web_site status", error))?;
+            .map_err(|error| store_error("update webserver_site status", error))?;
 
         if result.rows_affected() == 0 {
             return self.conflict_or_missing_site(tenant_id, &site_id).await;
         }
 
+        self.retrieve_application_repo(tenant_id, None, application_id)
+            .await
+    }
+
+    /// Atomic activation: the successful-deployment precondition and the
+    /// status flip run in one transaction with the site row locked, so a
+    /// concurrent deployment deletion can never slip between the check and
+    /// the act (the service-level pre-check remains as a fast, friendly
+    /// rejection path).
+    pub(super) async fn activate_application_repo(
+        &self,
+        tenant_id: i64,
+        application_id: &str,
+    ) -> WebServiceResult<ApplicationResponse> {
+        use sqlx::Row;
+        let site_id = self.resolve_site_id_repo(tenant_id, application_id).await?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|error| store_error("begin webserver_site activation", error))?;
+        sqlx::query("SELECT id FROM webserver_site WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL FOR UPDATE")
+            .bind(tenant_id)
+            .bind(&site_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|error| store_error("lock webserver_site for activation", error))?
+            .ok_or_else(|| WebServiceError::not_found("application not found"))?;
+        let has_successful_deployment = sqlx::query_scalar::<_, i64>(
+            "SELECT 1 FROM webserver_deployment
+             WHERE tenant_id = $1 AND site_id = (SELECT id FROM webserver_site WHERE tenant_id = $1 AND uuid = $2)
+               AND status = 2
+             LIMIT 1",
+        )
+        .bind(tenant_id)
+        .bind(&site_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|error| store_error("verify webserver_deployment success", error))?;
+        if has_successful_deployment.is_none() {
+            return Err(WebServiceError::conflict(
+                "at least one successful deployment is required before activation",
+            ));
+        }
+        let current_version = sqlx::query_scalar::<_, i64>(
+            "SELECT version FROM webserver_site WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
+        )
+        .bind(tenant_id)
+        .bind(&site_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|error| store_error("read webserver_site version", error))?;
+        let now = now_rfc3339();
+        let now_expression = instant_write_expression("$4");
+        let update_sql = format!(
+            "UPDATE webserver_site
+             SET status = 1, updated_at = {now_expression}, version = version + 1
+             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL AND version = $5"
+        );
+        let result = sqlx::query(audited_sql(&update_sql))
+            .bind(tenant_id)
+            .bind(&site_id)
+            .bind(1_i32)
+            .bind(&now)
+            .bind(current_version)
+            .execute(&mut *tx)
+            .await
+            .map_err(|error| store_error("activate webserver_site", error))?;
+        if result.rows_affected() == 0 {
+            return Err(WebServiceError::conflict(
+                "application was modified concurrently; reload and retry",
+            ));
+        }
+        tx.commit()
+            .await
+            .map_err(|error| store_error("commit webserver_site activation", error))?;
         self.retrieve_application_repo(tenant_id, None, application_id)
             .await
     }
@@ -558,15 +638,15 @@ impl WebRepository {
     ) -> WebServiceResult<String> {
         sqlx::query_scalar(
             "SELECT s.uuid
-             FROM web_application a
-             JOIN web_site s ON s.id = a.site_id AND s.tenant_id = a.tenant_id
+             FROM webserver_application a
+             JOIN webserver_site s ON s.id = a.site_id AND s.tenant_id = a.tenant_id
              WHERE a.tenant_id = $1 AND a.uuid = $2 AND a.deleted_at IS NULL AND s.deleted_at IS NULL",
         )
         .bind(tenant_id)
         .bind(application_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("resolve web_application site id", error))?
+        .map_err(|error| store_error("resolve webserver_application site id", error))?
         .ok_or_else(|| WebServiceError::not_found("application not found"))
     }
 
@@ -577,14 +657,14 @@ impl WebRepository {
         site_id: &str,
     ) -> WebServiceResult<i64> {
         sqlx::query_scalar(
-            "SELECT version FROM web_site
+            "SELECT version FROM webserver_site
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
         )
         .bind(tenant_id)
         .bind(site_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("load web_site version", error))?
+        .map_err(|error| store_error("load webserver_site version", error))?
         .ok_or_else(|| WebServiceError::not_found("application not found"))
     }
 

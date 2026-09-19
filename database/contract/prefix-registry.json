@@ -3,7 +3,7 @@
   "kind": "sdkwork.database.prefix-registry",
   "prefixes": [
     {
-      "prefix": "web_",
+      "prefix": "webserver_",
       "owner": "web-platform",
       "domain": "web"
     }

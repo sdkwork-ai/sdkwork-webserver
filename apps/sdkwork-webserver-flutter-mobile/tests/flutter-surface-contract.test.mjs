@@ -599,72 +599,18 @@ for (const { filePath, source } of authoredDartSources()) {
   );
 }
 
-// The generated Dart artifact this root depends on must actually exist and be
-// the package the code names — a path dependency that resolves to nothing is a
-// build failure nobody sees until the toolchain lands.
+// The `deploy_app` entity is owned by `sdkwork-deployments`, and this root reads
+// it through the catalog port asserted below. No generated Dart artifact for
+// that authority exists yet, so the root declares no `*_app_sdk` path dependency
+// at all: naming one would point at a surface that is not generated, and the
+// catalog port is what turns that gap into an explicit state instead of a build
+// failure nobody sees until the toolchain lands.
 const corePubspec = mustExist(
   "packages/sdkwork_webserver_flutter_mobile_core/pubspec.yaml",
 );
-const sdkPathMatch = /sdkwork_webserver_app_sdk:\s*\n\s*path:\s*(\S+)/u.exec(
-  corePubspec,
-);
-assert.ok(sdkPathMatch, "core must declare a path dependency on the generated Dart app SDK");
-const generatedSdkRoot = path.resolve(
-  root,
-  "packages/sdkwork_webserver_flutter_mobile_core",
-  sdkPathMatch[1],
-);
 assert.ok(
-  fs.existsSync(generatedSdkRoot),
-  `core's generated SDK path dependency must resolve (${sdkPathMatch[1]})`,
-);
-const generatedPubspec = fs.readFileSync(
-  path.join(generatedSdkRoot, "pubspec.yaml"),
-  "utf8",
-);
-assert.match(
-  generatedPubspec,
-  /^name:\s*sdkwork_webserver_app_sdk$/mu,
-  "the resolved artifact must be the sdkwork_webserver_app_sdk package",
-);
-
-/** The generated client already prepends the surface prefix; the root must strip it. */
-const generatedPaths = fs.readFileSync(
-  path.join(generatedSdkRoot, "lib", "src", "api", "paths.dart"),
-  "utf8",
-);
-const generatedPrefix = /apiPrefix = '([^']+)'/u.exec(generatedPaths)?.[1];
-assert.equal(
-  generatedPrefix,
-  "/app/v3/api",
-  "the generated client's own prefix must be the v3 app-api surface",
-);
-
-const sdkClientSource = mustExist(
-  "packages/sdkwork_webserver_flutter_mobile_core/lib/sdk/webserver_app_sdk_clients.dart",
-);
-assert.match(
-  sdkClientSource,
-  new RegExp(
-    `const String webserverAppApiPrefix = '${generatedPrefix.replaceAll("/", "\\/")}';`,
-    "u",
-  ),
-  "core must declare the same prefix the generated client prepends",
-);
-assert.match(
-  sdkClientSource,
-  /SdkworkAppClient\.withBaseUrl\(\s*baseUrl: transportBaseUrl,/u,
-  "the generated client must be constructed from the STRIPPED base URL",
-);
-assert.match(
-  sdkClientSource,
-  /uri\.path\.endsWith\(webserverAppApiPrefix\)/u,
-  "the surface prefix must be required, not optional",
-);
-assert.match(
-  sdkClientSource,
-  /must contain \$webserverAppApiPrefix exactly once/u,
-  "a duplicated surface prefix must be rejected at construction",
+  !/^[ \t]*\w+_app_sdk:[ \t]*$/mu.test(corePubspec),
+  "core must not declare a generated app SDK path dependency while none is generated",
 );
 
 const catalogPortSource = mustExist(
@@ -712,9 +658,8 @@ assert.deepEqual(
   [
     "sdkwork-deployments-app-sdk",
     "sdkwork-drive-app-sdk",
-    "sdkwork-webserver-app-sdk",
   ],
-  "the root must compose the same three app SDK families as the PC, H5, mini program, and HarmonyOS roots",
+  "the root must compose the deployments- and drive-owned app SDK families — the same set the PC, H5, mini program, and HarmonyOS roots compose",
 );
 
 // The declared Dart coverage must match the filesystem, and the unbound catalog
@@ -731,8 +676,8 @@ const availableDartSdks = (rootComponentSpec.metadata?.dartSdkCoverage ?? [])
   .map((entry) => entry.workspace);
 assert.deepEqual(
   availableDartSdks.sort(),
-  ["sdkwork-webserver-app-sdk"],
-  "exactly one declared app SDK family ships a Dart variant today",
+  [],
+  "no declared app SDK family ships a Dart variant today, so the catalog port is unbound",
 );
 assert.ok(
   !availableDartSdks.includes("sdkwork-deployments-app-sdk"),
@@ -1146,13 +1091,13 @@ test("the reference mirror narrows page info without inventing totals", () => {
   assert.equal(cursorMode.hasMore, true);
 });
 
-// --- 12. Behavioural: SDK boundary source contracts ------------------------
+// --- 12. Behavioural: runtime surface URL contracts ------------------------
 
 const clientSource = mustExist(
-  "packages/sdkwork_webserver_flutter_mobile_core/lib/sdk/webserver_app_sdk_clients.dart",
+  "packages/sdkwork_webserver_flutter_mobile_core/lib/sdk/app_api_surface_url.dart",
 );
 
-test("the SDK client boundary normalizes the surface URL and strips the prefix", () => {
+test("the runtime environment normalizes the surface URL", () => {
   assert.match(
     clientSource,
     /final normalized = value\.trim\(\)\.replaceFirst\(RegExp\(r'\/\+\$'\), ''\);/u,
@@ -1165,8 +1110,13 @@ test("the SDK client boundary normalizes the surface URL and strips the prefix",
   );
   assert.match(
     clientSource,
-    /uri\.path\.substring\(\s*0,\s*uri\.path\.length - webserverAppApiPrefix\.length,\s*\)/u,
-    "the transport URL must be the surface URL with the prefix removed",
+    /!uri\.path\.endsWith\(webserverAppApiPrefix\)/u,
+    "the surface prefix must be required, not optional",
+  );
+  assert.match(
+    clientSource,
+    /must contain \$webserverAppApiPrefix exactly once/u,
+    "a duplicated surface prefix must be rejected while the environment is built",
   );
 });
 
@@ -1261,23 +1211,10 @@ test("every closed set mirrors the generated deployments unions exactly", () => 
     "core's AppStatus mirror must equal the generated union",
   );
 
-  // The webserver app SDK ships the same AppKind set; drift between the two
-  // generated sources is a server-contract problem worth failing on.
-  const webserverTypesDir = path.join(
-    repoRoot,
-    "sdks",
-    "sdkwork-webserver-app-sdk",
-    "sdkwork-webserver-app-sdk-typescript",
-    "generated",
-    "server-openapi",
-    "src",
-    "types",
-  );
-  assert.deepEqual(
-    membersOf(path.join(webserverTypesDir, "app-kind.ts"), "AppKind"),
-    generatedKinds,
-    "the webserver and deployments generated AppKind unions must agree",
-  );
+  // The webserver-owned application surface is deliberately not consulted: the
+  // `deploy_app` entity has one owner (`sdkwork-deployments`), so pinning this
+  // root's mirror to a second, retiring authority would keep the duplicate alive
+  // (`COMPOSABLE_ARCHITECTURE_SPEC.md` §7).
 });
 
 test("both locale fragments cover the same keys and every label resolves", () => {
@@ -1346,16 +1283,13 @@ test("the shipped Dart mapping drops unrenderable rows and never blanks a cell",
  */
 const behaviouralSuites = [
   {
-    path: "packages/sdkwork_webserver_flutter_mobile_core/test/webserver_app_sdk_clients_test.dart",
+    path: "packages/sdkwork_webserver_flutter_mobile_core/test/app_api_surface_url_test.dart",
     behaviours: [
-      "constructs the generated webserver app client from one surface URL",
-      "exposes the applications list operation the catalog depends on",
-      "rejects a bare origin and a duplicated surface prefix",
-      "reports unavailable and refuses to look like an empty tenant",
-      "bounds the closed sets to the generated deployments unions",
-      "narrows server page info without inventing totals",
-      "stops paging on the last server page",
-      "applies defaults when the server omits page info",
+      "accepts one prefixed surface URL and normalizes trailing slashes",
+      "rejects a bare origin that carries no surface prefix",
+      "rejects a URL carrying a duplicated surface prefix",
+      "rejects a URL carrying a query or a fragment",
+      "rejects a non-HTTP(S) scheme",
     ],
   },
   {

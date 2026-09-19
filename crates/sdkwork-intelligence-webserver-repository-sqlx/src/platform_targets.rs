@@ -20,14 +20,14 @@ async fn resolve_application_identity(
     application_id: &str,
 ) -> WebServiceResult<(i64, String)> {
     sqlx::query_as::<_, (i64, String)>(
-        "SELECT id, uuid FROM web_application
+        "SELECT id, uuid FROM webserver_application
          WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
     )
     .bind(tenant_id)
     .bind(application_id)
     .fetch_optional(pool)
     .await
-    .map_err(|error| store_error("resolve web_application identity", error))?
+    .map_err(|error| store_error("resolve webserver_application identity", error))?
     .ok_or_else(|| WebServiceError::not_found("application not found"))
 }
 
@@ -63,7 +63,7 @@ impl WebRepository {
         let channels_expression = json_write_expression("$13");
 
         let insert_sql = format!(
-            "INSERT INTO web_app_platform_target (
+            "INSERT INTO webserver_app_platform_target (
                 id, uuid, tenant_id, organization_id, data_scope, user_id, app_id,
                 target_key, platform, tech_stack, architectures_json,
                 bundle_id, package_name, app_id_value, bundle_name,
@@ -93,7 +93,7 @@ impl WebRepository {
             .bind(&now)
             .execute(&self.pool)
             .await
-            .map_err(|error| store_error("insert web_app_platform_target", error))?;
+            .map_err(|error| store_error("insert webserver_app_platform_target", error))?;
 
         Ok(PlatformTargetResponse {
             id: uuid,
@@ -122,7 +122,7 @@ impl WebRepository {
         let (page, page_size, offset) = pagination(page, page_size)?;
         let (application_internal_id, application_uuid) =
             resolve_application_identity(&self.pool, tenant_id, application_id).await?;
-        let count_sql = "SELECT COUNT(*) AS total FROM web_app_platform_target
+        let count_sql = "SELECT COUNT(*) AS total FROM webserver_app_platform_target
              WHERE tenant_id = $1 AND app_id = $2 AND deleted_at IS NULL";
         let list_sql = "SELECT uuid, target_key, platform, tech_stack,
                     CAST(architectures_json AS TEXT) AS architectures_json,
@@ -130,7 +130,7 @@ impl WebRepository {
                     target_status,
                     CAST(created_at AS TEXT) AS created_at,
                     CAST(updated_at AS TEXT) AS updated_at
-             FROM web_app_platform_target
+             FROM webserver_app_platform_target
              WHERE tenant_id = $1 AND app_id = $2 AND deleted_at IS NULL
              ORDER BY id ASC LIMIT $3 OFFSET $4";
 
@@ -139,10 +139,10 @@ impl WebRepository {
             .bind(application_internal_id)
             .fetch_one(&self.pool)
             .await
-            .map_err(|error| store_error("count web_app_platform_target", error))?;
+            .map_err(|error| store_error("count webserver_app_platform_target", error))?;
         let total: i64 = count_row
             .try_get("total")
-            .map_err(|error| store_error("map web_app_platform_target count", error))?;
+            .map_err(|error| store_error("map webserver_app_platform_target count", error))?;
 
         let rows = sqlx::query(list_sql)
             .bind(tenant_id)
@@ -151,13 +151,13 @@ impl WebRepository {
             .bind(offset)
             .fetch_all(&self.pool)
             .await
-            .map_err(|error| store_error("list web_app_platform_target", error))?;
+            .map_err(|error| store_error("list webserver_app_platform_target", error))?;
 
         let mut items = Vec::with_capacity(rows.len());
         for row in &rows {
             items.push(
                 map_platform_target_row(row, &application_uuid).map_err(|error| {
-                    WebServiceError::Internal(format!("map web_app_platform_target row: {error}"))
+                    WebServiceError::Internal(format!("map webserver_app_platform_target row: {error}"))
                 })?,
             );
         }
@@ -185,7 +185,7 @@ impl WebRepository {
                     target_status,
                     CAST(created_at AS TEXT) AS created_at,
                     CAST(updated_at AS TEXT) AS updated_at
-             FROM web_app_platform_target
+             FROM webserver_app_platform_target
              WHERE tenant_id = $1 AND app_id = $2 AND uuid = $3 AND deleted_at IS NULL",
         )
         .bind(tenant_id)
@@ -193,7 +193,7 @@ impl WebRepository {
         .bind(platform_target_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("retrieve web_app_platform_target", error))?
+        .map_err(|error| store_error("retrieve webserver_app_platform_target", error))?
         .ok_or_else(|| WebServiceError::not_found("platform target not found"))?;
 
         map_platform_target_row(&row, &application_uuid)

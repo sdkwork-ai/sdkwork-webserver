@@ -3150,13 +3150,33 @@ proxyPass = "http://gateway"
         let production = parse_toml_file(&repo.join("server.production.toml")).expect("production");
         let standalone = parse_toml_file(&repo.join("server.standalone.toml")).expect("standalone");
         let effective = merge_effective(&common, &production, &standalone).expect("merge");
-        assert_eq!(
-            effective["http"]["server"]
-                .as_array()
-                .expect("servers")
-                .len(),
-            14
-        );
+        let servers = effective["http"]["server"].as_array().expect("servers");
+        // Every base domain in the production example must survive the merge
+        // (currently sdkwork/birdcoder/dtupay/noaper/skubc/zowalk/offer86/
+        // 86offer across .com and .cn). Deriving the expectation from the
+        // source document keeps this test honest across example updates
+        // while still proving nothing was dropped.
+        let expected: Vec<String> = production["http"]["server"]
+            .as_array()
+            .expect("production servers")
+            .iter()
+            .filter_map(|server| {
+                server["serverName"]
+                    .as_array()
+                    .and_then(|names| names[0].as_str())
+                    .map(str::to_owned)
+            })
+            .collect();
+        let served: Vec<String> = servers
+            .iter()
+            .filter_map(|server| {
+                server["serverName"]
+                    .as_array()
+                    .and_then(|names| names[0].as_str())
+                    .map(str::to_owned)
+            })
+            .collect();
+        assert_eq!(served, expected);
     }
 
     #[test]

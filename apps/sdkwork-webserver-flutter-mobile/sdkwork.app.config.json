@@ -29,7 +29,6 @@
     "organizationId": "0",
     "tenantId": "100001",
     "accessTokenPermissionScope": [
-      "web.applications.read",
       "deploy.apps.read",
       "web.plugins.read",
       "web.servers.read",
@@ -125,11 +124,11 @@
         "version": "0.1.0",
         "releaseChannel": "DEV",
         "title": "SDKWork Web Server Flutter mobile 0.1.0",
-        "summary": "Flutter mobile console initialized against the webserver app API.",
+        "summary": "Flutter mobile console initialized against the deployments-owned app API.",
         "content": "Initial SDKWork App Standard v3 manifest for the SDKWork Web Server Flutter mobile surface.",
         "highlights": [
           "Flutter root layout follows FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC",
-          "The generated Dart webserver app SDK is constructed from one validated app-api base URL",
+          "The app-api base URL is normalized by lib/sdk/app_api_surface_url.dart, independent of any generated client",
           "The deploy_app catalog port stays declared until a Dart deployments SDK is generated"
         ],
         "packageIds": [],

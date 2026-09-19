@@ -1,6 +1,7 @@
 import { useSdkworkAuthControllerState } from "@sdkwork/auth-pc-react";
 import { DeployAppsAdminSurface, webserverModule as appsAdminModule } from "@sdkwork/webserver-pc-admin-apps";
 import { webserverModule as auditModule } from "@sdkwork/webserver-pc-admin-audit";
+import { ClusterOverviewSurface, webserverModule as clusterModule } from "@sdkwork/webserver-pc-admin-cluster";
 import { webserverModule as diagnosticsModule } from "@sdkwork/webserver-pc-admin-diagnostics";
 import { webserverModule as mcpAdminModule, McpAdminSurface, type McpAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-mcp";
 import { webserverModule as nginxModule } from "@sdkwork/webserver-pc-admin-nginx";
@@ -29,7 +30,7 @@ import { useSdkworkModuleMessages } from "@sdkwork/i18n-pc-react";
 // certificate entities. `delivery` therefore owns those three menu entries and
 // nothing else: the Web Server console keeps no local application lifecycle.
 const consoleModules = [deliveryModule, pluginsModule, skillsModule, mcpModule] satisfies readonly WebserverPcModuleDefinition[];
-const adminModules = [appsAdminModule, nginxModule, serversModule, serversExplorerModule, webserverConfigModule, diagnosticsModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule, storageModule] satisfies readonly WebserverPcModuleDefinition[];
+const adminModules = [appsAdminModule, nginxModule, serversModule, serversExplorerModule, webserverConfigModule, clusterModule, diagnosticsModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule, storageModule] satisfies readonly WebserverPcModuleDefinition[];
 const LazyAdminSurface = lazy(() => import("./WebserverAdminSurface.tsx").then((module) => ({ default: module.WebserverAdminSurface })));
 
 export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: WebserverLocale; runtime: BootstrappedWebserverPcRuntime }) {
@@ -87,6 +88,7 @@ export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: Webs
     "storage-kinds": storageCenterSurface("storage-kinds"),
     "storage-buckets": storageCenterSurface("storage-buckets"),
     "storage-bindings": storageCenterSurface("storage-bindings"),
+    "cluster-overview": <ClusterOverviewSurface locale={locale} resource="cluster-overview" />,
   };
 
   return (

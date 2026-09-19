@@ -46,7 +46,7 @@ trace:
   components:
     - database/database.manifest.json
     - database/contract/schema.yaml
-    - database/ddl/baseline/postgres/0001_web_baseline.sql
+    - database/ddl/baseline/postgres/0001_webserver_baseline.sql
     - crates/sdkwork-webserver-database-host
     - crates/sdkwork-intelligence-webserver-repository-sqlx
 verification:

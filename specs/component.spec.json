@@ -46,7 +46,6 @@
     "publicExports": [
       "crates/sdkwork-api-webserver-standalone-gateway",
       "crates/sdkwork-webserver-website-delivery-edge-runtime",
-      "crates/sdkwork-routes-webserver-app-api",
       "crates/sdkwork-routes-webserver-backend-api",
       "crates/sdkwork-routes-webserver-internal-api",
       "crates/sdkwork-webserver-delivery-runtime",

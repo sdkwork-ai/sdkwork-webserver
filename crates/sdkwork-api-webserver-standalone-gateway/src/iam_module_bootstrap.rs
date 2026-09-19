@@ -151,7 +151,11 @@ mod tests {
             .and_then(|extension| extension["patterns"].as_array())
             .expect("app_user role grant extension");
 
-        for expected in ["web.applications.*", "web.certificates.*"] {
+        // `web.applications.*` was retired together with the app-api surface:
+        // the application lifecycle is granted by deployments' own module
+        // (`deploy.apps.*`), so the Web module's app_user extension now carries
+        // only the resources this owner still serves.
+        for expected in ["web.certificates.*"] {
             assert!(
                 app_user_patterns.iter().any(|pattern| pattern == expected),
                 "app_user must receive {expected}"

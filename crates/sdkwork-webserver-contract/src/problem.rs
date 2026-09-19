@@ -13,6 +13,14 @@ pub enum WebServiceErrorKind {
     Internal,
 }
 
+/// Deliberately a flat, `Clone` payload enum. The typed upstream error
+/// (sqlx, IO, provider) is logged with full `Debug` detail where it occurs
+/// (see `store_error` and every repository boundary), then flattened; the
+/// route layer masks `Internal`/`DatabaseUnavailable` details so internal
+/// error text never reaches clients. A `source()` chain would add no
+/// recoverable information — the source is already persisted at the origin
+/// — and would leak internals into any downstream `source()` walker, against
+/// the redaction contract (SECURITY_SPEC).
 #[derive(Debug, thiserror::Error)]
 pub enum WebServiceError {
     #[error("not found: {0}")]

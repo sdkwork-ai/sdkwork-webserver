@@ -21,7 +21,7 @@ client.setAuthToken('your-auth-token');
 client.setAccessToken('your-access-token');
 
 // Use the SDK
-final result = await client.nginx.statusRetrieve();
+final result = await client.cluster.clustersOverviewRetrieve();
 print(result);
 ```
 
@@ -57,6 +57,7 @@ client.setHeader('X-Custom-Header', 'value');
 - `client.webserverConfig` - webserver_config API
 - `client.agent` - agent API
 - `client.audit` - audit API
+- `client.cluster` - cluster API
 
 ## Usage Examples
 
@@ -204,11 +205,18 @@ final result = await client.audit.logsList(params);
 print(result);
 ```
 
+### cluster
+```dart
+// Retrieve the cluster health overview for status polling
+final result = await client.cluster.clustersOverviewRetrieve();
+print(result);
+```
+
 ## Error Handling
 
 ```dart
 try {
-  final result = await client.nginx.statusRetrieve();
+  final result = await client.cluster.clustersOverviewRetrieve();
   print(result);
 } catch (e) {
   print('Error: $e');

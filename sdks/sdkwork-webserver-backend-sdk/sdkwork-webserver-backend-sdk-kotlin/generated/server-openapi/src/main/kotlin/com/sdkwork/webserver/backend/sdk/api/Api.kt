@@ -19,4 +19,5 @@ class Api(private val client: HttpClient) {
     val webserverConfig: WebserverConfigApi = WebserverConfigApi(client)
     val agent: AgentApi = AgentApi(client)
     val audit: AuditApi = AuditApi(client)
+    val cluster: ClusterApi = ClusterApi(client)
 }

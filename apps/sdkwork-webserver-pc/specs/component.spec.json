@@ -34,15 +34,15 @@
     "publicExports": [],
     "runtimeEntrypoints": ["src/main.tsx"],
     "routeManifest": null,
-    "sdkClients": ["SdkworkAppClient", "SdkworkDriveAppClient", "SdkworkBackendClient"],
+    "sdkClients": ["SdkworkDeployAppClient", "SdkworkDriveAppClient", "SdkworkBackendClient"],
     "sdkDependencies": [
-      { "workspace": "sdkwork-webserver-app-sdk", "surface": "app-api", "credentialMode": "authenticated-app-api" },
+      { "workspace": "sdkwork-deployments-app-sdk", "surface": "app-api", "credentialMode": "authenticated-app-api" },
       { "workspace": "sdkwork-drive-app-sdk", "surface": "app-api", "credentialMode": "authenticated-app-api" },
       { "workspace": "sdkwork-webserver-backend-sdk", "surface": "backend-api", "credentialMode": "authenticated-backend-admin" },
       { "workspace": "sdkwork-iam-app-sdk", "surface": "app-api", "credentialMode": "authenticated-app-api" }
     ],
     "events": [],
-    "configKeys": ["appApiBaseUrl", "backendApiBaseUrl", "driveAppApiBaseUrl", "appbaseAppApiBaseUrl", "messagingPcUrl", "browserOriginMode", "environment", "deploymentProfile", "profileId", "runtimeTarget"]
+    "configKeys": ["appApiBaseUrl", "backendApiBaseUrl", "deployAppApiBaseUrl", "driveAppApiBaseUrl", "appbaseAppApiBaseUrl", "messagingPcUrl", "browserOriginMode", "environment", "deploymentProfile", "profileId", "runtimeTarget"]
   },
   "integration": {
     "authority": "Root SDKWork specs remain authoritative.",

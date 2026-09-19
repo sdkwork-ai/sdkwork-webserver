@@ -11,11 +11,11 @@ material diverged from the control plane.
 # Operation states (0=PENDING,1=RUNNING,2=SUCCEEDED,3=FAILED,4=EXHAUSTED)
 psql "$DATABASE_URL" -c "SELECT id, operation_type, status, attempts, lease_owner,
        lease_expires_at, fencing_token, next_attempt_at
-       FROM web_certificate_operation ORDER BY id DESC LIMIT 20;"
+       FROM webserver_certificate_operation ORDER BY id DESC LIMIT 20;"
 
 # Certificate aggregate and versions
 psql "$DATABASE_URL" -c "SELECT uuid, status, renewal_status, auto_renew
-       FROM web_certificate WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT 20;"
+       FROM webserver_certificate WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT 20;"
 
 # Certificate worker liveness (systemd installs)
 systemctl status sdkwork-webserver-certificate-worker
@@ -42,7 +42,7 @@ guard).
 
 ### 2.3 Retry budget exhausted (EXHAUSTED)
 
-- Read `web_certificate.metadata.certificateOperationFailureCode` to classify
+- Read `webserver_certificate.metadata.certificateOperationFailureCode` to classify
   the failure (DNS unverified / CA rejection / webroot not writable).
 - Fix the root cause and issue a new operation; each operation carries its own
   bounded retry budget.
@@ -62,7 +62,7 @@ guard).
 - After every successful operation the worker re-projects listener bindings and
   publishes a monotonic snapshot; the data plane hot-reloads without dropping
   connections. If the snapshot is stale, check the worker log first, then that
-  `web_listener_certificate_binding.desired_version_id` matches the current
+  `webserver_listener_certificate_binding.desired_version_id` matches the current
   version.
 
 ## 3. Post-recovery verification

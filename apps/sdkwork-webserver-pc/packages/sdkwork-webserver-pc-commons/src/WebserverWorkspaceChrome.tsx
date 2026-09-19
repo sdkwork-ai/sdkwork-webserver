@@ -4,12 +4,14 @@ import {
   Bell,
   Boxes,
   CloudCog,
+  Cpu,
   FolderOpen,
   Globe2,
   HardDrive,
   House,
   Layers3,
   LogOut,
+  Network,
   Puzzle,
   Plug,
   Rocket,
@@ -181,6 +183,8 @@ function ModuleIcon({ moduleId }: { moduleId: string }): ReactNode {
   switch (moduleId) {
     case "storageCenter":
       return <CloudCog {...iconProps} />;
+    case "clusterCenter":
+      return <Network {...iconProps} />;
     default:
       return <House {...iconProps} />;
   }
@@ -219,6 +223,16 @@ function ResourceIcon({ resource }: { resource: WebserverResourceKey }): ReactNo
       return <Boxes {...iconProps} />;
     case "storage-bindings":
       return <Plug {...iconProps} />;
+    case "cluster-overview":
+      return <Network {...iconProps} />;
+    case "cluster-clusters":
+      return <Boxes {...iconProps} />;
+    case "cluster-hosts":
+      return <Server {...iconProps} />;
+    case "cluster-instances":
+      return <Cpu {...iconProps} />;
+    case "cluster-events":
+      return <ScrollText {...iconProps} />;
     default:
       return <Activity {...iconProps} />;
   }

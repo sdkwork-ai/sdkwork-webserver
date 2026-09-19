@@ -14,7 +14,7 @@ Canonical lifecycle assets for the `sdkwork-webserver` PostgreSQL control-plane 
 
 This module is in initialization state for greenfield PostgreSQL deployments:
 
-1. `database/ddl/baseline/postgres/0001_web_baseline.sql` is the full PostgreSQL DDL snapshot.
+1. `database/ddl/baseline/postgres/0001_webserver_baseline.sql` is the full PostgreSQL DDL snapshot.
 2. `database/migrations/postgres/` contains checksum-tracked forward migrations for every schema
    change made after the initial baseline. Existing databases must never be upgraded by replaying
    or editing the baseline.
@@ -39,7 +39,7 @@ an authority fallback, or a rollback target.
 
 This module is in **initialization state** for greenfield deployments:
 
-1. **Baseline** — `database/ddl/baseline/{engine}/0001_web_baseline.sql` contains the full DDL snapshot.
+1. **Baseline** — `database/ddl/baseline/{engine}/0001_webserver_baseline.sql` contains the full DDL snapshot.
 2. **Migrations** — `database/migrations/{engine}/` is reserved for post-GA incremental schema changes only. It is intentionally empty at initialization.
 3. **Drift** — run `pnpm db:drift:check` before release.
 

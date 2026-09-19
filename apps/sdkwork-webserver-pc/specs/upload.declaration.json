@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "appId": "sdkwork-webserver-pc",
+  "declarations": [
+    {
+      "appResourceType": "web.plugin.package",
+      "appResourceIdKind": "application",
+      "scene": "plugin-package",
+      "source": "sdkwork-webserver-pc",
+      "uploadProfileCode": "archive",
+      "retention": "long_term",
+      "purpose": "Web console plugin package uploaded so the plugin can be installed into the running webserver."
+    }
+  ]
+}

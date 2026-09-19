@@ -106,15 +106,8 @@
     ],
     "runtimeEntrypoints": [],
     "routeManifest": null,
-    "sdkClients": [
-      "SdkworkAppClient"
-    ],
+    "sdkClients": [],
     "sdkDependencies": [
-      {
-        "workspace": "sdkwork-webserver-app-sdk",
-        "surface": "app-api",
-        "credentialMode": "authenticated-app-api"
-      },
       {
         "workspace": "sdkwork-drive-app-sdk",
         "surface": "app-api",

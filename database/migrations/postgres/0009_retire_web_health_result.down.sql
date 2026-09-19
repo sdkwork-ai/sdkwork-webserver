@@ -27,8 +27,8 @@ CREATE TABLE IF NOT EXISTS web_health_result (
     PRIMARY KEY (id),
     CONSTRAINT uk_web_health_result_uuid UNIQUE (uuid),
     CONSTRAINT fk_web_health_result_check FOREIGN KEY (health_check_id)
-        REFERENCES web_health_check(id),
-    CONSTRAINT fk_web_health_result_site FOREIGN KEY (site_id) REFERENCES web_site(id)
+        REFERENCES webserver_health_check(id),
+    CONSTRAINT fk_web_health_result_site FOREIGN KEY (site_id) REFERENCES webserver_site(id)
 );
 
 COMMENT ON TABLE web_health_result IS 'Web health check result';

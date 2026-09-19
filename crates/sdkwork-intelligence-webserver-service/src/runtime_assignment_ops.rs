@@ -1,7 +1,9 @@
 use async_trait::async_trait;
 use sdkwork_webserver_contract::{
     AuthenticatedMachineCredential, CreateRuntimeObservationRequest,
-    MachineCredentialAuthenticator, PublishRuntimeAssignmentRequest, RuntimeAssignment,
+    ClusterHeartbeatRequest, ClusterHeartbeatResponse, ClusterPeerDirectoryResponse,
+    ClusterRegistrationRequest, ClusterRegistrationResponse, MachineCredentialAuthenticator,
+    PublishRuntimeAssignmentRequest, RuntimeAssignment,
     RuntimeAssignmentDelivery, RuntimeObservation, RuntimeObservationState, WebInternalApi,
     WebInternalRequestContext, WebServiceError, WebServiceResult,
 };
@@ -22,6 +24,20 @@ impl MachineCredentialAuthenticator for WebService {
         &self,
         credential: &str,
     ) -> WebServiceResult<Option<AuthenticatedMachineCredential>> {
+        // Cluster instance tokens (winst_) and the shared registration
+        // credential (wreg_) authenticate against the cluster registry and
+        // the configured registration secret respectively.
+        if credential.starts_with(crate::cluster_ops::CLUSTER_INSTANCE_TOKEN_PREFIX) {
+            return Ok(self
+                .try_authenticate_cluster_instance_token(credential)
+                .await?
+                .map(cluster_machine_credential));
+        }
+        if credential.starts_with(crate::cluster_ops::CLUSTER_REGISTRATION_TOKEN_PREFIX) {
+            return Ok(self
+                .try_authenticate_cluster_registration_token(credential)
+                .map(cluster_machine_credential));
+        }
         if !credential.starts_with(AGENT_TOKEN_PREFIX) {
             return Ok(None);
         }
@@ -37,6 +53,42 @@ impl MachineCredentialAuthenticator for WebService {
 
 #[async_trait]
 impl WebInternalApi for WebService {
+    // Cluster instance lifecycle: the machine-only framework layer already
+    // authenticated the `wreg_` registration credential or the per-instance
+    // `winst_` heartbeat token; `subject_id` carries the registration
+    // sentinel or the instance uuid.
+    async fn register_cluster_instance(
+        &self,
+        context: &WebInternalRequestContext,
+        request: &ClusterRegistrationRequest,
+    ) -> WebServiceResult<ClusterRegistrationResponse> {
+        if context.tenant_id != 0 {
+            return Err(WebServiceError::Forbidden);
+        }
+        self.cluster_register(None, request).await
+    }
+
+    async fn record_cluster_heartbeat(
+        &self,
+        context: &WebInternalRequestContext,
+        request: &ClusterHeartbeatRequest,
+    ) -> WebServiceResult<ClusterHeartbeatResponse> {
+        if context.tenant_id != 0 {
+            return Err(WebServiceError::Forbidden);
+        }
+        self.cluster_heartbeat(&context.subject_id, request).await
+    }
+
+    async fn retrieve_cluster_peers(
+        &self,
+        context: &WebInternalRequestContext,
+    ) -> WebServiceResult<ClusterPeerDirectoryResponse> {
+        if context.tenant_id != 0 {
+            return Err(WebServiceError::Forbidden);
+        }
+        self.cluster_peers(&context.subject_id).await
+    }
+
     async fn publish_runtime_assignment(
         &self,
         context: &WebInternalRequestContext,
@@ -193,10 +245,20 @@ impl WebInternalApi for WebService {
     }
 }
 
+fn cluster_machine_credential(
+    credential: crate::cluster_ops::ClusterMachineCredential,
+) -> AuthenticatedMachineCredential {
+    AuthenticatedMachineCredential {
+        tenant_id: credential.tenant_id,
+        subject_id: credential.subject_id,
+        app_id: crate::cluster_ops::CLUSTER_MACHINE_APP_ID.to_owned(),
+        permission_scope: credential.permission_scope,
+    }
+}
+
 fn parse_environment(value: &str) -> WebServiceResult<WebsiteRuntimeEnvironment> {
-    WebsiteRuntimeEnvironment::parse(value).map_err(|_| {
-        WebServiceError::validation("unsupported runtime environment")
-    })
+    WebsiteRuntimeEnvironment::parse(value)
+        .map_err(|_| WebServiceError::validation("unsupported runtime environment"))
 }
 
 fn parse_generation(value: &str) -> WebServiceResult<u64> {

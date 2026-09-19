@@ -1,5 +1,50 @@
 import Foundation
 
+public struct ClusterHeartbeatSampleResponse: Codable {
+    public let id: String?
+    public let status: Int?
+    public let latencyMs: Int?
+    public let metrics: [String: Any]?
+    public let reportedAt: String?
+
+
+    public init(id: String? = nil, status: Int? = nil, latencyMs: Int? = nil, metrics: [String: Any]? = nil, reportedAt: String? = nil) {
+        self.id = id
+        self.status = status
+        self.latencyMs = latencyMs
+        self.metrics = metrics
+        self.reportedAt = reportedAt
+    }
+}
+
+public struct EnqueueClusterPeerMessagesRequest: Codable {
+    public let clusterId: String?
+    public let toInstanceId: String?
+    public let fromInstanceId: String?
+    public let messageType: String?
+    public let payload: [String: Any]?
+    public let expiresInSeconds: Int?
+
+
+    public init(clusterId: String? = nil, toInstanceId: String? = nil, fromInstanceId: String? = nil, messageType: String? = nil, payload: [String: Any]? = nil, expiresInSeconds: Int? = nil) {
+        self.clusterId = clusterId
+        self.toInstanceId = toInstanceId
+        self.fromInstanceId = fromInstanceId
+        self.messageType = messageType
+        self.payload = payload
+        self.expiresInSeconds = expiresInSeconds
+    }
+}
+
+public struct EnqueueClusterPeerMessagesResponse: Codable {
+    public let enqueued: String?
+
+
+    public init(enqueued: String? = nil) {
+        self.enqueued = enqueued
+    }
+}
+
 public struct ProblemDetail: Codable {
     public let type: String?
     public let title: String?
@@ -1154,15 +1199,31 @@ public struct ServerRunOperationRequest: Codable {
 public struct ServerOperationResult: Codable {
     public let operationId: String?
     public let exitCode: Int?
+    public let timedOut: Bool?
     public let stdout: String?
     public let stderr: String?
+    public let stdoutTruncated: Bool?
+    public let stderrTruncated: Bool?
+    public let pid: Int?
+    public let pidFile: String?
+    public let logFile: String?
+    public let stopped: Bool?
+    public let message: String?
 
 
-    public init(operationId: String? = nil, exitCode: Int? = nil, stdout: String? = nil, stderr: String? = nil) {
+    public init(operationId: String? = nil, exitCode: Int? = nil, timedOut: Bool? = nil, stdout: String? = nil, stderr: String? = nil, stdoutTruncated: Bool? = nil, stderrTruncated: Bool? = nil, pid: Int? = nil, pidFile: String? = nil, logFile: String? = nil, stopped: Bool? = nil, message: String? = nil) {
         self.operationId = operationId
         self.exitCode = exitCode
+        self.timedOut = timedOut
         self.stdout = stdout
         self.stderr = stderr
+        self.stdoutTruncated = stdoutTruncated
+        self.stderrTruncated = stderrTruncated
+        self.pid = pid
+        self.pidFile = pidFile
+        self.logFile = logFile
+        self.stopped = stopped
+        self.message = message
     }
 }
 
@@ -1448,6 +1509,241 @@ public struct SdkWorkCommandResponse: Codable {
         self.code = code
         self.data = data
         self.traceId = traceId
+    }
+}
+
+public struct ClusterResponse: Codable {
+    public let id: String?
+    public let name: String?
+    public let code: String?
+    public let description: String?
+    public let status: Int?
+    public let heartbeatIntervalSeconds: Int?
+    public let offlineThresholdSeconds: Int?
+    public let hostCount: String?
+    public let instanceCount: String?
+    public let onlineInstanceCount: String?
+    public let createdAt: String?
+    public let updatedAt: String?
+
+
+    public init(id: String? = nil, name: String? = nil, code: String? = nil, description: String? = nil, status: Int? = nil, heartbeatIntervalSeconds: Int? = nil, offlineThresholdSeconds: Int? = nil, hostCount: String? = nil, instanceCount: String? = nil, onlineInstanceCount: String? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
+        self.id = id
+        self.name = name
+        self.code = code
+        self.description = description
+        self.status = status
+        self.heartbeatIntervalSeconds = heartbeatIntervalSeconds
+        self.offlineThresholdSeconds = offlineThresholdSeconds
+        self.hostCount = hostCount
+        self.instanceCount = instanceCount
+        self.onlineInstanceCount = onlineInstanceCount
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+public struct CreateClusterRequest: Codable {
+    public let name: String?
+    public let code: String?
+    public let description: String?
+    public let heartbeatIntervalSeconds: Int?
+    public let offlineThresholdSeconds: Int?
+
+
+    public init(name: String? = nil, code: String? = nil, description: String? = nil, heartbeatIntervalSeconds: Int? = nil, offlineThresholdSeconds: Int? = nil) {
+        self.name = name
+        self.code = code
+        self.description = description
+        self.heartbeatIntervalSeconds = heartbeatIntervalSeconds
+        self.offlineThresholdSeconds = offlineThresholdSeconds
+    }
+}
+
+public struct UpdateClusterRequest: Codable {
+    public let name: String?
+    public let description: String?
+    public let status: Int?
+    public let heartbeatIntervalSeconds: Int?
+    public let offlineThresholdSeconds: Int?
+
+
+    public init(name: String? = nil, description: String? = nil, status: Int? = nil, heartbeatIntervalSeconds: Int? = nil, offlineThresholdSeconds: Int? = nil) {
+        self.name = name
+        self.description = description
+        self.status = status
+        self.heartbeatIntervalSeconds = heartbeatIntervalSeconds
+        self.offlineThresholdSeconds = offlineThresholdSeconds
+    }
+}
+
+public struct ClusterHostResponse: Codable {
+    public let id: String?
+    public let clusterId: String?
+    public let name: String?
+    public let hostname: String?
+    public let machineCode: String?
+    public let osName: String?
+    public let osVersion: String?
+    public let kernelVersion: String?
+    public let arch: String?
+    public let cpuModel: String?
+    public let cpuCores: Int?
+    public let memoryTotalMb: String?
+    public let remoteIp: String?
+    public let localIps: [String]?
+    public let macAddresses: [String]?
+    public let daemonVersion: String?
+    public let status: Int?
+    public let lastHeartbeatAt: String?
+    public let instanceCount: String?
+    public let createdAt: String?
+    public let updatedAt: String?
+
+
+    public init(id: String? = nil, clusterId: String? = nil, name: String? = nil, hostname: String? = nil, machineCode: String? = nil, osName: String? = nil, osVersion: String? = nil, kernelVersion: String? = nil, arch: String? = nil, cpuModel: String? = nil, cpuCores: Int? = nil, memoryTotalMb: String? = nil, remoteIp: String? = nil, localIps: [String]? = nil, macAddresses: [String]? = nil, daemonVersion: String? = nil, status: Int? = nil, lastHeartbeatAt: String? = nil, instanceCount: String? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
+        self.id = id
+        self.clusterId = clusterId
+        self.name = name
+        self.hostname = hostname
+        self.machineCode = machineCode
+        self.osName = osName
+        self.osVersion = osVersion
+        self.kernelVersion = kernelVersion
+        self.arch = arch
+        self.cpuModel = cpuModel
+        self.cpuCores = cpuCores
+        self.memoryTotalMb = memoryTotalMb
+        self.remoteIp = remoteIp
+        self.localIps = localIps
+        self.macAddresses = macAddresses
+        self.daemonVersion = daemonVersion
+        self.status = status
+        self.lastHeartbeatAt = lastHeartbeatAt
+        self.instanceCount = instanceCount
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+public struct UpdateClusterHostRequest: Codable {
+    public let name: String?
+    public let clusterId: String?
+
+
+    public init(name: String? = nil, clusterId: String? = nil) {
+        self.name = name
+        self.clusterId = clusterId
+    }
+}
+
+public struct ClusterInstanceResponse: Codable {
+    public let id: String?
+    public let clusterId: String?
+    public let hostId: String?
+    public let hostName: String?
+    public let name: String?
+    public let role: String?
+    public let environment: String?
+    public let processPid: Int?
+    public let processStartedAt: String?
+    public let bindHost: String?
+    public let bindPort: Int?
+    public let publicEndpoint: String?
+    public let buildVersion: String?
+    public let status: Int?
+    public let healthState: String?
+    public let lastHeartbeatAt: String?
+    public let lastOnlineAt: String?
+    public let uptimeSeconds: String?
+    public let metrics: [String: Any]?
+    public let createdAt: String?
+    public let updatedAt: String?
+
+
+    public init(id: String? = nil, clusterId: String? = nil, hostId: String? = nil, hostName: String? = nil, name: String? = nil, role: String? = nil, environment: String? = nil, processPid: Int? = nil, processStartedAt: String? = nil, bindHost: String? = nil, bindPort: Int? = nil, publicEndpoint: String? = nil, buildVersion: String? = nil, status: Int? = nil, healthState: String? = nil, lastHeartbeatAt: String? = nil, lastOnlineAt: String? = nil, uptimeSeconds: String? = nil, metrics: [String: Any]? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
+        self.id = id
+        self.clusterId = clusterId
+        self.hostId = hostId
+        self.hostName = hostName
+        self.name = name
+        self.role = role
+        self.environment = environment
+        self.processPid = processPid
+        self.processStartedAt = processStartedAt
+        self.bindHost = bindHost
+        self.bindPort = bindPort
+        self.publicEndpoint = publicEndpoint
+        self.buildVersion = buildVersion
+        self.status = status
+        self.healthState = healthState
+        self.lastHeartbeatAt = lastHeartbeatAt
+        self.lastOnlineAt = lastOnlineAt
+        self.uptimeSeconds = uptimeSeconds
+        self.metrics = metrics
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+public struct UpdateClusterInstanceRequest: Codable {
+    public let name: String?
+    public let status: Int?
+    public let publicEndpoint: String?
+
+
+    public init(name: String? = nil, status: Int? = nil, publicEndpoint: String? = nil) {
+        self.name = name
+        self.status = status
+        self.publicEndpoint = publicEndpoint
+    }
+}
+
+public struct ClusterEventResponse: Codable {
+    public let id: String?
+    public let clusterId: String?
+    public let hostId: String?
+    public let instanceId: String?
+    public let eventType: String?
+    public let severity: String?
+    public let message: String?
+    public let detail: [String: Any]?
+    public let occurredAt: String?
+    public let createdAt: String?
+
+
+    public init(id: String? = nil, clusterId: String? = nil, hostId: String? = nil, instanceId: String? = nil, eventType: String? = nil, severity: String? = nil, message: String? = nil, detail: [String: Any]? = nil, occurredAt: String? = nil, createdAt: String? = nil) {
+        self.id = id
+        self.clusterId = clusterId
+        self.hostId = hostId
+        self.instanceId = instanceId
+        self.eventType = eventType
+        self.severity = severity
+        self.message = message
+        self.detail = detail
+        self.occurredAt = occurredAt
+        self.createdAt = createdAt
+    }
+}
+
+public struct ClusterOverviewResponse: Codable {
+    public let totalHosts: String?
+    public let onlineHosts: String?
+    public let totalInstances: String?
+    public let onlineInstances: String?
+    public let unhealthyInstances: String?
+    public let pendingPeerMessages: String?
+    public let generatedAt: String?
+
+
+    public init(totalHosts: String? = nil, onlineHosts: String? = nil, totalInstances: String? = nil, onlineInstances: String? = nil, unhealthyInstances: String? = nil, pendingPeerMessages: String? = nil, generatedAt: String? = nil) {
+        self.totalHosts = totalHosts
+        self.onlineHosts = onlineHosts
+        self.totalInstances = totalInstances
+        self.onlineInstances = onlineInstances
+        self.unhealthyInstances = unhealthyInstances
+        self.pendingPeerMessages = pendingPeerMessages
+        self.generatedAt = generatedAt
     }
 }
 
@@ -2154,6 +2450,188 @@ public struct RetrieveResponse: Codable {
 }
 
 public struct AuditLogsListResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ClustersListResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ClustersCreateResponse201: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ClustersRetrieveResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ClustersUpdateResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ClustersHostsListResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ClustersHostsRetrieveResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ClustersHostsUpdateResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ClustersInstancesListResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ClustersInstancesRetrieveResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ClustersInstancesUpdateResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ClustersEventsListResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ClustersOverviewRetrieveResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ClustersInstancesHeartbeatsListResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ClustersMessagesCreateResponse201: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?

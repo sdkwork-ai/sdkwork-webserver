@@ -24,7 +24,7 @@ client.setAuthToken("your-auth-token")
 client.setAccessToken("your-access-token")
 
 // Use the SDK
-let result = try await client.nginx.statusRetrieve()
+let result = try await client.cluster.clustersOverviewRetrieve()
 print(result)
 ```
 
@@ -61,6 +61,7 @@ client.setHeader("X-Custom-Header", value: "value")
 - `client.webserverConfig` - webserver_config API
 - `client.agent` - agent API
 - `client.audit` - audit API
+- `client.cluster` - cluster API
 
 ## Usage Examples
 
@@ -221,11 +222,19 @@ let result = try await client.audit.logsList(params: params)
 print(result)
 ```
 
+### cluster
+
+```swift
+// Retrieve the cluster health overview for status polling
+let result = try await client.cluster.clustersOverviewRetrieve()
+print(result)
+```
+
 ## Error Handling
 
 ```swift
 do {
-    try await client.nginx.statusRetrieve()
+    try await client.cluster.clustersOverviewRetrieve()
 } catch {
     print("Error: \(error)")
 }

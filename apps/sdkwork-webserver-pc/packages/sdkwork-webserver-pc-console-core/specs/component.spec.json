@@ -57,22 +57,16 @@
       "./session",
       "./composition"
     ],
-    "providedPorts": [
-      {
-        "name": "applicationSourceStorageAdapter",
-        "export": "."
-      }
-    ],
     "runtimeEntrypoints": [],
     "routeManifest": null,
     "sdkClients": [
-      "SdkworkAppClient",
+      "SdkworkDeployAppClient",
       "SdkworkDriveAppClient"
     ],
     "sdkDependencies": [
       {
-        "workspace": "sdkwork-webserver-app-sdk",
-        "permissionModuleId": "web",
+        "workspace": "sdkwork-deployments-app-sdk",
+        "permissionModuleId": "deploy",
         "surface": "app-api",
         "credentialMode": "authenticated-app-api"
       },
@@ -89,6 +83,12 @@
         {
           "moduleId": "web",
           "manifestRef": "../../../../specs/iam.module.manifest.json",
+          "inheritPermissions": true,
+          "inheritRoles": true
+        },
+        {
+          "moduleId": "deployments",
+          "manifestRef": "../../../../../sdkwork-deployments/specs/iam.module.manifest.json",
           "inheritPermissions": true,
           "inheritRoles": true
         },

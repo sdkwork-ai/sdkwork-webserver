@@ -1,7 +1,6 @@
 [package]
 name = "sdkwork-api-webserver-assembly"
 edition.workspace = true
-rust-version.workspace = true
 license.workspace = true
 version.workspace = true
 description = "Generated API assembly for sdkwork-webserver application HTTP plane."
@@ -19,6 +18,8 @@ async-trait.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+chrono.workspace = true
+sdkwork-utils-rust.workspace = true
 sdkwork-intelligence-webserver-repository-sqlx.workspace = true
 sdkwork-intelligence-webserver-service.workspace = true
 sdkwork_intelligence_deploy_repository_sqlx = { workspace = true }
@@ -28,9 +29,5 @@ sdkwork-web-contract.workspace = true
 sdkwork-api-deployments-assembly.workspace = true
 sdkwork-api-skills-assembly.workspace = true
 sdkwork-api-mcp-assembly.workspace = true
-sdkwork-routes-webserver-app-api.workspace = true
 sdkwork-routes-webserver-backend-api.workspace = true
 sdkwork-routes-webserver-internal-api.workspace = true
-
-[lints]
-workspace = true

@@ -35,7 +35,7 @@ public class Main {
 client.setAccessToken("your-access-token");
 
         // Use the SDK
-        StatusRetrieveResponse result = client.getNginx().statusRetrieve();
+        ClustersOverviewRetrieveResponse result = client.getCluster().clustersOverviewRetrieve();
         System.out.println(result);
     }
 }
@@ -74,6 +74,7 @@ client.getHttpClient().setHeader("X-Custom-Header", "value");
 - `client.getWebserverConfig()` - webserver_config API
 - `client.getAgent()` - agent API
 - `client.getAudit()` - audit API
+- `client.getCluster()` - cluster API
 
 ## Usage Examples
 
@@ -224,11 +225,19 @@ AuditLogsListResponse result = client.getAudit().logsList(params);
 System.out.println(result);
 ```
 
+### cluster
+
+```java
+// Retrieve the cluster health overview for status polling
+ClustersOverviewRetrieveResponse result = client.getCluster().clustersOverviewRetrieve();
+System.out.println(result);
+```
+
 ## Error Handling
 
 ```java
 try {
-    StatusRetrieveResponse result = client.getNginx().statusRetrieve();
+    ClustersOverviewRetrieveResponse result = client.getCluster().clustersOverviewRetrieve();
     System.out.println(result);
 } catch (Exception e) {
     System.err.println("Error: " + e.getMessage());

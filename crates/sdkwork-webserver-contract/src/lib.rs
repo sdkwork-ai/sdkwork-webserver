@@ -1,6 +1,7 @@
 //! Web Server service and HTTP port contracts.
 
 pub mod app_ports;
+pub mod cluster;
 pub mod dto;
 pub mod internal_ports;
 pub mod problem;
@@ -10,6 +11,7 @@ pub use app_ports::{
     ListApplicationsQuery, ListAuditLogsQuery, ListRootDomainsQuery, WebAppApi,
     WebAppRequestContext, WebAppResourceScope, WebBackendApi, WebBackendRequestContext,
 };
+pub use cluster::*;
 pub use dto::*;
 pub use internal_ports::*;
 pub use problem::{WebServiceError, WebServiceErrorKind, WebServiceResult};

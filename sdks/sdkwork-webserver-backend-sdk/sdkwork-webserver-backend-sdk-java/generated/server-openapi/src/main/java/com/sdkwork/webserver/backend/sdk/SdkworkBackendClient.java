@@ -15,6 +15,7 @@ import com.sdkwork.webserver.backend.sdk.api.ServerFileApi;
 import com.sdkwork.webserver.backend.sdk.api.WebserverConfigApi;
 import com.sdkwork.webserver.backend.sdk.api.AgentApi;
 import com.sdkwork.webserver.backend.sdk.api.AuditApi;
+import com.sdkwork.webserver.backend.sdk.api.ClusterApi;
 
 public class SdkworkBackendClient {
     private final HttpClient httpClient;
@@ -31,6 +32,7 @@ public class SdkworkBackendClient {
     private WebserverConfigApi webserverConfig;
     private AgentApi agent;
     private AuditApi audit;
+    private ClusterApi cluster;
 
     public SdkworkBackendClient(String baseUrl) {
         this.httpClient = new HttpClient(baseUrl);
@@ -47,6 +49,7 @@ public class SdkworkBackendClient {
         this.webserverConfig = new WebserverConfigApi(httpClient);
         this.agent = new AgentApi(httpClient);
         this.audit = new AuditApi(httpClient);
+        this.cluster = new ClusterApi(httpClient);
     }
 
     public SdkworkBackendClient(Types.SdkConfig config) {
@@ -64,6 +67,7 @@ public class SdkworkBackendClient {
         this.webserverConfig = new WebserverConfigApi(httpClient);
         this.agent = new AgentApi(httpClient);
         this.audit = new AuditApi(httpClient);
+        this.cluster = new ClusterApi(httpClient);
     }
 
     public ApplicationApi getApplication() {
@@ -116,6 +120,10 @@ public class SdkworkBackendClient {
 
     public AuditApi getAudit() {
         return this.audit;
+    }
+
+    public ClusterApi getCluster() {
+        return this.cluster;
     }
     public SdkworkBackendClient setAuthToken(String token) {
         httpClient.setAuthToken(token);

@@ -37,10 +37,9 @@
     }
   },
   "dependencies": {
+    "@sdkwork/deployments-app-sdk": "workspace:*",
     "@sdkwork/drive-app-sdk": "workspace:*",
     "@sdkwork/sdk-common": "workspace:*",
-    "@sdkwork/webserver-app-sdk": "workspace:*",
-    "@sdkwork/webserver-pc-commons": "workspace:*",
     "react": "catalog:"
   },
   "sdkwork": {

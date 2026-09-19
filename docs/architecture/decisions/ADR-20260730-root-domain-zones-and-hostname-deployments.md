@@ -16,13 +16,13 @@ guessing cannot be the ownership authority and cannot provide store-level pagina
 
 ## Decision
 
-- `web_root_domain` is the explicit tenant-owned Zone authority. Active normalized root hostnames
+- `webserver_root_domain` is the explicit tenant-owned Zone authority. Active normalized root hostnames
   are globally unique because two tenants cannot safely control the same public name.
-- Every `web_domain` has a required `(tenant_id, root_domain_id)` foreign key. The apex uses record
+- Every `webserver_domain` has a required `(tenant_id, root_domain_id)` foreign key. The apex uses record
   name `@`; child labels are normalized by the service into fully qualified hostnames.
 - Root domains and hostname children have independent, tenant-filtered repository pagination.
-- Application association is represented only by `web_site_binding`; deployment visibility is a
-  read projection from the bound `web_site` and its latest `web_deployment`.
+- Application association is represented only by `webserver_site_binding`; deployment visibility is a
+  read projection from the bound `webserver_site` and its latest `webserver_deployment`.
 - Hostname rows expose verification, route binding, certificate count, HTTPS readiness, latest
   deployment, and state-aware operations. They do not duplicate those authorities.
 - Root-domain deletion is blocked while any live hostname child exists. Hostname deletion is

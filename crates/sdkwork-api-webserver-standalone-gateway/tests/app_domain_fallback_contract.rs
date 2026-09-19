@@ -25,7 +25,8 @@ use sdkwork_deploy_runtime_compiler::{
     RuntimeDeliveryPolicy, RuntimeEnvironment, RuntimeHandler, RuntimeLimits, RuntimeMount,
     RuntimeMountMode, RuntimeMountTranslation, RuntimeObservabilityPolicy,
     RuntimeProviderReference, RuntimeProviderType, RuntimeResource, RuntimeResourceCapabilities,
-    RuntimeSecurityPolicy, RuntimeVariant, DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION as DEPLOY_DRIVE,
+    RuntimeSecurityPolicy, RuntimeVariant,
+    DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION as DEPLOY_DRIVE,
     KNOWLEDGEBASE_WIKI_PUBLICATION_PROVIDER_CONTRACT_VERSION as DEPLOY_WIKI,
 };
 use sdkwork_webserver_core::website_runtime::{
@@ -39,13 +40,7 @@ use sdkwork_webserver_knowledgebase_provider::KNOWLEDGEBASE_WIKI_PROVIDER_CONTRA
 const HOSTNAME: &str = "myapp.app.sdkwork.com";
 
 /// The five lifecycle environments the platform provisions and serves.
-const LIFECYCLE_ENVIRONMENTS: [&str; 5] = [
-    "development",
-    "test",
-    "staging",
-    "demo",
-    "production",
-];
+const LIFECYCLE_ENVIRONMENTS: [&str; 5] = ["development", "test", "staging", "demo", "production"];
 
 #[test]
 fn provider_contract_versions_agree_across_repositories() {

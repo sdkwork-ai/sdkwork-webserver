@@ -23,8 +23,8 @@ test('node sync repository streams bounded projections before materialization', 
   assert.match(repository, /\.fetch\(&self\.pool\)/u);
   assert.match(repository, /\.try_next\(\)/u);
   assert.match(repository, /CASE WHEN \{content_size\}/u);
-  assert.match(repository, /web_listener_certificate_binding/u);
-  assert.match(repository, /web_certificate_version/u);
+  assert.match(repository, /webserver_listener_certificate_binding/u);
+  assert.match(repository, /webserver_certificate_version/u);
   assert.match(repository, /v\.secret_bundle_ref/u);
   assert.match(repository, /reserve_with_additional_bytes/u);
   // Every runtime-assignment query remains bounded: the only `fetch_all` on the
@@ -51,7 +51,7 @@ test('node sync service and daemon retain independent final response bounds', ()
   // failure rejects the sync; the service forwards the bounded manifest.
   assert.match(
     repositorySource,
-    /INNER JOIN web_certificate_secret_bundle/u,
+    /INNER JOIN webserver_certificate_secret_bundle/u,
   );
   assert.match(repositorySource, /decrypt_certificate_secret_bundle/u);
   assert.match(service, /serde_json::to_vec\(manifest\)/u);

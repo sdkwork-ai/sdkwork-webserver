@@ -5,6 +5,7 @@ pub mod app;
 pub mod audit_time;
 pub mod backend;
 pub mod certificate_ops;
+pub mod cluster_ops;
 pub mod certificate_renewal_ops;
 pub mod domain_verification;
 pub mod nginx_ops;
@@ -15,20 +16,23 @@ pub mod tls_material_distribution;
 
 pub use domain_verification::{DnsTxtDomainOwnershipVerifier, DomainOwnershipVerifier};
 pub use repository::{
-    AuditLogWrite, CertificateRevocationMaterial, DomainVerificationChallenge,
-    DomainVerificationObservation, RuntimeAssignmentTarget, RuntimeAssignmentWrite,
-    RuntimeObservationWrite, WebRepositoryPort,
+    AuditLogWrite, CertificateRevocationMaterial, ClusterEventWrite, ClusterHeartbeatTransition,
+    ClusterHeartbeatWrite, ClusterHostUpsert, ClusterIdentity, ClusterInstanceCredentials,
+    ClusterInstanceUpsert, ClusterPeerMessageEnqueue, ClusterUpsert, DomainVerificationChallenge,
+    DomainVerificationObservation, ExpiredClusterHost, ExpiredClusterInstance,
+    RuntimeAssignmentTarget, RuntimeAssignmentWrite, RuntimeObservationWrite, WebRepositoryPort,
 };
 pub use source_import::{
     ApplicationSourceImporter, GitSourceImportRequest, ImportedApplicationSource,
 };
+pub use cluster_ops::{ClusterMachineCredential, ClusterSweepReport};
 pub use tls_material_distribution::TlsMaterialDistributionConfig;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use sdkwork_webserver_acme_service::CertificateIssuer;
-use sdkwork_webserver_contract::WebServiceResult;
+use sdkwork_webserver_contract::{WebServiceError, WebServiceResult};
 use sdkwork_webserver_edge_runtime::EdgeRuntime;
 
 /// Application service for SDKWork Web control plane operations.
@@ -48,7 +52,7 @@ impl WebService {
         repository: Arc<dyn WebRepositoryPort>,
         certificate_issuer: Arc<CertificateIssuer>,
         edge_runtime: Arc<EdgeRuntime>,
-    ) -> Self {
+    ) -> Result<Self, WebServiceError> {
         Self::new_with_source_importer(
             repository,
             certificate_issuer,
@@ -62,14 +66,14 @@ impl WebService {
         certificate_issuer: Arc<CertificateIssuer>,
         edge_runtime: Arc<EdgeRuntime>,
         source_importer: Arc<dyn ApplicationSourceImporter>,
-    ) -> Self {
-        Self::new_with_dependencies(
+    ) -> Result<Self, WebServiceError> {
+        Ok(Self::new_with_dependencies(
             repository,
             certificate_issuer,
             edge_runtime,
             source_importer,
-            Arc::new(DnsTxtDomainOwnershipVerifier::new()),
-        )
+            Arc::new(DnsTxtDomainOwnershipVerifier::new()?),
+        ))
     }
 
     pub fn new_with_dependencies(

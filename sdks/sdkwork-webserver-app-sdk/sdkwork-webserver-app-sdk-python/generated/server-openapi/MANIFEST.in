@@ -1,2 +1,0 @@
-include README.md
-recursive-include sdkwork_webserver_app_sdk *.py

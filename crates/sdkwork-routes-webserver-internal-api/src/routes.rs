@@ -8,8 +8,9 @@ use axum::{
 };
 use sdkwork_routes_webserver_common::{created_resource, ok_resource, WebApiError};
 use sdkwork_webserver_contract::{
-    CreateRuntimeObservationRequest, PublishRuntimeAssignmentRequest, WebInternalApi,
-    WebInternalRequestContext, MAX_WEBSITE_RUNTIME_SET_BYTES,
+    ClusterHeartbeatRequest, ClusterRegistrationRequest, CreateRuntimeObservationRequest,
+    PublishRuntimeAssignmentRequest, WebInternalApi, WebInternalRequestContext,
+    MAX_WEBSITE_RUNTIME_SET_BYTES,
 };
 use serde::Deserialize;
 
@@ -17,6 +18,8 @@ use crate::{auth::require_internal_context, paths};
 
 const PUBLISH_REQUEST_ENVELOPE_BYTES: usize = 1024 * 1024;
 const OBSERVATION_REQUEST_BYTES: usize = 16 * 1024;
+const REGISTRATION_REQUEST_BYTES: usize = 64 * 1024;
+const HEARTBEAT_REQUEST_BYTES: usize = 64 * 1024;
 
 #[derive(Clone)]
 struct InternalState {
@@ -61,7 +64,52 @@ pub fn build_router_with_shared_internal_api(api: Arc<dyn WebInternalApi>) -> Ro
             paths::LATEST_RUNTIME_OBSERVATION,
             get(retrieve_latest_runtime_observation),
         )
+        .route(
+            paths::CLUSTER_REGISTER,
+            post(cluster_register).layer(DefaultBodyLimit::max(REGISTRATION_REQUEST_BYTES)),
+        )
+        .route(
+            paths::CLUSTER_HEARTBEAT,
+            post(cluster_heartbeat).layer(DefaultBodyLimit::max(HEARTBEAT_REQUEST_BYTES)),
+        )
+        .route(paths::CLUSTER_PEERS, get(retrieve_cluster_peers))
         .with_state(InternalState { api })
+}
+
+async fn cluster_register(
+    State(state): State<InternalState>,
+    context: Option<Extension<WebInternalRequestContext>>,
+    Json(request): Json<ClusterRegistrationRequest>,
+) -> Result<Response, WebApiError> {
+    let context = require_internal_context(context)?;
+    created_resource(
+        state
+            .api
+            .register_cluster_instance(&context, &request)
+            .await,
+    )
+}
+
+async fn cluster_heartbeat(
+    State(state): State<InternalState>,
+    context: Option<Extension<WebInternalRequestContext>>,
+    Json(request): Json<ClusterHeartbeatRequest>,
+) -> Result<Response, WebApiError> {
+    let context = require_internal_context(context)?;
+    ok_resource(
+        state
+            .api
+            .record_cluster_heartbeat(&context, &request)
+            .await,
+    )
+}
+
+async fn retrieve_cluster_peers(
+    State(state): State<InternalState>,
+    context: Option<Extension<WebInternalRequestContext>>,
+) -> Result<Response, WebApiError> {
+    let context = require_internal_context(context)?;
+    ok_resource(state.api.retrieve_cluster_peers(&context).await)
 }
 
 async fn publish_runtime_assignment(

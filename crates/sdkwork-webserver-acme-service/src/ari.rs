@@ -9,7 +9,6 @@ use instant_acme::{CertificateIdentifier, Error as InstantAcmeError};
 use x509_parser::extensions::ParsedExtension;
 use x509_parser::pem::parse_x509_pem;
 
-use crate::http_client::BoundedAcmeHttpClient;
 use crate::{AcmeServiceError, AcmeServiceResult, CertificateIssuer};
 
 /// CA-suggested renewal window (RFC 9773 §4.2), serialized RFC 3339.
@@ -81,15 +80,12 @@ impl CertificateIssuer {
                     "no ACME account exists for the configured CA; cannot query renewal information",
                 )
             })?;
-        let account =
-            instant_acme::Account::builder_with_http(Box::new(BoundedAcmeHttpClient::new()?))
-                .from_credentials(credentials)
-                .await
-                .map_err(|error| {
-                    AcmeServiceError::provider(format!(
-                        "restore ACME account for ARI lookup: {error}"
-                    ))
-                })?;
+        let account = instant_acme::Account::builder_with_http(self.client_factory.build()?)
+            .from_credentials(credentials)
+            .await
+            .map_err(|error| {
+                AcmeServiceError::provider(format!("restore ACME account for ARI lookup: {error}"))
+            })?;
         let certificate_id = CertificateIdentifier {
             authority_key_identifier: std::borrow::Cow::Owned(
                 URL_SAFE_NO_PAD.encode(authority_key_identifier.0),

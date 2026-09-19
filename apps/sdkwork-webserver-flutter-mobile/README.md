@@ -30,9 +30,9 @@ worked around.
    expects capability packages to consume dependency domains through generated
    Dart clients. The workspace has **62** `*-app-sdk` families and only **six**
    ship a Flutter variant (`sdkwork-agents`, `sdkwork-cloudrouter`,
-   `sdkwork-iam`, `sdkwork-im`, `sdkwork-mcp`, `sdkwork-webserver`).
-   `sdkwork-webserver` is consumed for real; `sdkwork-deployments-app-sdk` and
-   `sdkwork-drive-app-sdk` are TypeScript-only.
+   `sdkwork-iam`, `sdkwork-im`, `sdkwork-mcp`, `sdkwork-webserver`) — and none of
+   those six is owned by this root. The two families this root does own,
+   `sdkwork-deployments-app-sdk` and `sdkwork-drive-app-sdk`, are TypeScript-only.
 
    Because the applications screen reads the **deployments** vocabulary
    (`deploy.apps.list`, `AppKind`, `AppStatus`) — the same authority the PC
@@ -142,7 +142,7 @@ never claims "the Dart ran":
   asserted to exist and to still name each behaviour, so a behaviour can never be
   quietly dropped from the suite that will run once the toolchain lands. The
   behavioural half itself lives in
-  `packages/sdkwork_webserver_flutter_mobile_core/test/webserver_app_sdk_clients_test.dart`,
+  `packages/sdkwork_webserver_flutter_mobile_core/test/app_api_surface_url_test.dart`,
   `..._applications/test/applications_mapping_test.dart`, and
   `..._shell/test/route_contract_test.dart`.
 - **A reference mirror** (pure JS) for the pagination narrowing, labelled as a

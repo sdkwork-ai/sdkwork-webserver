@@ -13,7 +13,7 @@ import type { WebserverMessageKey } from "./i18n/index.ts";
  * module (`/admin/storage`) be carved out of the catch-all `home` module
  * (`/admin`) without enumerating what stays behind.
  */
-export type WebserverAdminModuleId = "home" | "storageCenter";
+export type WebserverAdminModuleId = "home" | "storageCenter" | "clusterCenter";
 
 export interface WebserverAdminModuleDefinition {
   id: WebserverAdminModuleId;
@@ -43,6 +43,12 @@ export const ADMIN_MODULES: readonly WebserverAdminModuleDefinition[] = [
     labelKey: "module.storageCenter",
     descriptionKey: "module.storageCenter.description",
     pathPrefixes: ["/admin/storage"],
+  },
+  {
+    id: "clusterCenter",
+    labelKey: "module.clusterCenter",
+    descriptionKey: "module.clusterCenter.description",
+    pathPrefixes: ["/admin/cluster"],
   },
 ];
 

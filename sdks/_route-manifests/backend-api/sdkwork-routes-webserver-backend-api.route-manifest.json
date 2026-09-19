@@ -1626,6 +1626,448 @@
       "permission": "web.auditLogs.read",
       "idempotent": false,
       "rateLimitTier": null
+    },
+    {
+      "method": "GET",
+      "path": "/backend/v3/api/clusters",
+      "operationId": "clusters.list",
+      "tags": [
+        "cluster"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.cluster.read",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "POST",
+      "path": "/backend/v3/api/clusters",
+      "operationId": "clusters.create",
+      "tags": [
+        "cluster"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.cluster.write",
+      "idempotent": true,
+      "rateLimitTier": "auth-critical"
+    },
+    {
+      "method": "GET",
+      "path": "/backend/v3/api/clusters/{clusterId}",
+      "operationId": "clusters.retrieve",
+      "tags": [
+        "cluster"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.cluster.read",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "PATCH",
+      "path": "/backend/v3/api/clusters/{clusterId}",
+      "operationId": "clusters.update",
+      "tags": [
+        "cluster"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.cluster.write",
+      "idempotent": true,
+      "rateLimitTier": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/backend/v3/api/clusters/{clusterId}",
+      "operationId": "clusters.delete",
+      "tags": [
+        "cluster"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.cluster.write",
+      "idempotent": true,
+      "rateLimitTier": "auth-critical"
+    },
+    {
+      "method": "GET",
+      "path": "/backend/v3/api/clusters/hosts",
+      "operationId": "clusters.hosts.list",
+      "tags": [
+        "cluster"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.cluster.read",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "GET",
+      "path": "/backend/v3/api/clusters/hosts/{hostId}",
+      "operationId": "clusters.hosts.retrieve",
+      "tags": [
+        "cluster"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.cluster.read",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "PATCH",
+      "path": "/backend/v3/api/clusters/hosts/{hostId}",
+      "operationId": "clusters.hosts.update",
+      "tags": [
+        "cluster"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.cluster.write",
+      "idempotent": true,
+      "rateLimitTier": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/backend/v3/api/clusters/hosts/{hostId}",
+      "operationId": "clusters.hosts.delete",
+      "tags": [
+        "cluster"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.cluster.write",
+      "idempotent": true,
+      "rateLimitTier": "auth-critical"
+    },
+    {
+      "method": "GET",
+      "path": "/backend/v3/api/clusters/instances",
+      "operationId": "clusters.instances.list",
+      "tags": [
+        "cluster"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.cluster.read",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "GET",
+      "path": "/backend/v3/api/clusters/instances/{instanceId}",
+      "operationId": "clusters.instances.retrieve",
+      "tags": [
+        "cluster"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.cluster.read",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "PATCH",
+      "path": "/backend/v3/api/clusters/instances/{instanceId}",
+      "operationId": "clusters.instances.update",
+      "tags": [
+        "cluster"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.cluster.write",
+      "idempotent": true,
+      "rateLimitTier": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/backend/v3/api/clusters/instances/{instanceId}",
+      "operationId": "clusters.instances.delete",
+      "tags": [
+        "cluster"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.cluster.write",
+      "idempotent": true,
+      "rateLimitTier": "auth-critical"
+    },
+    {
+      "method": "GET",
+      "path": "/backend/v3/api/clusters/events",
+      "operationId": "clusters.events.list",
+      "tags": [
+        "cluster"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.cluster.read",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "GET",
+      "path": "/backend/v3/api/clusters/overview",
+      "operationId": "clusters.overview.retrieve",
+      "tags": [
+        "cluster"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.cluster.read",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "GET",
+      "path": "/backend/v3/api/clusters/instances/{instanceId}/heartbeats",
+      "operationId": "clusters.instances.heartbeats.list",
+      "tags": [
+        "cluster"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.cluster.read",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "POST",
+      "path": "/backend/v3/api/clusters/messages",
+      "operationId": "clusters.messages.create",
+      "tags": [
+        "cluster"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.cluster.write",
+      "idempotent": true,
+      "rateLimitTier": "auth-critical"
     }
   ]
 }

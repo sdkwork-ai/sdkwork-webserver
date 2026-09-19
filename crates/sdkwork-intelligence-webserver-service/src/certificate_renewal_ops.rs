@@ -275,7 +275,8 @@ async fn persist_certificate_operation_failure(
     lease: &CertificateOperationLease,
     failure_code: &str,
 ) -> WebServiceResult<CertificateOperationOutcome> {
-    let (retry_at, terminal_retry_at) = certificate_retry_deadlines(lease.attempt_count);
+    let (retry_at, terminal_retry_at) =
+        certificate_retry_deadlines(lease.attempt_count, &lease.operation_id);
     let operation = repository
         .fail_certificate_operation(lease, failure_code, &retry_at, &terminal_retry_at)
         .await?;
@@ -322,13 +323,26 @@ fn spawn_certificate_lease_heartbeat(
     })
 }
 
-fn certificate_retry_deadlines(attempt_count: i32) -> (String, String) {
+/// Deterministic ±20% jitter derived from the operation id. A fleet of
+/// workers retrying after a CA outage spreads their re-claims instead of
+/// retrying in lockstep, while the schedule for one operation stays
+/// reproducible (no RNG dependency, stable in logs and tests).
+fn certificate_retry_deadlines(attempt_count: i32, operation_id: &str) -> (String, String) {
     let exponent = u32::try_from(attempt_count.saturating_sub(1))
         .unwrap_or_default()
         .min(16);
     let delay_secs = CERTIFICATE_RETRY_BASE_SECS
         .saturating_mul(1_i64.checked_shl(exponent).unwrap_or(i64::MAX))
         .min(CERTIFICATE_RETRY_MAX_SECS);
+    let jitter_spread = (delay_secs / 5).max(1);
+    // First 8 hex chars of the operation-id hash select the jitter offset.
+    let offset = i64::from_str_radix(
+        &sdkwork_utils_rust::crypto::sha256_hash(operation_id.as_bytes())[..8],
+        16,
+    )
+    .unwrap_or_default();
+    let delay_secs = (delay_secs - jitter_spread) + (offset % (2 * jitter_spread + 1)).abs();
+    let delay_secs = delay_secs.clamp(1, CERTIFICATE_RETRY_MAX_SECS);
     let now = Utc::now();
     (
         (now + Duration::seconds(delay_secs)).to_rfc3339(),
@@ -355,7 +369,7 @@ mod tests {
 
     #[test]
     fn retry_backoff_is_bounded_and_terminal_cooldown_is_later() {
-        let (retry_at, terminal_retry_at) = certificate_retry_deadlines(100);
+        let (retry_at, terminal_retry_at) = certificate_retry_deadlines(100, "op-1");
         let retry_at = DateTime::parse_from_rfc3339(&retry_at).expect("retry instant");
         let terminal_retry_at =
             DateTime::parse_from_rfc3339(&terminal_retry_at).expect("terminal instant");

@@ -12,6 +12,144 @@ List<dynamic>? _sdkworkAsList(dynamic value) {
   return value is List ? value : null;
 }
 
+class ClusterHeartbeatSampleResponse {
+  final String id;
+  final int status;
+  final int? latencyMs;
+  final Map<String, dynamic> metrics;
+  final String reportedAt;
+
+  ClusterHeartbeatSampleResponse({
+    required this.id,
+    required this.status,
+    this.latencyMs,
+    required this.metrics,
+    required this.reportedAt
+  });
+
+  factory ClusterHeartbeatSampleResponse.fromJson(Map<String, dynamic> json) {
+    return ClusterHeartbeatSampleResponse(
+      id: (() {
+        final value = json['id']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterHeartbeatSampleResponse.id is required');
+        }
+        return value;
+      })(),
+      status: (() {
+        final value = json['status'];
+        if (value is! int) {
+          throw FormatException('ClusterHeartbeatSampleResponse.status is required');
+        }
+        return value;
+      })(),
+      latencyMs: json['latencyMs'] is int ? json['latencyMs'] : null,
+      metrics: (() {
+        final map = _sdkworkAsMap(json['metrics']);
+        if (map == null) {
+          throw FormatException('ClusterHeartbeatSampleResponse.metrics is required');
+        }
+        return map;
+      })(),
+      reportedAt: (() {
+        final value = json['reportedAt']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterHeartbeatSampleResponse.reportedAt is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'status': status,
+      'latencyMs': latencyMs,
+      'metrics': metrics,
+      'reportedAt': reportedAt,
+    };
+  }
+}
+
+class EnqueueClusterPeerMessagesRequest {
+  final String clusterId;
+  final String? toInstanceId;
+  final String? fromInstanceId;
+  final String messageType;
+  final Map<String, dynamic>? payload;
+  final int? expiresInSeconds;
+
+  EnqueueClusterPeerMessagesRequest({
+    required this.clusterId,
+    this.toInstanceId,
+    this.fromInstanceId,
+    required this.messageType,
+    this.payload,
+    this.expiresInSeconds
+  });
+
+  factory EnqueueClusterPeerMessagesRequest.fromJson(Map<String, dynamic> json) {
+    return EnqueueClusterPeerMessagesRequest(
+      clusterId: (() {
+        final value = json['clusterId']?.toString();
+        if (value == null) {
+          throw FormatException('EnqueueClusterPeerMessagesRequest.clusterId is required');
+        }
+        return value;
+      })(),
+      toInstanceId: json['toInstanceId']?.toString(),
+      fromInstanceId: json['fromInstanceId']?.toString(),
+      messageType: (() {
+        final value = json['messageType']?.toString();
+        if (value == null) {
+          throw FormatException('EnqueueClusterPeerMessagesRequest.messageType is required');
+        }
+        return value;
+      })(),
+      payload: _sdkworkAsMap(json['payload']),
+      expiresInSeconds: json['expiresInSeconds'] is int ? json['expiresInSeconds'] : null
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'clusterId': clusterId,
+      'toInstanceId': toInstanceId,
+      'fromInstanceId': fromInstanceId,
+      'messageType': messageType,
+      'payload': payload,
+      'expiresInSeconds': expiresInSeconds,
+    };
+  }
+}
+
+class EnqueueClusterPeerMessagesResponse {
+  final String enqueued;
+
+  EnqueueClusterPeerMessagesResponse({
+    required this.enqueued
+  });
+
+  factory EnqueueClusterPeerMessagesResponse.fromJson(Map<String, dynamic> json) {
+    return EnqueueClusterPeerMessagesResponse(
+      enqueued: (() {
+        final value = json['enqueued']?.toString();
+        if (value == null) {
+          throw FormatException('EnqueueClusterPeerMessagesResponse.enqueued is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'enqueued': enqueued,
+    };
+  }
+}
+
 class ProblemDetail {
   final String type;
   final String title;
@@ -3775,14 +3913,30 @@ class ServerRunOperationRequest {
 class ServerOperationResult {
   final String operationId;
   final int? exitCode;
+  final bool? timedOut;
   final String? stdout;
   final String? stderr;
+  final bool? stdoutTruncated;
+  final bool? stderrTruncated;
+  final int? pid;
+  final String? pidFile;
+  final String? logFile;
+  final bool? stopped;
+  final String? message;
 
   ServerOperationResult({
     required this.operationId,
     this.exitCode,
+    this.timedOut,
     this.stdout,
-    this.stderr
+    this.stderr,
+    this.stdoutTruncated,
+    this.stderrTruncated,
+    this.pid,
+    this.pidFile,
+    this.logFile,
+    this.stopped,
+    this.message
   });
 
   factory ServerOperationResult.fromJson(Map<String, dynamic> json) {
@@ -3795,8 +3949,16 @@ class ServerOperationResult {
         return value;
       })(),
       exitCode: json['exitCode'] is int ? json['exitCode'] : null,
+      timedOut: json['timedOut'] is bool ? json['timedOut'] : null,
       stdout: json['stdout']?.toString(),
-      stderr: json['stderr']?.toString()
+      stderr: json['stderr']?.toString(),
+      stdoutTruncated: json['stdoutTruncated'] is bool ? json['stdoutTruncated'] : null,
+      stderrTruncated: json['stderrTruncated'] is bool ? json['stderrTruncated'] : null,
+      pid: json['pid'] is int ? json['pid'] : null,
+      pidFile: json['pidFile']?.toString(),
+      logFile: json['logFile']?.toString(),
+      stopped: json['stopped'] is bool ? json['stopped'] : null,
+      message: json['message']?.toString()
     );
   }
 
@@ -3804,8 +3966,16 @@ class ServerOperationResult {
     return <String, dynamic>{
       'operationId': operationId,
       'exitCode': exitCode,
+      'timedOut': timedOut,
       'stdout': stdout,
       'stderr': stderr,
+      'stdoutTruncated': stdoutTruncated,
+      'stderrTruncated': stderrTruncated,
+      'pid': pid,
+      'pidFile': pidFile,
+      'logFile': logFile,
+      'stopped': stopped,
+      'message': message,
     };
   }
 }
@@ -4720,6 +4890,806 @@ class SdkWorkCommandResponse {
       'code': code,
       'data': data,
       'traceId': traceId,
+    };
+  }
+}
+
+class ClusterResponse {
+  final String id;
+  final String name;
+  final String code;
+  final String? description;
+  final int status;
+  final int heartbeatIntervalSeconds;
+  final int offlineThresholdSeconds;
+  final String hostCount;
+  final String instanceCount;
+  final String onlineInstanceCount;
+  final String createdAt;
+  final String updatedAt;
+
+  ClusterResponse({
+    required this.id,
+    required this.name,
+    required this.code,
+    this.description,
+    required this.status,
+    required this.heartbeatIntervalSeconds,
+    required this.offlineThresholdSeconds,
+    required this.hostCount,
+    required this.instanceCount,
+    required this.onlineInstanceCount,
+    required this.createdAt,
+    required this.updatedAt
+  });
+
+  factory ClusterResponse.fromJson(Map<String, dynamic> json) {
+    return ClusterResponse(
+      id: (() {
+        final value = json['id']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterResponse.id is required');
+        }
+        return value;
+      })(),
+      name: (() {
+        final value = json['name']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterResponse.name is required');
+        }
+        return value;
+      })(),
+      code: (() {
+        final value = json['code']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterResponse.code is required');
+        }
+        return value;
+      })(),
+      description: json['description']?.toString(),
+      status: (() {
+        final value = json['status'];
+        if (value is! int) {
+          throw FormatException('ClusterResponse.status is required');
+        }
+        return value;
+      })(),
+      heartbeatIntervalSeconds: (() {
+        final value = json['heartbeatIntervalSeconds'];
+        if (value is! int) {
+          throw FormatException('ClusterResponse.heartbeatIntervalSeconds is required');
+        }
+        return value;
+      })(),
+      offlineThresholdSeconds: (() {
+        final value = json['offlineThresholdSeconds'];
+        if (value is! int) {
+          throw FormatException('ClusterResponse.offlineThresholdSeconds is required');
+        }
+        return value;
+      })(),
+      hostCount: (() {
+        final value = json['hostCount']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterResponse.hostCount is required');
+        }
+        return value;
+      })(),
+      instanceCount: (() {
+        final value = json['instanceCount']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterResponse.instanceCount is required');
+        }
+        return value;
+      })(),
+      onlineInstanceCount: (() {
+        final value = json['onlineInstanceCount']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterResponse.onlineInstanceCount is required');
+        }
+        return value;
+      })(),
+      createdAt: (() {
+        final value = json['createdAt']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterResponse.createdAt is required');
+        }
+        return value;
+      })(),
+      updatedAt: (() {
+        final value = json['updatedAt']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterResponse.updatedAt is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'name': name,
+      'code': code,
+      'description': description,
+      'status': status,
+      'heartbeatIntervalSeconds': heartbeatIntervalSeconds,
+      'offlineThresholdSeconds': offlineThresholdSeconds,
+      'hostCount': hostCount,
+      'instanceCount': instanceCount,
+      'onlineInstanceCount': onlineInstanceCount,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
+    };
+  }
+}
+
+class CreateClusterRequest {
+  final String name;
+  final String code;
+  final String? description;
+  final int? heartbeatIntervalSeconds;
+  final int? offlineThresholdSeconds;
+
+  CreateClusterRequest({
+    required this.name,
+    required this.code,
+    this.description,
+    this.heartbeatIntervalSeconds,
+    this.offlineThresholdSeconds
+  });
+
+  factory CreateClusterRequest.fromJson(Map<String, dynamic> json) {
+    return CreateClusterRequest(
+      name: (() {
+        final value = json['name']?.toString();
+        if (value == null) {
+          throw FormatException('CreateClusterRequest.name is required');
+        }
+        return value;
+      })(),
+      code: (() {
+        final value = json['code']?.toString();
+        if (value == null) {
+          throw FormatException('CreateClusterRequest.code is required');
+        }
+        return value;
+      })(),
+      description: json['description']?.toString(),
+      heartbeatIntervalSeconds: json['heartbeatIntervalSeconds'] is int ? json['heartbeatIntervalSeconds'] : null,
+      offlineThresholdSeconds: json['offlineThresholdSeconds'] is int ? json['offlineThresholdSeconds'] : null
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'name': name,
+      'code': code,
+      'description': description,
+      'heartbeatIntervalSeconds': heartbeatIntervalSeconds,
+      'offlineThresholdSeconds': offlineThresholdSeconds,
+    };
+  }
+}
+
+class UpdateClusterRequest {
+  final String? name;
+  final String? description;
+  final int? status;
+  final int? heartbeatIntervalSeconds;
+  final int? offlineThresholdSeconds;
+
+  UpdateClusterRequest({
+    this.name,
+    this.description,
+    this.status,
+    this.heartbeatIntervalSeconds,
+    this.offlineThresholdSeconds
+  });
+
+  factory UpdateClusterRequest.fromJson(Map<String, dynamic> json) {
+    return UpdateClusterRequest(
+      name: json['name']?.toString(),
+      description: json['description']?.toString(),
+      status: json['status'] is int ? json['status'] : null,
+      heartbeatIntervalSeconds: json['heartbeatIntervalSeconds'] is int ? json['heartbeatIntervalSeconds'] : null,
+      offlineThresholdSeconds: json['offlineThresholdSeconds'] is int ? json['offlineThresholdSeconds'] : null
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'name': name,
+      'description': description,
+      'status': status,
+      'heartbeatIntervalSeconds': heartbeatIntervalSeconds,
+      'offlineThresholdSeconds': offlineThresholdSeconds,
+    };
+  }
+}
+
+class ClusterHostResponse {
+  final String id;
+  final String clusterId;
+  final String name;
+  final String hostname;
+  final String machineCode;
+  final String? osName;
+  final String? osVersion;
+  final String? kernelVersion;
+  final String? arch;
+  final String? cpuModel;
+  final int? cpuCores;
+  final String? memoryTotalMb;
+  final String? remoteIp;
+  final List<String> localIps;
+  final List<String> macAddresses;
+  final String? daemonVersion;
+  final int status;
+  final String? lastHeartbeatAt;
+  final String instanceCount;
+  final String createdAt;
+  final String updatedAt;
+
+  ClusterHostResponse({
+    required this.id,
+    required this.clusterId,
+    required this.name,
+    required this.hostname,
+    required this.machineCode,
+    this.osName,
+    this.osVersion,
+    this.kernelVersion,
+    this.arch,
+    this.cpuModel,
+    this.cpuCores,
+    this.memoryTotalMb,
+    this.remoteIp,
+    required this.localIps,
+    required this.macAddresses,
+    this.daemonVersion,
+    required this.status,
+    this.lastHeartbeatAt,
+    required this.instanceCount,
+    required this.createdAt,
+    required this.updatedAt
+  });
+
+  factory ClusterHostResponse.fromJson(Map<String, dynamic> json) {
+    return ClusterHostResponse(
+      id: (() {
+        final value = json['id']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterHostResponse.id is required');
+        }
+        return value;
+      })(),
+      clusterId: (() {
+        final value = json['clusterId']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterHostResponse.clusterId is required');
+        }
+        return value;
+      })(),
+      name: (() {
+        final value = json['name']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterHostResponse.name is required');
+        }
+        return value;
+      })(),
+      hostname: (() {
+        final value = json['hostname']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterHostResponse.hostname is required');
+        }
+        return value;
+      })(),
+      machineCode: (() {
+        final value = json['machineCode']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterHostResponse.machineCode is required');
+        }
+        return value;
+      })(),
+      osName: json['osName']?.toString(),
+      osVersion: json['osVersion']?.toString(),
+      kernelVersion: json['kernelVersion']?.toString(),
+      arch: json['arch']?.toString(),
+      cpuModel: json['cpuModel']?.toString(),
+      cpuCores: json['cpuCores'] is int ? json['cpuCores'] : null,
+      memoryTotalMb: json['memoryTotalMb']?.toString(),
+      remoteIp: json['remoteIp']?.toString(),
+      localIps: (() {
+        final list = _sdkworkAsList(json['localIps']);
+        if (list == null) {
+          throw FormatException('ClusterHostResponse.localIps is required');
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      macAddresses: (() {
+        final list = _sdkworkAsList(json['macAddresses']);
+        if (list == null) {
+          throw FormatException('ClusterHostResponse.macAddresses is required');
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      daemonVersion: json['daemonVersion']?.toString(),
+      status: (() {
+        final value = json['status'];
+        if (value is! int) {
+          throw FormatException('ClusterHostResponse.status is required');
+        }
+        return value;
+      })(),
+      lastHeartbeatAt: json['lastHeartbeatAt']?.toString(),
+      instanceCount: (() {
+        final value = json['instanceCount']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterHostResponse.instanceCount is required');
+        }
+        return value;
+      })(),
+      createdAt: (() {
+        final value = json['createdAt']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterHostResponse.createdAt is required');
+        }
+        return value;
+      })(),
+      updatedAt: (() {
+        final value = json['updatedAt']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterHostResponse.updatedAt is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'clusterId': clusterId,
+      'name': name,
+      'hostname': hostname,
+      'machineCode': machineCode,
+      'osName': osName,
+      'osVersion': osVersion,
+      'kernelVersion': kernelVersion,
+      'arch': arch,
+      'cpuModel': cpuModel,
+      'cpuCores': cpuCores,
+      'memoryTotalMb': memoryTotalMb,
+      'remoteIp': remoteIp,
+      'localIps': localIps.map((item) => item).toList(),
+      'macAddresses': macAddresses.map((item) => item).toList(),
+      'daemonVersion': daemonVersion,
+      'status': status,
+      'lastHeartbeatAt': lastHeartbeatAt,
+      'instanceCount': instanceCount,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
+    };
+  }
+}
+
+class UpdateClusterHostRequest {
+  final String? name;
+  final String? clusterId;
+
+  UpdateClusterHostRequest({
+    this.name,
+    this.clusterId
+  });
+
+  factory UpdateClusterHostRequest.fromJson(Map<String, dynamic> json) {
+    return UpdateClusterHostRequest(
+      name: json['name']?.toString(),
+      clusterId: json['clusterId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'name': name,
+      'clusterId': clusterId,
+    };
+  }
+}
+
+class ClusterInstanceResponse {
+  final String id;
+  final String clusterId;
+  final String hostId;
+  final String? hostName;
+  final String name;
+  final String role;
+  final String environment;
+  final int? processPid;
+  final String? processStartedAt;
+  final String? bindHost;
+  final int? bindPort;
+  final String? publicEndpoint;
+  final String? buildVersion;
+  final int status;
+  final String healthState;
+  final String? lastHeartbeatAt;
+  final String? lastOnlineAt;
+  final String uptimeSeconds;
+  final Map<String, dynamic> metrics;
+  final String createdAt;
+  final String updatedAt;
+
+  ClusterInstanceResponse({
+    required this.id,
+    required this.clusterId,
+    required this.hostId,
+    this.hostName,
+    required this.name,
+    required this.role,
+    required this.environment,
+    this.processPid,
+    this.processStartedAt,
+    this.bindHost,
+    this.bindPort,
+    this.publicEndpoint,
+    this.buildVersion,
+    required this.status,
+    required this.healthState,
+    this.lastHeartbeatAt,
+    this.lastOnlineAt,
+    required this.uptimeSeconds,
+    required this.metrics,
+    required this.createdAt,
+    required this.updatedAt
+  });
+
+  factory ClusterInstanceResponse.fromJson(Map<String, dynamic> json) {
+    return ClusterInstanceResponse(
+      id: (() {
+        final value = json['id']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterInstanceResponse.id is required');
+        }
+        return value;
+      })(),
+      clusterId: (() {
+        final value = json['clusterId']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterInstanceResponse.clusterId is required');
+        }
+        return value;
+      })(),
+      hostId: (() {
+        final value = json['hostId']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterInstanceResponse.hostId is required');
+        }
+        return value;
+      })(),
+      hostName: json['hostName']?.toString(),
+      name: (() {
+        final value = json['name']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterInstanceResponse.name is required');
+        }
+        return value;
+      })(),
+      role: (() {
+        final value = json['role']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterInstanceResponse.role is required');
+        }
+        return value;
+      })(),
+      environment: (() {
+        final value = json['environment']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterInstanceResponse.environment is required');
+        }
+        return value;
+      })(),
+      processPid: json['processPid'] is int ? json['processPid'] : null,
+      processStartedAt: json['processStartedAt']?.toString(),
+      bindHost: json['bindHost']?.toString(),
+      bindPort: json['bindPort'] is int ? json['bindPort'] : null,
+      publicEndpoint: json['publicEndpoint']?.toString(),
+      buildVersion: json['buildVersion']?.toString(),
+      status: (() {
+        final value = json['status'];
+        if (value is! int) {
+          throw FormatException('ClusterInstanceResponse.status is required');
+        }
+        return value;
+      })(),
+      healthState: (() {
+        final value = json['healthState']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterInstanceResponse.healthState is required');
+        }
+        return value;
+      })(),
+      lastHeartbeatAt: json['lastHeartbeatAt']?.toString(),
+      lastOnlineAt: json['lastOnlineAt']?.toString(),
+      uptimeSeconds: (() {
+        final value = json['uptimeSeconds']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterInstanceResponse.uptimeSeconds is required');
+        }
+        return value;
+      })(),
+      metrics: (() {
+        final map = _sdkworkAsMap(json['metrics']);
+        if (map == null) {
+          throw FormatException('ClusterInstanceResponse.metrics is required');
+        }
+        return map;
+      })(),
+      createdAt: (() {
+        final value = json['createdAt']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterInstanceResponse.createdAt is required');
+        }
+        return value;
+      })(),
+      updatedAt: (() {
+        final value = json['updatedAt']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterInstanceResponse.updatedAt is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'clusterId': clusterId,
+      'hostId': hostId,
+      'hostName': hostName,
+      'name': name,
+      'role': role,
+      'environment': environment,
+      'processPid': processPid,
+      'processStartedAt': processStartedAt,
+      'bindHost': bindHost,
+      'bindPort': bindPort,
+      'publicEndpoint': publicEndpoint,
+      'buildVersion': buildVersion,
+      'status': status,
+      'healthState': healthState,
+      'lastHeartbeatAt': lastHeartbeatAt,
+      'lastOnlineAt': lastOnlineAt,
+      'uptimeSeconds': uptimeSeconds,
+      'metrics': metrics,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
+    };
+  }
+}
+
+class UpdateClusterInstanceRequest {
+  final String? name;
+  final int? status;
+  final String? publicEndpoint;
+
+  UpdateClusterInstanceRequest({
+    this.name,
+    this.status,
+    this.publicEndpoint
+  });
+
+  factory UpdateClusterInstanceRequest.fromJson(Map<String, dynamic> json) {
+    return UpdateClusterInstanceRequest(
+      name: json['name']?.toString(),
+      status: json['status'] is int ? json['status'] : null,
+      publicEndpoint: json['publicEndpoint']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'name': name,
+      'status': status,
+      'publicEndpoint': publicEndpoint,
+    };
+  }
+}
+
+class ClusterEventResponse {
+  final String id;
+  final String clusterId;
+  final String? hostId;
+  final String? instanceId;
+  final String eventType;
+  final String severity;
+  final String message;
+  final Map<String, dynamic> detail;
+  final String occurredAt;
+  final String createdAt;
+
+  ClusterEventResponse({
+    required this.id,
+    required this.clusterId,
+    this.hostId,
+    this.instanceId,
+    required this.eventType,
+    required this.severity,
+    required this.message,
+    required this.detail,
+    required this.occurredAt,
+    required this.createdAt
+  });
+
+  factory ClusterEventResponse.fromJson(Map<String, dynamic> json) {
+    return ClusterEventResponse(
+      id: (() {
+        final value = json['id']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterEventResponse.id is required');
+        }
+        return value;
+      })(),
+      clusterId: (() {
+        final value = json['clusterId']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterEventResponse.clusterId is required');
+        }
+        return value;
+      })(),
+      hostId: json['hostId']?.toString(),
+      instanceId: json['instanceId']?.toString(),
+      eventType: (() {
+        final value = json['eventType']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterEventResponse.eventType is required');
+        }
+        return value;
+      })(),
+      severity: (() {
+        final value = json['severity']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterEventResponse.severity is required');
+        }
+        return value;
+      })(),
+      message: (() {
+        final value = json['message']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterEventResponse.message is required');
+        }
+        return value;
+      })(),
+      detail: (() {
+        final map = _sdkworkAsMap(json['detail']);
+        if (map == null) {
+          throw FormatException('ClusterEventResponse.detail is required');
+        }
+        return map;
+      })(),
+      occurredAt: (() {
+        final value = json['occurredAt']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterEventResponse.occurredAt is required');
+        }
+        return value;
+      })(),
+      createdAt: (() {
+        final value = json['createdAt']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterEventResponse.createdAt is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'clusterId': clusterId,
+      'hostId': hostId,
+      'instanceId': instanceId,
+      'eventType': eventType,
+      'severity': severity,
+      'message': message,
+      'detail': detail,
+      'occurredAt': occurredAt,
+      'createdAt': createdAt,
+    };
+  }
+}
+
+class ClusterOverviewResponse {
+  final String totalHosts;
+  final String onlineHosts;
+  final String totalInstances;
+  final String onlineInstances;
+  final String unhealthyInstances;
+  final String pendingPeerMessages;
+  final String generatedAt;
+
+  ClusterOverviewResponse({
+    required this.totalHosts,
+    required this.onlineHosts,
+    required this.totalInstances,
+    required this.onlineInstances,
+    required this.unhealthyInstances,
+    required this.pendingPeerMessages,
+    required this.generatedAt
+  });
+
+  factory ClusterOverviewResponse.fromJson(Map<String, dynamic> json) {
+    return ClusterOverviewResponse(
+      totalHosts: (() {
+        final value = json['totalHosts']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterOverviewResponse.totalHosts is required');
+        }
+        return value;
+      })(),
+      onlineHosts: (() {
+        final value = json['onlineHosts']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterOverviewResponse.onlineHosts is required');
+        }
+        return value;
+      })(),
+      totalInstances: (() {
+        final value = json['totalInstances']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterOverviewResponse.totalInstances is required');
+        }
+        return value;
+      })(),
+      onlineInstances: (() {
+        final value = json['onlineInstances']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterOverviewResponse.onlineInstances is required');
+        }
+        return value;
+      })(),
+      unhealthyInstances: (() {
+        final value = json['unhealthyInstances']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterOverviewResponse.unhealthyInstances is required');
+        }
+        return value;
+      })(),
+      pendingPeerMessages: (() {
+        final value = json['pendingPeerMessages']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterOverviewResponse.pendingPeerMessages is required');
+        }
+        return value;
+      })(),
+      generatedAt: (() {
+        final value = json['generatedAt']?.toString();
+        if (value == null) {
+          throw FormatException('ClusterOverviewResponse.generatedAt is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'totalHosts': totalHosts,
+      'onlineHosts': onlineHosts,
+      'totalInstances': totalInstances,
+      'onlineInstances': onlineInstances,
+      'unhealthyInstances': unhealthyInstances,
+      'pendingPeerMessages': pendingPeerMessages,
+      'generatedAt': generatedAt,
     };
   }
 }
@@ -7179,6 +8149,650 @@ class AuditLogsListResponse {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('AuditLogsListResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ClustersListResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ClustersListResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ClustersListResponse.fromJson(Map<String, dynamic> json) {
+    return ClustersListResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ClustersListResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ClustersListResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ClustersListResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ClustersCreateResponse201 {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ClustersCreateResponse201({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ClustersCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return ClustersCreateResponse201(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ClustersCreateResponse201.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ClustersCreateResponse201.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ClustersCreateResponse201.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ClustersRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ClustersRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ClustersRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return ClustersRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ClustersRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ClustersRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ClustersRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ClustersUpdateResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ClustersUpdateResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ClustersUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return ClustersUpdateResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ClustersUpdateResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ClustersUpdateResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ClustersUpdateResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ClustersHostsListResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ClustersHostsListResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ClustersHostsListResponse.fromJson(Map<String, dynamic> json) {
+    return ClustersHostsListResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ClustersHostsListResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ClustersHostsListResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ClustersHostsListResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ClustersHostsRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ClustersHostsRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ClustersHostsRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return ClustersHostsRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ClustersHostsRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ClustersHostsRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ClustersHostsRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ClustersHostsUpdateResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ClustersHostsUpdateResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ClustersHostsUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return ClustersHostsUpdateResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ClustersHostsUpdateResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ClustersHostsUpdateResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ClustersHostsUpdateResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ClustersInstancesListResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ClustersInstancesListResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ClustersInstancesListResponse.fromJson(Map<String, dynamic> json) {
+    return ClustersInstancesListResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ClustersInstancesListResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ClustersInstancesListResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ClustersInstancesListResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ClustersInstancesRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ClustersInstancesRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ClustersInstancesRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return ClustersInstancesRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ClustersInstancesRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ClustersInstancesRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ClustersInstancesRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ClustersInstancesUpdateResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ClustersInstancesUpdateResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ClustersInstancesUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return ClustersInstancesUpdateResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ClustersInstancesUpdateResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ClustersInstancesUpdateResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ClustersInstancesUpdateResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ClustersEventsListResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ClustersEventsListResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ClustersEventsListResponse.fromJson(Map<String, dynamic> json) {
+    return ClustersEventsListResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ClustersEventsListResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ClustersEventsListResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ClustersEventsListResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ClustersOverviewRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ClustersOverviewRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ClustersOverviewRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return ClustersOverviewRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ClustersOverviewRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ClustersOverviewRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ClustersOverviewRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ClustersInstancesHeartbeatsListResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ClustersInstancesHeartbeatsListResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ClustersInstancesHeartbeatsListResponse.fromJson(Map<String, dynamic> json) {
+    return ClustersInstancesHeartbeatsListResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ClustersInstancesHeartbeatsListResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ClustersInstancesHeartbeatsListResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ClustersInstancesHeartbeatsListResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ClustersMessagesCreateResponse201 {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ClustersMessagesCreateResponse201({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ClustersMessagesCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return ClustersMessagesCreateResponse201(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ClustersMessagesCreateResponse201.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ClustersMessagesCreateResponse201.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ClustersMessagesCreateResponse201.traceId is required');
         }
         return value;
       })()

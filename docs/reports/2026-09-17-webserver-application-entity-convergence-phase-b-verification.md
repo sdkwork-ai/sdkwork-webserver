@@ -167,9 +167,9 @@ mini-program 都声明了；`@sdkwork/app-topology@0.2.0` 就在工作区里。
 | 项 | 说明 |
 | --- | --- |
 | 带会话端到端验收 | 需开发态管理员凭据或授权重置 dev 库密码（§5.2） |
-| 后端 `web_application` 残留 | `crates/sdkwork-intelligence-webserver-repository-sqlx/src/applications.rs` 仍有 **26 处** `web_application` SQL。控制台入口已不走它，但该表在活库仍在、模块仍在读它 |
+| 后端 `webserver_application` 残留 | `crates/sdkwork-intelligence-webserver-repository-sqlx/src/applications.rs` 仍有 **26 处** `webserver_application` SQL。控制台入口已不走它，但该表在活库仍在、模块仍在读它 |
 | Phase 3 剩余 25 张表退役 | 被 **53 条活路由 + 24 个 repository 模块**绑住 ⇒ 硬前置是 Phase 2 |
-| `web_source_version` | 16 文件 / 6 个 legacy 面，是否一并退役 |
+| `webserver_source_version` | 16 文件 / 6 个 legacy 面，是否一并退役 |
 | `web.applications.*` 旧权限码 | 仍守卫 **32 条活 app-api 路由**（`.read` 2 / `.write` 30）⇒ 只能维持加性别名期，待应用路由退役后进入四步改名第 4 步 |
 | 孤儿权限码 `web.domains.read` | IAM 目录里没有，仅 1 条 app-api 路由在用 |
 

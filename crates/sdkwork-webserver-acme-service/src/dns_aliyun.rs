@@ -72,7 +72,12 @@ impl AliyunDns01Presenter {
         access_key_id: impl AsRef<str>,
         access_key_secret: impl AsRef<str>,
     ) -> AcmeServiceResult<Self> {
-        Self::with_base_url(client, access_key_id, access_key_secret, ALIYUN_DEFAULT_BASE_URL)
+        Self::with_base_url(
+            client,
+            access_key_id,
+            access_key_secret,
+            ALIYUN_DEFAULT_BASE_URL,
+        )
     }
 
     pub(crate) fn with_base_url(
@@ -330,11 +335,16 @@ mod tests {
             if let Some(code) = state.error_code {
                 return (
                     http::StatusCode::BAD_REQUEST,
-                    Json(json!({ "Code": code, "Message": "record not found", "RequestId": "r-1" })),
+                    Json(
+                        json!({ "Code": code, "Message": "record not found", "RequestId": "r-1" }),
+                    ),
                 );
             }
             let _ = action;
-            (http::StatusCode::OK, Json(json!({ "RecordId": "aliyun-rec-9" })))
+            (
+                http::StatusCode::OK,
+                Json(json!({ "RecordId": "aliyun-rec-9" })),
+            )
         }
 
         let app = Router::new().route("/", get(handler)).with_state(state);
@@ -377,12 +387,24 @@ mod tests {
         let requests = state.requests.lock().expect("lock");
         assert_eq!(requests.len(), 1);
         let params = &requests[0];
-        assert_eq!(params.get("Action").map(String::as_str), Some("AddDomainRecord"));
-        assert_eq!(params.get("DomainName").map(String::as_str), Some("example.com"));
-        assert_eq!(params.get("RR").map(String::as_str), Some("_acme-challenge"));
+        assert_eq!(
+            params.get("Action").map(String::as_str),
+            Some("AddDomainRecord")
+        );
+        assert_eq!(
+            params.get("DomainName").map(String::as_str),
+            Some("example.com")
+        );
+        assert_eq!(
+            params.get("RR").map(String::as_str),
+            Some("_acme-challenge")
+        );
         assert_eq!(params.get("Type").map(String::as_str), Some("TXT"));
         assert_eq!(params.get("Value").map(String::as_str), Some("digest-1"));
-        assert_eq!(params.get("Version").map(String::as_str), Some(ALIYUN_API_VERSION));
+        assert_eq!(
+            params.get("Version").map(String::as_str),
+            Some(ALIYUN_API_VERSION)
+        );
         assert_eq!(
             params.get("SignatureMethod").map(String::as_str),
             Some(ALIYUN_SIGNATURE_METHOD)
@@ -445,7 +467,10 @@ mod tests {
         assert_eq!(aliyun_percent_encode("~"), "~");
         assert_eq!(aliyun_percent_encode("/"), "%2F");
         assert_eq!(aliyun_percent_encode("-_.~"), "-_.~");
-        assert_eq!(aliyun_percent_encode("_acme-challenge.example.com"), "_acme-challenge.example.com");
+        assert_eq!(
+            aliyun_percent_encode("_acme-challenge.example.com"),
+            "_acme-challenge.example.com"
+        );
     }
 
     #[test]

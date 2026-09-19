@@ -339,7 +339,7 @@ server {
         },
     },
     SurfaceCase {
-        name: "http-level proxy_set_header inheritance with server override",
+        name: "proxy_set_header: child level replaces the inherited array",
         nginx: r#"
 http {
     proxy_set_header X-Http $scheme;
@@ -347,7 +347,10 @@ http {
     server {
         listen 80;
         server_name headers.example.com;
-        location / {
+        location /inherits {
+            proxy_pass http://api;
+        }
+        location /replaces {
             proxy_set_header X-Server $host;
             proxy_pass http://api;
         }
@@ -355,19 +358,83 @@ http {
 }
 "#,
         check: |config| {
-            let proxy = config
+            // nginx: proxy_set_header inherits from the previous level only
+            // when the current level declares none; a child that declares any
+            // directive replaces the whole inherited array.
+            let mut proxies: Vec<(String, Vec<String>)> = config
                 .resources
                 .iter()
-                .find_map(|r| match r {
+                .filter_map(|r| match r {
                     ResourceConfig::Proxy {
+                        id,
                         request_set_headers,
                         ..
-                    } => Some(request_set_headers.clone()),
+                    } => Some((id.clone(), request_set_headers.clone())),
                     _ => None,
                 })
-                .unwrap();
-            assert!(proxy.contains(&"X-Http $scheme".to_owned()), "{proxy:?}");
-            assert!(proxy.contains(&"X-Server $host".to_owned()), "{proxy:?}");
+                .collect();
+            proxies.sort_by(|left, right| left.0.cmp(&right.0));
+            assert_eq!(proxies.len(), 2, "{proxies:?}");
+            assert!(
+                proxies[0].1.contains(&"X-Http $scheme".to_owned()),
+                "{proxies:?}"
+            );
+            assert!(
+                proxies[1].1.contains(&"X-Server $host".to_owned()),
+                "{proxies:?}"
+            );
+            assert!(
+                !proxies[1].1.contains(&"X-Http $scheme".to_owned()),
+                "{proxies:?}"
+            );
+        },
+    },
+    SurfaceCase {
+        name: "server-level gzip, return, and error_page materialize per host",
+        nginx: r#"
+server {
+    listen 80;
+    server_name contexts.example.com;
+    gzip on;
+    gzip_types text/plain;
+    gzip_min_length 128;
+    error_page 404 /notfound.html;
+    error_page 416 =200 /notfound.html;
+    return 200 "host-answer";
+}
+server {
+    listen 80;
+    server_name plain.example.com;
+    location / { return 200 "plain"; }
+}
+"#,
+        check: |config| {
+            let find_host = |suffix: &str| {
+                config
+                    .virtual_hosts
+                    .iter()
+                    .find(|host| host.id.ends_with(suffix))
+                    .unwrap_or_else(|| panic!("missing host {suffix}"))
+            };
+            // Server-level gzip resolves to a per-host compression policy.
+            let contexts = find_host("contexts-example-com-80");
+            let compression = contexts.compression.as_ref().expect("compression policy");
+            assert!(compression.enabled);
+            assert!(compression.types.iter().any(|value| value == "text/plain"));
+            assert_eq!(compression.min_length, 128);
+            // The other host inherits the app-level policy (no override).
+            let plain = find_host("plain-example-com-80");
+            assert!(plain.compression.is_none(), "{:?}", plain.compression);
+            // error_page entries append in declaration order.
+            assert_eq!(contexts.error_pages.len(), 2, "{:?}", contexts.error_pages);
+            assert_eq!(contexts.error_pages[0].codes, vec![404]);
+            assert_eq!(contexts.error_pages[0].uri, "/notfound.html");
+            assert_eq!(contexts.error_pages[0].response_code, None);
+            assert_eq!(contexts.error_pages[1].codes, vec![416]);
+            assert_eq!(contexts.error_pages[1].response_code, Some(200));
+            // Server-level return collapses the host to one catch-all route.
+            assert_eq!(contexts.routes.len(), 1, "{:?}", contexts.routes);
+            assert_eq!(contexts.routes[0].route_match.path, "/");
         },
     },
     SurfaceCase {

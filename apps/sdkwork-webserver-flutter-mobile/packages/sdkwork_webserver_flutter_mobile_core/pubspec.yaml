@@ -9,8 +9,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  sdkwork_webserver_app_sdk:
-    path: ../../../../sdks/sdkwork-webserver-app-sdk/sdkwork-webserver-app-sdk-flutter/generated/server-openapi
 
 dev_dependencies:
   flutter_test:

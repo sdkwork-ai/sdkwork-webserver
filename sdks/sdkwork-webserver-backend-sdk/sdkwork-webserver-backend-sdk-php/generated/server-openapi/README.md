@@ -19,7 +19,7 @@ use SDKWork\Webserver\BackendSdk\SdkConfig;
 
 $config = new SdkConfig(baseUrl: 'http://localhost:3800');
 $client = new SdkworkBackendClient($config);
-$$result = $client->nginx->statusRetrieve();
+$$result = $client->cluster->clustersOverviewRetrieve();
 
 
 var_dump($result);
@@ -63,6 +63,7 @@ $client->setHeader('X-Custom-Header', 'value');
 - `$client->webserverConfig` - webserver_config API
 - `$client->agent` - agent API
 - `$client->audit` - audit API
+- `$client->cluster` - cluster API
 
 ## Usage Examples
 
@@ -209,6 +210,16 @@ $result = $client->audit->logsList($params);
 var_dump($result);
 ```
 
+### cluster
+
+```php
+<?php
+
+// Retrieve the cluster health overview for status polling
+$result = $client->cluster->clustersOverviewRetrieve();
+var_dump($result);
+```
+
 ## Error Handling
 
 ```php
@@ -222,7 +233,7 @@ $config = new SdkConfig(baseUrl: 'http://localhost:3800');
 $client = new SdkworkBackendClient($config);
 
 try {
-    $client->nginx->statusRetrieve();
+    $client->cluster->clustersOverviewRetrieve();
 } catch (\Throwable $e) {
     echo "Error: {$e->getMessage()}\n";
 }

@@ -233,6 +233,19 @@ fn write_challenge_file(
         .and_then(|_| staged.flush())
         .and_then(|_| staged.as_file().sync_all())
         .map_err(|error| AcmeServiceError::Internal(format!("write ACME challenge: {error}")))?;
+    #[cfg(unix)]
+    {
+        // Challenge responses are public by design (the CA fetches them
+        // anonymously over HTTP-01), so they must be world-readable or a
+        // serving worker running as a different user fails validation.
+        use std::os::unix::fs::PermissionsExt;
+        staged
+            .as_file()
+            .set_permissions(std::fs::Permissions::from_mode(0o644))
+            .map_err(|error| {
+                AcmeServiceError::Internal(format!("set ACME challenge permissions: {error}"))
+            })?;
+    }
     staged.persist(&target).map_err(|error| {
         AcmeServiceError::Internal(format!("activate ACME challenge: {}", error.error))
     })?;
@@ -265,6 +278,16 @@ async fn write_challenge_file_async(
     file.sync_all()
         .await
         .map_err(|error| AcmeServiceError::Internal(format!("sync ACME challenge: {error}")))?;
+    #[cfg(unix)]
+    {
+        // World-readable, same rationale as the synchronous path.
+        use std::os::unix::fs::PermissionsExt;
+        file.set_permissions(std::fs::Permissions::from_mode(0o644))
+            .await
+            .map_err(|error| {
+                AcmeServiceError::Internal(format!("set ACME challenge permissions: {error}"))
+            })?;
+    }
     drop(file);
     staged_path.persist(&target).map_err(|error| {
         AcmeServiceError::Internal(format!("activate ACME challenge: {}", error.error))

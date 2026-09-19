@@ -1,10 +1,17 @@
 //! Project operation mapping.
 //!
 //! A classified project root is offered a set of operations (build, package,
-//! start, deploy, stop, restart). Each operation carries the IAM permission
-//! required to invoke it; the caller must be authorized separately. Commands
-//! are expressed as `argv` vectors (never shell strings) so no shell
+//! start, stop, restart). Each operation carries the IAM permission required
+//! to invoke it; the caller must be authorized separately. Commands are
+//! expressed as `argv` vectors (never shell strings) so no shell
 //! interpretation or injection is possible.
+//!
+//! Every offered operation maps to exactly one [`OperationExecution`]:
+//! foreground runs are bounded by a timeout with capped capture, and
+//! start/stop/restart manage a single per-project process through the pid
+//! file in the run directory (see [`crate::operation_runtime`]). Deployment
+//! is intentionally NOT offered here: application deployment is the durable
+//! command plane (PRD-FR-026), not a shell operation.
 
 pub use super::project::ProjectClassification;
 use super::project::ProjectType;
@@ -16,10 +23,14 @@ pub enum ProjectOperationKind {
     Build,
     Package,
     Start,
-    Deploy,
     Stop,
     Restart,
 }
+
+/// Canonical pid-file slot for the single managed process of one project.
+/// Start, stop, and restart all address this slot so a project root owns at
+/// most one managed process at a time.
+pub const MANAGED_PROCESS_SLOT: &str = "process";
 
 /// An operation offered for a project root.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -110,13 +121,6 @@ pub fn operations_for(
                 PERMISSION_DEPLOY,
                 true,
             ),
-            op(
-                "deploy",
-                ProjectOperationKind::Deploy,
-                "Deploy to node",
-                PERMISSION_DEPLOY,
-                true,
-            ),
         ],
         ProjectType::RustBackend => vec![
             op(
@@ -154,13 +158,6 @@ pub fn operations_for(
                 PERMISSION_DEPLOY,
                 true,
             ),
-            op(
-                "deploy",
-                ProjectOperationKind::Deploy,
-                "Deploy to node",
-                PERMISSION_DEPLOY,
-                true,
-            ),
         ],
         ProjectType::NodeBackend => vec![
             op(
@@ -191,13 +188,6 @@ pub fn operations_for(
                 PERMISSION_DEPLOY,
                 true,
             ),
-            op(
-                "deploy",
-                ProjectOperationKind::Deploy,
-                "Deploy to node",
-                PERMISSION_DEPLOY,
-                true,
-            ),
         ],
         ProjectType::H5App | ProjectType::PcApp => vec![
             op(
@@ -220,13 +210,6 @@ pub fn operations_for(
                 "Preview",
                 PERMISSION_DEPLOY,
                 false,
-            ),
-            op(
-                "deploy",
-                ProjectOperationKind::Deploy,
-                "Deploy to node",
-                PERMISSION_DEPLOY,
-                true,
             ),
         ],
         ProjectType::SdkworkWorkspace => vec![
@@ -256,67 +239,83 @@ pub fn operations_for(
     }
 }
 
-/// Resolve a concrete executable command for a project type + operation kind.
+/// How an offered operation executes on the node.
+#[derive(Debug, Clone)]
+pub enum OperationExecution {
+    /// Run to completion under a hard timeout with capped output capture.
+    Foreground(ProjectOperationCommand),
+    /// Spawn a detached managed process recorded in the project run
+    /// directory ([`RUN_DIRECTORY_NAME`]).
+    StartManaged(ProjectOperationCommand),
+    /// Stop the project's managed process (pid-file addressed process tree).
+    StopManaged,
+    /// Stop the managed process, then start it again with the command.
+    RestartManaged(ProjectOperationCommand),
+}
+
+/// Resolve the concrete execution for a project type + operation kind.
 /// Returns `None` when the type does not support the operation.
-pub fn command_for(
+pub fn execution_for(
     project_type: ProjectType,
     kind: ProjectOperationKind,
-) -> Option<ProjectOperationCommand> {
-    let command = match (project_type, kind) {
+) -> Option<OperationExecution> {
+    let execution = match (project_type, kind) {
         (ProjectType::FlutterApp, ProjectOperationKind::Build) => {
-            shellish("flutter", &["build", "web"])
+            OperationExecution::Foreground(shellish("flutter", &["build", "web"]))
         }
         (ProjectType::FlutterApp, ProjectOperationKind::Package) => {
-            shellish("flutter", &["build", "web", "--release"])
+            OperationExecution::Foreground(shellish("flutter", &["build", "web", "--release"]))
         }
         (ProjectType::FlutterApp, ProjectOperationKind::Start) => {
-            shellish("flutter", &["run", "-d", "web-server"])
+            OperationExecution::StartManaged(shellish("flutter", &["run", "-d", "web-server"]))
         }
-        (ProjectType::FlutterApp, ProjectOperationKind::Stop) => {
-            shellish("kill", &["$(pgrep -f 'flutter run')"])
+        (ProjectType::FlutterApp, ProjectOperationKind::Stop) => OperationExecution::StopManaged,
+        (ProjectType::RustBackend, ProjectOperationKind::Build) => {
+            OperationExecution::Foreground(shellish("cargo", &["build"]))
         }
-        (ProjectType::RustBackend, ProjectOperationKind::Build) => shellish("cargo", &["build"]),
         (ProjectType::RustBackend, ProjectOperationKind::Package) => {
-            shellish("cargo", &["build", "--release"])
+            OperationExecution::Foreground(shellish("cargo", &["build", "--release"]))
         }
-        (ProjectType::RustBackend, ProjectOperationKind::Start) => shellish("cargo", &["run"]),
+        (ProjectType::RustBackend, ProjectOperationKind::Start) => {
+            OperationExecution::StartManaged(shellish("cargo", &["run"]))
+        }
         (ProjectType::RustBackend, ProjectOperationKind::Restart) => {
-            shellish("systemctl", &["restart", "sdkwork"])
+            OperationExecution::RestartManaged(shellish("cargo", &["run"]))
         }
-        (ProjectType::RustBackend, ProjectOperationKind::Stop) => {
-            shellish("systemctl", &["stop", "sdkwork"])
+        (ProjectType::RustBackend, ProjectOperationKind::Stop) => OperationExecution::StopManaged,
+        (ProjectType::NodeBackend, ProjectOperationKind::Build) => {
+            OperationExecution::Foreground(shellish("npm", &["install"]))
         }
-        (ProjectType::NodeBackend, ProjectOperationKind::Build) => shellish("npm", &["install"]),
-        (ProjectType::NodeBackend, ProjectOperationKind::Start) => shellish("npm", &["start"]),
+        (ProjectType::NodeBackend, ProjectOperationKind::Start) => {
+            OperationExecution::StartManaged(shellish("npm", &["start"]))
+        }
         (ProjectType::NodeBackend, ProjectOperationKind::Restart) => {
-            shellish("systemctl", &["restart", "sdkwork-node"])
+            OperationExecution::RestartManaged(shellish("npm", &["start"]))
         }
-        (ProjectType::NodeBackend, ProjectOperationKind::Stop) => {
-            shellish("systemctl", &["stop", "sdkwork-node"])
-        }
+        (ProjectType::NodeBackend, ProjectOperationKind::Stop) => OperationExecution::StopManaged,
         (ProjectType::H5App | ProjectType::PcApp, ProjectOperationKind::Build) => {
-            shellish("pnpm", &["build"])
+            OperationExecution::Foreground(shellish("pnpm", &["build"]))
         }
         (ProjectType::H5App | ProjectType::PcApp, ProjectOperationKind::Package) => {
-            shellish("pnpm", &["build"])
+            OperationExecution::Foreground(shellish("pnpm", &["build"]))
         }
         (ProjectType::H5App | ProjectType::PcApp, ProjectOperationKind::Start) => {
-            shellish("pnpm", &["dev"])
+            OperationExecution::StartManaged(shellish("pnpm", &["dev"]))
         }
         (ProjectType::SdkworkWorkspace, ProjectOperationKind::Build) => {
-            shellish("pnpm", &["build"])
+            OperationExecution::Foreground(shellish("pnpm", &["build"]))
         }
         (ProjectType::SdkworkWorkspace, ProjectOperationKind::Package) => {
-            shellish("pnpm", &["build"])
+            OperationExecution::Foreground(shellish("pnpm", &["build"]))
         }
         _ => return None,
     };
-    Some(command)
+    Some(execution)
 }
 
-/// Helper that returns an argv-style command. For commands that genuinely
-/// require a shell (e.g. `kill $(pgrep ...)`), the operator is expected to
-/// install a deploy manifest; here we keep argv explicit and safe.
+/// Helper that returns an argv-style command. Operations are argv-only by
+/// contract: process lifecycle is addressed through the pid-file slot, never
+/// through shell interpolation.
 fn shellish(program: &str, args: &[&str]) -> ProjectOperationCommand {
     ProjectOperationCommand {
         program: program.to_string(),
@@ -331,7 +330,7 @@ mod tests {
     use crate::project::classify_entry_names;
 
     #[test]
-    fn rust_project_exposes_build_and_deploy() {
+    fn rust_project_exposes_lifecycle_operations_without_fake_deploy() {
         let classification = classify_entry_names(&["Cargo.toml".to_string()]);
         let manifest = operations_for("n1", "/opt/deploy/server", &classification);
         assert!(manifest
@@ -341,7 +340,9 @@ mod tests {
         assert!(manifest
             .operations
             .iter()
-            .any(|o| o.kind == ProjectOperationKind::Deploy));
+            .any(|o| o.kind == ProjectOperationKind::Stop));
+        // Deployment is the durable command plane, never a shell operation.
+        assert!(manifest.operations.iter().all(|o| o.id != "deploy"),);
     }
 
     #[test]
@@ -352,10 +353,38 @@ mod tests {
     }
 
     #[test]
-    fn command_for_returns_argv() {
+    fn execution_for_maps_foreground_and_managed_ops() {
         let classification = classify_entry_names(&["Cargo.toml".to_string()]);
-        let cmd = command_for(classification.project_type, ProjectOperationKind::Build).unwrap();
-        assert_eq!(cmd.program, "cargo");
-        assert_eq!(cmd.args, vec!["build"]);
+        match execution_for(classification.project_type, ProjectOperationKind::Build) {
+            Some(OperationExecution::Foreground(command)) => {
+                assert_eq!(command.program, "cargo");
+                assert_eq!(command.args, vec!["build"]);
+            }
+            other => panic!("build must be foreground, got {other:?}"),
+        }
+        match execution_for(classification.project_type, ProjectOperationKind::Start) {
+            Some(OperationExecution::StartManaged(command)) => {
+                assert_eq!(command.program, "cargo");
+            }
+            other => panic!("start must be managed, got {other:?}"),
+        }
+        assert!(matches!(
+            execution_for(classification.project_type, ProjectOperationKind::Stop),
+            Some(OperationExecution::StopManaged)
+        ));
+        // No argv command may embed shell interpolation ever again.
+        let commands = [
+            execution_for(ProjectType::FlutterApp, ProjectOperationKind::Start),
+            execution_for(ProjectType::NodeBackend, ProjectOperationKind::Start),
+            execution_for(ProjectType::H5App, ProjectOperationKind::Start),
+        ];
+        for command in commands.into_iter().flatten() {
+            let OperationExecution::StartManaged(command) = command else {
+                continue;
+            };
+            for arg in &command.args {
+                assert!(!arg.contains("$("), "shell interpolation in {arg:?}");
+            }
+        }
     }
 }

@@ -1,6 +1,6 @@
 //! Regression gate for the audit-log keyset cursor statement.
 //!
-//! `web_audit_log` is only listed through the cursor (keyset) mode, so a defect
+//! `webserver_audit_log` is only listed through the cursor (keyset) mode, so a defect
 //! in the assembled statement takes the whole endpoint down instead of one
 //! page. The repository parity suite covers this path too, but only as one step
 //! of a long contract walk that also needs the application/deployment graph.
@@ -22,7 +22,7 @@ use sdkwork_webserver_database_host::bootstrap_web_database;
 const POSTGRES_TEST_URL_ENV: &str = "SDKWORK_DATABASE_TEST_POSTGRES_URL";
 const TENANT: i64 = 410_777;
 const ACTION: &str = "audit.cursor.parity";
-const TARGET_TYPE: &str = "web_application";
+const TARGET_TYPE: &str = "webserver_application";
 const ROWS: usize = 5;
 const PAGE_SIZE: i32 = 2;
 
@@ -89,7 +89,7 @@ async fn audit_log_keyset_cursor_pages_without_gaps_or_duplicates() {
                 metadata_json: "{}",
             })
             .await
-            .expect("insert web_audit_log row");
+            .expect("insert webserver_audit_log row");
     }
 
     // 1) Walk the whole log two rows at a time through the opaque cursor. Every
@@ -110,7 +110,7 @@ async fn audit_log_keyset_cursor_pages_without_gaps_or_duplicates() {
                 },
             )
             .await
-            .expect("list web_audit_log cursor page");
+            .expect("list webserver_audit_log cursor page");
         assert!(
             page.items.len() <= PAGE_SIZE as usize,
             "cursor page returned {} rows for page_size {PAGE_SIZE}",
@@ -158,7 +158,7 @@ async fn audit_log_keyset_cursor_pages_without_gaps_or_duplicates() {
             },
         )
         .await
-        .expect("list web_audit_log with date window");
+        .expect("list webserver_audit_log with date window");
     assert_eq!(windowed.items.len(), ROWS);
 
     let empty_window = repository
@@ -172,7 +172,7 @@ async fn audit_log_keyset_cursor_pages_without_gaps_or_duplicates() {
             },
         )
         .await
-        .expect("list web_audit_log outside the row window");
+        .expect("list webserver_audit_log outside the row window");
     assert!(empty_window.items.is_empty());
 
     pool.close().await;

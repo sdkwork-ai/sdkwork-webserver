@@ -61,7 +61,7 @@ reload, Deploy Release, or SiteRevision.
 - Own cloud Site authoring, domain claims, certificate orders, entitlements, billing, or Wiki page
   state.
 - Continue serving writable `/app/v3/api/applications...` control-plane operations or authoritative
-  `web_site`, `web_domain`, `web_deployment`, and `web_certificate` state after cutover.
+  `webserver_site`, `webserver_domain`, `webserver_deployment`, and `webserver_certificate` state after cutover.
 - Infer publication from Drive Space visibility or filesystem/object-store reachability.
 - Reconstruct, override, or authorize a Drive root selector or Knowledgebase publication from
   diagnostic Space/folder fields in the descriptor.

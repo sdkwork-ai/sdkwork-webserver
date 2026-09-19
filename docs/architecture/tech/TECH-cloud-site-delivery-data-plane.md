@@ -34,7 +34,7 @@ Control-plane connectivity is not on the request hot path after a valid snapshot
 Provider resolution is on the origin path and therefore uses bounded timeouts, concurrency,
 circuit breaking, caching, and explicit stale behavior.
 
-The writable Web app-api and `web_site`, `web_domain`, `web_deployment`, and `web_certificate`
+The writable Web app-api and `webserver_site`, `webserver_domain`, `webserver_deployment`, and `webserver_certificate`
 tables belong only to the explicit standalone local-management profile. `cloud.production` starts
 only the Website Edge Runtime with management composition disabled and accepts Deploy-owned
 immutable assignments. Standalone records are never imported, shadow-written, or treated as cloud
@@ -517,7 +517,7 @@ The cloud business source is Deploy `deploy_*`. Web Server may persist:
 - runtime audit and operation evidence owned by Web Server.
 
 It must not accept independent cloud writes that create a Site/domain/certificate truth conflicting
-with Deploy. Existing `web_site`, `web_domain`, `web_deployment`, and `web_certificate` remain
+with Deploy. Existing `webserver_site`, `webserver_domain`, `webserver_deployment`, and `webserver_certificate` remain
 standalone-only local authority. Runtime files use canonical protected directories and atomic
 write/fsync/rename semantics where applicable. The cloud artifact excludes overlapping Web app-api
 Site/Domain/Deployment/Certificate write routes; typed runtime observation APIs are a separate

@@ -989,9 +989,12 @@ impl WebAppApi for WebService {
                 "at least one successful deployment is required before activation",
             ));
         }
+        // The successful-deployment guard runs again inside the same
+        // transaction as the status flip; the service-level check above only
+        // turns the common rejection into a fast, friendly error.
         let site = self
             .repository
-            .set_application_status(tenant_id, application_id, 1)
+            .activate_application(tenant_id, application_id)
             .await?;
         self.audit_site_action(context, "applications.activate", application_id)
             .await;

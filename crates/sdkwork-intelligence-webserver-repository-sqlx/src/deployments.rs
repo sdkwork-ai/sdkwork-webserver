@@ -49,12 +49,12 @@ const DEPLOYMENT_LIST_SELECT: &str = "SELECT deployment.id, deployment.uuid, dep
         CAST(deployment.completed_at AS TEXT) AS completed_at,
         deployment.duration_ms,
         CAST(deployment.created_at AS TEXT) AS created_at
- FROM web_deployment deployment
- LEFT JOIN web_deployment source
+ FROM webserver_deployment deployment
+ LEFT JOIN webserver_deployment source
    ON source.id = deployment.rollback_from
   AND source.tenant_id = deployment.tenant_id
   AND source.site_id = deployment.site_id
- LEFT JOIN web_source_version source_version
+ LEFT JOIN webserver_source_version source_version
    ON source_version.id = deployment.source_version_id
   AND source_version.tenant_id = deployment.tenant_id
   AND source_version.site_id = deployment.site_id";
@@ -88,7 +88,7 @@ impl WebRepository {
 
         let (count_row, rows) = if let Some(status) = status {
             let count_row = sqlx::query(
-                "SELECT COUNT(*) AS total FROM web_deployment
+                "SELECT COUNT(*) AS total FROM webserver_deployment
                  WHERE tenant_id = $1 AND site_id = $2 AND status = $3",
             )
             .bind(tenant_id)
@@ -96,7 +96,7 @@ impl WebRepository {
             .bind(status)
             .fetch_one(&self.pool)
             .await
-            .map_err(|error| store_error("count web_deployment", error))?;
+            .map_err(|error| store_error("count webserver_deployment", error))?;
 
             let rows = sqlx::query(audited_sql(&format!(
                 "{DEPLOYMENT_LIST_SELECT}
@@ -112,19 +112,19 @@ impl WebRepository {
             .bind(offset)
             .fetch_all(&self.pool)
             .await
-            .map_err(|error| store_error("list web_deployment", error))?;
+            .map_err(|error| store_error("list webserver_deployment", error))?;
 
             (count_row, rows)
         } else {
             let count_row = sqlx::query(
-                "SELECT COUNT(*) AS total FROM web_deployment
+                "SELECT COUNT(*) AS total FROM webserver_deployment
                  WHERE tenant_id = $1 AND site_id = $2",
             )
             .bind(tenant_id)
             .bind(site_internal_id)
             .fetch_one(&self.pool)
             .await
-            .map_err(|error| store_error("count web_deployment", error))?;
+            .map_err(|error| store_error("count webserver_deployment", error))?;
 
             let rows = sqlx::query(audited_sql(&format!(
                 "{DEPLOYMENT_LIST_SELECT}
@@ -137,18 +137,18 @@ impl WebRepository {
             .bind(offset)
             .fetch_all(&self.pool)
             .await
-            .map_err(|error| store_error("list web_deployment", error))?;
+            .map_err(|error| store_error("list webserver_deployment", error))?;
 
             (count_row, rows)
         };
 
         let total: i64 = count_row
             .try_get("total")
-            .map_err(|error| store_error("map web_deployment count", error))?;
+            .map_err(|error| store_error("map webserver_deployment count", error))?;
         let mut items = Vec::with_capacity(rows.len());
         for row in &rows {
             items.push(map_deployment_row(row, site_id).map_err(|error| {
-                WebServiceError::Internal(format!("map web_deployment row: {error}"))
+                WebServiceError::Internal(format!("map webserver_deployment row: {error}"))
             })?);
         }
 
@@ -197,23 +197,23 @@ impl WebRepository {
             .bind(fetch_size)
             .fetch_all(&self.pool)
             .await
-            .map_err(|error| store_error("list web_deployment cursor", error))?;
+            .map_err(|error| store_error("list webserver_deployment cursor", error))?;
         let has_more = rows.len() > page_size as usize;
         let page_rows = rows.into_iter().take(page_size as usize).collect::<Vec<_>>();
         let mut items = Vec::with_capacity(page_rows.len());
         for row in &page_rows {
             items.push(map_deployment_row(row, site_id).map_err(|error| {
-                WebServiceError::Internal(format!("map web_deployment row: {error}"))
+                WebServiceError::Internal(format!("map webserver_deployment row: {error}"))
             })?);
         }
         let next_cursor = has_more
             .then(|| {
                 let last = page_rows.last().expect("non-empty page when has_more");
                 let created_at = cursor_instant_from_row(last, "created_at")
-                    .map_err(|error| store_error("map web_deployment cursor instant", error))?;
+                    .map_err(|error| store_error("map webserver_deployment cursor instant", error))?;
                 let id: i64 = last
                     .try_get("id")
-                    .map_err(|error| store_error("map web_deployment cursor id", error))?;
+                    .map_err(|error| store_error("map webserver_deployment cursor id", error))?;
                 Ok::<_, WebServiceError>(encode_keyset_cursor(&created_at, id))
             })
             .transpose()?;
@@ -245,7 +245,7 @@ impl WebRepository {
             let row = sqlx::query(
                 "SELECT id, version_tag, commit_hash, source_ref, artifact_path,
                         artifact_size, artifact_hash, status
-                 FROM web_source_version
+                 FROM webserver_source_version
                  WHERE tenant_id = $1 AND site_id = $2 AND uuid = $3",
             )
             .bind(tenant_id)
@@ -358,7 +358,7 @@ impl WebRepository {
 
         let now_expression = instant_write_expression("$16");
         let insert_sql = format!(
-            "INSERT INTO web_deployment (
+            "INSERT INTO webserver_deployment (
                 id, uuid, tenant_id, organization_id, user_id, site_id, source_version_id,
                 deploy_type, environment, version_tag,
                 commit_hash, source_ref, artifact_path, artifact_size, artifact_hash, status,
@@ -366,7 +366,7 @@ impl WebRepository {
                 created_at, updated_at, version
              ) VALUES (
                 $1, $2, $3,
-                COALESCE((SELECT organization_id FROM web_site WHERE tenant_id = $3 AND id = $5), 0),
+                COALESCE((SELECT organization_id FROM webserver_site WHERE tenant_id = $3 AND id = $5), 0),
                 $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 0, $15, '{{}}',
                 {now_expression}, {now_expression}, 0
              )"
@@ -394,13 +394,13 @@ impl WebRepository {
         if let Err(error) = insert_result {
             if is_unique_violation(&error) {
                 let Some(lookup) = idempotency_lookup.as_ref() else {
-                    return Err(store_error("insert web_deployment", error));
+                    return Err(store_error("insert webserver_deployment", error));
                 };
                 if let Some(existing) = self.find_deployment_by_idempotency_repo(lookup).await? {
                     return Ok(existing);
                 }
             }
-            return Err(store_error("insert web_deployment", error));
+            return Err(store_error("insert webserver_deployment", error));
         }
 
         self.retrieve_deployment_repo(tenant_id, site_id, &uuid)
@@ -426,12 +426,12 @@ impl WebRepository {
                     CAST(deployment.completed_at AS TEXT) AS completed_at,
                     deployment.duration_ms,
                     CAST(deployment.created_at AS TEXT) AS created_at
-             FROM web_deployment deployment
-             LEFT JOIN web_deployment source
+             FROM webserver_deployment deployment
+             LEFT JOIN webserver_deployment source
                ON source.id = deployment.rollback_from
               AND source.tenant_id = deployment.tenant_id
               AND source.site_id = deployment.site_id
-             LEFT JOIN web_source_version source_version
+             LEFT JOIN webserver_source_version source_version
                ON source_version.id = deployment.source_version_id
               AND source_version.tenant_id = deployment.tenant_id
               AND source_version.site_id = deployment.site_id
@@ -441,7 +441,7 @@ impl WebRepository {
         .bind(lookup.idempotency_key)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("find web_deployment by idempotency_key", error))?;
+        .map_err(|error| store_error("find webserver_deployment by idempotency_key", error))?;
 
         let Some(row) = row else {
             return Ok(None);
@@ -498,7 +498,7 @@ impl WebRepository {
 
         map_deployment_row(&row, lookup.site_id)
             .map(Some)
-            .map_err(|error| WebServiceError::Internal(format!("map web_deployment row: {error}")))
+            .map_err(|error| WebServiceError::Internal(format!("map webserver_deployment row: {error}")))
     }
 
     pub(super) async fn retrieve_deployment_repo(
@@ -519,12 +519,12 @@ impl WebRepository {
                     CAST(deployment.completed_at AS TEXT) AS completed_at,
                     deployment.duration_ms,
                     CAST(deployment.created_at AS TEXT) AS created_at
-             FROM web_deployment deployment
-             LEFT JOIN web_deployment source
+             FROM webserver_deployment deployment
+             LEFT JOIN webserver_deployment source
                ON source.id = deployment.rollback_from
               AND source.tenant_id = deployment.tenant_id
               AND source.site_id = deployment.site_id
-             LEFT JOIN web_source_version source_version
+             LEFT JOIN webserver_source_version source_version
                ON source_version.id = deployment.source_version_id
               AND source_version.tenant_id = deployment.tenant_id
               AND source_version.site_id = deployment.site_id
@@ -537,7 +537,7 @@ impl WebRepository {
         .bind(deployment_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("retrieve web_deployment", error))?
+        .map_err(|error| store_error("retrieve webserver_deployment", error))?
         .ok_or_else(|| WebServiceError::not_found("deployment not found"))?;
 
         map_deployment_row(&row, site_id)
@@ -559,8 +559,8 @@ impl WebRepository {
                     deployment.source_ref, deployment.artifact_path, deployment.artifact_size,
                     deployment.artifact_hash, deployment.source_version_id,
                     source_version.status AS source_version_status
-             FROM web_deployment deployment
-             LEFT JOIN web_source_version source_version
+             FROM webserver_deployment deployment
+             LEFT JOIN webserver_source_version source_version
                ON source_version.id = deployment.source_version_id
               AND source_version.tenant_id = deployment.tenant_id
               AND source_version.site_id = deployment.site_id
@@ -571,15 +571,15 @@ impl WebRepository {
         .bind(deployment_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("rollback web_deployment lookup", error))?
+        .map_err(|error| store_error("rollback webserver_deployment lookup", error))?
         .ok_or_else(|| WebServiceError::not_found("deployment not found"))?;
 
         let source_id: i64 = source
             .try_get("id")
-            .map_err(|error| store_error("rollback web_deployment source id", error))?;
+            .map_err(|error| store_error("rollback webserver_deployment source id", error))?;
         let source_status: i32 = source
             .try_get("status")
-            .map_err(|error| store_error("rollback web_deployment source status", error))?;
+            .map_err(|error| store_error("rollback webserver_deployment source status", error))?;
         if source_status != 2 {
             return Err(WebServiceError::conflict(
                 "only a successful deployment can be rolled back",
@@ -587,34 +587,34 @@ impl WebRepository {
         }
         let deploy_type: i32 = source
             .try_get("deploy_type")
-            .map_err(|error| store_error("rollback web_deployment deploy_type", error))?;
+            .map_err(|error| store_error("rollback webserver_deployment deploy_type", error))?;
         let environment: String = source
             .try_get("environment")
-            .map_err(|error| store_error("rollback web_deployment environment", error))?;
+            .map_err(|error| store_error("rollback webserver_deployment environment", error))?;
         let version_tag: Option<String> = source
             .try_get("version_tag")
-            .map_err(|error| store_error("rollback web_deployment version_tag", error))?;
+            .map_err(|error| store_error("rollback webserver_deployment version_tag", error))?;
         let commit_hash: Option<String> = source
             .try_get("commit_hash")
-            .map_err(|error| store_error("rollback web_deployment commit_hash", error))?;
+            .map_err(|error| store_error("rollback webserver_deployment commit_hash", error))?;
         let source_ref: Option<String> = source
             .try_get("source_ref")
-            .map_err(|error| store_error("rollback web_deployment source_ref", error))?;
+            .map_err(|error| store_error("rollback webserver_deployment source_ref", error))?;
         let artifact_drive_uri: Option<String> = source
             .try_get("artifact_path")
-            .map_err(|error| store_error("rollback web_deployment artifact_path", error))?;
+            .map_err(|error| store_error("rollback webserver_deployment artifact_path", error))?;
         let artifact_size: Option<i64> = source
             .try_get("artifact_size")
-            .map_err(|error| store_error("rollback web_deployment artifact_size", error))?;
+            .map_err(|error| store_error("rollback webserver_deployment artifact_size", error))?;
         let artifact_hash: Option<String> = source
             .try_get("artifact_hash")
-            .map_err(|error| store_error("rollback web_deployment artifact_hash", error))?;
+            .map_err(|error| store_error("rollback webserver_deployment artifact_hash", error))?;
         let source_version_internal_id: Option<i64> = source
             .try_get("source_version_id")
-            .map_err(|error| store_error("rollback web_deployment source_version_id", error))?;
+            .map_err(|error| store_error("rollback webserver_deployment source_version_id", error))?;
         let source_version_status: Option<i32> = source
             .try_get("source_version_status")
-            .map_err(|error| store_error("rollback web_deployment source version status", error))?;
+            .map_err(|error| store_error("rollback webserver_deployment source version status", error))?;
         if source_version_internal_id.is_some() && source_version_status != Some(1) {
             return Err(WebServiceError::conflict(
                 "the source version is outside the retained release window and cannot be rolled back",
@@ -656,7 +656,7 @@ impl WebRepository {
 
         let rollback_insert_time = instant_write_expression("$17");
         let insert_sql = format!(
-            "INSERT INTO web_deployment (
+            "INSERT INTO webserver_deployment (
                 id, uuid, tenant_id, organization_id, user_id, site_id, source_version_id,
                 deploy_type, environment, version_tag,
                 commit_hash, source_ref, artifact_path, artifact_size, artifact_hash, status,
@@ -664,7 +664,7 @@ impl WebRepository {
                 created_at, updated_at, version
              ) VALUES (
                 $1, $2, $3,
-                COALESCE((SELECT organization_id FROM web_site WHERE tenant_id = $3 AND id = $5), 0),
+                COALESCE((SELECT organization_id FROM webserver_site WHERE tenant_id = $3 AND id = $5), 0),
                 $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 0, $15, $16, '{{}}',
                 {rollback_insert_time}, {rollback_insert_time}, 0
              )"
@@ -675,7 +675,7 @@ impl WebRepository {
             .pool
             .begin()
             .await
-            .map_err(|error| store_error("begin rollback web_deployment transaction", error))?;
+            .map_err(|error| store_error("begin rollback webserver_deployment transaction", error))?;
 
         let insert_result = sqlx::query(audited_sql(&insert_sql))
             .bind(id)
@@ -700,22 +700,22 @@ impl WebRepository {
 
         if let Err(error) = insert_result {
             tx.rollback().await.map_err(|rollback_error| {
-                store_error("abort restore web_deployment transaction", rollback_error)
+                store_error("abort restore webserver_deployment transaction", rollback_error)
             })?;
             if is_unique_violation(&error) {
                 let Some(lookup) = idempotency_lookup.as_ref() else {
-                    return Err(store_error("insert restore web_deployment", error));
+                    return Err(store_error("insert restore webserver_deployment", error));
                 };
                 if let Some(existing) = self.find_deployment_by_idempotency_repo(lookup).await? {
                     return Ok(existing);
                 }
             }
-            return Err(store_error("insert restore web_deployment", error));
+            return Err(store_error("insert restore webserver_deployment", error));
         }
 
         tx.commit()
             .await
-            .map_err(|error| store_error("commit restore web_deployment transaction", error))?;
+            .map_err(|error| store_error("commit restore webserver_deployment transaction", error))?;
 
         self.retrieve_deployment_repo(tenant_id, site_id, &uuid)
             .await

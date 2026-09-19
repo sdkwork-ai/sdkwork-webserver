@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
+use crate::cluster::*;
 use crate::dto::*;
 use crate::problem::WebServiceResult;
 
@@ -717,7 +718,7 @@ pub trait WebBackendApi: Send + Sync {
         config_id: &str,
     ) -> WebServiceResult<NginxValidateResponse>;
 
-    async fn web_nginx_config(
+    async fn webserver_nginx_config(
         &self,
         context: &WebBackendRequestContext,
         config_id: &str,
@@ -752,6 +753,124 @@ pub trait WebBackendApi: Send + Sync {
         context: &WebBackendRequestContext,
         query: &ListAuditLogsQuery,
     ) -> WebServiceResult<AuditLogPage>;
+
+    async fn list_clusters(
+        &self,
+        context: &WebBackendRequestContext,
+        page: i32,
+        page_size: i32,
+    ) -> WebServiceResult<ClusterPage>;
+
+    async fn create_cluster(
+        &self,
+        context: &WebBackendRequestContext,
+        request: &CreateClusterRequest,
+    ) -> WebServiceResult<ClusterResponse>;
+
+    async fn retrieve_cluster(
+        &self,
+        context: &WebBackendRequestContext,
+        cluster_id: &str,
+    ) -> WebServiceResult<ClusterResponse>;
+
+    async fn update_cluster(
+        &self,
+        context: &WebBackendRequestContext,
+        cluster_id: &str,
+        request: &UpdateClusterRequest,
+    ) -> WebServiceResult<ClusterResponse>;
+
+    async fn delete_cluster(
+        &self,
+        context: &WebBackendRequestContext,
+        cluster_id: &str,
+    ) -> WebServiceResult<()>;
+
+    async fn list_cluster_hosts(
+        &self,
+        context: &WebBackendRequestContext,
+        cluster_id: Option<&str>,
+        status: Option<i32>,
+        page_size: i32,
+        cursor: Option<&str>,
+    ) -> WebServiceResult<ClusterHostPage>;
+
+    async fn retrieve_cluster_host(
+        &self,
+        context: &WebBackendRequestContext,
+        host_id: &str,
+    ) -> WebServiceResult<ClusterHostResponse>;
+
+    async fn update_cluster_host(
+        &self,
+        context: &WebBackendRequestContext,
+        host_id: &str,
+        request: &UpdateClusterHostRequest,
+    ) -> WebServiceResult<ClusterHostResponse>;
+
+    async fn delete_cluster_host(
+        &self,
+        context: &WebBackendRequestContext,
+        host_id: &str,
+    ) -> WebServiceResult<()>;
+
+    async fn list_cluster_instances(
+        &self,
+        context: &WebBackendRequestContext,
+        cluster_id: Option<&str>,
+        host_id: Option<&str>,
+        status: Option<i32>,
+        health_state: Option<&str>,
+        page_size: i32,
+        cursor: Option<&str>,
+    ) -> WebServiceResult<ClusterInstancePage>;
+
+    async fn retrieve_cluster_instance(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+    ) -> WebServiceResult<ClusterInstanceResponse>;
+
+    async fn update_cluster_instance(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+        request: &UpdateClusterInstanceRequest,
+    ) -> WebServiceResult<ClusterInstanceResponse>;
+
+    async fn delete_cluster_instance(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+    ) -> WebServiceResult<()>;
+
+    async fn list_cluster_events(
+        &self,
+        context: &WebBackendRequestContext,
+        cluster_id: Option<&str>,
+        severity: Option<&str>,
+        page_size: i32,
+        cursor: Option<&str>,
+    ) -> WebServiceResult<ClusterEventPage>;
+
+    async fn retrieve_cluster_overview(
+        &self,
+        context: &WebBackendRequestContext,
+    ) -> WebServiceResult<ClusterOverviewResponse>;
+
+    async fn list_cluster_heartbeats(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+        page_size: i32,
+        cursor: Option<&str>,
+    ) -> WebServiceResult<ClusterHeartbeatSamplePage>;
+
+    async fn enqueue_cluster_messages(
+        &self,
+        context: &WebBackendRequestContext,
+        request: &EnqueueClusterPeerMessagesRequest,
+    ) -> WebServiceResult<EnqueueClusterPeerMessagesResponse>;
 }
 
 #[cfg(test)]

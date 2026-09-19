@@ -62,8 +62,9 @@ test('root pnpm surface exposes every owned capability through canonical action-
 
 test('SDK generation covers every materialized manifest language', () => {
   const plans = collectGenerationPlans();
+  // `sdkwork-webserver-app-sdk` was retired together with the app-api surface:
+  // the application-facing SDK is deployments' own generated family now.
   const expected = [
-    'sdkwork-webserver-app-sdk',
     'sdkwork-webserver-backend-sdk',
     'sdkwork-webserver-internal-sdk',
   ].flatMap((familyName) => {
@@ -76,7 +77,7 @@ test('SDK generation covers every materialized manifest language', () => {
     plans.map((plan) => `${plan.sdkName}/${plan.language}`),
     expected,
   );
-  assert.equal(plans.length, 26);
+  assert.equal(plans.length, 14);
 });
 
 test('PC app surface delegates dev and stop while keeping its local lifecycle scoped', () => {

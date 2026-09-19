@@ -52,17 +52,8 @@
     }
   ],
   "contracts": {
-    "sdkClients": [
-      "SdkworkAppClient"
-    ],
+    "sdkClients": [],
     "sdkDependencies": [
-      {
-        "workspace": "sdkwork-webserver-app-sdk",
-        "surface": "app-api",
-        "credentialMode": "authenticated-app-api",
-        "packageName": "sdkwork_webserver_app_sdk",
-        "status": "active"
-      },
       {
         "workspace": "sdkwork-drive-app-sdk",
         "surface": "app-api",
@@ -87,12 +78,6 @@
   },
   "metadata": {
     "dartSdkCoverage": [
-      {
-        "workspace": "sdkwork-webserver-app-sdk",
-        "variantPath": "sdks/sdkwork-webserver-app-sdk/sdkwork-webserver-app-sdk-flutter/generated/server-openapi",
-        "packageName": "sdkwork_webserver_app_sdk",
-        "available": true
-      },
       {
         "workspace": "sdkwork-drive-app-sdk",
         "variantPath": "sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-flutter/generated/server-openapi",

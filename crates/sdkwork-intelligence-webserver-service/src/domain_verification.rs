@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use sdkwork_webserver_contract::WebServiceError;
+
 use async_trait::async_trait;
 use hickory_resolver::config::ResolverConfig;
 use hickory_resolver::net::runtime::TokioRuntimeProvider;
@@ -27,25 +29,49 @@ pub struct DnsTxtDomainOwnershipVerifier {
 }
 
 impl DnsTxtDomainOwnershipVerifier {
-    pub fn new() -> Self {
-        let resolver = TokioResolver::builder_tokio()
-            .and_then(|builder| builder.build())
-            .unwrap_or_else(|error| {
-                tracing::warn!(error = %error, "system DNS resolver configuration unavailable; using bounded default resolver configuration");
+    pub fn new() -> Result<Self, WebServiceError> {
+        let resolver = match TokioResolver::builder_tokio() {
+            Ok(builder) => builder.build().map_err(|error| {
+                tracing::error!(%error, "system DNS resolver configuration failed to build");
+                WebServiceError::Internal(
+                    "system DNS resolver configuration failed to build".to_string(),
+                )
+            })?,
+            Err(error) => {
+                tracing::warn!(
+                    error = %error,
+                    "system DNS resolver configuration unavailable; using bounded default resolver configuration"
+                );
                 hickory_resolver::Resolver::builder_with_config(
                     ResolverConfig::default(),
                     TokioRuntimeProvider::default(),
                 )
                 .build()
-                .expect("default DNS resolver configuration builds")
-            });
-        Self { resolver }
+                .map_err(|error| {
+                    tracing::error!(
+                        error = %error,
+                        "default DNS resolver configuration failed to build"
+                    );
+                    WebServiceError::Internal(
+                        "default DNS resolver configuration failed to build".to_string(),
+                    )
+                })?
+            }
+        };
+        Ok(Self { resolver })
     }
 }
 
 impl Default for DnsTxtDomainOwnershipVerifier {
+    /// Panics only if neither the system nor the default resolver
+    /// configuration can build, which leaves no verifier to construct; the
+    /// composition path uses [`Self::new`] and propagates instead.
+    #[allow(clippy::panic)]
     fn default() -> Self {
-        Self::new()
+        match Self::new() {
+            Ok(verifier) => verifier,
+            Err(error) => panic!("no DNS resolver configuration could be built: {error}"),
+        }
     }
 }
 

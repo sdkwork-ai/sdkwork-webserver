@@ -132,8 +132,14 @@ pub async fn run() -> anyhow::Result<()> {
 
     let mut consecutive_failures: u32 = 0;
     loop {
-        if let Err(error) =
-            sync_once(&edge, &clients, &state_path, &mut local_state, &served_certificates).await
+        if let Err(error) = sync_once(
+            &edge,
+            &clients,
+            &state_path,
+            &mut local_state,
+            &served_certificates,
+        )
+        .await
         {
             warn!(error = %error, "node sync cycle failed");
             consecutive_failures = consecutive_failures.saturating_add(1);
@@ -200,15 +206,8 @@ async fn sync_once(
         }
         // The data plane adopts a rotation on its own schedule, so SERVED is
         // reconciled on every cycle rather than only when the manifest changes.
-        reconcile_served_certificates(
-            edge,
-            clients,
-            state_path,
-            local_state,
-            &manifest,
-            authority,
-        )
-        .await?;
+        reconcile_served_certificates(edge, clients, state_path, local_state, &manifest, authority)
+            .await?;
         info!(
             server_id = %manifest.server_id,
             sync_version = %manifest.sync_version,
@@ -434,8 +433,7 @@ async fn reconcile_served_certificates(
     authority: &ServedCertificateAuthority,
 ) -> anyhow::Result<()> {
     let Some(report_path) = authority.report_path() else {
-        return probe_served_certificates(edge, clients, state_path, local_state, manifest)
-            .await;
+        return probe_served_certificates(edge, clients, state_path, local_state, manifest).await;
     };
     let report = match read_served_certificate_report(report_path) {
         Ok(report) => report,

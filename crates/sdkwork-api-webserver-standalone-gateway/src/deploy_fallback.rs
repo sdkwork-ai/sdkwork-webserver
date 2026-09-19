@@ -158,8 +158,7 @@ pub fn classify_host(hostname: &str, suffixes: &[String]) -> HostClass {
     let app_label = labels.next().unwrap_or_default();
     let platform_label = labels.next().unwrap_or_default();
     let suffix = labels.collect::<Vec<_>>().join(".");
-    let Some(environment) =
-        sdkwork_deploy_core::environment_for_app_domain_label(platform_label)
+    let Some(environment) = sdkwork_deploy_core::environment_for_app_domain_label(platform_label)
     else {
         return HostClass::Custom;
     };
@@ -474,14 +473,12 @@ impl DeployFallbackResolver {
         };
         let (descriptor, descriptor_sha256, attribution, nginx_conf) =
             match (descriptor, descriptor_sha256, attribution, nginx_conf) {
-                (Some(descriptor), Some(descriptor_sha256), attribution, nginx_conf) => {
-                    (
-                        Some(descriptor),
-                        Some(descriptor_sha256),
-                        attribution,
-                        nginx_conf,
-                    )
-                }
+                (Some(descriptor), Some(descriptor_sha256), attribution, nginx_conf) => (
+                    Some(descriptor),
+                    Some(descriptor_sha256),
+                    attribution,
+                    nginx_conf,
+                ),
                 _ => {
                     let environment = self.environment.as_str();
                     let resolved = self.lookup.resolve_server(&hostname, environment).await;
@@ -792,11 +789,12 @@ mod tests {
     #[test]
     fn classifies_default_app_domains_and_custom_domains() {
         let list = suffixes();
-        let expected = |app_label: &str, environment: &'static str, suffix: &str| HostClass::DefaultApp {
-            app_label: app_label.to_owned(),
-            environment,
-            suffix: suffix.to_owned(),
-        };
+        let expected =
+            |app_label: &str, environment: &'static str, suffix: &str| HostClass::DefaultApp {
+                app_label: app_label.to_owned(),
+                environment,
+                suffix: suffix.to_owned(),
+            };
         assert_eq!(
             classify_host("myapp.app.sdkwork.com", &list),
             expected("myapp", "production", "sdkwork.com")
@@ -843,19 +841,17 @@ mod tests {
     #[test]
     fn suffix_catalog_is_the_deploy_core_authority() {
         let catalog = sdkwork_deploy_core::platform_app_domain_suffixes();
-        assert_eq!(catalog.len(), 14, "platform catalog must stay at 14 suffixes");
+        assert_eq!(
+            catalog.len(),
+            14,
+            "platform catalog must stay at 14 suffixes"
+        );
         assert!(catalog.iter().any(|item| item == "sdkwork.com"));
         assert!(
             !catalog.iter().any(|item| item == "noaper.com"),
             "noaper.com is not a platform suffix"
         );
-        let catalog_labels = [
-            "app",
-            "app-dev",
-            "app-test",
-            "app-staging",
-            "app-demo",
-        ];
+        let catalog_labels = ["app", "app-dev", "app-test", "app-staging", "app-demo"];
         for label in catalog_labels {
             assert!(
                 sdkwork_deploy_core::environment_for_app_domain_label(label).is_some(),

@@ -31,7 +31,12 @@ export function createBrowserPortalStatistics(
   return {
     async load() {
       const client = await loadClient();
-      const result = await client.application.list({ page: 1, pageSize: 1, status: 1 });
+      // The tenant application count comes from the deployments-owned
+      // `deploy_app` list. `apps.list` takes only `environment` / `page` /
+      // `page_size`, so the count is the tenant's full application total — the
+      // same figure the retired webserver face produced, whose extra `status`
+      // argument was never a contract parameter and was dropped by the server.
+      const result = await client.app.list({ page: 1, pageSize: 1 });
       const totalItems = result.pageInfo.totalItems?.trim();
       if (totalItems && /^\d+$/.test(totalItems)) {
         return { deployedApplications: totalItems.replace(/^0+(?=\d)/, "") };

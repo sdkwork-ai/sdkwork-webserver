@@ -1,12 +1,12 @@
 use crate::audited_sql;
 use futures_util::TryStreamExt;
 use sdkwork_webserver_contract::{
-    AgentCertificateObservation, AgentSyncResponse, WebServiceError, WebServiceResult,
+    AgentCertificateObservation, WebServiceError, WebServiceResult,
 };
 use sqlx::Row;
 use std::collections::HashSet;
 
-use super::agents::AuthenticatedAgent;
+use super::agents::{AgentSyncFingerprint, AuthenticatedAgent};
 use super::support::{new_uuid, next_id, store_error};
 use super::WebRepository;
 
@@ -17,7 +17,7 @@ impl WebRepository {
         &self,
         agent: &AuthenticatedAgent,
         observations: &[AgentCertificateObservation],
-        manifest: &AgentSyncResponse,
+        desired: &AgentSyncFingerprint,
     ) -> WebServiceResult<bool> {
         if observations.is_empty() {
             return Ok(false);
@@ -29,15 +29,10 @@ impl WebRepository {
                 "certificate observations exceed the maximum batch of {MAX_PENDING_LISTENER_BINDINGS}"
             )));
         }
-        let expected = manifest
-            .certificates
+        let expected = desired
+            .certificate_fingerprints
             .iter()
-            .map(|certificate| {
-                (
-                    certificate.certificate_id.as_str(),
-                    certificate.fingerprint.as_str(),
-                )
-            })
+            .map(|(certificate_id, fingerprint)| (certificate_id.as_str(), fingerprint.as_str()))
             .collect::<HashSet<_>>();
         let mut transaction = self
             .pool
@@ -46,7 +41,7 @@ impl WebRepository {
             .map_err(|error| store_error("begin certificate node observation", error))?;
         let mut recorded = false;
         for observation in observations {
-            if observation.sync_version != manifest.sync_version {
+            if observation.sync_version != desired.sync_version {
                 continue;
             }
             if !expected.contains(&(
@@ -58,7 +53,7 @@ impl WebRepository {
                 ));
             }
             let result = sqlx::query(
-                "INSERT INTO web_certificate_node_state (
+                "INSERT INTO webserver_certificate_node_state (
                     id, uuid, tenant_id, server_id, certificate_id,
                     certificate_version_id, state, fingerprint_sha256, sync_version,
                     failure_code, observed_at, created_at, updated_at, version
@@ -66,28 +61,28 @@ impl WebRepository {
                  SELECT $1, $2, $3, s.id, c.id, v.id, $7,
                         v.fingerprint_sha256, $8, $9, CAST($10 AS TIMESTAMPTZ),
                         NOW(), NOW(), 0
-                 FROM web_server s
-                 INNER JOIN web_certificate c ON c.tenant_id = s.tenant_id
+                 FROM webserver_server s
+                 INNER JOIN webserver_certificate c ON c.tenant_id = s.tenant_id
                      AND c.uuid = $5 AND c.deleted_at IS NULL
-                 INNER JOIN web_certificate_version v ON v.tenant_id = c.tenant_id
+                 INNER JOIN webserver_certificate_version v ON v.tenant_id = c.tenant_id
                      AND v.certificate_id = c.id AND v.fingerprint_sha256 = $6
                  WHERE s.tenant_id = $3 AND s.uuid = $4
                    AND EXISTS (
                        SELECT 1
-                       FROM web_listener_certificate_binding l
+                       FROM webserver_listener_certificate_binding l
                        WHERE l.tenant_id = c.tenant_id
                          AND l.certificate_id = c.id AND l.desired_version_id = v.id
                          AND l.status IN ('PENDING', 'DEPLOYING', 'ACTIVE', 'FAILED')
                          AND l.deleted_at IS NULL
                    )
-                 ON CONFLICT ON CONSTRAINT uk_web_certificate_node_state_version
+                 ON CONFLICT ON CONSTRAINT uk_webserver_certificate_node_state_version
                  DO UPDATE SET state = EXCLUDED.state,
                      fingerprint_sha256 = EXCLUDED.fingerprint_sha256,
                      sync_version = EXCLUDED.sync_version,
                      failure_code = EXCLUDED.failure_code,
                      observed_at = EXCLUDED.observed_at,
                      updated_at = EXCLUDED.updated_at,
-                     version = web_certificate_node_state.version + 1",
+                     version = webserver_certificate_node_state.version + 1",
             )
             .bind(next_id(self.id_generator())?)
             .bind(new_uuid())
@@ -128,8 +123,8 @@ impl WebRepository {
         let sql = format!(
             "SELECT l.id AS binding_id, l.certificate_id,
                     l.desired_version_id AS desired_version_id
-             FROM web_listener_certificate_binding l
-             INNER JOIN web_certificate_version v ON v.tenant_id = l.tenant_id
+             FROM webserver_listener_certificate_binding l
+             INNER JOIN webserver_certificate_version v ON v.tenant_id = l.tenant_id
                  AND v.certificate_id = l.certificate_id
                  AND v.id = l.desired_version_id
                  AND v.status IN ('ACTIVE', 'SUPERSEDED')
@@ -178,7 +173,7 @@ impl WebRepository {
                 .map_err(|error| store_error("begin listener certificate convergence row", error))?;
             let lock_row = sqlx::query(
                 "SELECT 1
-                 FROM web_listener_certificate_binding
+                 FROM webserver_listener_certificate_binding
                  WHERE tenant_id = $1 AND id = $2 AND desired_version_id = $3
                    AND status IN ('PENDING', 'DEPLOYING', 'FAILED')
                    AND deleted_at IS NULL
@@ -200,14 +195,14 @@ impl WebRepository {
             let counts = sqlx::query(
                 "WITH assigned_servers AS (
                     SELECT DISTINCT a.server_id
-                    FROM web_listener_certificate_binding l
-                    INNER JOIN web_site_binding b ON b.tenant_id = l.tenant_id
+                    FROM webserver_listener_certificate_binding l
+                    INNER JOIN webserver_site_binding b ON b.tenant_id = l.tenant_id
                         AND b.id = l.site_binding_id AND b.deleted_at IS NULL
-                    INNER JOIN web_site s ON s.tenant_id = b.tenant_id
+                    INNER JOIN webserver_site s ON s.tenant_id = b.tenant_id
                         AND s.id = b.site_id AND s.deleted_at IS NULL
-                    INNER JOIN web_runtime_assignment a ON a.tenant_id = l.tenant_id
+                    INNER JOIN webserver_runtime_assignment a ON a.tenant_id = l.tenant_id
                         AND NOT EXISTS (
-                            SELECT 1 FROM web_runtime_assignment newer
+                            SELECT 1 FROM webserver_runtime_assignment newer
                             WHERE newer.tenant_id = a.tenant_id
                               AND newer.server_id = a.server_id
                               AND newer.environment = a.environment
@@ -225,7 +220,7 @@ impl WebRepository {
                         COUNT(o.server_id) FILTER (WHERE o.state = 'SERVED') AS served_count,
                         COUNT(o.server_id) FILTER (WHERE o.state = 'FAILED') AS failed_count
                  FROM assigned_servers assigned
-                 LEFT JOIN web_certificate_node_state o ON o.tenant_id = $1
+                 LEFT JOIN webserver_certificate_node_state o ON o.tenant_id = $1
                      AND o.server_id = assigned.server_id
                      AND o.certificate_version_id = $2",
             )
@@ -249,7 +244,7 @@ impl WebRepository {
                 .map_err(|error| store_error("map failed certificate node count", error))?;
             if failed_count > 0 {
                 sqlx::query(
-                    "UPDATE web_listener_certificate_binding
+                    "UPDATE webserver_listener_certificate_binding
                      SET status = 'FAILED', updated_at = NOW(), version = version + 1
                      WHERE tenant_id = $1 AND id = $2 AND desired_version_id = $3
                        AND status IN ('PENDING', 'DEPLOYING', 'FAILED')
@@ -273,7 +268,7 @@ impl WebRepository {
             }
             if assigned_count > 0 && served_count == assigned_count {
                 sqlx::query(
-                    "UPDATE web_listener_certificate_binding
+                    "UPDATE webserver_listener_certificate_binding
                      SET current_version_id = desired_version_id, status = 'ACTIVE',
                          activated_at = NOW(), updated_at = NOW(), version = version + 1
                      WHERE tenant_id = $1 AND id = $2 AND certificate_id = $3
@@ -290,7 +285,7 @@ impl WebRepository {
                 .map_err(|error| store_error("activate converged listener certificate", error))?;
             } else if observed_count > 0 {
                 sqlx::query(
-                    "UPDATE web_listener_certificate_binding
+                    "UPDATE webserver_listener_certificate_binding
                      SET status = 'DEPLOYING', updated_at = NOW(), version = version + 1
                      WHERE tenant_id = $1 AND id = $2 AND desired_version_id = $3
                        AND status IN ('PENDING', 'DEPLOYING', 'FAILED')

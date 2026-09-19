@@ -45,7 +45,7 @@ impl WebRepository {
 
         let (count_row, rows) = if let Some(environment) = environment {
             let count_row = sqlx::query(
-                "SELECT COUNT(*) AS total FROM web_env_variable
+                "SELECT COUNT(*) AS total FROM webserver_env_variable
                  WHERE tenant_id = $1 AND site_id = $2 AND environment = $3 AND status = 1",
             )
             .bind(tenant_id)
@@ -53,11 +53,11 @@ impl WebRepository {
             .bind(environment)
             .fetch_one(&self.pool)
             .await
-            .map_err(|error| store_error("count web_env_variable", error))?;
+            .map_err(|error| store_error("count webserver_env_variable", error))?;
 
             let rows = sqlx::query(
                 "SELECT uuid, key, value_encrypted, environment, is_secret
-                 FROM web_env_variable
+                 FROM webserver_env_variable
                  WHERE tenant_id = $1 AND site_id = $2 AND environment = $3 AND status = 1
                  ORDER BY key ASC
                  LIMIT 100",
@@ -67,23 +67,23 @@ impl WebRepository {
             .bind(environment)
             .fetch_all(&self.pool)
             .await
-            .map_err(|error| store_error("list web_env_variable", error))?;
+            .map_err(|error| store_error("list webserver_env_variable", error))?;
 
             (count_row, rows)
         } else {
             let count_row = sqlx::query(
-                "SELECT COUNT(*) AS total FROM web_env_variable
+                "SELECT COUNT(*) AS total FROM webserver_env_variable
                  WHERE tenant_id = $1 AND site_id = $2 AND status = 1",
             )
             .bind(tenant_id)
             .bind(site_internal_id)
             .fetch_one(&self.pool)
             .await
-            .map_err(|error| store_error("count web_env_variable", error))?;
+            .map_err(|error| store_error("count webserver_env_variable", error))?;
 
             let rows = sqlx::query(
                 "SELECT uuid, key, value_encrypted, environment, is_secret
-                 FROM web_env_variable
+                 FROM webserver_env_variable
                  WHERE tenant_id = $1 AND site_id = $2 AND status = 1
                  ORDER BY environment ASC, key ASC
                  LIMIT 100",
@@ -92,14 +92,14 @@ impl WebRepository {
             .bind(site_internal_id)
             .fetch_all(&self.pool)
             .await
-            .map_err(|error| store_error("list web_env_variable", error))?;
+            .map_err(|error| store_error("list webserver_env_variable", error))?;
 
             (count_row, rows)
         };
 
         let total: i64 = count_row
             .try_get("total")
-            .map_err(|error| store_error("map web_env_variable count", error))?;
+            .map_err(|error| store_error("map webserver_env_variable count", error))?;
         if total > MAX_SITE_ENV_VARIABLES {
             tracing::error!(
                 tenant_id,
@@ -115,7 +115,7 @@ impl WebRepository {
         let mut items = Vec::with_capacity(rows.len());
         for row in &rows {
             items.push(map_env_variable_row(row).map_err(|error| {
-                WebServiceError::Internal(format!("map web_env_variable row: {error}"))
+                WebServiceError::Internal(format!("map webserver_env_variable row: {error}"))
             })?);
         }
 
@@ -146,7 +146,7 @@ impl WebRepository {
 
         let now_expression = instant_write_expression("$9");
         let insert_sql = format!(
-            "INSERT INTO web_env_variable (
+            "INSERT INTO webserver_env_variable (
                 id, uuid, tenant_id, site_id, environment, key, value_encrypted, is_secret,
                 status, created_at, updated_at, version
              ) VALUES (
@@ -159,37 +159,37 @@ impl WebRepository {
             .pool
             .begin()
             .await
-            .map_err(|error| store_error("begin create web_env_variable transaction", error))?;
+            .map_err(|error| store_error("begin create webserver_env_variable transaction", error))?;
         let locked = sqlx::query(
-            "UPDATE web_site SET version = version
+            "UPDATE webserver_site SET version = version
              WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL",
         )
         .bind(tenant_id)
         .bind(site_internal_id)
         .execute(&mut *transaction)
         .await
-        .map_err(|error| store_error("lock web_env_variable site capacity", error))?;
+        .map_err(|error| store_error("lock webserver_env_variable site capacity", error))?;
         if locked.rows_affected() != 1 {
             return Err(WebServiceError::not_found("site not found"));
         }
 
         let count_row = sqlx::query(
-            "SELECT COUNT(*) AS total FROM web_env_variable
+            "SELECT COUNT(*) AS total FROM webserver_env_variable
              WHERE tenant_id = $1 AND site_id = $2 AND status = 1",
         )
         .bind(tenant_id)
         .bind(site_internal_id)
         .fetch_one(&mut *transaction)
         .await
-        .map_err(|error| store_error("count web_env_variable capacity", error))?;
+        .map_err(|error| store_error("count webserver_env_variable capacity", error))?;
         let total: i64 = count_row
             .try_get("total")
-            .map_err(|error| store_error("map web_env_variable capacity", error))?;
+            .map_err(|error| store_error("map webserver_env_variable capacity", error))?;
         if total >= MAX_SITE_ENV_VARIABLES {
             transaction
                 .rollback()
                 .await
-                .map_err(|error| store_error("rollback full web_env_variable collection", error))?;
+                .map_err(|error| store_error("rollback full webserver_env_variable collection", error))?;
             return Err(WebServiceError::conflict(
                 "a site supports at most 100 active environment variables",
             ));
@@ -207,12 +207,12 @@ impl WebRepository {
             .bind(&now)
             .execute(&mut *transaction)
             .await
-            .map_err(|error| store_error("insert web_env_variable", error))?;
+            .map_err(|error| store_error("insert webserver_env_variable", error))?;
 
         transaction
             .commit()
             .await
-            .map_err(|error| store_error("commit create web_env_variable transaction", error))?;
+            .map_err(|error| store_error("commit create webserver_env_variable transaction", error))?;
 
         // 响应中机密值返回掩码，不回传明文/密文，避免泄漏。
         Ok(EnvVariableResponse {
@@ -239,7 +239,7 @@ impl WebRepository {
         let site_internal_id = resolve_site_internal_id(&self.pool, tenant_id, site_id).await?;
         let row = sqlx::query(
             "SELECT uuid, key, environment, is_secret, version
-             FROM web_env_variable
+             FROM webserver_env_variable
              WHERE tenant_id = $1 AND site_id = $2 AND uuid = $3 AND status = 1",
         )
         .bind(tenant_id)
@@ -247,17 +247,17 @@ impl WebRepository {
         .bind(variable_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("retrieve web_env_variable for update", error))?
+        .map_err(|error| store_error("retrieve webserver_env_variable for update", error))?
         .ok_or_else(|| WebServiceError::not_found("environment variable not found"))?;
         let key: String = row
             .try_get("key")
-            .map_err(|error| store_error("map web_env_variable key", error))?;
+            .map_err(|error| store_error("map webserver_env_variable key", error))?;
         let environment: String = row
             .try_get("environment")
-            .map_err(|error| store_error("map web_env_variable environment", error))?;
+            .map_err(|error| store_error("map webserver_env_variable environment", error))?;
         let stored_version: i64 = row
             .try_get("version")
-            .map_err(|error| store_error("map web_env_variable version", error))?;
+            .map_err(|error| store_error("map webserver_env_variable version", error))?;
         let derived = env_variable_secret_key(self.secret_key(), tenant_id, variable_id);
         let stored_value = if request.is_secret {
             aes_gcm_encrypt(&derived, request.value.as_bytes()).map_err(|error| {
@@ -270,7 +270,7 @@ impl WebRepository {
 
         let now_expression = instant_write_expression("$5");
         let update_sql = format!(
-            "UPDATE web_env_variable
+            "UPDATE webserver_env_variable
              SET value_encrypted = $4, is_secret = $6,
                  updated_at = {now_expression}, version = version + 1
              WHERE tenant_id = $1 AND site_id = $2 AND uuid = $3 AND status = 1 AND version = $7"
@@ -285,7 +285,7 @@ impl WebRepository {
             .bind(stored_version)
             .execute(&self.pool)
             .await
-            .map_err(|error| store_error("update web_env_variable", error))?;
+            .map_err(|error| store_error("update webserver_env_variable", error))?;
         if result.rows_affected() == 0 {
             // The variable was modified concurrently or removed between the
             // read and the compare-and-swap update: distinguish the two
@@ -319,7 +319,7 @@ impl WebRepository {
 
         let now_expression = instant_write_expression("$4");
         let update_sql = format!(
-            "UPDATE web_env_variable
+            "UPDATE webserver_env_variable
              SET status = 0, updated_at = {now_expression}, version = version + 1
              WHERE tenant_id = $1 AND site_id = $2 AND uuid = $3 AND status = 1"
         );
@@ -330,7 +330,7 @@ impl WebRepository {
             .bind(&now)
             .execute(&self.pool)
             .await
-            .map_err(|error| store_error("delete web_env_variable", error))?;
+            .map_err(|error| store_error("delete webserver_env_variable", error))?;
         if result.rows_affected() == 0 {
             return Err(WebServiceError::not_found("environment variable not found"));
         }
@@ -346,7 +346,7 @@ impl WebRepository {
         variable_id: &str,
     ) -> WebServiceResult<EnvVariableResponse> {
         let exists = sqlx::query_scalar::<_, i64>(
-            "SELECT 1 FROM web_env_variable
+            "SELECT 1 FROM webserver_env_variable
              WHERE tenant_id = $1 AND site_id = $2 AND uuid = $3 AND status = 1",
         )
         .bind(tenant_id)
@@ -354,7 +354,7 @@ impl WebRepository {
         .bind(variable_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("recheck web_env_variable existence", error))?;
+        .map_err(|error| store_error("recheck webserver_env_variable existence", error))?;
         if exists.is_some() {
             return Err(WebServiceError::conflict(
                 "environment variable was modified concurrently; reload and retry",

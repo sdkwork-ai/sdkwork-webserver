@@ -29,8 +29,8 @@ impl WebRepository {
         let (_page, page_size, offset) = pagination(page, page_size)?;
         let total: i64 = sqlx::query_scalar(
             "SELECT COUNT(DISTINCT d.id)
-             FROM web_domain d
-             INNER JOIN web_site_binding b ON b.tenant_id = d.tenant_id AND b.domain_id = d.id
+             FROM webserver_domain d
+             INNER JOIN webserver_site_binding b ON b.tenant_id = d.tenant_id AND b.domain_id = d.id
              WHERE d.tenant_id = $1 AND b.site_id = $2
                AND b.deleted_at IS NULL AND b.status <> 'ARCHIVED'
                AND d.deleted_at IS NULL",
@@ -85,12 +85,12 @@ impl WebRepository {
     ) -> WebServiceResult<DomainPage> {
         let (_page, page_size, offset) = pagination(page, page_size)?;
         let total: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM web_domain WHERE tenant_id = $1 AND deleted_at IS NULL",
+            "SELECT COUNT(*) FROM webserver_domain WHERE tenant_id = $1 AND deleted_at IS NULL",
         )
         .bind(tenant_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(|error| store_error("count managed web_domain", error))?;
+        .map_err(|error| store_error("count managed webserver_domain", error))?;
         let rows = sqlx::query(audited_sql(&domain_select(
             "d.tenant_id = $1 AND d.deleted_at IS NULL
              ORDER BY d.updated_at DESC, d.id DESC LIMIT $2 OFFSET $3",
@@ -100,7 +100,7 @@ impl WebRepository {
         .bind(offset)
         .fetch_all(&self.pool)
         .await
-        .map_err(|error| store_error("list managed web_domain", error))?;
+        .map_err(|error| store_error("list managed webserver_domain", error))?;
 
         Ok(DomainPage {
             items: map_domain_rows(&rows)?,
@@ -117,7 +117,7 @@ impl WebRepository {
     ) -> WebServiceResult<DomainPage> {
         let (_page, page_size, offset) = pagination(page, page_size)?;
         let total: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM web_domain
+            "SELECT COUNT(*) FROM webserver_domain
              WHERE tenant_id = $1 AND deleted_at IS NULL
                AND ($2 IS NULL OR user_id = $2)",
         )
@@ -176,7 +176,7 @@ impl WebRepository {
             ));
         }
         let root_domain_id: i64 = sqlx::query_scalar(
-            "SELECT id FROM web_root_domain
+            "SELECT id FROM webserver_root_domain
              WHERE tenant_id = $1 AND deleted_at IS NULL
                AND ($2 = hostname OR $2 LIKE ('%.' || hostname))
              ORDER BY LENGTH(hostname) DESC, id DESC LIMIT 1",
@@ -205,7 +205,7 @@ impl WebRepository {
 
         let insert_time = instant_write_expression("$9");
         let insert_sql = format!(
-            "INSERT INTO web_domain (
+            "INSERT INTO webserver_domain (
                 id, uuid, tenant_id, user_id, root_domain_id, hostname, hostname_type,
                 verification_status, status, metadata, created_at, updated_at, version
              ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'PENDING', $8, '{{}}',
@@ -215,7 +215,7 @@ impl WebRepository {
             .pool
             .begin()
             .await
-            .map_err(|error| store_error("begin create web_domain", error))?;
+            .map_err(|error| store_error("begin create webserver_domain", error))?;
         sqlx::query(audited_sql(&insert_sql))
             .bind(id)
             .bind(&uuid)
@@ -232,7 +232,7 @@ impl WebRepository {
             .bind(&now)
             .execute(&mut *tx)
             .await
-            .map_err(|error| store_error("insert web_domain", error))?;
+            .map_err(|error| store_error("insert webserver_domain", error))?;
 
         if let Some(site_internal_id) = site_internal_id {
             self.insert_site_binding(
@@ -249,7 +249,7 @@ impl WebRepository {
         }
         tx.commit()
             .await
-            .map_err(|error| store_error("commit create web_domain", error))?;
+            .map_err(|error| store_error("commit create webserver_domain", error))?;
         self.retrieve_managed_domain_repo(tenant_id, &uuid).await
     }
 
@@ -287,7 +287,7 @@ impl WebRepository {
         .bind(domain_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("retrieve managed web_domain", error))?
+        .map_err(|error| store_error("retrieve managed webserver_domain", error))?
         .ok_or_else(|| WebServiceError::not_found("domain not found"))?;
         map_domain_row(&row)
             .map_err(|error| WebServiceError::Internal(format!("map managed domain: {error}")))
@@ -321,15 +321,15 @@ impl WebRepository {
             .map_err(|error| store_error("begin managed domain delete transaction", error))?;
         let row = sqlx::query(
             "SELECT d.id,
-                    (SELECT COUNT(*) FROM web_site_binding b
+                    (SELECT COUNT(*) FROM webserver_site_binding b
                      WHERE b.tenant_id = d.tenant_id AND b.domain_id = d.id
                        AND b.deleted_at IS NULL AND b.status <> 'ARCHIVED') AS binding_count,
-                    (SELECT COUNT(*) FROM web_certificate_identifier ci
-                     INNER JOIN web_certificate c
+                    (SELECT COUNT(*) FROM webserver_certificate_identifier ci
+                     INNER JOIN webserver_certificate c
                        ON c.tenant_id = ci.tenant_id AND c.id = ci.certificate_id
                       AND c.deleted_at IS NULL
                      WHERE ci.tenant_id = d.tenant_id AND ci.domain_id = d.id) AS certificate_count
-             FROM web_domain d
+             FROM webserver_domain d
              WHERE d.tenant_id = $1 AND d.uuid = $2 AND d.deleted_at IS NULL
              FOR UPDATE OF d",
         )
@@ -359,7 +359,7 @@ impl WebRepository {
 
         let now_expression = instant_write_expression("$3");
         let sql = format!(
-            "UPDATE web_domain SET deleted_at = {now_expression}, updated_at = {now_expression},
+            "UPDATE webserver_domain SET deleted_at = {now_expression}, updated_at = {now_expression},
                     version = version + 1
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL"
         );
@@ -388,7 +388,7 @@ impl WebRepository {
         let site_internal_id =
             resolve_site_internal_id(&self.pool, tenant_id, &request.application_id).await?;
         let domain_internal_id: i64 = sqlx::query_scalar(
-            "SELECT id FROM web_domain
+            "SELECT id FROM webserver_domain
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
         )
         .bind(tenant_id)
@@ -437,10 +437,10 @@ impl WebRepository {
 
         let now_expression = instant_write_expression("$4");
         let sql = format!(
-            "UPDATE web_site_binding b
+            "UPDATE webserver_site_binding b
              SET status = 'ARCHIVED', deleted_at = {now_expression}, updated_at = {now_expression},
                  is_primary = FALSE, version = b.version + 1
-             FROM web_domain d
+             FROM webserver_domain d
              WHERE b.tenant_id = $1 AND d.tenant_id = b.tenant_id AND d.id = b.domain_id
                AND d.uuid = $2 AND d.deleted_at IS NULL
                AND ($3 IS NULL OR b.site_id = $3)
@@ -497,10 +497,10 @@ impl WebRepository {
             .map_err(|error| store_error("begin domain verification challenge", error))?;
         let domain = sqlx::query(
             "SELECT d.id, d.hostname, d.verification_status
-             FROM web_domain d
+             FROM webserver_domain d
              WHERE d.tenant_id = $1 AND d.uuid = $2 AND d.deleted_at IS NULL
                AND ($3 IS NULL OR EXISTS (
-                   SELECT 1 FROM web_site_binding b
+                   SELECT 1 FROM webserver_site_binding b
                    WHERE b.tenant_id = d.tenant_id AND b.domain_id = d.id AND b.site_id = $3
                      AND b.deleted_at IS NULL AND b.status <> 'ARCHIVED'
                ))
@@ -525,7 +525,7 @@ impl WebRepository {
 
         let expire_time = instant_write_expression("$3");
         let expire_sql = format!(
-            "UPDATE web_domain_verification
+            "UPDATE webserver_domain_verification
              SET status = 'EXPIRED', failure_code = 'CHALLENGE_EXPIRED',
                  next_attempt_at = NULL, updated_at = {expire_time}, version = version + 1
              WHERE tenant_id = $1 AND domain_id = $2 AND status IN ('PENDING', 'CHECKING')
@@ -573,7 +573,7 @@ impl WebRepository {
         let time = instant_write_expression("$8");
         let expiry = instant_write_expression("$7");
         let insert_sql = format!(
-            "INSERT INTO web_domain_verification (
+            "INSERT INTO webserver_domain_verification (
                 id, uuid, tenant_id, domain_id, method, record_name, proof_sha256, status,
                 attempt_count, next_attempt_at, expires_at, created_at, updated_at, version
              ) VALUES ($1, $2, $3, $4, 'DNS_TXT', $5, $6, 'PENDING', 0,
@@ -593,7 +593,7 @@ impl WebRepository {
             .map_err(|error| store_error("insert domain verification challenge", error))?;
         let pending_time = instant_write_expression("$3");
         let pending_sql = format!(
-            "UPDATE web_domain SET verification_status = 'PENDING', verified_at = NULL,
+            "UPDATE webserver_domain SET verification_status = 'PENDING', verified_at = NULL,
                     status = 0, updated_at = {pending_time}, version = version + 1
              WHERE tenant_id = $1 AND id = $2"
         );
@@ -755,7 +755,7 @@ impl WebRepository {
         // against this insert; the delete transaction cannot soft-delete a
         // domain whose binding insert is in flight.
         let live_domain: Option<i64> = sqlx::query_scalar(
-            "SELECT id FROM web_domain
+            "SELECT id FROM webserver_domain
              WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
              FOR UPDATE",
         )
@@ -768,7 +768,7 @@ impl WebRepository {
             return Err(WebServiceError::not_found("domain not found"));
         }
         let existing_site_id: Option<i64> = sqlx::query_scalar(
-            "SELECT site_id FROM web_site_binding
+            "SELECT site_id FROM webserver_site_binding
              WHERE tenant_id = $1 AND domain_id = $2 AND environment = 'production'
                AND path_prefix = '/' AND deleted_at IS NULL AND status <> 'ARCHIVED'
              FOR UPDATE",
@@ -794,7 +794,7 @@ impl WebRepository {
             // primary bindings cannot both pass the single-primary check and
             // collide at activation time.
             let locked = sqlx::query(
-                "UPDATE web_site SET version = version
+                "UPDATE webserver_site SET version = version
                  WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL",
             )
             .bind(tenant_id)
@@ -807,7 +807,7 @@ impl WebRepository {
             }
             let clear_time = instant_write_expression("$3");
             let clear_sql = format!(
-                "UPDATE web_site_binding SET is_primary = FALSE, updated_at = {clear_time},
+                "UPDATE webserver_site_binding SET is_primary = FALSE, updated_at = {clear_time},
                         version = version + 1
                  WHERE tenant_id = $1 AND site_id = $2 AND environment = 'production'
                    AND deleted_at IS NULL AND status <> 'ARCHIVED' AND is_primary = TRUE"
@@ -824,7 +824,7 @@ impl WebRepository {
         let binding_uuid = new_uuid();
         let binding_time = instant_write_expression("$7");
         let binding_sql = format!(
-            "INSERT INTO web_site_binding (
+            "INSERT INTO webserver_site_binding (
                 id, uuid, tenant_id, site_id, domain_id, is_primary, environment,
                 path_prefix, action_type, status, created_at, updated_at, version
              ) VALUES ($1, $2, $3, $4, $5, $6, 'production', '/', 'SERVE', 'PENDING',
@@ -847,7 +847,7 @@ impl WebRepository {
             let policy_uuid = new_uuid();
             let policy_time = instant_write_expression("$6");
             let policy_sql = format!(
-                "INSERT INTO web_tls_policy (
+                "INSERT INTO webserver_tls_policy (
                     id, uuid, tenant_id, site_binding_id, certificate_source,
                     created_at, updated_at, version
                  ) VALUES ($1, $2, $3, $4, $5, {policy_time}, {policy_time}, 0)"
@@ -886,7 +886,7 @@ async fn fetch_domain_verification_challenge(
                 CAST(next_attempt_at AS TEXT) AS next_attempt_at,
                 CAST(checked_at AS TEXT) AS checked_at, failure_code,
                 (next_attempt_at IS NULL OR next_attempt_at <= {now_expression}) AS ready_for_check
-         FROM web_domain_verification
+         FROM webserver_domain_verification
          WHERE tenant_id = $1 AND domain_id = $2
            AND (($3 = 'VERIFIED' AND status = 'VERIFIED')
                 OR ($3 = 'ACTIVE' AND status IN ('PENDING', 'CHECKING')))
@@ -916,8 +916,8 @@ async fn fetch_domain_verification_challenge_for_update(
                 CAST(v.checked_at AS TEXT) AS checked_at, v.failure_code,
                 (v.next_attempt_at IS NULL OR v.next_attempt_at <= {now_expression}) AS ready_for_check,
                 (v.expires_at <= {now_expression}) AS is_expired
-         FROM web_domain_verification v
-         INNER JOIN web_domain d ON d.tenant_id = v.tenant_id AND d.id = v.domain_id
+         FROM webserver_domain_verification v
+         INNER JOIN webserver_domain d ON d.tenant_id = v.tenant_id AND d.id = v.domain_id
          WHERE v.tenant_id = $1 AND v.uuid = $2 AND d.deleted_at IS NULL
          FOR UPDATE OF v, d"
     );
@@ -945,7 +945,7 @@ async fn update_domain_verification_state(
     let next_attempt = instant_write_expression("$6");
     let checked = instant_write_expression("$8");
     let sql = format!(
-        "UPDATE web_domain_verification
+        "UPDATE webserver_domain_verification
          SET status = $3, observed_sha256 = $4, attempt_count = $5,
              next_attempt_at = {next_attempt}, checked_at = {checked},
              verified_at = CASE WHEN $3 = 'VERIFIED' THEN {checked} ELSE NULL END,
@@ -986,7 +986,7 @@ async fn update_domain_verification_status(
     };
     let time = instant_write_expression("$4");
     let sql = format!(
-        "UPDATE web_domain
+        "UPDATE webserver_domain
          SET verification_status = $3,
              verified_at = CASE WHEN $3 = 'VERIFIED' THEN {time} ELSE NULL END,
              status = CASE WHEN $3 = 'VERIFIED' THEN 1 ELSE 0 END,
@@ -1012,7 +1012,7 @@ async fn activate_verified_domain_bindings(
 ) -> WebServiceResult<()> {
     let time = instant_write_expression("$3");
     let sql = format!(
-        "UPDATE web_site_binding
+        "UPDATE webserver_site_binding
          SET status = 'ACTIVE', activated_at = {time}, updated_at = {time}, version = version + 1
          WHERE tenant_id = $1 AND domain_id = $2 AND status = 'PENDING' AND deleted_at IS NULL"
     );
@@ -1119,7 +1119,7 @@ fn domain_select(predicate: &str) -> String {
                      ELSE LEFT(d.hostname, LENGTH(d.hostname) - LENGTH(r.hostname) - 1)
                 END AS record_name,
                 s.uuid AS application_id, s.name AS application_name,
-                (SELECT COUNT(*) FROM web_certificate_identifier ci
+                (SELECT COUNT(*) FROM webserver_certificate_identifier ci
                  WHERE ci.tenant_id = d.tenant_id AND ci.domain_id = d.id) AS certificate_count,
                 COALESCE(b.is_primary, FALSE) AS is_primary,
                 (d.verification_status = 'VERIFIED') AS is_verified,
@@ -1138,21 +1138,21 @@ fn domain_select(predicate: &str) -> String {
                 latest.version_tag AS latest_deployment_version_tag,
                 CAST(latest.completed_at AS TEXT) AS latest_deployment_completed_at,
                 CAST(latest.created_at AS TEXT) AS latest_deployment_created_at
-         FROM web_domain d
-         INNER JOIN web_root_domain r ON r.id = d.root_domain_id
+         FROM webserver_domain d
+         INNER JOIN webserver_root_domain r ON r.id = d.root_domain_id
          LEFT JOIN LATERAL (
-             SELECT candidate.* FROM web_site_binding candidate
+             SELECT candidate.* FROM webserver_site_binding candidate
              WHERE candidate.tenant_id = d.tenant_id AND candidate.domain_id = d.id
                AND candidate.environment = 'production' AND candidate.deleted_at IS NULL
                AND candidate.status <> 'ARCHIVED'
              ORDER BY (candidate.status = 'ACTIVE') DESC, candidate.updated_at DESC, candidate.id DESC
              LIMIT 1
          ) b ON TRUE
-         LEFT JOIN web_site s ON s.id = b.site_id
-         LEFT JOIN web_tls_policy p ON p.tenant_id = b.tenant_id
+         LEFT JOIN webserver_site s ON s.id = b.site_id
+         LEFT JOIN webserver_tls_policy p ON p.tenant_id = b.tenant_id
              AND p.site_binding_id = b.id AND p.status = 'ACTIVE' AND p.deleted_at IS NULL
-         LEFT JOIN web_deployment latest ON latest.id = (
-             SELECT dep.id FROM web_deployment dep
+         LEFT JOIN webserver_deployment latest ON latest.id = (
+             SELECT dep.id FROM webserver_deployment dep
              WHERE dep.tenant_id = d.tenant_id AND dep.site_id = b.site_id
              ORDER BY dep.created_at DESC, dep.id DESC LIMIT 1
          )
@@ -1164,7 +1164,7 @@ fn map_domain_rows(rows: &[EngineRow]) -> WebServiceResult<Vec<DomainResponse>> 
     rows.iter()
         .map(map_domain_row)
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| WebServiceError::Internal(format!("map web_domain row: {error}")))
+        .map_err(|error| WebServiceError::Internal(format!("map webserver_domain row: {error}")))
 }
 
 fn map_domain_row(row: &EngineRow) -> Result<DomainResponse, sqlx::Error> {

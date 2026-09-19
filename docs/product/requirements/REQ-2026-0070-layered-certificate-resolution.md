@@ -135,11 +135,11 @@ local listener and asserts that the served leaf equals the *assigned* certificat
 every hostname in the node manifest. On a `policy-first` listener whose configured file also covers
 such a hostname, the served leaf is the configured certificate, so the probe reports
 `TLS_SNI_PROBE_FAILED`. That code routes through `record_deployment_failure` into a `FAILED` row in
-`web_certificate_node_state`, and `promote_converged_listener_certificate_bindings` converts any
+`webserver_certificate_node_state`, and `promote_converged_listener_certificate_bindings` converts any
 `FAILED` row into a `FAILED` listener certificate binding. A listener that is serving correctly
 would be marked failed purely because the operator's own certificate took precedence.
 
-The same plane is also the only writer of `web_certificate_node_state`. `agents.rs` records
+The same plane is also the only writer of `webserver_certificate_node_state`. `agents.rs` records
 observations from the node daemon heartbeat, and that daemon drives the stock-Nginx activation path
 that this repository retires for public domains. In a standalone deployment, where Rust
 request-path serving owns the listener, nothing reports what the data plane actually served, so

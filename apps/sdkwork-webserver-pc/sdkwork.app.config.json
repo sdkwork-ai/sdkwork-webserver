@@ -29,8 +29,6 @@
     "tenantId": "100001",
     "organizationId": "0",
     "accessTokenPermissionScope": [
-      "web.applications.read",
-      "web.applications.write",
       "deploy.apps.read",
       "deploy.apps.write",
       "deploy.domainZones.read",
@@ -41,7 +39,9 @@
       "web.nginx.write",
       "web.servers.read",
       "web.servers.write",
-      "web.auditLogs.read"
+      "web.auditLogs.read",
+      "web.cluster.read",
+      "web.cluster.write"
     ]
   },
   "runtime": {

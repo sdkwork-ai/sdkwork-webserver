@@ -4,9 +4,14 @@
 ///
 /// `dartArtifactAvailable` records whether a generated Dart/Flutter variant of
 /// that workspace exists today. It is deliberately part of the inventory rather
-/// than a comment: `sdkwork-webserver` ships a Flutter variant, `sdkwork-drive`
-/// and `sdkwork-deployments` ship TypeScript only, and the deploy_app catalog
+/// than a comment: neither `sdkwork-drive` nor `sdkwork-deployments` ships a
+/// Dart variant today — both are TypeScript-only — and the `deploy_app` catalog
 /// port in `sdk/` is unbound for exactly that reason.
+///
+/// The legacy `sdkwork-webserver-app-sdk` family is deliberately absent: the
+/// `deploy_app` entity is owned by `sdkwork-deployments`, so this root no longer
+/// composes the webserver-owned application surface
+/// (`COMPOSABLE_ARCHITECTURE_SPEC.md` §7: one owner per normalized route).
 class WebserverFlutterCoreSdkInventoryEntry {
   const WebserverFlutterCoreSdkInventoryEntry({
     required this.workspace,
@@ -23,12 +28,6 @@ class WebserverFlutterCoreSdkInventoryEntry {
 
 const List<WebserverFlutterCoreSdkInventoryEntry>
 webserverFlutterCoreSdkInventory = <WebserverFlutterCoreSdkInventoryEntry>[
-  WebserverFlutterCoreSdkInventoryEntry(
-    workspace: 'sdkwork-webserver-app-sdk',
-    packageName: 'sdkwork_webserver_app_sdk',
-    permissionModuleId: 'web',
-    dartArtifactAvailable: true,
-  ),
   WebserverFlutterCoreSdkInventoryEntry(
     workspace: 'sdkwork-drive-app-sdk',
     packageName: 'sdkwork_drive_app_sdk',

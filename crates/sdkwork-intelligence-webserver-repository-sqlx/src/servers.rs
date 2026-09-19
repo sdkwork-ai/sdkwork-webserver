@@ -36,21 +36,21 @@ impl WebRepository {
         let (_page, page_size, offset) = pagination(page, page_size)?;
 
         let count_row =
-            sqlx::query("SELECT COUNT(*) AS total FROM web_server WHERE tenant_id = $1")
+            sqlx::query("SELECT COUNT(*) AS total FROM webserver_server WHERE tenant_id = $1")
                 .bind(tenant_id)
                 .fetch_one(&self.pool)
                 .await
-                .map_err(|error| store_error("count web_server", error))?;
+                .map_err(|error| store_error("count webserver_server", error))?;
         let total: i64 = count_row
             .try_get("total")
-            .map_err(|error| store_error("map web_server count", error))?;
+            .map_err(|error| store_error("map webserver_server count", error))?;
 
         let rows = sqlx::query(
             "SELECT uuid, name, host, tenant_scope_hash, ssh_port, status,
                     CAST(metadata AS TEXT) AS metadata,
                     CAST(updated_at AS TEXT) AS updated_at,
                     CAST(created_at AS TEXT) AS created_at
-             FROM web_server
+             FROM webserver_server
              WHERE tenant_id = $1
              ORDER BY updated_at DESC, id DESC LIMIT $2 OFFSET $3",
         )
@@ -59,12 +59,12 @@ impl WebRepository {
         .bind(offset)
         .fetch_all(&self.pool)
         .await
-        .map_err(|error| store_error("list web_server", error))?;
+        .map_err(|error| store_error("list webserver_server", error))?;
 
         let mut items = Vec::with_capacity(rows.len());
         for row in &rows {
             items.push(map_server_row(row).map_err(|error| {
-                WebServiceError::Internal(format!("map web_server row: {error}"))
+                WebServiceError::Internal(format!("map webserver_server row: {error}"))
             })?);
         }
 
@@ -95,7 +95,7 @@ impl WebRepository {
                     CAST(metadata AS TEXT) AS metadata,
                     CAST(updated_at AS TEXT) AS updated_at,
                     CAST(created_at AS TEXT) AS created_at
-             FROM web_server
+             FROM webserver_server
              WHERE tenant_id = $1
                AND (updated_at, id) < (CAST($2 AS TIMESTAMPTZ), $3)
              ORDER BY updated_at DESC, id DESC LIMIT $4".to_string();
@@ -107,23 +107,23 @@ impl WebRepository {
             .bind(fetch_size)
             .fetch_all(&self.pool)
             .await
-            .map_err(|error| store_error("list web_server cursor", error))?;
+            .map_err(|error| store_error("list webserver_server cursor", error))?;
         let has_more = rows.len() > page_size as usize;
         let page_rows = rows.into_iter().take(page_size as usize).collect::<Vec<_>>();
         let mut items = Vec::with_capacity(page_rows.len());
         for row in &page_rows {
             items.push(map_server_row(row).map_err(|error| {
-                WebServiceError::Internal(format!("map web_server row: {error}"))
+                WebServiceError::Internal(format!("map webserver_server row: {error}"))
             })?);
         }
         let next_cursor = has_more
             .then(|| {
                 let last = page_rows.last().expect("non-empty page when has_more");
                 let updated_at = cursor_instant_from_row(last, "updated_at")
-                    .map_err(|error| store_error("map web_server cursor instant", error))?;
+                    .map_err(|error| store_error("map webserver_server cursor instant", error))?;
                 let id: i64 = last
                     .try_get("id")
-                    .map_err(|error| store_error("map web_server cursor id", error))?;
+                    .map_err(|error| store_error("map webserver_server cursor id", error))?;
                 Ok::<_, WebServiceError>(encode_keyset_cursor(&updated_at, id))
             })
             .transpose()?;
@@ -151,7 +151,7 @@ impl WebRepository {
         let metadata_expression = json_write_expression("$8");
         let now_expression = instant_write_expression("$9");
         let insert_sql = format!(
-            "INSERT INTO web_server (
+            "INSERT INTO webserver_server (
                 id, uuid, tenant_id, name, host, tenant_scope_hash, ssh_port, status, metadata,
                 created_at, updated_at, version
              ) VALUES (
@@ -172,7 +172,7 @@ impl WebRepository {
             .bind(&now)
             .execute(&self.pool)
             .await
-            .map_err(|error| store_error("insert web_server", error))?;
+            .map_err(|error| store_error("insert webserver_server", error))?;
 
         Ok(CreateServerResponse {
             server: ServerResponse {

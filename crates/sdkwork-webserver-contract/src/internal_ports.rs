@@ -4,6 +4,10 @@ pub use sdkwork_webserver_core::website_runtime::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::cluster::{
+    ClusterHeartbeatRequest, ClusterHeartbeatResponse, ClusterPeerDirectoryResponse,
+    ClusterRegistrationRequest, ClusterRegistrationResponse,
+};
 use crate::problem::WebServiceResult;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -175,4 +179,31 @@ pub trait WebInternalApi: Send + Sync {
         context: &WebInternalRequestContext,
         snapshot_uuid: &str,
     ) -> WebServiceResult<RuntimeObservation>;
+
+    /// Registers (or re-registers) a webserver process instance and its host
+    /// machine in the distributed cluster registry. The request must arrive on
+    /// the machine-only surface authenticated with the shared cluster
+    /// registration credential (`wreg_` prefix); the response carries the
+    /// instance's own heartbeat token (`winst_` prefix).
+    async fn register_cluster_instance(
+        &self,
+        context: &WebInternalRequestContext,
+        request: &ClusterRegistrationRequest,
+    ) -> WebServiceResult<ClusterRegistrationResponse>;
+
+    /// Records one instance heartbeat: liveness, health state, and resource
+    /// metrics. The response refreshes the peer directory and delivers any
+    /// pending peer mailbox messages (at-most-once handoff).
+    async fn record_cluster_heartbeat(
+        &self,
+        context: &WebInternalRequestContext,
+        request: &ClusterHeartbeatRequest,
+    ) -> WebServiceResult<ClusterHeartbeatResponse>;
+
+    /// Returns the current cluster peer directory for the authenticated
+    /// instance.
+    async fn retrieve_cluster_peers(
+        &self,
+        context: &WebInternalRequestContext,
+    ) -> WebServiceResult<ClusterPeerDirectoryResponse>;
 }

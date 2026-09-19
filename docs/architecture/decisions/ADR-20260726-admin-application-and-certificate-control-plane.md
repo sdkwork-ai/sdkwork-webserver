@@ -13,8 +13,8 @@ The current backend-admin surface owns Nginx, Web Node inventory, diagnostics, a
 ## Decision
 
 - Extend the backend-api authority and generated Backend SDK with tenant-bound application, application-domain, application-deployment, certificate, and certificate-distribution operations.
-- Add `application_type` to `web_site` with values `WEB` and `API`. Keep `site_type` unchanged as the runtime technology classification.
-- Keep one canonical `web_certificate` row per certificate. Renewal updates that row in place, including the leaf fingerprint and encrypted private key; no per-server certificate rows are created.
+- Add `application_type` to `webserver_site` with values `WEB` and `API`. Keep `site_type` unchanged as the runtime technology classification.
+- Keep one canonical `webserver_certificate` row per certificate. Renewal updates that row in place, including the leaf fingerprint and encrypted private key; no per-server certificate rows are created.
 - Continue distributing certificates through the authenticated bounded Node Sync Manifest. Its single tenant-wide `syncVersion` is derived from active Nginx revisions and canonical certificate fingerprints.
 - Treat node certificate files as replaceable runtime projections. A Web Node reports the manifest version as applied only after atomic certificate/config activation and a successful real reload.
 - Expose distribution status by comparing every paginated server observation with one desired tenant manifest version. This is operational evidence, not a second certificate state store.

@@ -25,10 +25,10 @@ users:
   - certificate operators
 acceptance_criteria:
   - A hostname exists independently of application routing and certificates.
-  - An application may own multiple active hostname routes through web_site_binding.
+  - An application may own multiple active hostname routes through webserver_site_binding.
   - The certificate issue command accepts 1..8 unique verified domainIds and an RSA or ECDSA key algorithm.
   - Backend certificate selection loads one bounded hostname page at a time, excludes unverified assets, preserves selected ids and labels across pages, and keeps verified unbound hostnames eligible.
-  - Backend certificate listing and issuance are filtered by domainIds and do not require a web_site_binding or applicationId.
+  - Backend certificate listing and issuance are filtered by domainIds and do not require a webserver_site_binding or applicationId.
   - Certificate issuance and renewal persist a durable operation and return HTTP 202 asynchronous data; generated SDK operation retrieval, not the acceptance payload, supplies terminal status.
   - Certificate identifiers are ordered relational rows with foreign keys to both certificate and hostname.
   - Authorized operators can repeatedly issue certificates and can list certificates by domain without downloading the tenant inventory.
@@ -93,11 +93,11 @@ verification:
 The canonical relationship is:
 
 ```text
-web_site 1 -> N web_site_binding N -> 1 web_domain
-web_certificate N <-> N web_domain through web_certificate_identifier
-web_certificate 1 -> N web_certificate_version
-web_certificate 1 -> N web_certificate_operation
-web_site_binding 1 -> N web_listener_certificate_binding
+webserver_site 1 -> N webserver_site_binding N -> 1 webserver_domain
+webserver_certificate N <-> N webserver_domain through webserver_certificate_identifier
+webserver_certificate 1 -> N webserver_certificate_version
+webserver_certificate 1 -> N webserver_certificate_operation
+webserver_site_binding 1 -> N webserver_listener_certificate_binding
 ```
 
 Binding is desired control-plane state, not proof of deployment or public readiness. Runtime and

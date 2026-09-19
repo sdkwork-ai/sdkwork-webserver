@@ -13,3 +13,4 @@ export { ServerFileApi, createServerFileApi } from './server-file';
 export { WebserverConfigApi, createWebserverConfigApi } from './webserver-config';
 export { AgentApi, createAgentApi } from './agent';
 export { AuditApi, createAuditApi } from './audit';
+export { ClusterApi, createClusterApi } from './cluster';

@@ -30,8 +30,8 @@ use serde_json::{json, Value};
 use thiserror::Error;
 
 use crate::config::{
-    format_proxy_set_header_entry, hostname_upstream_allowed_cidrs, merge_proxy_set_headers,
-    parse_htpasswd, parse_limit_conn, parse_limit_conn_zone, parse_limit_req, parse_limit_req_zone,
+    format_proxy_set_header_entry, hostname_upstream_allowed_cidrs, parse_htpasswd,
+    parse_limit_conn, parse_limit_conn_zone, parse_limit_req, parse_limit_req_zone,
     ConfigDiagnostic, StreamTargetConfig, StreamTlsMode, WebServerAppConfig, WebServerConfigError,
 };
 
@@ -71,7 +71,6 @@ const ACCEPTED_IGNORED: &[&str] = &[
     "proxy_buffering",
     "proxy_request_buffering",
     "proxy_method",
-    "proxy_intercept_errors",
     "proxy_next_upstream",
     "proxy_hide_header",
     "proxy_redirect",
@@ -151,7 +150,6 @@ const ACCEPTED_IGNORED: &[&str] = &[
     "msie_refresh",
     "chunked_transfer_encoding",
     "max_ranges",
-    "recursive_error_pages",
     "proxy_temp_path",
     "proxy_max_temp_file_size",
     "proxy_temp_file_write_size",
@@ -187,7 +185,6 @@ const ACCEPTED_IGNORED: &[&str] = &[
     // (config-source-fixtures/nginx/full-nginx.conf) exercises `autoindex on`
     // as part of the accepted surface, and the TOML spec treats autoindex as
     // an operator policy knob (§11.2).
-    "error_page",
     "autoindex",
     "expires",
     "etag",
@@ -274,6 +271,17 @@ pub fn materialize_nginx_app(
             }
             "client_max_body_size" => {
                 mapper.note_client_max_body_size(parse_body_size(directive)?);
+            }
+            "error_page" => {
+                mapper.http_error_pages.push(parse_error_page(directive)?);
+            }
+            "recursive_error_pages" => {
+                mapper.http_recursive_error_pages =
+                    parse_on_off(directive, "recursive_error_pages")?;
+            }
+            "proxy_intercept_errors" => {
+                mapper.http_proxy_intercept_errors =
+                    parse_on_off(directive, "proxy_intercept_errors")?;
             }
             "proxy_ssl_verify"
             | "proxy_ssl_trusted_certificate"
@@ -411,6 +419,10 @@ struct LocationExtras {
     auth_basic: Option<Value>,
     sub_filter: Option<Value>,
     secure_link: Option<Value>,
+    gzip: Option<bool>,
+    gzip_types: Option<Vec<String>>,
+    gzip_min_length: Option<u64>,
+    error_pages: Vec<Value>,
 }
 
 struct Mapper<'a> {
@@ -429,6 +441,13 @@ struct Mapper<'a> {
     /// http-level `proxy_set_header` entries inherited by every server
     /// (nginx http context inheritance).
     http_proxy_set_headers: Vec<String>,
+    /// http-level `error_page` mappings inherited by every server
+    /// (nginx http context inheritance, declaration order preserved).
+    http_error_pages: Vec<Value>,
+    /// http-level `recursive_error_pages` inherited by every server.
+    http_recursive_error_pages: bool,
+    /// http-level `proxy_intercept_errors` inherited by every server.
+    http_proxy_intercept_errors: bool,
     /// http-level `proxy_ssl_*` upstream TLS settings inherited by every
     /// server and location.
     http_proxy_ssl: ProxySslSettings,
@@ -479,6 +498,9 @@ impl<'a> Mapper<'a> {
             gzip_types: Vec::new(),
             gzip_min_length: 20,
             http_proxy_set_headers: Vec::new(),
+            http_error_pages: Vec::new(),
+            http_recursive_error_pages: false,
+            http_proxy_intercept_errors: false,
             http_proxy_ssl: ProxySslSettings::default(),
             http_http2: None,
             http_real_ip: RealIpSettings::default(),
@@ -755,6 +777,14 @@ impl<'a> Mapper<'a> {
             "targets": targets,
             "loadBalancing": load_balancing,
         });
+        // nginx defaults `proxy_next_upstream error timeout`: transport
+        // failures and timeouts fail over to the next target, and each
+        // request may try every declared server once.
+        upstream["retry"] = json!({
+            "maxAttempts": targets.len().min(u8::MAX as usize),
+            "timeoutMs": default_nginx_retry_timeout_ms(),
+            "retryOn": ["error", "timeout"],
+        });
         if let Some(hash) = hash_config {
             upstream["hash"] = hash;
         }
@@ -794,6 +824,23 @@ impl<'a> Mapper<'a> {
         let mut server_real_ip = RealIpSettings::default();
         let mut ssl_verify_client: Option<&str> = None;
         let mut ssl_client_certificate: Option<String> = None;
+        // nginx http-level gzip state snapshot: server-level `gzip*`
+        // directives overlay it (single-value on/off inherits; the type list
+        // and min length replace when declared).
+        let http_gzip = (
+            self.gzip_enabled,
+            self.gzip_types.clone(),
+            self.gzip_min_length,
+        );
+        let mut server_gzip: Option<bool> = None;
+        let mut server_gzip_types: Option<Vec<String>> = None;
+        let mut server_gzip_min_length: Option<u64> = None;
+        let mut server_rewrite_rules: Vec<Value> = Vec::new();
+        let mut server_error_pages: Vec<Value> = Vec::new();
+        let mut server_return: Option<Vec<String>> = None;
+        let mut server_sub_filter: Option<Value> = None;
+        let mut server_recursive_error_pages: Option<bool> = None;
+        let mut server_proxy_intercept_errors: Option<bool> = None;
 
         for child in &directive.children {
             match child.name.as_str() {
@@ -969,6 +1016,66 @@ impl<'a> Mapper<'a> {
                 "auth_basic_user_file" => {
                     inherited_auth_file = Some(self.resolve_path(child)?);
                 }
+                "gzip" => match child.args.first().map(String::as_str) {
+                    Some("on") => server_gzip = Some(true),
+                    Some("off") => server_gzip = Some(false),
+                    _ => {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "gzip requires on or off",
+                        ));
+                    }
+                },
+                "gzip_types" => {
+                    if child.args.is_empty() {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "gzip_types requires at least one MIME type",
+                        ));
+                    }
+                    server_gzip_types = Some(child.args.clone());
+                }
+                "gzip_min_length" => {
+                    let Some(value) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "gzip_min_length requires a size",
+                        ));
+                    };
+                    let Some(bytes) = parse_size_bytes(value) else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            format!("invalid gzip_min_length `{value}`"),
+                        ));
+                    };
+                    server_gzip_min_length = Some(bytes);
+                }
+                "rewrite" => {
+                    server_rewrite_rules.push(parse_rewrite_rule(child)?);
+                }
+                "error_page" => {
+                    server_error_pages.push(parse_error_page(child)?);
+                }
+                "return" => {
+                    server_return = Some(child.args.clone());
+                }
+                "sub_filter" => {
+                    apply_sub_filter_entry(&mut server_sub_filter, child)?;
+                }
+                "sub_filter_once" => {
+                    apply_sub_filter_once(&mut server_sub_filter, child)?;
+                }
+                "sub_filter_types" => {
+                    apply_sub_filter_types(&mut server_sub_filter, child)?;
+                }
+                "proxy_intercept_errors" => {
+                    server_proxy_intercept_errors =
+                        Some(parse_on_off(child, "proxy_intercept_errors")?);
+                }
+                "recursive_error_pages" => {
+                    server_recursive_error_pages =
+                        Some(parse_on_off(child, "recursive_error_pages")?);
+                }
                 name if ACCEPTED_IGNORED.contains(&name) => {}
                 name if UNSUPPORTED_SECURITY.contains(&name) => {
                     return Err(NginxConfigError::unsupported(
@@ -994,6 +1101,22 @@ impl<'a> Mapper<'a> {
         // this server owns (nginx: the first server for a listen address is
         // its default, overridden by an explicit `default_server`).
         let virtual_host_id = format!("{}-{first_port}", sanitize_id(&primary_name));
+        // nginx server-level `return`: the rewrite phase answers every
+        // request before location selection, so the whole host collapses to
+        // one catch-all response route and its locations are unreachable.
+        let catch_all_return = match server_return {
+            Some(args) => Some(materialize_server_return(directive, server_index, &args)?),
+            None => None,
+        };
+        let catch_all_iterations = if catch_all_return.is_none() {
+            usize::MAX
+        } else {
+            0
+        };
+        // nginx inheritance: the location flag overrides the server value,
+        // which overrides the http-level value.
+        let inherited_proxy_intercept_errors =
+            server_proxy_intercept_errors.unwrap_or(self.http_proxy_intercept_errors);
 
         let has_ssl = listen_specs.iter().any(|spec| spec.ssl);
         if has_ssl {
@@ -1056,10 +1179,12 @@ impl<'a> Mapper<'a> {
             self.tls_policies.push(tls_policy);
         }
 
-        // http-level `proxy_set_header` entries are inherited by every
-        // server; server entries override http entries on the same name.
-        let inherited_proxy_set_headers =
-            merge_proxy_set_headers(&self.http_proxy_set_headers, &inherited_proxy_set_headers);
+        // nginx inheritance: `proxy_set_header` directives are inherited
+        // from the previous level only when the current level declares none.
+        let inherited_proxy_set_headers = inherit_proxy_set_headers_nginx(
+            &self.http_proxy_set_headers,
+            &inherited_proxy_set_headers,
+        );
         // http ⊕ server: location-level values override per directive.
         let effective_proxy_ssl = server_proxy_ssl.merge(&self.http_proxy_ssl);
         let mut effective_real_ip = self.http_real_ip.clone();
@@ -1174,7 +1299,7 @@ impl<'a> Mapper<'a> {
         }
 
         let mut location_extras = Vec::new();
-        for (index, location) in locations.iter().enumerate() {
+        for (index, location) in locations.iter().enumerate().take(catch_all_iterations) {
             let extras = self.materialize_location(
                 location,
                 &primary_name,
@@ -1188,6 +1313,8 @@ impl<'a> Mapper<'a> {
                 inherited_auth_realm.as_deref(),
                 inherited_auth_file.as_deref(),
                 inherited_auth_off,
+                server_sub_filter.as_ref(),
+                inherited_proxy_intercept_errors,
                 &inherited_proxy_set_headers,
                 &effective_proxy_ssl,
                 named_pc_root.as_deref(),
@@ -1195,7 +1322,7 @@ impl<'a> Mapper<'a> {
             )?;
             location_extras.push(extras);
         }
-        if locations.is_empty() {
+        if locations.is_empty() && catch_all_return.is_none() {
             return Err(NginxConfigError::unsupported(
                 directive,
                 "server requires at least one location",
@@ -1263,17 +1390,113 @@ impl<'a> Mapper<'a> {
             }
             virtual_host["securityHeaders"] = Value::Object(security);
         }
+        // Server-level `gzip` resolution: emit a per-host policy only when
+        // this server declared a gzip directive; otherwise the runtime
+        // inherits the http-level (app-wide) policy.
+        if server_gzip.is_some() || server_gzip_types.is_some() || server_gzip_min_length.is_some()
+        {
+            let enabled = server_gzip.unwrap_or(http_gzip.0);
+            let mut types = server_gzip_types.unwrap_or_else(|| http_gzip.1.clone());
+            if enabled
+                && !types
+                    .iter()
+                    .any(|value| value.eq_ignore_ascii_case("text/html"))
+            {
+                types.push("text/html".to_owned());
+            }
+            if types.is_empty() {
+                types.push("text/html".to_owned());
+            }
+            let min_length = server_gzip_min_length.unwrap_or(http_gzip.2);
+            virtual_host["compression"] = json!({
+                "enabled": enabled,
+                "types": types,
+                "minLength": min_length,
+            });
+        }
+        // nginx `error_page`: http-level mappings inherit and server-level
+        // entries append; the runtime resolves the last declaration per code.
+        if !server_error_pages.is_empty() || !self.http_error_pages.is_empty() {
+            let mut pages = self.http_error_pages.clone();
+            pages.extend(server_error_pages);
+            virtual_host["errorPages"] = Value::Array(pages);
+        }
+        virtual_host["recursiveErrorPages"] =
+            Value::Bool(server_recursive_error_pages.unwrap_or(self.http_recursive_error_pages));
         // Rewrite route matches with their actual path types (exact/prefix).
         let mut route_entries = Vec::new();
-        for (index, location) in locations.iter().enumerate() {
+        for (index, location) in locations.iter().enumerate().take(catch_all_iterations) {
             let (path_type, path) = parse_location_match(location)?;
             let mut route = json!({
                 "id": format!("route-{server_index}-{index}"),
                 "match": {"pathType": path_type, "path": path},
                 "resourceRef": format!("loc-{server_index}-{index}"),
             });
-            if !location_extras[index].rewrite.is_empty() {
-                route["rewrite"] = Value::Array(location_extras[index].rewrite.clone());
+            let mut route_rewrites = server_rewrite_rules.clone();
+            route_rewrites.extend(location_extras[index].rewrite.iter().cloned());
+            if !route_rewrites.is_empty() {
+                route["rewrite"] = Value::Array(route_rewrites);
+            }
+            if !location_extras[index].error_pages.is_empty() {
+                // nginx: a location that declares error_page replaces the
+                // inherited set for that location.
+                route["errorPages"] = Value::Array(location_extras[index].error_pages.clone());
+            }
+            if location_extras[index].gzip.is_some()
+                || location_extras[index].gzip_types.is_some()
+                || location_extras[index].gzip_min_length.is_some()
+            {
+                // Location gzip overlays the host policy (on/off inherits;
+                // types/min length replace when declared).
+                let host = virtual_host.get("compression");
+                let (host_enabled, host_types, host_min) = match host {
+                    Some(value) => (
+                        value
+                            .get("enabled")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(false),
+                        value
+                            .get("types")
+                            .and_then(Value::as_array)
+                            .cloned()
+                            .unwrap_or_default(),
+                        value.get("minLength").and_then(Value::as_u64),
+                    ),
+                    None => (
+                        self.gzip_enabled,
+                        self.gzip_types.iter().cloned().map(Value::String).collect(),
+                        Some(self.gzip_min_length),
+                    ),
+                };
+                let enabled = location_extras[index].gzip.unwrap_or(host_enabled);
+                let mut types = location_extras[index]
+                    .gzip_types
+                    .clone()
+                    .map(|values| values.into_iter().map(Value::String).collect())
+                    .unwrap_or(host_types);
+                if enabled
+                    && !types.iter().any(|value| {
+                        value
+                            .as_str()
+                            .is_some_and(|v| v.eq_ignore_ascii_case("text/html"))
+                    })
+                {
+                    types.push(Value::String("text/html".to_owned()));
+                }
+                if types.is_empty() {
+                    types.push(Value::String("text/html".to_owned()));
+                }
+                // nginx gzip_min_length default (20 bytes) matches the
+                // mapper's http-level initial state.
+                let min_length = location_extras[index]
+                    .gzip_min_length
+                    .or(host_min)
+                    .unwrap_or(20);
+                route["compression"] = json!({
+                    "enabled": enabled,
+                    "types": types,
+                    "minLength": min_length,
+                });
             }
             if !location_extras[index].access.is_empty() {
                 route["access"] = Value::Array(location_extras[index].access.clone());
@@ -1295,7 +1518,13 @@ impl<'a> Mapper<'a> {
             }
             route_entries.push(route);
         }
-        virtual_host["routes"] = Value::Array(route_entries);
+        if let Some((_route, resource)) = &catch_all_return {
+            self.resources.push(resource.clone());
+        }
+        virtual_host["routes"] = match &catch_all_return {
+            Some((route, _resource)) => Value::Array(vec![route.clone()]),
+            None => Value::Array(route_entries),
+        };
         self.note_client_max_body_size(client_max_body_size);
         self.virtual_hosts.push(virtual_host);
         Ok(())
@@ -1315,6 +1544,8 @@ impl<'a> Mapper<'a> {
         inherited_auth_realm: Option<&str>,
         inherited_auth_file: Option<&str>,
         inherited_auth_off: bool,
+        inherited_sub_filter: Option<&Value>,
+        inherited_proxy_intercept_errors: bool,
         inherited_proxy_set_headers: &[String],
         inherited_proxy_ssl: &ProxySslSettings,
         named_pc_root: Option<&str>,
@@ -1325,6 +1556,7 @@ impl<'a> Mapper<'a> {
         let mut proxy_pass = None;
         let mut dynamic_target = None;
         let mut proxy_pass_request_headers = true;
+        let mut proxy_intercept_errors = inherited_proxy_intercept_errors;
         let mut return_directive = None;
         let mut root = None;
         let mut alias = None;
@@ -1468,6 +1700,48 @@ impl<'a> Mapper<'a> {
                         .as_array_mut()
                         .expect("rules array")
                         .push(json!({ "from": from, "to": to }));
+                }
+                "gzip" => {
+                    extras.gzip = Some(match child.args.first().map(String::as_str) {
+                        Some("on") => true,
+                        Some("off") => false,
+                        _ => {
+                            return Err(NginxConfigError::unsupported(
+                                child,
+                                "gzip requires on or off",
+                            ));
+                        }
+                    });
+                }
+                "gzip_types" => {
+                    if child.args.is_empty() {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "gzip_types requires at least one MIME type",
+                        ));
+                    }
+                    extras.gzip_types = Some(child.args.clone());
+                }
+                "gzip_min_length" => {
+                    let Some(value) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "gzip_min_length requires a size",
+                        ));
+                    };
+                    let Some(bytes) = parse_size_bytes(value) else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            format!("invalid gzip_min_length `{value}`"),
+                        ));
+                    };
+                    extras.gzip_min_length = Some(bytes);
+                }
+                "error_page" => {
+                    extras.error_pages.push(parse_error_page(child)?);
+                }
+                "proxy_intercept_errors" => {
+                    proxy_intercept_errors = parse_on_off(child, "proxy_intercept_errors")?;
                 }
                 "sub_filter_once" => {
                     let Some(value) = child.args.first() else {
@@ -1751,8 +2025,10 @@ impl<'a> Mapper<'a> {
             }
             // Variable proxy_pass: the URL is evaluated per request; the
             // materialized model carries the template.
-            let request_set_headers =
-                merge_proxy_set_headers(inherited_proxy_set_headers, &location_proxy_set_headers);
+            let request_set_headers = inherit_proxy_set_headers_nginx(
+                inherited_proxy_set_headers,
+                &location_proxy_set_headers,
+            );
             let mut proxy_resource = json!({
                 "id": resource_id,
                 "type": "proxy",
@@ -1760,6 +2036,7 @@ impl<'a> Mapper<'a> {
                 "upstreamRef": "",
                 "dynamicTarget": target,
                 "proxyPassRequestHeaders": proxy_pass_request_headers,
+                "proxyInterceptErrors": proxy_intercept_errors,
             });
             if !request_set_headers.is_empty() {
                 proxy_resource["requestSetHeaders"] =
@@ -1791,13 +2068,16 @@ impl<'a> Mapper<'a> {
                     "`proxy_ssl_*` settings require an `https://` `proxy_pass` target (the runtime model attaches one TLS policy per upstream)",
                 ));
             }
-            let request_set_headers =
-                merge_proxy_set_headers(inherited_proxy_set_headers, &location_proxy_set_headers);
+            let request_set_headers = inherit_proxy_set_headers_nginx(
+                inherited_proxy_set_headers,
+                &location_proxy_set_headers,
+            );
             let mut proxy_resource = json!({
                 "id": resource_id,
                 "type": "proxy",
                 "stripPrefix": false,
                 "proxyPassRequestHeaders": proxy_pass_request_headers,
+                "proxyInterceptErrors": proxy_intercept_errors,
             });
             if let Some(uri) = &target_uri {
                 proxy_resource["targetUri"] = Value::String(uri.clone());
@@ -2030,6 +2310,11 @@ impl<'a> Mapper<'a> {
                 "indexFiles": alias_index_files,
                 "stripPrefix": true,
             }));
+        }
+        // nginx inheritance: `sub_filter` directives inherit from the
+        // previous level only when the current level declares none.
+        if extras.sub_filter.is_none() {
+            extras.sub_filter = inherited_sub_filter.cloned();
         }
         let _ = (server_name, client_max_body_size);
         Ok(extras)
@@ -3423,6 +3708,17 @@ pub(crate) fn redirect_variables_ok(url: &str) -> bool {
     true
 }
 
+/// nginx `proxy_set_header` inheritance: these directives are inherited from
+/// the previous configuration level if and only if there are no
+/// `proxy_set_header` directives defined on the current level.
+fn inherit_proxy_set_headers_nginx(inherited: &[String], current: &[String]) -> Vec<String> {
+    if current.is_empty() {
+        inherited.to_vec()
+    } else {
+        current.to_vec()
+    }
+}
+
 fn parse_u64(value: &str) -> Option<u64> {
     value.parse::<u64>().ok()
 }
@@ -3439,6 +3735,12 @@ fn parse_body_size(directive: &NginxDirective) -> Result<Option<u64>, NginxConfi
     parse_size_bytes(value).map(Some).ok_or_else(|| {
         NginxConfigError::unsupported(directive, format!("invalid client_max_body_size `{value}`"))
     })
+}
+
+/// nginx leaves the total upstream retry budget to the runtime; the shared
+/// model default (30s) matches `UpstreamRetryConfig`'s documented default.
+fn default_nginx_retry_timeout_ms() -> u64 {
+    30_000
 }
 
 fn parse_size_bytes(value: &str) -> Option<u64> {
@@ -3501,6 +3803,263 @@ fn parse_rewrite_rule(directive: &NginxDirective) -> Result<Value, NginxConfigEr
 }
 
 /// Parse `allow` / `deny` into a runtime access rule.
+/// Shared `sub_filter <from> <to>` application (http/server/location).
+fn apply_sub_filter_entry(
+    target: &mut Option<Value>,
+    directive: &NginxDirective,
+) -> Result<(), NginxConfigError> {
+    let Some(from) = directive.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "sub_filter requires a pattern to replace",
+        ));
+    };
+    if from.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "sub_filter pattern must not be empty",
+        ));
+    }
+    let to = directive.args.get(1).cloned().unwrap_or_default();
+    let entry = target.get_or_insert_with(
+        || json!({ "rules": [], "once": true, "types": ["text/html"], "lastModified": false }),
+    );
+    entry["rules"]
+        .as_array_mut()
+        .expect("rules array")
+        .push(json!({ "from": from, "to": to }));
+    Ok(())
+}
+
+/// Shared `sub_filter_once on|off` application.
+fn apply_sub_filter_once(
+    target: &mut Option<Value>,
+    directive: &NginxDirective,
+) -> Result<(), NginxConfigError> {
+    let Some(value) = directive.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "sub_filter_once requires on|off",
+        ));
+    };
+    let enabled = match value.as_str() {
+        "on" => true,
+        "off" => false,
+        other => {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("sub_filter_once accepts on|off, found `{other}`"),
+            ))
+        }
+    };
+    let entry = target.get_or_insert_with(
+        || json!({ "rules": [], "once": true, "types": ["text/html"], "lastModified": false }),
+    );
+    entry["once"] = Value::Bool(enabled);
+    Ok(())
+}
+
+/// Shared `sub_filter_types <mime…>` application.
+fn apply_sub_filter_types(
+    target: &mut Option<Value>,
+    directive: &NginxDirective,
+) -> Result<(), NginxConfigError> {
+    if directive.args.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "sub_filter_types requires at least one MIME type",
+        ));
+    }
+    let types: Vec<Value> = directive.args.iter().cloned().map(Value::String).collect();
+    let entry = target.get_or_insert_with(
+        || json!({ "rules": [], "once": true, "types": ["text/html"], "lastModified": false }),
+    );
+    entry["types"] = Value::Array(types);
+    Ok(())
+}
+
+/// Shared `on|off` parser for simple switch directives.
+fn parse_on_off(directive: &NginxDirective, name: &str) -> Result<bool, NginxConfigError> {
+    match directive.args.first().map(String::as_str) {
+        Some("on") => Ok(true),
+        Some("off") => Ok(false),
+        other => Err(NginxConfigError::unsupported(
+            directive,
+            format!("{name} requires on or off, found `{other:?}`"),
+        )),
+    }
+}
+
+/// One nginx `error_page <codes...> [=[response]] uri;` mapping.
+fn parse_error_page(directive: &NginxDirective) -> Result<Value, NginxConfigError> {
+    let mut codes = Vec::new();
+    let mut response_code: Option<u16> = None;
+    let mut uri: Option<String> = None;
+    for argument in &directive.args {
+        if let Some(code) = argument.strip_prefix('=') {
+            if response_code.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "error_page accepts at most one `=code` response override",
+                ));
+            }
+            let Some(parsed) = (if code.is_empty() {
+                None
+            } else {
+                code.parse::<u16>().ok()
+            }) else {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`=code` requires a response status (200-599)",
+                ));
+            };
+            if !(200..=599).contains(&parsed) {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!("error_page response `{parsed}` must be 200-599"),
+                ));
+            }
+            response_code = Some(parsed);
+        } else if argument.starts_with('/') {
+            if uri.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "error_page accepts exactly one target URI",
+                ));
+            }
+            uri = Some(argument.clone());
+        } else if let Ok(code) = argument.parse::<u16>() {
+            if !(300..=599).contains(&code) {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!("error_page code `{code}` must be 300-599"),
+                ));
+            }
+            codes.push(code);
+        } else {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!(
+                    "unsupported error_page argument `{argument}`; expected codes, an optional `=code`, and one `/target` URI"
+                ),
+            ));
+        }
+    }
+    if codes.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "error_page requires at least one status code",
+        ));
+    }
+    let Some(uri) = uri else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "error_page requires a `/target` URI",
+        ));
+    };
+    Ok(json!({
+        "codes": codes,
+        "uri": uri,
+        "responseCode": response_code,
+    }))
+}
+
+/// nginx server-level `return`: every request in the host is answered by the
+/// rewrite phase before location selection. Materialized as one catch-all
+/// route plus its respond/redirect resource.
+fn materialize_server_return(
+    directive: &NginxDirective,
+    server_index: usize,
+    args: &[String],
+) -> Result<(Value, Value), NginxConfigError> {
+    let resource_id = format!("loc-{server_index}-return");
+    let Some(first) = args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "return requires a status or URL",
+        ));
+    };
+    let resource = if let Ok(status) = first.parse::<u16>() {
+        if status == 444 {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                "return 444 (close the connection without a response) is not supported by the runtime model",
+            ));
+        }
+        match (status, args.get(1)) {
+            (301 | 302 | 303 | 307 | 308, Some(url)) => {
+                if url.contains('$') && !redirect_variables_ok(url) {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("return URL `{url}` uses unsupported variables; supported: $host $request_uri $scheme"),
+                    ));
+                }
+                json!({
+                    "id": resource_id,
+                    "type": "redirect",
+                    "status": status,
+                    "location": url,
+                })
+            }
+            (200..=599, None) => json!({
+                "id": resource_id,
+                "type": "respond",
+                "status": status,
+                "contentType": "text/plain; charset=utf-8",
+                "body": "",
+            }),
+            (200..=599, Some(body)) => {
+                if body.contains('$') {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                            "return body `{body}` contains variables; the runtime responds with literal text only"
+                        ),
+                    ));
+                }
+                json!({
+                    "id": resource_id,
+                    "type": "respond",
+                    "status": status,
+                    "contentType": "text/plain; charset=utf-8",
+                    "body": body,
+                })
+            }
+            _ => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "server-level `return` supports 301/302/303/307/308 with a URL or 200-599 with a body",
+                ));
+            }
+        }
+    } else {
+        if args.len() != 1 {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                "the `return URL` form takes exactly one argument",
+            ));
+        }
+        if first.contains('$') && !redirect_variables_ok(first) {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("return URL `{first}` uses unsupported variables; supported: $host $request_uri $scheme"),
+            ));
+        }
+        json!({
+            "id": resource_id,
+            "type": "redirect",
+            "status": 302,
+            "location": first,
+        })
+    };
+    let route = json!({
+        "id": format!("route-{server_index}-return"),
+        "match": {"pathType": "prefix", "path": "/"},
+        "resourceRef": resource_id,
+    });
+    Ok((route, resource))
+}
+
 fn parse_access_rule(directive: &NginxDirective) -> Result<Value, NginxConfigError> {
     let Some(network) = directive.args.first() else {
         return Err(NginxConfigError::unsupported(
@@ -4549,6 +5108,8 @@ server {
 
     #[test]
     fn http_level_proxy_set_headers_are_inherited_by_servers() {
+        // nginx: `proxy_set_header` inherits from the previous level only
+        // when the current level declares none (nginx docs, proxy_set_header).
         let config = materialize(
             r#"
 http {
@@ -4559,8 +5120,11 @@ http {
     server {
         listen 80;
         server_name headers.example.com;
-        location / {
-            proxy_set_header X-Server-Level $host;
+        location /inherits {
+            proxy_pass http://api;
+        }
+        location /replaces {
+            proxy_set_header X-Location-Level $host;
             proxy_pass http://api;
         }
     }
@@ -4568,24 +5132,42 @@ http {
 "#,
         )
         .expect("materialize");
-        let proxy = config
+        // Proxy resources are emitted in location order (`loc-<server>-<n>`);
+        // the first location inherits, the second declares its own set.
+        let mut proxies: Vec<(String, Vec<String>)> = config
             .resources
             .iter()
-            .find_map(|resource| match resource {
+            .filter_map(|resource| match resource {
                 crate::config::ResourceConfig::Proxy {
+                    id,
                     request_set_headers,
                     ..
-                } => Some(request_set_headers.clone()),
+                } => Some((id.clone(), request_set_headers.clone())),
                 _ => None,
             })
-            .expect("proxy resource");
+            .collect();
+        proxies.sort_by(|left, right| left.0.cmp(&right.0));
+        let [(_, inherited), (_, replaced)] = proxies.as_slice() else {
+            panic!("expected two proxy resources, got {proxies:?}");
+        };
+        // A location without its own directives inherits the http-level set.
         assert!(
-            proxy.iter().any(|entry| entry == "X-Http-Level $scheme"),
-            "{proxy:?}"
+            inherited
+                .iter()
+                .any(|entry| entry == "X-Http-Level $scheme"),
+            "{inherited:?}"
+        );
+        // A location that declares any proxy_set_header replaces the whole
+        // inherited array (nginx semantics).
+        assert!(
+            replaced
+                .iter()
+                .any(|entry| entry == "X-Location-Level $host"),
+            "{replaced:?}"
         );
         assert!(
-            proxy.iter().any(|entry| entry == "X-Server-Level $host"),
-            "{proxy:?}"
+            !replaced.iter().any(|entry| entry == "X-Http-Level $scheme"),
+            "{replaced:?}"
         );
     }
 

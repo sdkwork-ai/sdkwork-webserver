@@ -102,17 +102,10 @@
     "runtimeEntrypoints": [],
     "routeManifest": null,
     "sdkClients": [
-      "@sdkwork/webserver-app-sdk",
       "@sdkwork/drive-app-sdk",
       "@sdkwork/deployments-app-sdk"
     ],
     "sdkDependencies": [
-      {
-        "workspace": "sdkwork-webserver-app-sdk",
-        "permissionModuleId": "web",
-        "surface": "app-api",
-        "credentialMode": "authenticated-app-api"
-      },
       {
         "workspace": "sdkwork-drive-app-sdk",
         "permissionModuleId": "drive",

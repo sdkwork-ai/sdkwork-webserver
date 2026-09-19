@@ -23,7 +23,12 @@ export type WebserverResourceKey =
   | "storage-providers"
   | "storage-kinds"
   | "storage-buckets"
-  | "storage-bindings";
+  | "storage-bindings"
+  | "cluster-overview"
+  | "cluster-clusters"
+  | "cluster-hosts"
+  | "cluster-instances"
+  | "cluster-events";
 
 export interface WebserverModuleEntry {
   description: string;

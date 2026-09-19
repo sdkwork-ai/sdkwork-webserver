@@ -7,7 +7,7 @@ use sdkwork_webserver_contract::{
     WebServiceError, WebServiceResult,
 };
 use serde_json::{json, Value};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use super::{EngineDatabase, EngineRow, WebRepository};
 use sqlx::Row;
 
@@ -92,6 +92,15 @@ pub(crate) struct AuthenticatedAgent {
     pub tenant_id: i64,
 }
 
+/// Lightweight desired-state projection for the heartbeat path: the sync
+/// version plus the `(certificate_id, fingerprint)` pairs observations must
+/// match. Carries no decrypted key material.
+#[derive(Clone, Debug)]
+pub(crate) struct AgentSyncFingerprint {
+    pub sync_version: String,
+    pub certificate_fingerprints: HashSet<(String, String)>,
+}
+
 pub(crate) fn hash_agent_token(token: &str) -> String {
     sha256_hash(token.as_bytes())
 }
@@ -106,14 +115,18 @@ impl WebRepository {
         token: &str,
     ) -> WebServiceResult<AuthenticatedAgent> {
         let token_hash = hash_agent_token(token);
+        // Containment (not `->>` extraction) so the metadata GIN index serves
+        // the lookup; an extraction predicate would seq-scan the table on
+        // every node authentication/heartbeat.
         let sql = "SELECT uuid, tenant_id, name, host
-                   FROM web_server
-                   WHERE metadata ->> 'agentTokenHash' = $1";
+                   FROM webserver_server
+                   WHERE metadata @> CAST($1 AS JSONB)";
+        let credential = json!({ "agentTokenHash": token_hash }).to_string();
         let row = sqlx::query(sql)
-            .bind(token_hash)
+            .bind(credential)
             .fetch_optional(&self.pool)
             .await
-            .map_err(|error| store_error("authenticate web_server agent token", error))?;
+            .map_err(|error| store_error("authenticate webserver_server agent token", error))?;
 
         let row = row.ok_or(WebServiceError::Forbidden)?;
         map_authenticated_agent(&row)
@@ -125,8 +138,12 @@ impl WebRepository {
         agent: &AuthenticatedAgent,
         request: &AgentHeartbeatRequest,
     ) -> WebServiceResult<AgentHeartbeatResponse> {
-        let desired_manifest = if !request.certificate_observations.is_empty() {
-            Some(self.build_agent_sync_manifest_repo(agent, None).await?)
+        // The heartbeat only needs the desired-state fingerprint (ids +
+        // fingerprints + hostnames) to validate and record observations; the
+        // full manifest would decrypt every assigned certificate's PEM
+        // bundle per heartbeat for data the comparison never reads.
+        let desired_fingerprint = if !request.certificate_observations.is_empty() {
+            Some(self.build_agent_sync_fingerprint_repo(agent).await?)
         } else {
             None
         };
@@ -143,7 +160,7 @@ impl WebRepository {
 
         let now_expression = instant_write_expression("$3");
         let update_sql = format!(
-            "UPDATE web_server
+            "UPDATE webserver_server
              SET status = 1, metadata = metadata || CAST($2 AS JSONB),
                  updated_at = {now_expression}, version = version + 1
              WHERE tenant_id = $1 AND uuid = $4"
@@ -156,16 +173,17 @@ impl WebRepository {
             .bind(&agent.server_uuid)
             .execute(&self.pool)
             .await
-            .map_err(|error| store_error("record web_server heartbeat", error))?;
+            .map_err(|error| store_error("record webserver_server heartbeat", error))?;
 
         if !request.certificate_observations.is_empty() {
             let recorded = self
                 .record_certificate_observations(
                 agent,
                 &request.certificate_observations,
-                desired_manifest.as_ref().ok_or_else(|| {
+                desired_fingerprint.as_ref().ok_or_else(|| {
                     WebServiceError::Internal(
-                        "desired node manifest missing for certificate observations".to_string(),
+                        "desired node fingerprint missing for certificate observations"
+                            .to_string(),
                     )
                 })?,
                 )
@@ -228,6 +246,147 @@ impl WebRepository {
         })
     }
 
+    /// Desired-state fingerprint for heartbeat-validated certificate
+    /// observations. Produces the same `sync_version` as the full manifest
+    /// without decrypting any certificate secret bundle (the version is
+    /// computed from ids, fingerprints, and hostnames only).
+    pub(super) async fn build_agent_sync_fingerprint_repo(
+        &self,
+        agent: &AuthenticatedAgent,
+    ) -> WebServiceResult<AgentSyncFingerprint> {
+        let mut budget = NodeSyncBudget::new();
+        let assigned_site_uuids = self
+            .load_current_assigned_site_uuids(agent)
+            .await?
+            .ok_or_else(|| WebServiceError::conflict("runtime assignment not found for node"))?;
+        let nginx_configs = self
+            .load_active_nginx_configs_for_sites(
+                agent.tenant_id,
+                &assigned_site_uuids,
+                &mut budget,
+            )
+            .await?;
+        let certificate_fingerprints = self
+            .load_active_certificate_fingerprints_for_sites(
+                agent.tenant_id,
+                &assigned_site_uuids,
+                &mut budget,
+            )
+            .await?;
+        let mut parts = Vec::with_capacity(nginx_configs.len() + certificate_fingerprints.len());
+        parts.extend(nginx_configs.iter().map(agent_nginx_sync_part));
+        for (certificate_id, fingerprint, hostnames) in &certificate_fingerprints {
+            parts.push(agent_certificate_sync_part(
+                certificate_id,
+                fingerprint,
+                hostnames,
+            ));
+        }
+        Ok(AgentSyncFingerprint {
+            sync_version: compute_agent_sync_version_from_parts(parts),
+            certificate_fingerprints: certificate_fingerprints
+                .into_iter()
+                .map(|(certificate_id, fingerprint, _)| (certificate_id, fingerprint))
+                .collect(),
+        })
+    }
+
+    /// Fingerprint-only projection of the active node certificate set: the
+    /// same rows as [`Self::load_active_certificates_for_sites`] minus the
+    /// secret-bundle join and decryption.
+    async fn load_active_certificate_fingerprints_for_sites(
+        &self,
+        tenant_id: i64,
+        site_uuids: &[String],
+        budget: &mut NodeSyncBudget,
+    ) -> WebServiceResult<Vec<(String, String, Vec<String>)>> {
+        let sql = format!(
+            "SELECT DISTINCT c.uuid, v.fingerprint_sha256 AS fingerprint,
+                    CAST((
+                        SELECT jsonb_agg(hostname ORDER BY hostname)
+                        FROM (
+                            SELECT DISTINCT listener_domain.hostname
+                            FROM webserver_listener_certificate_binding listener
+                            INNER JOIN webserver_site_binding listener_route
+                                ON listener_route.tenant_id = listener.tenant_id
+                                AND listener_route.id = listener.site_binding_id
+                                AND listener_route.status = 'ACTIVE'
+                                AND listener_route.deleted_at IS NULL
+                            INNER JOIN webserver_site listener_site
+                                ON listener_site.tenant_id = listener_route.tenant_id
+                                AND listener_site.id = listener_route.site_id
+                                AND listener_site.deleted_at IS NULL
+                            INNER JOIN webserver_domain listener_domain
+                                ON listener_domain.tenant_id = listener_route.tenant_id
+                                AND listener_domain.id = listener_route.domain_id
+                                AND listener_domain.deleted_at IS NULL
+                            WHERE listener.tenant_id = l.tenant_id
+                              AND listener.certificate_id = c.id
+                              AND listener.desired_version_id = v.id
+                              AND listener.status IN ('PENDING', 'DEPLOYING', 'ACTIVE', 'FAILED')
+                              AND listener.deleted_at IS NULL
+                              AND listener_site.uuid = ANY($2)
+                        ) verification_hostnames
+                    ) AS TEXT) AS verification_hostnames
+             FROM webserver_listener_certificate_binding l
+             INNER JOIN webserver_site_binding b ON b.tenant_id = l.tenant_id
+                 AND b.id = l.site_binding_id AND b.status = 'ACTIVE'
+                 AND b.deleted_at IS NULL
+             INNER JOIN webserver_site s ON s.tenant_id = b.tenant_id AND s.id = b.site_id
+                 AND s.deleted_at IS NULL
+             INNER JOIN webserver_certificate c ON c.tenant_id = l.tenant_id
+                 AND c.id = l.certificate_id AND c.status = 1 AND c.deleted_at IS NULL
+             INNER JOIN webserver_certificate_version v ON v.tenant_id = l.tenant_id
+                 AND v.id = l.desired_version_id AND v.certificate_id = c.id
+                  AND v.status IN ('ACTIVE', 'SUPERSEDED')
+             WHERE l.tenant_id = $1 AND s.uuid = ANY($2)
+               AND l.status IN ('PENDING', 'DEPLOYING', 'ACTIVE', 'FAILED')
+               AND l.deleted_at IS NULL
+             ORDER BY c.uuid ASC
+             LIMIT {}",
+            MAX_NODE_SYNC_ITEMS + 1
+        );
+        let mut rows = sqlx::query(audited_sql(&sql))
+            .bind(tenant_id)
+            .bind(site_uuids)
+            .fetch(&self.pool);
+
+        let mut items = Vec::new();
+        while let Some(row) = rows
+            .try_next()
+            .await
+            .map_err(|error| store_error("stream active certificate fingerprints", error))?
+        {
+            let certificate_id: String = row.try_get("uuid").map_err(|error| {
+                WebServiceError::Internal(format!("agent sync certificate id: {error}"))
+            })?;
+            let fingerprint: String = row
+                .try_get("fingerprint")
+                .map_err(|error| store_error("agent sync certificate fingerprint", error))?;
+            let verification_hostnames_json: String = row
+                .try_get("verification_hostnames")
+                .map_err(|error| store_error("agent sync hostnames", error))?;
+            let hostnames = serde_json::from_str::<Vec<String>>(&verification_hostnames_json)
+                .map_err(|error| {
+                    WebServiceError::Internal(format!(
+                        "decode agent sync certificate verification hostnames: {error}"
+                    ))
+                })?;
+            if hostnames.is_empty() || hostnames.len() > 128 {
+                return Err(WebServiceError::Internal(
+                    "agent sync certificate must target between 1 and 128 listener hostnames"
+                        .to_string(),
+                ));
+            }
+            budget.reserve(&serde_json::json!({
+                "certificate": certificate_id,
+                "fingerprint": fingerprint,
+            }))?;
+            items.push((certificate_id, fingerprint, hostnames));
+        }
+        Ok(items)
+    }
+
     pub(super) async fn list_certificate_distribution_repo(
         &self,
         tenant_id: i64,
@@ -250,17 +409,17 @@ impl WebRepository {
                     error,
                 )
             })?;
-        let count_row = sqlx::query("SELECT COUNT(*) AS total FROM web_server WHERE tenant_id = $1")
+        let count_row = sqlx::query("SELECT COUNT(*) AS total FROM webserver_server WHERE tenant_id = $1")
             .bind(tenant_id)
             .fetch_one(&mut *transaction)
             .await
-            .map_err(|error| store_error("count web_server certificate distribution", error))?;
+            .map_err(|error| store_error("count webserver_server certificate distribution", error))?;
         let total: i64 = count_row
             .try_get("total")
-            .map_err(|error| store_error("map web_server sync count", error))?;
+            .map_err(|error| store_error("map webserver_server sync count", error))?;
         let rows = sqlx::query(
             "SELECT id, uuid, name, host, status, CAST(metadata AS TEXT) AS metadata
-             FROM web_server
+             FROM webserver_server
              WHERE tenant_id = $1
              ORDER BY updated_at DESC, id DESC LIMIT $2 OFFSET $3",
         )
@@ -269,7 +428,7 @@ impl WebRepository {
         .bind(offset)
         .fetch_all(&mut *transaction)
         .await
-        .map_err(|error| store_error("list web_server certificate distribution", error))?;
+        .map_err(|error| store_error("list webserver_server certificate distribution", error))?;
 
         let mut server_ids = Vec::with_capacity(rows.len());
         let mut server_uuids = BTreeMap::new();
@@ -379,7 +538,7 @@ impl WebRepository {
             "WITH current_assignments AS (
                 SELECT DISTINCT ON (a.server_id, a.environment)
                        a.server_id, a.environment, a.runtime_set
-                FROM web_runtime_assignment a
+                FROM webserver_runtime_assignment a
                 WHERE a.tenant_id = $1 AND a.server_id = ANY($2)
                 ORDER BY a.server_id, a.environment, a.generation DESC
              )
@@ -478,7 +637,7 @@ impl WebRepository {
             "WITH current_assignments AS (
                 SELECT DISTINCT ON (a.server_id, a.environment)
                        a.server_id, a.runtime_set
-                FROM web_runtime_assignment a
+                FROM webserver_runtime_assignment a
                 WHERE a.tenant_id = $1 AND a.server_id = ANY($2)
                 ORDER BY a.server_id, a.environment, a.generation DESC
              ),
@@ -511,8 +670,8 @@ impl WebRepository {
              nginx_candidates AS (
                 SELECT DISTINCT scope.server_id, nc.uuid, nc.config_hash, nc.version,
                        OCTET_LENGTH(nc.config_content) AS config_content_bytes,
-                       (SELECT d.hostname FROM web_site_binding b
-                        INNER JOIN web_domain d
+                       (SELECT d.hostname FROM webserver_site_binding b
+                        INNER JOIN webserver_domain d
                             ON d.tenant_id = b.tenant_id AND d.id = b.domain_id
                         WHERE b.tenant_id = nc.tenant_id AND b.site_id = s.id
                           AND b.environment = 'production' AND b.status = 'ACTIVE'
@@ -520,10 +679,10 @@ impl WebRepository {
                         ORDER BY b.is_primary DESC, b.created_at ASC
                         LIMIT 1) AS domain
                 FROM site_scope scope
-                INNER JOIN web_site s
+                INNER JOIN webserver_site s
                     ON s.tenant_id = $1 AND s.uuid = scope.site_uuid
                    AND s.deleted_at IS NULL
-                INNER JOIN web_nginx_config nc
+                INNER JOIN webserver_nginx_config nc
                     ON nc.tenant_id = s.tenant_id AND nc.site_id = s.id
                    AND nc.is_active = TRUE AND nc.status = 1
              ),
@@ -545,24 +704,24 @@ impl WebRepository {
                        v.fingerprint_sha256 AS fingerprint, v.secret_bundle_ref,
                        sb.encryption_algorithm, OCTET_LENGTH(sb.bundle_encrypted) AS encrypted_bytes
                 FROM site_scope scope
-                INNER JOIN web_site s
+                INNER JOIN webserver_site s
                     ON s.tenant_id = $1 AND s.uuid = scope.site_uuid
                    AND s.deleted_at IS NULL
-                INNER JOIN web_site_binding b
+                INNER JOIN webserver_site_binding b
                     ON b.tenant_id = s.tenant_id AND b.site_id = s.id
                    AND b.status = 'ACTIVE' AND b.deleted_at IS NULL
-                INNER JOIN web_listener_certificate_binding l
+                INNER JOIN webserver_listener_certificate_binding l
                     ON l.tenant_id = b.tenant_id AND l.site_binding_id = b.id
                    AND l.status IN ('PENDING', 'DEPLOYING', 'ACTIVE', 'FAILED')
                    AND l.deleted_at IS NULL
-                INNER JOIN web_certificate c
+                INNER JOIN webserver_certificate c
                     ON c.tenant_id = l.tenant_id AND c.id = l.certificate_id
                    AND c.status = 1 AND c.deleted_at IS NULL
-                INNER JOIN web_certificate_version v
+                INNER JOIN webserver_certificate_version v
                     ON v.tenant_id = l.tenant_id AND v.id = l.desired_version_id
                    AND v.certificate_id = c.id
                    AND v.status IN ('ACTIVE', 'SUPERSEDED')
-                INNER JOIN web_certificate_secret_bundle sb
+                INNER JOIN webserver_certificate_secret_bundle sb
                     ON sb.tenant_id = v.tenant_id AND sb.certificate_version_id = v.id
              ),
              certificate_hostnames AS (
@@ -572,22 +731,22 @@ impl WebRepository {
                        target.secret_bundle_ref, target.encryption_algorithm,
                        target.encrypted_bytes, listener_domain.hostname
                 FROM certificate_targets target
-                INNER JOIN web_listener_certificate_binding listener
+                INNER JOIN webserver_listener_certificate_binding listener
                     ON listener.tenant_id = $1
                    AND listener.certificate_id = target.certificate_id
                    AND listener.desired_version_id = target.certificate_version_id
                    AND listener.status IN ('PENDING', 'DEPLOYING', 'ACTIVE', 'FAILED')
                    AND listener.deleted_at IS NULL
-                INNER JOIN web_site_binding listener_route
+                INNER JOIN webserver_site_binding listener_route
                     ON listener_route.tenant_id = listener.tenant_id
                    AND listener_route.id = listener.site_binding_id
                    AND listener_route.status = 'ACTIVE'
                    AND listener_route.deleted_at IS NULL
-                INNER JOIN web_site listener_site
+                INNER JOIN webserver_site listener_site
                     ON listener_site.tenant_id = listener_route.tenant_id
                    AND listener_site.id = listener_route.site_id
                    AND listener_site.deleted_at IS NULL
-                INNER JOIN web_domain listener_domain
+                INNER JOIN webserver_domain listener_domain
                     ON listener_domain.tenant_id = listener_route.tenant_id
                    AND listener_domain.id = listener_route.domain_id
                    AND listener_domain.deleted_at IS NULL
@@ -740,11 +899,11 @@ impl WebRepository {
     ) -> WebServiceResult<Option<Vec<String>>> {
         let rows = sqlx::query(
             "SELECT CAST(a.runtime_set AS TEXT) AS runtime_set
-             FROM web_runtime_assignment a
-             INNER JOIN web_server s ON s.tenant_id = a.tenant_id AND s.id = a.server_id
+             FROM webserver_runtime_assignment a
+             INNER JOIN webserver_server s ON s.tenant_id = a.tenant_id AND s.id = a.server_id
              WHERE a.tenant_id = $1 AND s.uuid = $2
                AND NOT EXISTS (
-                   SELECT 1 FROM web_runtime_assignment newer
+                   SELECT 1 FROM webserver_runtime_assignment newer
                    WHERE newer.tenant_id = a.tenant_id AND newer.server_id = a.server_id
                      AND newer.environment = a.environment AND newer.generation > a.generation
                )
@@ -833,15 +992,15 @@ impl WebRepository {
                          THEN nc.config_content ELSE NULL END AS config_content,
                     {content_size} AS config_content_bytes,
                     nc.version,
-                    (SELECT d.hostname FROM web_site_binding b
-                     INNER JOIN web_domain d ON d.tenant_id = b.tenant_id AND d.id = b.domain_id
+                    (SELECT d.hostname FROM webserver_site_binding b
+                     INNER JOIN webserver_domain d ON d.tenant_id = b.tenant_id AND d.id = b.domain_id
                      WHERE b.tenant_id = nc.tenant_id AND b.site_id = s.id
                        AND b.environment = 'production' AND b.status = 'ACTIVE'
                        AND b.deleted_at IS NULL AND d.deleted_at IS NULL
                      ORDER BY b.is_primary DESC, b.created_at ASC
                      LIMIT 1) AS domain
-             FROM web_nginx_config nc
-             INNER JOIN web_site s ON s.id = nc.site_id
+             FROM webserver_nginx_config nc
+             INNER JOIN webserver_site s ON s.id = nc.site_id
              WHERE nc.tenant_id = $1 AND s.uuid = ANY($2)
                AND nc.is_active = TRUE AND nc.status = 1
                AND s.deleted_at IS NULL
@@ -922,17 +1081,17 @@ impl WebRepository {
                         SELECT jsonb_agg(hostname ORDER BY hostname)
                         FROM (
                             SELECT DISTINCT listener_domain.hostname
-                            FROM web_listener_certificate_binding listener
-                            INNER JOIN web_site_binding listener_route
+                            FROM webserver_listener_certificate_binding listener
+                            INNER JOIN webserver_site_binding listener_route
                                 ON listener_route.tenant_id = listener.tenant_id
                                 AND listener_route.id = listener.site_binding_id
                                 AND listener_route.status = 'ACTIVE'
                                 AND listener_route.deleted_at IS NULL
-                            INNER JOIN web_site listener_site
+                            INNER JOIN webserver_site listener_site
                                 ON listener_site.tenant_id = listener_route.tenant_id
                                 AND listener_site.id = listener_route.site_id
                                 AND listener_site.deleted_at IS NULL
-                            INNER JOIN web_domain listener_domain
+                            INNER JOIN webserver_domain listener_domain
                                 ON listener_domain.tenant_id = listener_route.tenant_id
                                 AND listener_domain.id = listener_route.domain_id
                                 AND listener_domain.deleted_at IS NULL
@@ -944,18 +1103,18 @@ impl WebRepository {
                               AND listener_site.uuid = ANY($2)
                         ) verification_hostnames
                     ) AS TEXT) AS verification_hostnames
-             FROM web_listener_certificate_binding l
-             INNER JOIN web_site_binding b ON b.tenant_id = l.tenant_id
+             FROM webserver_listener_certificate_binding l
+             INNER JOIN webserver_site_binding b ON b.tenant_id = l.tenant_id
                  AND b.id = l.site_binding_id AND b.status = 'ACTIVE'
                  AND b.deleted_at IS NULL
-             INNER JOIN web_site s ON s.tenant_id = b.tenant_id AND s.id = b.site_id
+             INNER JOIN webserver_site s ON s.tenant_id = b.tenant_id AND s.id = b.site_id
                  AND s.deleted_at IS NULL
-             INNER JOIN web_certificate c ON c.tenant_id = l.tenant_id
+             INNER JOIN webserver_certificate c ON c.tenant_id = l.tenant_id
                  AND c.id = l.certificate_id AND c.status = 1 AND c.deleted_at IS NULL
-             INNER JOIN web_certificate_version v ON v.tenant_id = l.tenant_id
+             INNER JOIN webserver_certificate_version v ON v.tenant_id = l.tenant_id
                  AND v.id = l.desired_version_id AND v.certificate_id = c.id
                   AND v.status IN ('ACTIVE', 'SUPERSEDED')
-             INNER JOIN web_certificate_secret_bundle sb ON sb.tenant_id = v.tenant_id
+             INNER JOIN webserver_certificate_secret_bundle sb ON sb.tenant_id = v.tenant_id
                  AND sb.certificate_version_id = v.id
              WHERE l.tenant_id = $1 AND s.uuid = ANY($2)
                AND l.status IN ('PENDING', 'DEPLOYING', 'ACTIVE', 'FAILED')
@@ -1063,25 +1222,39 @@ pub(crate) fn parse_last_heartbeat_at(metadata_raw: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
+/// Canonical sync-version part for one nginx config bundle.
+fn agent_nginx_sync_part(config: &AgentNginxConfigBundle) -> String {
+    format!(
+        "n:{}:{}:{}:{}",
+        config.config_id, config.fingerprint, config.version, config.domain
+    )
+}
+
+/// Canonical sync-version part for one certificate bundle. The fingerprint
+/// projection ([`Self::build_agent_sync_fingerprint_repo`]) must produce the
+/// identical string so heartbeat-validated sync versions match the full
+/// manifest path byte for byte.
+fn agent_certificate_sync_part(
+    certificate_id: &str,
+    fingerprint: &str,
+    hostnames: &[String],
+) -> String {
+    format!("c:{certificate_id}:{fingerprint}:{}", hostnames.join(","))
+}
+
 pub(crate) fn compute_agent_sync_version(
     nginx_configs: &[AgentNginxConfigBundle],
     certificates: &[AgentCertificateBundle],
 ) -> String {
     let mut parts = Vec::with_capacity(nginx_configs.len() + certificates.len());
-    for config in nginx_configs {
-        parts.push(format!(
-            "n:{}:{}:{}:{}",
-            config.config_id, config.fingerprint, config.version, config.domain
-        ));
-    }
-    for certificate in certificates {
-        parts.push(format!(
-            "c:{}:{}:{}",
-            certificate.certificate_id,
-            certificate.fingerprint,
-            certificate.hostnames.join(",")
-        ));
-    }
+    parts.extend(nginx_configs.iter().map(agent_nginx_sync_part));
+    parts.extend(certificates.iter().map(|certificate| {
+        agent_certificate_sync_part(
+            &certificate.certificate_id,
+            &certificate.fingerprint,
+            &certificate.hostnames,
+        )
+    }));
     compute_agent_sync_version_from_parts(parts)
 }
 

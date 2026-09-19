@@ -180,7 +180,9 @@ async fn spawn_data_plane(
 }
 
 async fn wait_ready(client: &reqwest::Client, url: &str) {
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    // Generous budget: under a fully parallel workspace test run the server
+    // process competes for CPU and a tight deadline makes this test flaky.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
     loop {
         match client.get(url).send().await {
             Ok(_) => return,

@@ -3,10 +3,6 @@
 use axum::{Extension, Router};
 use sdkwork_intelligence_webserver_repository_sqlx::bootstrap_web_runtime_from_env;
 use sdkwork_intelligence_webserver_service::WebService;
-use sdkwork_routes_webserver_app_api::{
-    gateway_mount as mount_app, gateway_route_manifest as app_route_manifest,
-    web_app_domain_context_injectors,
-};
 use sdkwork_routes_webserver_backend_api::{
     agent_gateway_mount, gateway_mount as mount_backend,
     gateway_route_manifest as backend_route_manifest, web_backend_domain_context_injectors,
@@ -38,7 +34,8 @@ pub struct ApiAssemblyContext {
 
 impl ApiAssemblyContext {
     /// Selects the Web Server service-to-service surface for the platform cloud gateway.
-    /// Standalone Site, certificate, Nginx, and server management routes remain excluded.
+    /// The standalone backend-admin control plane (Nginx, servers, server files,
+    /// server configuration, certificate distribution, node agent) stays excluded.
     pub const fn cloud_gateway() -> Self {
         Self {
             profile: ApiAssemblyProfile::CloudGateway,
@@ -132,6 +129,20 @@ pub async fn assemble_business_routes(
             service: service.clone(),
         })];
     if context.includes_standalone_control_plane() {
+        // The gateway reports its own host + process into the cluster
+        // registry and heartbeats liveness; owner is the gateway process
+        // (cluster_self_report module docs). Detached by design.
+        match crate::cluster_self_report::ClusterSelfReportConfig::from_env() {
+            Ok(config) => {
+                crate::cluster_self_report::spawn_cluster_self_report_task(
+                    service.clone(),
+                    config,
+                );
+            }
+            Err(detail) => {
+                tracing::warn!(detail, "cluster self-report disabled: invalid configuration");
+            }
+        }
         // Same-origin dependency surfaces are deliberately **not** composed
         // here. API_ASSEMBLY_SPEC §6.1 makes the standalone gateway the
         // composition point for every dependency it declares as same-origin and
@@ -142,7 +153,6 @@ pub async fn assemble_business_routes(
         // gateway's `dependency_assembly`), so every dependency keeps its own
         // owner, route manifest, OpenAPI document, and permission catalog.
         router = router
-            .merge(mount_app(service.clone()))
             .merge(mount_backend(service.clone()))
             // Web Node agent routes authenticate through the shared api-key
             // path; wrap them in a machine-only framework layer so IAM user
@@ -156,7 +166,6 @@ pub async fn assemble_business_routes(
                 )
                 .await,
             );
-        domain_context_injectors.extend(web_app_domain_context_injectors());
         domain_context_injectors.extend(web_backend_domain_context_injectors());
     }
     // The internal (machine-to-machine) surface must remain machine-only on
@@ -264,7 +273,6 @@ fn permission_catalog(routes: &[HttpRoute]) -> Vec<&'static str> {
 fn selected_route_manifest(context: ApiAssemblyContext) -> HttpRouteManifest {
     let mut routes = Vec::new();
     if context.includes_standalone_control_plane() {
-        routes.extend_from_slice(app_route_manifest().routes());
         routes.extend_from_slice(backend_route_manifest().routes());
     }
     routes.extend_from_slice(internal_route_manifest().routes());
@@ -284,10 +292,15 @@ pub async fn web_module_with_context(context: ApiAssemblyContext) -> Result<WebM
 /// (API_ASSEMBLY_SPEC §4.1.1): the complete HTTP surface — every route,
 /// manifest, and OpenAPI document of this owner — as one installable module.
 ///
-/// The default context is the standalone profile, which also mounts the
-/// Site, certificate, Nginx, and server management control plane. The platform
-/// cloud gateway installs [`web_module_with_context`] with
-/// [`ApiAssemblyContext::cloud_gateway`] instead.
+/// This owner publishes two surfaces: the backend-admin control plane
+/// (`/backend/v3/api`, mounted only under the standalone profile) and the
+/// machine-only internal surface (`/internal/v3/api`, mounted on every
+/// profile). There is deliberately no `/app/v3/api` surface: the application,
+/// domain, and certificate lifecycle is owned by sdkwork-deployments and is
+/// installed beside this module by the standalone gateway's same-origin
+/// dependency assembly. The platform cloud gateway installs
+/// [`web_module_with_context`] with [`ApiAssemblyContext::cloud_gateway`]
+/// instead.
 pub async fn web_module() -> Result<WebModule, String> {
     web_module_with_context(ApiAssemblyContext::default()).await
 }
@@ -357,10 +370,19 @@ mod tests {
     fn standalone_profile_retains_control_plane_routes() {
         let manifest = selected_route_manifest(ApiAssemblyContext::default());
 
-        assert!(manifest
-            .routes()
-            .iter()
-            .any(|route| route.path.starts_with("/app/v3/api/applications")));
+        // The retired app-api surface must never come back. Every
+        // `/app/v3/api/*` route is owned by sdkwork-deployments now
+        // (COMPOSABLE_ARCHITECTURE_SPEC §7: one owner per normalized
+        // (surface, method, path)); a lingering owner here would be an
+        // entity-level dual master and would collide with the same-origin
+        // deployments contribution the standalone gateway installs beside us.
+        assert!(
+            !manifest
+                .routes()
+                .iter()
+                .any(|route| route.path.starts_with("/app/v3/api/")),
+            "sdkwork-webserver must not own any /app/v3/api route"
+        );
         assert!(manifest
             .routes()
             .iter()

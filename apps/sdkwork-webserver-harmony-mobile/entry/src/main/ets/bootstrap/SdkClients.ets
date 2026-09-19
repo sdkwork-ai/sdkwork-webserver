@@ -1,9 +1,9 @@
 import {
-  configureWebserverAppSdkBaseUrl,
+  configureWebserverDeployAppSdkBaseUrl,
   createWebserverHarmonySdkPort,
   getWebserverHarmonySdkPort,
-  resetWebserverAppSdkBaseUrl,
-  type WebserverAppSdkPort,
+  resetWebserverDeployAppSdkBaseUrl,
+  type WebserverDeployAppSdkPort,
   type WebserverHarmonySdkPortConfig,
 } from '@sdkwork/sdkwork-webserver-harmony-mobile-core';
 
@@ -14,30 +14,34 @@ import {
  * `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md` §6. Concrete clients are constructed
  * here (bootstrap only) and injected into feature packages; capability packages
  * must never construct one.
+ *
+ * The `deploy_app` entity is owned by `sdkwork-deployments`, so this root binds
+ * the deployments-owned port and not a second, webserver-owned application
+ * surface (`COMPOSABLE_ARCHITECTURE_SPEC.md` §7).
  */
 export class WebserverHarmonySdkClients {
-  private webserverPort: WebserverAppSdkPort | null = null;
+  private deployAppPort: WebserverDeployAppSdkPort | null = null;
 
   initialize(appApiBaseUrl: string, accessToken?: string, authToken?: string): void {
-    configureWebserverAppSdkBaseUrl(appApiBaseUrl);
+    configureWebserverDeployAppSdkBaseUrl(appApiBaseUrl);
     const config: WebserverHarmonySdkPortConfig = {
       baseUrl: appApiBaseUrl,
       accessToken,
       authToken,
     };
-    this.webserverPort = createWebserverHarmonySdkPort(config);
+    this.deployAppPort = createWebserverHarmonySdkPort(config);
   }
 
-  get webserver(): WebserverAppSdkPort {
-    if (this.webserverPort === null) {
-      throw new Error('Webserver app SDK port must be initialized by bootstrap before use');
+  get deployApp(): WebserverDeployAppSdkPort {
+    if (this.deployAppPort === null) {
+      throw new Error('the deploy_app SDK port must be initialized by bootstrap before use');
     }
-    return this.webserverPort;
+    return this.deployAppPort;
   }
 
   reset(): void {
-    resetWebserverAppSdkBaseUrl();
-    this.webserverPort = null;
+    resetWebserverDeployAppSdkBaseUrl();
+    this.deployAppPort = null;
   }
 }
 
@@ -60,5 +64,5 @@ export function resetWebserverHarmonySdkClients(): void {
 }
 
 /** Re-export so capability packages can name the injected port type. */
-export type { WebserverAppSdkPort };
+export type { WebserverDeployAppSdkPort };
 export { getWebserverHarmonySdkPort };

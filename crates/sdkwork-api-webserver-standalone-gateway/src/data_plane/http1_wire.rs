@@ -20,7 +20,6 @@ use super::connection_limit::ConnectionLimitedStream;
 use super::metrics::{DataPlaneMetrics, ProtocolErrorKind};
 
 const READ_SCRATCH_BYTES: usize = 8 * 1024;
-const MAX_WIRE_BODY_BYTES: u64 = 2_147_483_648;
 
 #[derive(Clone, Copy)]
 struct WireLimits {
@@ -49,7 +48,10 @@ impl From<&WebServerLimits> for WireLimits {
             max_header_name_bytes: limits.max_header_name_bytes,
             max_header_value_bytes: limits.max_header_value_bytes,
             max_headers: limits.max_request_headers,
-            max_body_bytes: MAX_WIRE_BODY_BYTES,
+            // The wire guard enforces the same configured body ceiling the
+            // body consumers enforce downstream; a wire-only 2 GiB fallback
+            // would let slow uploads drain far past the configured limit.
+            max_body_bytes: limits.max_request_body_bytes,
             max_chunk_line_bytes: limits.max_chunk_line_bytes,
             max_trailer_bytes: limits.max_trailer_bytes,
             max_trailers: limits.max_trailers,

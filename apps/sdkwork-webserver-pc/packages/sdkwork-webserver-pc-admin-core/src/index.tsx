@@ -1,9 +1,13 @@
 import { normalizeWebserverPage, type WebserverResourceAction, type WebserverResourceActionContext, type WebserverResourceDataSource, type WebserverResourceRegistry } from "@sdkwork/webserver-pc-commons";
 import {
   createClient,
+  type CreateClusterRequest,
   type CreateNginxConfigRequest,
   type CreateServerRequest,
   type SdkworkBackendClient,
+  type UpdateClusterInstanceRequest,
+  type UpdateClusterHostRequest,
+  type UpdateClusterRequest,
   type UpdateNginxConfigRequest,
 } from "@sdkwork/webserver-backend-sdk";
 import type { AuthTokenManager } from "@sdkwork/sdk-common";
@@ -17,6 +21,11 @@ export { createDriveAppClient };
 // backend SDK only through these core exports, never via direct imports
 // (frontend composition feature-package import rule).
 export type {
+  ClusterEventResponse,
+  ClusterHostResponse,
+  ClusterInstanceResponse,
+  ClusterOverviewResponse,
+  ClusterResponse,
   ServerDirectoryListing,
   ServerEntry,
   ServerFileContent,
@@ -48,6 +57,39 @@ export function createWebserverAdminRegistry(client: WebserverAdminSdkClient): W
     servers: source((query) => client.server.list({ cursor: query.cursor, pageSize: query.pageSize }), [
       action("create", "Register server", { name: "", host: "", sshPort: 22, tenantScopeHash: "" }, async (context) => client.server.create(createServerRequest(context.body), idempotencyParams(context)), { permission: "web.servers.write", requiredFields: ["name", "host", "tenantScopeHash"], resultFields: ["agentToken", "id", "name", "host", "sshPort"] }),
     ]),
+    "cluster-clusters": source((query) => client.cluster.list({ page: query.page, pageSize: query.pageSize }), [
+      action("create", "Create cluster", { name: "", code: "", description: "", heartbeatIntervalSeconds: 15, offlineThresholdSeconds: 60 }, async (context) => client.cluster.create(createClusterRequest(context.body), idempotencyParams(context)), { permission: "web.cluster.write", requiredFields: ["name", "code"] }),
+      action("update", "Update", { description: "", heartbeatIntervalSeconds: 15, offlineThresholdSeconds: 60 }, async (context) => client.cluster.update(selectedId(context, "id"), updateClusterRequest(context.body), idempotencyParams(context)), { permission: "web.cluster.write", selection: true }),
+      action("delete", "Delete cluster", {}, (context) => client.cluster.delete(selectedId(context, "id"), idempotencyParams(context)), { dangerous: true, permission: "web.cluster.write", selection: true }),
+    ]),
+    "cluster-hosts": {
+      ...source((query) => client.cluster.hosts.list({ cursor: query.cursor, pageSize: query.pageSize, clusterId: filterValue(query.filters, "clusterId"), status: optionalIntegerFilter(query.filters, "status") }), [
+        action("delete", "Remove host", {}, (context) => client.cluster.hosts.delete(selectedId(context, "id"), idempotencyParams(context)), { dangerous: true, permission: "web.cluster.write", selection: true }),
+      ]),
+      filters: [
+        { id: "clusterId", type: "text" },
+        { id: "status", type: "select", fieldOptions: ["0", "1", "2", "3", "4"] },
+      ],
+    },
+    "cluster-instances": {
+      ...source((query) => client.cluster.instances.list({ cursor: query.cursor, pageSize: query.pageSize, clusterId: filterValue(query.filters, "clusterId"), hostId: filterValue(query.filters, "hostId"), status: optionalIntegerFilter(query.filters, "status"), healthState: healthStateFilter(query.filters) }), [
+        action("maintain", "Mark maintenance", {}, async (context) => client.cluster.instances.update(selectedId(context, "id"), maintenanceRequest(), idempotencyParams(context)), { permission: "web.cluster.write", selection: true }),
+        action("delete", "Unregister", {}, (context) => client.cluster.instances.delete(selectedId(context, "id"), idempotencyParams(context)), { dangerous: true, permission: "web.cluster.write", selection: true }),
+      ]),
+      filters: [
+        { id: "clusterId", type: "text" },
+        { id: "hostId", type: "text" },
+        { id: "status", type: "select", fieldOptions: ["0", "1", "2", "3", "4", "5"] },
+        { id: "healthState", type: "select", fieldOptions: ["HEALTHY", "DEGRADED", "UNHEALTHY", "UNKNOWN"] },
+      ],
+    },
+    "cluster-events": {
+      ...source((query) => client.cluster.events.list({ cursor: query.cursor, pageSize: query.pageSize, clusterId: filterValue(query.filters, "clusterId"), severity: severityFilter(query.filters) }), []),
+      filters: [
+        { id: "clusterId", type: "text" },
+        { id: "severity", type: "select", fieldOptions: ["INFO", "WARNING", "ERROR"] },
+      ],
+    },
     diagnostics: source(async () => client.nginx.status.retrieve(), [action("reload", "Reload runtime", {}, (context) => client.nginx.reload.create(idempotencyParams(context)), { dangerous: true, permission: "web.nginx.write" })]),
     audit: {
       ...source((query) => client.audit.auditLogs.list({
@@ -92,6 +134,104 @@ function updateNginxConfigRequest(body: Readonly<Record<string, unknown>>): Upda
     throw new Error("At least one configuration field is required");
   }
   return { configName, configContent };
+}
+
+function createClusterRequest(body: Readonly<Record<string, unknown>>): CreateClusterRequest {
+  const request: CreateClusterRequest = {
+    name: requiredText(body.name, "Cluster name", 100),
+    code: requiredClusterCode(body.code),
+  };
+  const description = optionalText(body.description, "Description", 500);
+  if (description !== undefined) request.description = description;
+  const heartbeatIntervalSeconds = optionalInteger(body.heartbeatIntervalSeconds);
+  if (heartbeatIntervalSeconds !== undefined) {
+    if (heartbeatIntervalSeconds < 5 || heartbeatIntervalSeconds > 600) throw new Error("Heartbeat interval must be between 5 and 600 seconds");
+    request.heartbeatIntervalSeconds = heartbeatIntervalSeconds;
+  }
+  const offlineThresholdSeconds = optionalInteger(body.offlineThresholdSeconds);
+  if (offlineThresholdSeconds !== undefined) {
+    if (offlineThresholdSeconds < 10 || offlineThresholdSeconds > 3600) throw new Error("Offline threshold must be between 10 and 3600 seconds");
+    request.offlineThresholdSeconds = offlineThresholdSeconds;
+  }
+  return request;
+}
+
+function updateClusterRequest(body: Readonly<Record<string, unknown>>): UpdateClusterRequest {
+  const request: UpdateClusterRequest = {};
+  const description = optionalText(body.description, "Description", 500);
+  if (description !== undefined) request.description = description;
+  const heartbeatIntervalSeconds = optionalInteger(body.heartbeatIntervalSeconds);
+  if (heartbeatIntervalSeconds !== undefined) {
+    if (heartbeatIntervalSeconds < 5 || heartbeatIntervalSeconds > 600) throw new Error("Heartbeat interval must be between 5 and 600 seconds");
+    request.heartbeatIntervalSeconds = heartbeatIntervalSeconds;
+  }
+  const offlineThresholdSeconds = optionalInteger(body.offlineThresholdSeconds);
+  if (offlineThresholdSeconds !== undefined) {
+    if (offlineThresholdSeconds < 10 || offlineThresholdSeconds > 3600) throw new Error("Offline threshold must be between 10 and 3600 seconds");
+    request.offlineThresholdSeconds = offlineThresholdSeconds;
+  }
+  if (Object.keys(request).length === 0) throw new Error("At least one cluster field is required");
+  return request;
+}
+
+function updateClusterHostRequest(body: Readonly<Record<string, unknown>>): UpdateClusterHostRequest {
+  const request: UpdateClusterHostRequest = {};
+  const name = optionalText(body.name, "Host name", 100);
+  if (name !== undefined) request.name = name;
+  const clusterId = optionalText(body.clusterId, "Target cluster", 64);
+  if (clusterId !== undefined) request.clusterId = clusterId;
+  if (Object.keys(request).length === 0) throw new Error("At least one host field is required");
+  return request;
+}
+
+function updateClusterInstanceRequest(body: Readonly<Record<string, unknown>>): UpdateClusterInstanceRequest {
+  const request: UpdateClusterInstanceRequest = {};
+  const name = optionalText(body.name, "Instance name", 100);
+  if (name !== undefined) request.name = name;
+  const publicEndpoint = optionalText(body.publicEndpoint, "Public endpoint", 255);
+  if (publicEndpoint !== undefined) request.publicEndpoint = publicEndpoint;
+  const status = optionalInteger(body.status);
+  if (status !== undefined) {
+    if (status < 0 || status > 5) throw new Error("Instance status must be between 0 and 5");
+    request.status = status;
+  }
+  if (Object.keys(request).length === 0) throw new Error("At least one instance field is required");
+  return request;
+}
+
+function maintenanceRequest(): UpdateClusterInstanceRequest {
+  return { status: 5 };
+}
+
+function requiredClusterCode(value: unknown): string {
+  const code = requiredText(value, "Cluster code", 64);
+  if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(code)) throw new Error("Cluster code must be lowercase letters, digits, dot, underscore, or dash");
+  return code;
+}
+
+function optionalInteger(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) throw new Error("Value must be an integer");
+  return parsed;
+}
+
+function optionalIntegerFilter(filters: Readonly<Record<string, string>> | undefined, key: string): number | undefined {
+  const value = filterValue(filters, key);
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) return undefined;
+  return parsed;
+}
+
+function healthStateFilter(filters: Readonly<Record<string, string>> | undefined): "HEALTHY" | "DEGRADED" | "UNHEALTHY" | "UNKNOWN" | undefined {
+  const value = filterValue(filters, "healthState");
+  return value === "HEALTHY" || value === "DEGRADED" || value === "UNHEALTHY" || value === "UNKNOWN" ? value : undefined;
+}
+
+function severityFilter(filters: Readonly<Record<string, string>> | undefined): "INFO" | "WARNING" | "ERROR" | undefined {
+  const value = filterValue(filters, "severity");
+  return value === "INFO" || value === "WARNING" || value === "ERROR" ? value : undefined;
 }
 
 function createServerRequest(body: Readonly<Record<string, unknown>>): CreateServerRequest {

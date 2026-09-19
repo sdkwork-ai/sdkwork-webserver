@@ -2,12 +2,18 @@
 
 use async_trait::async_trait;
 use sdkwork_intelligence_webserver_service::{
-    AuditLogWrite, CertificateRevocationMaterial, DomainVerificationChallenge,
-    DomainVerificationObservation, RuntimeAssignmentTarget, RuntimeAssignmentWrite,
-    RuntimeObservationWrite, WebRepositoryPort,
+    AuditLogWrite, CertificateRevocationMaterial, ClusterEventWrite, ClusterHeartbeatTransition,
+    ClusterHeartbeatWrite, ClusterHostUpsert, ClusterIdentity, ClusterInstanceCredentials,
+    ClusterInstanceUpsert, ClusterPeerMessageEnqueue, ClusterUpsert, DomainVerificationChallenge,
+    DomainVerificationObservation, ExpiredClusterHost, ExpiredClusterInstance,
+    RuntimeAssignmentTarget, RuntimeAssignmentWrite, RuntimeObservationWrite, WebRepositoryPort,
 };
 use sdkwork_webserver_contract::{
     AgentHeartbeatRequest, AgentHeartbeatResponse, AgentSyncResponse, AuditLogPage,
+    ClusterEventPage, ClusterHeartbeatSamplePage, ClusterHostPage, ClusterHostResponse,
+    ClusterInstancePage, ClusterInstanceResponse, ClusterOverviewResponse, ClusterPage,
+    ClusterPeer, ClusterPeerMessage, ClusterResponse, CreateClusterRequest,
+    UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest,
     CertificateDistributionPage, CertificateIssueUpdate, CertificateOperationAcceptedResponse,
     CertificateOperationLease, CertificateOperationResponse, CertificatePage,
     ListAuditLogsQuery,
@@ -98,6 +104,14 @@ impl WebRepositoryPort for WebRepository {
         status: i32,
     ) -> WebServiceResult<ApplicationResponse> {
         self.set_application_status_repo(tenant_id, application_id, status).await
+    }
+
+    async fn activate_application(
+        &self,
+        tenant_id: i64,
+        application_id: &str,
+    ) -> WebServiceResult<ApplicationResponse> {
+        self.activate_application_repo(tenant_id, application_id).await
     }
 
     async fn resolve_site_id(
@@ -738,12 +752,12 @@ impl WebRepositoryPort for WebRepository {
             .await
     }
 
-    async fn web_nginx_config(
+    async fn webserver_nginx_config(
         &self,
         tenant_id: Option<i64>,
         config_id: &str,
     ) -> WebServiceResult<NginxConfigResponse> {
-        self.web_nginx_config_repo(tenant_id, config_id).await
+        self.webserver_nginx_config_repo(tenant_id, config_id).await
     }
 
     async fn retrieve_nginx_status(
@@ -875,4 +889,309 @@ impl WebRepositoryPort for WebRepository {
     async fn insert_audit_log(&self, entry: AuditLogWrite<'_>) -> WebServiceResult<()> {
         self.insert_audit_log_repo(entry).await
     }
+
+    async fn list_clusters(
+        &self,
+        page: i32,
+        page_size: i32,
+    ) -> WebServiceResult<ClusterPage> {
+        self.list_clusters_repo(page, page_size).await
+    }
+
+    async fn create_cluster(
+        &self,
+        request: &CreateClusterRequest,
+    ) -> WebServiceResult<ClusterResponse> {
+        self.create_cluster_repo(
+            &request.name,
+            &request.code,
+            request.description.as_deref(),
+            request.heartbeat_interval_seconds.unwrap_or(15),
+            request.offline_threshold_seconds.unwrap_or(60),
+        )
+        .await
+    }
+
+    async fn retrieve_cluster(&self, cluster_id: &str) -> WebServiceResult<ClusterResponse> {
+        self.retrieve_cluster_repo(cluster_id).await
+    }
+
+    async fn update_cluster(
+        &self,
+        cluster_id: &str,
+        request: &UpdateClusterRequest,
+    ) -> WebServiceResult<ClusterResponse> {
+        self.update_cluster_repo(cluster_id, request).await
+    }
+
+    async fn delete_cluster(&self, cluster_id: &str) -> WebServiceResult<()> {
+        self.delete_cluster_repo(cluster_id).await
+    }
+
+    async fn list_cluster_hosts(
+        &self,
+        cluster_id: Option<&str>,
+        status: Option<i32>,
+        page_size: i32,
+        cursor: Option<&str>,
+    ) -> WebServiceResult<ClusterHostPage> {
+        self.list_cluster_hosts_repo(cluster_id, status, page_size, cursor)
+            .await
+    }
+
+    async fn retrieve_cluster_host(&self, host_id: &str) -> WebServiceResult<ClusterHostResponse> {
+        self.retrieve_cluster_host_repo(host_id).await
+    }
+
+    async fn update_cluster_host(
+        &self,
+        host_id: &str,
+        request: &UpdateClusterHostRequest,
+    ) -> WebServiceResult<ClusterHostResponse> {
+        self.update_cluster_host_repo(host_id, request).await
+    }
+
+    async fn delete_cluster_host(&self, host_id: &str) -> WebServiceResult<()> {
+        self.delete_cluster_host_repo(host_id).await
+    }
+
+    async fn list_cluster_instances(
+        &self,
+        cluster_id: Option<&str>,
+        host_id: Option<&str>,
+        status: Option<i32>,
+        health_state: Option<&str>,
+        page_size: i32,
+        cursor: Option<&str>,
+    ) -> WebServiceResult<ClusterInstancePage> {
+        self.list_cluster_instances_repo(
+            cluster_id,
+            host_id,
+            status,
+            health_state,
+            page_size,
+            cursor,
+        )
+        .await
+    }
+
+    async fn retrieve_cluster_instance(
+        &self,
+        instance_id: &str,
+    ) -> WebServiceResult<ClusterInstanceResponse> {
+        self.retrieve_cluster_instance_repo(instance_id).await
+    }
+
+    async fn update_cluster_instance(
+        &self,
+        instance_id: &str,
+        request: &UpdateClusterInstanceRequest,
+    ) -> WebServiceResult<ClusterInstanceResponse> {
+        self.update_cluster_instance_repo(instance_id, request).await
+    }
+
+    async fn delete_cluster_instance(&self, instance_id: &str) -> WebServiceResult<()> {
+        self.delete_cluster_instance_repo(instance_id).await
+    }
+
+    async fn list_cluster_events(
+        &self,
+        cluster_id: Option<&str>,
+        severity: Option<&str>,
+        page_size: i32,
+        cursor: Option<&str>,
+    ) -> WebServiceResult<ClusterEventPage> {
+        self.list_cluster_events_repo(cluster_id, severity, page_size, cursor)
+            .await
+    }
+
+    async fn cluster_overview(&self) -> WebServiceResult<ClusterOverviewResponse> {
+        self.cluster_overview_repo().await
+    }
+
+    async fn resolve_cluster_identity(
+        &self,
+        tenant_id: i64,
+        cluster_code: Option<&str>,
+    ) -> WebServiceResult<ClusterIdentity> {
+        let row = self
+            .resolve_cluster_identity_repo(tenant_id, cluster_code)
+            .await?;
+        Ok(ClusterIdentity {
+            cluster_id: row.cluster_id,
+            cluster_uuid: row.cluster_uuid,
+            name: row.name,
+            code: row.code,
+            heartbeat_interval_seconds: row.heartbeat_interval_seconds,
+            offline_threshold_seconds: row.offline_threshold_seconds,
+        })
+    }
+
+    async fn upsert_cluster_host(
+        &self,
+        write: ClusterHostUpsert,
+    ) -> WebServiceResult<ClusterUpsert> {
+        let row = self.upsert_cluster_host_repo(&write).await?;
+        Ok(ClusterUpsert {
+            id: row.id,
+            uuid: row.uuid,
+            created: row.created,
+        })
+    }
+
+    async fn upsert_cluster_instance(
+        &self,
+        write: ClusterInstanceUpsert,
+    ) -> WebServiceResult<ClusterUpsert> {
+        let row = self.upsert_cluster_instance_repo(&write).await?;
+        Ok(ClusterUpsert {
+            id: row.id,
+            uuid: row.uuid,
+            created: row.created,
+        })
+    }
+
+    async fn authenticate_cluster_instance_token(
+        &self,
+        token: &str,
+    ) -> WebServiceResult<ClusterInstanceCredentials> {
+        let token_hash = super::cluster::hash_cluster_instance_token(token);
+        let row = self
+            .authenticate_cluster_instance_token_repo(&token_hash)
+            .await?
+            .ok_or_else(|| WebServiceError::not_found("cluster instance not found"))?;
+        Ok(ClusterInstanceCredentials {
+            instance_id: row.instance_id,
+            instance_uuid: row.instance_uuid,
+            host_id: row.host_id,
+            host_uuid: row.host_uuid,
+            cluster_id: row.cluster_id,
+            cluster_uuid: row.cluster_uuid,
+            tenant_id: row.tenant_id,
+            heartbeat_interval_seconds: row.heartbeat_interval_seconds,
+            offline_threshold_seconds: row.offline_threshold_seconds,
+        })
+    }
+
+    async fn resolve_cluster_instance_by_uuid(
+        &self,
+        instance_uuid: &str,
+    ) -> WebServiceResult<ClusterInstanceCredentials> {
+        let row = self
+            .resolve_cluster_instance_by_uuid_repo(instance_uuid)
+            .await?
+            .ok_or_else(|| WebServiceError::not_found("cluster instance not found"))?;
+        Ok(ClusterInstanceCredentials {
+            instance_id: row.instance_id,
+            instance_uuid: row.instance_uuid,
+            host_id: row.host_id,
+            host_uuid: row.host_uuid,
+            cluster_id: row.cluster_id,
+            cluster_uuid: row.cluster_uuid,
+            tenant_id: row.tenant_id,
+            heartbeat_interval_seconds: row.heartbeat_interval_seconds,
+            offline_threshold_seconds: row.offline_threshold_seconds,
+        })
+    }
+
+    async fn record_cluster_heartbeat(
+        &self,
+        write: ClusterHeartbeatWrite,
+    ) -> WebServiceResult<ClusterHeartbeatTransition> {
+        let row = self.record_cluster_heartbeat_repo(&write).await?;
+        Ok(ClusterHeartbeatTransition {
+            previous_status: row.previous_status,
+            previous_health_state: row.previous_health_state,
+        })
+    }
+
+    async fn list_cluster_peers(
+        &self,
+        exclude_instance_uuid: &str,
+        limit: i32,
+    ) -> WebServiceResult<Vec<ClusterPeer>> {
+        self.list_cluster_peers_repo(exclude_instance_uuid, limit)
+            .await
+    }
+
+    async fn claim_cluster_peer_messages(
+        &self,
+        instance_id: i64,
+        limit: i32,
+        now: &str,
+    ) -> WebServiceResult<Vec<ClusterPeerMessage>> {
+        self.claim_cluster_peer_messages_repo(instance_id, limit, now)
+            .await
+    }
+
+    async fn enqueue_cluster_peer_messages(
+        &self,
+        write: ClusterPeerMessageEnqueue<'_>,
+    ) -> WebServiceResult<u64> {
+        self.enqueue_cluster_peer_messages_repo(&write).await
+    }
+
+    async fn list_cluster_heartbeats(
+        &self,
+        instance_uuid: &str,
+        page_size: i32,
+        cursor: Option<&str>,
+    ) -> WebServiceResult<ClusterHeartbeatSamplePage> {
+        self.list_cluster_heartbeats_repo(instance_uuid, page_size, cursor)
+            .await
+    }
+
+    async fn record_cluster_event(&self, write: ClusterEventWrite<'_>) -> WebServiceResult<()> {
+        self.insert_cluster_event_repo(&write).await
+    }
+
+    async fn expire_stale_cluster_instances(
+        &self,
+        now: &str,
+        limit: i32,
+    ) -> WebServiceResult<Vec<ExpiredClusterInstance>> {
+        let rows = self.expire_stale_cluster_instances_repo(now, limit).await?;
+        Ok(rows
+            .into_iter()
+            .map(|row| ExpiredClusterInstance {
+                instance_uuid: row.instance_uuid,
+                name: row.name,
+                cluster_uuid: row.cluster_uuid,
+                host_uuid: row.host_uuid,
+            })
+            .collect())
+    }
+
+    async fn expire_stale_cluster_hosts(
+        &self,
+        now: &str,
+        limit: i32,
+    ) -> WebServiceResult<Vec<ExpiredClusterHost>> {
+        let rows = self.expire_stale_cluster_hosts_repo(now, limit).await?;
+        Ok(rows
+            .into_iter()
+            .map(|row| ExpiredClusterHost {
+                host_uuid: row.host_uuid,
+                name: row.name,
+                cluster_uuid: row.cluster_uuid,
+            })
+            .collect())
+    }
+
+    async fn expire_cluster_peer_messages(
+        &self,
+        now: &str,
+        limit: i32,
+    ) -> WebServiceResult<u64> {
+        self.expire_cluster_peer_messages_repo(now, limit).await
+    }
+
+    async fn purge_cluster_heartbeats(
+        &self,
+        older_than: &str,
+        limit: i32,
+    ) -> WebServiceResult<u64> {
+        self.purge_cluster_heartbeats_repo(older_than, limit).await
+    }
 }
+

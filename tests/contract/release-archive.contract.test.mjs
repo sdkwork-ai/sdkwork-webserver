@@ -42,8 +42,8 @@ const PACKAGE_FILES = new Map([
   ['database/contract/prefix-registry.json', '{}\n'],
   ['database/contract/schema.yaml', 'schemaVersion: 1\n'],
   ['database/contract/table-registry.json', '{}\n'],
-  ['database/ddl/baseline/postgres/0001_web_baseline.sql', '-- postgres baseline\n'],
-  ['database/migrations/postgres/0005_web_application.up.sql', '-- application migration\n'],
+  ['database/ddl/baseline/postgres/0001_webserver_baseline.sql', '-- postgres baseline\n'],
+  ['database/migrations/postgres/0005_webserver_application.up.sql', '-- application migration\n'],
   [
     'database/migrations/postgres/0006_organization_id_not_null.up.sql',
     '-- organization migration\n',
@@ -778,7 +778,9 @@ test('Linux release smoke validates, extracts, serves HTTP and HTTPS, and cleans
   assert.match(source, /SDKWORK_WEBSERVER_ACME_PROFILE: 'staging'/u);
   assert.match(source, /SDKWORK_WEBSERVER_ACME_CONTACT_EMAIL/u);
   assert.match(source, /SDKWORK_DRIVE_DOWNLOAD_TOKEN_HMAC_SECRET/u);
-  assert.match(source, /applications\.list/u);
+  // The same-origin application probe now targets the deployments-owned app-api
+  // route; the retired webserver `/app/v3/api/applications` surface is gone.
+  assert.match(source, /apps\.list/u);
   assert.match(source, /sessions\.current\.retrieve/u);
   assert.match(source, /assets\.list/u);
   assert.match(source, /application\/problem\+json/u);

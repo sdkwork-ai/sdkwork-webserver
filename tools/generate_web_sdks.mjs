@@ -10,8 +10,10 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const WORKSPACE_ROOT = path.resolve(REPO_ROOT, '..');
 const GENERATOR_PATH = path.join(WORKSPACE_ROOT, 'sdkwork-sdk-generator', 'bin', 'sdkgen.js');
 const SDK_ROOT = path.join(REPO_ROOT, 'sdks');
+// The `sdkwork-webserver-app-sdk` family was retired together with the app-api
+// route surface: the application-facing SDK is now deployments' own generated
+// family (`sdkwork-deployments-app-sdk`).
 const FAMILY_NAMES = [
-  'sdkwork-webserver-app-sdk',
   'sdkwork-webserver-backend-sdk',
   'sdkwork-webserver-internal-sdk',
 ];

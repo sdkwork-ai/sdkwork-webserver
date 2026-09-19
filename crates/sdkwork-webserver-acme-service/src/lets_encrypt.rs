@@ -96,7 +96,9 @@ async fn issue_lets_encrypt_inner(
     // of every name the wildcard could expand to. Only DNS-01 can do that, so a
     // wildcard request on the HTTP-01 path is rejected before any order is
     // created rather than failing later at challenge selection.
-    if hostnames.iter().any(|hostname| is_wildcard_identifier(hostname))
+    if hostnames
+        .iter()
+        .any(|hostname| is_wildcard_identifier(hostname))
         && matches!(mode, AcmeChallengeMode::Http01)
     {
         return Err(AcmeServiceError::validation(
@@ -107,13 +109,13 @@ async fn issue_lets_encrypt_inner(
     // HTTP-01 needs the edge webroot; DNS-01 never touches it, so a deployment
     // that only issues wildcard certificates does not need one configured.
     let webroot = match mode {
-        AcmeChallengeMode::Http01 => Some(config.webroot.as_deref().map(Path::new).ok_or_else(
-            || {
+        AcmeChallengeMode::Http01 => {
+            Some(config.webroot.as_deref().map(Path::new).ok_or_else(|| {
                 AcmeServiceError::config(
                     "SDKWORK_WEBSERVER_ACME_WEBROOT is required for Let's Encrypt HTTP-01 issuance",
                 )
-            },
-        )?),
+            })?)
+        }
         AcmeChallengeMode::Dns01 { .. } => None,
     };
 
@@ -172,7 +174,8 @@ async fn issue_lets_encrypt_inner(
                     "ACME order exceeds {MAX_AUTHORIZATIONS_PER_ORDER} authorizations"
                 )));
             }
-            let mut authz = result.map_err(|error| AcmeServiceError::provider(error.to_string()))?;
+            let mut authz =
+                result.map_err(|error| AcmeServiceError::provider(error.to_string()))?;
             if authz.status == AuthorizationStatus::Valid {
                 // Already authorized: reuse it and present nothing. This is the
                 // normal path for a renewal inside the CA's authorization cache
@@ -250,7 +253,9 @@ async fn issue_lets_encrypt_inner(
         let key_algorithm_owned = key_algorithm.to_owned();
         let key_pair = tokio::task::spawn_blocking(move || generate_key_pair(&key_algorithm_owned))
             .await
-            .map_err(|error| AcmeServiceError::Internal(format!("join key generation: {error}")))??;
+            .map_err(|error| {
+                AcmeServiceError::Internal(format!("join key generation: {error}"))
+            })??;
         let csr = params
             .serialize_request(&key_pair)
             .map_err(|error| AcmeServiceError::Internal(error.to_string()))?;
@@ -318,7 +323,10 @@ async fn withdraw_dns01_presentations(
 }
 
 fn is_wildcard_identifier(hostname: &str) -> bool {
-    hostname.trim_start_matches('.').to_ascii_lowercase().starts_with("*.")
+    hostname
+        .trim_start_matches('.')
+        .to_ascii_lowercase()
+        .starts_with("*.")
 }
 
 fn challenge_type_label(mode: AcmeChallengeMode<'_>) -> &'static str {

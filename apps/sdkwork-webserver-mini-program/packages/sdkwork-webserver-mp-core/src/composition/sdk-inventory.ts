@@ -7,14 +7,15 @@
  * A native mini program has no browser origin to align to, so every surface
  * below is reached through the absolute application origin of the selected
  * runtime profile (`config/mini-program/runtime-env.<profile>.json`).
+ *
+ * The `deploy_app` entity is owned by `sdkwork-deployments`; this root consumes
+ * that authority through `@sdkwork/deployments-app-sdk`. The legacy
+ * `@sdkwork/webserver-app-sdk` family is not composed here — it belongs to the
+ * webserver app-api surface that the deployments-owned one supersedes
+ * (`COMPOSABLE_ARCHITECTURE_SPEC.md` §7: one owner per normalized route).
  */
 export function listWebserverMpCoreSdkInventory() {
   return [
-    {
-      packageName: "@sdkwork/webserver-app-sdk",
-      authority: "sdkwork-webserver-app-api",
-      surface: "app-api",
-    },
     {
       packageName: "@sdkwork/drive-app-sdk",
       authority: "sdkwork-drive-app-api",

@@ -156,6 +156,12 @@ impl Drop for EnvironmentVariableGuard {
     }
 }
 
+/// Shadow for the pre-convergence `site.id` usages: holds the resolved
+/// backing site uuid so `&site.id` call sites keep their meaning.
+struct SiteRef {
+    id: String,
+}
+
 struct TestContext {
     pool: PgPool,
     repository: Arc<dyn WebRepositoryPort>,
@@ -191,7 +197,9 @@ async fn postgres_repository_transactions_tenants_idempotency_and_pagination_are
 
 async fn verify_certificate_revocation_ari_and_tls_projection(context: &TestContext) {
     let repository = &context.repository;
-    let site = repository
+    // create_application returns the application entity id; the repository
+    // plane below addresses the backing SITE uuid, so translate up front.
+    let application = repository
         .create_application(
             TENANT_A,
             Some(31),
@@ -207,6 +215,12 @@ async fn verify_certificate_revocation_ari_and_tls_projection(context: &TestCont
         )
         .await
         .expect("create revocation site");
+    let site = SiteRef {
+        id: repository
+            .resolve_site_id(TENANT_A, &application.id)
+            .await
+            .expect("resolve revocation site"),
+    };
     let domain = repository
         .create_domain(
             TENANT_A,
@@ -243,7 +257,7 @@ async fn verify_certificate_revocation_ari_and_tls_projection(context: &TestCont
     let revoked_certificate = repository
         .finalize_certificate_operation(
             &revoke_lease,
-            &test_certificate_update("revoke.example.test", 3, "ECDSA", '7', false),
+            &test_certificate_update("revoke.example.test", 3, "ECDSA", '9', false),
         )
         .await
         .expect("finalize revoke certificate");
@@ -313,13 +327,28 @@ async fn verify_certificate_revocation_ari_and_tls_projection(context: &TestCont
 
     // 2) ARI scheduling: a future CA-suggested window suppresses scheduling
     // inside the fixed window; an elapsed window schedules immediately.
+    // The ARI certificate covers its own domain, so create it before enqueue.
+    let ari_domain = repository
+        .create_domain(
+            TENANT_A,
+            &site.id,
+            &CreateDomainRequest {
+                hostname: "ari.example.test".to_string(),
+                is_primary: false,
+                ssl_enabled: true,
+                ssl_provider: Some("lets-encrypt".to_string()),
+            },
+        )
+        .await
+        .expect("create ARI domain");
+    verify_site_domain_with_evidence(&context.repository, TENANT_A, &site.id, &ari_domain.id).await;
     let ari_lease = enqueue_and_claim_certificate(
         repository,
         TENANT_A,
         Some(91),
         Some(91),
         &IssueCertificateRequest {
-            domain_ids: vec![domain.id.clone()],
+            domain_ids: vec![ari_domain.id.clone()],
             cert_type: 1,
             key_algorithm: "ECDSA".to_string(),
             auto_renew: true,
@@ -369,20 +398,6 @@ async fn verify_certificate_revocation_ari_and_tls_projection(context: &TestCont
 
     // 3) Node TLS material projection: only active bindings on assigned sites
     // are projected; revoked certificates never appear.
-    let ari_domain = repository
-        .create_domain(
-            TENANT_A,
-            &site.id,
-            &CreateDomainRequest {
-                hostname: "ari.example.test".to_string(),
-                is_primary: false,
-                ssl_enabled: true,
-                ssl_provider: Some("lets-encrypt".to_string()),
-            },
-        )
-        .await
-        .expect("create ARI domain");
-    verify_site_domain_with_evidence(&context.repository, TENANT_A, &site.id, &ari_domain.id).await;
     let _ari_binding = repository
         .bind_listener_certificate(
             TENANT_A,
@@ -424,14 +439,14 @@ async fn verify_certificate_revocation_ari_and_tls_projection(context: &TestCont
         .await
         .expect("publish TLS node runtime assignment");
     sqlx::query(
-        "UPDATE web_runtime_assignment a
+        "UPDATE webserver_runtime_assignment a
          SET runtime_set = jsonb_set(
              a.runtime_set,
              '{descriptors}',
              jsonb_build_array(jsonb_build_object('siteUuid', CAST($3 AS TEXT))),
              FALSE
          )
-         FROM web_server s
+         FROM webserver_server s
          WHERE a.tenant_id = $1 AND a.server_id = s.id AND s.uuid = $2",
     )
     .bind(TENANT_A)
@@ -475,7 +490,9 @@ async fn verify_certificate_revocation_ari_and_tls_projection(context: &TestCont
 }
 
 async fn verify_certificate_activation_compensation(context: &TestContext) {
-    let site = context
+    // Translate the application id into the backing site uuid (see the
+    // revocation helper note).
+    let application = context
         .repository
         .create_application(
             TENANT_A,
@@ -492,6 +509,13 @@ async fn verify_certificate_activation_compensation(context: &TestContext) {
         )
         .await
         .expect("create certificate compensation site");
+    let site = SiteRef {
+        id: context
+            .repository
+            .resolve_site_id(TENANT_A, &application.id)
+            .await
+            .expect("resolve compensation site"),
+    };
     let domain = context
         .repository
         .create_domain(
@@ -525,7 +549,7 @@ async fn verify_certificate_activation_compensation(context: &TestContext) {
         .await
         .expect("enqueue compensation certificate operation");
     sqlx::query(
-        "UPDATE web_certificate_operation SET max_attempts = 1 WHERE tenant_id = $1 AND uuid = $2",
+        "UPDATE webserver_certificate_operation SET max_attempts = 1 WHERE tenant_id = $1 AND uuid = $2",
     )
     .bind(TENANT_A)
     .bind(&operation.operation_id)
@@ -557,8 +581,8 @@ async fn verify_certificate_activation_compensation(context: &TestContext) {
     );
 
     let version_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM web_certificate_version version
-         INNER JOIN web_certificate certificate ON certificate.id = version.certificate_id
+        "SELECT COUNT(*) FROM webserver_certificate_version version
+         INNER JOIN webserver_certificate certificate ON certificate.id = version.certificate_id
          WHERE certificate.tenant_id = $1 AND certificate.uuid = $2",
     )
     .bind(TENANT_A)
@@ -582,7 +606,7 @@ async fn verify_certificate_activation_compensation(context: &TestContext) {
         .expect("persist bounded terminal compensation failure");
     let row = sqlx::query(
         "SELECT status, renewal_status, CAST(metadata AS TEXT) AS metadata
-         FROM web_certificate WHERE tenant_id = $1 AND uuid = $2",
+         FROM webserver_certificate WHERE tenant_id = $1 AND uuid = $2",
     )
     .bind(TENANT_A)
     .bind(&lease.certificate_id)
@@ -778,7 +802,8 @@ async fn verify_repository_contract(context: &TestContext) {
         .await
         .expect_err("tenant B must not retrieve tenant A site");
 
-    let tie_sql = "UPDATE web_site SET updated_at = CAST($1 AS TIMESTAMPTZ) WHERE tenant_id = $2";
+    let tie_sql =
+        "UPDATE webserver_site SET updated_at = CAST($1 AS TIMESTAMPTZ) WHERE tenant_id = $2";
     sqlx::query(tie_sql)
         .bind("2026-01-01T00:00:00.000Z")
         .bind(TENANT_A)
@@ -819,10 +844,15 @@ async fn verify_repository_contract(context: &TestContext) {
             .all(|site| !first_ids.contains(&site.id)),
         "stable pages must not overlap"
     );
+    // The application entity owns the resource identity since the
+    // convergence refactor: the listing returns application uuids ordered by
+    // the APPLICATION row's (updated_at, id), joined to the site carrier for
+    // the application_type filter.
     let expected: Vec<String> = sqlx::query(
-        "SELECT uuid FROM web_site
-         WHERE tenant_id = $1 AND application_type = 'WEB'
-         ORDER BY updated_at DESC, id DESC",
+        "SELECT a.uuid FROM webserver_application a
+         JOIN webserver_site s ON s.id = a.site_id AND s.tenant_id = a.tenant_id
+         WHERE a.tenant_id = $1 AND s.application_type = 'WEB'
+         ORDER BY a.updated_at DESC, a.id DESC",
     )
     .bind(TENANT_A)
     .fetch_all(&context.pool)
@@ -859,12 +889,35 @@ async fn verify_repository_contract(context: &TestContext) {
         sdkwork_webserver_contract::WebServiceError::Validation(_)
     ));
 
-    verify_source_version_contract(context, &sites[0].id, &sites[1].id, &tenant_b_site.id).await;
-    verify_deployment_idempotency(context, &sites[0].id, &sites[1].id).await;
-    verify_rollback_atomicity(context, &sites[0].id).await;
-    verify_root_domain_zone_contract(context, &sites[0].id).await;
-    verify_bounded_config_collections(context, &sites[2].id, &sites[3].id).await;
-    verify_public_repository_surface(context, &sites[0].id).await;
+    // The application entity owns the public id since the convergence
+    // refactor; the repository plane below addresses the backing SITE uuid,
+    // so translate through the port exactly as the service layer does.
+    let site_ids = async {
+        let mut resolved = Vec::with_capacity(sites.len());
+        for site in &sites {
+            resolved.push(
+                context
+                    .repository
+                    .resolve_site_id(TENANT_A, &site.id)
+                    .await
+                    .expect("resolve backing site id"),
+            );
+        }
+        resolved
+    }
+    .await;
+    let tenant_b_site_id = context
+        .repository
+        .resolve_site_id(TENANT_B, &tenant_b_site.id)
+        .await
+        .expect("resolve tenant B backing site id");
+
+    verify_source_version_contract(context, &site_ids[0], &site_ids[1], &tenant_b_site_id).await;
+    verify_deployment_idempotency(context, &site_ids[0], &site_ids[1]).await;
+    verify_rollback_atomicity(context, &site_ids[0]).await;
+    verify_root_domain_zone_contract(context, &site_ids[0]).await;
+    verify_bounded_config_collections(context, &site_ids[2], &site_ids[3]).await;
+    verify_public_repository_surface(context, &sites[0].id, &site_ids[0]).await;
 }
 
 async fn verify_root_domain_zone_contract(context: &TestContext, site_id: &str) {
@@ -949,7 +1002,7 @@ async fn verify_root_domain_zone_contract(context: &TestContext, site_id: &str) 
         .await
         .expect("create root-domain projected deployment");
     let deployment_time_sql =
-        "UPDATE web_deployment SET status = 2, completed_at = CAST($1 AS TIMESTAMPTZ) WHERE tenant_id = $2 AND uuid = $3";
+        "UPDATE webserver_deployment SET status = 2, completed_at = CAST($1 AS TIMESTAMPTZ) WHERE tenant_id = $2 AND uuid = $3";
     sqlx::query(deployment_time_sql)
         .bind("2026-07-30T12:00:00.000Z")
         .bind(TENANT_A)
@@ -1124,11 +1177,15 @@ async fn verify_bounded_config_collections(
     assert_eq!(health_page.items.len(), 100);
 }
 
-async fn verify_public_repository_surface(context: &TestContext, site_id: &str) {
+async fn verify_public_repository_surface(
+    context: &TestContext,
+    application_id: &str,
+    site_id: &str,
+) {
     let repository = &context.repository;
     let metadata_expression = "CAST($3 AS JSONB)";
     let statement = format!(
-        "UPDATE web_site SET metadata = {metadata_expression} WHERE tenant_id = $1 AND uuid = $2"
+        "UPDATE webserver_site SET metadata = {metadata_expression} WHERE tenant_id = $1 AND uuid = $2"
     );
     sqlx::query(sqlx::AssertSqlSafe(statement.as_str()))
         .bind(TENANT_A)
@@ -1140,7 +1197,7 @@ async fn verify_public_repository_surface(context: &TestContext, site_id: &str) 
     let updated_site = repository
         .update_application(
             TENANT_A,
-            site_id,
+            application_id,
             &UpdateApplicationRequest {
                 name: Some("Alpha Site Updated".to_string()),
                 description: Some("dual-engine repository parity".to_string()),
@@ -1167,7 +1224,7 @@ async fn verify_public_repository_surface(context: &TestContext, site_id: &str) 
         Some("icon-node")
     );
     let metadata: String = sqlx::query_scalar(
-        "SELECT CAST(metadata AS TEXT) FROM web_site WHERE tenant_id = $1 AND uuid = $2",
+        "SELECT CAST(metadata AS TEXT) FROM webserver_site WHERE tenant_id = $1 AND uuid = $2",
     )
     .bind(TENANT_A)
     .bind(site_id)
@@ -1198,7 +1255,7 @@ async fn verify_public_repository_surface(context: &TestContext, site_id: &str) 
     );
     assert_eq!(
         repository
-            .set_application_status(TENANT_A, site_id, 1)
+            .set_application_status(TENANT_A, application_id, 1)
             .await
             .expect("update site status timestamp")
             .status,
@@ -1406,8 +1463,8 @@ async fn verify_public_repository_surface(context: &TestContext, site_id: &str) 
     assert_eq!(bound_domain.application_id.as_deref(), Some(site_id));
     assert_eq!(bound_domain.certificate_count, 2);
     let active_binding_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM web_site_binding b
-         INNER JOIN web_domain d ON d.tenant_id = b.tenant_id AND d.id = b.domain_id
+        "SELECT COUNT(*) FROM webserver_site_binding b
+         INNER JOIN webserver_domain d ON d.tenant_id = b.tenant_id AND d.id = b.domain_id
          WHERE b.tenant_id = $1 AND d.uuid = $2 AND b.status <> 'ARCHIVED'
            AND b.deleted_at IS NULL",
     )
@@ -1424,8 +1481,8 @@ async fn verify_public_repository_surface(context: &TestContext, site_id: &str) 
         .expect("unbind managed domain");
     assert!(unbound_domain.application_id.is_none());
     let archived_binding_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM web_site_binding b
-         INNER JOIN web_domain d ON d.tenant_id = b.tenant_id AND d.id = b.domain_id
+        "SELECT COUNT(*) FROM webserver_site_binding b
+         INNER JOIN webserver_domain d ON d.tenant_id = b.tenant_id AND d.id = b.domain_id
          WHERE b.tenant_id = $1 AND d.uuid = $2 AND b.status = 'ARCHIVED'
            AND b.deleted_at IS NOT NULL",
     )
@@ -1574,7 +1631,7 @@ async fn verify_public_repository_surface(context: &TestContext, site_id: &str) 
     assert_eq!(
         repository
             .list_nginx_configs(
-                None,
+                Some(TENANT_A),
                 &ListNginxConfigsQuery {
                     page: 1,
                     page_size: 20,
@@ -1584,14 +1641,14 @@ async fn verify_public_repository_surface(context: &TestContext, site_id: &str) 
                 },
             )
             .await
-            .expect("list nginx configs across tenants")
+            .expect("list nginx configs across sites in the tenant")
             .total,
         1
     );
     assert_eq!(
         repository
             .list_nginx_configs(
-                None,
+                Some(TENANT_A),
                 &ListNginxConfigsQuery {
                     page: 1,
                     page_size: 20,
@@ -1601,14 +1658,14 @@ async fn verify_public_repository_surface(context: &TestContext, site_id: &str) 
                 },
             )
             .await
-            .expect("global nginx config list applies the site filter")
+            .expect("tenant nginx config list applies the site filter")
             .total,
         0
     );
     repository
-        .web_nginx_config(None, &nginx.id)
+        .webserver_nginx_config(Some(TENANT_A), &nginx.id)
         .await
-        .expect("atomically activate nginx config through global backend scope");
+        .expect("atomically activate nginx config through the backend scope");
     verify_nginx_activation_rollback(context, site_id, &nginx.id).await;
 
     let certificate_lease = enqueue_and_claim_certificate(
@@ -1856,7 +1913,7 @@ async fn verify_public_repository_surface(context: &TestContext, site_id: &str) 
         .expect_err("automatic renewal policy cannot invalidate an active claim");
 
     sqlx::query(
-        "UPDATE web_certificate_operation SET lease_expires_at = NOW() - INTERVAL '1 second'
+        "UPDATE webserver_certificate_operation SET lease_expires_at = NOW() - INTERVAL '1 second'
          WHERE tenant_id = $1 AND uuid = $2",
     )
     .bind(TENANT_A)
@@ -1945,7 +2002,7 @@ async fn verify_public_repository_surface(context: &TestContext, site_id: &str) 
     }
     assert_eq!(exhausted_lease.attempt_count, exhausted_lease.max_attempts);
     sqlx::query(
-        "UPDATE web_certificate_operation SET lease_expires_at = NOW() - INTERVAL '1 second'
+        "UPDATE webserver_certificate_operation SET lease_expires_at = NOW() - INTERVAL '1 second'
          WHERE tenant_id = $1 AND uuid = $2",
     )
     .bind(TENANT_A)
@@ -1984,7 +2041,7 @@ async fn verify_public_repository_surface(context: &TestContext, site_id: &str) 
         .await
         .expect("enqueue certificate for terminal issuance failure");
     sqlx::query(
-        "UPDATE web_certificate_operation SET max_attempts = 1 WHERE tenant_id = $1 AND uuid = $2",
+        "UPDATE webserver_certificate_operation SET max_attempts = 1 WHERE tenant_id = $1 AND uuid = $2",
     )
     .bind(TENANT_A)
     .bind(&failed_issue.operation_id)
@@ -2150,16 +2207,12 @@ async fn verify_public_repository_surface(context: &TestContext, site_id: &str) 
         .expect("insert audit timestamp");
     // Audit logs are a growing collection and list only supports opaque
     // keyset cursor pagination (PAGINATION_SPEC §6/§12): no OFFSET, and
-    // `total` is not computed in cursor mode. A first-page cursor is the
-    // far-future bound `(9999-12-31T23:59:59Z, i64::MAX)` encoded as
-    // base64url of `v1|<created_at>|<id>`.
+    // `total` is not computed in cursor mode. The first page returns the
+    // newest row plus a signed continuation token.
     let audit_page = repository
         .list_audit_logs(
             Some(TENANT_A),
             &ListAuditLogsQuery {
-                cursor: Some(
-                    "djF8OTk5OS0xMi0zMVQyMzo1OTo1OVp8OTIyMzM3MjAzNjg1NDc3NTgwNw".to_string(),
-                ),
                 page_size: Some(20),
                 ..ListAuditLogsQuery::default()
             },
@@ -2168,6 +2221,7 @@ async fn verify_public_repository_surface(context: &TestContext, site_id: &str) 
         .expect("list audit timestamp projections");
     assert_eq!(audit_page.items[0].action, "repository.parity");
     assert_eq!(audit_page.has_more, Some(false));
+    assert!(audit_page.next_cursor.is_none());
 
     let first_audit_page = repository
         .list_audit_logs(
@@ -2238,20 +2292,20 @@ async fn verify_public_repository_surface(context: &TestContext, site_id: &str) 
         .items
         .is_empty());
     let active_delete = repository
-        .delete_application(TENANT_A, site_id, Some(91))
+        .delete_application(TENANT_A, application_id, Some(91))
         .await
         .expect_err("active site deletion must be rejected");
     assert_eq!(active_delete.kind(), WebServiceErrorKind::Conflict);
     repository
-        .set_application_status(TENANT_A, site_id, 2)
+        .set_application_status(TENANT_A, application_id, 2)
         .await
         .expect("disable site before deletion");
     repository
-        .delete_application(TENANT_A, site_id, Some(91))
+        .delete_application(TENANT_A, application_id, Some(91))
         .await
         .expect("soft-delete site timestamps");
     repository
-        .retrieve_application(TENANT_A, None, site_id)
+        .retrieve_application(TENANT_A, None, application_id)
         .await
         .expect_err("soft-deleted site must not be retrievable");
 }
@@ -2564,14 +2618,14 @@ async fn verify_runtime_assignment_contract(
         WebServiceErrorKind::Conflict
     );
     sqlx::query(
-        "UPDATE web_runtime_assignment a
+        "UPDATE webserver_runtime_assignment a
          SET runtime_set = jsonb_set(
              a.runtime_set,
              '{descriptors}',
              jsonb_build_array(jsonb_build_object('siteUuid', CAST($3 AS TEXT))),
              FALSE
          )
-         FROM web_server s
+         FROM webserver_server s
          WHERE a.tenant_id = $1 AND a.server_id = s.id AND s.uuid = $2",
     )
     .bind(TENANT_A)
@@ -2650,7 +2704,7 @@ async fn verify_node_sync_database_bounds(
     certificate_id: &str,
 ) {
     let original_config: String = sqlx::query_scalar(
-        "SELECT config_content FROM web_nginx_config WHERE tenant_id = $1 AND uuid = $2",
+        "SELECT config_content FROM webserver_nginx_config WHERE tenant_id = $1 AND uuid = $2",
     )
     .bind(TENANT_A)
     .bind(nginx_config_id)
@@ -2658,7 +2712,7 @@ async fn verify_node_sync_database_bounds(
     .await
     .expect("read original node sync config");
     sqlx::query(
-        "UPDATE web_nginx_config SET config_content = $1 WHERE tenant_id = $2 AND uuid = $3",
+        "UPDATE webserver_nginx_config SET config_content = $1 WHERE tenant_id = $2 AND uuid = $3",
     )
     .bind("x".repeat(1024 * 1024 + 1))
     .bind(TENANT_A)
@@ -2675,7 +2729,7 @@ async fn verify_node_sync_database_bounds(
         .to_string()
         .contains("active nginx configuration exceeds"));
     sqlx::query(
-        "UPDATE web_nginx_config SET config_content = $1 WHERE tenant_id = $2 AND uuid = $3",
+        "UPDATE webserver_nginx_config SET config_content = $1 WHERE tenant_id = $2 AND uuid = $3",
     )
     .bind(original_config)
     .bind(TENANT_A)
@@ -2685,7 +2739,7 @@ async fn verify_node_sync_database_bounds(
     .expect("restore node sync config");
 
     let original_metadata: String = sqlx::query_scalar(
-        "SELECT CAST(metadata AS TEXT) FROM web_certificate WHERE tenant_id = $1 AND uuid = $2",
+        "SELECT CAST(metadata AS TEXT) FROM webserver_certificate WHERE tenant_id = $1 AND uuid = $2",
     )
     .bind(TENANT_A)
     .bind(certificate_id)
@@ -2698,7 +2752,7 @@ async fn verify_node_sync_database_bounds(
     })
     .to_string();
     let metadata_update =
-        "UPDATE web_certificate SET metadata = CAST($1 AS JSONB) WHERE tenant_id = $2 AND uuid = $3";
+        "UPDATE webserver_certificate SET metadata = CAST($1 AS JSONB) WHERE tenant_id = $2 AND uuid = $3";
     sqlx::query(metadata_update)
         .bind(unrelated_metadata)
         .bind(TENANT_A)
@@ -2763,7 +2817,7 @@ async fn verify_deployment_idempotency(
         .as_deref()
         .is_some_and(|hash| hash == "a".repeat(64)));
     let stored = sqlx::query(
-        "SELECT idempotency_key, organization_id FROM web_deployment
+        "SELECT idempotency_key, organization_id FROM webserver_deployment
          WHERE tenant_id = $1 AND uuid = $2",
     )
     .bind(TENANT_A)
@@ -2963,7 +3017,7 @@ async fn verify_source_version_contract(
         assert_eq!(error.kind(), WebServiceErrorKind::NotFound);
     }
 
-    sqlx::query("UPDATE web_deployment SET status = 2 WHERE tenant_id = $1 AND uuid = $2")
+    sqlx::query("UPDATE webserver_deployment SET status = 2 WHERE tenant_id = $1 AND uuid = $2")
         .bind(TENANT_A)
         .bind(&deployment.id)
         .execute(&context.pool)
@@ -3043,7 +3097,7 @@ async fn verify_rollback_atomicity(context: &TestContext, site_id: &str) {
         .expect_err("pending deployment rollback must be rejected");
     assert_eq!(pending_rollback.kind(), WebServiceErrorKind::Conflict);
 
-    sqlx::query("UPDATE web_deployment SET status = 2 WHERE tenant_id = $1 AND uuid = $2")
+    sqlx::query("UPDATE webserver_deployment SET status = 2 WHERE tenant_id = $1 AND uuid = $2")
         .bind(TENANT_A)
         .bind(&source.id)
         .execute(&context.pool)
@@ -3063,16 +3117,17 @@ async fn verify_rollback_atomicity(context: &TestContext, site_id: &str) {
         .await
         .expect_err("forced rollback-record failure must abort transaction");
 
-    let status: i32 =
-        sqlx::query_scalar("SELECT status FROM web_deployment WHERE tenant_id = $1 AND uuid = $2")
-            .bind(TENANT_A)
-            .bind(&source.id)
-            .fetch_one(&context.pool)
-            .await
-            .expect("read rollback source status");
+    let status: i32 = sqlx::query_scalar(
+        "SELECT status FROM webserver_deployment WHERE tenant_id = $1 AND uuid = $2",
+    )
+    .bind(TENANT_A)
+    .bind(&source.id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("read rollback source status");
     assert_eq!(status, 2, "failed transaction must restore source status");
     let rollback_records: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM web_deployment WHERE tenant_id = $1 AND rollback_from IS NOT NULL",
+        "SELECT COUNT(*) FROM webserver_deployment WHERE tenant_id = $1 AND rollback_from IS NOT NULL",
     )
     .bind(TENANT_A)
     .fetch_one(&context.pool)
@@ -3139,20 +3194,21 @@ async fn verify_rollback_atomicity(context: &TestContext, site_id: &str) {
     );
 
     let rollback_records: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM web_deployment WHERE tenant_id = $1 AND rollback_from IS NOT NULL",
+        "SELECT COUNT(*) FROM webserver_deployment WHERE tenant_id = $1 AND rollback_from IS NOT NULL",
     )
     .bind(TENANT_A)
     .fetch_one(&context.pool)
     .await
     .expect("count immutable restore records");
     assert_eq!(rollback_records, 2);
-    let source_status: i32 =
-        sqlx::query_scalar("SELECT status FROM web_deployment WHERE tenant_id = $1 AND uuid = $2")
-            .bind(TENANT_A)
-            .bind(&source.id)
-            .fetch_one(&context.pool)
-            .await
-            .expect("read committed rollback source status");
+    let source_status: i32 = sqlx::query_scalar(
+        "SELECT status FROM webserver_deployment WHERE tenant_id = $1 AND uuid = $2",
+    )
+    .bind(TENANT_A)
+    .bind(&source.id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("read committed rollback source status");
     assert_eq!(source_status, 2);
 }
 
@@ -3178,16 +3234,16 @@ async fn verify_nginx_activation_rollback(
 
     let error = context
         .repository
-        .web_nginx_config(Some(TENANT_A), &blocked.id)
+        .webserver_nginx_config(Some(TENANT_A), &blocked.id)
         .await
         .expect_err("a skipped target activation must abort the transaction");
     assert_eq!(error.kind(), WebServiceErrorKind::NotFound);
 
     let active: String = sqlx::query_scalar(
         "SELECT config.uuid
-         FROM web_nginx_config config
-         INNER JOIN web_site site
-           ON site.id = config.application_id AND site.tenant_id = config.tenant_id
+         FROM webserver_nginx_config config
+         INNER JOIN webserver_site site
+           ON site.id = config.site_id AND site.tenant_id = config.tenant_id
          WHERE config.tenant_id = $1 AND site.uuid = $2 AND config.is_active = TRUE",
     )
     .bind(TENANT_A)
@@ -3216,7 +3272,7 @@ async fn install_nginx_activation_ignore_trigger(pool: &PgPool) {
     .expect("install PostgreSQL nginx activation trigger function");
     sqlx::query(
         "CREATE TRIGGER sdkwork_test_ignore_nginx_activation
-         BEFORE UPDATE OF is_active ON web_nginx_config
+         BEFORE UPDATE OF is_active ON webserver_nginx_config
          FOR EACH ROW EXECUTE FUNCTION sdkwork_test_ignore_nginx_activation()",
     )
     .execute(pool)
@@ -3225,7 +3281,7 @@ async fn install_nginx_activation_ignore_trigger(pool: &PgPool) {
 }
 
 async fn remove_nginx_activation_ignore_trigger(pool: &PgPool) {
-    sqlx::query("DROP TRIGGER sdkwork_test_ignore_nginx_activation ON web_nginx_config")
+    sqlx::query("DROP TRIGGER sdkwork_test_ignore_nginx_activation ON webserver_nginx_config")
         .execute(pool)
         .await
         .expect("remove PostgreSQL nginx activation trigger");
@@ -3251,7 +3307,7 @@ async fn install_rollback_failure_trigger(pool: &PgPool) {
     .expect("install PostgreSQL rollback failure function");
     sqlx::query(
         "CREATE TRIGGER sdkwork_test_reject_rollback_insert
-         BEFORE INSERT ON web_deployment
+         BEFORE INSERT ON webserver_deployment
          FOR EACH ROW EXECUTE FUNCTION sdkwork_test_reject_rollback_insert()",
     )
     .execute(pool)
@@ -3260,7 +3316,7 @@ async fn install_rollback_failure_trigger(pool: &PgPool) {
 }
 
 async fn remove_rollback_failure_trigger(pool: &PgPool) {
-    sqlx::query("DROP TRIGGER sdkwork_test_reject_rollback_insert ON web_deployment")
+    sqlx::query("DROP TRIGGER sdkwork_test_reject_rollback_insert ON webserver_deployment")
         .execute(pool)
         .await
         .expect("remove PostgreSQL rollback failure trigger");
@@ -3286,7 +3342,7 @@ async fn install_certificate_finalize_failure_trigger(pool: &PgPool) {
     .expect("install PostgreSQL certificate finalize failure function");
     sqlx::query(
         "CREATE TRIGGER sdkwork_test_reject_certificate_finalize
-         BEFORE UPDATE OF status ON web_certificate
+         BEFORE UPDATE OF status ON webserver_certificate
          FOR EACH ROW EXECUTE FUNCTION sdkwork_test_reject_certificate_finalize()",
     )
     .execute(pool)
@@ -3295,7 +3351,7 @@ async fn install_certificate_finalize_failure_trigger(pool: &PgPool) {
 }
 
 async fn remove_certificate_finalize_failure_trigger(pool: &PgPool) {
-    sqlx::query("DROP TRIGGER sdkwork_test_reject_certificate_finalize ON web_certificate")
+    sqlx::query("DROP TRIGGER sdkwork_test_reject_certificate_finalize ON webserver_certificate")
         .execute(pool)
         .await
         .expect("remove PostgreSQL certificate finalize failure trigger");

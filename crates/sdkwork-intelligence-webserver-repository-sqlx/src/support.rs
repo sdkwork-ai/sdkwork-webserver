@@ -57,12 +57,19 @@ fn cursor_hmac_secret() -> &'static str {
     use std::sync::OnceLock;
     static SECRET: OnceLock<String> = OnceLock::new();
     SECRET
-        .get_or_init(
-            || match std::env::var("SDKWORK_WEBSERVER_CURSOR_HMAC_KEY") {
-                Ok(seed) if !seed.trim().is_empty() => seed.trim().to_owned(),
-                _ => std::env::var("SDKWORK_DATABASE_URL").unwrap_or_default(),
-            },
-        )
+        .get_or_init(|| match std::env::var("SDKWORK_WEBSERVER_CURSOR_HMAC_KEY") {
+            Ok(seed) if !seed.trim().is_empty() => seed.trim().to_owned(),
+            _ => {
+                // Deployment-stable fallback so sibling nodes still agree,
+                // but the operator must know the key material now overlaps
+                // with the database URL: any leak of the URL would also
+                // enable cursor forgery.
+                tracing::warn!(
+                    "SDKWORK_WEBSERVER_CURSOR_HMAC_KEY is not set; keyset cursors are signed                      with the database URL. Set a dedicated secret before exposing                      list APIs to untrusted clients."
+                );
+                std::env::var("SDKWORK_DATABASE_URL").unwrap_or_default()
+            }
+        })
         .as_str()
 }
 
@@ -232,18 +239,18 @@ pub(crate) async fn resolve_site_internal_id(
     site_uuid: &str,
 ) -> Result<i64, WebServiceError> {
     let row = sqlx::query(
-        "SELECT id FROM web_site
+        "SELECT id FROM webserver_site
          WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
     )
     .bind(tenant_id)
     .bind(site_uuid)
     .fetch_optional(pool)
     .await
-    .map_err(|error| store_error("resolve web_site id", error))?;
+    .map_err(|error| store_error("resolve webserver_site id", error))?;
 
     let row = row.ok_or_else(|| WebServiceError::not_found("site not found"))?;
     row.try_get("id")
-        .map_err(|error| store_error("map web_site id", error))
+        .map_err(|error| store_error("map webserver_site id", error))
 }
 
 pub(crate) async fn resolve_site_owner_id(
@@ -252,14 +259,14 @@ pub(crate) async fn resolve_site_owner_id(
     site_id: i64,
 ) -> Result<Option<i64>, WebServiceError> {
     sqlx::query_scalar(
-        "SELECT user_id FROM web_site
+        "SELECT user_id FROM webserver_site
          WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL",
     )
     .bind(tenant_id)
     .bind(site_id)
     .fetch_optional(pool)
     .await
-    .map_err(|error| store_error("resolve web_site owner", error))?
+    .map_err(|error| store_error("resolve webserver_site owner", error))?
     .ok_or_else(|| WebServiceError::not_found("site not found"))
 }
 

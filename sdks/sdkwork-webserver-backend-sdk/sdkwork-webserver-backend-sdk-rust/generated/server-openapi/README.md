@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     client.set_auth_token("your-auth-token");
 client.set_access_token("your-access-token");
 
-    let result = client.nginx().status_retrieve().await?;
+    let result = client.cluster().clusters_overview_retrieve().await?;
     println!("{result:?}");
     Ok(())
 }
@@ -56,6 +56,7 @@ client.set_header("X-Custom-Header", "value");
 - `client.webserver_config()` - webserver_config API
 - `client.agent()` - agent API
 - `client.audit()` - audit API
+- `client.cluster()` - cluster API
 
 ## Usage Examples
 
@@ -216,6 +217,14 @@ let result = client.audit().logs_list(Some(&query)).await?;
 println!("{result:?}");
 ```
 
+### cluster
+
+```rust
+// Retrieve the cluster health overview for status polling
+let result = client.cluster().clusters_overview_retrieve().await?;
+println!("{result:?}");
+```
+
 ## Error Handling
 
 ```rust
@@ -225,7 +234,7 @@ use sdkwork_webserver_backend_sdk_generated_rust::{SdkworkBackendClient, Sdkwork
 let client = SdkworkBackendClient::new(SdkworkConfig::new("http://localhost:3800"))?;
 
 let outcome: Result<(), _> = async {
-    client.nginx().status_retrieve().await?;
+    client.cluster().clusters_overview_retrieve().await?;
     Ok(())
 }.await;
 

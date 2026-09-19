@@ -69,9 +69,9 @@ impl CloudflareDns01Presenter {
         body: Option<serde_json::Value>,
     ) -> AcmeServiceResult<http::Request<http_body_util::Full<bytes::Bytes>>> {
         let mut request = json_request(DnsProviderKind::Cloudflare, method, url, body)?;
-        let value = format!("Bearer {}", self.api_token)
-            .parse()
-            .map_err(|_| AcmeServiceError::Internal("encode Cloudflare bearer token".to_string()))?;
+        let value = format!("Bearer {}", self.api_token).parse().map_err(|_| {
+            AcmeServiceError::Internal("encode Cloudflare bearer token".to_string())
+        })?;
         request
             .headers_mut()
             .insert(http::header::AUTHORIZATION, value);
@@ -82,7 +82,11 @@ impl CloudflareDns01Presenter {
         if let Some(zone_ref) = self.zone_ref.as_deref() {
             return Ok(zone_ref.to_string());
         }
-        let url = format!("{}/zones?name={}&per_page={MAX_ZONE_LIST_ENTRIES}", self.base_url, crate::dns_http::encode_form_component(zone_apex));
+        let url = format!(
+            "{}/zones?name={}&per_page={MAX_ZONE_LIST_ENTRIES}",
+            self.base_url,
+            crate::dns_http::encode_form_component(zone_apex)
+        );
         let request = self.authorized_request(Method::GET, &url, None)?;
         let response = self.client.send(request).await?;
         response.ensure_success(DnsProviderKind::Cloudflare)?;
@@ -138,7 +142,9 @@ impl Dns01Presenter for CloudflareDns01Presenter {
             .map(|record| record.id)
             .filter(|id| !id.is_empty())
             .ok_or_else(|| {
-                AcmeServiceError::provider("Cloudflare accepted the presentation without a record id")
+                AcmeServiceError::provider(
+                    "Cloudflare accepted the presentation without a record id",
+                )
             })?;
         Ok(Dns01RecordHandle {
             zone_apex: request.zone_apex.clone(),
@@ -153,10 +159,7 @@ impl Dns01Presenter for CloudflareDns01Presenter {
             return Ok(());
         };
         let zone_id = self.resolve_zone_id(&handle.zone_apex).await?;
-        let url = format!(
-            "{}/zones/{zone_id}/dns_records/{record_ref}",
-            self.base_url
-        );
+        let url = format!("{}/zones/{zone_id}/dns_records/{record_ref}", self.base_url);
         let http_request = self.authorized_request(Method::DELETE, &url, None)?;
         let response = self.client.send(http_request).await?;
         // A record that is already gone is the desired end state.
@@ -292,11 +295,11 @@ mod tests {
         }
 
         async fn delete_record(State(state): State<Arc<StubState>>) -> Json<Value> {
-            state
-                .requests
-                .lock()
-                .expect("lock")
-                .push(("DELETE".into(), "/dns_records/rec-42".into(), json!(null)));
+            state.requests.lock().expect("lock").push((
+                "DELETE".into(),
+                "/dns_records/rec-42".into(),
+                json!(null),
+            ));
             Json(json!({ "success": true, "result": { "id": "rec-42" } }))
         }
 
@@ -419,11 +422,9 @@ mod tests {
 
     #[test]
     fn an_empty_token_is_rejected() {
-        assert!(CloudflareDns01Presenter::new(
-            DnsApiClient::new().expect("client"),
-            "  ",
-            None
-        )
-        .is_err());
+        assert!(
+            CloudflareDns01Presenter::new(DnsApiClient::new().expect("client"), "  ", None)
+                .is_err()
+        );
     }
 }

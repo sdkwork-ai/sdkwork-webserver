@@ -9,3 +9,7 @@ key.pem
 !**/logs/.gitkeep
 **/temp/**/*
 !**/temp/**/.gitkeep
+full-surface/nginx.rendered.conf
+full-surface/htpasswd
+full-surface/*.pem
+full-surface/cache/

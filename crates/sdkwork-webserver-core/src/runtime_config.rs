@@ -242,8 +242,8 @@ fn is_import_aggregator_conf(path: &Path) -> bool {
 }
 
 fn module_import_id_from_nginx_sidecar(path: &Path) -> Result<String, String> {
-    let module_id = module_dir_id_from_nginx_sidecar(path)
-        .unwrap_or(import_id_from_include_path(path)?);
+    let module_id =
+        module_dir_id_from_nginx_sidecar(path).unwrap_or(import_id_from_include_path(path)?);
     // Qualify with the sidecar's profile + lifecycle environment
     // (SDKWORK_WEBSERVER_SPEC.md §17.3.2 universal import plane). The
     // aggregator emits one include per `nginx.<profile>.<environment>.conf`

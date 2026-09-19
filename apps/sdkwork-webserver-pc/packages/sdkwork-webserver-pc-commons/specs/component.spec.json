@@ -85,10 +85,6 @@
       {
         "name": "webserverWorkspaceI18n",
         "export": "."
-      },
-      {
-        "name": "applicationSourceStorage",
-        "export": "."
       }
     ],
     "requiredPorts": [],

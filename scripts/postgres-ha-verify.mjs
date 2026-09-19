@@ -14,7 +14,7 @@ const DATABASE_USER = 'sdkwork_ha';
 const DATABASE_PASSWORD = 'sdkwork-ha-test-only-password';
 const REPLICATION_SLOT = 'sdkwork_web_ha_slot';
 const PGDATA = '/var/lib/postgresql/data';
-const BASELINE_PATH = 'database/ddl/baseline/postgres/0001_web_baseline.sql';
+const BASELINE_PATH = 'database/ddl/baseline/postgres/0001_webserver_baseline.sql';
 const READY_ATTEMPTS = 60;
 const CONVERGENCE_ATTEMPTS = 60;
 const POLL_INTERVAL_MS = 1_000;
@@ -267,7 +267,7 @@ function containerResourceArgs() {
 }
 
 function insertCanarySql(id, name) {
-  return `INSERT INTO web_site (`
+  return `INSERT INTO webserver_site (`
     + `id, uuid, tenant_id, organization_id, data_scope, user_id, name, slug, description, `
     + `site_type, status, runtime_config, metadata, created_at, updated_at, version, deleted_at, deleted_by`
     + `) VALUES (`
@@ -398,7 +398,7 @@ function verifyReplication(primaryName, standbyName, remainingTimeout) {
   );
   psql(
     primaryName,
-    `UPDATE web_site SET name = 'ha-replicated-before-failover' WHERE id = ${CANARY_ID};`,
+    `UPDATE webserver_site SET name = 'ha-replicated-before-failover' WHERE id = ${CANARY_ID};`,
     remainingTimeout,
   );
   const lsnResult = psql(
@@ -420,7 +420,7 @@ function verifyReplication(primaryName, standbyName, remainingTimeout) {
   );
   waitForSqlValue(
     standbyName,
-    `SELECT name FROM web_site WHERE id = ${CANARY_ID} AND tenant_id = ${CANARY_TENANT_ID};`,
+    `SELECT name FROM webserver_site WHERE id = ${CANARY_ID} AND tenant_id = ${CANARY_TENANT_ID};`,
     'ha-replicated-before-failover',
     remainingTimeout,
     'tenant canary replication',
@@ -448,7 +448,7 @@ function promoteStandby(primaryName, standbyName, plan, remainingTimeout) {
   );
   const result = psql(
     standbyName,
-    `SELECT COUNT(*)::text FROM web_site WHERE tenant_id = ${CANARY_TENANT_ID} `
+    `SELECT COUNT(*)::text FROM webserver_site WHERE tenant_id = ${CANARY_TENANT_ID} `
       + `AND id IN (${CANARY_ID}, ${PROMOTED_CANARY_ID});`,
     remainingTimeout,
     true,

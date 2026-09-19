@@ -1,5 +1,5 @@
 {
-  "name": "sdkwork-web-workspace",
+  "name": "sdkwork-webserver-workspace",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "type": "module",
@@ -123,7 +123,7 @@
     "check:api-envelope": "node ../sdkwork-specs/tools/check-api-response-envelope.mjs --workspace .",
     "check:api-operation-patterns": "node ../sdkwork-specs/tools/check-api-operation-patterns.mjs --root .",
     "check:repository-docs": "node ../sdkwork-specs/tools/check-repository-docs-standard.mjs --root .",
-    "check:pnpm-script-standard": "node ../sdkwork-specs/tools/check-pnpm-script-standard.mjs --root . --product-prefix web",
+    "check:pnpm-script-standard": "node ../sdkwork-specs/tools/check-pnpm-script-standard.mjs --root . --product-prefix webserver,web",
     "check:agent-workflow-standard": "node ../sdkwork-specs/tools/check-agent-workflow-standard.mjs --root .",
     "verify": "pnpm exec sdkwork-app verify",
     "clean": "pnpm exec sdkwork-app clean",
@@ -133,10 +133,9 @@
     "sdk:generate": "pnpm api:materialize && node tools/generate_web_sdks.mjs",
     "sdk:generate:check": "pnpm api:materialize:check && node tools/generate_web_sdks.mjs --check && node ../sdkwork-specs/tools/check-sdk-standard.mjs --workspace .",
     "sdk:check": "pnpm sdk:generate:check",
-    "sdk:generate:app": "node tools/generate_web_sdks.mjs --family sdkwork-webserver-app-sdk",
     "sdk:generate:backend": "node tools/generate_web_sdks.mjs --family sdkwork-webserver-backend-sdk",
     "sdk:generate:internal": "node tools/generate_web_sdks.mjs --family sdkwork-webserver-internal-sdk",
-    "db:materialize:contract": "node ../sdkwork-specs/tools/materialize-database-contract-from-baseline.mjs --root . --baseline database/ddl/baseline/postgres/0001_web_baseline.sql --module-id web --owner web-platform --prefixes web_ --engines postgres",
+    "db:materialize:contract": "node ../sdkwork-specs/tools/materialize-database-contract-from-baseline.mjs --root . --baseline database/ddl/baseline/postgres/0001_webserver_baseline.sql --module-id webserver --owner web-platform --prefixes webserver_ --engines postgres",
     "db:validate": "node ../sdkwork-specs/tools/check-database-framework-standard.mjs --root .",
     "db:plan": "cargo run --manifest-path ../sdkwork-database/Cargo.toml -p sdkwork-database-cli -- --app-root . plan",
     "db:init": "cargo run --manifest-path ../sdkwork-database/Cargo.toml -p sdkwork-database-cli -- --app-root . init",
@@ -184,7 +183,6 @@
     "import:status": "node scripts/webserver-import-profile.mjs status",
     "build:pc:demo": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture pc --environment demo",
     "build:h5:demo": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture h5 --environment demo",
-    "import:switch:cloud": "node scripts/webserver-import-profile.mjs cloud",
     "deploy:reapply:demo": "bash bin/docker-deploy.sh install --environment demo"
   },
   "exports": {

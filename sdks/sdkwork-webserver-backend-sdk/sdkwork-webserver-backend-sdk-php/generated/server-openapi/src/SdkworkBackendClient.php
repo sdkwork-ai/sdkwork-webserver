@@ -18,6 +18,7 @@ use SDKWork\Webserver\BackendSdk\Api\ServerFileApi;
 use SDKWork\Webserver\BackendSdk\Api\WebserverConfigApi;
 use SDKWork\Webserver\BackendSdk\Api\AgentApi;
 use SDKWork\Webserver\BackendSdk\Api\AuditApi;
+use SDKWork\Webserver\BackendSdk\Api\ClusterApi;
 
 final class SdkworkBackendClient
 {
@@ -35,6 +36,7 @@ final class SdkworkBackendClient
     public WebserverConfigApi $webserverConfig;
     public AgentApi $agent;
     public AuditApi $audit;
+    public ClusterApi $cluster;
 
     public function __construct(SdkConfig $config)
     {
@@ -52,6 +54,7 @@ final class SdkworkBackendClient
         $this->webserverConfig = new WebserverConfigApi($this->http);
         $this->agent = new AgentApi($this->http);
         $this->audit = new AuditApi($this->http);
+        $this->cluster = new ClusterApi($this->http);
     }
 
     public function setApiKey(string $apiKey): self

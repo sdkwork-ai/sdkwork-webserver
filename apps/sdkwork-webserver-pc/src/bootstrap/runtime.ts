@@ -51,10 +51,10 @@ export async function bootstrapWebserverPcRuntime() {
       consoleClientsPromise = import("@sdkwork/webserver-pc-console-core")
         .then(({ createWebserverConsoleSdkClients }) => {
           const clients = createWebserverConsoleSdkClients({
+            deployAppApiBaseUrl: config.deployAppApiBaseUrl,
             driveAppApiBaseUrl: config.driveAppApiBaseUrl,
-            webAppApiBaseUrl: config.appApiBaseUrl,
           }, tokenManager);
-          attachSdkClientBoundaries([clients.web, clients.drive]);
+          attachSdkClientBoundaries([clients.deploy, clients.drive]);
           return clients;
         })
         .catch((cause: unknown) => {

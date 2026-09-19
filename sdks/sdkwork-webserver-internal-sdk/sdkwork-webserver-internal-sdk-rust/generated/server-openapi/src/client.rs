@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::api::{RuntimeApi};
+use crate::api::{RuntimeApi, ClusterApi};
 use crate::http::{SdkworkConfig, SdkworkError, SdkworkHttpClient};
 
 #[derive(Clone)]
@@ -46,5 +46,9 @@ impl SdkworkCustomClient {
 
     pub fn runtime(&self) -> RuntimeApi {
             RuntimeApi::new(Arc::clone(&self.http))
+        }
+
+    pub fn cluster(&self) -> ClusterApi {
+            ClusterApi::new(Arc::clone(&self.http))
         }
 }

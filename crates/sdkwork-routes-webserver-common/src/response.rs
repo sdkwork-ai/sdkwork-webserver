@@ -6,8 +6,10 @@ use sdkwork_utils_rust::{
     SDKWORK_TRACE_ID_HEADER,
 };
 use sdkwork_webserver_contract::{
-    ApplicationPage, AuditLogPage, CertificateDistributionPage, CertificatePage, DeploymentPage,
-    DomainPage, EnvVariablePage, HealthCheckPage, ListenerCertificateBindingPage, NginxConfigPage,
+    ApplicationPage, AuditLogPage, CertificateDistributionPage, CertificatePage, ClusterEventPage,
+    ClusterHeartbeatSamplePage, ClusterHostPage, ClusterInstancePage, ClusterPage,
+    DeploymentPage, DomainPage,
+    EnvVariablePage, HealthCheckPage, ListenerCertificateBindingPage, NginxConfigPage,
     PlatformTargetPage, RootDomainPage, ServerPage, SourceVersionPage, WebServiceResult,
 };
 use serde::Serialize;
@@ -344,6 +346,114 @@ pub fn ok_server_page(
             };
             Ok(envelope(StatusCode::OK, payload))
         }
+        Err(error) => Err(error.into()),
+    }
+}
+
+
+/// Offset-mode page for the bounded cluster registry listing.
+pub fn ok_cluster_page(
+    result: WebServiceResult<ClusterPage>,
+    page: i32,
+    page_size: i32,
+) -> Result<Response, WebApiError> {
+    match result {
+        Ok(page_data) => Ok(envelope(
+            StatusCode::OK,
+            build_page_data(page_data.items, page, page_size, page_data.total),
+        )),
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// Cursor-mode page over the growing cluster host inventory.
+pub fn ok_cluster_host_page(result: WebServiceResult<ClusterHostPage>) -> Result<Response, WebApiError> {
+    match result {
+        Ok(page_data) => Ok(envelope(
+            StatusCode::OK,
+            SdkWorkPageData {
+                items: page_data.items,
+                page_info: PageInfo {
+                    mode: PageMode::Cursor,
+                    page: None,
+                    page_size: None,
+                    total_items: None,
+                    total_pages: None,
+                    next_cursor: page_data.next_cursor,
+                    has_more: page_data.has_more,
+                },
+            },
+        )),
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// Cursor-mode page over the growing cluster instance inventory.
+pub fn ok_cluster_instance_page(
+    result: WebServiceResult<ClusterInstancePage>,
+) -> Result<Response, WebApiError> {
+    match result {
+        Ok(page_data) => Ok(envelope(
+            StatusCode::OK,
+            SdkWorkPageData {
+                items: page_data.items,
+                page_info: PageInfo {
+                    mode: PageMode::Cursor,
+                    page: None,
+                    page_size: None,
+                    total_items: None,
+                    total_pages: None,
+                    next_cursor: page_data.next_cursor,
+                    has_more: page_data.has_more,
+                },
+            },
+        )),
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// Cursor-mode page over one instance's stored heartbeat samples.
+pub fn ok_cluster_heartbeat_page(
+    result: WebServiceResult<ClusterHeartbeatSamplePage>,
+) -> Result<Response, WebApiError> {
+    match result {
+        Ok(page_data) => Ok(envelope(
+            StatusCode::OK,
+            SdkWorkPageData {
+                items: page_data.items,
+                page_info: PageInfo {
+                    mode: PageMode::Cursor,
+                    page: None,
+                    page_size: None,
+                    total_items: None,
+                    total_pages: None,
+                    next_cursor: page_data.next_cursor,
+                    has_more: page_data.has_more,
+                },
+            },
+        )),
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// Cursor-mode page over the append-only cluster event log.
+pub fn ok_cluster_event_page(result: WebServiceResult<ClusterEventPage>) -> Result<Response, WebApiError> {
+    match result {
+        Ok(page_data) => Ok(envelope(
+            StatusCode::OK,
+            SdkWorkPageData {
+                items: page_data.items,
+                page_info: PageInfo {
+                    mode: PageMode::Cursor,
+                    page: None,
+                    page_size: None,
+                    total_items: None,
+                    total_pages: None,
+                    next_cursor: page_data.next_cursor,
+                    has_more: page_data.has_more,
+                },
+            },
+        )),
         Err(error) => Err(error.into()),
     }
 }

@@ -10,11 +10,11 @@
 # 操作状态（0=PENDING,1=RUNNING,2=SUCCEEDED,3=FAILED,4=EXHAUSTED）
 psql "$DATABASE_URL" -c "SELECT id, operation_type, status, attempts, lease_owner,
        lease_expires_at, fencing_token, next_attempt_at
-       FROM web_certificate_operation ORDER BY id DESC LIMIT 20;"
+       FROM webserver_certificate_operation ORDER BY id DESC LIMIT 20;"
 
 # 证书聚合与版本
 psql "$DATABASE_URL" -c "SELECT uuid, status, renewal_status, auto_renew
-       FROM web_certificate WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT 20;"
+       FROM webserver_certificate WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT 20;"
 
 # 证书 worker 是否存活（systemd 部署）
 systemctl status sdkwork-webserver-certificate-worker
@@ -39,7 +39,7 @@ UPDATE 状态行（会绕过围栏令牌校验）。
 
 ### 2.3 重试预算耗尽（EXHAUSTED）
 
-- 查 `web_certificate.metadata.certificateOperationFailureCode` 定位失败类别
+- 查 `webserver_certificate.metadata.certificateOperationFailureCode` 定位失败类别
   （DNS 未验证 / CA 拒绝 / webroot 不可写）。
 - 修复根因后重新发起 issue/renew；新操作有独立的重试预算。
 
@@ -55,7 +55,7 @@ UPDATE 状态行（会绕过围栏令牌校验）。
   generation/fingerprint 是否已更新。
 - worker 在每次成功操作后会重投影节点 listener 绑定并发布单调快照；数据面
   `FileTlsRuntimeController` 热加载，不落连接。若快照未更新，优先查 worker 日志，
-  其次核对 `web_listener_certificate_binding` 的 `desired_version_id` 与当前版本一致。
+  其次核对 `webserver_listener_certificate_binding` 的 `desired_version_id` 与当前版本一致。
 
 ## 3. 恢复后验证
 

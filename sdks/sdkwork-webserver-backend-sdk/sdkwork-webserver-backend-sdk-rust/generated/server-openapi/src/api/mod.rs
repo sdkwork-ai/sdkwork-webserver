@@ -26,3 +26,5 @@ pub mod agent;
 pub use agent::AgentApi;
 pub mod audit;
 pub use audit::AuditApi;
+pub mod cluster;
+pub use cluster::ClusterApi;

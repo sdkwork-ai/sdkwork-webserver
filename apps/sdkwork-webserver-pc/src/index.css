@@ -2457,3 +2457,49 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   width: auto;
   align-self: center;
 }
+
+/* Cluster overview: health cards and severity badges (auto-refreshing
+   monitoring surface for the distributed Web Server cluster). */
+.cluster-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin: 14px 0 22px;
+}
+.cluster-overview-card {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--sdk-color-border-default);
+  border-radius: 7px;
+  background: var(--sdk-color-surface-panel);
+}
+.cluster-overview-card[data-tone="ok"] {
+  border-color: var(--webserver-color-success-border, var(--sdk-color-border-default));
+}
+.cluster-overview-card[data-tone="warn"] {
+  border-color: var(--webserver-color-warning-border, var(--sdk-color-border-default));
+}
+.cluster-overview-value {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--sdk-color-text-primary);
+}
+.cluster-overview-label {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--sdk-color-text-secondary);
+}
+.status-badge.cluster-severity-info {
+  background: var(--sdk-color-surface-panel-muted);
+  color: var(--sdk-color-text-secondary);
+}
+.status-badge.cluster-severity-warning {
+  background: var(--webserver-color-warning-surface);
+  color: var(--webserver-color-warning-text);
+}
+.status-badge.cluster-severity-error {
+  background: var(--webserver-color-danger-surface);
+  color: var(--webserver-color-danger-text);
+}

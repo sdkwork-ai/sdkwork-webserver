@@ -48,7 +48,7 @@ SDKWork Web Server 需要在控制面内嵌 **免费 TLS 证书自动签发与�
 ## Consequences
 
 - Cargo workspace 新增 `instant-acme`、`rcgen` 依赖；需在 `SUPPLY_CHAIN_SECURITY_SPEC.md` 流程中登记 license 与版本 pin。
-- `certificates.issue` 持久化异步 ACME 操作并返回 HTTP `202` 标准异步数据；完成后写入不可变证书版本、更新 `web_certificate` 聚合并触发节点 TLS 材料发布。
+- `certificates.issue` 持久化异步 ACME 操作并返回 HTTP `202` 标准异步数据；完成后写入不可变证书版本、更新 `webserver_certificate` 聚合并触发节点 TLS 材料发布。
 - HTTP-01 要求自建数据面监听器配置 `acmeHttp01.webroot`，且 worker 的 `SDKWORK_WEBSERVER_ACME_WEBROOT` 指向同一目录；验证窗口内该监听器必须公网可达。
 - ACME 证书自动续期默认在到期前 30 天启动（ARI 窗口优先）；失败写入 `renewal_status=3` 并告警。自签名证书仅支持显式手动重签，不进入自动续期扫描。
 - Staging CA 签发证书不受浏览器信任，仅用于联调；生产 profile 必须显式指向 LE 生产目录。

@@ -80,18 +80,10 @@
     "runtimeEntrypoints": [],
     "routeManifest": null,
     "sdkClients": [
-      "@sdkwork/webserver-app-sdk",
       "@sdkwork/drive-app-sdk",
       "@sdkwork/deployments-app-sdk"
     ],
     "sdkDependencies": [
-      {
-        "workspace": "sdkwork-webserver-app-sdk",
-        "permissionModuleId": "web",
-        "surface": "app-api",
-        "credentialMode": "authenticated-app-api",
-        "runtimeAdaptation": "arkts-port-pending"
-      },
       {
         "workspace": "sdkwork-drive-app-sdk",
         "permissionModuleId": "drive",
@@ -177,6 +169,6 @@
   },
   "metadata": {
     "standardVersion": "2026-09-17",
-    "arktsSdkGap": "The SDK generation chain emits typescript and flutter targets for sdkwork-webserver-app-sdk only; no arkts target exists in the workspace."
+    "arktsSdkGap": "`sdkwork-deployments-app-sdk` materializes a typescript variant only; no arkts target exists in the workspace, so the deploy_app port is declared but unbound."
   }
 }

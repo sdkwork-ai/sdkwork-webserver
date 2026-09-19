@@ -36,6 +36,7 @@ const KIND_MESSAGE_KEYS: Record<DeployAppKind, string> = {
   STATIC_WEB: "applications.list.kind.static-web",
   SPA_WEB: "applications.list.kind.spa-web",
   API_SERVICE: "applications.list.kind.api-service",
+  DESKTOP_APP: "applications.list.kind.desktop-app",
   WECHAT_MINIPROGRAM: "applications.list.kind.wechat-miniprogram",
   DOUYIN_MINIPROGRAM: "applications.list.kind.douyin-miniprogram",
   IOS_APP: "applications.list.kind.ios-app",

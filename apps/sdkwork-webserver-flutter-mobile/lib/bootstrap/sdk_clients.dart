@@ -1,8 +1,14 @@
-/// Generated app SDK construction and capability binding for the Flutter root.
+/// Generated app SDK composition and capability binding for the Flutter root.
 ///
 /// `APP_SDK_INTEGRATION_SPEC.md` section 2: generated clients are constructed at
 /// the application root and injected downward; capability packages never build a
 /// transport.
+///
+/// The `deploy_app` entity is owned by `sdkwork-deployments`, so this root binds
+/// the deployments-owned catalog port instead of composing a second,
+/// webserver-owned application client (`COMPOSABLE_ARCHITECTURE_SPEC.md` §7).
+/// That port stays unbound until `sdkwork-deployments` ships a Dart artifact;
+/// `composition/sdk_inventory.dart` records that gap explicitly.
 library;
 
 import 'package:sdkwork_webserver_flutter_mobile_applications/sdkwork_webserver_flutter_mobile_applications.dart';
@@ -11,11 +17,8 @@ import 'package:sdkwork_webserver_flutter_mobile_core/sdkwork_webserver_flutter_
 /// Everything the root hands to capabilities.
 class WebserverFlutterSdkClients {
   const WebserverFlutterSdkClients({
-    required this.appClients,
     required this.deployAppCatalog,
   });
-
-  final WebserverAppSdkClients appClients;
 
   /// The `deploy_app` catalog port. It is constructed unconditionally and its
   /// availability is *asked*, never assumed, so a capability renders an explicit
@@ -24,21 +27,11 @@ class WebserverFlutterSdkClients {
 
   void dispose() {
     deployAppCatalog.dispose();
-    appClients.dispose();
   }
 }
 
-WebserverFlutterSdkClients createWebserverFlutterSdkClients({
-  required String appApiBaseUrl,
-  String? authToken,
-  String? accessToken,
-}) {
+WebserverFlutterSdkClients createWebserverFlutterSdkClients() {
   return WebserverFlutterSdkClients(
-    appClients: createWebserverAppSdkClients(
-      appApiBaseUrl: appApiBaseUrl,
-      authToken: authToken,
-      accessToken: accessToken,
-    ),
     deployAppCatalog: WebserverDeployAppCatalogPort(),
   );
 }

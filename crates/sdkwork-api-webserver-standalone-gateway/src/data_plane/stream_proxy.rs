@@ -95,6 +95,7 @@ pub(crate) async fn serve_stream_listener(
     let maximum_age =
         Duration::from_millis(runtime.current().app.config().limits.max_connection_age_ms);
     let mut tasks = tokio::task::JoinSet::new();
+    let mut accept_policy = super::accept::AcceptRetryPolicy::new();
     loop {
         tokio::select! {
             changed = shutdown.changed() => {
@@ -104,10 +105,23 @@ pub(crate) async fn serve_stream_listener(
             }
             accepted = listener.socket.accept() => {
                 let (downstream, peer) = match accepted {
-                    Ok(accepted) => accepted,
+                    Ok(accepted) => {
+                        accept_policy.on_success();
+                        accepted
+                    }
                     Err(error) => {
-                        tracing::warn!(stream_id = %listener.id, error = %error, "stream accept failed");
-                        continue;
+                        // Transient accept failures must not stop the
+                        // listener; only a broken listener socket ends the
+                        // accept loop.
+                        if accept_policy.on_error(&error) {
+                            tokio::time::sleep(super::accept::ACCEPT_RETRY_PAUSE).await;
+                            continue;
+                        }
+                        tracing::error!(stream_id = %listener.id, error = %error, "stream listener accept failed terminally");
+                        return Err(DataPlaneError::Listener {
+                            listener_id: listener.id.clone(),
+                            source: error,
+                        });
                     }
                 };
                 let permit = match Arc::clone(&runtime.connection_permits).try_acquire_owned() {

@@ -12,6 +12,7 @@ from .api.server_file import ServerFileApi
 from .api.webserver_config import WebserverConfigApi
 from .api.agent import AgentApi
 from .api.audit import AuditApi
+from .api.cluster import ClusterApi
 
 
 class SdkworkBackendClient:
@@ -32,6 +33,7 @@ class SdkworkBackendClient:
         self.webserver_config: WebserverConfigApi
         self.agent: AgentApi
         self.audit: AuditApi
+        self.cluster: ClusterApi
 
         # Initialize API modules
         self.application = ApplicationApi(self._client)
@@ -47,6 +49,7 @@ class SdkworkBackendClient:
         self.webserver_config = WebserverConfigApi(self._client)
         self.agent = AgentApi(self._client)
         self.audit = AuditApi(self._client)
+        self.cluster = ClusterApi(self._client)
     def set_auth_token(self, token: str) -> 'SdkworkBackendClient':
         """Set auth token for authentication."""
         self._client.set_auth_token(token)

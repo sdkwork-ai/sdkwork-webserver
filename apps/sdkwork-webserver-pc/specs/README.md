@@ -2,7 +2,7 @@
 
 The application is a browser composition root with two isolated surfaces:
 
-- `app-console`: standalone tenant operations through `@sdkwork/webserver-app-sdk`.
+- `app-console`: tenant operations over the deployment-owned application, domain, and certificate pages (`@sdkwork/deployments-app-sdk`, with package bytes through `@sdkwork/drive-app-sdk`), plus the plugins / skills / MCP self-service surfaces.
 - `backend-admin`: internal Web Server operations through `@sdkwork/webserver-backend-sdk`.
 
 The root owns runtime configuration, IAM bootstrap, the shared TokenManager, route composition, and lazy loading. Capability packages own navigation metadata; surface core packages own generated SDK adaptation. Drive uploads and cloud publishing do not belong to this application.

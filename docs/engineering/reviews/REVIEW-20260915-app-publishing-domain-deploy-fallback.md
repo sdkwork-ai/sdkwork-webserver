@@ -289,7 +289,7 @@ Reality:
   lifecycle environment.
 - The Web Server never reads `deploy_nginx_config` (grep: only the Deploy
   repository/service/routes reference it). It has its own near-identical table
-  `web_nginx_config` (`database/ddl/baseline/postgres/0001_web_baseline.sql:298-319`,
+  `webserver_nginx_config` (`database/ddl/baseline/postgres/0001_webserver_baseline.sql:298-319`,
   `site_id` instead of `app_id`, also no `environment`), written by
   `WebRepository::*_nginx_configs_repo` and materialised through the local edge
   runtime (`sdkwork-webserver-edge-runtime::deploy_nginx_config` /
@@ -364,7 +364,7 @@ locally-declared-but-broken host can never recover.
   tests that exercise the fallback lookup, and they cannot run against the
   current schema.
 - `docs/migrations/MIG-2026-0070-application-resource-model.md:55-56` claims
-  `web_application.site_id` mirrors "the `deploy_app.site_id` model" — `deploy_app`
+  `webserver_application.site_id` mirrors "the `deploy_app.site_id` model" — `deploy_app`
   has no `site_id` column (the `deploy_site` table was folded away by migration
   `0007_deploy_app_delivery`; only a `-- source: migrations/001_create_deploy_site.sql`
   comment remains).

@@ -54,6 +54,7 @@ client.set_header('X-Custom-Header', 'value')
 - `client.webserver_config` - webserver_config API
 - `client.agent` - agent API
 - `client.audit` - audit API
+- `client.cluster` - cluster API
 
 ## Usage Examples
 
@@ -171,6 +172,14 @@ puts result.inspect
 # List audit logs
 params = { 'page_size' => 1, 'cursor' => 'cursor', 'target_type' => 'target-type', 'action' => 'action', 'operator_id' => '1', 'start_date' => '2026-04-10T00:00:00Z', 'end_date' => '2026-04-10T00:00:00Z' }
 result = client.audit.logs_list(params: params)
+puts result.inspect
+```
+
+### cluster
+
+```ruby
+# Retrieve the cluster health overview for status polling
+result = client.cluster.clusters_overview_retrieve()
 puts result.inspect
 ```
 

@@ -18,7 +18,9 @@
     "Stock-config expansion (2026-08): default nginx.conf tuning (server_names/types/variables hash sizes, gzip_http_version/buffers/window, charset_map, lingering_*, pool sizes, proxy_temp_*) accepted; listen OS socket parameters (backlog/so_keepalive/ipv6only/bind/deferred/fastopen/rcvbuf/sndbuf/accept_filter/setfib) accepted; upstream keepalive_timeout/requests/time accepted; proxy_ssl_verify/trusted_certificate/certificate/key/server_name materialize upstream TLS (verify off, server_name off, custom SNI names, and per-upstream conflicts fail closed; TLS material must be config-relative); set_real_ip_from/real_ip_header/real_ip_recursive materialize listener trustedProxy (conflicts fail closed); include globs expand across directory segments like libc glob.",
     "Pass-3 alignment (2026-08): http-level `http2 on` inherits to every ssl listener (nginx 1.25.1+ form); `return` bodies with variables fail closed; accept_mutex_delay/charset_types/ssl_buffer_size accepted; the JS import tool (tools/import-nginx-conf.mjs) now tokenizes with the same ngx_conf_read_token-exact lexer and expands `include` with conf_prefix anchoring and libc-glob patterns (include expansion fixed the standalone-conf import regression).",
     "Systematic surface test suite (2026-08): crates/sdkwork-webserver-core/tests/nginx_config_surface.rs covers every supported directive family (SURFACE matrix), every fail-closed form (server/http/stream/top-level matrices), stock nginx.conf tuning acceptance by context, full nginx.conf round trip, include expansion (files/globs/nested/cycle/missing), load_nginx_compat round trips, and merge_nginx_apps; exposed and fixed two real bugs: upstream `random two least_conn` now materializes as random-two-least-connections, and include globs keep Windows drive prefixes absolute; limit_req_status/limit_req_log_level accepted.",
-    "Test-suite expansion (2026-08): tests/nginx_parser_edge_cases.rs pins tokenizer behavior (CRLF, tabs, multi-line directives, comment placement, per-type quote closing, escape table, ${var}, error line reporting, adversarial no-panic); mapping unit tests cover every ACCEPTED_IGNORED directive with sample arguments and adversarial materialization; the parser now caps block nesting at 256 levels (fail closed instead of stack overflow)."
+    "Test-suite expansion (2026-08): tests/nginx_parser_edge_cases.rs pins tokenizer behavior (CRLF, tabs, multi-line directives, comment placement, per-type quote closing, escape table, ${var}, error line reporting, adversarial no-panic); mapping unit tests cover every ACCEPTED_IGNORED directive with sample arguments and adversarial materialization; the parser now caps block nesting at 256 levels (fail closed instead of stack overflow).",
+    "Full-surface regression (2026-09, REQ-2026-0040): tests/nginx/full-surface/ adds a single-page behavioral regression (one fixture + one self-contained probe, 57 cases) covering routing, URI canonicalization, static semantics, proxying, load balancing, response filters, limits, TLS SNI, http2 ALPN, and stream proxying against the serving data plane. First alignment runs closed five real gaps: nginx-materialized upstreams now carry the nginx-default retry policy (proxy_next_upstream error timeout equivalent) so backup failover works; proxy_set_header inheritance follows nginx replace-on-declare semantics; rewrite-changed URIs are forwarded upstream in rewritten form; If-None-Match uses RFC 9110 weak comparison with correct polarity; try_files SPA fallbacks accept nested internal-redirect targets. Cataloged remaining context gaps: server/location-level gzip granularity and server-level return.",
+    "Context completion (2026-09, REQ-2026-0041): the regression grew to 61 cases and closed the round-1 context gaps plus the PRD-required error-page mapping. Server-level gzip/gzip_types/gzip_min_length materialize into VirtualHostConfig.compression with nginx inheritance (on/off inherits http level, types/minLength replace) and the compression layer resolves the policy per matched host via a response extension. Server-level rewrite prepends to every route of its host (nginx rewrite-phase order). Server-level return collapses the host to one catch-all respond/redirect route. error_page http/server mappings materialize into VirtualHostConfig.errorPages and generated static errors (including ACL 403) internally redirect to the mapped target with optional =code status replacement, one hop, static targets. Still cataloged: location-level gzip/error_page overrides, server-level sub_filter, recursive error pages, proxy_intercept_errors. Round-3 closure (REQ-2026-0042): location-level gzip/error_page overrides, proxy_intercept_errors across http/server/location, recursive_error_pages (three-hop bound), and server-level sub_filter are runtime-executable; the regression covers all of it (66 cases). Remaining intentional differences: recursive chain bound, static-only error-page targets, RFC 8441, OCSP stapling, zero-downtime listener handoff."
   ],
   "capabilities": [
     {
@@ -67,7 +69,7 @@
       "id": "http.gzip",
       "group": "response",
       "status": "implemented",
-      "summary": "Response gzip via CompressionLayer (gzipTypes + gzipMinLength + text/html); brotli remains out of this capability id"
+      "summary": "Response gzip via CompressionLayer (gzipTypes + gzipMinLength + text/html); server-level gzip/gzip_types/gzip_min_length resolve a per-vhost policy with nginx inheritance (REQ-2026-0041); brotli remains out of this capability id"
     },
     {
       "id": "http.proxy-cache",
@@ -220,10 +222,16 @@
       "summary": "Strategy-pattern config sources (nginx conf / TOML / JSON) behind one ConfigSource trait + WebServerConfigLoader with auto-detection and --format override; single-file TOML mode; parity regression corpus (tests/config_sources.rs)"
     },
     {
+      "id": "http.error-page",
+      "group": "response",
+      "status": "implemented",
+      "summary": "error_page http/server/location mappings with nginx replace-on-declare inheritance; generated static errors (including ACL 403) and proxy_intercept_errors-mapped upstream errors internally redirect to the target with optional =code replacement; recursive_error_pages chains through per-route sets bounded to three hops (REQ-2026-0042)"
+    },
+    {
       "id": "http.sub-filter",
       "group": "response",
       "status": "implemented",
-      "summary": "sub_filter / sub_filter_once / sub_filter_types / sub_filter_last_modified response body substitution, ordered before gzip like nginx filters"
+      "summary": "sub_filter / sub_filter_once / sub_filter_types / sub_filter_last_modified response body substitution at http/server/location with replace-on-declare inheritance, ordered before gzip like nginx filters (REQ-2026-0042)"
     },
     {
       "id": "http.limit-conn",

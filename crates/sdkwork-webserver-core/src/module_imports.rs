@@ -559,13 +559,13 @@ pub fn load_module_import_app_config(
             app_key: Some(app_key),
             ..ConfigLoadOptions::default()
         };
-        let loaded = loader
-            .load(&import.path, &options)
-            .map_err(|source| ModuleImportError::Validation {
+        let loaded = loader.load(&import.path, &options).map_err(|source| {
+            ModuleImportError::Validation {
                 id: import.id.clone(),
                 path: import.path.clone(),
                 source,
-            })?;
+            }
+        })?;
         let mut app = loaded.app;
         apply_environment_scoped_adaptive_roots(&mut app, &import.path);
         return Ok(app);
@@ -778,12 +778,19 @@ mod tests {
             std::process::id(),
             std::thread::current().id()
         ));
-        let staging_pc = base.join("im/web/staging/pc");
+        // The resolver joins with forward slashes (`Path::new(&candidate)`
+        // textually checks existence), so the fixture tree must be built the
+        // same way instead of `base.join("im/web/staging/pc")`, which uses
+        // the platform separator on Windows and desynchronizes the strings.
+        let staging_pc = Path::new(&format!("{}/im/web/staging/pc", base.display())).to_path_buf();
         std::fs::create_dir_all(&staging_pc).expect("materialize staging pc root");
 
         let declared = format!("{}/im/web/pc", base.display());
         let scoped = environment_scoped_adaptive_root(&declared, "staging");
-        assert_eq!(scoped.as_deref(), Some(staging_pc.to_string_lossy().as_ref()));
+        assert_eq!(
+            scoped.as_deref(),
+            Some(staging_pc.to_string_lossy().as_ref())
+        );
 
         // Not materialized for this environment -> keep the declared root.
         assert!(environment_scoped_adaptive_root(&declared, "production").is_none());
@@ -793,14 +800,16 @@ mod tests {
             Some(staging_pc.to_string_lossy().as_ref())
         );
         // Non-Adaptive-Web roots are never rewritten.
-        assert!(
-            environment_scoped_adaptive_root(&format!("{}/im/static", base.display()), "staging")
-                .is_none()
-        );
-        assert!(
-            environment_scoped_adaptive_root(&format!("{}/im/web/pc/app", base.display()), "staging")
-                .is_none()
-        );
+        assert!(environment_scoped_adaptive_root(
+            &format!("{}/im/static", base.display()),
+            "staging"
+        )
+        .is_none());
+        assert!(environment_scoped_adaptive_root(
+            &format!("{}/im/web/pc/app", base.display()),
+            "staging"
+        )
+        .is_none());
 
         let _ = std::fs::remove_dir_all(&base);
     }

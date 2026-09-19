@@ -25,12 +25,7 @@ const client = new SdkworkCustomClient({
 client.setApiKey('your-api-key');
 
 // Use the SDK
-const params = {
-  environment: 'development',
-  ifGeneration: 'ifGeneration',
-  ifSnapshotSha256: 'ifSnapshotSha256',
-};
-const result = await client.runtime.runtimeAssignments.current.retrieve(params);
+const result = await client.cluster.peers.retrieve();
 ```
 
 ## Authentication
@@ -63,6 +58,7 @@ const client = new SdkworkCustomClient({
 ## API Modules
 
 - `client.runtime` - runtime API
+- `client.cluster` - cluster API
 
 ## Usage Examples
 
@@ -78,18 +74,20 @@ const params = {
 const result = await client.runtime.runtimeAssignments.current.retrieve(params);
 ```
 
+### cluster
+
+```typescript
+// Retrieve the authenticated instance's cluster peer directory
+const result = await client.cluster.peers.retrieve();
+```
+
 ## Error Handling
 
 ```typescript
 import { SdkworkCustomClient, NetworkError, TimeoutError, AuthenticationError } from '@sdkwork/webserver-internal-sdk';
 
 try {
-  const params = {
-    environment: 'development',
-    ifGeneration: 'ifGeneration',
-    ifSnapshotSha256: 'ifSnapshotSha256',
-  };
-  const result = await client.runtime.runtimeAssignments.current.retrieve(params);
+  const result = await client.cluster.peers.retrieve();
 } catch (error) {
   if (error instanceof AuthenticationError) {
     console.error('Authentication failed:', error.message);

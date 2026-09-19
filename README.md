@@ -1,13 +1,13 @@
 # SDKWork Web Server
 repository-kind: application
 
-Standards-aligned HTTP backend for site, domain, deployment, certificate, Nginx, and Web Node management. Exposes **app-api** and **backend-api** surfaces integrated with SDKWork platform frameworks.
+Standards-aligned HTTP backend for site, domain, deployment, certificate, Nginx, and Web Node management. Authors the **backend-api** and **internal-api** OpenAPI authorities (the legacy webserver `app-api` surface was retired; tenant-facing application workflows consume the Deployments `app-api` assembled into this gateway) and hosts the standalone composed gateway with the Rust request data plane.
 
 ## Framework Integration
 
 | Framework | Status |
 | --- | --- |
-| `sdkwork-web-framework` | Integrated on app-api and backend-api routers |
+| `sdkwork-web-framework` | Integrated on backend-api and internal-api routers |
 | `sdkwork-database` | Integrated through `database/` assets and `sdkwork-webserver-database-host` |
 | `sdkwork-utils-rust` | API envelope, crypto, env parsing, slugify, serde helpers |
 | `sdkwork-id-core` (via `sdkwork-database-id`) | Snowflake PKs and UUID resource identifiers |

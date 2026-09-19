@@ -68,12 +68,15 @@ export interface ServerFileContent {
   modifiedAt?: string;
 }
 
-/** An executable project operation offered by a project root. */
+/**
+ * An executable project operation offered by a project root. Deployment is
+ * intentionally absent: application deployment is the durable command plane,
+ * not a shell operation.
+ */
 export type ServerProjectOperationKind =
   | "build"
   | "package"
   | "start"
-  | "deploy"
   | "stop"
   | "restart";
 
@@ -96,11 +99,26 @@ export interface ServerProjectOperations {
   operations: ServerProjectOperation[];
 }
 
+/**
+ * Result of running one project operation. The present fields depend on the
+ * execution model: foreground runs report `exitCode`/`stdout`/`stderr`,
+ * managed starts report `pid`/`pidFile`/`logFile`, managed stops report
+ * `stopped`.
+ */
 export interface ServerOperationResult {
   operationId: string;
-  /** Async operation tracker when the command is long-running. */
-  jobId?: string;
+  /** Foreground runs: process exit code (absent when the run timed out). */
   exitCode?: number;
+  timedOut?: boolean;
   stdout?: string;
   stderr?: string;
+  stdoutTruncated?: boolean;
+  stderrTruncated?: boolean;
+  /** Managed runs: recorded process identity. */
+  pid?: number;
+  pidFile?: string;
+  logFile?: string;
+  stopped?: boolean;
+  /** Human-readable outcome for managed runs. */
+  message?: string;
 }

@@ -2294,10 +2294,15 @@ paths:
     post:
       operationId: serverFiles.node.operations.create
       summary: Run a project operation on a deployment node
-      description: Runs a classified project lifecycle operation (build, package,
-        start, deploy, stop, restart) as fixed argv. Deploy-class operations
-        additionally require the `web.servers.files.deploy` permission and are
-        rejected with 403 when the principal lacks it.
+      description: Runs a classified project lifecycle operation as fixed argv.
+        Build/package operations run to completion under a hard timeout with
+        byte-capped output capture and kill the process tree on expiry.
+        Start/stop/restart manage the project's single managed process through
+        a pid file (start refuses a duplicate live process; stop is idempotent).
+        Managed operations require the `web.servers.files.deploy` permission
+        and are rejected with 403 when the principal lacks it. Deployment is
+        not a shell operation; application releases go through the durable
+        deployment command plane.
       tags:
       - serverFile
       security:
@@ -2624,6 +2629,707 @@ paths:
                             $ref: '#/components/schemas/AuditLogResponse'
                         pageInfo:
                           $ref: '#/components/schemas/PageInfo'
+  /backend/v3/api/clusters:
+    get:
+      operationId: clusters.list
+      summary: List Web Server clusters
+      x-sdkwork-pagination-mode: offset
+      tags:
+      - cluster
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.cluster.read
+      x-sdkwork-owner: sdkwork-webserver
+      parameters:
+      - $ref: '#/components/parameters/PageParam'
+      - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Cluster list returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      additionalProperties: false
+                      required:
+                      - items
+                      - pageInfo
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/ClusterResponse'
+                        pageInfo:
+                          $ref: '#/components/schemas/PageInfo'
+    post:
+      operationId: clusters.create
+      summary: Create a Web Server cluster
+      tags:
+      - cluster
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.cluster.write
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-sdkwork-rate-limit-tier: auth-critical
+      x-sdkwork-owner: sdkwork-webserver
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClusterRequest'
+      responses:
+        '201':
+          description: Cluster created successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/ClusterResponse'
+  /backend/v3/api/clusters/{clusterId}:
+    parameters:
+    - $ref: '#/components/parameters/ClusterIdParam'
+    get:
+      operationId: clusters.retrieve
+      summary: Retrieve a Web Server cluster
+      tags:
+      - cluster
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.cluster.read
+      x-sdkwork-owner: sdkwork-webserver
+      responses:
+        '200':
+          description: Cluster returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/ClusterResponse'
+    patch:
+      operationId: clusters.update
+      summary: Update a Web Server cluster
+      tags:
+      - cluster
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.cluster.write
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-sdkwork-owner: sdkwork-webserver
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateClusterRequest'
+      responses:
+        '200':
+          description: Cluster updated successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/ClusterResponse'
+    delete:
+      operationId: clusters.delete
+      summary: Delete an empty Web Server cluster
+      tags:
+      - cluster
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.cluster.write
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-sdkwork-rate-limit-tier: auth-critical
+      x-sdkwork-owner: sdkwork-webserver
+      responses:
+        '204':
+          description: Cluster deleted successfully.
+  /backend/v3/api/clusters/hosts:
+    get:
+      operationId: clusters.hosts.list
+      summary: List cluster hosts with system and network identity
+      x-sdkwork-pagination-mode: cursor
+      tags:
+      - cluster
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.cluster.read
+      x-sdkwork-owner: sdkwork-webserver
+      parameters:
+      - $ref: '#/components/parameters/PageSizeParam'
+      - $ref: '#/components/parameters/CursorParam'
+      - name: cluster_id
+        in: query
+        description: Filter by cluster uuid.
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        description: 'Filter by host status: 0=offline, 1=online, 2=deploying, 3=error, 4=maintenance.'
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 4
+      responses:
+        '200':
+          description: Cluster host list returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      additionalProperties: false
+                      required:
+                      - items
+                      - pageInfo
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/ClusterHostResponse'
+                        pageInfo:
+                          $ref: '#/components/schemas/PageInfo'
+  /backend/v3/api/clusters/hosts/{hostId}:
+    parameters:
+    - $ref: '#/components/parameters/ClusterHostIdParam'
+    get:
+      operationId: clusters.hosts.retrieve
+      summary: Retrieve a cluster host
+      tags:
+      - cluster
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.cluster.read
+      x-sdkwork-owner: sdkwork-webserver
+      responses:
+        '200':
+          description: Cluster host returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/ClusterHostResponse'
+    patch:
+      operationId: clusters.hosts.update
+      summary: Rename a host or reassign it to another cluster
+      tags:
+      - cluster
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.cluster.write
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-sdkwork-owner: sdkwork-webserver
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateClusterHostRequest'
+      responses:
+        '200':
+          description: Cluster host updated successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/ClusterHostResponse'
+    delete:
+      operationId: clusters.hosts.delete
+      summary: Remove an instance-free host from the cluster inventory
+      tags:
+      - cluster
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.cluster.write
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-sdkwork-rate-limit-tier: auth-critical
+      x-sdkwork-owner: sdkwork-webserver
+      responses:
+        '204':
+          description: Cluster host removed successfully.
+  /backend/v3/api/clusters/instances:
+    get:
+      operationId: clusters.instances.list
+      summary: List webserver process instances with liveness state
+      x-sdkwork-pagination-mode: cursor
+      tags:
+      - cluster
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.cluster.read
+      x-sdkwork-owner: sdkwork-webserver
+      parameters:
+      - $ref: '#/components/parameters/PageSizeParam'
+      - $ref: '#/components/parameters/CursorParam'
+      - name: cluster_id
+        in: query
+        description: Filter by cluster uuid.
+        schema:
+          type: string
+          format: uuid
+      - name: host_id
+        in: query
+        description: Filter by host uuid.
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        description: 'Filter by instance status: 0=offline, 1=online, 2=starting, 3=stopping, 4=error, 5=maintenance.'
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 5
+      - name: health_state
+        in: query
+        description: Filter by health state.
+        schema:
+          type: string
+          enum:
+          - HEALTHY
+          - DEGRADED
+          - UNHEALTHY
+          - UNKNOWN
+      responses:
+        '200':
+          description: Cluster instance list returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      additionalProperties: false
+                      required:
+                      - items
+                      - pageInfo
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/ClusterInstanceResponse'
+                        pageInfo:
+                          $ref: '#/components/schemas/PageInfo'
+  /backend/v3/api/clusters/instances/{instanceId}:
+    parameters:
+    - $ref: '#/components/parameters/ClusterInstanceIdParam'
+    get:
+      operationId: clusters.instances.retrieve
+      summary: Retrieve a webserver process instance
+      tags:
+      - cluster
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.cluster.read
+      x-sdkwork-owner: sdkwork-webserver
+      responses:
+        '200':
+          description: Cluster instance returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/ClusterInstanceResponse'
+    patch:
+      operationId: clusters.instances.update
+      summary: Update an instance display name, status, or advertised endpoint
+      tags:
+      - cluster
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.cluster.write
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-sdkwork-owner: sdkwork-webserver
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateClusterInstanceRequest'
+      responses:
+        '200':
+          description: Cluster instance updated successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/ClusterInstanceResponse'
+    delete:
+      operationId: clusters.instances.delete
+      summary: Unregister a webserver process instance
+      tags:
+      - cluster
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.cluster.write
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-sdkwork-rate-limit-tier: auth-critical
+      x-sdkwork-owner: sdkwork-webserver
+      responses:
+        '204':
+          description: Cluster instance unregistered successfully.
+  /backend/v3/api/clusters/events:
+    get:
+      operationId: clusters.events.list
+      summary: List cluster lifecycle events
+      x-sdkwork-pagination-mode: cursor
+      tags:
+      - cluster
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.cluster.read
+      x-sdkwork-owner: sdkwork-webserver
+      parameters:
+      - $ref: '#/components/parameters/PageSizeParam'
+      - $ref: '#/components/parameters/CursorParam'
+      - name: cluster_id
+        in: query
+        description: Filter by cluster uuid.
+        schema:
+          type: string
+          format: uuid
+      - name: severity
+        in: query
+        description: Filter by event severity.
+        schema:
+          type: string
+          enum:
+          - INFO
+          - WARNING
+          - ERROR
+      responses:
+        '200':
+          description: Cluster event list returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      additionalProperties: false
+                      required:
+                      - items
+                      - pageInfo
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/ClusterEventResponse'
+                        pageInfo:
+                          $ref: '#/components/schemas/PageInfo'
+  /backend/v3/api/clusters/overview:
+    get:
+      operationId: clusters.overview.retrieve
+      summary: Retrieve the cluster health overview for status polling
+      tags:
+      - cluster
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.cluster.read
+      x-sdkwork-owner: sdkwork-webserver
+      responses:
+        '200':
+          description: Cluster overview returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/ClusterOverviewResponse'
+  /backend/v3/api/clusters/instances/{instanceId}/heartbeats:
+    parameters:
+    - $ref: '#/components/parameters/ClusterInstanceIdParam'
+    get:
+      operationId: clusters.instances.heartbeats.list
+      summary: List one instance's stored heartbeat samples
+      x-sdkwork-pagination-mode: cursor
+      tags:
+      - cluster
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.cluster.read
+      x-sdkwork-owner: sdkwork-webserver
+      parameters:
+      - $ref: '#/components/parameters/PageSizeParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Heartbeat sample list returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      additionalProperties: false
+                      required:
+                      - items
+                      - pageInfo
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/ClusterHeartbeatSampleResponse'
+                        pageInfo:
+                          $ref: '#/components/schemas/PageInfo'
+  /backend/v3/api/clusters/messages:
+    post:
+      operationId: clusters.messages.create
+      summary: Enqueue a peer message to one instance or broadcast to online members
+      description: |-
+        Materializes one mailbox row per target member so every member claims
+        its own copy (at-most-once per member). A broadcast addresses every
+        ONLINE member of the cluster at enqueue time.
+      tags:
+      - cluster
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.cluster.write
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-sdkwork-rate-limit-tier: auth-critical
+      x-sdkwork-owner: sdkwork-webserver
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnqueueClusterPeerMessagesRequest'
+      responses:
+        '201':
+          description: Peer messages enqueued.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/EnqueueClusterPeerMessagesResponse'
 components:
   securitySchemes:
     AuthToken:
@@ -2727,7 +3433,92 @@ components:
         type: string
         minLength: 1
         maxLength: 512
+    ClusterIdParam:
+      name: clusterId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ClusterHostIdParam:
+      name: hostId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ClusterInstanceIdParam:
+      name: instanceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
   schemas:
+    ClusterHeartbeatSampleResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - status
+      - metrics
+      - reportedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: integer
+          minimum: 0
+          maximum: 5
+        latencyMs:
+          type: integer
+          minimum: 0
+        metrics:
+          type: object
+          description: Resource metrics snapshot captured at heartbeat time.
+        reportedAt:
+          type: string
+          format: date-time
+    EnqueueClusterPeerMessagesRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - clusterId
+      - messageType
+      properties:
+        clusterId:
+          type: string
+          format: uuid
+        toInstanceId:
+          type: string
+          format: uuid
+          description: Target instance; omitted broadcasts to every online member.
+        fromInstanceId:
+          type: string
+          format: uuid
+          description: Sender instance; omitted for control-plane-originated messages.
+        messageType:
+          type: string
+          minLength: 1
+          maxLength: 64
+        payload:
+          type: object
+          description: Message payload JSON; bounded to 16 KiB.
+        expiresInSeconds:
+          type: integer
+          minimum: 1
+          maximum: 86400
+          default: 3600
+    EnqueueClusterPeerMessagesResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - enqueued
+      properties:
+        enqueued:
+          $ref: '#/components/schemas/Int64String'
+          description: Rows materialized (one per target member).
     Int64String:
       type: string
       format: int64
@@ -3125,9 +3916,10 @@ components:
         hasSourceVersion:
           type: boolean
           description: |
-            该应用是否已有源码版本。由 application 列表/详情投影用一次查询算出
-            （`EXISTS` over `web_source_version`），调用方无需再逐行探测
-            `applications/{applicationId}/source_versions`。
+            Whether the application already has a source version. The application
+            list and detail projections derive it in a single `EXISTS` query over
+            `webserver_source_version`, so callers never probe
+            `applications/{applicationId}/source_versions` row by row.
         runtimeConfig:
           type: object
           additionalProperties: true
@@ -4501,7 +5293,6 @@ components:
           - build
           - package
           - start
-          - deploy
           - stop
           - restart
         label:
@@ -4535,10 +5326,34 @@ components:
         exitCode:
           type: integer
           nullable: true
+          description: Foreground runs only; absent when the run timed out.
+        timedOut:
+          type: boolean
         stdout:
           type: string
         stderr:
           type: string
+        stdoutTruncated:
+          type: boolean
+          description: True when stdout exceeded the capture cap and was truncated.
+        stderrTruncated:
+          type: boolean
+          description: True when stderr exceeded the capture cap and was truncated.
+        pid:
+          type: integer
+          description: Managed runs; the recorded (or restarted) process id.
+        pidFile:
+          type: string
+          description: Managed runs; path of the pid-file record.
+        logFile:
+          type: string
+          description: Managed runs; path of the append-only run log.
+        stopped:
+          type: boolean
+          description: Managed stops/restarts; false when no live process existed.
+        message:
+          type: string
+          description: Human-readable outcome for managed runs.
     AgentHeartbeatRequest:
       type: object
       additionalProperties: false
@@ -4942,6 +5757,387 @@ components:
         properties:
           data:
             $ref: '#/components/schemas/SdkWorkCommandData'
+    ClusterResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - name
+      - code
+      - status
+      - heartbeatIntervalSeconds
+      - offlineThresholdSeconds
+      - hostCount
+      - instanceCount
+      - onlineInstanceCount
+      - createdAt
+      - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 100
+        code:
+          type: string
+          maxLength: 64
+        description:
+          type: string
+          maxLength: 500
+        status:
+          type: integer
+          description: '0=inactive, 1=active'
+          minimum: 0
+          maximum: 1
+        heartbeatIntervalSeconds:
+          type: integer
+          minimum: 5
+          maximum: 600
+        offlineThresholdSeconds:
+          type: integer
+          minimum: 10
+          maximum: 3600
+        hostCount:
+          $ref: '#/components/schemas/Int64String'
+        instanceCount:
+          $ref: '#/components/schemas/Int64String'
+        onlineInstanceCount:
+          $ref: '#/components/schemas/Int64String'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreateClusterRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      - code
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        code:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '^[a-z0-9][a-z0-9._-]{0,63}$'
+        description:
+          type: string
+          maxLength: 500
+        heartbeatIntervalSeconds:
+          type: integer
+          minimum: 5
+          maximum: 600
+        offlineThresholdSeconds:
+          type: integer
+          minimum: 10
+          maximum: 3600
+    UpdateClusterRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        status:
+          type: integer
+          minimum: 0
+          maximum: 1
+        heartbeatIntervalSeconds:
+          type: integer
+          minimum: 5
+          maximum: 600
+        offlineThresholdSeconds:
+          type: integer
+          minimum: 10
+          maximum: 3600
+    ClusterHostResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - clusterId
+      - name
+      - hostname
+      - machineCode
+      - localIps
+      - macAddresses
+      - status
+      - instanceCount
+      - createdAt
+      - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        clusterId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 100
+        hostname:
+          type: string
+          maxLength: 255
+        machineCode:
+          type: string
+          maxLength: 128
+        osName:
+          type: string
+          maxLength: 100
+        osVersion:
+          type: string
+          maxLength: 100
+        kernelVersion:
+          type: string
+          maxLength: 100
+        arch:
+          type: string
+          maxLength: 32
+        cpuModel:
+          type: string
+          maxLength: 200
+        cpuCores:
+          type: integer
+          minimum: 0
+        memoryTotalMb:
+          $ref: '#/components/schemas/Int64String'
+        remoteIp:
+          type: string
+          maxLength: 64
+        localIps:
+          type: array
+          items:
+            type: string
+            maxLength: 64
+        macAddresses:
+          type: array
+          items:
+            type: string
+            maxLength: 64
+        daemonVersion:
+          type: string
+          maxLength: 64
+        status:
+          type: integer
+          description: '0=offline, 1=online, 2=deploying, 3=error, 4=maintenance'
+          minimum: 0
+          maximum: 4
+        lastHeartbeatAt:
+          type: string
+          format: date-time
+        instanceCount:
+          $ref: '#/components/schemas/Int64String'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    UpdateClusterHostRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        clusterId:
+          type: string
+          format: uuid
+    ClusterInstanceResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - clusterId
+      - hostId
+      - name
+      - role
+      - environment
+      - status
+      - healthState
+      - uptimeSeconds
+      - metrics
+      - createdAt
+      - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        clusterId:
+          type: string
+          format: uuid
+        hostId:
+          type: string
+          format: uuid
+        hostName:
+          type: string
+          maxLength: 100
+        name:
+          type: string
+          maxLength: 100
+        role:
+          type: string
+          enum:
+          - GATEWAY
+          - MANAGEMENT
+          - DATA_PLANE
+          - WORKER
+          - OTHER
+        environment:
+          type: string
+          enum:
+          - development
+          - test
+          - staging
+          - production
+        processPid:
+          type: integer
+          minimum: 1
+        processStartedAt:
+          type: string
+          format: date-time
+        bindHost:
+          type: string
+          maxLength: 64
+        bindPort:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        publicEndpoint:
+          type: string
+          maxLength: 255
+        buildVersion:
+          type: string
+          maxLength: 64
+        status:
+          type: integer
+          description: '0=offline, 1=online, 2=starting, 3=stopping, 4=error, 5=maintenance'
+          minimum: 0
+          maximum: 5
+        healthState:
+          type: string
+          enum:
+          - HEALTHY
+          - DEGRADED
+          - UNHEALTHY
+          - UNKNOWN
+        lastHeartbeatAt:
+          type: string
+          format: date-time
+        lastOnlineAt:
+          type: string
+          format: date-time
+        uptimeSeconds:
+          $ref: '#/components/schemas/Int64String'
+        metrics:
+          type: object
+          description: Latest resource metrics snapshot (CPU/memory/connections).
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    UpdateClusterInstanceRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        status:
+          type: integer
+          minimum: 0
+          maximum: 5
+        publicEndpoint:
+          type: string
+          minLength: 1
+          maxLength: 255
+    ClusterEventResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - clusterId
+      - eventType
+      - severity
+      - message
+      - detail
+      - occurredAt
+      - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        clusterId:
+          type: string
+          format: uuid
+        hostId:
+          type: string
+          format: uuid
+        instanceId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          maxLength: 64
+        severity:
+          type: string
+          enum:
+          - INFO
+          - WARNING
+          - ERROR
+        message:
+          type: string
+          maxLength: 500
+        detail:
+          type: object
+        occurredAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    ClusterOverviewResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - totalHosts
+      - onlineHosts
+      - totalInstances
+      - onlineInstances
+      - unhealthyInstances
+      - pendingPeerMessages
+      - generatedAt
+      properties:
+        totalHosts:
+          $ref: '#/components/schemas/Int64String'
+        onlineHosts:
+          $ref: '#/components/schemas/Int64String'
+        totalInstances:
+          $ref: '#/components/schemas/Int64String'
+        onlineInstances:
+          $ref: '#/components/schemas/Int64String'
+        unhealthyInstances:
+          $ref: '#/components/schemas/Int64String'
+        pendingPeerMessages:
+          $ref: '#/components/schemas/Int64String'
+        generatedAt:
+          type: string
+          format: date-time
+
   responses:
     BadRequest:
       description: Invalid request parameters.

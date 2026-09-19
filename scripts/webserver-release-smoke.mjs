@@ -44,7 +44,7 @@ const STANDALONE_SAME_ORIGIN_PATHS = Object.freeze({
   runtimeEnv: '/runtime-env.json',
   navigation: '/console/applications',
   openapi: '/openapi.json',
-  webApplications: '/app/v3/api/applications',
+  deployApps: '/app/v3/api/apps',
   iamSession: '/app/v3/api/auth/sessions/current',
   driveAssets: '/app/v3/api/assets',
   missingApi: '/app/v3/api/__sdkwork_release_smoke_missing__',
@@ -461,7 +461,7 @@ async function verifyStandaloneSameOriginIngress({
     assertContentType(openapi, 'application/json', 'standalone OpenAPI');
     const openapiDocument = JSON.parse(openapi.body);
     for (const ownerPath of [
-      STANDALONE_SAME_ORIGIN_PATHS.webApplications,
+      STANDALONE_SAME_ORIGIN_PATHS.deployApps,
       STANDALONE_SAME_ORIGIN_PATHS.iamSession,
       STANDALONE_SAME_ORIGIN_PATHS.driveAssets,
     ]) {
@@ -472,9 +472,12 @@ async function verifyStandaloneSameOriginIngress({
 
     for (const ownerRoute of [
       {
-        label: 'standalone unauthenticated Web applications',
-        path: STANDALONE_SAME_ORIGIN_PATHS.webApplications,
-        operationId: 'applications.list',
+        // The application lifecycle is deployments-owned now: the probe
+        // targets the same-origin dependency's own app-api route rather than
+        // the retired webserver `/app/v3/api/applications` surface.
+        label: 'standalone unauthenticated Deploy applications',
+        path: STANDALONE_SAME_ORIGIN_PATHS.deployApps,
+        operationId: 'apps.list',
       },
       {
         label: 'standalone unauthenticated IAM current session',

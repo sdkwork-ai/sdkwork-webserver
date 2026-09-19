@@ -172,8 +172,10 @@ fn weak_etag(metadata: &std::fs::Metadata) -> Option<String> {
 }
 
 /// RFC 9110 `If-None-Match`: any matching entity tag means the representation
-/// is unchanged. A `*` matches when the representation exists (it always does
-/// at this point). When the header is absent the check passes.
+/// is unchanged, so the request must not serve the body (the caller answers
+/// 304). A `*` matches when the representation exists (it always does at this
+/// point). `true` here means "serve the representation"; `false` means
+/// "not modified".
 fn if_none_match_passes(headers: &HeaderMap, etag: Option<&str>) -> bool {
     let Some(condition) = headers.get(header::IF_NONE_MATCH) else {
         return true;
@@ -187,10 +189,17 @@ fn if_none_match_passes(headers: &HeaderMap, etag: Option<&str>) -> bool {
     if condition.trim() == "*" {
         return false;
     }
-    // Tag list is comma-separated; weak comparison strips the W/ prefix.
-    condition.split(',').any(|candidate| {
-        candidate.trim() == etag || candidate.trim().strip_prefix("W/") == etag.strip_prefix("W/")
-    })
+    // Tag list is comma-separated; RFC 9110 weak comparison strips an
+    // optional W/ prefix from both sides before comparing opaque tags.
+    !condition
+        .split(',')
+        .any(|candidate| weak_tag_value(candidate) == weak_tag_value(etag))
+}
+
+/// Strip the optional RFC 9110 weakness prefix, returning the opaque tag.
+fn weak_tag_value(tag: &str) -> &str {
+    let trimmed = tag.trim();
+    trimmed.strip_prefix("W/").unwrap_or(trimmed)
 }
 
 fn if_modified_since_is_modified(headers: &HeaderMap, modified: Option<HttpDate>) -> bool {
@@ -282,6 +291,46 @@ mod tests {
             serve_opened_file(opened_file, &Method::GET, &headers)
                 .await
                 .status(),
+            StatusCode::NOT_MODIFIED
+        );
+    }
+
+    #[test]
+    fn if_none_match_pure_polarity() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::IF_NONE_MATCH,
+            HeaderValue::from_static("W/\"abc-1\""),
+        );
+        assert!(!if_none_match_passes(&headers, Some("W/\"abc-1\"")));
+        assert!(if_none_match_passes(&headers, Some("\"zzz-9\"")));
+        assert!(if_none_match_passes(&HeaderMap::new(), Some("W/\"abc-1\"")));
+    }
+
+    #[tokio::test]
+    async fn if_none_match_conditional_matrix() {
+        let temp = NamedTempFile::new().unwrap();
+        temp.as_file().write_all(b"0123456789").unwrap();
+        let etag = weak_etag(&temp.as_file().metadata().unwrap()).unwrap();
+        let echo = |tag: String| {
+            let opened_file = opened(&temp);
+            let mut headers = HeaderMap::new();
+            headers.insert(header::IF_NONE_MATCH, HeaderValue::from_str(&tag).unwrap());
+            async move { serve_opened_file(opened_file, &Method::GET, &headers).await }
+        };
+        // Echoing the served weak tag (and its weak-equivalent bare form)
+        // means the representation is unchanged → 304.
+        assert_eq!(echo(etag.clone()).await.status(), StatusCode::NOT_MODIFIED);
+        let bare = etag.trim_start_matches("W/").to_owned();
+        assert_eq!(echo(bare).await.status(), StatusCode::NOT_MODIFIED);
+        // A different tag must still serve the representation.
+        assert_eq!(
+            echo("\"deadbeef-1\"".to_owned()).await.status(),
+            StatusCode::OK
+        );
+        // `*` matches the existing representation → not modified.
+        assert_eq!(
+            echo("*".to_owned()).await.status(),
             StatusCode::NOT_MODIFIED
         );
     }

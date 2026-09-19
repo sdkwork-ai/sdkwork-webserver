@@ -73,7 +73,7 @@ async fn postgres_baseline_seed_and_drift_are_clean() {
     let application_type_columns: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM information_schema.columns \
          WHERE table_schema = current_schema() \
-           AND table_name = 'web_site' AND column_name = 'application_type'",
+           AND table_name = 'webserver_site' AND column_name = 'application_type'",
     )
     .fetch_one(postgres)
     .await
@@ -83,7 +83,7 @@ async fn postgres_baseline_seed_and_drift_are_clean() {
     let runtime_tables: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM information_schema.tables \
          WHERE table_schema = current_schema() \
-           AND table_name IN ('web_runtime_assignment', 'web_runtime_observation')",
+           AND table_name IN ('webserver_runtime_assignment', 'webserver_runtime_observation')",
     )
     .fetch_one(postgres)
     .await

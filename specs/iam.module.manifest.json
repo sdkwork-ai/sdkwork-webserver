@@ -18,24 +18,6 @@
         "replacementCode": null
       },
       {
-        "code": "web.applications.read",
-        "name": "Read sites and applications",
-        "resource": "applications",
-        "action": "read",
-        "status": "active",
-        "since": "1.0.0",
-        "replacementCode": null
-      },
-      {
-        "code": "web.applications.write",
-        "name": "Manage sites and applications",
-        "resource": "applications",
-        "action": "write",
-        "status": "active",
-        "since": "1.0.0",
-        "replacementCode": null
-      },
-      {
         "code": "web.certificates.read",
         "name": "Read certificates",
         "resource": "certificates",
@@ -151,6 +133,24 @@
         "status": "active",
         "since": "1.0.0",
         "replacementCode": null
+      },
+      {
+        "code": "web.cluster.read",
+        "name": "Read the Web Server cluster inventory and status",
+        "resource": "cluster",
+        "action": "read",
+        "status": "active",
+        "since": "1.1.0",
+        "replacementCode": null
+      },
+      {
+        "code": "web.cluster.write",
+        "name": "Manage the Web Server cluster, hosts, and instances",
+        "resource": "cluster",
+        "action": "write",
+        "status": "active",
+        "since": "1.1.0",
+        "replacementCode": null
       }
     ],
     "openapiAuthorities": []
@@ -161,7 +161,6 @@
       {
         "roleCode": "app_user",
         "patterns": [
-          "web.applications.*",
           "web.certificates.*"
         ]
       },

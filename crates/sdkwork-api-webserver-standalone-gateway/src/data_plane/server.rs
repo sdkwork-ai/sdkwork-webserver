@@ -695,6 +695,7 @@ where
 {
     let mut connections = JoinSet::new();
     let proxy_protocol = Arc::new(proxy_protocol);
+    let mut accept_policy = super::accept::AcceptRetryPolicy::new();
     loop {
         tokio::select! {
             biased;
@@ -705,7 +706,22 @@ where
                 }
             }
             accepted = listener.accept() => {
-                let (stream, peer) = accepted?;
+                let (stream, peer) = match accepted {
+                    Ok(accepted) => {
+                        accept_policy.on_success();
+                        accepted
+                    }
+                    Err(error) => {
+                        // Transient accept failures (fd exhaustion, aborted
+                        // connections) must not stop a production listener;
+                        // only a broken listener is fatal.
+                        if accept_policy.on_error(&error) {
+                            tokio::time::sleep(super::accept::ACCEPT_RETRY_PAUSE).await;
+                            continue;
+                        }
+                        return Err(error);
+                    }
+                };
                 metrics.record_connection_accepted();
                 if resource_pressure.is_pressured() {
                     metrics.record_connection_rejection(ConnectionRejection::ResourcePressure);

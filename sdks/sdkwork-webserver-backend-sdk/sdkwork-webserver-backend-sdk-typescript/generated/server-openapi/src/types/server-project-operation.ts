@@ -1,6 +1,6 @@
 export interface ServerProjectOperation {
   id: string;
-  kind: 'build' | 'package' | 'start' | 'deploy' | 'stop' | 'restart';
+  kind: 'build' | 'package' | 'start' | 'stop' | 'restart';
   label: string;
   /** IAM permission required to invoke the operation. */
   permission: string;

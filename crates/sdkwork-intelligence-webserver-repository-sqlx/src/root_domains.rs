@@ -28,7 +28,7 @@ impl WebRepository {
             .map(|value| format!("%{}%", value.to_ascii_lowercase()));
 
         let total: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM web_root_domain r
+            "SELECT COUNT(*) FROM webserver_root_domain r
              WHERE r.tenant_id = $1 AND r.deleted_at IS NULL
                AND ($2 IS NULL OR r.status = $2)
                AND ($3 IS NULL OR LOWER(r.hostname) LIKE $3)",
@@ -38,46 +38,46 @@ impl WebRepository {
         .bind(keyword.as_deref())
         .fetch_one(&self.pool)
         .await
-        .map_err(|error| store_error("count web_root_domain", error))?;
+        .map_err(|error| store_error("count webserver_root_domain", error))?;
 
         let rows = sqlx::query(
+            // One grouped LATERAL pass per page row replaces five separate
+            // correlated subqueries per row. Every aggregate counts DISTINCT
+            // domain ids so the site-binding/listener joins cannot multiply
+            // the counts; only the active-deployment filter keeps a per-row
+            // latest-deployment lookup, indexed by (tenant_id, site_id).
             "SELECT r.uuid, r.hostname, r.status,
-                    (SELECT COUNT(*) FROM web_domain d
-                     WHERE d.tenant_id = r.tenant_id AND d.root_domain_id = r.id
-                       AND d.deleted_at IS NULL) AS subdomain_count,
-                    (SELECT COUNT(DISTINCT d.id) FROM web_domain d
-                     INNER JOIN web_site_binding b ON b.tenant_id = d.tenant_id
-                         AND b.domain_id = d.id AND b.deleted_at IS NULL
-                         AND b.status <> 'ARCHIVED'
-                     WHERE d.tenant_id = r.tenant_id AND d.root_domain_id = r.id
-                       AND d.deleted_at IS NULL)
-                        AS bound_subdomain_count,
-                    (SELECT COUNT(*) FROM web_domain d
-                     WHERE d.tenant_id = r.tenant_id AND d.root_domain_id = r.id
-                       AND d.verification_status = 'VERIFIED' AND d.deleted_at IS NULL)
-                        AS verified_subdomain_count,
-                    (SELECT COUNT(DISTINCT d.id) FROM web_domain d
-                     INNER JOIN web_site_binding b ON b.tenant_id = d.tenant_id
-                         AND b.domain_id = d.id AND b.deleted_at IS NULL
-                     INNER JOIN web_listener_certificate_binding l ON l.tenant_id = b.tenant_id
-                         AND l.site_binding_id = b.id AND l.status = 'ACTIVE'
-                         AND l.deleted_at IS NULL
-                     WHERE d.tenant_id = r.tenant_id AND d.root_domain_id = r.id
-                       AND d.deleted_at IS NULL)
-                        AS https_subdomain_count,
-                    (SELECT COUNT(DISTINCT d.id) FROM web_domain d
-                     INNER JOIN web_site_binding b ON b.tenant_id = d.tenant_id
-                         AND b.domain_id = d.id AND b.status = 'ACTIVE'
-                         AND b.deleted_at IS NULL
-                     WHERE d.tenant_id = r.tenant_id AND d.root_domain_id = r.id
-                       AND d.deleted_at IS NULL
-                       AND (SELECT dep.status FROM web_deployment dep
-                            WHERE dep.tenant_id = r.tenant_id AND dep.site_id = b.site_id
-                            ORDER BY dep.created_at DESC, dep.id DESC LIMIT 1) = 2)
-                        AS active_deployment_count,
+                    COALESCE(agg.subdomain_count, 0) AS subdomain_count,
+                    COALESCE(agg.bound_subdomain_count, 0) AS bound_subdomain_count,
+                    COALESCE(agg.verified_subdomain_count, 0) AS verified_subdomain_count,
+                    COALESCE(agg.https_subdomain_count, 0) AS https_subdomain_count,
+                    COALESCE(agg.active_deployment_count, 0) AS active_deployment_count,
                     CAST(r.created_at AS TEXT) AS created_at,
                     CAST(r.updated_at AS TEXT) AS updated_at
-             FROM web_root_domain r
+             FROM webserver_root_domain r
+             LEFT JOIN LATERAL (
+                 SELECT COUNT(DISTINCT d.id) AS subdomain_count,
+                        COUNT(DISTINCT d.id) FILTER (WHERE d.verification_status = 'VERIFIED')
+                            AS verified_subdomain_count,
+                        COUNT(DISTINCT d.id) FILTER (WHERE b.id IS NOT NULL AND b.status <> 'ARCHIVED')
+                            AS bound_subdomain_count,
+                        COUNT(DISTINCT d.id) FILTER (WHERE l.id IS NOT NULL)
+                            AS https_subdomain_count,
+                        COUNT(DISTINCT d.id) FILTER (WHERE b.id IS NOT NULL AND b.status = 'ACTIVE'
+                            AND (SELECT dep.status FROM webserver_deployment dep
+                                 WHERE dep.tenant_id = d.tenant_id AND dep.site_id = b.site_id
+                                 ORDER BY dep.created_at DESC, dep.id DESC LIMIT 1) = 2)
+                            AS active_deployment_count
+                 FROM webserver_domain d
+                 LEFT JOIN webserver_site_binding b
+                     ON b.tenant_id = d.tenant_id AND b.domain_id = d.id
+                     AND b.deleted_at IS NULL
+                 LEFT JOIN webserver_listener_certificate_binding l
+                     ON l.tenant_id = b.tenant_id AND l.site_binding_id = b.id
+                     AND l.status = 'ACTIVE' AND l.deleted_at IS NULL
+                 WHERE d.tenant_id = r.tenant_id AND d.root_domain_id = r.id
+                   AND d.deleted_at IS NULL
+             ) agg ON TRUE
              WHERE r.tenant_id = $1 AND r.deleted_at IS NULL
                AND ($2 IS NULL OR r.status = $2)
                AND ($3 IS NULL OR LOWER(r.hostname) LIKE $3)
@@ -90,14 +90,14 @@ impl WebRepository {
         .bind(offset)
         .fetch_all(&self.pool)
         .await
-        .map_err(|error| store_error("list web_root_domain", error))?;
+        .map_err(|error| store_error("list webserver_root_domain", error))?;
 
         let items = rows
             .iter()
             .map(map_root_domain_row)
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| {
-                WebServiceError::Internal(format!("map web_root_domain row: {error}"))
+                WebServiceError::Internal(format!("map webserver_root_domain row: {error}"))
             })?;
 
         Ok(RootDomainPage { items, total })
@@ -114,7 +114,7 @@ impl WebRepository {
 
         let now_expression = instant_write_expression("$6");
         let sql = format!(
-            "INSERT INTO web_root_domain (
+            "INSERT INTO webserver_root_domain (
                 id, uuid, tenant_id, hostname, status, metadata, created_at, updated_at, version
              ) VALUES ($1, $2, $3, $4, $5, '{{}}', {now_expression}, {now_expression}, 0)"
         );
@@ -127,7 +127,7 @@ impl WebRepository {
             .bind(&now)
             .execute(&self.pool)
             .await
-            .map_err(|error| store_error("insert web_root_domain", error))?;
+            .map_err(|error| store_error("insert webserver_root_domain", error))?;
 
         self.retrieve_root_domain_repo(tenant_id, &uuid).await
     }
@@ -139,53 +139,53 @@ impl WebRepository {
     ) -> WebServiceResult<RootDomainResponse> {
         let row = sqlx::query(
             "SELECT r.uuid, r.hostname, r.status,
-                    (SELECT COUNT(*) FROM web_domain d
+                    (SELECT COUNT(*) FROM webserver_domain d
                      WHERE d.tenant_id = r.tenant_id AND d.root_domain_id = r.id
                        AND d.deleted_at IS NULL) AS subdomain_count,
-                    (SELECT COUNT(DISTINCT d.id) FROM web_domain d
-                     INNER JOIN web_site_binding b ON b.tenant_id = d.tenant_id
+                    (SELECT COUNT(DISTINCT d.id) FROM webserver_domain d
+                     INNER JOIN webserver_site_binding b ON b.tenant_id = d.tenant_id
                          AND b.domain_id = d.id AND b.deleted_at IS NULL
                          AND b.status <> 'ARCHIVED'
                      WHERE d.tenant_id = r.tenant_id AND d.root_domain_id = r.id
                        AND d.deleted_at IS NULL)
                         AS bound_subdomain_count,
-                    (SELECT COUNT(*) FROM web_domain d
+                    (SELECT COUNT(*) FROM webserver_domain d
                      WHERE d.tenant_id = r.tenant_id AND d.root_domain_id = r.id
                        AND d.verification_status = 'VERIFIED' AND d.deleted_at IS NULL)
                         AS verified_subdomain_count,
-                    (SELECT COUNT(DISTINCT d.id) FROM web_domain d
-                     INNER JOIN web_site_binding b ON b.tenant_id = d.tenant_id
+                    (SELECT COUNT(DISTINCT d.id) FROM webserver_domain d
+                     INNER JOIN webserver_site_binding b ON b.tenant_id = d.tenant_id
                          AND b.domain_id = d.id AND b.deleted_at IS NULL
-                     INNER JOIN web_listener_certificate_binding l ON l.tenant_id = b.tenant_id
+                     INNER JOIN webserver_listener_certificate_binding l ON l.tenant_id = b.tenant_id
                          AND l.site_binding_id = b.id AND l.status = 'ACTIVE'
                          AND l.deleted_at IS NULL
                      WHERE d.tenant_id = r.tenant_id AND d.root_domain_id = r.id
                        AND d.deleted_at IS NULL)
                         AS https_subdomain_count,
-                    (SELECT COUNT(DISTINCT d.id) FROM web_domain d
-                     INNER JOIN web_site_binding b ON b.tenant_id = d.tenant_id
+                    (SELECT COUNT(DISTINCT d.id) FROM webserver_domain d
+                     INNER JOIN webserver_site_binding b ON b.tenant_id = d.tenant_id
                          AND b.domain_id = d.id AND b.status = 'ACTIVE'
                          AND b.deleted_at IS NULL
                      WHERE d.tenant_id = r.tenant_id AND d.root_domain_id = r.id
                        AND d.deleted_at IS NULL
-                       AND (SELECT dep.status FROM web_deployment dep
+                       AND (SELECT dep.status FROM webserver_deployment dep
                             WHERE dep.tenant_id = r.tenant_id AND dep.site_id = b.site_id
                             ORDER BY dep.created_at DESC, dep.id DESC LIMIT 1) = 2)
                         AS active_deployment_count,
                     CAST(r.created_at AS TEXT) AS created_at,
                     CAST(r.updated_at AS TEXT) AS updated_at
-             FROM web_root_domain r
+             FROM webserver_root_domain r
              WHERE r.tenant_id = $1 AND r.uuid = $2 AND r.deleted_at IS NULL",
         )
         .bind(tenant_id)
         .bind(root_domain_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("retrieve web_root_domain", error))?
+        .map_err(|error| store_error("retrieve webserver_root_domain", error))?
         .ok_or_else(|| WebServiceError::not_found("root domain not found"))?;
 
         map_root_domain_row(&row)
-            .map_err(|error| WebServiceError::Internal(format!("map web_root_domain: {error}")))
+            .map_err(|error| WebServiceError::Internal(format!("map webserver_root_domain: {error}")))
     }
 
     pub(super) async fn delete_root_domain_repo(
@@ -195,21 +195,21 @@ impl WebRepository {
     ) -> WebServiceResult<()> {
         let row = sqlx::query(
             "SELECT r.id,
-                    (SELECT COUNT(*) FROM web_domain d
+                    (SELECT COUNT(*) FROM webserver_domain d
                      WHERE d.tenant_id = r.tenant_id AND d.root_domain_id = r.id
                        AND d.deleted_at IS NULL) AS subdomain_count
-             FROM web_root_domain r
+             FROM webserver_root_domain r
              WHERE r.tenant_id = $1 AND r.uuid = $2 AND r.deleted_at IS NULL",
         )
         .bind(tenant_id)
         .bind(root_domain_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("load web_root_domain delete state", error))?
+        .map_err(|error| store_error("load webserver_root_domain delete state", error))?
         .ok_or_else(|| WebServiceError::not_found("root domain not found"))?;
         let subdomain_count: i64 = row
             .try_get("subdomain_count")
-            .map_err(|error| store_error("map web_root_domain child count", error))?;
+            .map_err(|error| store_error("map webserver_root_domain child count", error))?;
         if subdomain_count > 0 {
             return Err(WebServiceError::conflict(
                 "root domain hostnames must be removed before deletion",
@@ -220,7 +220,7 @@ impl WebRepository {
 
         let now_expression = instant_write_expression("$3");
         let sql = format!(
-            "UPDATE web_root_domain
+            "UPDATE webserver_root_domain
              SET deleted_at = {now_expression}, updated_at = {now_expression},
                  version = version + 1
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL"
@@ -231,7 +231,7 @@ impl WebRepository {
             .bind(&now)
             .execute(&self.pool)
             .await
-            .map_err(|error| store_error("delete web_root_domain", error))?;
+            .map_err(|error| store_error("delete webserver_root_domain", error))?;
         if result.rows_affected() == 0 {
             return Err(WebServiceError::not_found("root domain not found"));
         }
@@ -250,7 +250,7 @@ impl WebRepository {
             .await?;
         let (_page, page_size, offset) = pagination(page, page_size)?;
         let total: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM web_domain
+            "SELECT COUNT(*) FROM webserver_domain
              WHERE tenant_id = $1 AND root_domain_id = $2 AND deleted_at IS NULL",
         )
         .bind(tenant_id)
@@ -288,21 +288,21 @@ impl WebRepository {
         request: &CreateRootDomainHostnameRequest,
     ) -> WebServiceResult<DomainResponse> {
         let root = sqlx::query(
-            "SELECT id, hostname FROM web_root_domain
+            "SELECT id, hostname FROM webserver_root_domain
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
         )
         .bind(tenant_id)
         .bind(root_domain_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("load web_root_domain for hostname", error))?
+        .map_err(|error| store_error("load webserver_root_domain for hostname", error))?
         .ok_or_else(|| WebServiceError::not_found("root domain not found"))?;
         let root_internal_id: i64 = root
             .try_get("id")
-            .map_err(|error| store_error("map web_root_domain id", error))?;
+            .map_err(|error| store_error("map webserver_root_domain id", error))?;
         let root_hostname: String = root
             .try_get("hostname")
-            .map_err(|error| store_error("map web_root_domain hostname", error))?;
+            .map_err(|error| store_error("map webserver_root_domain hostname", error))?;
         let hostname = if request.record_name == "@" {
             root_hostname
         } else {
@@ -344,7 +344,7 @@ impl WebRepository {
             // Serialize primary binding creation on the site row so concurrent
             // primary hostnames cannot both pass the single-primary check.
             let locked = sqlx::query(
-                "UPDATE web_site SET version = version
+                "UPDATE webserver_site SET version = version
                  WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL",
             )
             .bind(tenant_id)
@@ -357,7 +357,7 @@ impl WebRepository {
             }
             let clear_time = instant_write_expression("$3");
             let clear_sql = format!(
-                "UPDATE web_site_binding SET is_primary = FALSE, updated_at = {clear_time},
+                "UPDATE webserver_site_binding SET is_primary = FALSE, updated_at = {clear_time},
                         version = version + 1
                  WHERE tenant_id = $1 AND site_id = $2 AND environment = 'production'
                    AND deleted_at IS NULL"
@@ -373,7 +373,7 @@ impl WebRepository {
 
         let insert_time = instant_write_expression("$9");
         let insert_sql = format!(
-            "INSERT INTO web_domain (
+            "INSERT INTO webserver_domain (
                 id, uuid, tenant_id, user_id, root_domain_id, hostname, hostname_type,
                 verification_status, status, metadata,
                 created_at, updated_at, version
@@ -401,7 +401,7 @@ impl WebRepository {
             let binding_uuid = new_uuid();
             let binding_time = instant_write_expression("$7");
             let binding_sql = format!(
-                "INSERT INTO web_site_binding (
+                "INSERT INTO webserver_site_binding (
                     id, uuid, tenant_id, site_id, domain_id, environment, path_prefix,
                     action_type, is_primary, status, created_at, updated_at, version
                  ) VALUES (
@@ -426,7 +426,7 @@ impl WebRepository {
                 let policy_uuid = new_uuid();
                 let policy_time = instant_write_expression("$6");
                 let policy_sql = format!(
-                    "INSERT INTO web_tls_policy (
+                    "INSERT INTO webserver_tls_policy (
                         id, uuid, tenant_id, site_binding_id, certificate_source,
                         created_at, updated_at, version
                      ) VALUES ($1, $2, $3, $4, $5, {policy_time}, {policy_time}, 0)"
@@ -484,14 +484,14 @@ impl WebRepository {
         root_domain_id: &str,
     ) -> WebServiceResult<i64> {
         sqlx::query_scalar(
-            "SELECT id FROM web_root_domain
+            "SELECT id FROM webserver_root_domain
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
         )
         .bind(tenant_id)
         .bind(root_domain_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("resolve web_root_domain id", error))?
+        .map_err(|error| store_error("resolve webserver_root_domain id", error))?
         .ok_or_else(|| WebServiceError::not_found("root domain not found"))
     }
 }
@@ -500,7 +500,7 @@ fn root_domain_hostname_select(predicate: &str) -> String {
     format!(
         "SELECT d.uuid, d.hostname, r.uuid AS root_domain_id, r.hostname AS root_hostname,
                 s.uuid AS application_id, s.name AS application_name,
-                (SELECT COUNT(*) FROM web_certificate_identifier ci
+                (SELECT COUNT(*) FROM webserver_certificate_identifier ci
                  WHERE ci.tenant_id = d.tenant_id AND ci.domain_id = d.id)
                     AS certificate_count,
                 COALESCE(b.is_primary, FALSE) AS is_primary,
@@ -521,21 +521,21 @@ fn root_domain_hostname_select(predicate: &str) -> String {
                 CAST(latest.created_at AS TEXT) AS latest_deployment_created_at,
                 CAST(d.created_at AS TEXT) AS created_at,
                 CAST(d.updated_at AS TEXT) AS updated_at
-         FROM web_domain d
-         INNER JOIN web_root_domain r ON r.id = d.root_domain_id
+         FROM webserver_domain d
+         INNER JOIN webserver_root_domain r ON r.id = d.root_domain_id
          LEFT JOIN LATERAL (
-             SELECT candidate.* FROM web_site_binding candidate
+             SELECT candidate.* FROM webserver_site_binding candidate
              WHERE candidate.tenant_id = d.tenant_id AND candidate.domain_id = d.id
                AND candidate.environment = 'production' AND candidate.deleted_at IS NULL
                AND candidate.status <> 'ARCHIVED'
              ORDER BY (candidate.status = 'ACTIVE') DESC, candidate.updated_at DESC, candidate.id DESC
              LIMIT 1
          ) b ON TRUE
-         LEFT JOIN web_site s ON s.id = b.site_id
-         LEFT JOIN web_tls_policy p ON p.tenant_id = b.tenant_id
+         LEFT JOIN webserver_site s ON s.id = b.site_id
+         LEFT JOIN webserver_tls_policy p ON p.tenant_id = b.tenant_id
              AND p.site_binding_id = b.id AND p.status = 'ACTIVE' AND p.deleted_at IS NULL
-         LEFT JOIN web_deployment latest ON latest.id = (
-             SELECT dep.id FROM web_deployment dep
+         LEFT JOIN webserver_deployment latest ON latest.id = (
+             SELECT dep.id FROM webserver_deployment dep
              WHERE dep.tenant_id = d.tenant_id AND dep.site_id = b.site_id
              ORDER BY dep.created_at DESC, dep.id DESC LIMIT 1
          )

@@ -12,21 +12,30 @@
 //!   `sdkwork-workspace`, `generic`).
 //! - **File reading** bounded by a configured maximum content size.
 //! - **Project operation mapping** that turns a classified project root into
-//!   an executable command (build / package / start / deploy / stop /
-//!   restart), gated by IAM permission metadata.
+//!   an executable operation (build / package / start / stop / restart),
+//!   gated by IAM permission metadata. Foreground operations run under a
+//!   hard timeout with capped output capture; start/stop/restart manage a
+//!   single per-project process through a pid file. Deployment is not a
+//!   shell operation (PRD-FR-026 command plane).
 //!
 //! The service is intentionally transport-agnostic: HTTP route handlers in
 //! `sdkwork-routes-*` and the frontend `ServerFilesClient` share these types.
 
+mod operation_runtime;
 mod operations;
 mod path_security;
 mod project;
 mod service;
 mod startup_clone;
 
+pub use operation_runtime::{
+    run_foreground, start_managed, stop_managed, ForegroundRunOutcome, ManagedStartOutcome,
+    ManagedStopOutcome, OperationRunError, MANAGED_STOP_TIMEOUT, MAXIMUM_CAPTURED_OUTPUT_BYTES,
+    RUN_DIRECTORY_NAME,
+};
 pub use operations::{
-    command_for, operations_for, ProjectOperation, ProjectOperationCommand, ProjectOperationKind,
-    ServerProjectOperations,
+    execution_for, operations_for, OperationExecution, ProjectOperation, ProjectOperationCommand,
+    ProjectOperationKind, ServerProjectOperations, MANAGED_PROCESS_SLOT,
 };
 pub use path_security::{
     display_path, is_sensitive_file_name, resolve_contained_path, validate_allowed_root,

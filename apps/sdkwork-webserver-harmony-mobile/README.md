@@ -21,15 +21,15 @@ root can produce a signed HAP. They are declared, not worked around.
    a command that cannot execute would be a false signal (`PNPM_SCRIPT_SPEC.md`).
 2. **ArkTS SDK adaptation.** `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md` §6 requires
    Harmony packages to consume `/app/v3/api` through generated ArkTS/TypeScript app
-   SDK clients *adapted for the Harmony runtime*. The workspace generates
-   `typescript` and `flutter` targets for `sdkwork-webserver-app-sdk`; `-dart` is
-   declared but its `generated/` directory is empty, and **no ArkTS target exists
-   for any app SDK family**. `core` therefore declares the port contract
-   (`sdk/WebserverAppSdkClient.ets`) and the adapter seam, and does not fabricate a
+   SDK clients *adapted for the Harmony runtime*. **No ArkTS target exists for any
+   app SDK family**, and the two families this root owns
+   (`sdkwork-deployments-app-sdk`, `sdkwork-drive-app-sdk`) are TypeScript-only.
+   `core` therefore declares the `deploy_app` port contract
+   (`sdk/DeployAppSdkPort.ets`) and the adapter seam, and does not fabricate a
    vendored transport. A port built without an injected transport reports
    `available === false` and its readers reject with
-   `WebserverAppSdkUnavailableError`, so the screen shows its error state rather
-   than claiming the tenant has no applications.
+   `WebserverDeployAppSdkUnavailableError`, so the screen shows its error state
+   rather than claiming the tenant has no applications.
 3. **Runtime config projection.** `entry/src/main/ets/bootstrap/Runtime.ets` fails
    fast until `config/app/runtime-env.<profileId>.json` is projected into the HAP
    as an ArkTS resource module. Falling back to a hand-written host is exactly the

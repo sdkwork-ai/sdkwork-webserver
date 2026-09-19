@@ -26,7 +26,7 @@ var client = new SdkworkBackendClient(config);
 client.SetAuthToken("your-auth-token");
 client.SetAccessToken("your-access-token");
 
-var result = await client.Nginx.StatusRetrieveAsync();
+var result = await client.Cluster.ClustersOverviewRetrieveAsync();
 Console.WriteLine(result);
 ```
 
@@ -63,6 +63,7 @@ client.SetHeader("X-Custom-Header", "value");
 - `client.WebserverConfig` - webserver_config API
 - `client.Agent` - agent API
 - `client.Audit` - audit API
+- `client.Cluster` - cluster API
 
 ## Usage Examples
 
@@ -233,12 +234,20 @@ var result = await client.Audit.LogsListAsync(query);
 Console.WriteLine(result);
 ```
 
+### cluster
+
+```csharp
+// Retrieve the cluster health overview for status polling
+var result = await client.Cluster.ClustersOverviewRetrieveAsync();
+Console.WriteLine(result);
+```
+
 ## Error Handling
 
 ```csharp
 try
 {
-    await client.Nginx.StatusRetrieveAsync();
+    await client.Cluster.ClustersOverviewRetrieveAsync();
 }
 catch (HttpRequestException ex)
 {

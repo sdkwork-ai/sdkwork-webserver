@@ -1,4 +1,4 @@
-//! `web_resolution_cache` persistence for the multi-layer resolution cache.
+//! `webserver_resolution_cache` persistence for the multi-layer resolution cache.
 //!
 //! The deploy control plane (`sdkwork-deployments`) seeds and maintains
 //! domain/IP inventory in this table; the data plane reads it as the
@@ -28,7 +28,7 @@ impl ResolutionDatabase for SqlxResolutionCache {
         let pool = self.pool.as_postgres()?;
         let row = sqlx::query_as::<_, (String, String, bool, chrono::DateTime<chrono::Utc>)>(
             "SELECT domain, addresses::text, negative, expires_at \
-             FROM web_resolution_cache \
+             FROM webserver_resolution_cache \
              WHERE domain = $1 AND expires_at > now()",
         )
         .bind(domain)
@@ -64,7 +64,7 @@ impl ResolutionDatabase for SqlxResolutionCache {
             return;
         };
         let _ = sqlx::query(
-            "INSERT INTO web_resolution_cache (domain, addresses, negative, expires_at, updated_at) \
+            "INSERT INTO webserver_resolution_cache (domain, addresses, negative, expires_at, updated_at) \
              VALUES ($1, $2, $3, $4, now()) \
              ON CONFLICT (domain) DO UPDATE SET \
                addresses = EXCLUDED.addresses, \

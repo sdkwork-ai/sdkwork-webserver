@@ -57,7 +57,7 @@ impl WebRepository {
         let domains = sqlx::query(
             "SELECT d.id, d.user_id, d.hostname, d.hostname_type, requested.position
              FROM UNNEST($2::text[]) WITH ORDINALITY requested(uuid, position)
-             INNER JOIN web_domain d ON d.tenant_id = $1 AND d.uuid = requested.uuid
+             INNER JOIN webserver_domain d ON d.tenant_id = $1 AND d.uuid = requested.uuid
              WHERE d.deleted_at IS NULL
                AND d.verification_status = 'VERIFIED'
                AND ($3 IS NULL OR d.user_id = $3)
@@ -92,7 +92,7 @@ impl WebRepository {
         let certificate_internal_id = next_id(self.id_generator())?;
         let certificate_uuid = new_uuid();
         sqlx::query(
-            "INSERT INTO web_certificate (
+            "INSERT INTO webserver_certificate (
                 id, uuid, tenant_id, user_id, cert_name, cert_type, ca_profile,
                 preferred_key_algorithm, auto_renew, renewal_status, status, metadata,
                 created_at, updated_at, version
@@ -109,7 +109,7 @@ impl WebRepository {
         .bind(request.auto_renew)
         .execute(&mut *tx)
         .await
-        .map_err(|error| store_error("insert pending web_certificate", error))?;
+        .map_err(|error| store_error("insert pending webserver_certificate", error))?;
 
         for (position, domain) in domains.iter().enumerate() {
             let domain_id: i64 = domain
@@ -122,7 +122,7 @@ impl WebRepository {
                 .try_get("hostname_type")
                 .map_err(|error| store_error("map certificate hostname type", error))?;
             sqlx::query(
-                "INSERT INTO web_certificate_identifier (
+                "INSERT INTO webserver_certificate_identifier (
                     id, uuid, tenant_id, certificate_id, domain_id, identifier_type,
                     hostname, position, created_at
                  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())",
@@ -142,7 +142,7 @@ impl WebRepository {
 
         let operation_uuid = new_uuid();
         let insert_operation = sqlx::query(
-            "INSERT INTO web_certificate_operation (
+            "INSERT INTO webserver_certificate_operation (
                 id, uuid, tenant_id, certificate_id, requested_by, operation_type, status,
                 attempt_count, max_attempts, next_attempt_at, fencing_token, failure_code,
                 idempotency_key_hash, request_sha256, created_at, updated_at
@@ -204,7 +204,7 @@ impl WebRepository {
             .map_err(|error| store_error("begin certificate renewal operation", error))?;
         let certificate = sqlx::query(
             "SELECT id, cert_type, current_version_id
-             FROM web_certificate
+             FROM webserver_certificate
              WHERE tenant_id = $1 AND uuid = $2 AND status = 1 AND deleted_at IS NULL
              FOR UPDATE",
         )
@@ -253,7 +253,7 @@ impl WebRepository {
 
         let operation_uuid = new_uuid();
         sqlx::query(
-            "INSERT INTO web_certificate_operation (
+            "INSERT INTO webserver_certificate_operation (
                 id, uuid, tenant_id, certificate_id, requested_by, operation_type, status,
                 attempt_count, max_attempts, next_attempt_at, fencing_token, failure_code,
                 idempotency_key_hash, request_sha256, created_at, updated_at
@@ -272,7 +272,7 @@ impl WebRepository {
         .await
         .map_err(|error| store_error("insert certificate renewal operation", error))?;
         sqlx::query(
-            "UPDATE web_certificate
+            "UPDATE webserver_certificate
              SET renewal_status = 2, metadata = metadata - 'certificateOperationFailureCode', updated_at = NOW(), version = version + 1
              WHERE tenant_id = $1 AND id = $2",
         )
@@ -300,8 +300,8 @@ impl WebRepository {
                     operation.failure_code, CAST(operation.created_at AS TEXT) AS created_at,
                     CAST(operation.updated_at AS TEXT) AS updated_at,
                     CAST(operation.completed_at AS TEXT) AS completed_at
-             FROM web_certificate_operation operation
-             INNER JOIN web_certificate certificate
+             FROM webserver_certificate_operation operation
+             INNER JOIN webserver_certificate certificate
                ON certificate.tenant_id = operation.tenant_id
               AND certificate.id = operation.certificate_id
              WHERE operation.tenant_id = $1 AND operation.uuid = $2
@@ -332,8 +332,8 @@ impl WebRepository {
         let candidates = sqlx::query(
             "SELECT certificate.id, certificate.uuid, certificate.tenant_id,
                     certificate.current_version_id
-             FROM web_certificate certificate
-             INNER JOIN web_certificate_version version
+             FROM webserver_certificate certificate
+             INNER JOIN webserver_certificate_version version
                ON version.tenant_id = certificate.tenant_id
               AND version.id = certificate.current_version_id
               AND version.certificate_id = certificate.id
@@ -347,13 +347,13 @@ impl WebRepository {
                      version.not_after - ($1 * INTERVAL '1 day')
                    ) <= NOW()
                AND NOT EXISTS (
-                   SELECT 1 FROM web_certificate_operation active_operation
+                   SELECT 1 FROM webserver_certificate_operation active_operation
                    WHERE active_operation.tenant_id = certificate.tenant_id
                      AND active_operation.certificate_id = certificate.id
                      AND active_operation.status IN ('PENDING', 'RUNNING')
                )
                AND NOT EXISTS (
-                   SELECT 1 FROM web_certificate_operation cooling_operation
+                   SELECT 1 FROM webserver_certificate_operation cooling_operation
                    WHERE cooling_operation.tenant_id = certificate.tenant_id
                      AND cooling_operation.certificate_id = certificate.id
                      AND cooling_operation.operation_type = 'RENEW'
@@ -385,7 +385,7 @@ impl WebRepository {
                 .ok_or_else(|| WebServiceError::conflict("certificate has no active version"))?;
             let request_sha256 = certificate_renewal_request_sha256(&certificate_uuid);
             sqlx::query(
-                "INSERT INTO web_certificate_operation (
+                "INSERT INTO webserver_certificate_operation (
                     id, uuid, tenant_id, certificate_id, requested_by, operation_type, status,
                     attempt_count, max_attempts, next_attempt_at, fencing_token, failure_code,
                     idempotency_key_hash, request_sha256, created_at, updated_at
@@ -402,7 +402,7 @@ impl WebRepository {
             .await
             .map_err(|error| store_error("insert scheduled certificate renewal", error))?;
             sqlx::query(
-                "UPDATE web_certificate
+                "UPDATE webserver_certificate
                  SET renewal_status = 2, metadata = metadata - 'certificateOperationFailureCode', updated_at = NOW(), version = version + 1
                  WHERE tenant_id = $1 AND id = $2",
             )
@@ -447,14 +447,14 @@ impl WebRepository {
         }
         let claimed_rows = sqlx::query(
             "WITH candidates AS (
-                SELECT id FROM web_certificate_operation
+                SELECT id FROM webserver_certificate_operation
                 WHERE attempt_count < max_attempts
                   AND ((status = 'PENDING' AND next_attempt_at <= NOW())
                     OR (status = 'RUNNING' AND lease_expires_at <= NOW()))
                 ORDER BY next_attempt_at ASC, id ASC
                 FOR UPDATE SKIP LOCKED LIMIT $1
              )
-             UPDATE web_certificate_operation operation
+             UPDATE webserver_certificate_operation operation
              SET status = 'RUNNING', attempt_count = operation.attempt_count + 1,
                  lease_owner = $2, lease_expires_at = NOW() + ($3 * INTERVAL '1 second'),
                  fencing_token = operation.fencing_token + 1, failure_code = NULL,
@@ -481,9 +481,9 @@ impl WebRepository {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| store_error("map claimed certificate operation id", error))?;
         sqlx::query(
-            "UPDATE web_certificate certificate
+            "UPDATE webserver_certificate certificate
              SET renewal_status = 1, updated_at = NOW(), version = version + 1
-             FROM web_certificate_operation operation
+             FROM webserver_certificate_operation operation
              WHERE operation.id = ANY($1) AND operation.tenant_id = certificate.tenant_id
                AND operation.certificate_id = certificate.id",
         )
@@ -498,13 +498,13 @@ impl WebRepository {
                     certificate.uuid AS certificate_uuid, certificate.cert_type,
                     certificate.cert_name, certificate.preferred_key_algorithm,
                     certificate.auto_renew, identifier.hostnames
-             FROM web_certificate_operation operation
-             INNER JOIN web_certificate certificate
+             FROM webserver_certificate_operation operation
+             INNER JOIN webserver_certificate certificate
                ON certificate.tenant_id = operation.tenant_id
               AND certificate.id = operation.certificate_id
              INNER JOIN LATERAL (
                  SELECT CAST(jsonb_agg(identifier.hostname ORDER BY identifier.position) AS TEXT) AS hostnames
-                 FROM web_certificate_identifier identifier
+                 FROM webserver_certificate_identifier identifier
                  WHERE identifier.tenant_id = operation.tenant_id
                    AND identifier.certificate_id = operation.certificate_id
              ) identifier ON TRUE
@@ -552,8 +552,8 @@ impl WebRepository {
                     operation.lease_expires_at > NOW() AS lease_current,
                     operation.operation_type, certificate.id AS certificate_internal_id,
                     certificate.uuid AS certificate_uuid
-             FROM web_certificate_operation operation
-             INNER JOIN web_certificate certificate
+             FROM webserver_certificate_operation operation
+             INNER JOIN webserver_certificate certificate
                ON certificate.tenant_id = operation.tenant_id
               AND certificate.id = operation.certificate_id
              WHERE operation.tenant_id = $1 AND operation.uuid = $2
@@ -581,7 +581,7 @@ impl WebRepository {
             .map_err(|error| store_error("map failed operation certificate id", error))?;
 
         sqlx::query(
-            "UPDATE web_certificate_operation
+            "UPDATE webserver_certificate_operation
              SET status = CASE WHEN $3 THEN 'FAILED' ELSE 'PENDING' END,
                  next_attempt_at = CAST(CASE WHEN $3 THEN $5 ELSE $4 END AS TIMESTAMPTZ),
                  lease_owner = NULL, lease_expires_at = NULL, failure_code = $6,
@@ -602,7 +602,7 @@ impl WebRepository {
         // are never clobbered by a whole-document replacement.
         let metadata = json!({ "certificateOperationFailureCode": failure_code });
         sqlx::query(
-            "UPDATE web_certificate
+            "UPDATE webserver_certificate
              SET renewal_status = CASE WHEN $3 THEN 3 ELSE 2 END,
                  status = CASE WHEN $4 = 'ISSUE' AND $3 THEN 0 ELSE status END,
                  metadata = metadata || CAST($5 AS JSONB),
@@ -635,7 +635,7 @@ impl WebRepository {
             )));
         }
         let result = sqlx::query(
-            "UPDATE web_certificate_operation
+            "UPDATE webserver_certificate_operation
              SET lease_expires_at = NOW() + ($4 * INTERVAL '1 second'),
                  updated_at = NOW()
              WHERE tenant_id = $1 AND uuid = $2 AND status = 'RUNNING'
@@ -665,7 +665,7 @@ impl WebRepository {
     ) -> WebServiceResult<Option<CertificateOperationAcceptedResponse>> {
         let row = sqlx::query(
             "SELECT uuid, status, request_sha256
-             FROM web_certificate_operation
+             FROM webserver_certificate_operation
              WHERE tenant_id = $1 AND idempotency_key_hash = $2",
         )
         .bind(tenant_id)
@@ -711,7 +711,7 @@ async fn find_idempotent_certificate_operation_in_tx(
 ) -> WebServiceResult<Option<ExistingCertificateOperation>> {
     let row = sqlx::query(
         "SELECT uuid, status, request_sha256
-         FROM web_certificate_operation
+         FROM webserver_certificate_operation
          WHERE tenant_id = $1 AND idempotency_key_hash = $2",
     )
     .bind(tenant_id)
@@ -731,7 +731,7 @@ async fn find_active_certificate_operation_in_tx(
 ) -> WebServiceResult<Option<ExistingCertificateOperation>> {
     let row = sqlx::query(
         "SELECT uuid, status, request_sha256
-         FROM web_certificate_operation
+         FROM webserver_certificate_operation
          WHERE tenant_id = $1 AND certificate_id = $2
            AND status IN ('PENDING', 'RUNNING')
          ORDER BY id DESC LIMIT 1",
@@ -753,14 +753,14 @@ async fn reap_exhausted_certificate_operations_in_tx(
     let row = sqlx::query(
         "WITH candidates AS (
             SELECT id
-            FROM web_certificate_operation
+            FROM webserver_certificate_operation
             WHERE status = 'RUNNING'
               AND lease_expires_at <= NOW()
               AND attempt_count >= max_attempts
             ORDER BY lease_expires_at ASC, id ASC
             FOR UPDATE SKIP LOCKED LIMIT $1
          ), expired AS (
-            UPDATE web_certificate_operation operation
+            UPDATE webserver_certificate_operation operation
             SET status = 'FAILED',
                 next_attempt_at = NOW() + ($2 * INTERVAL '1 second'),
                 lease_owner = NULL, lease_expires_at = NULL,
@@ -769,7 +769,7 @@ async fn reap_exhausted_certificate_operations_in_tx(
             WHERE operation.id = candidates.id
             RETURNING operation.tenant_id, operation.certificate_id, operation.operation_type
          ), updated_certificates AS (
-            UPDATE web_certificate certificate
+            UPDATE webserver_certificate certificate
             SET renewal_status = 3,
                 status = CASE WHEN expired.operation_type = 'ISSUE' THEN 0 ELSE certificate.status END,
                 metadata = certificate.metadata
@@ -780,7 +780,7 @@ async fn reap_exhausted_certificate_operations_in_tx(
               AND certificate.id = expired.certificate_id
             RETURNING certificate.id
          ), archived_certificates AS (
-            UPDATE web_certificate certificate
+            UPDATE webserver_certificate certificate
             SET deleted_at = NOW(), updated_at = NOW(),
                 version = certificate.version + 1
             FROM expired
@@ -789,7 +789,7 @@ async fn reap_exhausted_certificate_operations_in_tx(
               AND expired.operation_type = 'ISSUE'
             RETURNING certificate.tenant_id, certificate.id AS certificate_id
          ), removed_identifiers AS (
-            DELETE FROM web_certificate_identifier identifier
+            DELETE FROM webserver_certificate_identifier identifier
             USING archived_certificates archived
             WHERE identifier.tenant_id = archived.tenant_id
               AND identifier.certificate_id = archived.certificate_id
@@ -813,8 +813,8 @@ async fn reap_exhausted_certificate_operations_in_tx(
     sqlx::query(
         "WITH failed_issue_certificates AS (
              SELECT DISTINCT operation.tenant_id, operation.certificate_id
-             FROM web_certificate_operation operation
-             INNER JOIN web_certificate certificate
+             FROM webserver_certificate_operation operation
+             INNER JOIN webserver_certificate certificate
                ON certificate.tenant_id = operation.tenant_id
               AND certificate.id = operation.certificate_id
               AND certificate.deleted_at IS NULL
@@ -822,14 +822,14 @@ async fn reap_exhausted_certificate_operations_in_tx(
                AND operation.status = 'FAILED'
                AND operation.completed_at IS NOT NULL
                AND NOT EXISTS (
-                   SELECT 1 FROM web_certificate_operation active_operation
+                   SELECT 1 FROM webserver_certificate_operation active_operation
                    WHERE active_operation.tenant_id = operation.tenant_id
                      AND active_operation.certificate_id = operation.certificate_id
                      AND active_operation.status IN ('PENDING', 'RUNNING')
                )
              LIMIT $1
          ), archived AS (
-             UPDATE web_certificate certificate
+             UPDATE webserver_certificate certificate
              SET deleted_at = NOW(), updated_at = NOW(),
                  version = certificate.version + 1
              FROM failed_issue_certificates failed
@@ -837,7 +837,7 @@ async fn reap_exhausted_certificate_operations_in_tx(
                AND certificate.id = failed.certificate_id
              RETURNING certificate.tenant_id, certificate.id AS certificate_id
          )
-         DELETE FROM web_certificate_identifier identifier
+         DELETE FROM webserver_certificate_identifier identifier
          USING archived
          WHERE identifier.tenant_id = archived.tenant_id
            AND identifier.certificate_id = archived.certificate_id",
@@ -853,7 +853,9 @@ fn accepted_operation(operation_id: &str, status: &str) -> CertificateOperationA
     CertificateOperationAcceptedResponse {
         accepted: true,
         operation_id: operation_id.to_string(),
-        status: status.to_ascii_lowercase(),
+        // The wire enum is SCREAMING_SNAKE_CASE (OpenAPI
+        // CertificateOperationResponse.status); lowercase broke the contract.
+        status: status.to_ascii_uppercase(),
     }
 }
 

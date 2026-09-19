@@ -206,6 +206,7 @@ pub async fn bootstrap_web_runtime_from_env() -> Result<WebRuntime, String> {
             certificate_issuer,
             edge_runtime,
             source_importer,
-        ),
+        )
+        .map_err(|error| format!("web service bootstrap failed: {error}"))?,
     })
 }

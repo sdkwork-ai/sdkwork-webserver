@@ -29,7 +29,6 @@
     "tenantId": "100001",
     "organizationId": "0",
     "accessTokenPermissionScope": [
-      "web.applications.read",
       "deploy.apps.read",
       "web.plugins.read",
       "web.servers.read",

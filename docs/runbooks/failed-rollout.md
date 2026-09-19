@@ -43,7 +43,7 @@ tail -n 50 /opt/deploy/sdkwork-webserver/bundle/release-ledger.log 2>/dev/null
 
 ## 3. 应用部署记录停留 PENDING（控制面）
 
-这是**设计内**的真实状态：`web_deployment` 是命令意图，推进 status 的部署
+这是**设计内**的真实状态：`webserver_deployment` 是命令意图，推进 status 的部署
 执行权威属于 Deploy 控制面（REQ-2026-0061/0062 门，ADR-20260731 人工评审中）。
 因此 `sites.activate`（要求存在成功部署）与 `deployments.rollback`（要求成功
 来源版本）诚实地返回 409。处置：

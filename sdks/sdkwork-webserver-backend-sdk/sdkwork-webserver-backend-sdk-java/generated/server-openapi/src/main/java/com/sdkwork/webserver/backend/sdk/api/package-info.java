@@ -16,3 +16,4 @@ import com.sdkwork.webserver.backend.sdk.api.ServerFileApi;
 import com.sdkwork.webserver.backend.sdk.api.WebserverConfigApi;
 import com.sdkwork.webserver.backend.sdk.api.AgentApi;
 import com.sdkwork.webserver.backend.sdk.api.AuditApi;
+import com.sdkwork.webserver.backend.sdk.api.ClusterApi;

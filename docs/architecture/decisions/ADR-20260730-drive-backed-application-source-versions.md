@@ -17,11 +17,11 @@ An application owns two distinct resources:
 
 Browser-selected ZIP and directory content continues to use the generated Drive App SDK. Public HTTPS Git repositories are imported server-side using a bounded non-interactive shallow clone, deterministic packaging, and `DriveUploaderService`. Repository URLs with credentials, query strings, fragments, or non-HTTPS schemes are rejected. Private, loopback, link-local, and otherwise disallowed targets fail closed.
 
-The per-application deployment configuration is stored in `web_site.runtime_config` and exposed through typed API fields. The default ready-source retention window is five, with a valid range of 1 through 50. Versions outside that window are marked pruned and cannot be published or used for rollback, while release records and immutable artifact snapshots remain auditable.
+The per-application deployment configuration is stored in `webserver_site.runtime_config` and exposed through typed API fields. The default ready-source retention window is five, with a valid range of 1 through 50. Versions outside that window are marked pruned and cannot be published or used for rollback, while release records and immutable artifact snapshots remain auditable.
 
 This release-retention transition does not synchronously delete Drive objects. Physical reclamation remains owned by Drive lifecycle processing and requires an explicit cross-owner cleanup contract; the Web Server repository must not bypass that boundary by mutating Drive tables directly.
 
-`web_deployment.source_version_id` is nullable for existing records. New release flows provide `sourceVersionId`; the service resolves that source version in the same tenant and application, requires it to be ready and retained, then copies its stable artifact facts into the deployment record.
+`webserver_deployment.source_version_id` is nullable for existing records. New release flows provide `sourceVersionId`; the service resolves that source version in the same tenant and application, requires it to be ready and retained, then copies its stable artifact facts into the deployment record.
 
 ## Consequences
 

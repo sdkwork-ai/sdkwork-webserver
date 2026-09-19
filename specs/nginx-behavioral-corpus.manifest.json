@@ -54,6 +54,15 @@
       "probe": "probe.py",
       "listenPort": 19880,
       "notes": "keepalive_time vs SDKWork proactive connectionMaximumAge retirement"
+    },
+    {
+      "id": "full-surface",
+      "req": "REQ-2026-0040",
+      "dir": "full-surface",
+      "nginxConf": "nginx.conf",
+      "probe": "probe.py",
+      "listenPort": 19890,
+      "notes": "Single-page full-surface behavioral regression (REQ-2026-0040): routing, URI semantics, static, proxying, LB, filters, limits, TLS SNI, http2 ALPN, stream; the probe owns mock upstreams, staging render, and server lifecycle (see the REQ for the alignment findings it closed)"
     }
   ]
 }

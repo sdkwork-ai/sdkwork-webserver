@@ -67,10 +67,12 @@ impl ZoneState {
     fn try_acquire(&mut self, client_ip: IpAddr, burst: u32) -> bool {
         let now = Instant::now();
         if !self.entries.contains_key(&client_ip) && self.entries.len() as u32 >= self.max_keys {
-            // Evict the oldest-ish entry by first key when at capacity.
-            if let Some(victim) = self.entries.keys().next().copied() {
-                self.entries.remove(&victim);
-            }
+            // The zone is saturated with distinct clients. Reject the new
+            // key instead of evicting an arbitrary victim: eviction would
+            // let an IP flood continuously reset legitimate clients' token
+            // buckets, defeating rate limiting for them (the same
+            // reject-new-keys policy limit_conn applies).
+            return false;
         }
         let rate = self.rate_per_second;
         let bucket = self.entries.entry(client_ip).or_insert_with(|| Bucket {
@@ -112,5 +114,32 @@ mod tests {
         assert_eq!(runtime.admit(ip, &rules), LimitReqDecision::Allow);
         assert_eq!(runtime.admit(ip, &rules), LimitReqDecision::Allow);
         assert_eq!(runtime.admit(ip, &rules), LimitReqDecision::Reject);
+    }
+
+    #[test]
+    fn saturated_zone_rejects_new_keys_without_evicting_established_clients() {
+        let runtime = LimitReqRuntime::from_zones(&[LimitReqZoneConfig {
+            name: "zone".to_owned(),
+            key: "$binary_remote_addr".to_owned(),
+            max_keys: 2,
+            rate_per_second: 1.0,
+        }]);
+        let rules = [LimitReqConfig {
+            zone: "zone".to_owned(),
+            burst: 1_000,
+            nodelay: true,
+        }];
+        let first = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1));
+        let second = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2));
+        let flooder = IpAddr::V4(Ipv4Addr::new(10, 9, 9, 9));
+        assert_eq!(runtime.admit(first, &rules), LimitReqDecision::Allow);
+        assert_eq!(runtime.admit(second, &rules), LimitReqDecision::Allow);
+
+        // The flood cannot push a new key past the capacity...
+        assert_eq!(runtime.admit(flooder, &rules), LimitReqDecision::Reject);
+        // ...and must not evict the established clients' buckets: both keep
+        // their state and remain admissible within burst.
+        assert_eq!(runtime.admit(first, &rules), LimitReqDecision::Allow);
+        assert_eq!(runtime.admit(second, &rules), LimitReqDecision::Allow);
     }
 }

@@ -20,7 +20,7 @@ const POSTGRES_INITIALIZATION_COMPLETE =
 const CRITICAL_SOURCE_FILES = Object.freeze([
   'Cargo.toml',
   'Cargo.lock',
-  'database/ddl/baseline/postgres/0001_web_baseline.sql',
+  'database/ddl/baseline/postgres/0001_webserver_baseline.sql',
   'crates/sdkwork-webserver-database-host/tests/postgres_lifecycle.rs',
   'crates/sdkwork-intelligence-webserver-repository-sqlx/tests/repository_parity.rs',
 ]);

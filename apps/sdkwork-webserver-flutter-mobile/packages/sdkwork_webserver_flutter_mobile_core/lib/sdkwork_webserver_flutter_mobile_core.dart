@@ -7,7 +7,7 @@
 library sdkwork_webserver_flutter_mobile_core;
 
 export 'composition/composition.dart';
+export 'sdk/app_api_surface_url.dart';
 export 'sdk/pagination.dart';
-export 'sdk/webserver_app_sdk_clients.dart';
 export 'sdk/webserver_deploy_app_catalog_port.dart';
 export 'session/session_store.dart';

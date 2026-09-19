@@ -15,7 +15,6 @@ import {
   Play,
   RefreshCw,
   RotateCcw,
-  Rocket,
   Server,
   Square,
   TriangleAlert,
@@ -610,7 +609,6 @@ const OPERATION_ICON: Record<string, typeof Play> = {
   build: Hammer,
   package: Package,
   start: Play,
-  deploy: Rocket,
   stop: Square,
   restart: RotateCcw,
 };

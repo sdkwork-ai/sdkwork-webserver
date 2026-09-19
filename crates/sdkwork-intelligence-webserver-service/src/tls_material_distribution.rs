@@ -123,10 +123,9 @@ impl WebService {
     /// failure fails the surrounding operation.
     pub async fn publish_node_tls_material(&self) -> WebServiceResult<()> {
         let config = TlsMaterialDistributionConfig::from_env()?;
-        if !config.enabled() {
+        let Some(node_uuid) = config.node_uuid.clone().filter(|_| config.enabled()) else {
             return Ok(());
-        }
-        let node_uuid = config.node_uuid.clone().expect("enabled config");
+        };
         let assignments = self
             .repository
             .load_node_tls_certificate_assignments(&node_uuid)
@@ -154,7 +153,11 @@ fn publish_node_tls_material_blocking(
     config: &TlsMaterialDistributionConfig,
     assignments: &[TlsCertificateAssignmentMaterial],
 ) -> WebServiceResult<()> {
-    let node_uuid = config.node_uuid.as_deref().expect("enabled config");
+    let node_uuid = config.node_uuid.as_deref().ok_or_else(|| {
+        WebServiceError::Internal(
+            "TLS material distribution is enabled without a node uuid".to_string(),
+        )
+    })?;
     // Each version uuid names the directory its material is written to, and it
     // arrives from a database column with no shape constraint. Validating here
     // rather than only inside `build_snapshot` matters because that check runs

@@ -22,7 +22,54 @@ impl WebDatabaseHost {
     }
 }
 
+/// Application-scoped advisory-lock key for the bootstrap sequence
+/// (init + migrate + drift). Concurrent gateway processes and the
+/// in-process double bootstrap serialize on it so migrations and the drift
+/// check never race.
+const BOOTSTRAP_LOCK_KEY: i64 = 0x5344_4B57_4253_5450;
+
 pub async fn bootstrap_web_database(pool: DatabasePool) -> Result<WebDatabaseHost, String> {
+    // The advisory lock must live on one dedicated connection for the whole
+    // bootstrap; the orchestrator runs on its own pool connections.
+    let pg = pool
+        .as_postgres()
+        .ok_or("Web database bootstrap requires the PostgreSQL engine")?;
+    let mut lock_tx = pg
+        .begin()
+        .await
+        .map_err(|error| format!("begin Web database bootstrap lock: {error}"))?;
+    // Allow a generous bounded wait instead of inheriting the pool's 10 s
+    // lock_timeout: a sibling process running a long migration must not
+    // fail this startup.
+    sqlx::query("SET LOCAL lock_timeout = '10min'")
+        .execute(&mut *lock_tx)
+        .await
+        .map_err(|error| format!("configure Web database bootstrap lock: {error}"))?;
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(BOOTSTRAP_LOCK_KEY)
+        .execute(&mut *lock_tx)
+        .await
+        .map_err(|error| format!("acquire Web database bootstrap lock: {error}"))?;
+
+    let result = run_web_database_bootstrap(pool.clone()).await;
+
+    match result {
+        Ok(host) => {
+            lock_tx
+                .commit()
+                .await
+                .map_err(|error| format!("release Web database bootstrap lock: {error}"))?;
+            Ok(host)
+        }
+        Err(error) => {
+            // Dropping the transaction releases the advisory lock.
+            let _ = lock_tx.rollback().await;
+            Err(error)
+        }
+    }
+}
+
+async fn run_web_database_bootstrap(pool: DatabasePool) -> Result<WebDatabaseHost, String> {
     let app_root = resolve_app_root();
     let module = Arc::new(
         DefaultDatabaseModule::from_app_root(&app_root)

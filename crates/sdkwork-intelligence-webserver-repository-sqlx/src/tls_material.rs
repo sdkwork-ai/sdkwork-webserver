@@ -29,11 +29,11 @@ impl WebRepository {
         let sql = format!(
             "WITH node_assignments AS (
                  SELECT a.tenant_id, a.runtime_set
-                 FROM web_server s
-                 INNER JOIN web_runtime_assignment a
+                 FROM webserver_server s
+                 INNER JOIN webserver_runtime_assignment a
                      ON a.tenant_id = s.tenant_id AND a.server_id = s.id
                      AND NOT EXISTS (
-                         SELECT 1 FROM web_runtime_assignment newer
+                         SELECT 1 FROM webserver_runtime_assignment newer
                          WHERE newer.tenant_id = a.tenant_id
                            AND newer.server_id = a.server_id
                            AND newer.environment = a.environment
@@ -48,7 +48,7 @@ impl WebRepository {
                      CASE WHEN jsonb_typeof(a.runtime_set -> 'descriptors') = 'array'
                           THEN a.runtime_set -> 'descriptors' ELSE '[]'::jsonb END
                  ) AS descriptor(value)
-                 INNER JOIN web_site site
+                 INNER JOIN webserver_site site
                      ON site.tenant_id = a.tenant_id
                      AND site.uuid = descriptor.value ->> 'siteUuid'
                      AND site.deleted_at IS NULL
@@ -66,17 +66,17 @@ impl WebRepository {
                         SELECT jsonb_agg(hostname ORDER BY hostname)
                         FROM (
                             SELECT DISTINCT listener_domain.hostname
-                            FROM web_listener_certificate_binding listener
-                            INNER JOIN web_site_binding listener_route
+                            FROM webserver_listener_certificate_binding listener
+                            INNER JOIN webserver_site_binding listener_route
                                 ON listener_route.tenant_id = listener.tenant_id
                                 AND listener_route.id = listener.site_binding_id
                                 AND listener_route.status = 'ACTIVE'
                                 AND listener_route.deleted_at IS NULL
-                            INNER JOIN web_site listener_site
+                            INNER JOIN webserver_site listener_site
                                 ON listener_site.tenant_id = listener_route.tenant_id
                                 AND listener_site.id = listener_route.site_id
                                 AND listener_site.deleted_at IS NULL
-                            INNER JOIN web_domain listener_domain
+                            INNER JOIN webserver_domain listener_domain
                                 ON listener_domain.tenant_id = listener_route.tenant_id
                                 AND listener_domain.id = listener_route.domain_id
                                 AND listener_domain.deleted_at IS NULL
@@ -91,22 +91,22 @@ impl WebRepository {
                         ) hostnames
                     ) AS TEXT) AS hostnames
              FROM assigned_sites assigned
-             INNER JOIN web_site site
+             INNER JOIN webserver_site site
                  ON site.tenant_id = assigned.tenant_id AND site.uuid = assigned.site_uuid
-             INNER JOIN web_site_binding b
+             INNER JOIN webserver_site_binding b
                  ON b.tenant_id = site.tenant_id AND b.site_id = site.id
                  AND b.status = 'ACTIVE' AND b.deleted_at IS NULL
-             INNER JOIN web_listener_certificate_binding l
+             INNER JOIN webserver_listener_certificate_binding l
                  ON l.tenant_id = b.tenant_id AND l.site_binding_id = b.id
                  AND l.status IN ('PENDING', 'DEPLOYING', 'ACTIVE', 'FAILED')
                  AND l.deleted_at IS NULL
-             INNER JOIN web_certificate c
+             INNER JOIN webserver_certificate c
                  ON c.tenant_id = l.tenant_id AND c.id = l.certificate_id
                  AND c.status = 1 AND c.deleted_at IS NULL
-             INNER JOIN web_certificate_version v
+             INNER JOIN webserver_certificate_version v
                  ON v.tenant_id = l.tenant_id AND v.id = l.desired_version_id
                  AND v.certificate_id = c.id AND v.status IN ('ACTIVE', 'SUPERSEDED')
-             INNER JOIN web_certificate_secret_bundle sb
+             INNER JOIN webserver_certificate_secret_bundle sb
                  ON sb.tenant_id = v.tenant_id AND sb.certificate_version_id = v.id
              ORDER BY c.tenant_id ASC, c.uuid ASC
              LIMIT {}",

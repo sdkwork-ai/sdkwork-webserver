@@ -8,7 +8,7 @@ requirement: REQ-2026-0068
 type: mixed
 scope:
   producers:
-    - database/web_root_domain
+    - database/webserver_root_domain
     - sdkwork-web.backend
   consumers:
     - sdkwork-web-backend-sdk
@@ -33,7 +33,7 @@ verification:
 
 ## Compatibility
 
-The migration adds `web_root_domain` and nullable `web_domain.root_domain_id`. Existing flat domain
+The migration adds `webserver_root_domain` and nullable `webserver_domain.root_domain_id`. Existing flat domain
 rows and APIs remain valid. No public-suffix inference or historical data backfill is performed.
 Operators explicitly define Zones and add new apex or child hostnames through the new API.
 

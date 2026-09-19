@@ -32,7 +32,11 @@ use sdkwork_webserver_config_service::{
 use sdkwork_webserver_contract::WebBackendRequestContext;
 use serde::Deserialize;
 
-use crate::{auth::require_backend_context, paths, server_files_routes::ok_json};
+use crate::{
+    auth::{require_backend_context, require_platform_operator},
+    paths,
+    server_files_routes::ok_json,
+};
 
 #[derive(Clone)]
 struct WebserverConfigState {
@@ -90,7 +94,8 @@ async fn list_webserver_configs(
     State(state): State<WebserverConfigState>,
     context: Option<Extension<WebBackendRequestContext>>,
 ) -> Result<Response, WebApiError> {
-    require_backend_context(context)?;
+    let context = require_backend_context(context)?;
+    require_platform_operator(&context, "the Web Server configuration surface")?;
     let catalog = state
         .service
         .catalog()
@@ -104,7 +109,8 @@ async fn read_webserver_config(
     context: Option<Extension<WebBackendRequestContext>>,
     Path(config_id): Path<String>,
 ) -> Result<Response, WebApiError> {
-    require_backend_context(context)?;
+    let context = require_backend_context(context)?;
+    require_platform_operator(&context, "the Web Server configuration surface")?;
     let file = state
         .service
         .read(&config_id)
@@ -126,7 +132,8 @@ async fn update_webserver_config(
     Path(config_id): Path<String>,
     Json(request): Json<UpdateWebserverConfigRequest>,
 ) -> Result<Response, WebApiError> {
-    require_backend_context(context)?;
+    let context = require_backend_context(context)?;
+    require_platform_operator(&context, "the Web Server configuration surface")?;
     let result = state
         .service
         .write(

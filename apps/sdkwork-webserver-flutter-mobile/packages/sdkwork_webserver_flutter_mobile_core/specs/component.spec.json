@@ -58,14 +58,6 @@
     ],
     "sdkDependencies": [
       {
-        "workspace": "sdkwork-webserver-app-sdk",
-        "permissionModuleId": "web",
-        "surface": "app-api",
-        "credentialMode": "authenticated-app-api",
-        "packageName": "sdkwork_webserver_app_sdk",
-        "status": "active"
-      },
-      {
         "workspace": "sdkwork-drive-app-sdk",
         "permissionModuleId": "drive",
         "surface": "app-api",
@@ -82,9 +74,7 @@
         "status": "pending-dart-artifact"
       }
     ],
-    "sdkClients": [
-      "SdkworkAppClient"
-    ],
+    "sdkClients": [],
     "dependencyApiExports": [],
     "dependencyApiSurfaces": [],
     "permissionComposition": {

@@ -42,7 +42,10 @@ async fn run() -> MainResult<()> {
     let raw_arguments = std::env::args().skip(1).collect::<Vec<_>>();
     let (format_override, arguments) = extract_format_override(&raw_arguments)?;
     let leading_command = arguments.first().map(String::as_str);
-    let nginx_compat_command = matches!(leading_command, Some("serve-nginx") | Some("validate-nginx"));
+    let nginx_compat_command = matches!(
+        leading_command,
+        Some("serve-nginx") | Some("validate-nginx")
+    );
     // `reset-admin` is an operator recovery command. It has to keep working when
     // the imported-module sidecars or the packaged dependency roots are
     // themselves part of what the operator is trying to get past, so it skips
@@ -68,9 +71,11 @@ async fn run() -> MainResult<()> {
         Some("reset-admin") => {
             let options = AdminResetOptions::from_arguments(&arguments.collect::<Vec<_>>())
                 .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
-            let output = reset_admin_account_from_env(options).await.map_err(|error| {
-                io::Error::other(format!("admin password reset failed: {error}"))
-            })?;
+            let output = reset_admin_account_from_env(options)
+                .await
+                .map_err(|error| {
+                    io::Error::other(format!("admin password reset failed: {error}"))
+                })?;
             println!(
                 "{}",
                 serde_json::to_string(&output).map_err(|error| io::Error::other(format!(

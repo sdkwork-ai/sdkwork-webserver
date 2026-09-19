@@ -2,6 +2,7 @@
 
 pub mod agent_routes;
 pub mod auth;
+pub mod cluster_routes;
 pub mod http_route_manifest;
 pub mod paths;
 pub mod routes;

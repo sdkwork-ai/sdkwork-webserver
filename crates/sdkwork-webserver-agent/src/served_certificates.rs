@@ -23,7 +23,6 @@ use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
 use sdkwork_utils_rust::datetime;
-use tracing::{info, warn};
 use sdkwork_webserver_contract::{
     AgentCertificateBundle, AgentCertificateObservation, AgentSyncResponse,
 };
@@ -34,6 +33,7 @@ use sdkwork_webserver_core::{
         MAX_SERVED_CERTIFICATE_REPORT_BYTES, SERVED_CERTIFICATE_REPORT_SCHEMA,
     },
 };
+use tracing::{info, warn};
 
 /// Observation state for a certificate the listener serves as intended.
 const STATE_SERVED: &str = "SERVED";
@@ -281,8 +281,7 @@ fn certificate_verdict(
     let report = report.report();
     for server_name in &certificate.hostnames {
         let Some(entry) = report.entries.iter().find(|entry| {
-            entry.certificate_id == certificate.certificate_id
-                && entry.server_name == *server_name
+            entry.certificate_id == certificate.certificate_id && entry.server_name == *server_name
         }) else {
             return ServedVerdict::Failed(FAILURE_NAME_NOT_ASSIGNED);
         };
@@ -314,11 +313,14 @@ fn report_is_after(report: &ValidatedServedCertificateReport, recorded_at: &str)
 
 #[cfg(test)]
 mod tests {
-    use sdkwork_webserver_core::tls_runtime::{ServedCertificateEntry, SERVED_CERTIFICATE_REPORT_SCHEMA};
+    use sdkwork_webserver_core::tls_runtime::{
+        ServedCertificateEntry, SERVED_CERTIFICATE_REPORT_SCHEMA,
+    };
 
     use super::*;
 
-    const SYNC_VERSION: &str = "sv1:1111111111111111111111111111111111111111111111111111111111111111";
+    const SYNC_VERSION: &str =
+        "sv1:1111111111111111111111111111111111111111111111111111111111111111";
     const RECORDED_AT: &str = "2026-09-17T00:00:00.000Z";
     const ASSIGNED_FINGERPRINT: &str =
         "2222222222222222222222222222222222222222222222222222222222222222";
@@ -376,7 +378,11 @@ mod tests {
         }
     }
 
-    fn recorded(state: &str, failure_code: Option<&str>, observed_at: &str) -> Vec<AgentCertificateObservation> {
+    fn recorded(
+        state: &str,
+        failure_code: Option<&str>,
+        observed_at: &str,
+    ) -> Vec<AgentCertificateObservation> {
         vec![AgentCertificateObservation {
             certificate_id: "certificate-0001".to_owned(),
             fingerprint: ASSIGNED_FINGERPRINT.to_owned(),

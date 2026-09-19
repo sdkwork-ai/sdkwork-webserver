@@ -48,7 +48,7 @@ pub(crate) struct HttpResponseCache {
     maximum_object_bytes: u64,
     default_ttl: Duration,
     stale_ttl: Duration,
-    in_flight: Mutex<std::collections::HashMap<CacheKey, Arc<tokio::sync::Notify>>>,
+    in_flight: Arc<Mutex<std::collections::HashMap<CacheKey, Arc<tokio::sync::Notify>>>>,
     metrics: Arc<DataPlaneMetrics>,
 }
 
@@ -62,7 +62,11 @@ impl HttpResponseCache {
             .filter(|path| !path.is_empty())
         {
             Some(path) => {
-                match TieredCacheBackend::with_disk(config.max_entries, PathBuf::from(path)) {
+                match TieredCacheBackend::with_limits(
+                    config.max_entries,
+                    config.max_memory_bytes,
+                    PathBuf::from(path),
+                ) {
                     Ok(backend) => {
                         tracing::info!(disk_path = %path, "proxy cache disk backend enabled");
                         disk_backed = true;
@@ -74,12 +78,18 @@ impl HttpResponseCache {
                             error = %error,
                             "proxy cache disk backend unavailable; falling back to memory"
                         );
-                        Arc::new(MemoryCacheBackend::new(config.max_entries))
+                        Arc::new(MemoryCacheBackend::with_limits(
+                            config.max_entries,
+                            config.max_memory_bytes,
+                        ))
                     }
                 }
             }
             // Memory-only path uses the L1 backend directly (no tier wrapper).
-            None => Arc::new(MemoryCacheBackend::new(config.max_entries)),
+            None => Arc::new(MemoryCacheBackend::with_limits(
+                config.max_entries,
+                config.max_memory_bytes,
+            )),
         };
         Arc::new(Self {
             store,
@@ -87,7 +97,7 @@ impl HttpResponseCache {
             maximum_object_bytes: config.max_object_bytes,
             default_ttl: Duration::from_secs(config.default_ttl_seconds),
             stale_ttl: Duration::from_secs(config.stale_ttl_seconds),
-            in_flight: Mutex::new(std::collections::HashMap::new()),
+            in_flight: Arc::new(Mutex::new(std::collections::HashMap::new())),
             metrics,
         })
     }
@@ -184,34 +194,67 @@ impl HttpResponseCache {
         self.metrics.record_proxy_cache_store();
     }
 
-    /// Register a single-flight fill for `key`. Returns `Some(waiter)` when
-    /// another request is already filling the key; the caller awaits the
-    /// waiter and re-looks-up. Returns `None` when this caller is the fill.
-    pub(crate) fn begin_fill(&self, key: &CacheKey) -> Option<Arc<tokio::sync::Notify>> {
+    /// Register for a single-flight fill of `key`.
+    ///
+    /// Existing fills are always joinable regardless of table size, so a
+    /// saturated table only affects new keys: those return
+    /// [`CacheFillReservation::Bypass`] and proxy upstream directly (nginx
+    /// does not coalesce fills at all) instead of parking on a waiter no
+    /// filler will ever notify.
+    ///
+    /// The returned [`FillGuard`] releases the slot and wakes waiters when
+    /// dropped — including when the filling future is cancelled mid-upstream
+    /// call — so a dropped fill can never leak its slot.
+    pub(crate) fn begin_fill(&self, key: &CacheKey) -> CacheFillReservation {
         let mut in_flight = self
             .in_flight
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if in_flight.len() >= MAXIMUM_IN_FLIGHT_FILLS {
-            return Some(Arc::new(tokio::sync::Notify::new()));
-        }
         if let Some(waiter) = in_flight.get(key) {
-            return Some(Arc::clone(waiter));
+            return CacheFillReservation::Waiter(Arc::clone(waiter));
+        }
+        if in_flight.len() >= MAXIMUM_IN_FLIGHT_FILLS {
+            return CacheFillReservation::Bypass;
         }
         let notify = Arc::new(tokio::sync::Notify::new());
         in_flight.insert(key.clone(), Arc::clone(&notify));
-        None
+        CacheFillReservation::Filler(FillGuard {
+            in_flight: Arc::clone(&self.in_flight),
+            key: key.clone(),
+            notify,
+        })
     }
+}
 
-    /// Complete a single-flight fill, notifying waiters.
-    pub(crate) fn finish_fill(&self, key: &CacheKey) {
-        if let Some(notify) = self
+/// Outcome of registering for a single-flight cache fill.
+pub(crate) enum CacheFillReservation {
+    /// This caller owns the fill for `key`. The in-flight slot is released
+    /// and waiters are notified when the guard drops, even on cancellation.
+    Filler(FillGuard),
+    /// Another request is filling the key: enable the notified future, then
+    /// re-lookup and await.
+    Waiter(Arc<tokio::sync::Notify>),
+    /// The in-flight table is saturated; proxy upstream without coalescing.
+    Bypass,
+}
+
+/// RAII owner of one single-flight slot. Dropping the guard removes the key
+/// from the in-flight table and notifies every waiter, so cancellation of the
+/// filling future cannot strand waiters on a never-notified `Notify`.
+pub(crate) struct FillGuard {
+    in_flight: Arc<Mutex<std::collections::HashMap<CacheKey, Arc<tokio::sync::Notify>>>>,
+    key: CacheKey,
+    notify: Arc<tokio::sync::Notify>,
+}
+
+impl Drop for FillGuard {
+    fn drop(&mut self) {
+        let mut in_flight = self
             .in_flight
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .remove(key)
-        {
-            notify.notify_waiters();
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if in_flight.remove(&self.key).is_some() {
+            self.notify.notify_waiters();
         }
     }
 }
@@ -231,7 +274,6 @@ mod tests {
     use axum::http::HeaderMap;
     use bytes::Bytes;
     use sdkwork_webserver_core::ProxyCacheConfig;
-    use tokio::sync::Notify;
 
     use super::*;
     use crate::data_plane::cache::entry::{decide_cacheability, ResponseMetadata};
@@ -242,6 +284,7 @@ mod tests {
             enabled: true,
             max_entries: 4,
             max_object_bytes: 1024,
+            max_memory_bytes: 4096,
             default_ttl_seconds: 60,
             stale_ttl_seconds: 60,
             disk_path: None,
@@ -309,17 +352,83 @@ mod tests {
     async fn single_flight_coalesces_concurrent_fills() {
         let cache = HttpResponseCache::new(&config(), metrics());
         let k = key("/hot");
-        assert!(cache.begin_fill(&k).is_none(), "first caller fills");
-        let waiter = cache.begin_fill(&k).expect("second caller waits");
-        let notify = Arc::new(Notify::new());
-        let waiter_task = tokio::spawn(async move {
-            notify.notified().await;
+        let filler = match cache.begin_fill(&k) {
+            CacheFillReservation::Filler(guard) => guard,
+            _ => panic!("first caller must own the fill"),
+        };
+        let waiter = match cache.begin_fill(&k) {
+            CacheFillReservation::Waiter(waiter) => waiter,
+            _ => panic!("second caller must wait"),
+        };
+        // Enable before releasing the filler so the wakeup cannot be lost
+        // between the notify and the waiter's first poll.
+        let mut notified = std::pin::pin!(waiter.notified());
+        notified.as_mut().enable();
+        drop(filler);
+        tokio::time::timeout(std::time::Duration::from_secs(1), notified)
+            .await
+            .expect("waiter must be woken by the fill guard");
+        // The slot was released: a fresh fill can start again.
+        assert!(matches!(
+            cache.begin_fill(&k),
+            CacheFillReservation::Filler(_)
+        ));
+    }
+
+    #[tokio::test]
+    async fn cancelled_fill_releases_its_slot() {
+        let cache = HttpResponseCache::new(&config(), metrics());
+        let k = key("/cancelled");
+        let task_cache = Arc::clone(&cache);
+        let task_key = k.clone();
+        let filler = tokio::spawn(async move {
+            let _guard = match task_cache.begin_fill(&task_key) {
+                CacheFillReservation::Filler(guard) => guard,
+                _ => panic!("first caller must own the fill"),
+            };
+            // Hold the slot until the task is aborted mid-"upstream call".
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
         });
-        cache.finish_fill(&k);
-        // The registered waiter was notified; a fresh fill can start again.
-        assert!(cache.begin_fill(&k).is_none());
-        let _ = waiter;
-        waiter_task.abort();
+        // Wait until the fill is registered before cancelling it.
+        while !matches!(cache.begin_fill(&k), CacheFillReservation::Waiter(_)) {
+            tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+        }
+        filler.abort();
+        assert!(filler.await.is_err(), "the filler task was aborted");
+        assert!(
+            matches!(cache.begin_fill(&k), CacheFillReservation::Filler(_)),
+            "a cancelled fill must release its slot instead of leaking it"
+        );
+    }
+
+    #[test]
+    fn saturated_table_bypasses_instead_of_dead_waiter() {
+        let cache = HttpResponseCache::new(&config(), metrics());
+        // The guards must stay alive or each slot would be released on drop.
+        let guards: Vec<FillGuard> = (0..MAXIMUM_IN_FLIGHT_FILLS)
+            .map(
+                |i| match cache.begin_fill(&key(&format!("/saturation-{i}"))) {
+                    CacheFillReservation::Filler(guard) => guard,
+                    _ => panic!("each fresh key must own a fill"),
+                },
+            )
+            .collect();
+        // A new key past capacity bypasses coalescing instead of receiving a
+        // waiter nobody will ever notify.
+        assert!(matches!(
+            cache.begin_fill(&key("/overflow")),
+            CacheFillReservation::Bypass
+        ));
+        // Already-filling keys stay joinable regardless of table size.
+        assert!(matches!(
+            cache.begin_fill(&key("/saturation-0")),
+            CacheFillReservation::Waiter(_)
+        ));
+        drop(guards);
+        assert!(matches!(
+            cache.begin_fill(&key("/overflow")),
+            CacheFillReservation::Filler(_)
+        ));
     }
 
     #[test]

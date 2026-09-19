@@ -1,14 +1,24 @@
 // Temporary diagnostic: load the live cloudrouter sidecar through the import
 // loader and dump listener/vhost wiring. Delete after debugging.
-use sdkwork_webserver_core::module_imports::{load_module_import_app_config, WebserverModuleImport};
+use sdkwork_webserver_core::module_imports::{
+    load_module_import_app_config, WebserverModuleImport,
+};
 
 #[test]
 fn dump_cloudrouter_materialization() {
-    let path = if std::path::Path::new("/tmp/router-sidecar/nginx.cloud.development.conf").exists() {
+    let path = if std::path::Path::new("/tmp/router-sidecar/nginx.cloud.development.conf").exists()
+    {
         "/tmp/router-sidecar/nginx.cloud.development.conf".to_owned()
     } else {
         "../sdkwork-cloudrouter/deployments/webserver/nginx.cloud.development.conf".to_owned()
     };
+    // Diagnostic probe: it needs a live sibling-module sidecar checkout and
+    // only prints the materialized wiring. Environments without the sibling
+    // checkout skip instead of failing the suite.
+    if !std::path::Path::new(&path).exists() {
+        eprintln!("skip: sidecar {path} is not checked out in this environment");
+        return;
+    }
     let import = WebserverModuleImport {
         id: "sdkwork-cloudrouter".to_owned(),
         path: path.clone().into(),
@@ -21,10 +31,7 @@ fn dump_cloudrouter_materialization() {
     for listener in &app.listeners {
         println!(
             "LISTENER id={} bind={} port={} default={:?}",
-            listener.id,
-            listener.bind,
-            listener.port,
-            listener.default_virtual_host_ref
+            listener.id, listener.bind, listener.port, listener.default_virtual_host_ref
         );
     }
     for host in &app.virtual_hosts {
@@ -38,14 +45,15 @@ fn dump_cloudrouter_materialization() {
         for route in host.routes.iter().take(8) {
             println!(
                 "  ROUTE id={} match={:?} resource_ref={}",
-                route.id,
-                route.route_match,
-                route.resource_ref
+                route.id, route.route_match, route.resource_ref
             );
         }
     }
     for resource in &app.resources {
-        println!("RESOURCE {}", serde_json::to_string_pretty(resource).unwrap_or_default());
+        println!(
+            "RESOURCE {}",
+            serde_json::to_string_pretty(resource).unwrap_or_default()
+        );
     }
     let loader = sdkwork_webserver_core::WebServerConfigLoader::new();
     let options = sdkwork_webserver_core::ConfigLoadOptions {
@@ -57,11 +65,17 @@ fn dump_cloudrouter_materialization() {
         .load_and_compile(std::path::Path::new(&path), &options)
         .expect("load_and_compile");
     for listener_id in ["listener-0-0-0-0-80"] {
-        for authority in ["router-dev.sdkwork.com", "server-dev.sdkwork.com", "unknown.example.com"] {
+        for authority in [
+            "router-dev.sdkwork.com",
+            "server-dev.sdkwork.com",
+            "unknown.example.com",
+        ] {
             let selected = compiled.select_route(listener_id, authority, "/", "GET");
             println!(
                 "SELECT listener={listener_id} host={authority} -> {}",
-                selected.map(|s| s.virtual_host.id.as_str()).unwrap_or("NONE")
+                selected
+                    .map(|s| s.virtual_host.id.as_str())
+                    .unwrap_or("NONE")
             );
         }
     }

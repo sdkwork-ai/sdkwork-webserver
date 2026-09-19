@@ -37,19 +37,19 @@ impl WebRepository {
         }
         let (page, page_size, offset) = pagination(page, page_size)?;
         let count_row = sqlx::query(
-            "SELECT COUNT(*) AS total FROM web_source_version
+            "SELECT COUNT(*) AS total FROM webserver_source_version
              WHERE tenant_id = $1 AND site_id = $2",
         )
         .bind(tenant_id)
         .bind(site_internal_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(|error| store_error("count web_source_version", error))?;
+        .map_err(|error| store_error("count webserver_source_version", error))?;
         let rows = sqlx::query(
             "SELECT uuid, version_tag, source_type, source_ref, commit_hash, artifact_path,
                     artifact_size, artifact_hash, CAST(config_snapshot AS TEXT) AS config_snapshot,
                     status, CAST(created_at AS TEXT) AS created_at
-             FROM web_source_version
+             FROM webserver_source_version
              WHERE tenant_id = $1 AND site_id = $2
              ORDER BY created_at DESC, id DESC LIMIT $3 OFFSET $4",
         )
@@ -59,16 +59,16 @@ impl WebRepository {
         .bind(offset)
         .fetch_all(&self.pool)
         .await
-        .map_err(|error| store_error("list web_source_version", error))?;
+        .map_err(|error| store_error("list webserver_source_version", error))?;
 
         let total = count_row
             .try_get("total")
-            .map_err(|error| store_error("map web_source_version count", error))?;
+            .map_err(|error| store_error("map webserver_source_version count", error))?;
         let items = rows
             .iter()
             .map(|row| map_source_version_row(row, site_id))
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| WebServiceError::Internal(format!("map web_source_version: {error}")))?;
+            .map_err(|error| WebServiceError::Internal(format!("map webserver_source_version: {error}")))?;
         Ok(SourceVersionPage {
             items,
             total,
@@ -99,7 +99,7 @@ impl WebRepository {
         let sql = "SELECT uuid, version_tag, source_type, source_ref, commit_hash, artifact_path,
                     artifact_size, artifact_hash, CAST(config_snapshot AS TEXT) AS config_snapshot,
                     status, CAST(created_at AS TEXT) AS created_at
-             FROM web_source_version
+             FROM webserver_source_version
              WHERE tenant_id = $1 AND site_id = $2
                AND (created_at, id) < (CAST($3 AS TIMESTAMPTZ), $4)
              ORDER BY created_at DESC, id DESC LIMIT $5".to_string();
@@ -112,22 +112,22 @@ impl WebRepository {
             .bind(fetch_size)
             .fetch_all(&self.pool)
             .await
-            .map_err(|error| store_error("list web_source_version cursor", error))?;
+            .map_err(|error| store_error("list webserver_source_version cursor", error))?;
         let has_more = rows.len() > page_size as usize;
         let page_rows = rows.into_iter().take(page_size as usize).collect::<Vec<_>>();
         let items = page_rows
             .iter()
             .map(|row| map_source_version_row(row, site_id))
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| WebServiceError::Internal(format!("map web_source_version: {error}")))?;
+            .map_err(|error| WebServiceError::Internal(format!("map webserver_source_version: {error}")))?;
         let next_cursor = has_more
             .then(|| {
                 let last = page_rows.last().expect("non-empty page when has_more");
                 let created_at = cursor_instant_from_row(last, "created_at")
-                    .map_err(|error| store_error("map web_source_version cursor instant", error))?;
+                    .map_err(|error| store_error("map webserver_source_version cursor instant", error))?;
                 let id: i64 = last
                     .try_get("id")
-                    .map_err(|error| store_error("map web_source_version cursor id", error))?;
+                    .map_err(|error| store_error("map webserver_source_version cursor id", error))?;
                 Ok::<_, WebServiceError>(encode_keyset_cursor(&created_at, id))
             })
             .transpose()?;
@@ -165,7 +165,7 @@ impl WebRepository {
             .await
             .map_err(|error| store_error("begin source version transaction", error))?;
         let site_row = sqlx::query(
-            "SELECT id, organization_id FROM web_site
+            "SELECT id, organization_id FROM webserver_site
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL
              FOR UPDATE",
         )
@@ -183,7 +183,7 @@ impl WebRepository {
             .map_err(|error| store_error("map source version organization id", error))?;
 
         sqlx::query(
-            "INSERT INTO web_source_version (
+            "INSERT INTO webserver_source_version (
                 id, uuid, tenant_id, organization_id, user_id, site_id, version_tag,
                 source_type, source_ref, commit_hash, artifact_path, artifact_size,
                 artifact_hash, config_snapshot, status, metadata, created_at, updated_at, version
@@ -210,17 +210,17 @@ impl WebRepository {
             .bind(&now)
             .execute(&mut *transaction)
             .await
-            .map_err(|error| store_error("insert web_source_version", error))?;
+            .map_err(|error| store_error("insert webserver_source_version", error))?;
 
         sqlx::query(
             "WITH retained AS (
                  SELECT id
-                 FROM web_source_version
+                 FROM webserver_source_version
                  WHERE tenant_id = $1 AND site_id = $2 AND status = 1
                  ORDER BY created_at DESC, id DESC
                  OFFSET $3
              )
-             UPDATE web_source_version AS source_version
+             UPDATE webserver_source_version AS source_version
              SET status = 3, pruned_at = CAST($5 AS TIMESTAMPTZ), pruned_by = $4,
                  updated_at = CAST($5 AS TIMESTAMPTZ), version = source_version.version + 1
              FROM retained
@@ -235,13 +235,13 @@ impl WebRepository {
         .bind(&now)
         .execute(&mut *transaction)
         .await
-        .map_err(|error| store_error("prune web_source_version", error))?;
+        .map_err(|error| store_error("prune webserver_source_version", error))?;
 
         let row = sqlx::query(
             "SELECT uuid, version_tag, source_type, source_ref, commit_hash, artifact_path,
                     artifact_size, artifact_hash, CAST(config_snapshot AS TEXT) AS config_snapshot,
                     status, CAST(created_at AS TEXT) AS created_at
-             FROM web_source_version
+             FROM webserver_source_version
              WHERE tenant_id = $1 AND site_id = $2 AND uuid = $3",
         )
         .bind(tenant_id)
@@ -249,9 +249,9 @@ impl WebRepository {
         .bind(&uuid)
         .fetch_one(&mut *transaction)
         .await
-        .map_err(|error| store_error("retrieve created web_source_version", error))?;
+        .map_err(|error| store_error("retrieve created webserver_source_version", error))?;
         let response = map_source_version_row(&row, site_id)
-            .map_err(|error| WebServiceError::Internal(format!("map web_source_version: {error}")))?;
+            .map_err(|error| WebServiceError::Internal(format!("map webserver_source_version: {error}")))?;
         transaction
             .commit()
             .await
@@ -270,7 +270,7 @@ impl WebRepository {
             "SELECT uuid, version_tag, source_type, source_ref, commit_hash, artifact_path,
                     artifact_size, artifact_hash, CAST(config_snapshot AS TEXT) AS config_snapshot,
                     status, CAST(created_at AS TEXT) AS created_at
-             FROM web_source_version
+             FROM webserver_source_version
              WHERE tenant_id = $1 AND site_id = $2 AND uuid = $3",
         )
         .bind(tenant_id)
@@ -278,10 +278,10 @@ impl WebRepository {
         .bind(source_version_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("retrieve web_source_version", error))?
+        .map_err(|error| store_error("retrieve webserver_source_version", error))?
         .ok_or_else(|| WebServiceError::not_found("source version not found"))?;
         map_source_version_row(&row, site_id)
-            .map_err(|error| WebServiceError::Internal(format!("map web_source_version: {error}")))
+            .map_err(|error| WebServiceError::Internal(format!("map webserver_source_version: {error}")))
     }
 }
 

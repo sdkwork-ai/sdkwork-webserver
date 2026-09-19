@@ -8,17 +8,11 @@ import { parse as parseYaml } from 'yaml';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
+// The `app-api` surface was retired: the application / domain / certificate
+// lifecycle is owned by sdkwork-deployments and served through its own
+// `/app/v3/api` authority, so this repository only verifies the two surfaces it
+// still owns.
 const surfaces = [
-  {
-    name: 'app-api',
-    source: 'apis/app-api/web/openapi.yaml',
-    authority: 'apis/app-api/web/sdkwork-webserver-app-api.openapi.json',
-    manifest: 'sdks/_route-manifests/app-api/sdkwork-routes-webserver-app-api.route-manifest.json',
-    typescriptApi: 'sdks/sdkwork-webserver-app-sdk/sdkwork-webserver-app-sdk-typescript/generated/server-openapi/src/api',
-    // 15 marked operations after listener_certificate_bindings and health_checks
-    // idempotency markings were added to apis/app-api/web/openapi.yaml and materialized.
-    expectedIdempotentOperations: 15,
-  },
   {
     name: 'backend-api',
     source: 'apis/backend-api/web/openapi.yaml',
@@ -119,17 +113,36 @@ for (const surface of surfaces) {
 }
 
 test('deployment idempotency is Header-owned and consumers do not assemble it manually', () => {
-  const appAuthority = JSON.parse(read('apis/app-api/web/sdkwork-webserver-app-api.openapi.json'));
+  // The webserver app-api authority was retired together with the surface, so
+  // the request under guard is the backend-admin one.
   const backendAuthority = JSON.parse(read('apis/backend-api/web/sdkwork-webserver-backend-api.openapi.json'));
-  assert.equal(appAuthority.components.schemas.CreateDeploymentRequest.properties.idempotencyKey, undefined);
-  assert.equal(backendAuthority.components.schemas.CreateApplicationDeploymentRequest.properties.idempotencyKey, undefined);
+  assert.equal(
+    backendAuthority.components.schemas.CreateApplicationDeploymentRequest.properties.idempotencyKey,
+    undefined,
+  );
 
-  const consumerFiles = [
-    'apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-console-core/src/index.tsx',
-    'apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-core/src/index.tsx',
-    'apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-applications/src/data-source.ts',
-  ];
-  for (const file of consumerFiles) {
-    assert.doesNotMatch(read(file), /Idempotency-Key/u, `${file} must use generated SDK params`);
-  }
+  // Every authored PC surface must reach the header through generated SDK
+  // params. The authored tree is walked explicitly, skipping `node_modules` and
+  // `dist`: `fs.readdirSync(..., { recursive: true })` cannot prune those and
+  // dies on the broken `.bin` entries pnpm leaves inside nested dependency
+  // hoists. The scan replaces a hand-kept file list that had gone stale — it
+  // still pointed at `…-admin-applications`, a package that no longer exists,
+  // so the assertion died on ENOENT instead of guarding.
+  const offenders = [];
+  const walkAuthored = (directory) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        if (entry.name === 'node_modules' || entry.name === 'dist') continue;
+        walkAuthored(path.join(directory, entry.name));
+        continue;
+      }
+      if (!entry.isFile() || !/\.tsx?$/u.test(entry.name)) continue;
+      const absolute = path.join(directory, entry.name);
+      if (/Idempotency-Key/u.test(fs.readFileSync(absolute, 'utf8'))) {
+        offenders.push(path.relative(ROOT, absolute).replace(/\\/gu, '/'));
+      }
+    }
+  };
+  walkAuthored(path.join(ROOT, 'apps/sdkwork-webserver-pc/packages'));
+  assert.deepEqual(offenders, [], 'authored PC surfaces must use generated SDK params');
 });

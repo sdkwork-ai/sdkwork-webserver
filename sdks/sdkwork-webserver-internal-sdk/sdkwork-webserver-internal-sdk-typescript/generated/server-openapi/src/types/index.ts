@@ -1,4 +1,17 @@
 export * from './common';
+export type { Int64String } from './int64-string';
+export type { ClusterRegistrationRequest } from './cluster-registration-request';
+export type { ClusterHostDescriptor } from './cluster-host-descriptor';
+export type { ClusterInstanceDescriptor } from './cluster-instance-descriptor';
+export type { ClusterRegistrationResponse } from './cluster-registration-response';
+export type { ClusterRef } from './cluster-ref';
+export type { ClusterHostRef } from './cluster-host-ref';
+export type { ClusterInstanceRef } from './cluster-instance-ref';
+export type { ClusterPeer } from './cluster-peer';
+export type { ClusterHeartbeatRequest } from './cluster-heartbeat-request';
+export type { ClusterHeartbeatResponse } from './cluster-heartbeat-response';
+export type { ClusterPeerMessage } from './cluster-peer-message';
+export type { ClusterPeerDirectoryResponse } from './cluster-peer-directory-response';
 export type { PublishRuntimeAssignmentRequest } from './publish-runtime-assignment-request';
 export type { CreateRuntimeObservationRequest } from './create-runtime-observation-request';
 export type { RuntimeAssignment } from './runtime-assignment';

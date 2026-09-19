@@ -1,9 +1,9 @@
+import {
+  createClient as createDeployAppClient,
+  type SdkworkDeployAppClient,
+} from "@sdkwork/deployments-app-sdk";
 import { createDriveAppClient, type SdkworkDriveAppClient } from "@sdkwork/drive-app-sdk";
 import type { AuthTokenManager } from "@sdkwork/sdk-common";
-import {
-  createClient as createWebAppClient,
-  type SdkworkAppClient as SdkworkWebAppClient,
-} from "@sdkwork/webserver-app-sdk";
 import { createContext, useContext, type ReactNode } from "react";
 
 /**
@@ -11,27 +11,35 @@ import { createContext, useContext, type ReactNode } from "react";
  * base URLs plus token manager into the two generated clients the console
  * surfaces consume, and publishing them through a typed host port.
  *
- * The application lifecycle used to live here as a resource registry over
- * `web_application` / `web_source_version` / `web_deployment`. That entity is
- * owned by sdkwork-deployments (`deploy_app`) and every Applications page is now
- * the canonical deployments page bridged by
- * `@sdkwork/webserver-pc-console-delivery`, so no registry-driven console
- * resource remains and nothing local re-implements the lifecycle.
+ * Both clients are dependency-owned. The application lifecycle used to live here
+ * as a resource registry over `webserver_application` / `webserver_source_version` /
+ * `webserver_deployment`; that entity is owned by sdkwork-deployments (`deploy_app`)
+ * and every Applications page is now the canonical deployments page bridged by
+ * `@sdkwork/webserver-pc-console-delivery`. The client this host constructs is
+ * the deployments generated client as well, so no console surface reaches the
+ * legacy webserver app-api face any more.
  */
 
-export type { SdkworkDriveAppClient };
-export { createDriveAppClient };
+export type { SdkworkDeployAppClient, SdkworkDriveAppClient };
+export { createDeployAppClient, createDriveAppClient };
+export {
+  WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD,
+  WEBSERVER_PC_UPLOAD_DECLARATIONS,
+} from "./sdk/uploadDeclaration";
+export type {
+  WebserverPcUploadDeclarationEntry,
+} from "./sdk/uploadDeclaration";
 
-export type WebserverConsoleSdkClient = SdkworkWebAppClient;
+export type WebserverConsoleSdkClient = SdkworkDeployAppClient;
 
 export interface WebserverConsoleSdkClients {
+  deploy: SdkworkDeployAppClient;
   drive: SdkworkDriveAppClient;
-  web: SdkworkWebAppClient;
 }
 
 const Context = createContext<WebserverConsoleSdkClients | null>(null);
 
-export function createWebserverConsoleSdkClient(baseUrl: string, tokenManager: AuthTokenManager): WebserverConsoleSdkClient { return createWebAppClient({ baseUrl, authMode: "dual-token", platform: "pc", tokenManager }); }
-export function createWebserverConsoleSdkClients(baseUrls: { driveAppApiBaseUrl: string; webAppApiBaseUrl: string }, tokenManager: AuthTokenManager): WebserverConsoleSdkClients { return { drive: createDriveAppClient({ baseUrl: baseUrls.driveAppApiBaseUrl, authMode: "dual-token", platform: "pc", tokenManager }), web: createWebserverConsoleSdkClient(baseUrls.webAppApiBaseUrl, tokenManager) }; }
+export function createWebserverConsoleSdkClient(baseUrl: string, tokenManager: AuthTokenManager): WebserverConsoleSdkClient { return createDeployAppClient({ baseUrl, authMode: "dual-token", platform: "pc", tokenManager }); }
+export function createWebserverConsoleSdkClients(baseUrls: { deployAppApiBaseUrl: string; driveAppApiBaseUrl: string }, tokenManager: AuthTokenManager): WebserverConsoleSdkClients { return { deploy: createWebserverConsoleSdkClient(baseUrls.deployAppApiBaseUrl, tokenManager), drive: createDriveAppClient({ baseUrl: baseUrls.driveAppApiBaseUrl, authMode: "dual-token", platform: "pc", tokenManager }) }; }
 export function WebserverConsoleSdkProvider({ children, clients }: { children: ReactNode; clients: WebserverConsoleSdkClients }) { return <Context.Provider value={clients}>{children}</Context.Provider>; }
 export function useWebserverConsoleSdk(): WebserverConsoleSdkClients { const clients = useContext(Context); if (!clients) throw new Error("WebserverConsoleSdkProvider is required"); return clients; }

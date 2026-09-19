@@ -22,7 +22,7 @@ client.set_auth_token("your-auth-token")
 client.set_access_token("your-access-token")
 
 # Use the SDK
-result = client.nginx.status.retrieve()
+result = client.cluster.overview.list()
 ```
 
 ## Authentication
@@ -61,6 +61,7 @@ client.set_header('X-Custom-Header', 'value')
 - `client.webserver_config` - webserver_config API
 - `client.agent` - agent API
 - `client.audit` - audit API
+- `client.cluster` - cluster API
 
 ## Usage Examples
 
@@ -221,11 +222,19 @@ result = client.audit.audit_logs.list(params)
 print(result)
 ```
 
+### cluster
+
+```python
+# Retrieve the cluster health overview for status polling
+result = client.cluster.overview.list()
+print(result)
+```
+
 ## Error Handling
 
 ```python
 try:
-    client.nginx.status.retrieve()
+    client.cluster.overview.list()
 except Exception as error:
     print(f"Error: {error}")
 ```

@@ -427,13 +427,19 @@ mod tests {
         .expect("wildcard request");
 
         let apex_handle = presenter.publish(&apex).await.expect("publish apex");
-        let wildcard_handle = presenter.publish(&wildcard).await.expect("publish wildcard");
+        let wildcard_handle = presenter
+            .publish(&wildcard)
+            .await
+            .expect("publish wildcard");
 
         let mut values = presenter.values_at("_acme-challenge.example.com");
         values.sort();
         assert_eq!(values.len(), 2, "both values must survive at one name");
 
-        presenter.withdraw(&apex_handle).await.expect("withdraw apex");
+        presenter
+            .withdraw(&apex_handle)
+            .await
+            .expect("withdraw apex");
         assert_eq!(
             presenter.values_at("_acme-challenge.example.com"),
             vec![wildcard.record_value.clone()]
@@ -459,12 +465,9 @@ mod tests {
 
     #[test]
     fn request_rejects_a_record_outside_its_zone() {
-        assert!(Dns01RecordRequest::new(
-            "example.com",
-            "_acme-challenge.other.com",
-            "value"
-        )
-        .is_err());
+        assert!(
+            Dns01RecordRequest::new("example.com", "_acme-challenge.other.com", "value").is_err()
+        );
     }
 
     #[test]

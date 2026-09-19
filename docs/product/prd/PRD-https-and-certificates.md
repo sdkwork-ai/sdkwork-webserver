@@ -41,16 +41,16 @@ Listener activation fails when its TLS policy has no valid certificate candidate
 ## 4. SNI And Certificate Selection
 
 - Hostnames are tenant assets under explicit root-domain Zones. Application routing is represented
-  by `web_site_binding`; certificates never own or copy an application id.
+  by `webserver_site_binding`; certificates never own or copy an application id.
 - Managed certificate inventory and issuance are addressed by verified hostname identifiers. A
-  `web_site_binding` is not an issuance prerequisite; it is required only for listener assignment.
+  `webserver_site_binding` is not an issuance prerequisite; it is required only for listener assignment.
 - Certificate issue forms load eligible hostname choices through standard server pagination, keep
   selections stable across page changes, and never aggregate the tenant hostname inventory in the
   browser. Only `isVerified = true` assets are selectable; verified unbound assets remain eligible.
 - A certificate covers 1..8 ordered exact or wildcard hostnames through
-  `web_certificate_identifier`. The UI and API both enforce this limit before issuance. A hostname
+  `webserver_certificate_identifier`. The UI and API both enforce this limit before issuance. A hostname
   may participate in several certificate lifecycles.
-- Listener selection intent is represented by `web_listener_certificate_binding`, not by copying a
+- Listener selection intent is represented by `webserver_listener_certificate_binding`, not by copying a
   certificate id onto a hostname or application row.
 - Certificate names support exact DNS names, standards-compliant wildcards, and SAN coverage. Regex certificate names are forbidden.
 - The engine selects certificates by normalized SNI name and declared priority, then by compatible signature algorithm and client capabilities.
@@ -228,7 +228,7 @@ Alerts include configurable 30-day, 14-day, 7-day, 72-hour, and 24-hour expiry t
 - Certificate issue and manual renewal return HTTP `202` with `SdkWorkAsyncData`; they never return
   a certificate resource as proof that external issuance completed. App and backend generated SDKs
   retrieve the tenant/owner-scoped operation by `operationId` until a terminal state is observed.
-- `web_certificate_operation` persists `ISSUE` and `RENEW` intent independently of browser or API
+- `webserver_certificate_operation` persists `ISSUE` and `RENEW` intent independently of browser or API
   process lifetime. Claims use `FOR UPDATE SKIP LOCKED`, expiring leases, monotonically increasing
   fencing tokens, bounded attempts, and retry timestamps. Stale workers cannot finalize newer work,
   and exhausted leases become terminal failures with a stable non-secret `failureCode`.

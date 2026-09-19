@@ -50,7 +50,7 @@ tail -n 50 /opt/deploy/sdkwork-webserver/bundle/release-ledger.log 2>/dev/null
 
 ## 3. Application deployment records stuck in PENDING (control plane)
 
-This is the designed truthful state: `web_deployment` is a command intent; the
+This is the designed truthful state: `webserver_deployment` is a command intent; the
 deployment worker that advances `status` belongs to the Deploy control plane
 (REQ-2026-0061/0062 gate; ADR-20260731 under human review). Therefore
 `sites.activate` (requires a successful deployment) and `deployments.rollback`

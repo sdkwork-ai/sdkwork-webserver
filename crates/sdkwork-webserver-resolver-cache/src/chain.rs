@@ -10,9 +10,11 @@
 //! async layers (Redis, database, fallback) run under a per-domain
 //! single-flight guard so a thundering herd collapses to one resolution.
 
-use std::{collections::HashMap, sync::Arc, time::Duration};
-
-use tokio::sync::Mutex;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use crate::{
     backend::{normalize_domain, ResolverCacheBackend},
@@ -39,6 +41,37 @@ pub type UpstreamResolver = dyn Fn(&str) -> std::pin::Pin<Box<dyn std::future::F
     + Send
     + Sync;
 
+/// Bound on waiter retries after a woken waiter finds no usable record (the
+/// winner was cancelled before back-filling). Each retry either becomes the
+/// winner or joins a fresh fill.
+const SINGLE_FLIGHT_RETRY_LIMIT: u32 = 8;
+
+/// Upper bound for one single-flight wait. Completion and cancellation both
+/// notify, so this only fires on a pathological race; it exists so a waiter
+/// cannot park forever under any circumstance.
+const SINGLE_FLIGHT_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// RAII owner of one per-domain in-flight slot. Dropping the guard removes
+/// the entry and wakes every waiter, so a cancelled resolution future cannot
+/// leave the domain parked on a notification nobody will ever send.
+struct InFlightGuard {
+    in_flight: Arc<Mutex<HashMap<String, Arc<tokio::sync::Notify>>>>,
+    domain: String,
+    notify: Arc<tokio::sync::Notify>,
+}
+
+impl Drop for InFlightGuard {
+    fn drop(&mut self) {
+        let mut in_flight = self
+            .in_flight
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if in_flight.remove(&self.domain).is_some() {
+            self.notify.notify_waiters();
+        }
+    }
+}
+
 pub struct ResolutionChain {
     file: Option<Arc<FileResolverSource>>,
     memory: Arc<InMemoryResolverCache>,
@@ -46,8 +79,11 @@ pub struct ResolutionChain {
     database: Option<Arc<dyn ResolutionDatabase>>,
     ttl_seconds: u64,
     negative_ttl_seconds: u64,
-    /// Per-domain single-flight for the async fallback path.
-    in_flight: Mutex<HashMap<String, Arc<tokio::sync::Notify>>>,
+    /// Per-domain single-flight for the async fallback path. The lock is a
+    /// synchronous mutex on purpose: it is only ever held across bounded map
+    /// operations, never across an await, and the in-flight RAII guard must
+    /// be able to clean up from `Drop` after the winner future is cancelled.
+    in_flight: Arc<Mutex<HashMap<String, Arc<tokio::sync::Notify>>>>,
     _config: ResolutionCacheConfig,
 }
 
@@ -81,7 +117,7 @@ impl ResolutionChain {
             database,
             ttl_seconds: config.memory_ttl_seconds,
             negative_ttl_seconds: config.negative_ttl_seconds,
-            in_flight: Mutex::new(HashMap::new()),
+            in_flight: Arc::new(Mutex::new(HashMap::new())),
             _config: config.clone(),
         }
     }
@@ -140,57 +176,125 @@ impl ResolutionChain {
         // Upstream fallback with per-domain single-flight. The waiter
         // enables its `Notified` future BEFORE re-reading the memory layer
         // (`tokio::sync::Notify` loses wakeups delivered to a future that
-        // was not yet polled): the winner back-fills memory before it
-        // removes the in-flight entry and calls `notify_waiters`, so a
-        // waiter either observes the back-filled record or is registered
-        // in time to receive the notification — it can never park forever.
-        let notify = {
-            let mut in_flight = self.in_flight.lock().await;
-            if let Some(notify) = in_flight.get(&domain) {
-                let notify = notify.clone();
-                drop(in_flight);
-                let notified = notify.notified();
-                tokio::pin!(notified);
-                notified.as_mut().enable();
-                // The winner may have completed between dropping the lock
-                // and enabling the notification; its back-fill already
-                // landed in memory, so serve it without waiting.
-                if let Some(record) = self.memory.get(&domain) {
-                    if !record.expired(now_unix()) {
-                        return self.outcome_of(record);
-                    }
-                }
-                notified.await;
-                // The winner back-filled the chain; re-read from memory.
-                return match self.memory.get(&domain) {
-                    Some(record) => self.outcome_of(record),
-                    None => ResolutionOutcome::NegativeHit,
-                };
+        // was not yet polled): the winner back-fills memory before its
+        // guard removes the in-flight entry and calls `notify_waiters`, so
+        // a waiter either observes the back-filled record or is registered
+        // in time to receive the notification.
+        //
+        // Every in-flight entry is owned by an RAII [`InFlightGuard`]: if
+        // the winner future is cancelled while parked on the upstream call
+        // (caller timeout, client disconnect), the guard removes the entry
+        // and wakes the waiters from `Drop`, so cancellation can never
+        // strand later resolutions on a never-notified `Notify`. A waiter
+        // woken without a usable record retries as a fresh candidate, so a
+        // cancelled winner costs one bounded retry instead of a fabricated
+        // negative result.
+        let mut rounds: u32 = 0;
+        loop {
+            // The borrow ends at this statement's semicolon; the lock is
+            // never held across an await in any path below.
+            let existing = self
+                .in_flight
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .get(&domain)
+                .cloned();
+            let outcome = match existing {
+                Some(notify) => self.wait_for_fill(&domain, notify).await,
+                None => self.win_fill(&domain, upstream).await,
+            };
+            if let Some(outcome) = outcome {
+                return outcome;
             }
-            let notify = Arc::new(tokio::sync::Notify::new());
-            in_flight.insert(domain.clone(), notify.clone());
-            notify
-        };
+            // Lost the race or the winner was cancelled before back-filling:
+            // take another turn. Bounded so a pathological race cannot loop
+            // unbounded.
+            rounds = rounds.saturating_add(1);
+            if rounds > SINGLE_FLIGHT_RETRY_LIMIT {
+                return ResolutionOutcome::NegativeHit;
+            }
+        }
+    }
 
-        let result = upstream(&domain).await;
+    /// Become the single-flight winner for `domain`: register the in-flight
+    /// entry under its RAII guard, run the upstream call, and back-fill the
+    /// chain. The guard releases the entry and wakes waiters on drop —
+    /// including when this future is cancelled mid-upstream.
+    ///
+    /// Returns `None` when another caller won the race between the caller's
+    /// table check and this lock; the caller should retry as a waiter.
+    async fn win_fill(
+        &self,
+        domain: &str,
+        upstream: &UpstreamResolver,
+    ) -> Option<ResolutionOutcome> {
+        let notify = Arc::new(tokio::sync::Notify::new());
+        {
+            let mut in_flight = self
+                .in_flight
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if in_flight.contains_key(domain) {
+                return None;
+            }
+            in_flight.insert(domain.to_owned(), Arc::clone(&notify));
+        }
+        // The lock is released and the guard owns the entry before the first
+        // await, so every table entry is owned until its future completes or
+        // is cancelled.
+        let guard = InFlightGuard {
+            in_flight: Arc::clone(&self.in_flight),
+            domain: domain.to_owned(),
+            notify,
+        };
+        let result = upstream(domain).await;
         let record = match result {
             Ok(addresses) => ResolvedRecord::fresh(
-                domain.clone(),
+                domain.to_owned(),
                 addresses.clone(),
                 self.ttl_seconds,
                 now_unix(),
             ),
             Err(()) => {
-                ResolvedRecord::negative(domain.clone(), self.negative_ttl_seconds, now_unix())
+                ResolvedRecord::negative(domain.to_owned(), self.negative_ttl_seconds, now_unix())
             }
         };
         self.backfill(record.clone()).await;
+        drop(guard);
+        Some(self.outcome_of(record))
+    }
 
-        let mut in_flight = self.in_flight.lock().await;
-        in_flight.remove(&domain);
-        notify.notify_waiters();
-
-        self.outcome_of(record)
+    /// Wait for an in-flight fill to complete and serve its back-filled
+    /// record. Returns `None` when the winner was cancelled without
+    /// back-filling (or the record expired in between), so the caller can
+    /// retry as a fresh candidate instead of fabricating a negative result.
+    async fn wait_for_fill(
+        &self,
+        domain: &str,
+        notify: Arc<tokio::sync::Notify>,
+    ) -> Option<ResolutionOutcome> {
+        let notified = notify.notified();
+        tokio::pin!(notified);
+        // Enable before the re-check so a winner completing between the
+        // lookup and the await cannot strand this waiter.
+        notified.as_mut().enable();
+        if let Some(record) = self.memory.get(domain) {
+            if !record.expired(now_unix()) {
+                return Some(self.outcome_of(record));
+            }
+        }
+        // Bound the wait even though every completion path now notifies: a
+        // timeout only costs one bounded retry instead of a parked future.
+        if tokio::time::timeout(SINGLE_FLIGHT_WAIT_TIMEOUT, notified)
+            .await
+            .is_err()
+        {
+            tracing::debug!(domain = %domain, "single-flight wait timed out; retrying resolution");
+        }
+        match self.memory.get(domain) {
+            Some(record) if !record.expired(now_unix()) => Some(self.outcome_of(record)),
+            _ => None,
+        }
     }
 
     fn outcome_of(&self, record: ResolvedRecord) -> ResolutionOutcome {
@@ -228,26 +332,6 @@ impl ResolutionChain {
 mod tests {
     use super::*;
     use crate::memory::now_unix;
-
-    fn upstream_ok(address: &'static str) -> Box<UpstreamResolver> {
-        let address = address.to_owned();
-        Box::new(
-            move |_domain: &str| -> std::pin::Pin<
-                Box<dyn std::future::Future<Output = Result<Vec<String>, ()>> + Send>,
-            > {
-                let address = address.clone();
-                Box::pin(async move { Ok(vec![address]) })
-            },
-        )
-    }
-
-    fn upstream_fail() -> Box<UpstreamResolver> {
-        Box::new(
-            |_domain: &str| -> std::pin::Pin<
-                Box<dyn std::future::Future<Output = Result<Vec<String>, ()>> + Send>,
-            > { Box::pin(async move { Err(()) }) },
-        )
-    }
 
     #[tokio::test]
     async fn resolves_through_the_fallback_and_backfills_memory() {
@@ -392,7 +476,7 @@ mod tests {
         });
         // Pre-register an in-flight entry so the waiter takes the single
         // -flight wait path instead of becoming the winner.
-        chain.in_flight.lock().await.insert(
+        chain.in_flight.lock().unwrap().insert(
             "race.local".to_owned(),
             Arc::new(tokio::sync::Notify::new()),
         );
@@ -420,7 +504,7 @@ mod tests {
             60,
             now_unix(),
         ));
-        if let Some(notify) = chain.in_flight.lock().await.get("race.local") {
+        if let Some(notify) = chain.in_flight.lock().unwrap().get("race.local") {
             notify.notify_waiters();
         }
 
@@ -432,6 +516,122 @@ mod tests {
             calls.load(std::sync::atomic::Ordering::SeqCst),
             0,
             "the waiter must be served from the back-filled record"
+        );
+    }
+
+    /// Regression test for the cancelled-winner leak: a winner future aborted
+    /// while parked on the upstream call must release its in-flight slot, and
+    /// the next resolution must be able to win instead of parking forever.
+    #[tokio::test]
+    async fn cancelled_winner_releases_the_in_flight_slot() {
+        let chain = Arc::new(ResolutionChain::build(
+            &Default::default(),
+            None,
+            None,
+            None,
+        ));
+        let release = Arc::new(tokio::sync::Notify::new());
+        let release_for_task = release.clone();
+        let upstream: Box<UpstreamResolver> = Box::new(move |_domain| {
+            let release = release_for_task.clone();
+            Box::pin(async move {
+                release.notified().await;
+                Ok(vec!["10.0.0.5".to_owned()])
+            })
+        });
+        let upstream = Arc::new(upstream);
+
+        // Winner parks on the upstream call.
+        let winner = tokio::spawn({
+            let chain = chain.clone();
+            let upstream = upstream.clone();
+            async move { chain.resolve("cancel.local", upstream.as_ref()).await }
+        });
+        while chain.in_flight.lock().unwrap().is_empty() {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+
+        // Abort the winner mid-upstream: the guard must drop the entry.
+        winner.abort();
+        assert!(winner.await.is_err());
+        assert!(
+            chain.in_flight.lock().unwrap().is_empty(),
+            "a cancelled winner must release its in-flight slot"
+        );
+
+        // A fresh resolution must be able to win and complete.
+        release.notify_one();
+        let outcome = chain.resolve("cancel.local", upstream.as_ref()).await;
+        assert_eq!(
+            outcome,
+            ResolutionOutcome::Resolved(vec!["10.0.0.5".to_owned()])
+        );
+    }
+
+    /// A waiter joined to a winner that gets cancelled must not report a
+    /// fabricated negative result; it retries and is served by a later
+    /// winner's back-filled record.
+    #[tokio::test]
+    async fn waiter_survives_a_cancelled_winner() {
+        let chain = Arc::new(ResolutionChain::build(
+            &Default::default(),
+            None,
+            None,
+            None,
+        ));
+        let release = Arc::new(tokio::sync::Notify::new());
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let upstream: Box<UpstreamResolver> = {
+            let release = release.clone();
+            let calls = calls.clone();
+            Box::new(move |_domain| {
+                let release = release.clone();
+                let calls = calls.clone();
+                Box::pin(async move {
+                    calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    release.notified().await;
+                    Ok(vec!["10.0.0.6".to_owned()])
+                })
+            })
+        };
+        let upstream = Arc::new(upstream);
+
+        // Winner parks on the upstream call.
+        let winner = tokio::spawn({
+            let chain = chain.clone();
+            let upstream = upstream.clone();
+            async move { chain.resolve("wait.local", upstream.as_ref()).await }
+        });
+        while chain.in_flight.lock().unwrap().is_empty() {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+        // Waiter joins the in-flight fill.
+        let waiter = tokio::spawn({
+            let chain = chain.clone();
+            let upstream = upstream.clone();
+            async move {
+                tokio::time::timeout(Duration::from_secs(5), async move {
+                    chain.resolve("wait.local", upstream.as_ref()).await
+                })
+                .await
+                .expect("waiter must not park past the winner's cancellation")
+            }
+        });
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        // Cancel the winner; the waiter must survive and a fresh completion
+        // must serve it.
+        winner.abort();
+        assert!(winner.await.is_err());
+        release.notify_one();
+
+        assert_eq!(
+            waiter.await.expect("join"),
+            ResolutionOutcome::Resolved(vec!["10.0.0.6".to_owned()])
+        );
+        assert!(
+            calls.load(std::sync::atomic::Ordering::SeqCst) >= 1,
+            "a fresh upstream resolution must have completed"
         );
     }
 }

@@ -7,23 +7,12 @@
   "crateDir": "crates/sdkwork-api-webserver-assembly",
   "routeCrates": [
     {
-      "packageName": "sdkwork-routes-webserver-app-api",
-      "memberDir": "crates/sdkwork-routes-webserver-app-api",
-      "libName": "sdkwork_routes_webserver_app_api",
-      "surface": "app-api",
-      "pathPrefix": null,
-      "mountOrder": 0,
-      "componentRef": "crates/sdkwork-routes-webserver-app-api/specs/component.spec.json",
-      "routeManifestRef": "sdks/_route-manifests/app-api/sdkwork-routes-webserver-app-api.route-manifest.json",
-      "sourceRef": "crates/sdkwork-routes-webserver-app-api/Cargo.toml"
-    },
-    {
       "packageName": "sdkwork-routes-webserver-backend-api",
       "memberDir": "crates/sdkwork-routes-webserver-backend-api",
       "libName": "sdkwork_routes_webserver_backend_api",
       "surface": "backend-api",
       "pathPrefix": null,
-      "mountOrder": 1,
+      "mountOrder": 0,
       "componentRef": "crates/sdkwork-routes-webserver-backend-api/specs/component.spec.json",
       "routeManifestRef": "sdks/_route-manifests/backend-api/sdkwork-routes-webserver-backend-api.route-manifest.json",
       "sourceRef": "crates/sdkwork-routes-webserver-backend-api/Cargo.toml"
@@ -34,7 +23,7 @@
       "libName": "sdkwork_routes_webserver_internal_api",
       "surface": "internal-api",
       "pathPrefix": null,
-      "mountOrder": 2,
+      "mountOrder": 1,
       "componentRef": "crates/sdkwork-routes-webserver-internal-api/specs/component.spec.json",
       "routeManifestRef": "sdks/_route-manifests/internal-api/sdkwork-routes-webserver-internal-api.route-manifest.json",
       "sourceRef": "crates/sdkwork-routes-webserver-internal-api/Cargo.toml"

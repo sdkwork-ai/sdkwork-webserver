@@ -4,7 +4,7 @@
 runtime dependencies.
 
 The worker periodically schedules due managed renewals and executes bounded `ISSUE` and `RENEW`
-operations from `web_certificate_operation`. Repository claims use expiring leases, fencing tokens,
+operations from `webserver_certificate_operation`. Repository claims use expiring leases, fencing tokens,
 bounded attempts, and retry timestamps so concurrent workers cannot finalize stale work. The
 service owns issuance orchestration and aggregate transitions; ACME, protected material, and edge
 activation remain in their declared providers.

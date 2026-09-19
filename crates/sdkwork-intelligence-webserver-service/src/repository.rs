@@ -6,21 +6,25 @@ use sdkwork_webserver_contract::{
     AgentHeartbeatRequest, AgentHeartbeatResponse, AgentSyncResponse, ApplicationPage,
     ApplicationResponse, AuditLogPage, CertificateDistributionPage, CertificateIssueUpdate,
     CertificateOperationAcceptedResponse, CertificateOperationLease, CertificateOperationResponse,
-    CertificatePage, CertificateResponse, CreateApplicationRequest, CreateDeploymentRequest,
-    CreateDomainRequest, CreateEnvVariableRequest, CreateHealthCheckRequest,
-    CreateListenerCertificateBindingRequest, CreateManagedDomainRequest, CreateNginxConfigRequest,
-    CreatePlatformTargetRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest,
-    CreateServerRequest, CreateServerResponse, CreateSourceVersionRequest, DeploymentPage,
-    DeploymentResponse, DomainPage, DomainResponse, EnvVariablePage, EnvVariableResponse,
-    HealthCheckPage, HealthCheckResponse, IssueCertificateRequest, ListApplicationsQuery,
-    ListAuditLogsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
-    ListenerCertificateBindingPage, ListenerCertificateBindingResponse, NginxConfigPage,
-    NginxConfigResponse, NginxStatusResponse, PlatformTargetPage, PlatformTargetResponse,
-    RevokeCertificateRequest, RootDomainPage, RootDomainResponse, RuntimeAssignment,
-    RuntimeAssignmentDelivery, RuntimeObservation, RuntimeObservationState, ServerPage,
-    SourceVersionPage, SourceVersionResponse, TlsCertificateAssignmentMaterial,
-    UpdateApplicationRequest, UpdateDomainApplicationBindingRequest, UpdateEnvVariableRequest,
-    UpdateNginxConfigRequest,
+    CertificatePage, CertificateResponse, ClusterEventPage,
+    ClusterHostPage, ClusterHostResponse, ClusterInstancePage, ClusterInstanceResponse,
+    ClusterHeartbeatSamplePage, ClusterOverviewResponse, ClusterPage, ClusterPeer,
+    ClusterPeerMessage, ClusterResponse,
+    CreateApplicationRequest, CreateClusterRequest, CreateDeploymentRequest, CreateDomainRequest,
+    CreateEnvVariableRequest, CreateHealthCheckRequest, CreateListenerCertificateBindingRequest,
+    CreateManagedDomainRequest, CreateNginxConfigRequest, CreatePlatformTargetRequest,
+    CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
+    CreateServerResponse, CreateSourceVersionRequest, DeploymentPage, DeploymentResponse,
+    DomainPage, DomainResponse, EnvVariablePage, EnvVariableResponse, HealthCheckPage,
+    HealthCheckResponse, IssueCertificateRequest, ListApplicationsQuery, ListAuditLogsQuery,
+    ListNginxConfigsQuery, ListRootDomainsQuery, ListenerCertificateBindingPage,
+    ListenerCertificateBindingResponse, NginxConfigPage, NginxConfigResponse,
+    NginxStatusResponse, PlatformTargetPage, PlatformTargetResponse, RevokeCertificateRequest,
+    RootDomainPage, RootDomainResponse, RuntimeAssignment, RuntimeAssignmentDelivery,
+    RuntimeObservation, RuntimeObservationState, ServerPage, SourceVersionPage,
+    SourceVersionResponse, TlsCertificateAssignmentMaterial, UpdateApplicationRequest,
+    UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest,
+    UpdateDomainApplicationBindingRequest, UpdateEnvVariableRequest, UpdateNginxConfigRequest,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -86,6 +90,146 @@ pub struct DomainVerificationObservation {
     pub failure_code: Option<String>,
 }
 
+/// Host identity write used by cluster registration (system basics, remote
+/// IP, local IPs, machine code, MAC addresses).
+#[derive(Clone, Debug)]
+pub struct ClusterHostUpsert {
+    pub tenant_id: i64,
+    pub cluster_id: i64,
+    pub name: String,
+    pub hostname: String,
+    pub machine_code: String,
+    pub os_name: Option<String>,
+    pub os_version: Option<String>,
+    pub kernel_version: Option<String>,
+    pub arch: Option<String>,
+    pub cpu_model: Option<String>,
+    pub cpu_cores: Option<i32>,
+    pub memory_total_mb: Option<i64>,
+    pub remote_ip: Option<String>,
+    pub local_ips: Vec<String>,
+    pub mac_addresses: Vec<String>,
+    pub daemon_version: Option<String>,
+}
+
+/// Process identity write used by cluster registration (one row per PID per
+/// host). `instance_token_hash` is merged into the instance metadata so the
+/// heartbeat token authenticates after registration.
+#[derive(Clone, Debug)]
+pub struct ClusterInstanceUpsert {
+    pub tenant_id: i64,
+    pub host_id: i64,
+    pub cluster_id: i64,
+    pub name: String,
+    pub role: String,
+    pub environment: String,
+    pub process_pid: i32,
+    pub process_started_at: String,
+    pub bind_host: Option<String>,
+    pub bind_port: Option<i32>,
+    pub public_endpoint: Option<String>,
+    pub build_version: Option<String>,
+    pub instance_token_hash: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct ClusterHeartbeatWrite {
+    pub tenant_id: i64,
+    pub instance_id: i64,
+    pub host_id: i64,
+    pub status: i32,
+    pub health_state: String,
+    pub uptime_seconds: i64,
+    pub build_version: Option<String>,
+    pub metrics_json: String,
+    pub reported_at: String,
+}
+
+/// Cluster lifecycle event write addressed by uuids; the store resolves the
+/// internal foreign keys so service callers never juggle two id planes.
+#[derive(Clone, Debug)]
+pub struct ClusterEventWrite<'a> {
+    pub tenant_id: i64,
+    pub cluster_uuid: &'a str,
+    pub host_uuid: Option<&'a str>,
+    pub instance_uuid: Option<&'a str>,
+    pub event_type: &'a str,
+    pub severity: &'a str,
+    pub message: &'a str,
+    pub detail_json: &'a str,
+    pub occurred_at: &'a str,
+}
+
+/// Peer message enqueue: one row per target member (broadcast materializes a
+/// copy per online member at enqueue time).
+#[derive(Clone, Debug)]
+pub struct ClusterPeerMessageEnqueue<'a> {
+    pub tenant_id: i64,
+    pub cluster_uuid: &'a str,
+    pub from_instance_uuid: Option<&'a str>,
+    pub to_instance_uuid: Option<&'a str>,
+    pub message_type: &'a str,
+    pub payload_json: &'a str,
+    pub deliver_at: &'a str,
+    pub expires_at: &'a str,
+}
+
+/// Resolved registration target cluster.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClusterIdentity {
+    pub cluster_id: i64,
+    pub cluster_uuid: String,
+    pub name: String,
+    pub code: String,
+    pub heartbeat_interval_seconds: i32,
+    pub offline_threshold_seconds: i32,
+}
+
+/// Result of an idempotent host/instance registration upsert.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClusterUpsert {
+    pub id: i64,
+    pub uuid: String,
+    pub created: bool,
+}
+
+/// Instance credentials resolved by heartbeat token or subject uuid.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClusterInstanceCredentials {
+    pub instance_id: i64,
+    pub instance_uuid: String,
+    pub host_id: i64,
+    pub host_uuid: String,
+    pub cluster_id: i64,
+    pub cluster_uuid: String,
+    pub tenant_id: i64,
+    pub heartbeat_interval_seconds: i32,
+    pub offline_threshold_seconds: i32,
+}
+
+/// Previous instance state observed during a heartbeat, used for lifecycle
+/// transition events.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClusterHeartbeatTransition {
+    pub previous_status: i32,
+    pub previous_health_state: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExpiredClusterInstance {
+    pub instance_uuid: String,
+    pub name: String,
+    pub cluster_uuid: String,
+    pub host_uuid: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExpiredClusterHost {
+    pub host_uuid: String,
+    pub name: String,
+    pub cluster_uuid: String,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct AuditLogWrite<'a> {
     pub tenant_id: i64,
@@ -145,6 +289,15 @@ pub trait WebRepositoryPort: Send + Sync {
         tenant_id: i64,
         application_id: &str,
         status: i32,
+    ) -> WebServiceResult<ApplicationResponse>;
+
+    /// Atomic activation: the successful-deployment precondition and the
+    /// status flip run in one transaction, so a concurrent deployment
+    /// deletion can never slip between the check and the act.
+    async fn activate_application(
+        &self,
+        tenant_id: i64,
+        application_id: &str,
     ) -> WebServiceResult<ApplicationResponse>;
 
     /// Resolves the backing site id for an application resource. The site is
@@ -604,7 +757,7 @@ pub trait WebRepositoryPort: Send + Sync {
         site_uuid: &str,
     ) -> WebServiceResult<String>;
 
-    async fn web_nginx_config(
+    async fn webserver_nginx_config(
         &self,
         tenant_id: Option<i64>,
         config_id: &str,
@@ -685,4 +838,145 @@ pub trait WebRepositoryPort: Send + Sync {
     ) -> WebServiceResult<AuditLogPage>;
 
     async fn insert_audit_log(&self, entry: AuditLogWrite<'_>) -> WebServiceResult<()>;
+
+    async fn list_clusters(&self, page: i32, page_size: i32) -> WebServiceResult<ClusterPage>;
+
+    async fn create_cluster(
+        &self,
+        request: &CreateClusterRequest,
+    ) -> WebServiceResult<ClusterResponse>;
+
+    async fn retrieve_cluster(&self, cluster_id: &str) -> WebServiceResult<ClusterResponse>;
+
+    async fn update_cluster(
+        &self,
+        cluster_id: &str,
+        request: &UpdateClusterRequest,
+    ) -> WebServiceResult<ClusterResponse>;
+
+    async fn delete_cluster(&self, cluster_id: &str) -> WebServiceResult<()>;
+
+    async fn list_cluster_hosts(
+        &self,
+        cluster_id: Option<&str>,
+        status: Option<i32>,
+        page_size: i32,
+        cursor: Option<&str>,
+    ) -> WebServiceResult<ClusterHostPage>;
+
+    async fn retrieve_cluster_host(&self, host_id: &str) -> WebServiceResult<ClusterHostResponse>;
+
+    async fn update_cluster_host(
+        &self,
+        host_id: &str,
+        request: &UpdateClusterHostRequest,
+    ) -> WebServiceResult<ClusterHostResponse>;
+
+    async fn delete_cluster_host(&self, host_id: &str) -> WebServiceResult<()>;
+
+    async fn list_cluster_instances(
+        &self,
+        cluster_id: Option<&str>,
+        host_id: Option<&str>,
+        status: Option<i32>,
+        health_state: Option<&str>,
+        page_size: i32,
+        cursor: Option<&str>,
+    ) -> WebServiceResult<ClusterInstancePage>;
+
+    async fn retrieve_cluster_instance(
+        &self,
+        instance_id: &str,
+    ) -> WebServiceResult<ClusterInstanceResponse>;
+
+    async fn update_cluster_instance(
+        &self,
+        instance_id: &str,
+        request: &UpdateClusterInstanceRequest,
+    ) -> WebServiceResult<ClusterInstanceResponse>;
+
+    async fn delete_cluster_instance(&self, instance_id: &str) -> WebServiceResult<()>;
+
+    async fn list_cluster_events(
+        &self,
+        cluster_id: Option<&str>,
+        severity: Option<&str>,
+        page_size: i32,
+        cursor: Option<&str>,
+    ) -> WebServiceResult<ClusterEventPage>;
+
+    async fn cluster_overview(&self) -> WebServiceResult<ClusterOverviewResponse>;
+
+    async fn resolve_cluster_identity(
+        &self,
+        tenant_id: i64,
+        cluster_code: Option<&str>,
+    ) -> WebServiceResult<ClusterIdentity>;
+
+    async fn upsert_cluster_host(&self, write: ClusterHostUpsert) -> WebServiceResult<ClusterUpsert>;
+
+    async fn upsert_cluster_instance(
+        &self,
+        write: ClusterInstanceUpsert,
+    ) -> WebServiceResult<ClusterUpsert>;
+
+    async fn authenticate_cluster_instance_token(
+        &self,
+        token: &str,
+    ) -> WebServiceResult<ClusterInstanceCredentials>;
+
+    async fn resolve_cluster_instance_by_uuid(
+        &self,
+        instance_uuid: &str,
+    ) -> WebServiceResult<ClusterInstanceCredentials>;
+
+    async fn record_cluster_heartbeat(
+        &self,
+        write: ClusterHeartbeatWrite,
+    ) -> WebServiceResult<ClusterHeartbeatTransition>;
+
+    async fn list_cluster_peers(
+        &self,
+        exclude_instance_uuid: &str,
+        limit: i32,
+    ) -> WebServiceResult<Vec<ClusterPeer>>;
+
+    async fn claim_cluster_peer_messages(
+        &self,
+        instance_id: i64,
+        limit: i32,
+        now: &str,
+    ) -> WebServiceResult<Vec<ClusterPeerMessage>>;
+
+    async fn enqueue_cluster_peer_messages(
+        &self,
+        write: ClusterPeerMessageEnqueue<'_>,
+    ) -> WebServiceResult<u64>;
+
+    async fn list_cluster_heartbeats(
+        &self,
+        instance_uuid: &str,
+        page_size: i32,
+        cursor: Option<&str>,
+    ) -> WebServiceResult<ClusterHeartbeatSamplePage>;
+
+    async fn record_cluster_event(&self, write: ClusterEventWrite<'_>) -> WebServiceResult<()>;
+
+    async fn expire_stale_cluster_instances(
+        &self,
+        now: &str,
+        limit: i32,
+    ) -> WebServiceResult<Vec<ExpiredClusterInstance>>;
+
+    async fn expire_stale_cluster_hosts(
+        &self,
+        now: &str,
+        limit: i32,
+    ) -> WebServiceResult<Vec<ExpiredClusterHost>>;
+
+    async fn expire_cluster_peer_messages(&self, now: &str, limit: i32)
+        -> WebServiceResult<u64>;
+
+    async fn purge_cluster_heartbeats(&self, older_than: &str, limit: i32)
+        -> WebServiceResult<u64>;
 }

@@ -666,9 +666,9 @@ fn parse_runtime_environment(
     value: &str,
 ) -> Result<WebsiteRuntimeEnvironment, WebsiteDataPlaneBootstrapError> {
     WebsiteRuntimeEnvironment::parse(value).map_err(|_| {
-        WebsiteDataPlaneBootstrapError::RuntimeAssignmentConfig(
-            format!("{WEBSITE_RUNTIME_ENVIRONMENT_ENV} is invalid"),
-        )
+        WebsiteDataPlaneBootstrapError::RuntimeAssignmentConfig(format!(
+            "{WEBSITE_RUNTIME_ENVIRONMENT_ENV} is invalid"
+        ))
     })
 }
 

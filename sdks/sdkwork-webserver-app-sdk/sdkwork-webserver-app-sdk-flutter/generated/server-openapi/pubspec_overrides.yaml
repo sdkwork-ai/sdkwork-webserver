@@ -1,3 +1,0 @@
-dependency_overrides:
-  sdkwork_common_flutter:
-    path: ../../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-flutter

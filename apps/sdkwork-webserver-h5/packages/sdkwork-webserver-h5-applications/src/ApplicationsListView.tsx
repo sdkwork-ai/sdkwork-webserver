@@ -30,6 +30,7 @@ const STATUS_MESSAGE_KEYS: Readonly<Record<DeployAppStatus, string>> = {
 const KIND_MESSAGE_KEYS: Readonly<Record<DeployAppKind, string>> = {
   ANDROID_APP: "applications.list.kind.android-app",
   API_SERVICE: "applications.list.kind.api-service",
+  DESKTOP_APP: "applications.list.kind.desktop-app",
   DOUYIN_MINIPROGRAM: "applications.list.kind.douyin-miniprogram",
   HARMONYOS_APP: "applications.list.kind.harmonyos-app",
   IOS_APP: "applications.list.kind.ios-app",

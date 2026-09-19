@@ -625,7 +625,8 @@ async fn serve_adaptive_request(
                         .file_name()
                         .is_some_and(|name| name == INDEX_FILE)
             }) {
-                let mut response = serve_index_with_bootstrap_token(root, file, token, &method);
+                let mut response =
+                    serve_index_with_bootstrap_token(root, file, token, &method).await;
                 response.headers_mut().insert(VARY, adaptive_vary_header());
                 return response;
             }
@@ -646,6 +647,33 @@ async fn serve_adaptive_request(
     }
 }
 
+/// Bounded read of the shell `index.html` for token injection.
+async fn read_bounded_index(path: PathBuf) -> Result<Vec<u8>, IndexReadError> {
+    use tokio::io::AsyncReadExt;
+
+    let mut handle = match tokio::fs::File::open(&path).await {
+        Ok(handle) => handle,
+        Err(_) => return Err(IndexReadError::Missing),
+    };
+    // Read one byte past the cap so oversize is detectable without
+    // materializing an unbounded file.
+    let mut buffer = Vec::new();
+    let read = (&mut handle)
+        .take(MAX_BOOTSTRAP_FILE_BYTES + 1)
+        .read_to_end(&mut buffer)
+        .await;
+    match read {
+        Ok(_) if buffer.len() as u64 > MAX_BOOTSTRAP_FILE_BYTES => Err(IndexReadError::Oversize),
+        Ok(_) => Ok(buffer),
+        Err(_) => Err(IndexReadError::Missing),
+    }
+}
+
+enum IndexReadError {
+    Missing,
+    Oversize,
+}
+
 /// Serves `index.html` with the credential-entry bootstrap Access-Token
 /// injected as an inline script so the identity-service metadata endpoints
 /// accept the anonymous login renderer (`@sdkwork/iam-credential-entry`).
@@ -654,15 +682,20 @@ async fn serve_adaptive_request(
 /// root-relative, so the file is re-read from the configured root instead of
 /// the process working directory. HEAD mirrors the GET headers, including
 /// the Content-Length of the injected document.
-fn serve_index_with_bootstrap_token(
+///
+/// The read is asynchronous and byte-capped at the bootstrap file limit: a
+/// mis-deployed giant `index.html` must neither stall a runtime worker nor
+/// balloon per-request memory.
+async fn serve_index_with_bootstrap_token(
     root: &Path,
     file: OpenedStaticFile,
     token: &str,
     method: &Method,
 ) -> Response<Body> {
-    let html = match fs::read(root.join(&file.path_hint)) {
+    let html = match read_bounded_index(root.join(&file.path_hint)).await {
         Ok(html) => html,
-        Err(_) => return empty_response(StatusCode::NOT_FOUND),
+        Err(IndexReadError::Missing) => return empty_response(StatusCode::NOT_FOUND),
+        Err(IndexReadError::Oversize) => return empty_response(StatusCode::INTERNAL_SERVER_ERROR),
     };
     let injected = format!(
         "<script>globalThis.__SDKWORK_CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN__=\"{}\";</script>",
@@ -887,7 +920,13 @@ mod tests {
         .unwrap()
         .is_none());
         assert!(AdaptiveAppShellConfig::resolve(
-            "cloud", "production", None, None, None, None, None,
+            "cloud",
+            "production",
+            None,
+            None,
+            None,
+            None,
+            None,
         )
         .unwrap()
         .is_none());

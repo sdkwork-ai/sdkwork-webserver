@@ -236,6 +236,13 @@
           "maximum": 67108864,
           "default": 1048576
         },
+        "maxMemoryBytes": {
+          "type": "integer",
+          "minimum": 1048576,
+          "maximum": 4294967296,
+          "default": 134217728,
+          "description": "Maximum total response body bytes resident in the memory cache tier."
+        },
         "defaultTtlSeconds": {
           "type": "integer",
           "minimum": 0,
@@ -1044,6 +1051,11 @@
         },
         "proxyPassRequestHeaders": {
           "type": "boolean"
+        },
+        "proxyInterceptErrors": {
+          "description": "nginx proxy_intercept_errors on: proxied responses whose status has an error_page mapping are replaced by the mapped page.",
+          "type": "boolean",
+          "default": false
         }
       },
       "oneOf": [
@@ -1641,6 +1653,30 @@
         },
         "securityHeaders": {
           "$ref": "#/$defs/securityHeaders"
+        },
+        "compression": {
+          "description": "Server-level nginx gzip policy resolved for this host; absent inherits the app-level policy.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/gzip"
+            }
+          ]
+        },
+        "errorPages": {
+          "description": "nginx error_page mappings declared at http/server level for this host, in declaration order (later entries override earlier codes).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/errorPage"
+          },
+          "default": []
+        },
+        "recursiveErrorPages": {
+          "description": "nginx recursive_error_pages on: an error produced while serving an error page may itself be mapped again (bounded hops).",
+          "type": "boolean",
+          "default": false
         }
       }
     },
@@ -1775,6 +1811,25 @@
         },
         "secureLink": {
           "$ref": "#/$defs/secureLink"
+        },
+        "compression": {
+          "description": "Location-level nginx gzip policy resolved for this route; absent inherits the host/app policy.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/gzip"
+            }
+          ]
+        },
+        "errorPages": {
+          "description": "Location-level nginx error_page mappings; non-empty replaces the host-level set for this route.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/errorPage"
+          },
+          "default": []
         }
       }
     },
@@ -2561,6 +2616,39 @@
           "required": [
             "mode"
           ]
+        }
+      }
+    },
+    "errorPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One nginx `error_page <codes...> [=[response]] uri;` mapping.",
+      "required": [
+        "codes",
+        "uri"
+      ],
+      "properties": {
+        "codes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "integer",
+            "minimum": 300,
+            "maximum": 599
+          }
+        },
+        "uri": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^/"
+        },
+        "responseCode": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 200,
+          "maximum": 599
         }
       }
     }

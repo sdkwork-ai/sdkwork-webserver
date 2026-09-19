@@ -23,11 +23,11 @@ impl WebRepository {
         let (_, page_size, offset) = pagination(page, page_size)?;
         let count_row = sqlx::query(
             "SELECT COUNT(*) AS total
-             FROM web_listener_certificate_binding l
-             INNER JOIN web_site_binding b ON b.tenant_id = l.tenant_id
+             FROM webserver_listener_certificate_binding l
+             INNER JOIN webserver_site_binding b ON b.tenant_id = l.tenant_id
                  AND b.id = l.site_binding_id
-             INNER JOIN web_site s ON s.tenant_id = b.tenant_id AND s.id = b.site_id
-             INNER JOIN web_domain d ON d.tenant_id = b.tenant_id AND d.id = b.domain_id
+             INNER JOIN webserver_site s ON s.tenant_id = b.tenant_id AND s.id = b.site_id
+             INNER JOIN webserver_domain d ON d.tenant_id = b.tenant_id AND d.id = b.domain_id
              WHERE l.tenant_id = $1 AND s.uuid = $2 AND d.uuid = $3
                AND l.deleted_at IS NULL AND l.status <> 'ARCHIVED'",
         )
@@ -86,9 +86,9 @@ impl WebRepository {
             .map_err(|error| store_error("begin listener certificate binding", error))?;
         let route = sqlx::query(
             "SELECT b.id AS site_binding_id, d.id AS domain_id
-             FROM web_site_binding b
-             INNER JOIN web_site s ON s.tenant_id = b.tenant_id AND s.id = b.site_id
-             INNER JOIN web_domain d ON d.tenant_id = b.tenant_id AND d.id = b.domain_id
+             FROM webserver_site_binding b
+             INNER JOIN webserver_site s ON s.tenant_id = b.tenant_id AND s.id = b.site_id
+             INNER JOIN webserver_domain d ON d.tenant_id = b.tenant_id AND d.id = b.domain_id
              WHERE b.tenant_id = $1 AND s.uuid = $2 AND d.uuid = $3
                AND b.environment = 'production' AND b.status = 'ACTIVE'
                AND b.deleted_at IS NULL AND s.deleted_at IS NULL AND d.deleted_at IS NULL
@@ -112,10 +112,10 @@ impl WebRepository {
         let version = sqlx::query(
             "SELECT c.id AS certificate_id, v.id AS certificate_version_id,
                     v.uuid AS certificate_version_uuid, v.key_algorithm
-             FROM web_certificate c
-             INNER JOIN web_certificate_identifier ci ON ci.tenant_id = c.tenant_id
+             FROM webserver_certificate c
+             INNER JOIN webserver_certificate_identifier ci ON ci.tenant_id = c.tenant_id
                  AND ci.certificate_id = c.id AND ci.domain_id = $3
-             INNER JOIN web_certificate_version v ON v.tenant_id = c.tenant_id
+             INNER JOIN webserver_certificate_version v ON v.tenant_id = c.tenant_id
                  AND v.certificate_id = c.id
                  AND (($4 IS NULL AND v.id = c.current_version_id)
                       OR ($4 IS NOT NULL AND v.uuid = $4))
@@ -123,7 +123,8 @@ impl WebRepository {
                AND c.deleted_at IS NULL
                AND (($4 IS NULL AND v.status = 'ACTIVE')
                     OR ($4 IS NOT NULL AND v.status IN ('ACTIVE', 'SUPERSEDED')))
-               AND v.not_after > NOW()",
+               AND v.not_after > NOW()
+             FOR UPDATE OF c",
         )
         .bind(tenant_id)
         .bind(&request.certificate_id)
@@ -149,7 +150,7 @@ impl WebRepository {
 
         let algorithm_occupied = sqlx::query(
             "SELECT 1
-             FROM web_listener_certificate_binding
+             FROM webserver_listener_certificate_binding
              WHERE tenant_id = $1 AND site_binding_id = $2 AND key_algorithm = $3
                AND certificate_id <> $4 AND status <> 'ARCHIVED' AND deleted_at IS NULL
              LIMIT 1",
@@ -171,7 +172,7 @@ impl WebRepository {
         let now = now_rfc3339();
         if request.is_default {
             sqlx::query(
-                "UPDATE web_listener_certificate_binding
+                "UPDATE webserver_listener_certificate_binding
                  SET is_default = FALSE, updated_at = CAST($3 AS TIMESTAMPTZ),
                      version = version + 1
                  WHERE tenant_id = $1 AND site_binding_id = $2 AND is_default = TRUE
@@ -187,7 +188,7 @@ impl WebRepository {
         let binding_uuid = new_uuid();
         let binding_id = next_id(self.id_generator())?;
         let row = sqlx::query(
-            "INSERT INTO web_listener_certificate_binding (
+            "INSERT INTO webserver_listener_certificate_binding (
                 id, uuid, tenant_id, site_binding_id, certificate_id,
                 desired_version_id, current_version_id, key_algorithm,
                 priority, is_default, status,
@@ -197,37 +198,37 @@ impl WebRepository {
                 NULL, CAST($10 AS TIMESTAMPTZ),
                 CAST($10 AS TIMESTAMPTZ), 0, NULL
              )
-             ON CONFLICT ON CONSTRAINT uk_web_listener_certificate_binding_certificate
+             ON CONFLICT ON CONSTRAINT uk_webserver_listener_certificate_binding_certificate
              DO UPDATE SET desired_version_id = EXCLUDED.desired_version_id,
                  current_version_id = CASE
-                     WHEN web_listener_certificate_binding.status = 'ARCHIVED'
-                          OR web_listener_certificate_binding.deleted_at IS NOT NULL
+                     WHEN webserver_listener_certificate_binding.status = 'ARCHIVED'
+                          OR webserver_listener_certificate_binding.deleted_at IS NOT NULL
                          THEN NULL
-                     ELSE web_listener_certificate_binding.current_version_id
+                     ELSE webserver_listener_certificate_binding.current_version_id
                  END,
                  key_algorithm = EXCLUDED.key_algorithm, priority = EXCLUDED.priority,
                  is_default = EXCLUDED.is_default,
                  status = CASE
-                     WHEN web_listener_certificate_binding.status = 'ARCHIVED'
-                          OR web_listener_certificate_binding.deleted_at IS NOT NULL
+                     WHEN webserver_listener_certificate_binding.status = 'ARCHIVED'
+                          OR webserver_listener_certificate_binding.deleted_at IS NOT NULL
                          THEN 'PENDING'
-                     WHEN web_listener_certificate_binding.desired_version_id = EXCLUDED.desired_version_id
-                         THEN web_listener_certificate_binding.status
-                     WHEN web_listener_certificate_binding.status = 'PAUSED'
+                     WHEN webserver_listener_certificate_binding.desired_version_id = EXCLUDED.desired_version_id
+                         THEN webserver_listener_certificate_binding.status
+                     WHEN webserver_listener_certificate_binding.status = 'PAUSED'
                          THEN 'PAUSED'
-                     WHEN web_listener_certificate_binding.current_version_id = EXCLUDED.desired_version_id
+                     WHEN webserver_listener_certificate_binding.current_version_id = EXCLUDED.desired_version_id
                          THEN 'ACTIVE'
                      ELSE 'PENDING'
                  END,
                  activated_at = CASE
-                     WHEN web_listener_certificate_binding.status = 'ARCHIVED'
-                          OR web_listener_certificate_binding.deleted_at IS NOT NULL
+                     WHEN webserver_listener_certificate_binding.status = 'ARCHIVED'
+                          OR webserver_listener_certificate_binding.deleted_at IS NOT NULL
                          THEN NULL
-                     ELSE web_listener_certificate_binding.activated_at
+                     ELSE webserver_listener_certificate_binding.activated_at
                  END,
                  updated_at = EXCLUDED.updated_at,
                  deleted_at = NULL,
-                 version = web_listener_certificate_binding.version + 1
+                 version = webserver_listener_certificate_binding.version + 1
              RETURNING uuid, status",
         )
         .bind(binding_id)
@@ -251,7 +252,7 @@ impl WebRepository {
             .map_err(|error| store_error("map listener certificate rollout status", error))?;
         if binding_status != "ACTIVE" {
             sqlx::query(
-                "DELETE FROM web_certificate_node_state
+                "DELETE FROM webserver_certificate_node_state
                  WHERE tenant_id = $1 AND certificate_id = $2
                    AND certificate_version_id = $3",
             )
@@ -278,13 +279,13 @@ impl WebRepository {
     ) -> WebServiceResult<()> {
         let now = now_rfc3339();
         let result = sqlx::query(
-            "UPDATE web_listener_certificate_binding l
+            "UPDATE webserver_listener_certificate_binding l
              SET status = 'ARCHIVED', is_default = FALSE,
                  deleted_at = CAST($5 AS TIMESTAMPTZ), updated_at = CAST($5 AS TIMESTAMPTZ),
                  version = l.version + 1
-             FROM web_site_binding b
-             INNER JOIN web_site s ON s.tenant_id = b.tenant_id AND s.id = b.site_id
-             INNER JOIN web_domain d ON d.tenant_id = b.tenant_id AND d.id = b.domain_id
+             FROM webserver_site_binding b
+             INNER JOIN webserver_site s ON s.tenant_id = b.tenant_id AND s.id = b.site_id
+             INNER JOIN webserver_domain d ON d.tenant_id = b.tenant_id AND d.id = b.domain_id
              WHERE l.tenant_id = $1 AND l.uuid = $2 AND s.uuid = $3 AND d.uuid = $4
                AND l.site_binding_id = b.id AND l.deleted_at IS NULL
                AND l.status <> 'ARCHIVED'",
@@ -349,8 +350,8 @@ fn listener_binding_select(predicate: &str) -> String {
                         'identifierType', ci.identifier_type,
                         'position', ci.position
                     ) ORDER BY ci.position)
-                    FROM web_certificate_identifier ci
-                    INNER JOIN web_domain identifier_domain
+                    FROM webserver_certificate_identifier ci
+                    INNER JOIN webserver_domain identifier_domain
                         ON identifier_domain.tenant_id = ci.tenant_id
                         AND identifier_domain.id = ci.domain_id
                     WHERE ci.tenant_id = c.tenant_id AND ci.certificate_id = c.id
@@ -359,16 +360,16 @@ fn listener_binding_select(predicate: &str) -> String {
                 CAST(l.activated_at AS TEXT) AS activated_at,
                 CAST(l.created_at AS TEXT) AS created_at,
                 CAST(l.updated_at AS TEXT) AS updated_at
-         FROM web_listener_certificate_binding l
-         INNER JOIN web_site_binding b ON b.tenant_id = l.tenant_id
+         FROM webserver_listener_certificate_binding l
+         INNER JOIN webserver_site_binding b ON b.tenant_id = l.tenant_id
              AND b.id = l.site_binding_id
-         INNER JOIN web_site s ON s.tenant_id = b.tenant_id AND s.id = b.site_id
-         INNER JOIN web_domain d ON d.tenant_id = b.tenant_id AND d.id = b.domain_id
-         INNER JOIN web_certificate c ON c.tenant_id = l.tenant_id
+         INNER JOIN webserver_site s ON s.tenant_id = b.tenant_id AND s.id = b.site_id
+         INNER JOIN webserver_domain d ON d.tenant_id = b.tenant_id AND d.id = b.domain_id
+         INNER JOIN webserver_certificate c ON c.tenant_id = l.tenant_id
              AND c.id = l.certificate_id
-         INNER JOIN web_certificate_version desired ON desired.tenant_id = l.tenant_id
+         INNER JOIN webserver_certificate_version desired ON desired.tenant_id = l.tenant_id
              AND desired.id = l.desired_version_id AND desired.certificate_id = c.id
-         LEFT JOIN web_certificate_version current ON current.tenant_id = l.tenant_id
+         LEFT JOIN webserver_certificate_version current ON current.tenant_id = l.tenant_id
              AND current.id = l.current_version_id AND current.certificate_id = c.id
          WHERE {predicate}"
     )

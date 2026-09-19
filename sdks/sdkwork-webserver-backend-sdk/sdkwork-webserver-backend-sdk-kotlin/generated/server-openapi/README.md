@@ -31,7 +31,7 @@ fun main() = runBlocking {
 client.setAccessToken("your-access-token")
 
     // Use the SDK
-    val result = client.nginx.statusRetrieve()
+    val result = client.cluster.clustersOverviewRetrieve()
     println(result)
 }
 ```
@@ -66,6 +66,7 @@ val client = SdkworkBackendClient(config)
 - `client.webserverConfig` - webserver_config API
 - `client.agent` - agent API
 - `client.audit` - audit API
+- `client.cluster` - cluster API
 
 ## Usage Examples
 
@@ -226,6 +227,14 @@ val result = client.audit.logsList(params)
 println(result)
 ```
 
+### cluster
+
+```kotlin
+// Retrieve the cluster health overview for status polling
+val result = client.cluster.clustersOverviewRetrieve()
+println(result)
+```
+
 ## Error Handling
 
 ```kotlin
@@ -233,7 +242,7 @@ import kotlinx.coroutines.runBlocking
 
 fun main() = runBlocking {
     try {
-        val result = client.nginx.statusRetrieve()
+        val result = client.cluster.clustersOverviewRetrieve()
         println(result)
     } catch (e: Exception) {
         println("Error: ${e.message}")

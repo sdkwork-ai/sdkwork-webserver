@@ -155,6 +155,116 @@ paths:
           $ref: '#/components/responses/Problem'
         '404':
           $ref: '#/components/responses/Problem'
+  /internal/v3/api/web/cluster/instances/register:
+    post:
+      operationId: cluster.instances.register
+      summary: Register a webserver process instance and its host machine
+      description: |-
+        Bootstrap registration for the distributed Web Server cluster. The
+        request must be authenticated with the shared cluster registration
+        credential; the response carries the instance's own heartbeat token
+        and the initial peer directory. Idempotent per (machine code, PID):
+        the latest registration wins and receives a fresh token.
+      tags:
+      - cluster
+      security:
+      - ApiKey: []
+      x-sdkwork-api-surface: internal-api
+      x-sdkwork-api-authority: sdkwork-webserver-internal-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: ingress-token
+      x-sdkwork-route-auth: ingress-token
+      x-sdkwork-permission: web.cluster.write
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-sdkwork-rate-limit-tier: auth-critical
+      x-sdkwork-owner: sdkwork-webserver
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClusterRegistrationRequest'
+      responses:
+        '201':
+          description: Instance registered (or re-registered) successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/ClusterRegistrationResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /internal/v3/api/web/cluster/instances/heartbeat:
+    post:
+      operationId: cluster.instances.heartbeat
+      summary: Record one webserver instance heartbeat
+      description: |-
+        Records instance liveness, health state, and resource metrics. The
+        response refreshes the peer directory and delivers pending peer
+        mailbox messages (at-most-once handoff).
+      tags:
+      - cluster
+      security:
+      - ApiKey: []
+      x-sdkwork-api-surface: internal-api
+      x-sdkwork-api-authority: sdkwork-webserver-internal-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: ingress-token
+      x-sdkwork-route-auth: ingress-token
+      x-sdkwork-permission: web.cluster.write
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-sdkwork-rate-limit-tier: auth-critical
+      x-sdkwork-owner: sdkwork-webserver
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClusterHeartbeatRequest'
+      responses:
+        '200':
+          description: Heartbeat accepted with the refreshed peer directory.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/ClusterHeartbeatResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /internal/v3/api/web/cluster/peers:
+    get:
+      operationId: cluster.peers.retrieve
+      summary: Retrieve the authenticated instance's cluster peer directory
+      tags:
+      - cluster
+      security:
+      - ApiKey: []
+      x-sdkwork-api-surface: internal-api
+      x-sdkwork-api-authority: sdkwork-webserver-internal-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: ingress-token
+      x-sdkwork-route-auth: ingress-token
+      x-sdkwork-permission: web.cluster.read
+      x-sdkwork-owner: sdkwork-webserver
+      responses:
+        '200':
+          description: Cluster peer directory returned successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/ClusterPeerDirectoryResponse'
+        '401':
+          $ref: '#/components/responses/Problem'
 components:
   securitySchemes:
     ApiKey:
@@ -250,7 +360,377 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/ProblemDetail'
+    ClusterRegistrationResponse:
+      description: Instance registered with its heartbeat token and peers.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SdkWorkApiResponse'
+              - type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: false
+                    required: [item]
+                    properties:
+                      item:
+                        $ref: '#/components/schemas/ClusterRegistrationResponse'
+    ClusterHeartbeatResponse:
+      description: Heartbeat accepted with the refreshed peer directory.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SdkWorkApiResponse'
+              - type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: false
+                    required: [item]
+                    properties:
+                      item:
+                        $ref: '#/components/schemas/ClusterHeartbeatResponse'
+    ClusterPeerDirectoryResponse:
+      description: Cluster peer directory returned.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SdkWorkApiResponse'
+              - type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: false
+                    required: [item]
+                    properties:
+                      item:
+                        $ref: '#/components/schemas/ClusterPeerDirectoryResponse'
   schemas:
+    Int64String:
+      type: string
+      format: int64
+      pattern: ^[0-9]+$
+      x-sdkwork-int64-string: true
+    ClusterRegistrationRequest:
+      type: object
+      additionalProperties: false
+      required: [host, instance]
+      properties:
+        clusterCode:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Target cluster code; omitted registers into the auto-provisioned default cluster.
+        host:
+          $ref: '#/components/schemas/ClusterHostDescriptor'
+        instance:
+          $ref: '#/components/schemas/ClusterInstanceDescriptor'
+    ClusterHostDescriptor:
+      type: object
+      additionalProperties: false
+      required: [hostname, machineCode]
+      properties:
+        hostname:
+          type: string
+          minLength: 1
+          maxLength: 255
+        machineCode:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: Stable hardware/machine fingerprint of the host.
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        osName:
+          type: string
+          maxLength: 100
+        osVersion:
+          type: string
+          maxLength: 100
+        kernelVersion:
+          type: string
+          maxLength: 100
+        arch:
+          type: string
+          maxLength: 32
+        cpuModel:
+          type: string
+          maxLength: 200
+        cpuCores:
+          type: integer
+          minimum: 0
+        memoryTotalMb:
+          $ref: '#/components/schemas/Int64String'
+        remoteIp:
+          type: string
+          maxLength: 64
+        localIps:
+          type: array
+          maxItems: 64
+          items:
+            type: string
+            maxLength: 64
+        macAddresses:
+          type: array
+          maxItems: 64
+          items:
+            type: string
+            maxLength: 64
+        daemonVersion:
+          type: string
+          maxLength: 64
+    ClusterInstanceDescriptor:
+      type: object
+      additionalProperties: false
+      required: [role, environment, processPid, processStartedAt]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        role:
+          type: string
+          enum:
+          - GATEWAY
+          - MANAGEMENT
+          - DATA_PLANE
+          - WORKER
+          - OTHER
+        environment:
+          type: string
+          enum:
+          - development
+          - test
+          - staging
+          - production
+        processPid:
+          type: integer
+          minimum: 1
+        processStartedAt:
+          type: string
+          format: date-time
+        bindHost:
+          type: string
+          maxLength: 64
+        bindPort:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        publicEndpoint:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Advertised endpoint peers use to reach this instance.
+        buildVersion:
+          type: string
+          maxLength: 64
+    ClusterRegistrationResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - cluster
+      - host
+      - instance
+      - instanceToken
+      - heartbeatIntervalSeconds
+      - offlineThresholdSeconds
+      - peers
+      properties:
+        cluster:
+          $ref: '#/components/schemas/ClusterRef'
+        host:
+          $ref: '#/components/schemas/ClusterHostRef'
+        instance:
+          $ref: '#/components/schemas/ClusterInstanceRef'
+        instanceToken:
+          type: string
+          minLength: 1
+          description: Secret heartbeat token for this instance (winst_ prefix); store securely.
+        heartbeatIntervalSeconds:
+          type: integer
+          minimum: 5
+          maximum: 600
+        offlineThresholdSeconds:
+          type: integer
+          minimum: 10
+          maximum: 3600
+        peers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClusterPeer'
+    ClusterRef:
+      type: object
+      additionalProperties: false
+      required: [id, name, code]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        code:
+          type: string
+    ClusterHostRef:
+      type: object
+      additionalProperties: false
+      required: [id, name, hostname]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        hostname:
+          type: string
+    ClusterInstanceRef:
+      type: object
+      additionalProperties: false
+      required: [id, name, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        role:
+          type: string
+    ClusterPeer:
+      type: object
+      additionalProperties: false
+      required:
+      - instanceId
+      - name
+      - role
+      - status
+      - hostName
+      - environment
+      properties:
+        instanceId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        role:
+          type: string
+        status:
+          type: integer
+          minimum: 0
+          maximum: 5
+        hostName:
+          type: string
+        remoteIp:
+          type: string
+        publicEndpoint:
+          type: string
+        environment:
+          type: string
+        buildVersion:
+          type: string
+        lastHeartbeatAt:
+          type: string
+          format: date-time
+    ClusterHeartbeatRequest:
+      type: object
+      additionalProperties: false
+      required: [status, healthState, uptimeSeconds]
+      properties:
+        status:
+          type: integer
+          minimum: 0
+          maximum: 5
+        healthState:
+          type: string
+          enum:
+          - HEALTHY
+          - DEGRADED
+          - UNHEALTHY
+          - UNKNOWN
+        uptimeSeconds:
+          $ref: '#/components/schemas/Int64String'
+        buildVersion:
+          type: string
+          maxLength: 64
+        metrics:
+          type: object
+          description: Resource metrics snapshot (CPU/memory/connections); bounded to 16 KiB.
+    ClusterHeartbeatResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - instanceId
+      - status
+      - acknowledgedAt
+      - heartbeatIntervalSeconds
+      - offlineThresholdSeconds
+      - peers
+      - messages
+      properties:
+        instanceId:
+          type: string
+          format: uuid
+        status:
+          type: integer
+        acknowledgedAt:
+          type: string
+          format: date-time
+        heartbeatIntervalSeconds:
+          type: integer
+          minimum: 5
+          maximum: 600
+        offlineThresholdSeconds:
+          type: integer
+          minimum: 10
+          maximum: 3600
+        peers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClusterPeer'
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClusterPeerMessage'
+    ClusterPeerMessage:
+      type: object
+      additionalProperties: false
+      required: [id, messageType, payload, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        messageType:
+          type: string
+          maxLength: 64
+        fromInstanceId:
+          type: string
+          format: uuid
+        toInstanceId:
+          type: string
+          format: uuid
+        payload:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+    ClusterPeerDirectoryResponse:
+      type: object
+      additionalProperties: false
+      required: [instanceId, peers]
+      properties:
+        instanceId:
+          type: string
+          format: uuid
+        peers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClusterPeer'
     PublishRuntimeAssignmentRequest:
       type: object
       additionalProperties: false

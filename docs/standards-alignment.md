@@ -126,9 +126,9 @@ approval. Normative requirements are owned by `../sdkwork-specs`.
 
 ## Persistence And Data Lifecycle
 
-- `database/ddl/baseline/postgres/0001_web_baseline.sql` is the authoritative schema snapshot;
+- `database/ddl/baseline/postgres/0001_webserver_baseline.sql` is the authoritative schema snapshot;
   `database/contract/schema.yaml` is fully materialized for every table including
-  `web_certificate_operation` with constraints, partial unique indexes, and predicates.
+  `webserver_certificate_operation` with constraints, partial unique indexes, and predicates.
 - `database/migrations/postgres/` carries expand-only migrations (`0001_web_schema_hardening`,
   `0002_web_env_variable_rotation`, `0003_web_certificate_lifecycle_completion`,
   `0004_web_list_index_hardening`) with standard metadata headers, paired down migrations, and
@@ -143,12 +143,13 @@ approval. Normative requirements are owned by `../sdkwork-specs`.
 - Certificates support soft deletion (`DELETE /backend/v3/api/certificates/{certificateId}`) that
   releases domain identifiers; terminal-failed ISSUE certificates are auto-archived by the worker
   reaper, so failed issuance never blocks domain removal.
-- Managed-domain responses project `latestDeployment` from the same `web_deployment` join used by
+- Managed-domain responses project `latestDeployment` from the same `webserver_deployment` join used by
   root-domain hostname responses, so the two listing paths return consistent deployment
   visibility.
-- Environment variables support in-place rotation and soft deletion
-  (`PATCH`/`DELETE /app/v3/api/applications/{siteId}/env_variables/{variableId}`); the active-key unique
-  index releases keys on deactivation.
+- Environment variables support in-place rotation and soft deletion at the repository layer, backed
+  by the active-key unique index that releases keys on deactivation. The retired `/app/v3/api`
+  surface was that capability's only HTTP exposure, so no route serves it today: environment
+  variables are reached through the deployments-owned application lifecycle (`deploy_env_variable`).
 - Optimistic concurrency: `version` columns are enforced with compare-and-swap updates on site,
   Nginx configuration, and environment-variable writes, returning `409` on concurrent
   modification instead of silent last-write-wins. Certificate renewal-policy updates use a
@@ -183,7 +184,7 @@ approval. Normative requirements are owned by `../sdkwork-specs`.
   Every transition branch (ACTIVE, DEPLOYING, FAILED) commits its short transaction explicitly,
   so a node-reported failure durably terminates the rollout instead of being rolled back with a
   dropped transaction.
-- `web_nginx_config` activation is edge-first: the site is deployed and reloaded before the
+- `webserver_nginx_config` activation is edge-first: the site is deployed and reloaded before the
   control-plane state commits, and a failed commit rolls the edge back to the previously
   active configuration.
 - Audit log persistence failures increment an observable `audit_persistence_failures` counter

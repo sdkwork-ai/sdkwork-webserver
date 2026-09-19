@@ -7,22 +7,14 @@ const root = process.cwd();
 const checkMode = process.argv.slice(2).includes("--check");
 const drift = [];
 
+// The legacy `app-api` profile was retired. The application / domain /
+// certificate lifecycle is owned by sdkwork-deployments (`deploy_app`) and this
+// repository no longer publishes an app-facing surface of its own: per
+// COMPOSABLE_ARCHITECTURE_SPEC §7 every normalized (surface, method, path) has
+// exactly one owner, so a second `/app/v3/api` authority here would be an
+// entity-level dual master. Only the backend-admin and internal-machine
+// surfaces remain.
 const surfaces = [
-  {
-    yamlPath: "apis/app-api/web/openapi.yaml",
-    jsonAuthorityPath: "apis/app-api/web/sdkwork-webserver-app-api.openapi.json",
-    sdkJsonPath: "sdks/sdkwork-webserver-app-sdk/openapi/sdkwork-webserver-app-api.openapi.json",
-    routeManifestPath:
-      "sdks/_route-manifests/app-api/sdkwork-routes-webserver-app-api.route-manifest.json",
-    crateDir: "crates/sdkwork-routes-webserver-app-api",
-    manifestFn: "app_route_manifest",
-    packageName: "sdkwork-routes-webserver-app-api",
-    surface: "app-api",
-    apiAuthority: "sdkwork-webserver-app-api",
-    sdkFamily: "sdkwork-webserver-app-sdk",
-    prefix: "/app/v3/api",
-    domainTag: "web",
-  },
   {
     yamlPath: "apis/backend-api/web/openapi.yaml",
     jsonAuthorityPath: "apis/backend-api/web/sdkwork-webserver-backend-api.openapi.json",

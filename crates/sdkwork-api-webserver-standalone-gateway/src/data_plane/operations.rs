@@ -218,6 +218,7 @@ async fn serve_bounded_operations(
         .timer(TokioTimer::new());
     let builder = Arc::new(builder.http1_only());
     let mut connections = JoinSet::new();
+    let mut accept_policy = super::accept::AcceptRetryPolicy::new();
 
     loop {
         tokio::select! {
@@ -229,7 +230,19 @@ async fn serve_bounded_operations(
                 }
             }
             accepted = listener.accept() => {
-                let (stream, _) = accepted?;
+                let (stream, _) = match accepted {
+                    Ok(accepted) => {
+                        accept_policy.on_success();
+                        accepted
+                    }
+                    Err(error) => {
+                        if accept_policy.on_error(&error) {
+                            tokio::time::sleep(super::accept::ACCEPT_RETRY_PAUSE).await;
+                            continue;
+                        }
+                        return Err(error);
+                    }
+                };
                 let Ok(permit) = permits.clone().try_acquire_owned() else {
                     drop(stream);
                     continue;

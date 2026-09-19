@@ -528,7 +528,11 @@ impl SemanticValidator {
                         );
                     }
                     if let Some(file) = spa_fallback {
-                        validate_relative_path(self, &format!("{path}/spaFallback"), file, false);
+                        // nginx `try_files` fallbacks are internal redirect
+                        // targets and may be nested (`/app/index.html`); the
+                        // data plane re-sanitizes every component under the
+                        // chrooted root, so nested fallbacks are safe.
+                        validate_relative_path(self, &format!("{path}/spaFallback"), file, true);
                     }
                     if *follow_symlinks {
                         self.push(
@@ -604,7 +608,11 @@ impl SemanticValidator {
                         );
                     }
                     if let Some(file) = spa_fallback {
-                        validate_relative_path(self, &format!("{path}/spaFallback"), file, false);
+                        // nginx `try_files` fallbacks are internal redirect
+                        // targets and may be nested (`/app/index.html`); the
+                        // data plane re-sanitizes every component under the
+                        // chrooted root, so nested fallbacks are safe.
+                        validate_relative_path(self, &format!("{path}/spaFallback"), file, true);
                     }
                 }
                 ResourceConfig::Knowledgebase {

@@ -12,8 +12,8 @@ scope:
     - crates/sdkwork-routes-webserver-app-api
     - crates/sdkwork-webserver-contract
     - crates/sdkwork-intelligence-webserver-service
-    - database/web_application
-    - database/web_site
+    - database/webserver_application
+    - database/webserver_site
   consumers:
     - sdkwork-web-app-sdk
     - sdkwork-web-backend-sdk
@@ -49,10 +49,10 @@ database:
 - App API paths: `/app/v3/api/sites*` → `/app/v3/api/applications*`
   (`{siteId}` → `{applicationId}`), operationIds `sites.*` →
   `applications.*`.
-- New `web_application` table: the tenant-facing application entity owns the
-  resource identity (name/slug/description). `web_site` remains the internal
+- New `webserver_application` table: the tenant-facing application entity owns the
+  resource identity (name/slug/description). `webserver_site` remains the internal
   site carrier row (runtime type, status, runtime config, domains,
-  deployments); `web_application.site_id` links the two (1:1).
+  deployments); `webserver_application.site_id` links the two (1:1).
 - This two-row split is **Web Server-local**. sdkwork-deployments does not
   mirror it: its former `deploy_site` carrier was folded into `deploy_app`
   (see `0007_deploy_app_delivery`), so there is no `deploy_app.site_id`
@@ -74,7 +74,7 @@ is `/console/applications`.
 
 ## Forward Fix
 
-- Database: `0001_web_baseline.sql` creates `web_application` and back-fills one
+- Database: `0001_webserver_baseline.sql` creates `webserver_application` and back-fills one
   application row per live site (idempotent `DO $$` block).
 - Code: the service `create_application` transaction inserts the site carrier
   and the application row, then links `site_id`; reads join both tables.

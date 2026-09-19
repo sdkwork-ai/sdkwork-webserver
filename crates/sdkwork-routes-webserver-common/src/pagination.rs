@@ -16,11 +16,15 @@ const MAXIMUM_CURSOR_BYTES: usize = 512;
 /// (`apis/*openapi.yaml` `x-sdkwork-pagination-mode: cursor`); the unit tests
 /// below pin the exact route constants from the app-api/backend-api path
 /// modules to fail fast on route renames.
-const CURSOR_PAGINATED_PATH_PATTERNS: [&str; 6] = [
+const CURSOR_PAGINATED_PATH_PATTERNS: [&str; 10] = [
     "/backend/v3/api/audit_logs",
     "/backend/v3/api/applications/{applicationId}/deployments",
     "/backend/v3/api/applications/{applicationId}/source_versions",
     "/backend/v3/api/servers",
+    "/backend/v3/api/clusters/hosts",
+    "/backend/v3/api/clusters/instances",
+    "/backend/v3/api/clusters/events",
+    "/backend/v3/api/clusters/instances/{instanceId}/heartbeats",
     "/app/v3/api/applications/{applicationId}/deployments",
     "/app/v3/api/applications/{applicationId}/source_versions",
 ];

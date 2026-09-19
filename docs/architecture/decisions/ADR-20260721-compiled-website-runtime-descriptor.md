@@ -40,7 +40,7 @@ resolution model.
    longest Mount prefix are pre-indexed and evaluated in that order.
 8. Last-known-good website and TLS snapshots remain active during temporary control-plane failure.
    Desired/observed revision and served fingerprint are reported back to Deploy.
-9. In cloud mode, `web_site`, `web_domain`, `web_deployment`, and `web_certificate` are not runtime
+9. In cloud mode, `webserver_site`, `webserver_domain`, `webserver_deployment`, and `webserver_certificate` are not runtime
    inputs or writable authority. They remain scoped to the explicit standalone local-management
    profile. The cloud artifact excludes management composition and accepts only Deploy-owned
    immutable assignments.

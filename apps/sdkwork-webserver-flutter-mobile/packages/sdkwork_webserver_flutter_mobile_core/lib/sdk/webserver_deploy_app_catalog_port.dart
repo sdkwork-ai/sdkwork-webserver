@@ -21,6 +21,7 @@ const List<String> webserverDeployAppKinds = <String>[
   'IOS_APP',
   'ANDROID_APP',
   'HARMONYOS_APP',
+  'DESKTOP_APP',
 ];
 
 /// `sdkwork-deployments/.../types/app-status.ts` — the generated union, verbatim.

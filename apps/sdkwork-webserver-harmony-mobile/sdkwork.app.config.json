@@ -29,7 +29,6 @@
     "tenantId": "100001",
     "organizationId": "0",
     "accessTokenPermissionScope": [
-      "web.applications.read",
       "web.servers.read",
       "web.auditLogs.read"
     ]
@@ -132,11 +131,11 @@
         "version": "0.1.0",
         "releaseChannel": "DEV",
         "title": "SDKWork Web Server HarmonyOS mobile 0.1.0",
-        "summary": "Native HarmonyOS console initialized against the webserver app API.",
+        "summary": "Native HarmonyOS console initialized against the deployments-owned app API.",
         "content": "Initial SDKWork App Standard v3 manifest for the SDKWork Web Server HarmonyOS mobile surface.",
         "highlights": [
           "Harmony root layout follows HARMONY_APP_MOBILE_ARCHITECTURE_SPEC",
-          "Generated webserver app SDK is reached through an injected ArkTS port declared in core",
+          "The deployments app surface is reached through an injected ArkTS port declared in core",
           "Runtime profile identity is validated before the HAP resource projection lands"
         ],
         "packageIds": [],

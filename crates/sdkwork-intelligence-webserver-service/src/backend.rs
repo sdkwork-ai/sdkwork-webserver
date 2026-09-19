@@ -6,7 +6,13 @@ use sdkwork_webserver_contract::{
     CreateListenerCertificateBindingRequest, CreateManagedDomainRequest, CreateNginxConfigRequest,
     CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
     CreateSourceVersionRequest, ImportGitSourceVersionRequest, IssueCertificateRequest,
-    ListApplicationsQuery, ListNginxConfigsQuery, ListRootDomainsQuery, UpdateApplicationRequest,
+    ClusterEventPage, ClusterHostPage, ClusterHostResponse, ClusterInstancePage,
+    ClusterHeartbeatSamplePage, ClusterInstanceResponse, ClusterOverviewResponse, ClusterPage,
+    ClusterResponse, CreateClusterRequest, EnqueueClusterPeerMessagesRequest,
+    EnqueueClusterPeerMessagesResponse, ListApplicationsQuery, ListNginxConfigsQuery,
+    ListRootDomainsQuery,
+    UpdateApplicationRequest, UpdateClusterHostRequest, UpdateClusterInstanceRequest,
+    UpdateClusterRequest,
     UpdateCertificateRequest, UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest,
     WebAppApi, WebAppRequestContext, WebAppResourceScope, WebBackendApi, WebBackendRequestContext,
     WebServiceError, WebServiceResult,
@@ -838,7 +844,7 @@ impl WebBackendApi for WebService {
         }
     }
 
-    async fn web_nginx_config(
+    async fn webserver_nginx_config(
         &self,
         context: &WebBackendRequestContext,
         config_id: &str,
@@ -873,7 +879,7 @@ impl WebBackendApi for WebService {
             .await?;
         let response = match self
             .repository
-            .web_nginx_config(Some(tenant_id), config_id)
+            .webserver_nginx_config(Some(tenant_id), config_id)
             .await
         {
             Ok(response) => response,
@@ -1007,6 +1013,170 @@ impl WebBackendApi for WebService {
         self.repository
             .list_audit_logs(Some(tenant_id), &normalized)
             .await
+    }
+    async fn list_clusters(
+        &self,
+        context: &WebBackendRequestContext,
+        page: i32,
+        page_size: i32,
+    ) -> WebServiceResult<ClusterPage> {
+        self.cluster_list(context, page, page_size).await
+    }
+
+    async fn create_cluster(
+        &self,
+        context: &WebBackendRequestContext,
+        request: &CreateClusterRequest,
+    ) -> WebServiceResult<ClusterResponse> {
+        self.cluster_create(context, request).await
+    }
+
+    async fn retrieve_cluster(
+        &self,
+        context: &WebBackendRequestContext,
+        cluster_id: &str,
+    ) -> WebServiceResult<ClusterResponse> {
+        self.cluster_retrieve(context, cluster_id).await
+    }
+
+    async fn update_cluster(
+        &self,
+        context: &WebBackendRequestContext,
+        cluster_id: &str,
+        request: &UpdateClusterRequest,
+    ) -> WebServiceResult<ClusterResponse> {
+        self.cluster_update(context, cluster_id, request).await
+    }
+
+    async fn delete_cluster(
+        &self,
+        context: &WebBackendRequestContext,
+        cluster_id: &str,
+    ) -> WebServiceResult<()> {
+        self.cluster_delete(context, cluster_id).await
+    }
+
+    async fn list_cluster_hosts(
+        &self,
+        context: &WebBackendRequestContext,
+        cluster_id: Option<&str>,
+        status: Option<i32>,
+        page_size: i32,
+        cursor: Option<&str>,
+    ) -> WebServiceResult<ClusterHostPage> {
+        self.cluster_host_list(context, cluster_id, status, page_size, cursor)
+            .await
+    }
+
+    async fn retrieve_cluster_host(
+        &self,
+        context: &WebBackendRequestContext,
+        host_id: &str,
+    ) -> WebServiceResult<ClusterHostResponse> {
+        self.cluster_host_retrieve(context, host_id).await
+    }
+
+    async fn update_cluster_host(
+        &self,
+        context: &WebBackendRequestContext,
+        host_id: &str,
+        request: &UpdateClusterHostRequest,
+    ) -> WebServiceResult<ClusterHostResponse> {
+        self.cluster_host_update(context, host_id, request).await
+    }
+
+    async fn delete_cluster_host(
+        &self,
+        context: &WebBackendRequestContext,
+        host_id: &str,
+    ) -> WebServiceResult<()> {
+        self.cluster_host_delete(context, host_id).await
+    }
+
+    async fn list_cluster_instances(
+        &self,
+        context: &WebBackendRequestContext,
+        cluster_id: Option<&str>,
+        host_id: Option<&str>,
+        status: Option<i32>,
+        health_state: Option<&str>,
+        page_size: i32,
+        cursor: Option<&str>,
+    ) -> WebServiceResult<ClusterInstancePage> {
+        self.cluster_instance_list(
+            context,
+            cluster_id,
+            host_id,
+            status,
+            health_state,
+            page_size,
+            cursor,
+        )
+        .await
+    }
+
+    async fn retrieve_cluster_instance(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+    ) -> WebServiceResult<ClusterInstanceResponse> {
+        self.cluster_instance_retrieve(context, instance_id).await
+    }
+
+    async fn update_cluster_instance(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+        request: &UpdateClusterInstanceRequest,
+    ) -> WebServiceResult<ClusterInstanceResponse> {
+        self.cluster_instance_update(context, instance_id, request)
+            .await
+    }
+
+    async fn delete_cluster_instance(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+    ) -> WebServiceResult<()> {
+        self.cluster_instance_delete(context, instance_id).await
+    }
+
+    async fn list_cluster_events(
+        &self,
+        context: &WebBackendRequestContext,
+        cluster_id: Option<&str>,
+        severity: Option<&str>,
+        page_size: i32,
+        cursor: Option<&str>,
+    ) -> WebServiceResult<ClusterEventPage> {
+        self.cluster_events_list(context, cluster_id, severity, page_size, cursor)
+            .await
+    }
+
+    async fn retrieve_cluster_overview(
+        &self,
+        context: &WebBackendRequestContext,
+    ) -> WebServiceResult<ClusterOverviewResponse> {
+        self.cluster_overview(context).await
+    }
+
+    async fn list_cluster_heartbeats(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+        page_size: i32,
+        cursor: Option<&str>,
+    ) -> WebServiceResult<ClusterHeartbeatSamplePage> {
+        self.cluster_heartbeat_list(context, instance_id, page_size, cursor)
+            .await
+    }
+
+    async fn enqueue_cluster_messages(
+        &self,
+        context: &WebBackendRequestContext,
+        request: &EnqueueClusterPeerMessagesRequest,
+    ) -> WebServiceResult<EnqueueClusterPeerMessagesResponse> {
+        self.cluster_message_enqueue(context, request).await
     }
 }
 

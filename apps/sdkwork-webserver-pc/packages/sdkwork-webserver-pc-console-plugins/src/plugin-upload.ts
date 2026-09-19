@@ -1,6 +1,9 @@
 import { Sha256Hasher } from "@sdkwork/utils/crypto";
 import { hexEncode } from "@sdkwork/utils/encoding";
-import type { SdkworkDriveAppClient } from "@sdkwork/webserver-pc-console-core";
+import {
+  WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD,
+  type SdkworkDriveAppClient,
+} from "@sdkwork/webserver-pc-console-core";
 
 export interface PluginArchiveUploadResult {
   artifactRef: string;
@@ -30,10 +33,10 @@ export async function uploadPluginArchive(
   const checksumSha256 = await calculateSha256(file);
   const uploaded = await drive.uploader.uploadArchive({
     file,
-    appResourceType: "web.plugin.package",
+    appResourceType: WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD.appResourceType,
     appResourceId: file.name,
-    scene: "plugin-package",
-    source: "sdkwork-webserver-pc",
+    scene: WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD.scene,
+    source: WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD.source,
     originalFileName: file.name,
     contentType: file.type || "application/zip",
     checksumSha256Hex: `sha256:${checksumSha256}`,

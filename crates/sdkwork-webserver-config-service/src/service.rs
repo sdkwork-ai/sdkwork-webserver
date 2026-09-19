@@ -187,6 +187,10 @@ pub struct WebserverConfigService {
     config: WebserverConfigServiceConfig,
     config_root: PathBuf,
     deploy_root: Option<PathBuf>,
+    /// Serializes read-check-write sequences so two concurrent writers with
+    /// the same `expectedSha256` cannot both pass and silently clobber each
+    /// other (last rename wins today; the lock makes the CAS honest).
+    write_lock: std::sync::Arc<tokio::sync::Mutex<()>>,
 }
 
 impl WebserverConfigService {
@@ -201,6 +205,7 @@ impl WebserverConfigService {
             config,
             config_root,
             deploy_root,
+            write_lock: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
     }
 
@@ -262,7 +267,12 @@ impl WebserverConfigService {
     pub async fn read(&self, id: &str) -> Result<WebserverConfigFile, WebserverConfigError> {
         let entry = self.lookup(id).await?;
         let absolute = self.absolute_path_for(&entry)?;
-        let metadata = tokio::fs::metadata(&absolute)
+        use tokio::io::AsyncReadExt;
+        let handle = tokio::fs::File::open(&absolute)
+            .await
+            .map_err(|_| WebserverConfigError::NotFound)?;
+        let metadata = handle
+            .metadata()
             .await
             .map_err(|_| WebserverConfigError::NotFound)?;
         if !metadata.is_file() {
@@ -271,9 +281,17 @@ impl WebserverConfigService {
         if metadata.len() > self.config.maximum_file_bytes as u64 {
             return Err(WebserverConfigError::TooLarge);
         }
-        let bytes = tokio::fs::read(&absolute)
+        // One bounded read from the opened handle: a file swapped or grown
+        // between a stat and a read can never bypass the size cap.
+        let mut bytes = Vec::new();
+        handle
+            .take(self.config.maximum_file_bytes as u64 + 1)
+            .read_to_end(&mut bytes)
             .await
             .map_err(|error| WebserverConfigError::Io(error.to_string()))?;
+        if bytes.len() as u64 > self.config.maximum_file_bytes as u64 {
+            return Err(WebserverConfigError::TooLarge);
+        }
         Ok(WebserverConfigFile {
             id: entry.id,
             kind: entry.kind,
@@ -320,6 +338,9 @@ impl WebserverConfigService {
         }
         validate_content(&entry.name, content)?;
 
+        // Hold the write lock across digest-check → backup → rename so the
+        // optimistic-concurrency check cannot be interleaved.
+        let _write_guard = self.write_lock.lock().await;
         let current_bytes = tokio::fs::read(&absolute)
             .await
             .map_err(|_| WebserverConfigError::NotFound)?;

@@ -66,6 +66,10 @@ const List<WebserverFlutterEnumLabel> webserverFlutterApplicationKindLabels =
     value: 'HARMONYOS_APP',
     messageKey: 'applications.list.kind.harmonyos-app',
   ),
+  WebserverFlutterEnumLabel(
+    value: 'DESKTOP_APP',
+    messageKey: 'applications.list.kind.desktop-app',
+  ),
 ];
 
 /// Closed `deploy_app` status labels.
@@ -123,6 +127,7 @@ const Map<String, String> webserverFlutterApplicationsMessagesEnUs =
   'applications.list.kind.ios-app': 'iOS app',
   'applications.list.kind.android-app': 'Android app',
   'applications.list.kind.harmonyos-app': 'HarmonyOS app',
+  'applications.list.kind.desktop-app': 'Desktop app',
   'applications.list.status.draft': 'Draft',
   'applications.list.status.ready': 'Ready',
   'applications.list.status.active': 'Active',
@@ -156,6 +161,7 @@ const Map<String, String> webserverFlutterApplicationsMessagesZhCn =
   'applications.list.kind.ios-app': 'iOS 应用',
   'applications.list.kind.android-app': 'Android 应用',
   'applications.list.kind.harmonyos-app': '鸿蒙应用',
+  'applications.list.kind.desktop-app': '桌面应用',
   'applications.list.status.draft': '草稿',
   'applications.list.status.ready': '待发布',
   'applications.list.status.active': '运行中',

@@ -1,7 +1,5 @@
 //! Cache-Control / Expires freshness parsing (RFC 9111).
 
-use std::time::Duration;
-
 /// Parsed freshness of a response.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct Freshness {
@@ -58,10 +56,4 @@ fn expires_freshness(expires: Option<&str>, date: Option<&str>) -> Option<u64> {
         .unwrap_or_else(std::time::SystemTime::now);
     let delta = expires.duration_since(date).ok()?.as_secs().min(31_536_000);
     Some(delta)
-}
-
-impl Freshness {
-    pub fn effective_ttl(&self, default_seconds: u64) -> Duration {
-        Duration::from_secs(self.fresh_seconds.unwrap_or(default_seconds))
-    }
 }

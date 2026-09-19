@@ -18,5 +18,6 @@ namespace SDKWork.WebserverBackendSdk.Api
         public static WebserverConfigApi? WebserverConfig { get; set; }
         public static AgentApi? Agent { get; set; }
         public static AuditApi? Audit { get; set; }
+        public static ClusterApi? Cluster { get; set; }
     }
 }

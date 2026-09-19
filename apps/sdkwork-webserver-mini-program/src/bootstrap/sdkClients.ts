@@ -1,9 +1,7 @@
 import type { AuthTokenManager } from "@sdkwork/sdk-common";
 import {
-  createWebserverMpAppSdkClient,
   createWebserverMpDeployAppSdkClient,
   createWebserverMpDriveAppSdkClient,
-  type WebserverMpAppSdkClient,
   type WebserverMpDeployAppClient,
   type WebserverMpDriveAppClient,
   type WebserverMpRuntimeConfig,
@@ -16,9 +14,13 @@ import type { ApplicationsListReader } from "@sdkwork/webserver-mp-applications"
  * `APP_SDK_INTEGRATION_SPEC.md` §2: every client is constructed in core and
  * injected downward. This module is the runtime's composition point — it decides
  * which clients exist and what a screen is allowed to see of them.
+ *
+ * The `deploy_app` entity has a single owner (`sdkwork-deployments`), so the
+ * applications screen reads it through the deployments App SDK rather than
+ * through a second, webserver-owned application surface
+ * (`COMPOSABLE_ARCHITECTURE_SPEC.md` §7).
  */
 export interface WebserverMiniProgramSdkClients {
-  readonly app: WebserverMpAppSdkClient;
   readonly deploy: WebserverMpDeployAppClient;
   readonly drive: WebserverMpDriveAppClient;
 }
@@ -36,10 +38,6 @@ export function createWebserverMiniProgramSdkClients(
   tokenManager: AuthTokenManager,
 ): WebserverMiniProgramSdkClients {
   return {
-    app: createWebserverMpAppSdkClient({
-      baseUrl: config.appApiBaseUrl,
-      tokenManager,
-    }),
     deploy: createWebserverMpDeployAppSdkClient({
       baseUrl: config.deployAppApiBaseUrl,
       tokenManager,

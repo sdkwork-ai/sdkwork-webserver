@@ -22,7 +22,7 @@
     "sdkType": "custom",
     "sdkSurface": "internal",
     "standardProfile": "sdkwork-v3",
-    "ownerOnlyOperationCount": 4
+    "ownerOnlyOperationCount": 7
   },
   "generator": {
     "package": "@sdkwork/sdk-generator",

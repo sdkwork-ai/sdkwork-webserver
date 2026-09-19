@@ -128,7 +128,7 @@ function PublicPortalApplication({
   const authState = usePublicAuthState(runtime);
   const messages = useSdkworkModuleMessages(webserverApplicationCatalog);
   const statistics = useMemo(
-    () => createBrowserPortalStatistics(async () => (await runtime.loadConsoleClients()).web),
+    () => createBrowserPortalStatistics(async () => (await runtime.loadConsoleClients()).deploy),
     [runtime.loadConsoleClients],
   );
 

@@ -20,7 +20,6 @@ members = [
   "crates/sdkwork-webserver-certificate-worker",
   "crates/sdkwork-intelligence-webserver-service",
   "crates/sdkwork-intelligence-webserver-repository-sqlx",
-  "crates/sdkwork-routes-webserver-app-api",
   "crates/sdkwork-routes-webserver-backend-api",
   "crates/sdkwork-routes-webserver-internal-api",
   "crates/sdkwork-api-webserver-standalone-gateway",
@@ -140,7 +139,6 @@ sdkwork-webserver-database-host = { path = "crates/sdkwork-webserver-database-ho
 sdkwork-webserver-http-host = { path = "crates/sdkwork-webserver-http-host" }
 sdkwork-intelligence-webserver-service = { path = "crates/sdkwork-intelligence-webserver-service" }
 sdkwork-intelligence-webserver-repository-sqlx = { path = "crates/sdkwork-intelligence-webserver-repository-sqlx" }
-sdkwork-routes-webserver-app-api = { path = "crates/sdkwork-routes-webserver-app-api" }
 sdkwork-routes-webserver-backend-api = { path = "crates/sdkwork-routes-webserver-backend-api" }
 sdkwork-api-deployments-assembly = { path = "../sdkwork-deployments/crates/sdkwork-api-deployments-assembly" }
 sdkwork-routes-webserver-internal-api = { path = "crates/sdkwork-routes-webserver-internal-api" }

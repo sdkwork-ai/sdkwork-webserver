@@ -23,13 +23,17 @@ use axum::{
 };
 use sdkwork_routes_webserver_common::WebApiError;
 use sdkwork_server_files_service::{
-    classify_entry_names, command_for, ServerFilesService, ServerFilesServiceConfig,
+    classify_entry_names, execution_for, run_foreground, start_managed, stop_managed,
+    OperationExecution, ServerFilesService, ServerFilesServiceConfig, MANAGED_PROCESS_SLOT,
 };
 use sdkwork_utils_rust::SdkWorkResultCode;
 use sdkwork_webserver_contract::WebBackendRequestContext;
 use serde::{Deserialize, Serialize};
 
-use crate::{auth::require_backend_context, paths};
+use crate::{
+    auth::{require_backend_context, require_platform_operator},
+    paths,
+};
 
 /// A deployment node the Server Files explorer may browse.
 ///
@@ -132,7 +136,7 @@ async fn list_nodes(
     State(state): State<ServerFilesState>,
     context: Option<Extension<WebBackendRequestContext>>,
 ) -> Result<Response, WebApiError> {
-    require_read(context)?;
+    require_read(context).await?;
     Ok(ok_json(
         &serde_json::json!({ "items": state.registry.all() }),
     ))
@@ -149,7 +153,7 @@ async fn browse_node_directory(
     Path(node_id): Path<String>,
     Query(query): Query<PathQuery>,
 ) -> Result<Response, WebApiError> {
-    require_read(context)?;
+    require_read(context).await?;
     let service = service_for(state, &node_id)?;
     let listing = service
         .browse_directory(&query.path)
@@ -163,7 +167,7 @@ async fn read_node_file(
     context: Option<Extension<WebBackendRequestContext>>,
     Path((node_id, file_path)): Path<(String, String)>,
 ) -> Result<Response, WebApiError> {
-    require_read(context)?;
+    require_read(context).await?;
     let service = service_for(state, &node_id)?;
     let content = service
         .read_file(&file_path)
@@ -178,7 +182,7 @@ async fn list_node_operations(
     Path(node_id): Path<String>,
     Query(query): Query<PathQuery>,
 ) -> Result<Response, WebApiError> {
-    require_read(context)?;
+    require_read(context).await?;
     let service = service_for(state, &node_id)?;
     let resolved = service
         .contained_path(&query.path)
@@ -204,6 +208,7 @@ async fn run_node_operation(
     Json(request): Json<RunOperationRequest>,
 ) -> Result<Response, WebApiError> {
     let context = require_backend_context(context)?;
+    require_platform_operator(&context, "the server files explorer")?;
     let service = service_for(state, &node_id)?;
     let resolved = service
         .contained_path(&request.path)
@@ -220,24 +225,95 @@ async fn run_node_operation(
         .ok_or_else(not_found)?;
     require_operation_permission(&context, operation)?;
 
-    let command = command_for(classification.project_type, operation.kind).ok_or_else(not_found)?;
+    let execution =
+        execution_for(classification.project_type, operation.kind).ok_or_else(not_found)?;
 
-    let cwd = resolved.join(&command.cwd);
-    let output = tokio::process::Command::new(&command.program)
-        .args(&command.args)
-        .current_dir(cwd)
-        .output()
-        .await
-        .map_err(|_error| {
-            WebApiError::new(SdkWorkResultCode::InternalError, "project operation failed")
-        })?;
+    match execution {
+        OperationExecution::Foreground(command) => {
+            let cwd = resolved.join(&command.cwd);
+            let outcome = run_foreground(&command.program, &command.args, &cwd)
+                .await
+                .map_err(operation_run_error)?;
+            Ok(ok_json(&serde_json::json!({
+                "operationId": operation.id,
+                "exitCode": outcome.exit_code,
+                "timedOut": outcome.timed_out,
+                "stdout": outcome.stdout,
+                "stderr": outcome.stderr,
+                "stdoutTruncated": outcome.stdout_truncated,
+                "stderrTruncated": outcome.stderr_truncated,
+            })))
+        }
+        OperationExecution::StartManaged(command) => {
+            let cwd = resolved.join(&command.cwd);
+            let outcome =
+                start_managed(MANAGED_PROCESS_SLOT, &command.program, &command.args, &cwd)
+                    .await
+                    .map_err(operation_run_error)?;
+            Ok(ok_json(&serde_json::json!({
+                "operationId": operation.id,
+                "pid": outcome.pid,
+                "pidFile": outcome.pid_file,
+                "logFile": outcome.log_file,
+                "message": "started as a managed background process",
+            })))
+        }
+        OperationExecution::StopManaged => {
+            let outcome = stop_managed(MANAGED_PROCESS_SLOT, &resolved)
+                .await
+                .map_err(operation_run_error)?;
+            Ok(ok_json(&serde_json::json!({
+                "operationId": operation.id,
+                "stopped": outcome.stopped,
+                "pid": outcome.pid,
+                "message": if outcome.stopped {
+                    "managed process stopped"
+                } else {
+                    "no managed process is running"
+                },
+            })))
+        }
+        OperationExecution::RestartManaged(command) => {
+            let stopped = stop_managed(MANAGED_PROCESS_SLOT, &resolved)
+                .await
+                .map_err(operation_run_error)?;
+            let started = start_managed(
+                MANAGED_PROCESS_SLOT,
+                &command.program,
+                &command.args,
+                &resolved,
+            )
+            .await
+            .map_err(operation_run_error)?;
+            Ok(ok_json(&serde_json::json!({
+                "operationId": operation.id,
+                "stopped": stopped.stopped,
+                "pid": started.pid,
+                "pidFile": started.pid_file,
+                "logFile": started.log_file,
+                "message": "managed process restarted",
+            })))
+        }
+    }
+}
 
-    Ok(ok_json(&serde_json::json!({
-        "operationId": operation.id,
-        "exitCode": output.status.code(),
-        "stdout": String::from_utf8_lossy(&output.stdout),
-        "stderr": String::from_utf8_lossy(&output.stderr),
-    })))
+fn operation_run_error(error: sdkwork_server_files_service::OperationRunError) -> WebApiError {
+    use sdkwork_server_files_service::OperationRunError;
+    match &error {
+        OperationRunError::ManagedAlreadyRunning { .. }
+        | OperationRunError::ManagedStop(_)
+        | OperationRunError::Timeout { .. } => {
+            // Caller-actionable failures carry their message; the envelope
+            // still maps them to a single diagnosable result code.
+            WebApiError::new(SdkWorkResultCode::ValidationError, error.to_string())
+        }
+        OperationRunError::Spawn { .. }
+        | OperationRunError::Io { .. }
+        | OperationRunError::ManagedState(_) => WebApiError::new(
+            SdkWorkResultCode::InternalError,
+            "project operation could not be executed",
+        ),
+    }
 }
 
 fn service_for(state: ServerFilesState, node_id: &str) -> Result<ServerFilesService, WebApiError> {
@@ -356,9 +432,12 @@ fn containment_error(_error: sdkwork_server_files_service::PathContainmentError)
     )
 }
 
-fn require_read(context: Option<Extension<WebBackendRequestContext>>) -> Result<(), WebApiError> {
-    require_backend_context(context)?;
-    Ok(())
+async fn require_read(
+    context: Option<Extension<WebBackendRequestContext>>,
+) -> Result<WebBackendRequestContext, WebApiError> {
+    let context = require_backend_context(context)?;
+    require_platform_operator(&context, "the server files explorer")?;
+    Ok(context)
 }
 
 /// Deploy-class operations escalate beyond the route's coarse
@@ -396,9 +475,9 @@ mod tests {
 
     fn deploy_operation() -> sdkwork_server_files_service::ProjectOperation {
         sdkwork_server_files_service::ProjectOperation {
-            id: "deploy".to_owned(),
-            kind: ProjectOperationKind::Deploy,
-            label: "Deploy".to_owned(),
+            id: "stop".to_owned(),
+            kind: ProjectOperationKind::Stop,
+            label: "Stop".to_owned(),
             permission: "web.servers.files.deploy".to_owned(),
             description: None,
             dangerous: true,
@@ -600,11 +679,25 @@ mod tests {
     fn context_with(grants: &[&str]) -> WebBackendRequestContext {
         WebBackendRequestContext {
             operator_id: Some(7),
-            tenant_id: Some(42),
+            tenant_id: Some(0),
             subject_id: Some("7".to_owned()),
             idempotency_key: None,
             permission_scope: grants.iter().map(|grant| (*grant).to_owned()).collect(),
         }
+    }
+
+    /// Host-scoped surfaces answer only the platform operator tenant
+    /// (PRD-FR-030): a tenant-bound principal with the same grants is
+    /// rejected even though the permission strings match.
+    #[tokio::test]
+    async fn tenant_bound_principal_cannot_browse_server_files() {
+        let root = scratch_node_root();
+        let mut context = context_with(&["web.servers.files.read"]);
+        context.tenant_id = Some(42);
+        let error = list_nodes(scratch_state(&root), Some(Extension(context)))
+            .await
+            .expect_err("tenant-bound principal must be rejected");
+        assert_eq!(error.code(), SdkWorkResultCode::PermissionRequired);
     }
 
     #[test]

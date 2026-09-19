@@ -3,7 +3,6 @@
 use instant_acme::{RevocationReason, RevocationRequest};
 use x509_parser::pem::parse_x509_pem;
 
-use crate::http_client::BoundedAcmeHttpClient;
 use crate::{AcmeServiceError, AcmeServiceResult, CertificateIssuer};
 
 /// Revocation reasons accepted by the control plane (RFC 5280 §5.3.1).
@@ -105,15 +104,12 @@ impl CertificateIssuer {
                     "no ACME account exists for the configured CA; cannot revoke",
                 )
             })?;
-        let account =
-            instant_acme::Account::builder_with_http(Box::new(BoundedAcmeHttpClient::new()?))
-                .from_credentials(credentials)
-                .await
-                .map_err(|error| {
-                    AcmeServiceError::provider(format!(
-                        "restore ACME account for revocation: {error}"
-                    ))
-                })?;
+        let account = instant_acme::Account::builder_with_http(self.client_factory.build()?)
+            .from_credentials(credentials)
+            .await
+            .map_err(|error| {
+                AcmeServiceError::provider(format!("restore ACME account for revocation: {error}"))
+            })?;
         let certificate_der = rustls_pki_types::CertificateDer::from(pem.contents);
         account
             .revoke(&RevocationRequest {

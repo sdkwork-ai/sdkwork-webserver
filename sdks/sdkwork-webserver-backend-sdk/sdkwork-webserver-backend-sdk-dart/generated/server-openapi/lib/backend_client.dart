@@ -13,6 +13,7 @@ import 'src/api/server_file.dart';
 import 'src/api/webserver_config.dart';
 import 'src/api/agent.dart';
 import 'src/api/audit.dart';
+import 'src/api/cluster.dart';
 
 class SdkworkBackendClient {
   final HttpClient _httpClient;
@@ -30,6 +31,7 @@ class SdkworkBackendClient {
   late final WebserverConfigApi webserverConfig;
   late final AgentApi agent;
   late final AuditApi audit;
+  late final ClusterApi cluster;
 
   SdkworkBackendClient({
     required SdkConfig config,
@@ -47,6 +49,7 @@ class SdkworkBackendClient {
     webserverConfig = WebserverConfigApi(_httpClient);
     agent = AgentApi(_httpClient);
     audit = AuditApi(_httpClient);
+    cluster = ClusterApi(_httpClient);
   }
 
   factory SdkworkBackendClient.withBaseUrl({

@@ -1175,6 +1175,12 @@ importers:
 
   apps/sdkwork-webserver-h5:
     dependencies:
+      '@sdkwork/iam-credential-entry':
+        specifier: workspace:*
+        version: link:../../../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-credential-entry
+      '@sdkwork/iam-runtime':
+        specifier: workspace:*
+        version: link:../../../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-runtime
       '@sdkwork/sdk-common':
         specifier: workspace:*
         version: link:../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
@@ -1266,9 +1272,6 @@ importers:
       '@sdkwork/sdk-common':
         specifier: workspace:*
         version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
-      '@sdkwork/webserver-app-sdk':
-        specifier: workspace:*
-        version: link:../../../../sdks/sdkwork-webserver-app-sdk/sdkwork-webserver-app-sdk-typescript
 
   apps/sdkwork-webserver-h5/packages/sdkwork-webserver-h5-shell:
     dependencies:
@@ -1341,9 +1344,6 @@ importers:
       '@sdkwork/sdk-common':
         specifier: workspace:*
         version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
-      '@sdkwork/webserver-app-sdk':
-        specifier: workspace:*
-        version: link:../../../../sdks/sdkwork-webserver-app-sdk/sdkwork-webserver-app-sdk-typescript
 
   apps/sdkwork-webserver-mini-program/packages/sdkwork-webserver-mp-host: {}
 
@@ -1361,6 +1361,9 @@ importers:
       '@sdkwork/auth-runtime-pc-react':
         specifier: workspace:*
         version: link:../../../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-auth-runtime-pc-react
+      '@sdkwork/deployments-app-sdk':
+        specifier: workspace:*
+        version: link:../../../sdkwork-deployments/sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-typescript
       '@sdkwork/drive-app-sdk':
         specifier: workspace:*
         version: link:../../../sdkwork-drive/sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-typescript
@@ -1388,9 +1391,6 @@ importers:
       '@sdkwork/utils':
         specifier: workspace:*
         version: link:../../../sdkwork-utils/packages/sdkwork-utils-typescript
-      '@sdkwork/webserver-app-sdk':
-        specifier: workspace:*
-        version: link:../../sdks/sdkwork-webserver-app-sdk/sdkwork-webserver-app-sdk-typescript
       '@sdkwork/webserver-backend-sdk':
         specifier: workspace:*
         version: link:../../sdks/sdkwork-webserver-backend-sdk/sdkwork-webserver-backend-sdk-typescript
@@ -1400,6 +1400,9 @@ importers:
       '@sdkwork/webserver-pc-admin-audit':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-admin-audit
+      '@sdkwork/webserver-pc-admin-cluster':
+        specifier: workspace:*
+        version: link:packages/sdkwork-webserver-pc-admin-cluster
       '@sdkwork/webserver-pc-admin-core':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-admin-core
@@ -1515,30 +1518,39 @@ importers:
 
   apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-apps:
     dependencies:
-      '@sdkwork/deployments-pc-commons':
-        specifier: workspace:*
-        version: link:../../../../../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-commons
-      '@sdkwork/deployments-pc-console-core':
-        specifier: workspace:*
-        version: link:../../../../../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-core
-      '@sdkwork/deployments-pc-console-publishing':
-        specifier: workspace:*
-        version: link:../../../../../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-publishing
-      '@sdkwork/sdk-common':
-        specifier: workspace:*
-        version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
       '@sdkwork/webserver-pc-commons':
         specifier: workspace:*
         version: link:../sdkwork-webserver-pc-commons
-      react:
-        specifier: 'catalog:'
-        version: 19.2.8
+      '@sdkwork/webserver-pc-console-delivery':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-console-delivery
 
   apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-audit:
     dependencies:
       '@sdkwork/webserver-pc-commons':
         specifier: workspace:*
         version: link:../sdkwork-webserver-pc-commons
+
+  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-cluster:
+    dependencies:
+      '@sdkwork/sdk-common':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      '@sdkwork/webserver-pc-admin-core':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-admin-core
+      '@sdkwork/webserver-pc-commons':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-commons
+      lucide-react:
+        specifier: 'catalog:'
+        version: 1.39.0(react@19.2.8)
+      react:
+        specifier: 'catalog:'
+        version: 19.2.8
+      react-router-dom:
+        specifier: ^7.15.0
+        version: 7.18.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
 
   apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-core:
     dependencies:
@@ -1743,18 +1755,15 @@ importers:
 
   apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-console-core:
     dependencies:
+      '@sdkwork/deployments-app-sdk':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-deployments/sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-typescript
       '@sdkwork/drive-app-sdk':
         specifier: workspace:*
         version: link:../../../../../sdkwork-drive/sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-typescript
       '@sdkwork/sdk-common':
         specifier: workspace:*
         version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
-      '@sdkwork/webserver-app-sdk':
-        specifier: workspace:*
-        version: link:../../../../sdks/sdkwork-webserver-app-sdk/sdkwork-webserver-app-sdk-typescript
-      '@sdkwork/webserver-pc-commons':
-        specifier: workspace:*
-        version: link:../sdkwork-webserver-pc-commons
       react:
         specifier: 'catalog:'
         version: 19.2.8
@@ -1868,22 +1877,6 @@ importers:
       react:
         specifier: 'catalog:'
         version: 19.2.8
-
-  sdks/sdkwork-webserver-app-sdk/sdkwork-webserver-app-sdk-typescript:
-    dependencies:
-      '@sdkwork/sdk-common':
-        specifier: workspace:*
-        version: link:../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
-      '@sdkwork/utils':
-        specifier: ^0.11.0
-        version: 0.11.0
-    devDependencies:
-      rollup:
-        specifier: ^4.0.0
-        version: 4.62.2
-      typescript:
-        specifier: ^5.0.0
-        version: 5.9.3
 
   sdks/sdkwork-webserver-backend-sdk/sdkwork-webserver-backend-sdk-typescript:
     dependencies:

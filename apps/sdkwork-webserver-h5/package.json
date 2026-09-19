@@ -30,6 +30,8 @@
     "build:demo": "node ../../../sdkwork-specs/tools/build-browser-client.mjs --app-root . --environment demo"
   },
   "dependencies": {
+    "@sdkwork/iam-credential-entry": "workspace:*",
+    "@sdkwork/iam-runtime": "workspace:*",
     "@sdkwork/sdk-common": "workspace:*",
     "@sdkwork/webserver-h5-applications": "workspace:*",
     "@sdkwork/webserver-h5-commons": "workspace:*",

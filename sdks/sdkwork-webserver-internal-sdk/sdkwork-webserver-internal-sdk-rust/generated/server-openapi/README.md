@@ -12,7 +12,6 @@ cargo add sdkwork-webserver-internal-sdk-generated-rust
 
 ```rust
 use sdkwork_webserver_internal_sdk_generated_rust::{SdkworkCustomClient, SdkworkConfig};
-use std::collections::HashMap;
 
 
 #[tokio::main]
@@ -20,11 +19,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = SdkworkCustomClient::new(SdkworkConfig::new("http://localhost:3800"))?;
     client.set_api_key("your-api-key");
 
-    let mut query = HashMap::new();
-    query.insert("environment".to_string(), serde_json::json!("development"));
-    query.insert("ifGeneration".to_string(), serde_json::json!("ifgeneration"));
-    query.insert("ifSnapshotSha256".to_string(), serde_json::json!("ifsnapshotsha256"));
-    let result = client.runtime().assignments_current_retrieve(Some(&query)).await?;
+    let result = client.cluster().peers_retrieve().await?;
     println!("{result:?}");
     Ok(())
 }
@@ -65,6 +60,7 @@ client.set_header("X-Custom-Header", "value");
 ## API Modules
 
 - `client.runtime()` - runtime API
+- `client.cluster()` - cluster API
 
 ## Usage Examples
 
@@ -81,21 +77,24 @@ let result = client.runtime().assignments_current_retrieve(Some(&query)).await?;
 println!("{result:?}");
 ```
 
+### cluster
+
+```rust
+// Retrieve the authenticated instance's cluster peer directory
+let result = client.cluster().peers_retrieve().await?;
+println!("{result:?}");
+```
+
 ## Error Handling
 
 ```rust
 use sdkwork_webserver_internal_sdk_generated_rust::{SdkworkCustomClient, SdkworkConfig};
-use std::collections::HashMap;
 
 
 let client = SdkworkCustomClient::new(SdkworkConfig::new("http://localhost:3800"))?;
 
 let outcome: Result<(), _> = async {
-    let mut query = HashMap::new();
-    query.insert("environment".to_string(), serde_json::json!("development"));
-    query.insert("ifGeneration".to_string(), serde_json::json!("ifgeneration"));
-    query.insert("ifSnapshotSha256".to_string(), serde_json::json!("ifsnapshotsha256"));
-    client.runtime().assignments_current_retrieve(Some(&query)).await?;
+    client.cluster().peers_retrieve().await?;
     Ok(())
 }.await;
 

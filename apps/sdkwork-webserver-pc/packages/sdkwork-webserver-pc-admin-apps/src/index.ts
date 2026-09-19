@@ -1,2 +1,2 @@
 export { webserverModule } from "./module.ts";
-export * from "./DeployAppsAdminSurface.tsx";
+export { DeployAppsManagementSurface as DeployAppsAdminSurface } from "@sdkwork/webserver-pc-console-delivery";

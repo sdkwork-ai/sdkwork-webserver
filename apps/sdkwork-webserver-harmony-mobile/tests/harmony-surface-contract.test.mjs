@@ -378,8 +378,8 @@ const rootComponentSpec = JSON.parse(mustExist("specs/component.spec.json"));
 assert.equal(rootComponentSpec.component?.type, "harmony-mobile-app-root");
 assert.deepEqual(
   (rootComponentSpec.contracts?.sdkDependencies ?? []).map((entry) => entry.workspace).sort(),
-  ["sdkwork-deployments-app-sdk", "sdkwork-drive-app-sdk", "sdkwork-webserver-app-sdk"],
-  "the root must compose the same three app SDK families as the PC, H5, and mini program roots",
+  ["sdkwork-deployments-app-sdk", "sdkwork-drive-app-sdk"],
+  "the root must compose the deployments- and drive-owned app SDK families — the same set the PC, H5, mini program, and Flutter roots compose",
 );
 
 // --- 9. ArkTS import direction -------------------------------------------
@@ -664,28 +664,28 @@ test("pagination narrows server page info without inventing totals", () => {
 // --- 12. Behavioural: SDK port ---------------------------------------------
 
 const sdk = await loadArkTsModule(
-  "packages/sdkwork-webserver-harmony-mobile-core/src/main/ets/sdk/WebserverAppSdkClient.ets",
+  "packages/sdkwork-webserver-harmony-mobile-core/src/main/ets/sdk/DeployAppSdkPort.ets",
 );
 
 test("the SDK port normalizes one surface base URL and rejects duplicates", () => {
-  sdk.configureWebserverAppSdkBaseUrl("https://console.example.com/app/v3/api/");
-  assert.equal(sdk.resolveWebserverAppSdkBaseUrl(), "https://console.example.com/app/v3/api");
+  sdk.configureWebserverDeployAppSdkBaseUrl("https://console.example.com/app/v3/api/");
+  assert.equal(sdk.resolveWebserverDeployAppSdkBaseUrl(), "https://console.example.com/app/v3/api");
 
-  assert.throws(() => sdk.configureWebserverAppSdkBaseUrl("https://console.example.com"));
+  assert.throws(() => sdk.configureWebserverDeployAppSdkBaseUrl("https://console.example.com"));
   assert.throws(() =>
-    sdk.configureWebserverAppSdkBaseUrl("https://console.example.com/app/v3/api/app/v3/api"),
+    sdk.configureWebserverDeployAppSdkBaseUrl("https://console.example.com/app/v3/api/app/v3/api"),
   );
-  assert.throws(() => sdk.configureWebserverAppSdkBaseUrl("   "));
+  assert.throws(() => sdk.configureWebserverDeployAppSdkBaseUrl("   "));
 
-  sdk.resetWebserverAppSdkBaseUrl();
-  assert.throws(() => sdk.resolveWebserverAppSdkBaseUrl());
+  sdk.resetWebserverDeployAppSdkBaseUrl();
+  assert.throws(() => sdk.resolveWebserverDeployAppSdkBaseUrl());
 
-  assert.deepEqual(sdk.WEBSERVER_APP_KINDS.length, 8);
+  assert.deepEqual(sdk.WEBSERVER_APP_KINDS.length, 9);
   assert.deepEqual(sdk.WEBSERVER_APP_STATUSES.length, 6);
 });
 
 test("an unadapted transport reports unavailable and refuses to look empty", async () => {
-  sdk.resetWebserverAppSdkBaseUrl();
+  sdk.resetWebserverDeployAppSdkBaseUrl();
   const port = sdk.createWebserverHarmonySdkPort({ baseUrl: "https://console.example.com/app/v3/api" });
   assert.equal(port.available, false, "no ArkTS transport exists yet, so the port must say so");
   assert.equal(port.platform, "harmony-native");
@@ -703,7 +703,7 @@ test("an unadapted transport reports unavailable and refuses to look empty", asy
 });
 
 test("an injected transport satisfies the same port without an adapter", async () => {
-  sdk.resetWebserverAppSdkBaseUrl();
+  sdk.resetWebserverDeployAppSdkBaseUrl();
   const calls = [];
   const transport = {
     platform: "harmony-native",
@@ -812,19 +812,6 @@ test("the ArkTS closed sets mirror the generated SDK unions exactly", () => {
     "src",
     "types",
   );
-  const webserverTypes = path.join(
-    root,
-    "..",
-    "..",
-    "sdks",
-    "sdkwork-webserver-app-sdk",
-    "sdkwork-webserver-app-sdk-typescript",
-    "generated",
-    "server-openapi",
-    "src",
-    "types",
-  );
-
   const membersOf = (filePath, typeName) => {
     const source = fs.readFileSync(filePath, "utf8");
     const match = new RegExp(`export type ${typeName} =([^;]+);`, "u").exec(source);
@@ -845,14 +832,10 @@ test("the ArkTS closed sets mirror the generated SDK unions exactly", () => {
     "the ArkTS AppStatus mirror must equal the generated SDK union",
   );
 
-  // The webserver app SDK owns the same AppKind set; if the two generated
-  // sources ever disagree, that is a server-contract drift worth failing on.
-  const webserverKinds = membersOf(path.join(webserverTypes, "app-kind.ts"), "AppKind");
-  assert.deepEqual(
-    webserverKinds,
-    generatedKinds,
-    "the webserver and deployments generated AppKind unions must agree",
-  );
+  // The webserver-owned application surface is deliberately not consulted: the
+  // `deploy_app` entity has one owner (`sdkwork-deployments`), and pinning this
+  // root's ArkTS mirror to a second, retiring authority would keep the duplicate
+  // alive (`COMPOSABLE_ARCHITECTURE_SPEC.md` §7).
 
   assert.deepEqual(
     messages.WEBSERVER_HARMONY_APPLICATION_KIND_LABELS.map((entry) => entry.value).sort(),

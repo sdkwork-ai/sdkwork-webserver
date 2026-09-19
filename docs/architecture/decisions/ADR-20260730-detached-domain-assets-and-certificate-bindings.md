@@ -23,15 +23,15 @@ cannot represent those relationships without duplicate state or destructive rebi
 
 ## Decision
 
-- `web_domain` is a tenant-owned hostname under a required `web_root_domain`; it does not contain
+- `webserver_domain` is a tenant-owned hostname under a required `webserver_root_domain`; it does not contain
   application or certificate ownership columns.
-- `web_site_binding` is the routing relation between `web_site` and `web_domain`. It owns
+- `webserver_site_binding` is the routing relation between `webserver_site` and `webserver_domain`. It owns
   environment, path prefix, serve/redirect behavior, primary state, and activation state.
-- `web_certificate` is a lifecycle aggregate. `web_certificate_identifier` is the ordered
+- `webserver_certificate` is a lifecycle aggregate. `webserver_certificate_identifier` is the ordered
   many-to-many relation to covered hostnames and is bounded to eight SAN identifiers.
-- `web_certificate_version` stores immutable certificate evidence and a protected material
+- `webserver_certificate_version` stores immutable certificate evidence and a protected material
   reference. Private keys and PEM data never enter domain rows, API responses, or browser state.
-- `web_certificate_operation` stores durable `ISSUE` and `RENEW` intent. API acceptance returns
+- `webserver_certificate_operation` stores durable `ISSUE` and `RENEW` intent. API acceptance returns
   HTTP `202`; workers claim with expiring leases and fencing tokens, and only a fenced terminal
   transaction may update the certificate aggregate and immutable version.
 - Automatic renewal policy is available only to ACME certificates. Self-signed certificate
@@ -39,28 +39,28 @@ cannot represent those relationships without duplicate state or destructive rebi
 - Backend certificate inventory and issuance address verified hostnames through `domainIds` and do
   not require an application binding. An application-scoped API may still use an owned route as
   its authorization boundary without changing certificate ownership.
-- `web_listener_certificate_binding` binds a certificate or explicit version to one
-  `web_site_binding`. One active RSA and one active ECDSA binding may coexist for the same listener;
+- `webserver_listener_certificate_binding` binds a certificate or explicit version to one
+  `webserver_site_binding`. One active RSA and one active ECDSA binding may coexist for the same listener;
   only one active binding is the listener default. Attempting to bind a different certificate to an
   already occupied algorithm returns a typed conflict before the database uniqueness guard.
 - A listener binding is allowed only when the certificate covers the hostname and has a usable
   version with matching algorithm. Activation remains fail closed.
-- Application deployment visibility is projected through `web_site_binding.site_id` to the latest
-  `web_deployment`; no domain-deployment join or copied deployment status is persisted.
+- Application deployment visibility is projected through `webserver_site_binding.site_id` to the latest
+  `webserver_deployment`; no domain-deployment join or copied deployment status is persisted.
 - Tenant-level backend operations manage hostname assets and listener certificate bindings. The
   app surface remains owner scoped. Browser feature packages use the injected generated SDK
   facade and never construct HTTP clients.
 - Domain management presents certificate lifecycle independently from listener binding. The
   certificate inventory and issue operation remain available for unbound verified hostnames;
-  listener controls are conditional on an existing `web_site_binding`.
+  listener controls are conditional on an existing `webserver_site_binding`.
 - Deleting an application binding does not delete the hostname or certificate. Hostname deletion
   is blocked while live route or certificate-identifier references exist.
 
 ## Alternatives
 
-- Keep one optional application column on `web_domain`. Rejected because it collapses routing
+- Keep one optional application column on `webserver_domain`. Rejected because it collapses routing
   policy into asset ownership and cannot model environment/path routes.
-- Keep one domain column on `web_certificate`. Rejected because it prevents multi-SAN certificates
+- Keep one domain column on `webserver_certificate`. Rejected because it prevents multi-SAN certificates
   and encourages duplicate certificate lifecycle rows.
 - Store relationships in JSON. Rejected because foreign-key integrity, bounded cardinality,
   pagination, filtering, and activation queries must remain enforceable in PostgreSQL.

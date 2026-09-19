@@ -116,6 +116,9 @@ macro_rules! repository_engine {
             mod servers {
                 include!("servers.rs");
             }
+            mod cluster {
+                include!("cluster.rs");
+            }
             mod applications {
                 include!("applications.rs");
             }

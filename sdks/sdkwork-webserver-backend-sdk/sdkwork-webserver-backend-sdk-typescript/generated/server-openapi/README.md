@@ -27,7 +27,7 @@ client.setAuthToken('your-auth-token');
 client.setAccessToken('your-access-token');
 
 // Use the SDK
-const result = await client.nginx.status.retrieve();
+const result = await client.cluster.overview.retrieve();
 ```
 
 ## Authentication
@@ -67,6 +67,7 @@ const client = new SdkworkBackendClient({
 - `client.webserverConfig` - webserver_config API
 - `client.agent` - agent API
 - `client.audit` - audit API
+- `client.cluster` - cluster API
 
 ## Usage Examples
 
@@ -214,13 +215,20 @@ const params = {
 const result = await client.audit.auditLogs.list(params);
 ```
 
+### cluster
+
+```typescript
+// Retrieve the cluster health overview for status polling
+const result = await client.cluster.overview.retrieve();
+```
+
 ## Error Handling
 
 ```typescript
 import { SdkworkBackendClient, NetworkError, TimeoutError, AuthenticationError } from '@sdkwork/webserver-backend-sdk';
 
 try {
-  const result = await client.nginx.status.retrieve();
+  const result = await client.cluster.overview.retrieve();
 } catch (error) {
   if (error instanceof AuthenticationError) {
     console.error('Authentication failed:', error.message);

@@ -21,7 +21,7 @@ in-process memory (LRU + TTL)
 Redis (distributed, cluster-ready)
         │ miss
         ▼
-database (web_resolution_cache)
+database (webserver_resolution_cache)
         │ miss
         ▼
 system resolver (fallback) ──► back-fills every layer (positive or negative)
@@ -43,7 +43,7 @@ concurrent lookups to one upstream call).
   namespaced keys and cluster-side expiry.
 - `ResolutionDatabase` — database boundary; the SQL implementation lives in
   `sdkwork-intelligence-webserver-repository-sqlx` over the
-  `web_resolution_cache` table.
+  `webserver_resolution_cache` table.
 - `ResolutionChain` — the orchestrator (walk order, back-fill, negative
   caching, single-flight).
 - `FileResolverSource` — `/etc/hosts`-style seed parsing.
@@ -76,7 +76,7 @@ JSON app config (`resolutionCache`) or the layout-v2 equivalent:
   closed.
 - `redis` — distributed layer; connection failure degrades to a warning
   and the chain keeps serving the upper layers.
-- `database` — reads/writes `web_resolution_cache` through the
+- `database` — reads/writes `webserver_resolution_cache` through the
   process-shared database pool (management deployments); without a pool it
   degrades with a warning.
 - `negativeTtlSeconds` — TTL for failed resolutions (fast-fail absorption).
@@ -95,7 +95,7 @@ domains and reverse-proxy inventory:
    layer at startup; requests never touch the system resolver for seeded
    names.
 2. **Database inventory** — the deploy plane seeds and maintains
-   `web_resolution_cache` (same table the data plane reads and
+   `webserver_resolution_cache` (same table the data plane reads and
    back-fills). Entries carry `expires_at`; expired rows are ignored by
    `load` and the data plane refreshes them from upstream resolutions.
 3. **Negative entries** — when the data plane cannot resolve a name, it

@@ -5,14 +5,37 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const appRoot = resolve(repositoryRoot, "apps/sdkwork-webserver-pc");
 
+// Dependency module catalogs inherited by reference (`COMPOSABLE_ARCHITECTURE_SPEC.md`
+// section 7): a core package that consumes a dependency SDK must point at that
+// dependency's own IAM module manifest instead of restating its permissions.
+// `moduleId` is the identity the composition validator matches against the
+// dependency's declared `moduleId`/`domain`, so it tracks the manifest, not the
+// permission-code prefix.
+const DEPENDENCY_MODULE_CATALOG_REFS = {
+  deploy: {
+    moduleId: "deployments",
+    manifestRef: "../../../../../sdkwork-deployments/specs/iam.module.manifest.json",
+  },
+  drive: {
+    moduleId: "drive",
+    manifestRef: "../../../../../sdkwork-iam/iam/modules/drive/iam.module.manifest.json",
+  },
+};
+
 const packages = [
   { id: "core", surface: "pc", capability: "runtime-core", deps: {}, coreComposition: true },
-  { id: "commons", surface: "pc", capability: "shared-ui", deps: { "@sdkwork/iam-contracts": "workspace:*", "@sdkwork/utils": "workspace:*", fflate: "^0.8.2", ignore: "^7.0.6", react: "catalog:", "react-router-dom": "^7.15.0", "lucide-react": "catalog:" }, canonicalSpecs: frontendCanonicalSpecs("PC package and component naming."), layerRole: "frontend-core", publicExports: ["."], providedPorts: [{ name: "webserverWorkspace", export: "." }, { name: "webserverResourceContracts", export: "." }, { name: "webserverWorkspaceI18n", export: "." }, { name: "applicationSourceStorage", export: "." }], requiredPorts: [], dependencyApiExports: [], dependencyApiSurfaces: [], permissionComposition: false, dependencyPolicy: "Console and admin shells consume the shared workspace, navigation, i18n, and resource contracts through the package root export.", sdkPolicy: "This package owns no SDK client; resource services remain injected by console-core or admin-core.", readme: "This package owns shared resource contracts and the reusable PC workspace chrome for console and backend-admin surfaces. Shell packages provide navigation and SDK-backed resource registries through typed props; this package does not construct SDK clients or own runtime configuration." },
+  { id: "commons", surface: "pc", capability: "shared-ui", deps: { "@sdkwork/iam-contracts": "workspace:*", "@sdkwork/utils": "workspace:*", fflate: "^0.8.2", ignore: "^7.0.6", react: "catalog:", "react-router-dom": "^7.15.0", "lucide-react": "catalog:" }, canonicalSpecs: frontendCanonicalSpecs("PC package and component naming."), layerRole: "frontend-core", publicExports: ["."], providedPorts: [{ name: "webserverWorkspace", export: "." }, { name: "webserverResourceContracts", export: "." }, { name: "webserverWorkspaceI18n", export: "." }], requiredPorts: [], dependencyApiExports: [], dependencyApiSurfaces: [], permissionComposition: false, dependencyPolicy: "Console and admin shells consume the shared workspace, navigation, i18n, and resource contracts through the package root export.", sdkPolicy: "This package owns no SDK client; resource services remain injected by console-core or admin-core.", readme: "This package owns shared resource contracts and the reusable PC workspace chrome for console and backend-admin surfaces. Shell packages provide navigation and SDK-backed resource registries through typed props; this package does not construct SDK clients or own runtime configuration." },
   // Console SDK wiring only: the application lifecycle this package used to
   // own as a resource registry now lives in sdkwork-deployments (`deploy_app`)
   // and is bridged by console-delivery, so the shared commons dependency and
-  // the `applicationSourceStorageAdapter` port went with it.
-  { id: "console-core", surface: "app-console", capability: "console-core", deps: { "@sdkwork/drive-app-sdk": "workspace:*", "@sdkwork/sdk-common": "workspace:*", "@sdkwork/webserver-app-sdk": "workspace:*", react: "catalog:" }, sdk: "sdkwork-webserver-app-sdk", sdkPackage: "@sdkwork/webserver-app-sdk", sdkAuthority: "sdkwork-webserver-app-api", sdkClients: ["SdkworkAppClient", "SdkworkDriveAppClient"], sdkDependencies: [{ workspace: "sdkwork-webserver-app-sdk", permissionModuleId: "web", surface: "app-api", credentialMode: "authenticated-app-api" }, { workspace: "sdkwork-drive-app-sdk", permissionModuleId: "drive", surface: "app-api", credentialMode: "authenticated-app-api" }], coreComposition: true },
+  // the `applicationSourceStorageAdapter` port went with it — and with that
+  // consumer gone, commons no longer declares the matching
+  // `applicationSourceStorage` providedPort either (a port nobody requires is
+  // not a seam, and `check-component-port-bindings` only validates port shape,
+  // so an orphaned port would have stayed green forever). The app SDK the
+  // console constructs is deployments' own generated client as well — the
+  // legacy webserver app-api surface has no console consumer left.
+  { id: "console-core", surface: "app-console", capability: "console-core", deps: { "@sdkwork/deployments-app-sdk": "workspace:*", "@sdkwork/drive-app-sdk": "workspace:*", "@sdkwork/sdk-common": "workspace:*", react: "catalog:" }, sdk: "sdkwork-deployments-app-sdk", sdkPackage: "@sdkwork/deployments-app-sdk", sdkAuthority: "sdkwork-deploy-app-api", sdkClients: ["SdkworkDeployAppClient", "SdkworkDriveAppClient"], sdkDependencies: [{ workspace: "sdkwork-deployments-app-sdk", permissionModuleId: "deploy", surface: "app-api", credentialMode: "authenticated-app-api" }, { workspace: "sdkwork-drive-app-sdk", permissionModuleId: "drive", surface: "app-api", credentialMode: "authenticated-app-api" }], coreComposition: true },
   { id: "console-shell", surface: "app-console", capability: "console-shell", deps: { "@sdkwork/webserver-pc-commons": "workspace:*", react: "catalog:" }, canonicalSpecs: frontendCanonicalSpecs("Console package naming."), layerRole: "frontend-feature", publicExports: ["."], providedPorts: [{ name: "webserverConsoleShell", export: "." }], requiredPorts: [{ name: "webserverWorkspace", export: ".", provider: "@sdkwork/webserver-pc-commons" }, { name: "portalNavigation", export: "." }, { name: "notificationCenterNavigation", export: "." }], dependencyApiExports: [], dependencyApiSurfaces: [], permissionComposition: false, dependencyPolicy: "The application root injects Portal and Messaging notification-center navigation while the shell consumes the shared workspace through its public root export.", sdkPolicy: "The shell owns no SDK client; app SDK access remains isolated behind console-core.", readme: "This package owns the app-console shell boundary. The application root injects a required Portal navigation target, an optional Messaging notification-center target, authenticated viewer context, and the console resource registry. Feature packages remain unaware of Portal, Messaging, and shell chrome." },
   // Applications / domains / certificates all render the canonical
   // sdkwork-deployments pages. `deploy_app` is owned by that module and its
@@ -24,11 +47,22 @@ const packages = [
   { id: "console-mcp", surface: "app-console", capability: "mcp", deps: { "@sdkwork/mcp-pc-core": "workspace:*", "@sdkwork/mcp-pc-console-mcp": "workspace:*", "@sdkwork/sdk-common": "workspace:*", react: "catalog:", "react-router-dom": "^7.15.0" }, module: [["mcp", "My MCP Servers", "MCP servers registered by the authenticated user", "mcp.marketplace.read"]], extraIndexExports: ['export * from "./McpConsoleSurface.tsx";'] },
   { id: "admin-core", surface: "backend-admin", capability: "admin-core", deps: { "@sdkwork/drive-app-sdk": "workspace:*", "@sdkwork/webserver-backend-sdk": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", "@sdkwork/sdk-common": "workspace:*", react: "catalog:" }, sdk: "sdkwork-webserver-backend-sdk", sdkPackage: "@sdkwork/webserver-backend-sdk", sdkAuthority: "sdkwork-webserver-backend-api", coreComposition: true },
   { id: "admin-shell", surface: "backend-admin", capability: "admin-shell", deps: { "@sdkwork/webserver-pc-commons": "workspace:*", react: "catalog:" } },
-  { id: "admin-apps", surface: "backend-admin", capability: "apps", deps: { "@sdkwork/deployments-pc-commons": "workspace:*", "@sdkwork/deployments-pc-console-core": "workspace:*", "@sdkwork/deployments-pc-console-publishing": "workspace:*", "@sdkwork/sdk-common": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", react: "catalog:" }, module: [["apps", "Applications", "Publish and operate deploy_app applications", "deploy.apps.read"]], extraIndexExports: ['export * from "./DeployAppsAdminSurface.tsx";'] },
+  // The backend-admin "Applications" entry renders the exact same canonical
+  // `deploy_app` publishing page as the app-console one, and the bridge that
+  // turns base URLs plus a token manager into that page's two clients is
+  // surface-neutral — it has no admin/console divergence at all. Both copies
+  // were introduced by the same commit and never diverged since, so this
+  // package re-exports console-delivery's adapter instead of keeping a second
+  // byte-identical copy. Only the menu entry (the part that really is
+  // surface-specific) stays local. `frontend-composition` forbids a commons/
+  // core package from depending on a capability package, and this direction
+  // mirrors the existing `admin-plugins` -> `console-plugins` precedent.
+  { id: "admin-apps", surface: "backend-admin", capability: "apps", deps: { "@sdkwork/webserver-pc-commons": "workspace:*", "@sdkwork/webserver-pc-console-delivery": "workspace:*" }, module: [["apps", "Applications", "Publish and operate deploy_app applications", "deploy.apps.read"]], extraIndexExports: ['export { DeployAppsManagementSurface as DeployAppsAdminSurface } from "@sdkwork/webserver-pc-console-delivery";'] },
   { id: "admin-nginx", surface: "backend-admin", capability: "nginx", deps: { "@sdkwork/webserver-pc-commons": "workspace:*" }, module: [["nginx", "Nginx", "Validate, deploy and reload Nginx configuration", "web.nginx.write"]] },
   { id: "admin-skills", surface: "backend-admin", capability: "skills", deps: { "@sdkwork/skills-pc-core": "workspace:*", "@sdkwork/skills-pc-admin-core": "workspace:*", "@sdkwork/skills-pc-admin-skill": "workspace:*", "@sdkwork/sdk-common": "workspace:*", react: "catalog:", "react-router-dom": "^7.15.0" }, module: [["skills", "Skills Admin", "Manage skill packages, categories, and capabilities", "skills.packages.manage"]], extraIndexExports: ['export * from "./SkillsAdminSurface.tsx";'] },
   { id: "admin-mcp", surface: "backend-admin", capability: "mcp", deps: { "@sdkwork/mcp-pc-core": "workspace:*", "@sdkwork/mcp-pc-admin": "workspace:*", "@sdkwork/sdk-common": "workspace:*", react: "catalog:", "react-router-dom": "^7.15.0" }, module: [["mcp", "MCP Admin", "Manage MCP servers, categories, and invocations", "mcp.admin.server.manage"]], extraIndexExports: ['export * from "./McpAdminSurface.tsx";'] },
   { id: "admin-servers", surface: "backend-admin", capability: "servers", deps: { "@sdkwork/webserver-pc-commons": "workspace:*" }, module: [["servers", "Servers", "Managed Web Server inventory", "web.servers.read"]] },
+  { id: "admin-cluster", surface: "backend-admin", capability: "cluster", deps: { "@sdkwork/webserver-pc-admin-core": "workspace:*", "@sdkwork/sdk-common": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", "lucide-react": "catalog:", react: "catalog:", "react-router-dom": "^7.15.0" }, sdkPolicy: "This package consumes the backend admin SDK exclusively through @sdkwork/webserver-pc-admin-core public exports (createWebserverAdminSdkClient and wire types); raw HTTP and direct generated-SDK imports are forbidden in authored UI code.", module: [["cluster-overview", "Cluster", "Distributed cluster health and liveness overview", "web.cluster.read", "cluster"], ["cluster-clusters", "Clusters", "Cluster grouping and heartbeat thresholds", "web.cluster.read", "cluster/clusters"], ["cluster-hosts", "Cluster Hosts", "Host machines with system and network identity", "web.cluster.read", "cluster/hosts"], ["cluster-instances", "Cluster Instances", "Webserver process instances and liveness", "web.cluster.read", "cluster/instances"], ["cluster-events", "Cluster Events", "Cluster lifecycle event evidence", "web.cluster.read", "cluster/events"]], extraIndexExports: ['export * from "./ClusterOverviewSurface.tsx";'] },
   { id: "admin-servers-explorer", surface: "backend-admin", capability: "servers-explorer", deps: { "@sdkwork/webserver-pc-admin-core": "workspace:*", "@sdkwork/sdk-common": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", "lucide-react": "catalog:", react: "catalog:", "react-router-dom": "^7.15.0" }, sdkPolicy: "This package consumes the backend admin SDK exclusively through @sdkwork/webserver-pc-admin-core public exports (createWebserverAdminSdkClient and wire types); raw HTTP and direct generated-SDK imports are forbidden in authored UI code.", module: [["servers-explorer", "Server Files", "Browse, classify, and operate server deployment projects and files", "web.servers.files.read"]], extraIndexExports: ['export * from "./ServerFilesExplorerSurface.tsx";', 'export * from "./server-files-client.ts";', 'export * from "./project-detection.ts";'] },
   { id: "admin-webserver-config", surface: "backend-admin", capability: "webserver-config", deps: { "@sdkwork/webserver-pc-admin-core": "workspace:*", "@sdkwork/sdk-common": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", "@monaco-editor/react": "catalog:", "monaco-editor": "catalog:", "lucide-react": "catalog:", react: "catalog:", "react-router-dom": "^7.15.0" }, sdkPolicy: "This package consumes the backend admin SDK exclusively through @sdkwork/webserver-pc-admin-core public exports (createWebserverAdminSdkClient and wire types); raw HTTP and direct generated-SDK imports are forbidden in authored UI code.", module: [["webserver-config", "Server Config", "Edit the deployed default config, import plane, and module sidecar configuration online", "web.servers.files.read"]], extraIndexExports: ['export * from "./WebserverConfigSurface.tsx";', 'export * from "./webserver-config-client.ts";', 'export * from "./config-language.ts";'] },
   { id: "admin-diagnostics", surface: "backend-admin", capability: "diagnostics", deps: { "@sdkwork/webserver-pc-commons": "workspace:*" }, module: [["diagnostics", "Diagnostics", "Runtime status and convergence diagnostics", "web.servers.read"]] },
@@ -117,7 +151,7 @@ function packageManifest(definition) {
 }
 
 function componentSpec(definition) {
-  const sdkDependencies = definition.sdkDependencies ?? (definition.sdk ? [{ workspace: definition.sdk, permissionModuleId: "web", surface: definition.surface === "backend-admin" ? "backend-api" : "app-api", credentialMode: definition.surface === "backend-admin" ? "authenticated-backend-admin" : "authenticated-app-api" }] : []);
+  const sdkDependencies = effectiveSdkDependencies(definition);
   const publicExports = definition.publicExports ?? (definition.coreComposition
     ? [".", "./sdk", "./modules", "./host", "./session", "./composition"]
     : ["src/index.ts"]);
@@ -176,6 +210,24 @@ function packageExport(path) {
   return { types: path, import: path, default: path };
 }
 
+/**
+ * The SDK dependencies a core package actually declares. `componentSpec` and
+ * `permissionComposition` both read this so the emitted dependency list and the
+ * emitted catalog references can never disagree about which modules the package
+ * inherits from.
+ */
+function effectiveSdkDependencies(definition) {
+  if (definition.sdkDependencies) return definition.sdkDependencies;
+  if (!definition.sdk) return [];
+  const backendAdmin = definition.surface === "backend-admin";
+  return [{
+    workspace: definition.sdk,
+    permissionModuleId: "web",
+    surface: backendAdmin ? "backend-api" : "app-api",
+    credentialMode: backendAdmin ? "authenticated-backend-admin" : "authenticated-app-api",
+  }];
+}
+
 function permissionComposition(definition) {
   if (!definition.coreComposition) {
     return {
@@ -192,9 +244,15 @@ function permissionComposition(definition) {
       consumerPolicy: { forbidLocalPermissionCatalogForDependencyDomains: true, allowExplicitOverridesOnly: true, allowFrontendHintsWithoutServerDuplication: true },
     };
   }
+  // The host's own module catalog leads, then every dependency module inherits
+  // its own catalog by reference — the host never restates a dependency's
+  // permissions (`COMPOSABLE_ARCHITECTURE_SPEC.md` section 7).
   const moduleCatalogRefs = [{ moduleId: "web", manifestRef: "../../../../specs/iam.module.manifest.json", inheritPermissions: true, inheritRoles: true }];
-  if (definition.sdkDependencies?.some((dependency) => dependency.permissionModuleId === "drive")) {
-    moduleCatalogRefs.push({ moduleId: "drive", manifestRef: "../../../../../sdkwork-iam/iam/modules/drive/iam.module.manifest.json", inheritPermissions: true, inheritRoles: true });
+  for (const dependency of effectiveSdkDependencies(definition)) {
+    const catalogRef = DEPENDENCY_MODULE_CATALOG_REFS[dependency.permissionModuleId];
+    if (catalogRef) {
+      moduleCatalogRefs.push({ ...catalogRef, inheritPermissions: true, inheritRoles: true });
+    }
   }
   return {
     inheritanceMode: "module-catalog-with-overrides",

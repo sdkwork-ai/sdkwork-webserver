@@ -3,280 +3,190 @@
   "kind": "sdkwork.database.table-registry",
   "tables": [
     {
-      "table_name": "web_site",
+      "table_name": "webserver_site",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_app"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_root_domain",
+      "table_name": "webserver_root_domain",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_dns_zone"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_domain",
+      "table_name": "webserver_domain",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_domain"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_domain_verification",
+      "table_name": "webserver_domain_verification",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_domain_verification"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_site_binding",
+      "table_name": "webserver_site_binding",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_app_binding"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_tls_policy",
+      "table_name": "webserver_tls_policy",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_tls_policy"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_nginx_config",
+      "table_name": "webserver_nginx_config",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_nginx_config"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_certificate",
+      "table_name": "webserver_certificate",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_certificate"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_certificate_identifier",
+      "table_name": "webserver_certificate_identifier",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_certificate_identifier"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_certificate_version",
+      "table_name": "webserver_certificate_version",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_certificate_version"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_certificate_secret_bundle",
+      "table_name": "webserver_certificate_secret_bundle",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_certificate_material"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_certificate_operation",
+      "table_name": "webserver_certificate_operation",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_certificate_order"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_listener_certificate_binding",
+      "table_name": "webserver_listener_certificate_binding",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_listener_certificate_binding"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_source_version",
+      "table_name": "webserver_source_version",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_app_revision"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_deployment",
+      "table_name": "webserver_deployment",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_deployment"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_env_variable",
+      "table_name": "webserver_env_variable",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_env_variable"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_health_check",
+      "table_name": "webserver_health_check",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_health_check"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_audit_log",
+      "table_name": "webserver_audit_log",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_audit_log"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_server",
+      "table_name": "webserver_server",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_server"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_certificate_node_state",
+      "table_name": "webserver_certificate_node_state",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_certificate_distribution"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_runtime_assignment",
+      "table_name": "webserver_runtime_assignment",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_runtime_assignment"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_runtime_observation",
+      "table_name": "webserver_runtime_observation",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_app_target_observation"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_application",
+      "table_name": "webserver_application",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_app"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_app_platform_target",
+      "table_name": "webserver_app_platform_target",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": "deploy_app_platform_target"
-      }
+      "lifecycle_status": "active"
     },
     {
-      "table_name": "web_resolution_cache",
+      "table_name": "webserver_resolution_cache",
       "owner": "web-platform",
       "compliance_level": "L2",
-      "lifecycle_status": "deprecated",
-      "retirement": {
-        "phase": "phase-3",
-        "rationale": "DATABASE_SPEC §7：web_ 前缀非注册业务模块前缀，属 L0 迁移事实，须收敛到 deploy_ 族",
-        "superseded_by": null,
-        "note": "无 deploy_ 对应，建议按运行时缓存退役"
-      }
+      "lifecycle_status": "active"
+    },
+    {
+      "table_name": "webserver_cluster",
+      "owner": "web-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
+    },
+    {
+      "table_name": "webserver_cluster_host",
+      "owner": "web-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
+    },
+    {
+      "table_name": "webserver_cluster_instance",
+      "owner": "web-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
+    },
+    {
+      "table_name": "webserver_cluster_event",
+      "owner": "web-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
+    },
+    {
+      "table_name": "webserver_cluster_heartbeat",
+      "owner": "web-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
+    },
+    {
+      "table_name": "webserver_cluster_peer_message",
+      "owner": "web-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
     }
   ]
 }

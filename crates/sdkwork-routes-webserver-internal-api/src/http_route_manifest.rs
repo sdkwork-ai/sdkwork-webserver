@@ -35,6 +35,31 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "runtimeAssignments.observations.latest.retrieve",
     )
     .with_required_permission("web.runtimeAssignments.write"),
+    HttpRoute::ingress_token(
+        HttpMethod::Post,
+        "/internal/v3/api/web/cluster/instances/register",
+        "cluster",
+        "cluster.instances.register",
+    )
+    .with_required_permission("web.cluster.write")
+    .with_idempotent(true)
+    .with_rate_limit_tier(RateLimitTier::AuthCritical),
+    HttpRoute::ingress_token(
+        HttpMethod::Post,
+        "/internal/v3/api/web/cluster/instances/heartbeat",
+        "cluster",
+        "cluster.instances.heartbeat",
+    )
+    .with_required_permission("web.cluster.write")
+    .with_idempotent(true)
+    .with_rate_limit_tier(RateLimitTier::AuthCritical),
+    HttpRoute::ingress_token(
+        HttpMethod::Get,
+        "/internal/v3/api/web/cluster/peers",
+        "cluster",
+        "cluster.peers.retrieve",
+    )
+    .with_required_permission("web.cluster.read"),
 ];
 
 pub fn internal_route_manifest() -> HttpRouteManifest {

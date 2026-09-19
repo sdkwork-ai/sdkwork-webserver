@@ -33,5 +33,6 @@ export const webserverApplicationsListEnUs = {
   "applications.list.kind.douyin-miniprogram": "Douyin mini program",
   "applications.list.kind.ios-app": "iOS app",
   "applications.list.kind.android-app": "Android app",
+  "applications.list.kind.desktop-app": "Desktop app",
   "applications.list.kind.harmonyos-app": "HarmonyOS app",
 } as const;

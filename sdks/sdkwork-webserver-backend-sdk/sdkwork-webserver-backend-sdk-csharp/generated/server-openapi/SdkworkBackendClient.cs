@@ -22,6 +22,7 @@ namespace SDKWork.WebserverBackendSdk
         public WebserverConfigApi WebserverConfig { get; }
         public AgentApi Agent { get; }
         public AuditApi Audit { get; }
+        public ClusterApi Cluster { get; }
 
         public SdkworkBackendClient(string baseUrl)
         {
@@ -39,6 +40,7 @@ namespace SDKWork.WebserverBackendSdk
             WebserverConfig = new WebserverConfigApi(_httpClient);
             Agent = new AgentApi(_httpClient);
             Audit = new AuditApi(_httpClient);
+            Cluster = new ClusterApi(_httpClient);
         }
 
         public SdkworkBackendClient(SdkConfig config)
@@ -57,6 +59,7 @@ namespace SDKWork.WebserverBackendSdk
             WebserverConfig = new WebserverConfigApi(_httpClient);
             Agent = new AgentApi(_httpClient);
             Audit = new AuditApi(_httpClient);
+            Cluster = new ClusterApi(_httpClient);
         }
         public SdkworkBackendClient SetAuthToken(string token)
         {

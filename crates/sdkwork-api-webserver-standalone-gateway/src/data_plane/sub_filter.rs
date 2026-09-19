@@ -8,6 +8,8 @@
 //! on`. Ineligible responses (no extension, non-matching content type, or an
 //! already-encoded body) stream through untouched.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use axum::{
     body::Body,
     http::{header, HeaderValue, StatusCode},
@@ -23,6 +25,45 @@ use sdkwork_webserver_core::{
 /// Route-level substitution configuration carried on the response.
 #[derive(Clone)]
 pub(crate) struct SubFilterExtension(pub SubFilterConfig);
+
+/// Process-wide cap on concurrently buffered sub_filter response bytes.
+///
+/// The per-response `MAX_SUB_FILTER_BODY_BYTES` alone bounds one buffer, so
+/// the theoretical aggregate is `max_concurrent_requests × 16 MiB`. This
+/// budget reserves the worst-case share before buffering and releases it on
+/// drop; when the budget is exhausted the response streams through
+/// unsubstituted (availability over transformation).
+const MAXIMUM_AGGREGATE_BUFFERED_BYTES: usize = 256 * 1024 * 1024;
+
+static BUFFERED_BYTES: AtomicUsize = AtomicUsize::new(0);
+
+/// RAII reservation against the aggregate buffer budget.
+struct BufferBudgetGuard(usize);
+
+impl Drop for BufferBudgetGuard {
+    fn drop(&mut self) {
+        BUFFERED_BYTES.fetch_sub(self.0, Ordering::Relaxed);
+    }
+}
+
+fn reserve_buffer_budget() -> Option<BufferBudgetGuard> {
+    let share = MAX_SUB_FILTER_BODY_BYTES;
+    let mut current = BUFFERED_BYTES.load(Ordering::Relaxed);
+    loop {
+        if current + share > MAXIMUM_AGGREGATE_BUFFERED_BYTES {
+            return None;
+        }
+        match BUFFERED_BYTES.compare_exchange_weak(
+            current,
+            current + share,
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        ) {
+            Ok(_) => return Some(BufferBudgetGuard(share)),
+            Err(observed) => current = observed,
+        }
+    }
+}
 
 pub(crate) async fn apply_sub_filters_middleware(
     request: axum::extract::Request,
@@ -54,6 +95,12 @@ async fn apply_sub_filters_to_response(mut response: Response<Body>) -> Response
         return response;
     }
 
+    // Reserve the aggregate buffer budget before buffering; without budget
+    // headroom the body streams through unsubstituted.
+    let Some(_budget) = reserve_buffer_budget() else {
+        return response;
+    };
+
     let body = std::mem::take(response.body_mut());
     let bytes = match collect_body_limited(body, MAX_SUB_FILTER_BODY_BYTES as u64).await {
         Ok(bytes) => bytes,
@@ -66,7 +113,10 @@ async fn apply_sub_filters_to_response(mut response: Response<Body>) -> Response
     };
     let replaced = apply_sub_filters(&bytes, &config);
     if replaced == bytes.as_ref() {
-        return response;
+        // Nothing substituted: restore the buffered body (it was taken from
+        // the response above), keeping the original headers intact.
+        let (parts, _) = response.into_parts();
+        return Response::from_parts(parts, Body::from(bytes));
     }
 
     let (mut parts, _) = response.into_parts();

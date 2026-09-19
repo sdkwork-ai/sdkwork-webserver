@@ -1052,6 +1052,10 @@ pub enum ResourceConfig {
         /// request headers to the upstream (fixed safe defaults still apply).
         #[serde(default = "default_proxy_pass_request_headers")]
         proxy_pass_request_headers: bool,
+        /// nginx `proxy_intercept_errors on`: proxied responses whose status
+        /// has an `error_page` mapping are replaced by the mapped page.
+        #[serde(default)]
+        proxy_intercept_errors: bool,
     },
     Redirect {
         id: String,
@@ -1486,6 +1490,32 @@ pub struct VirtualHostConfig {
     pub routes: Vec<RouteConfig>,
     #[serde(default)]
     pub security_headers: Option<SecurityHeadersConfig>,
+    /// Server-level nginx `gzip` policy resolved for this host; `None`
+    /// inherits the http-level (app-wide) policy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compression: Option<GzipConfig>,
+    /// nginx `error_page` mappings declared at http/server level for this
+    /// host, in declaration order (later entries override earlier codes).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub error_pages: Vec<ErrorPageConfig>,
+    /// nginx `recursive_error_pages on`: an error produced while serving an
+    /// error page may itself be mapped again (bounded hops).
+    #[serde(default)]
+    pub recursive_error_pages: bool,
+}
+
+/// One nginx `error_page <codes…> [=response] uri;` mapping.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ErrorPageConfig {
+    /// Status codes this mapping answers for.
+    pub codes: Vec<u16>,
+    /// Internal-redirect target URI (re-runs location selection).
+    pub uri: String,
+    /// Optional `=code` response-code replacement; `None` keeps the
+    /// original error status.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_code: Option<u16>,
 }
 
 /// Per-virtual-host security response headers, applied to every response
@@ -1568,6 +1598,14 @@ pub struct RouteConfig {
     /// Location `secure_link` family (nginx http secure link module).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secure_link: Option<SecureLinkMode>,
+    /// Location-level nginx `gzip` policy resolved for this route; `None`
+    /// inherits the host/app policy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compression: Option<GzipConfig>,
+    /// Location-level nginx `error_page` mappings; when non-empty they
+    /// replace the host-level set for this route (nginx inheritance).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub error_pages: Vec<ErrorPageConfig>,
 }
 
 /// nginx `secure_link` module modes (ngx_http_secure_link_module).
@@ -1700,6 +1738,11 @@ pub struct ProxyCacheConfig {
     /// Maximum cached response body bytes per entry.
     #[serde(default = "default_proxy_cache_max_object_bytes")]
     pub max_object_bytes: u64,
+    /// Maximum total body bytes resident in the memory tier (LRU evicts
+    /// beyond this even when `max_entries` is not reached; nginx
+    /// `proxy_cache_path max_size` analog for the memory L1).
+    #[serde(default = "default_proxy_cache_max_memory_bytes")]
+    pub max_memory_bytes: u64,
     /// Freshness used when the response declares no Cache-Control/Expires.
     #[serde(default = "default_proxy_cache_ttl_seconds")]
     pub default_ttl_seconds: u64,
@@ -1719,6 +1762,7 @@ impl Default for ProxyCacheConfig {
             enabled: false,
             max_entries: default_proxy_cache_max_entries(),
             max_object_bytes: default_proxy_cache_max_object_bytes(),
+            max_memory_bytes: default_proxy_cache_max_memory_bytes(),
             default_ttl_seconds: default_proxy_cache_ttl_seconds(),
             stale_ttl_seconds: default_proxy_cache_stale_ttl_seconds(),
             disk_path: None,
@@ -1732,6 +1776,10 @@ fn default_proxy_cache_max_entries() -> usize {
 
 fn default_proxy_cache_max_object_bytes() -> u64 {
     1 * 1024 * 1024
+}
+
+fn default_proxy_cache_max_memory_bytes() -> u64 {
+    128 * 1024 * 1024
 }
 
 fn default_proxy_cache_ttl_seconds() -> u64 {

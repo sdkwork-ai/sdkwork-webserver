@@ -56,5 +56,16 @@ pub const SERVER_FILES_NODE_OPERATIONS: &str =
 pub const WEBSERVER_CONFIGS: &str = "/backend/v3/api/webserver_configs";
 pub const WEBSERVER_CONFIG: &str = "/backend/v3/api/webserver_configs/{configId}";
 pub const AUDIT_LOGS: &str = "/backend/v3/api/audit_logs";
+pub const CLUSTERS: &str = "/backend/v3/api/clusters";
+pub const CLUSTER: &str = "/backend/v3/api/clusters/{clusterId}";
+pub const CLUSTER_HOSTS: &str = "/backend/v3/api/clusters/hosts";
+pub const CLUSTER_HOST: &str = "/backend/v3/api/clusters/hosts/{hostId}";
+pub const CLUSTER_INSTANCES: &str = "/backend/v3/api/clusters/instances";
+pub const CLUSTER_INSTANCE: &str = "/backend/v3/api/clusters/instances/{instanceId}";
+pub const CLUSTER_INSTANCE_HEARTBEATS: &str =
+    "/backend/v3/api/clusters/instances/{instanceId}/heartbeats";
+pub const CLUSTER_MESSAGES: &str = "/backend/v3/api/clusters/messages";
+pub const CLUSTER_EVENTS: &str = "/backend/v3/api/clusters/events";
+pub const CLUSTER_OVERVIEW: &str = "/backend/v3/api/clusters/overview";
 pub const AGENT_HEARTBEAT: &str = "/backend/v3/api/agent/heartbeat";
 pub const AGENT_SYNC: &str = "/backend/v3/api/agent/sync";

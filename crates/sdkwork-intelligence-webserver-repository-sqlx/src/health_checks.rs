@@ -22,17 +22,17 @@ impl WebRepository {
         let site_internal_id = resolve_site_internal_id(&self.pool, tenant_id, site_id).await?;
 
         let count_row = sqlx::query(
-            "SELECT COUNT(*) AS total FROM web_health_check
+            "SELECT COUNT(*) AS total FROM webserver_health_check
              WHERE tenant_id = $1 AND site_id = $2",
         )
         .bind(tenant_id)
         .bind(site_internal_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(|error| store_error("count web_health_check", error))?;
+        .map_err(|error| store_error("count webserver_health_check", error))?;
         let total: i64 = count_row
             .try_get("total")
-            .map_err(|error| store_error("map web_health_check count", error))?;
+            .map_err(|error| store_error("map webserver_health_check count", error))?;
         if total > MAX_SITE_HEALTH_CHECKS {
             tracing::error!(
                 tenant_id,
@@ -49,7 +49,7 @@ impl WebRepository {
         let rows = sqlx::query(
             "SELECT uuid, check_type, check_url, check_interval, timeout_ms, retry_count, status,
                     CAST(created_at AS TEXT) AS created_at
-             FROM web_health_check
+             FROM webserver_health_check
              WHERE tenant_id = $1 AND site_id = $2
              ORDER BY created_at DESC, id DESC
              LIMIT 100",
@@ -58,12 +58,12 @@ impl WebRepository {
         .bind(site_internal_id)
         .fetch_all(&self.pool)
         .await
-        .map_err(|error| store_error("list web_health_check", error))?;
+        .map_err(|error| store_error("list webserver_health_check", error))?;
 
         let mut items = Vec::with_capacity(rows.len());
         for row in &rows {
             items.push(map_health_check_row(row).map_err(|error| {
-                WebServiceError::Internal(format!("map web_health_check row: {error}"))
+                WebServiceError::Internal(format!("map webserver_health_check row: {error}"))
             })?);
         }
 
@@ -83,7 +83,7 @@ impl WebRepository {
 
         let now_expression = instant_write_expression("$10");
         let insert_sql = format!(
-            "INSERT INTO web_health_check (
+            "INSERT INTO webserver_health_check (
                 id, uuid, tenant_id, site_id, check_type, check_url, check_interval,
                 timeout_ms, retry_count, status,
                 created_at, updated_at, version
@@ -97,35 +97,35 @@ impl WebRepository {
             .pool
             .begin()
             .await
-            .map_err(|error| store_error("begin create web_health_check transaction", error))?;
+            .map_err(|error| store_error("begin create webserver_health_check transaction", error))?;
         let locked = sqlx::query(
-            "UPDATE web_site SET version = version
+            "UPDATE webserver_site SET version = version
              WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL",
         )
         .bind(tenant_id)
         .bind(site_internal_id)
         .execute(&mut *transaction)
         .await
-        .map_err(|error| store_error("lock web_health_check site capacity", error))?;
+        .map_err(|error| store_error("lock webserver_health_check site capacity", error))?;
         if locked.rows_affected() != 1 {
             return Err(WebServiceError::not_found("site not found"));
         }
 
         let count_row = sqlx::query(
-            "SELECT COUNT(*) AS total FROM web_health_check
+            "SELECT COUNT(*) AS total FROM webserver_health_check
              WHERE tenant_id = $1 AND site_id = $2",
         )
         .bind(tenant_id)
         .bind(site_internal_id)
         .fetch_one(&mut *transaction)
         .await
-        .map_err(|error| store_error("count web_health_check capacity", error))?;
+        .map_err(|error| store_error("count webserver_health_check capacity", error))?;
         let total: i64 = count_row
             .try_get("total")
-            .map_err(|error| store_error("map web_health_check capacity", error))?;
+            .map_err(|error| store_error("map webserver_health_check capacity", error))?;
         if total >= MAX_SITE_HEALTH_CHECKS {
             transaction.rollback().await.map_err(|error| {
-                store_error("rollback full web_health_check collection", error)
+                store_error("rollback full webserver_health_check collection", error)
             })?;
             return Err(WebServiceError::conflict(
                 "a site supports at most 100 health checks",
@@ -145,10 +145,10 @@ impl WebRepository {
             .bind(&now)
             .execute(&mut *transaction)
             .await
-            .map_err(|error| store_error("insert web_health_check", error))?;
+            .map_err(|error| store_error("insert webserver_health_check", error))?;
 
         transaction.commit().await.map_err(|error| {
-            store_error("commit create web_health_check transaction", error)
+            store_error("commit create webserver_health_check transaction", error)
         })?;
 
         Ok(HealthCheckResponse {

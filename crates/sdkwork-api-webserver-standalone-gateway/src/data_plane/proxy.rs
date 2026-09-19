@@ -344,6 +344,10 @@ pub(super) struct ProxyRequestContext<'a> {
     /// port the request was accepted on, not the Host header's port).
     pub listener_port: u16,
     pub normalized_path: &'a str,
+    /// nginx rewrite semantics: when a rewrite changed the URI, the proxy
+    /// forwards the rewritten canonical path; otherwise the raw request
+    /// path is preserved verbatim (REQ-2026-0018).
+    pub path_rewritten: bool,
     pub request_failure: RequestBodyFailure,
     pub tunnel_supervisor: &'a Arc<TunnelSupervisor>,
     pub metrics: &'a Arc<DataPlaneMetrics>,
@@ -419,14 +423,33 @@ pub(super) async fn proxy_request_cached(
         }
     }
 
-    // Single-flight: concurrent requests for the same key wait for the fill.
-    if let Some(waiter) = cache.begin_fill(&base_key) {
-        waiter.notified().await;
-        if let Some(hit) = cache.lookup(&base_key).await {
-            return cached_proxy_response(hit, request.headers());
+    // Single-flight: collapse concurrent fills per key. The fill guard
+    // releases its slot and wakes waiters on drop, so a cancelled fill
+    // (client disconnect, timeout eviction) can never strand later requests.
+    let _fill_guard = match cache.begin_fill(&base_key) {
+        super::cache::CacheFillReservation::Bypass => {
+            // Table saturated: proxy upstream without coalescing.
+            return proxy_request(context, request).await;
         }
-        return proxy_request(context, request).await;
-    }
+        super::cache::CacheFillReservation::Waiter(waiter) => {
+            // Enable before the re-lookup so a fill completing between the
+            // lookup and the await cannot strand this waiter (tokio
+            // `notify_waiters` only wakes already-enabled futures).
+            let mut notified = std::pin::pin!(waiter.notified());
+            notified.as_mut().enable();
+            if let Some(hit) = cache.lookup(&base_key).await {
+                return cached_proxy_response(hit, request.headers());
+            }
+            notified.await;
+            if let Some(hit) = cache.lookup(&base_key).await {
+                return cached_proxy_response(hit, request.headers());
+            }
+            // The fill was cancelled or the object was not stored: fall back
+            // to a direct upstream request, bounded by the admission gate.
+            return proxy_request(context, request).await;
+        }
+        super::cache::CacheFillReservation::Filler(guard) => guard,
+    };
 
     let request_headers = request.headers().clone();
     let response = proxy_request(context, request).await;
@@ -434,13 +457,11 @@ pub(super) async fn proxy_request_cached(
     // `proxy_cache_use_stale`), keeping the origin available under outages.
     if response.status().is_server_error() {
         if let Some(stale) = cache.lookup_stale(&base_key).await {
-            cache.finish_fill(&base_key);
             return cached_proxy_response(stale, &request_headers);
         }
     }
-    let response = store_proxy_response(&cache, &base_key, &request_headers, response).await;
-    cache.finish_fill(&base_key);
-    response
+    // The fill guard drops with this scope, releasing the in-flight slot.
+    store_proxy_response(&cache, &base_key, &request_headers, response).await
 }
 
 /// Buffer and store a cacheable upstream response. Oversized or
@@ -564,6 +585,10 @@ fn cached_proxy_response(
     for (name, value) in &entry.metadata.headers {
         builder = builder.header(name.as_str(), value.as_str());
     }
+    // nginx `proxy_cache` semantics: served-from-cache responses carry the
+    // entry's age so downstream caches and clients can honor freshness
+    // correctly.
+    builder = builder.header("age", entry.age_seconds().to_string());
     builder
         .body(Body::from(entry.body))
         .unwrap_or_else(|_| Response::new(Body::empty()))
@@ -651,6 +676,7 @@ pub(super) async fn proxy_request(
         &context.route.route_match.path,
         request.uri().path(),
         context.normalized_path,
+        context.path_rewritten,
         request.uri().query(),
     ) {
         Ok(url) => url,
@@ -1271,6 +1297,7 @@ fn build_retry_target_url(
         &context.route.route_match.path,
         request_parts.uri.path(),
         context.normalized_path,
+        context.path_rewritten,
         request_parts.uri.query(),
     )
 }
@@ -1582,6 +1609,7 @@ fn build_target_url(
     route_path: &str,
     request_path: &str,
     normalized_path: &str,
+    path_rewritten: bool,
     query: Option<&str>,
 ) -> Result<Url, ()> {
     // nginx `proxy_pass` URI replacement: when the target has a URI part,
@@ -1613,7 +1641,12 @@ fn build_target_url(
         rewritten.set_query(query);
         return Ok(rewritten);
     }
-    let forwarded_path = request_path;
+    let forwarded_path = if path_rewritten {
+        // nginx forwards the rewritten URI once a rewrite changed it.
+        normalized_path
+    } else {
+        request_path
+    };
     let base = target.as_str().trim_end_matches('/');
     let path = if forwarded_path.is_empty() {
         "/"

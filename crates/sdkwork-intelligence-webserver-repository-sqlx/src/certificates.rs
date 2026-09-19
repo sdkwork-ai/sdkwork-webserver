@@ -30,21 +30,21 @@ impl WebRepository {
     ) -> WebServiceResult<CertificatePage> {
         let (_page, page_size, offset) = pagination(page, page_size)?;
         let total: i64 = sqlx::query_scalar(
-             "SELECT COUNT(*) FROM web_certificate c
+             "SELECT COUNT(*) FROM webserver_certificate c
               WHERE c.tenant_id = $1 AND c.deleted_at IS NULL
                 AND ($2 IS NULL OR c.user_id = $2)
                AND ($3 IS NULL OR EXISTS (
-                   SELECT 1 FROM web_certificate_identifier ci
-                   INNER JOIN web_site_binding b ON b.tenant_id = ci.tenant_id
+                   SELECT 1 FROM webserver_certificate_identifier ci
+                   INNER JOIN webserver_site_binding b ON b.tenant_id = ci.tenant_id
                        AND b.domain_id = ci.domain_id AND b.deleted_at IS NULL
                        AND b.status <> 'ARCHIVED'
-                   INNER JOIN web_site s ON s.tenant_id = b.tenant_id AND s.id = b.site_id
+                   INNER JOIN webserver_site s ON s.tenant_id = b.tenant_id AND s.id = b.site_id
                    WHERE ci.tenant_id = c.tenant_id AND ci.certificate_id = c.id
                      AND s.uuid = $3 AND s.deleted_at IS NULL
                ))
                AND ($4 IS NULL OR EXISTS (
-                   SELECT 1 FROM web_certificate_identifier domain_ci
-                   INNER JOIN web_domain domain_d ON domain_d.tenant_id = domain_ci.tenant_id
+                   SELECT 1 FROM webserver_certificate_identifier domain_ci
+                   INNER JOIN webserver_domain domain_d ON domain_d.tenant_id = domain_ci.tenant_id
                        AND domain_d.id = domain_ci.domain_id
                        AND ($2 IS NULL OR domain_d.user_id = $2)
                    WHERE domain_ci.tenant_id = c.tenant_id
@@ -58,25 +58,25 @@ impl WebRepository {
         .bind(domain_uuid)
         .fetch_one(&self.pool)
         .await
-        .map_err(|error| store_error("count web_certificate", error))?;
+        .map_err(|error| store_error("count webserver_certificate", error))?;
 
         let rows = sqlx::query(audited_sql(&certificate_select(
             "c.tenant_id = $1 AND c.deleted_at IS NULL
              AND ($2 IS NULL OR c.user_id = $2)
              AND ($3 IS NULL OR EXISTS (
-                 SELECT 1 FROM web_certificate_identifier site_ci
-                 INNER JOIN web_site_binding site_b ON site_b.tenant_id = site_ci.tenant_id
+                 SELECT 1 FROM webserver_certificate_identifier site_ci
+                 INNER JOIN webserver_site_binding site_b ON site_b.tenant_id = site_ci.tenant_id
                      AND site_b.domain_id = site_ci.domain_id AND site_b.deleted_at IS NULL
                      AND site_b.status <> 'ARCHIVED'
-                 INNER JOIN web_site site_s ON site_s.tenant_id = site_b.tenant_id
+                 INNER JOIN webserver_site site_s ON site_s.tenant_id = site_b.tenant_id
                      AND site_s.id = site_b.site_id
                  WHERE site_ci.tenant_id = c.tenant_id
                    AND site_ci.certificate_id = c.id AND site_s.uuid = $3
                    AND site_s.deleted_at IS NULL
              ))
              AND ($4 IS NULL OR EXISTS (
-                 SELECT 1 FROM web_certificate_identifier domain_ci
-                 INNER JOIN web_domain domain_d ON domain_d.tenant_id = domain_ci.tenant_id
+                 SELECT 1 FROM webserver_certificate_identifier domain_ci
+                 INNER JOIN webserver_domain domain_d ON domain_d.tenant_id = domain_ci.tenant_id
                      AND domain_d.id = domain_ci.domain_id
                      AND ($2 IS NULL OR domain_d.user_id = $2)
                  WHERE domain_ci.tenant_id = c.tenant_id
@@ -93,13 +93,13 @@ impl WebRepository {
         .bind(offset)
         .fetch_all(&self.pool)
         .await
-        .map_err(|error| store_error("list web_certificate", error))?;
+        .map_err(|error| store_error("list webserver_certificate", error))?;
         let items = rows
             .iter()
             .map(map_certificate_row)
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| {
-                WebServiceError::Internal(format!("map web_certificate row: {error}"))
+                WebServiceError::Internal(format!("map webserver_certificate row: {error}"))
             })?;
         Ok(CertificatePage { items, total })
     }
@@ -117,7 +117,7 @@ impl WebRepository {
             .map_err(|error| store_error("begin certificate renewal policy update", error))?;
         let certificate = sqlx::query(
             "SELECT id, cert_type, status, renewal_status
-             FROM web_certificate
+             FROM webserver_certificate
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL
              FOR UPDATE",
         )
@@ -150,7 +150,7 @@ impl WebRepository {
             ));
         }
         sqlx::query(
-            "UPDATE web_certificate
+            "UPDATE webserver_certificate
              SET auto_renew = $3, updated_at = NOW(), version = version + 1
              WHERE tenant_id = $1 AND id = $2",
         )
@@ -179,7 +179,7 @@ impl WebRepository {
             .map_err(|error| store_error("begin delete certificate transaction", error))?;
         let certificate = sqlx::query(
             "SELECT id
-             FROM web_certificate
+             FROM webserver_certificate
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL
              FOR UPDATE",
         )
@@ -194,7 +194,7 @@ impl WebRepository {
             .map_err(|error| store_error("map certificate deletion id", error))?;
 
         let active_bindings: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM web_listener_certificate_binding
+            "SELECT COUNT(*) FROM webserver_listener_certificate_binding
              WHERE tenant_id = $1 AND certificate_id = $2
                AND deleted_at IS NULL AND status <> 'ARCHIVED'",
         )
@@ -209,7 +209,7 @@ impl WebRepository {
             ));
         }
         let active_operations: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM web_certificate_operation
+            "SELECT COUNT(*) FROM webserver_certificate_operation
              WHERE tenant_id = $1 AND certificate_id = $2
                AND status IN ('PENDING', 'RUNNING')",
         )
@@ -225,7 +225,7 @@ impl WebRepository {
         }
 
         sqlx::query(
-            "UPDATE web_certificate
+            "UPDATE webserver_certificate
              SET deleted_at = NOW(), updated_at = NOW(), version = version + 1
              WHERE tenant_id = $1 AND id = $2",
         )
@@ -237,7 +237,7 @@ impl WebRepository {
         // Certificate identifiers are relation rows with no audit value; hard
         // removal keeps the domain deletable and frees the unique hostname slot.
         sqlx::query(
-            "DELETE FROM web_certificate_identifier
+            "DELETE FROM webserver_certificate_identifier
              WHERE tenant_id = $1 AND certificate_id = $2",
         )
         .bind(tenant_id)
@@ -264,11 +264,11 @@ impl WebRepository {
         let row = sqlx::query(
             "SELECT c.id, c.cert_type, c.renewal_status, c.current_version_id,
                     v.secret_bundle_ref, sb.encryption_algorithm, sb.bundle_encrypted
-             FROM web_certificate c
-             INNER JOIN web_certificate_version v
+             FROM webserver_certificate c
+             INNER JOIN webserver_certificate_version v
                  ON v.tenant_id = c.tenant_id AND v.certificate_id = c.id
                  AND v.id = c.current_version_id
-             INNER JOIN web_certificate_secret_bundle sb
+             INNER JOIN webserver_certificate_secret_bundle sb
                  ON sb.tenant_id = v.tenant_id AND sb.certificate_version_id = v.id
              WHERE c.tenant_id = $1 AND c.uuid = $2 AND c.deleted_at IS NULL
              FOR UPDATE OF c",
@@ -338,9 +338,9 @@ impl WebRepository {
             }
         });
         let updated = sqlx::query(
-            "UPDATE web_certificate
+            "UPDATE webserver_certificate
              SET status = 3, auto_renew = FALSE, renewal_status = 0,
-                 metadata = metadata || $3, updated_at = NOW(), version = version + 1
+                 metadata = metadata || CAST($3 AS JSONB), updated_at = NOW(), version = version + 1
              WHERE tenant_id = $1 AND uuid = $2 AND status = 1 AND deleted_at IS NULL",
         )
         .bind(tenant_id)
@@ -355,7 +355,7 @@ impl WebRepository {
             ));
         }
         let certificate_internal_id: i64 = sqlx::query_scalar(
-            "SELECT id FROM web_certificate WHERE tenant_id = $1 AND uuid = $2",
+            "SELECT id FROM webserver_certificate WHERE tenant_id = $1 AND uuid = $2",
         )
         .bind(tenant_id)
         .bind(certificate_uuid)
@@ -363,7 +363,7 @@ impl WebRepository {
         .await
         .map_err(|error| store_error("resolve revoked certificate id", error))?;
         sqlx::query(
-            "UPDATE web_listener_certificate_binding
+            "UPDATE webserver_listener_certificate_binding
              SET status = 'ARCHIVED', updated_at = NOW(), version = version + 1
              WHERE tenant_id = $1 AND certificate_id = $2
                AND status <> 'ARCHIVED' AND deleted_at IS NULL",
@@ -376,7 +376,7 @@ impl WebRepository {
         // Stale node observations would keep reporting the revoked revision as
         // served; drop them so the node converges to the remaining set.
         sqlx::query(
-            "DELETE FROM web_certificate_node_state
+            "DELETE FROM webserver_certificate_node_state
              WHERE tenant_id = $1 AND certificate_id = $2",
         )
         .bind(tenant_id)
@@ -405,8 +405,8 @@ impl WebRepository {
             }
         });
         let updated = sqlx::query(
-            "UPDATE web_certificate
-             SET metadata = metadata || $3, updated_at = NOW(), version = version + 1
+            "UPDATE webserver_certificate
+             SET metadata = metadata || CAST($3 AS JSONB), updated_at = NOW(), version = version + 1
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
         )
         .bind(tenant_id)
@@ -439,8 +439,8 @@ impl WebRepository {
                     certificate.id, certificate.uuid AS certificate_uuid,
                     certificate.current_version_id, certificate.renewal_status,
                     certificate.version
-             FROM web_certificate_operation operation
-             INNER JOIN web_certificate certificate
+             FROM webserver_certificate_operation operation
+             INNER JOIN webserver_certificate certificate
                ON certificate.tenant_id = operation.tenant_id
               AND certificate.id = operation.certificate_id
              WHERE operation.tenant_id = $1 AND operation.uuid = $2
@@ -472,7 +472,7 @@ impl WebRepository {
             .try_get("current_version_id")
             .map_err(|error| store_error("map current certificate version", error))?;
         let version_no: i64 = sqlx::query_scalar(
-            "SELECT COALESCE(MAX(version_no), 0) + 1 FROM web_certificate_version
+            "SELECT COALESCE(MAX(version_no), 0) + 1 FROM webserver_certificate_version
              WHERE tenant_id = $1 AND certificate_id = $2",
         )
         .bind(lease.tenant_id)
@@ -482,7 +482,7 @@ impl WebRepository {
         .map_err(|error| store_error("allocate certificate version number", error))?;
         if current_version_id.is_some() {
             sqlx::query(
-                "UPDATE web_certificate_version SET status = 'SUPERSEDED'
+                "UPDATE webserver_certificate_version SET status = 'SUPERSEDED'
                  WHERE tenant_id = $1 AND certificate_id = $2 AND id = $3
                    AND status = 'ACTIVE'",
             )
@@ -504,7 +504,7 @@ impl WebRepository {
             &update.private_key_pem,
         )?;
         let version_sql =
-            "INSERT INTO web_certificate_version (
+            "INSERT INTO webserver_certificate_version (
                 id, uuid, tenant_id, certificate_id, version_no, serial_sha256,
                 fingerprint_sha256, spki_sha256, chain_sha256, issuer, subject,
                 key_algorithm, not_before, not_after, secret_bundle_ref, status, created_at
@@ -532,7 +532,7 @@ impl WebRepository {
             .await
             .map_err(|error| store_error("insert immutable certificate version", error))?;
         sqlx::query(
-            "INSERT INTO web_certificate_secret_bundle (
+            "INSERT INTO webserver_certificate_secret_bundle (
                 id, uuid, tenant_id, certificate_version_id, encryption_algorithm,
                 bundle_encrypted, created_at
              ) VALUES ($1, $2, $3, $4, $5, $6, NOW())",
@@ -547,7 +547,7 @@ impl WebRepository {
         .await
         .map_err(|error| store_error("insert encrypted certificate secret bundle", error))?;
         let result = sqlx::query(
-            "UPDATE web_certificate
+            "UPDATE webserver_certificate
              SET cert_name = $3, cert_type = $4, preferred_key_algorithm = $5,
                   auto_renew = $6, renewal_status = 0, status = 1,
                   current_version_id = $7,
@@ -570,7 +570,7 @@ impl WebRepository {
             ));
         }
         sqlx::query(
-            "UPDATE web_listener_certificate_binding
+            "UPDATE webserver_listener_certificate_binding
              SET desired_version_id = $3, key_algorithm = $4,
                  status = CASE WHEN status = 'PAUSED' THEN 'PAUSED' ELSE 'PENDING' END,
                  updated_at = NOW(), version = version + 1
@@ -585,7 +585,7 @@ impl WebRepository {
         .await
         .map_err(|error| store_error("stage listener certificate versions", error))?;
         sqlx::query(
-            "DELETE FROM web_certificate_node_state
+            "DELETE FROM webserver_certificate_node_state
              WHERE tenant_id = $1 AND certificate_id = $2
                AND certificate_version_id <> $3",
         )
@@ -596,7 +596,7 @@ impl WebRepository {
         .await
         .map_err(|error| store_error("invalidate superseded certificate observations", error))?;
         let operation_result = sqlx::query(
-            "UPDATE web_certificate_operation
+            "UPDATE webserver_certificate_operation
              SET status = 'SUCCEEDED', next_attempt_at = NOW(), lease_owner = NULL,
                  lease_expires_at = NULL, failure_code = NULL, completed_at = NOW(),
                  updated_at = NOW()
@@ -657,14 +657,14 @@ fn certificate_select(predicate: &str) -> String {
                         'identifierType', ci.identifier_type,
                         'position', ci.position
                     ) ORDER BY ci.position)
-                    FROM web_certificate_identifier ci
-                    INNER JOIN web_domain d ON d.tenant_id = ci.tenant_id
+                    FROM webserver_certificate_identifier ci
+                    INNER JOIN webserver_domain d ON d.tenant_id = ci.tenant_id
                         AND d.id = ci.domain_id
                     WHERE ci.tenant_id = c.tenant_id AND ci.certificate_id = c.id
                 ), '[]'::jsonb) AS TEXT) AS identifiers,
                 CAST(c.created_at AS TEXT) AS created_at
-         FROM web_certificate c
-             LEFT JOIN web_certificate_version v
+         FROM webserver_certificate c
+             LEFT JOIN webserver_certificate_version v
              ON v.id = c.current_version_id
              AND v.certificate_id = c.id
          WHERE {predicate}"

@@ -16,6 +16,7 @@ public class SdkworkBackendClient {
     public let webserverConfig: WebserverConfigApi
     public let agent: AgentApi
     public let audit: AuditApi
+    public let cluster: ClusterApi
 
     public init(baseURL: String) {
         self.httpClient = HttpClient(baseURL: baseURL)
@@ -32,6 +33,7 @@ public class SdkworkBackendClient {
         self.webserverConfig = WebserverConfigApi(client: httpClient)
         self.agent = AgentApi(client: httpClient)
         self.audit = AuditApi(client: httpClient)
+        self.cluster = ClusterApi(client: httpClient)
     }
 
     public init(config: SdkConfig) {
@@ -49,6 +51,7 @@ public class SdkworkBackendClient {
         self.webserverConfig = WebserverConfigApi(client: httpClient)
         self.agent = AgentApi(client: httpClient)
         self.audit = AuditApi(client: httpClient)
+        self.cluster = ClusterApi(client: httpClient)
     }
     public func setAuthToken(_ token: String) -> SdkworkBackendClient {
         httpClient.setAuthToken(token)

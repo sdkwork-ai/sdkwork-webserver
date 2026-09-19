@@ -234,7 +234,7 @@ impl WebRepository {
         }
         let list_sql = format!(
             "SELECT id, uuid, action, target_type, CAST(created_at AS TEXT) AS created_at
-             FROM web_audit_log{filter_sql}
+             FROM webserver_audit_log{filter_sql}
              ORDER BY created_at DESC, id DESC LIMIT ${next_index}"
         );
         let mut list_query = sqlx::query(audited_sql(&list_sql));
@@ -258,7 +258,7 @@ impl WebRepository {
         let rows = list_query
             .fetch_all(&self.pool)
             .await
-            .map_err(|error| store_error("list web_audit_log cursor", error))?;
+            .map_err(|error| store_error("list webserver_audit_log cursor", error))?;
         let has_more = rows.len() > page_size as usize;
         let page_rows = rows
             .into_iter()
@@ -268,17 +268,17 @@ impl WebRepository {
         let mut items = Vec::with_capacity(page_rows.len());
         for row in &page_rows {
             items.push(map_audit_log_row(row).map_err(|error| {
-                WebServiceError::Internal(format!("map web_audit_log row: {error}"))
+                WebServiceError::Internal(format!("map webserver_audit_log row: {error}"))
             })?);
         }
         let next_cursor = has_more
             .then(|| {
                 let last = page_rows.last().expect("non-empty page when has_more");
                 let created_at = cursor_instant_from_row(last, "created_at")
-                    .map_err(|error| store_error("map web_audit_log cursor instant", error))?;
+                    .map_err(|error| store_error("map webserver_audit_log cursor instant", error))?;
                 let id: i64 = last
                     .try_get("id")
-                    .map_err(|error| store_error("map web_audit_log cursor id", error))?;
+                    .map_err(|error| store_error("map webserver_audit_log cursor id", error))?;
                 Ok::<_, WebServiceError>(encode_keyset_cursor(&created_at, id))
             })
             .transpose()?;
@@ -304,7 +304,7 @@ impl WebRepository {
         let now_expression = instant_write_expression("$13");
         let metadata_expression = json_write_expression("$12");
         let insert_sql = format!(
-            "INSERT INTO web_audit_log (
+            "INSERT INTO webserver_audit_log (
                 id, uuid, tenant_id, organization_id, operator_id, operator_type, action,
                 target_type, target_id, target_uuid, request_id, metadata, created_at
              ) VALUES (
@@ -329,7 +329,7 @@ impl WebRepository {
             .bind(&now)
             .execute(&self.pool)
             .await
-            .map_err(|error| store_error("insert web_audit_log", error))?;
+            .map_err(|error| store_error("insert webserver_audit_log", error))?;
 
         Ok(())
     }

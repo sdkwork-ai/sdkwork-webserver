@@ -22,6 +22,7 @@ Specs: ARCHITECTURE_DECISION_SPEC.md, DOCUMENTATION_SPEC.md, RUST_CODE_SPEC.md, 
   ingress, dual-slot per-stream checkpoints, ordering/gap handling, and generated-SDK reconciliation
   are implemented.
 
+- [TECH-cluster-management.md](TECH-cluster-management.md) - distributed cluster plane: hosts, process instances, heartbeats, peer messaging, and admin monitoring.
 - [TECH-runtime-data-plane.md](TECH-runtime-data-plane.md) - target and implementation status for the Rust HTTP/HTTPS request data plane.
 - [TECH-resolution-cache.md](TECH-resolution-cache.md) - multi-layer DNS/IP resolution cache layers, TTL policy, and negative caching.
 - [TECH-app-domain-publishing-fallback.md](TECH-app-domain-publishing-fallback.md) - app publishing default-domain and custom-domain fallback behavior on the data plane.
@@ -119,10 +120,29 @@ Current implemented baseline:
   remainder; and the in-memory LRU caches (proxy cache, resolver memory
   layer) use O(1) linked-map eviction.
 
-Known capacity gap (disclosed, not silently partial): the PRD-FR-018 hierarchical
-resource governor is currently enforced at the process, listener, client, and upstream
-levels; per-application / per-host / per-route budgets do not exist yet —
-`WebServerLimits` is process-global.
+Resource governor status (PRD-FR-018): the process, listener, client, and upstream
+levels are enforced, and the buffering planes carry explicit aggregate budgets on top
+of the process-global `WebServerLimits`: `sub_filter` caps concurrently buffered
+response bytes process-wide (256 MiB), and the proxy-cache memory tier evicts by both
+entry count and total buffered bytes (`maxMemoryBytes`). Per-application / per-host /
+per-route budgets remain the remaining slice of FR-018.
+
+2026-09 hardening round 3: the proxy-cache single-flight is RAII-guarded (a cancelled
+fill releases its slot and wakes waiters; a saturated table bypasses coalescing
+instead of parking requests on a never-notified waiter), all three accept loops share
+one nginx-aligned transient-error policy (fd exhaustion and connection aborts no
+longer stop a listener), Web Node credential lookup uses a GIN-servable containment
+predicate, the resolver-cache single-flight releases its in-flight entry on
+cancellation, server-files operations run under hard timeouts with capped capture and
+manage long-running processes through pid-file process-tree control (the shell-
+interpolated `kill $(pgrep ...)` stop and the pseudo `deploy` operation were removed
+as untruthful), server-files and webserver-config surfaces answer only the platform
+operator tenant (PRD-FR-030), `activate_application` verifies the successful-
+deployment precondition inside the same transaction as the status flip, nginx-config
+repository operations fail closed on a missing tenant, the heartbeat observation path
+validates against a fingerprint projection instead of decrypting every certificate
+bundle per beat, the bootstrap sequence serializes on a PostgreSQL advisory lock,
+and the retry backoff carries deterministic jitter.
 
 The host synchronization process is named **Web Node Daemon** in all new
 runtime and operational surfaces. The canonical packaged/development entry
@@ -171,7 +191,7 @@ sdkwork-webserver-edge-runtime
   `-- existing external Nginx artifact operations only
 
 apps/sdkwork-webserver-pc
-  |-- console-* -> console-core -> @sdkwork/webserver-app-sdk -> app-api
+  |-- console-* -> console-core -> @sdkwork/deployments-app-sdk + @sdkwork/drive-app-sdk -> deploy app-api
   |-- admin-* -> lazy admin-core -> @sdkwork/webserver-backend-sdk -> backend-api
   `-- root bootstrap -> IAM + one TokenManager + typed browser runtime config
 ```
@@ -200,8 +220,11 @@ The request path does not call management services or repositories. Management r
 
 - Management success/error responses follow SDKWork envelopes and Problem Details.
 - Retriable management operations preserve one explicit idempotency contract from authority OpenAPI through route metadata and generated SDK inputs. The framework validates and scopes the Header; deployment repository deduplication receives only that framework-owned context value.
-- SDK families are `sdkwork-webserver-app-sdk`, `sdkwork-webserver-backend-sdk`, and the machine-to-machine
-  `sdkwork-webserver-internal-sdk` used for runtime assignment publication, retrieval, and observations.
+- SDK families owned here are `sdkwork-webserver-backend-sdk` and the machine-to-machine
+  `sdkwork-webserver-internal-sdk` used for runtime assignment publication, retrieval, and
+  observations. The application-facing SDK is `sdkwork-deployments-app-sdk`: the application,
+  domain, and certificate lifecycle is owned by `sdkwork-deployments`, and the legacy
+  `sdkwork-webserver-app-sdk` family was retired together with its `/app/v3/api` surface.
 - Request data-plane traffic preserves the configured upstream or static Web protocol; it does not wrap arbitrary application responses in SDKWork management envelopes.
 - PostgreSQL is the only authoritative server database and lifecycle, recovery, and
   release-verification profile.
@@ -213,7 +236,7 @@ The request path does not call management services or repositories. Management r
   UI packages never construct SDK clients or assemble authenticated HTTP requests.
 - Application store-listing media is uploaded by the bootstrap-injected Drive App SDK. The Web
   service persists the canonical Drive-backed `MediaResource` snapshots under
-  `web_site.metadata.storeListing`, projects only the typed `storeListing` API field, and atomically
+  `webserver_site.metadata.storeListing`, projects only the typed `storeListing` API field, and atomically
   replaces that metadata member without exposing or overwriting unrelated system metadata.
 - Application creation is a recoverable orchestration: validate source locally, create the draft,
   upload and attach bounded store media, persist ZIP/directory content through the Drive App SDK or
@@ -226,21 +249,21 @@ The request path does not call management services or repositories. Management r
 The domain, certificate, and deployment relationship is normalized:
 
 ```text
-web_root_domain 1 -> N web_domain
-web_site 1 -> N web_site_binding N -> 1 web_domain
-web_certificate N <-> N web_domain through web_certificate_identifier
-web_certificate 1 -> N web_certificate_version
-web_certificate 1 -> N web_certificate_operation
-web_site_binding 1 -> N web_listener_certificate_binding
-web_site 1 -> N web_deployment
+webserver_root_domain 1 -> N webserver_domain
+webserver_site 1 -> N webserver_site_binding N -> 1 webserver_domain
+webserver_certificate N <-> N webserver_domain through webserver_certificate_identifier
+webserver_certificate 1 -> N webserver_certificate_version
+webserver_certificate 1 -> N webserver_certificate_operation
+webserver_site_binding 1 -> N webserver_listener_certificate_binding
+webserver_site 1 -> N webserver_deployment
 ```
 
 Backend certificate listing and issuance use verified domain identifiers and remain available
-before `web_site_binding` exists. Application identity enters only at
-`web_listener_certificate_binding`, where hostname coverage, usable version, key algorithm, and
+before `webserver_site_binding` exists. Application identity enters only at
+`webserver_listener_certificate_binding`, where hostname coverage, usable version, key algorithm, and
 listener conflicts are checked before activation intent is accepted.
 
-Issue and renew routes persist `web_certificate_operation` and return HTTP `202` standard async
+Issue and renew routes persist `webserver_certificate_operation` and return HTTP `202` standard async
 data. App and backend generated SDKs retrieve operation status; the PC polls that generated method
 with a bounded client deadline and can stop observing without cancelling server work. The
 certificate worker schedules due renewals and claims both issue and renew operations with

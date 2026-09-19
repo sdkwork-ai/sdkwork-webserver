@@ -9,9 +9,10 @@ export interface ApplicationResponse {
   appKind?: AppKind;
   siteType: number;
   status: number;
-  /** 该应用是否已有源码版本。由 application 列表/详情投影用一次查询算出
-（`EXISTS` over `web_source_version`），调用方无需再逐行探测
-`applications/{applicationId}/source_versions`。
+  /** Whether the application already has a source version. The application
+list and detail projections derive it in a single `EXISTS` query over
+`webserver_source_version`, so callers never probe
+`applications/{applicationId}/source_versions` row by row.
  */
   hasSourceVersion?: boolean;
   runtimeConfig?: Record<string, unknown>;

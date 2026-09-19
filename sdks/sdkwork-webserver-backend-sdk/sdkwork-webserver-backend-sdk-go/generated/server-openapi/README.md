@@ -27,7 +27,7 @@ func main() {
 client.SetAccessToken("your-access-token")
     
     // Use the SDK
-    result, err := client.Nginx.StatusRetrieve()
+    result, err := client.Cluster.ClustersOverviewRetrieve()
     if err != nil {
         panic(err)
     }
@@ -68,6 +68,7 @@ client.SetHeader("X-Custom-Header", "value")
 - `client.WebserverConfig` - webserver_config API
 - `client.Agent` - agent API
 - `client.Audit` - audit API
+- `client.Cluster` - cluster API
 
 ## Usage Examples
 
@@ -267,10 +268,21 @@ if err != nil {
 fmt.Println(result)
 ```
 
+### cluster
+
+```go
+// Retrieve the cluster health overview for status polling
+result, err := client.Cluster.ClustersOverviewRetrieve()
+if err != nil {
+    panic(err)
+}
+fmt.Println(result)
+```
+
 ## Error Handling
 
 ```go
-_, err := client.Nginx.StatusRetrieve()
+_, err := client.Cluster.ClustersOverviewRetrieve()
 if err != nil {
     // Handle error
     fmt.Println("Error:", err)

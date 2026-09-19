@@ -193,12 +193,12 @@ const PACKAGE_ASSETS = [
     target: 'database/contract/table-registry.json',
   },
   {
-    source: 'database/ddl/baseline/postgres/0001_web_baseline.sql',
-    target: 'database/ddl/baseline/postgres/0001_web_baseline.sql',
+    source: 'database/ddl/baseline/postgres/0001_webserver_baseline.sql',
+    target: 'database/ddl/baseline/postgres/0001_webserver_baseline.sql',
   },
   {
-    source: 'database/migrations/postgres/0005_web_application.up.sql',
-    target: 'database/migrations/postgres/0005_web_application.up.sql',
+    source: 'database/migrations/postgres/0005_webserver_application.up.sql',
+    target: 'database/migrations/postgres/0005_webserver_application.up.sql',
   },
   {
     source: 'database/migrations/postgres/0006_organization_id_not_null.up.sql',

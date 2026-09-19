@@ -55,9 +55,7 @@ WebserverFlutterRuntime bootstrap({
       profileId: profileId,
       runtimeTarget: runtimeTarget,
     );
-    final sdkClients = createWebserverFlutterSdkClients(
-      appApiBaseUrl: resolvedEnvironment.appApiBaseUrl,
-    );
+    final sdkClients = createWebserverFlutterSdkClients();
     return WebserverFlutterRuntime(
       environment: resolvedEnvironment,
       sdkClients: sdkClients,

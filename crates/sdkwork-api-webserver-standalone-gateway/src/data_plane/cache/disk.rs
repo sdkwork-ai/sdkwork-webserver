@@ -31,17 +31,14 @@ pub(crate) struct TieredCacheBackend {
 }
 
 impl TieredCacheBackend {
-    pub(crate) fn memory_only(maximum_entries: usize) -> Self {
-        Self {
-            memory: MemoryCacheBackend::new(maximum_entries),
-            disk_root: None,
-        }
-    }
-
-    pub(crate) fn with_disk(maximum_entries: usize, disk_root: PathBuf) -> std::io::Result<Self> {
+    pub(crate) fn with_limits(
+        maximum_entries: usize,
+        maximum_bytes: u64,
+        disk_root: PathBuf,
+    ) -> std::io::Result<Self> {
         fs::create_dir_all(&disk_root)?;
         Ok(Self {
-            memory: MemoryCacheBackend::new(maximum_entries),
+            memory: MemoryCacheBackend::with_limits(maximum_entries, maximum_bytes),
             disk_root: Some(disk_root),
         })
     }
@@ -133,8 +130,8 @@ mod tests {
     #[test]
     fn tiered_disk_round_trip() {
         let directory = tempfile::tempdir().expect("temp");
-        let backend =
-            TieredCacheBackend::with_disk(8, directory.path().to_path_buf()).expect("disk");
+        let backend = TieredCacheBackend::with_limits(8, u64::MAX, directory.path().to_path_buf())
+            .expect("disk");
         let key = CacheKey::new(
             "GET",
             "example.com",
@@ -156,7 +153,8 @@ mod tests {
         );
         backend.insert(key.clone(), entry);
         // Drop memory by constructing a fresh backend on the same root.
-        let cold = TieredCacheBackend::with_disk(8, directory.path().to_path_buf()).expect("cold");
+        let cold = TieredCacheBackend::with_limits(8, u64::MAX, directory.path().to_path_buf())
+            .expect("cold");
         let hit = cold.get(&key).expect("disk hit");
         assert_eq!(hit.body.as_ref(), b"disk-body");
     }

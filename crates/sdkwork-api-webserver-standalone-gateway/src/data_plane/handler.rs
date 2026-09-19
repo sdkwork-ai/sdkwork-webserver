@@ -16,8 +16,9 @@ use sdkwork_webserver_core::{
     apply_rewrites, evaluate_access, evaluate_auth_basic, normalize_authority_host,
     prefer_h5_surface, verify_secure_link,
     website_runtime::{ProviderResourceReference, WebsiteProviderType},
-    AccessDecision, AuthBasicDecision, ResourceConfig, RewriteOutcome, RoutePathType,
-    SecureLinkFailure, SecurityHeadersConfig, XFrameOptions, MAX_REWRITE_INTERNAL_REDIRECTS,
+    AccessDecision, AuthBasicDecision, ErrorPageConfig, ResourceConfig, RewriteOutcome,
+    RoutePathType, SecureLinkFailure, SecurityHeadersConfig, SelectedRoute, VirtualHostConfig,
+    XFrameOptions, MAX_REWRITE_INTERNAL_REDIRECTS,
 };
 use sdkwork_webserver_delivery_runtime::{
     AppConfigProviderPolicy, AppConfigResourceHandler, AppConfigResourceRoute,
@@ -208,6 +209,9 @@ async fn route_admitted_request(
     };
     let method = request.method().as_str().to_owned();
     let mut path = normalized_path;
+    // nginx: once a rewrite changes the URI, proxying forwards the rewritten
+    // URI; without rewrites the raw request path is preserved verbatim.
+    let mut path_rewritten = false;
     if super::acme_challenge::acme_http01_request_enabled(listener, &path) {
         if let Some(response) = classify_request(&state, admitted, false, request.version()) {
             return response;
@@ -345,6 +349,7 @@ async fn route_admitted_request(
             Ok(RewriteOutcome::Continue {
                 path: next_path, ..
             }) => {
+                path_rewritten |= next_path != path;
                 path = next_path;
                 break candidate;
             }
@@ -363,6 +368,7 @@ async fn route_admitted_request(
                         "rewrite redirect limit exceeded\n",
                     );
                 }
+                path_rewritten = true;
                 path = next_path;
             }
             Ok(RewriteOutcome::Redirect { status, location }) => {
@@ -399,6 +405,19 @@ async fn route_admitted_request(
             .runtime
             .metrics
             .record_request_rejection(RequestRejection::AccessDenied);
+        if let Some(paged) = resolve_error_pages(
+            &state,
+            &generation,
+            &selected,
+            &authority,
+            StatusCode::FORBIDDEN,
+            request.method(),
+            request.headers(),
+        )
+        .await
+        {
+            return paged;
+        }
         return text_response(StatusCode::FORBIDDEN, "access denied\n");
     }
     match evaluate_auth_basic(
@@ -439,6 +458,15 @@ async fn route_admitted_request(
             return limit_req_rejected_response(request.version());
         }
     }
+    // nginx error_page applies to generated errors; keep the request
+    // identity for the internal redirect before any dispatch consumes the
+    // request. Captured only when the route or host declares error pages.
+    let error_page_saved =
+        if selected.route.error_pages.is_empty() && selected.virtual_host.error_pages.is_empty() {
+            None
+        } else {
+            Some((request.method().clone(), request.headers().clone()))
+        };
     let limit_conn_lease = match state
         .runtime
         .limit_conn
@@ -598,7 +626,7 @@ async fn route_admitted_request(
                     "static resource is unavailable\n",
                 );
             };
-            match drain_bounded_request_body(
+            let static_response = match drain_bounded_request_body(
                 request,
                 generation.app.config().limits.max_request_body_bytes,
                 &request_failure,
@@ -617,7 +645,16 @@ async fn route_admitted_request(
                     .await
                 }
                 Err(response) => response,
-            }
+            };
+            apply_error_pages(
+                &state,
+                &generation,
+                &selected,
+                &authority,
+                static_response,
+                error_page_saved.as_ref(),
+            )
+            .await
         }
         ResourceConfig::Proxy {
             upstream_ref,
@@ -626,9 +663,10 @@ async fn route_admitted_request(
             request_set_headers,
             dynamic_target,
             proxy_pass_request_headers,
+            proxy_intercept_errors,
             ..
         } => {
-            super::proxy::proxy_request_cached(
+            let proxy_response = super::proxy::proxy_request_cached(
                 super::proxy::ProxyRequestContext {
                     generation: &generation,
                     upstream_ref,
@@ -650,6 +688,7 @@ async fn route_admitted_request(
                         .map(|listener| listener.port)
                         .unwrap_or(0),
                     normalized_path: &path,
+                    path_rewritten,
                     request_failure,
                     tunnel_supervisor: &state.runtime.tunnel_supervisor,
                     metrics: &state.runtime.metrics,
@@ -657,7 +696,31 @@ async fn route_admitted_request(
                 },
                 request,
             )
-            .await
+            .await;
+            // nginx `proxy_intercept_errors on`: a proxied response whose
+            // status has an error_page mapping is replaced by the page.
+            let intercepted = if *proxy_intercept_errors {
+                if let Some((method, headers)) = error_page_saved.as_ref() {
+                    resolve_error_pages(
+                        &state,
+                        &generation,
+                        &selected,
+                        &authority,
+                        proxy_response.status(),
+                        method,
+                        headers,
+                    )
+                    .await
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            match intercepted {
+                Some(paged) => paged,
+                None => proxy_response,
+            }
         }
         ResourceConfig::Drive {
             id,
@@ -799,6 +862,17 @@ async fn route_admitted_request(
             .extensions_mut()
             .insert(super::sub_filter::SubFilterExtension(sub_filter));
     }
+    // Route the per-vhost compression policy (server-level nginx `gzip`) to
+    // the compression layer; `None` inherits the app-level policy.
+    response
+        .extensions_mut()
+        .insert(super::gzip_predicate::CompressionOverride(
+            selected
+                .route
+                .compression
+                .clone()
+                .or_else(|| selected.virtual_host.compression.clone()),
+        ));
     // Keep the limit_conn slot held for the whole response lifetime: the
     // lease drops when the response body completes or is abandoned.
     response.map(|body| {
@@ -807,6 +881,171 @@ async fn route_admitted_request(
             lease: limit_conn_lease,
         })
     })
+}
+
+/// One nginx `error_page` hop: resolve the mapping for `status`, re-run
+/// location selection for the target URI, and serve the target route.
+/// Returns `None` when no mapping applies or the target is not a static
+/// resource (v1). The response keeps the target's own status; the caller
+/// applies the `=code` override only when the target served successfully.
+async fn run_error_page_hop<'a>(
+    state: &ListenerState,
+    generation: &'a RuntimeGeneration,
+    pages: &'a [ErrorPageConfig],
+    authority: &str,
+    status: StatusCode,
+    method: &Method,
+    headers: &HeaderMap,
+) -> Option<(Response<Body>, StatusCode, &'a [ErrorPageConfig])> {
+    let entry = pages
+        .iter()
+        .rev()
+        .find(|page| page.codes.contains(&status.as_u16()))?;
+    let candidate =
+        generation
+            .app
+            .select_route(&state.listener_id, authority, &entry.uri, method.as_str())?;
+    let ResourceConfig::Static {
+        root,
+        strip_prefix,
+        spa_fallback,
+        ..
+    } = candidate.resource
+    else {
+        return None;
+    };
+    // Conditionals and ranges are stripped so the error page serves cleanly
+    // instead of re-triggering the original 304/416 semantics.
+    let mut rebuilt_headers = headers.clone();
+    rebuilt_headers.remove(axum::http::header::RANGE);
+    rebuilt_headers.remove(axum::http::header::IF_RANGE);
+    rebuilt_headers.remove(axum::http::header::IF_NONE_MATCH);
+    rebuilt_headers.remove(axum::http::header::IF_MODIFIED_SINCE);
+    let rebuilt = {
+        let mut builder = Request::builder()
+            .method(method.clone())
+            .uri(entry.uri.as_str());
+        *builder.headers_mut()? = rebuilt_headers;
+        builder.body(Body::empty()).ok()?
+    };
+    let response = serve_static(
+        std::path::Path::new(root),
+        candidate.route,
+        *strip_prefix,
+        spa_fallback.as_deref(),
+        &entry.uri,
+        rebuilt,
+    )
+    .await;
+    let target_status = response.status();
+    // A recursive chain re-enters mapping with the target route's own
+    // error_page set when the target declares one (nginx: each internal
+    // redirect re-runs location selection).
+    let next_pages = if candidate.route.error_pages.is_empty() {
+        candidate.virtual_host.error_pages.as_slice()
+    } else {
+        candidate.route.error_pages.as_slice()
+    };
+    Some((response, target_status, next_pages))
+}
+
+/// nginx `error_page` resolution for a generated error: internally redirect
+/// to the mapped page, honoring `=code` overrides and, when the host enables
+/// `recursive_error_pages`, mapping an error produced while serving the page
+/// itself (bounded hops). Returns `None` when nothing maps and the original
+/// response must stand.
+async fn resolve_error_pages(
+    state: &ListenerState,
+    generation: &RuntimeGeneration,
+    selected: &SelectedRoute<'_>,
+    authority: &str,
+    status: StatusCode,
+    method: &Method,
+    headers: &HeaderMap,
+) -> Option<Response<Body>> {
+    // nginx inheritance: a location that declares error_page replaces the
+    // host-level set for that route.
+    let pages = if selected.route.error_pages.is_empty() {
+        &selected.virtual_host.error_pages
+    } else {
+        &selected.route.error_pages
+    };
+    if pages.is_empty() {
+        return None;
+    }
+    let max_hops = if selected.virtual_host.recursive_error_pages {
+        3
+    } else {
+        1
+    };
+    let mut current_status = status;
+    let mut pages: &[ErrorPageConfig] = pages;
+    let mut hops = 0usize;
+    loop {
+        let Some(entry) = pages
+            .iter()
+            .rev()
+            .find(|page| page.codes.contains(&current_status.as_u16()))
+        else {
+            return None;
+        };
+        let (hop_response, target_status, next_pages) = run_error_page_hop(
+            state,
+            generation,
+            pages,
+            authority,
+            current_status,
+            method,
+            headers,
+        )
+        .await?;
+        let served_cleanly = !(target_status.is_client_error() || target_status.is_server_error());
+        if served_cleanly {
+            let final_status = entry
+                .response_code
+                .and_then(|code| StatusCode::from_u16(code).ok())
+                .unwrap_or(current_status);
+            let (mut parts, body) = hop_response.into_parts();
+            parts.status = final_status;
+            return Some(Response::from_parts(parts, body));
+        }
+        // The target itself failed: with recursion the failure maps again
+        // (with the target route's own mapping set); otherwise the target's
+        // own error stands (nginx default).
+        hops += 1;
+        if hops >= max_hops || !selected.virtual_host.recursive_error_pages {
+            return Some(hop_response);
+        }
+        current_status = target_status;
+        pages = next_pages;
+    }
+}
+
+/// Applies the route/host `error_page` mapping to a generated static error
+/// response when the request identity was captured for the redirect.
+async fn apply_error_pages(
+    state: &ListenerState,
+    generation: &RuntimeGeneration,
+    selected: &SelectedRoute<'_>,
+    authority: &str,
+    response: Response<Body>,
+    saved: Option<&(Method, HeaderMap)>,
+) -> Response<Body> {
+    let status = response.status();
+    let Some((method, headers)) = saved else {
+        return response;
+    };
+    if !(status.is_client_error() || status.is_server_error()) {
+        return response;
+    }
+    let Some(paged) = resolve_error_pages(
+        state, generation, selected, authority, status, method, headers,
+    )
+    .await
+    else {
+        return response;
+    };
+    paged
 }
 
 /// Applies the selected virtual host's security response headers. HSTS is

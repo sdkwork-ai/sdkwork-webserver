@@ -45,24 +45,24 @@ rollout diagnosis.
 ## 3. Canonical Web Relationships
 
 ```text
-web_root_domain 1 -> N web_domain
+webserver_root_domain 1 -> N webserver_domain
 
-web_site 1 -> N web_site_binding N -> 1 web_domain
-web_site 1 -> N web_deployment
+webserver_site 1 -> N webserver_site_binding N -> 1 webserver_domain
+webserver_site 1 -> N webserver_deployment
 
-web_certificate 1 -> N web_certificate_identifier N -> 1 web_domain
-web_certificate 1 -> N web_certificate_version
+webserver_certificate 1 -> N webserver_certificate_identifier N -> 1 webserver_domain
+webserver_certificate 1 -> N webserver_certificate_version
 
-web_site_binding 1 -> N web_listener_certificate_binding
-web_listener_certificate_binding N -> 1 web_certificate
-web_listener_certificate_binding N -> 0..1 web_certificate_version
+webserver_site_binding 1 -> N webserver_listener_certificate_binding
+webserver_listener_certificate_binding N -> 1 webserver_certificate
+webserver_listener_certificate_binding N -> 0..1 webserver_certificate_version
 ```
 
 This satisfies the explicit cardinalities:
 
-- one application supports multiple hostnames through `web_site_binding`;
+- one application supports multiple hostnames through `webserver_site_binding`;
 - one certificate supports up to eight SAN hostnames through
-  `web_certificate_identifier`;
+  `webserver_certificate_identifier`;
 - one hostname supports multiple certificate lifecycles because several certificates may include
   the same domain;
 - one listener supports multiple certificate bindings, with at most one active binding per RSA or
@@ -75,7 +75,7 @@ This satisfies the explicit cardinalities:
 
 - Every hostname has a required composite foreign key to its tenant-owned root Zone.
 - Active root and hostname names are unique, preventing conflicting public ownership.
-- Route state is normalized into `web_site_binding`, including environment, path, serve/redirect,
+- Route state is normalized into `webserver_site_binding`, including environment, path, serve/redirect,
   primary, activation, and soft-delete lifecycle.
 - Active route uniqueness on `(domain_id, environment, path_prefix)` prevents ambiguous traffic
   ownership while allowing explicit path-based composition.

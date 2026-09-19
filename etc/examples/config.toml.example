@@ -60,7 +60,7 @@ schema_fallback_public = false
 username = "sdkwork_ai_dev"
 password_file = ".sdkwork/runtime/secrets/database.secret"
 ssl_mode = "disable"
-max_connections = 10
+max_connections = 20
 auto_migrate = true
 
 # Optional: validate sibling module deployments/webserver/ at startup

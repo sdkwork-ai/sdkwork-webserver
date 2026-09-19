@@ -31,5 +31,6 @@ export const webserverApplicationsListZhCn = {
   "applications.list.kind.douyin-miniprogram": "抖音小程序",
   "applications.list.kind.ios-app": "iOS 应用",
   "applications.list.kind.android-app": "Android 应用",
+  "applications.list.kind.desktop-app": "桌面应用",
   "applications.list.kind.harmonyos-app": "鸿蒙应用",
 } as const;

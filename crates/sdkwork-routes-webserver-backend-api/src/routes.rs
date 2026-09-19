@@ -17,7 +17,7 @@ use sdkwork_webserver_contract::{
 use serde::Deserialize;
 use std::sync::Arc;
 
-use crate::{agent_routes, auth::require_backend_context, paths};
+use crate::{agent_routes, auth::require_backend_context, cluster_routes, paths};
 use sdkwork_routes_webserver_common::{
     accepted_async, created_resource, no_content, ok_application_page, ok_audit_log_page,
     ok_certificate_distribution_page, ok_certificate_page, ok_deployment_page, ok_domain_page,
@@ -145,6 +145,46 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn WebBackendApi>) -> Rout
         .route(paths::NGINX_STATUS, get(retrieve_nginx_status))
         .route(paths::SERVERS, get(list_servers).post(create_server))
         .route(paths::AUDIT_LOGS, get(list_audit_logs))
+        .route(
+            paths::CLUSTERS,
+            get(cluster_routes::list_clusters).post(cluster_routes::create_cluster),
+        )
+        .route(
+            paths::CLUSTER,
+            get(cluster_routes::retrieve_cluster)
+                .patch(cluster_routes::update_cluster)
+                .delete(cluster_routes::delete_cluster),
+        )
+        .route(paths::CLUSTER_HOSTS, get(cluster_routes::list_cluster_hosts))
+        .route(
+            paths::CLUSTER_HOST,
+            get(cluster_routes::retrieve_cluster_host)
+                .patch(cluster_routes::update_cluster_host)
+                .delete(cluster_routes::delete_cluster_host),
+        )
+        .route(
+            paths::CLUSTER_INSTANCES,
+            get(cluster_routes::list_cluster_instances),
+        )
+        .route(
+            paths::CLUSTER_INSTANCE,
+            get(cluster_routes::retrieve_cluster_instance)
+                .patch(cluster_routes::update_cluster_instance)
+                .delete(cluster_routes::delete_cluster_instance),
+        )
+        .route(
+            paths::CLUSTER_INSTANCE_HEARTBEATS,
+            get(cluster_routes::list_instance_heartbeats),
+        )
+        .route(
+            paths::CLUSTER_MESSAGES,
+            post(cluster_routes::enqueue_cluster_messages),
+        )
+        .route(paths::CLUSTER_EVENTS, get(cluster_routes::list_cluster_events))
+        .route(
+            paths::CLUSTER_OVERVIEW,
+            get(cluster_routes::retrieve_cluster_overview),
+        )
         .layer(axum::middleware::from_fn(validate_pagination_query))
         .with_state(BackendState { api })
 }
@@ -848,7 +888,7 @@ async fn deploy_nginx_config(
     Path(config_id): Path<String>,
 ) -> Result<Response, WebApiError> {
     let context = require_backend_context(context)?;
-    ok_resource(state.api.web_nginx_config(&context, &config_id).await)
+    ok_resource(state.api.webserver_nginx_config(&context, &config_id).await)
 }
 
 async fn reload_nginx(

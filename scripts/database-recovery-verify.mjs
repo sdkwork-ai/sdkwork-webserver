@@ -20,7 +20,7 @@ const COMMAND_TIMEOUT_MS = 2 * 60 * 1_000;
 const MAX_CAPTURE_BYTES = 64 * 1024;
 const MAX_BASELINE_BYTES = 2 * 1024 * 1024;
 const MAX_BACKUP_BYTES = 64 * 1024 * 1024;
-const BASELINE_PATH = 'database/ddl/baseline/postgres/0001_web_baseline.sql';
+const BASELINE_PATH = 'database/ddl/baseline/postgres/0001_webserver_baseline.sql';
 const CONTAINER_BACKUP_PATH = '/tmp/sdkwork-web-recovery.dump';
 const CANARY_ID = '9500001';
 const CANARY_TENANT_ID = '9500';
@@ -259,7 +259,7 @@ function verifyPostgresRecovery(containerName, plan, remainingTimeout) {
   psql(
     containerName,
     SOURCE_DATABASE,
-    `INSERT INTO web_site (`
+    `INSERT INTO webserver_site (`
       + `id, uuid, tenant_id, organization_id, data_scope, user_id, name, slug, description, `
       + `site_type, status, runtime_config, metadata, created_at, updated_at, version, deleted_at, deleted_by`
       + `) VALUES (`
@@ -293,7 +293,7 @@ function verifyPostgresRecovery(containerName, plan, remainingTimeout) {
   psql(
     containerName,
     SOURCE_DATABASE,
-    `UPDATE web_site SET name = 'source-mutated-after-backup' WHERE id = ${CANARY_ID};`,
+    `UPDATE webserver_site SET name = 'source-mutated-after-backup' WHERE id = ${CANARY_ID};`,
     remainingTimeout,
   );
   dockerExec(
@@ -305,7 +305,7 @@ function verifyPostgresRecovery(containerName, plan, remainingTimeout) {
   const canaryResult = psql(
     containerName,
     RESTORE_DATABASE,
-    `SELECT name || ':' || tenant_id::text FROM web_site `
+    `SELECT name || ':' || tenant_id::text FROM webserver_site `
       + `WHERE id = ${CANARY_ID} AND tenant_id = ${CANARY_TENANT_ID};`,
     remainingTimeout,
     true,

@@ -24,7 +24,7 @@ impl WebRepository {
         let row = if can_cross_tenant && requester_tenant_id == 0 {
             sqlx::query(
                 "SELECT id, uuid, tenant_id, tenant_scope_hash
-                 FROM web_server WHERE uuid = $1",
+                 FROM webserver_server WHERE uuid = $1",
             )
             .bind(node_uuid)
             .fetch_optional(&self.pool)
@@ -32,7 +32,7 @@ impl WebRepository {
         } else {
             sqlx::query(
                 "SELECT id, uuid, tenant_id, tenant_scope_hash
-                 FROM web_server WHERE tenant_id = $1 AND uuid = $2",
+                 FROM webserver_server WHERE tenant_id = $1 AND uuid = $2",
             )
             .bind(requester_tenant_id)
             .bind(node_uuid)
@@ -66,7 +66,7 @@ impl WebRepository {
             .map_err(|error| store_error("begin web runtime assignment transaction", error))?;
 
         let locked = sqlx::query(
-            "UPDATE web_server SET version = version
+            "UPDATE webserver_server SET version = version
              WHERE tenant_id = $1 AND id = $2 AND uuid = $3",
         )
         .bind(write.tenant_id)
@@ -83,8 +83,8 @@ impl WebRepository {
             "SELECT a.uuid AS assignment_uuid, s.uuid AS node_uuid, a.environment,
                     a.generation, a.snapshot_uuid, a.snapshot_sha256,
                     CAST(a.created_at AS TEXT) AS assigned_at
-             FROM web_runtime_assignment a
-             INNER JOIN web_server s ON s.id = a.server_id AND s.tenant_id = a.tenant_id
+             FROM webserver_runtime_assignment a
+             INNER JOIN webserver_server s ON s.id = a.server_id AND s.tenant_id = a.tenant_id
              WHERE a.tenant_id = $1 AND a.server_id = $2 AND a.environment = $3
              ORDER BY a.generation DESC LIMIT 1",
         )
@@ -121,7 +121,7 @@ impl WebRepository {
         let runtime_set_expression = json_write_expression("$9");
         let assigned_at_expression = instant_write_expression("$12");
         let insert_sql = format!(
-            "INSERT INTO web_runtime_assignment (
+            "INSERT INTO webserver_runtime_assignment (
                 id, uuid, tenant_id, server_id, environment, generation, snapshot_uuid,
                 snapshot_sha256, runtime_set, runtime_set_bytes, assigned_by_subject,
                 created_at, updated_at, version
@@ -175,11 +175,11 @@ impl WebRepository {
                     a.generation, a.snapshot_uuid, a.snapshot_sha256,
                     CAST(a.runtime_set AS TEXT) AS runtime_set,
                     CAST(a.created_at AS TEXT) AS assigned_at,
-                    (SELECT o.state FROM web_runtime_observation o
+                    (SELECT o.state FROM webserver_runtime_observation o
                      WHERE o.tenant_id = a.tenant_id AND o.assignment_id = a.id
                      ORDER BY o.id DESC LIMIT 1) AS latest_observation_state
-             FROM web_runtime_assignment a
-             INNER JOIN web_server s ON s.id = a.server_id AND s.tenant_id = a.tenant_id
+             FROM webserver_runtime_assignment a
+             INNER JOIN webserver_server s ON s.id = a.server_id AND s.tenant_id = a.tenant_id
              WHERE a.tenant_id = $1 AND s.uuid = $2 AND a.environment = $3
              ORDER BY a.generation DESC LIMIT 1",
         )
@@ -238,8 +238,8 @@ impl WebRepository {
         let assignment = sqlx::query(
             "SELECT a.id AS assignment_id, a.uuid AS assignment_uuid, a.generation,
                     a.snapshot_uuid, a.snapshot_sha256, a.server_id, a.environment
-             FROM web_runtime_assignment a
-             INNER JOIN web_server s ON s.id = a.server_id AND s.tenant_id = a.tenant_id
+             FROM webserver_runtime_assignment a
+             INNER JOIN webserver_server s ON s.id = a.server_id AND s.tenant_id = a.tenant_id
              WHERE a.tenant_id = $1 AND s.uuid = $2 AND a.snapshot_uuid = $3",
         )
         .bind(write.tenant_id)
@@ -262,7 +262,7 @@ impl WebRepository {
         }
 
         sqlx::query(
-            "UPDATE web_runtime_assignment SET version = version WHERE tenant_id = $1 AND id = $2",
+            "UPDATE webserver_runtime_assignment SET version = version WHERE tenant_id = $1 AND id = $2",
         )
         .bind(write.tenant_id)
         .bind(assignment_id)
@@ -276,10 +276,10 @@ impl WebRepository {
                     a.environment, a.generation, a.snapshot_uuid,
                     a.snapshot_sha256, o.state, o.node_version, o.reason_code, o.detail,
                     CAST(o.observed_at AS TEXT) AS observed_at
-             FROM web_runtime_observation o
-             INNER JOIN web_runtime_assignment a
+             FROM webserver_runtime_observation o
+             INNER JOIN webserver_runtime_assignment a
                 ON a.id = o.assignment_id AND a.tenant_id = o.tenant_id
-             INNER JOIN web_server s
+             INNER JOIN webserver_server s
                 ON s.id = a.server_id AND s.tenant_id = a.tenant_id
              WHERE o.tenant_id = $1 AND o.assignment_id = $2
              ORDER BY o.id DESC LIMIT 1",
@@ -340,7 +340,7 @@ impl WebRepository {
 
         let observed_at_expression = instant_write_expression("$10");
         let insert_sql = format!(
-            "INSERT INTO web_runtime_observation (
+            "INSERT INTO webserver_runtime_observation (
                 id, uuid, tenant_id, assignment_id, server_id, state, node_version,
                 reason_code, detail, observed_at, created_at, updated_at, version
              ) VALUES (
@@ -399,10 +399,10 @@ impl WebRepository {
                         a.environment, a.generation, a.snapshot_uuid,
                         a.snapshot_sha256, o.state, o.node_version, o.reason_code, o.detail,
                         CAST(o.observed_at AS TEXT) AS observed_at
-                 FROM web_runtime_observation o
-                 INNER JOIN web_runtime_assignment a
+                 FROM webserver_runtime_observation o
+                 INNER JOIN webserver_runtime_assignment a
                     ON a.id = o.assignment_id AND a.tenant_id = o.tenant_id
-                 INNER JOIN web_server s
+                 INNER JOIN webserver_server s
                     ON s.id = a.server_id AND s.tenant_id = a.tenant_id
                  WHERE a.snapshot_uuid = $1
                  ORDER BY o.id DESC LIMIT 1",
@@ -417,10 +417,10 @@ impl WebRepository {
                         a.environment, a.generation, a.snapshot_uuid,
                         a.snapshot_sha256, o.state, o.node_version, o.reason_code, o.detail,
                         CAST(o.observed_at AS TEXT) AS observed_at
-                 FROM web_runtime_observation o
-                 INNER JOIN web_runtime_assignment a
+                 FROM webserver_runtime_observation o
+                 INNER JOIN webserver_runtime_assignment a
                     ON a.id = o.assignment_id AND a.tenant_id = o.tenant_id
-                 INNER JOIN web_server s
+                 INNER JOIN webserver_server s
                     ON s.id = a.server_id AND s.tenant_id = a.tenant_id
                  WHERE a.tenant_id = $1 AND a.snapshot_uuid = $2
                  ORDER BY o.id DESC LIMIT 1",

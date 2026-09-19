@@ -4,9 +4,16 @@ use std::sync::Arc;
 
 use http::{header, StatusCode};
 use http_body::Body;
+use sdkwork_webserver_core::config::GzipConfig;
 use tower_http::compression::predicate::{Predicate, SizeAbove};
 
 use super::runtime::DataPlaneRuntime;
+
+/// Per-virtual-host compression policy resolved from server-level nginx
+/// `gzip` directives and attached to the response by the request handler;
+/// `None` inherits the app-level policy.
+#[derive(Clone, Default)]
+pub(crate) struct CompressionOverride(pub Option<GzipConfig>);
 
 /// Compress when `[http] gzip = true` and the response MIME matches
 /// `gzipTypes` (plus always `text/html`), with `gzipMinLength`.
@@ -27,7 +34,16 @@ impl Predicate for NginxGzipPredicate {
         B: Body,
     {
         let generation = self.runtime.current();
-        let gzip = &generation.app.config().gzip;
+        // Server-level nginx `gzip` overrides the app-wide policy when the
+        // matched virtual host declares one.
+        let override_compression = response
+            .extensions()
+            .get::<CompressionOverride>()
+            .and_then(|override_value| override_value.0.clone());
+        let gzip = match &override_compression {
+            Some(resolved) => resolved,
+            None => &generation.app.config().gzip,
+        };
         if !gzip.enabled {
             return false;
         }
