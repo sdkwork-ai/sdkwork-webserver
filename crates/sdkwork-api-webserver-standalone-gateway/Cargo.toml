@@ -90,6 +90,10 @@ sdkwork-api-deployments-assembly = { workspace = true, optional = true }
 sdkwork_deploy_contract = { workspace = true }
 sdkwork_deploy_core = { workspace = true }
 sdkwork-webserver-core.workspace = true
+sdkwork-webserver-tunnel.workspace = true
+sdkwork-webserver-cluster.workspace = true
+sdkwork-webserver-tunnel-transport.workspace = true
+sdkwork-webserver-tunnel-core.workspace = true
 sdkwork-webserver-edge-runtime = { workspace = true, optional = true }
 sdkwork-webserver-resolver-cache = { workspace = true, features = ["redis"] }
 sdkwork-webserver-contract.workspace = true
@@ -118,6 +122,10 @@ sqlx = { workspace = true, optional = true }
 sdkwork-iam-bootstrap = { workspace = true, optional = true }
 
 [dev-dependencies]
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+sdkwork-webserver-tunnel.workspace = true
+sdkwork-webserver-cluster.workspace = true
+sdkwork-webserver-tunnel-transport.workspace = true
 async-trait.workspace = true
 base64.workspace = true
 flate2.workspace = true

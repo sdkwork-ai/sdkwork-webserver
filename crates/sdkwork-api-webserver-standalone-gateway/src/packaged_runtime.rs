@@ -18,8 +18,10 @@ const PACKAGED_ROOTS: [(&str, &str); 5] = [
 pub fn configure_packaged_runtime_roots_from_env() -> Result<(), String> {
     let deployment_profile = env::var(WEB_DEPLOYMENT_PROFILE_ENV)
         .or_else(|_| env::var(DEPLOYMENT_PROFILE_ENV))
-        .unwrap_or_else(|_| "standalone".to_owned());
-    if !deployment_profile.trim().eq_ignore_ascii_case("standalone") {
+        .ok();
+    // The profile vocabulary and its normalization belong to the shared
+    // component so this gate cannot drift from the base-URL resolver.
+    if !sdkwork_utils_rust::service_base_url::is_standalone_profile(deployment_profile.as_deref()) {
         return Ok(());
     }
 

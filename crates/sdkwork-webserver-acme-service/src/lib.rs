@@ -6,10 +6,12 @@ mod caa;
 mod challenge_store;
 mod config;
 mod dns;
+mod dns_account;
 mod dns_aliyun;
 mod dns_cloudflare;
 mod dns_dnspod;
 mod dns_http;
+pub mod dns_zone;
 mod error;
 mod http_client;
 mod issue;
@@ -31,14 +33,18 @@ pub use dns::{
     Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest, DnsProviderKind, InMemoryDns01Presenter,
     ManualDns01Presenter, ACME_CHALLENGE_LABEL,
 };
+pub use dns_account::{
+    DispatchingDns01Presenter, DnsCloudAccount, DnsCloudAccountConfig, DnsCloudAccountRegistry,
+};
 pub use dns_aliyun::{AliyunDns01Presenter, ALIYUN_DEFAULT_BASE_URL};
 pub use dns_cloudflare::{CloudflareDns01Presenter, CLOUDFLARE_DEFAULT_BASE_URL};
 pub use dns_dnspod::{DnspodDns01Presenter, DNSPOD_DEFAULT_BASE_URL};
 pub use dns_http::DnsApiClient;
+pub use dns_zone::{DnsZoneResolver, SingleZoneResolver};
 pub use error::{AcmeServiceError, AcmeServiceResult};
 pub use http_client::{
     AcmeHttpClientFactory, ExtraRootsClientFactory, PlatformVerifierClientFactory,
 };
-pub use issue::{AcmeDns01Context, CertificateIssuer};
+pub use issue::{AcmeDns01Context, CertificateIssuer, IssuerDns01Context};
 pub use model::IssuedCertificateMaterial;
 pub use revoke::CertificateRevocationReason;

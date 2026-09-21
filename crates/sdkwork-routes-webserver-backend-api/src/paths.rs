@@ -61,6 +61,16 @@ pub const CLUSTER: &str = "/backend/v3/api/clusters/{clusterId}";
 pub const CLUSTER_HOSTS: &str = "/backend/v3/api/clusters/hosts";
 pub const CLUSTER_HOST: &str = "/backend/v3/api/clusters/hosts/{hostId}";
 pub const CLUSTER_INSTANCES: &str = "/backend/v3/api/clusters/instances";
+pub const CLUSTER_SYNC_PUBLISH: &str = "/backend/v3/api/clusters/{clusterId}/sync";
+pub const CLUSTER_INSTANCE_METRICS_HISTORY: &str =
+    "/backend/v3/api/clusters/instances/{instanceId}/metrics/history";
+pub const CLUSTER_INSTANCE_PROBE: &str = "/backend/v3/api/clusters/instances/{instanceId}/probe";
+pub const CLUSTER_INSTANCE_DRAIN: &str = "/backend/v3/api/clusters/instances/{instanceId}/drain";
+pub const CLUSTER_INSTANCE_UNDRAIN: &str =
+    "/backend/v3/api/clusters/instances/{instanceId}/undrain";
+pub const CLUSTER_INSTANCE_CORDON: &str = "/backend/v3/api/clusters/instances/{instanceId}/cordon";
+pub const CLUSTER_INSTANCE_UNCORDON: &str =
+    "/backend/v3/api/clusters/instances/{instanceId}/uncordon";
 pub const CLUSTER_INSTANCE: &str = "/backend/v3/api/clusters/instances/{instanceId}";
 pub const CLUSTER_INSTANCE_HEARTBEATS: &str =
     "/backend/v3/api/clusters/instances/{instanceId}/heartbeats";

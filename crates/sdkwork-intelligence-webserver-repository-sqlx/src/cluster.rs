@@ -52,6 +52,13 @@ pub(crate) struct ClusterInstanceAuthRow {
     pub tenant_id: i64,
     pub heartbeat_interval_seconds: i32,
     pub offline_threshold_seconds: i32,
+    pub desired_config_revision: Option<String>,
+    pub applied_config_revision: Option<String>,
+    pub desired_applications_revision: Option<String>,
+    pub applied_applications_revision: Option<String>,
+    pub sync_status: i32,
+    pub routing_enabled: bool,
+    pub draining: bool,
 }
 
 /// Previous state observed while recording a heartbeat, used by the service to
@@ -93,7 +100,7 @@ const HOST_PROJECTION: &str = "h.uuid, ch.uuid AS cluster_uuid, h.name, h.hostna
         h.cpu_model, h.cpu_cores, h.memory_total_mb, h.remote_ip,
         CAST(h.local_ips AS TEXT) AS local_ips,
         CAST(h.mac_addresses AS TEXT) AS mac_addresses,
-        h.daemon_version, h.status,
+        h.daemon_version, h.status, h.join_mode, h.tunnel_route_domain,
         CAST(h.last_heartbeat_at AS TEXT) AS last_heartbeat_at,
         CAST(h.created_at AS TEXT) AS created_at,
         CAST(h.updated_at AS TEXT) AS updated_at,
@@ -105,7 +112,13 @@ const INSTANCE_PROJECTION: &str = "i.uuid, ci.uuid AS cluster_uuid, ch.uuid AS h
         ch.name AS host_name, i.name, i.role, i.environment, i.process_pid,
         CAST(i.process_started_at AS TEXT) AS process_started_at,
         i.bind_host, i.bind_port, i.public_endpoint, i.build_version,
-        i.status, i.health_state,
+        i.status, i.health_state, i.join_mode, i.tunnel_route_domain,
+        i.quality_score, i.desired_config_revision, i.applied_config_revision,
+        i.desired_applications_revision, i.applied_applications_revision,
+        i.sync_status,
+        i.routing_enabled, i.draining, i.ejected_at IS NOT NULL AS ejected,
+        i.restart_count, CAST(i.labels AS TEXT) AS labels,
+        i.routing_weight, i.maintenance_note, i.probe_failures, i.probe_url,
         CAST(i.last_heartbeat_at AS TEXT) AS last_heartbeat_at,
         CAST(i.last_online_at AS TEXT) AS last_online_at,
         i.uptime_seconds,
@@ -149,6 +162,7 @@ impl WebRepository {
 
         let sql = "SELECT c.uuid, c.name, c.code, c.description, c.status,
                 c.heartbeat_interval_seconds, c.offline_threshold_seconds,
+                c.lb_strategy, CAST(c.served_domains AS TEXT) AS served_domains,
                 CAST(c.created_at AS TEXT) AS created_at, CAST(c.updated_at AS TEXT) AS updated_at,
                 (SELECT COUNT(*) FROM webserver_cluster_host h
                   WHERE h.cluster_id = c.id AND h.deleted_at IS NULL) AS host_count,
@@ -177,6 +191,7 @@ impl WebRepository {
         Ok(ClusterPage { items, total })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) async fn create_cluster_repo(
         &self,
         name: &str,
@@ -184,17 +199,28 @@ impl WebRepository {
         description: Option<&str>,
         heartbeat_interval_seconds: i32,
         offline_threshold_seconds: i32,
+        lb_strategy: &str,
+        served_domains: &[String],
     ) -> WebServiceResult<ClusterResponse> {
         let id = next_id(self.id_generator())?;
         let uuid = new_uuid();
         let now = now_rfc3339();
-        let now_expression = instant_write_expression("$9");
+        // `$9` is `lb_strategy` (a string), so the three timestamp columns need
+        // a placeholder of their own. Sharing `$9` bound the strategy text into
+        // `created_at` / `updated_at` and failed with `invalid input syntax for
+        // type timestamp with time zone: "round_robin"` — a masked 500 on every
+        // cluster insert.
+        let now_expression = instant_write_expression("$11");
+        let domains_expression = json_write_expression("$10");
+        let served_domains_json = serde_json::to_string(served_domains)
+            .map_err(|error| WebServiceError::Internal(format!("encode servedDomains: {error}")))?;
         let sql = format!(
             "INSERT INTO webserver_cluster (
                 id, uuid, tenant_id, name, code, description, status,
-                heartbeat_interval_seconds, offline_threshold_seconds, metadata,
+                heartbeat_interval_seconds, offline_threshold_seconds, lb_strategy,
+                served_domains, metadata,
                 created_at, updated_at, version
-            ) VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $8, CAST('{{}}' AS JSONB), {now_expression}, {now_expression}, 0)"
+            ) VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $8, $9, {domains_expression}, CAST('{{}}' AS JSONB), {now_expression}, {now_expression}, 0)"
         );
         sqlx::query(audited_sql(&sql))
             .bind(id)
@@ -205,6 +231,8 @@ impl WebRepository {
             .bind(description)
             .bind(heartbeat_interval_seconds)
             .bind(offline_threshold_seconds)
+            .bind(lb_strategy)
+            .bind(&served_domains_json)
             .bind(&now)
             .execute(&self.pool)
             .await
@@ -218,6 +246,8 @@ impl WebRepository {
             status: 1,
             heartbeat_interval_seconds,
             offline_threshold_seconds,
+            lb_strategy: Some(lb_strategy.to_owned()),
+            served_domains: Some(served_domains.to_vec()),
             host_count: 0,
             instance_count: 0,
             online_instance_count: 0,
@@ -232,6 +262,7 @@ impl WebRepository {
     ) -> WebServiceResult<ClusterResponse> {
         let sql = "SELECT c.uuid, c.name, c.code, c.description, c.status,
                 c.heartbeat_interval_seconds, c.offline_threshold_seconds,
+                c.lb_strategy, CAST(c.served_domains AS TEXT) AS served_domains,
                 CAST(c.created_at AS TEXT) AS created_at, CAST(c.updated_at AS TEXT) AS updated_at,
                 (SELECT COUNT(*) FROM webserver_cluster_host h
                   WHERE h.cluster_id = c.id AND h.deleted_at IS NULL) AS host_count,
@@ -262,6 +293,17 @@ impl WebRepository {
         let now = now_rfc3339();
         // Partial update via COALESCE: absent fields keep their current value.
         let now_expression = instant_write_expression("$8");
+        let served_domains = request
+            .served_domains
+            .as_ref()
+            .map(|domains| serde_json::to_string(domains))
+            .transpose()
+            .map_err(|error| WebServiceError::Internal(format!("encode servedDomains: {error}")))?;
+        // `served_domains` is JSONB and the bind is a JSON string, so the
+        // parameter needs an explicit cast: a bare `COALESCE($10, served_domains)`
+        // makes Postgres infer text and fail with
+        // `COALESCE types text and jsonb cannot be matched`.
+        let served_domains_expression = json_write_expression("$10");
         let sql = format!(
             "UPDATE webserver_cluster SET
                 name = COALESCE($3, name),
@@ -269,6 +311,8 @@ impl WebRepository {
                 status = COALESCE($5, status),
                 heartbeat_interval_seconds = COALESCE($6, heartbeat_interval_seconds),
                 offline_threshold_seconds = COALESCE($7, offline_threshold_seconds),
+                lb_strategy = COALESCE($9, lb_strategy),
+                served_domains = COALESCE({served_domains_expression}, served_domains),
                 updated_at = {now_expression}, version = version + 1
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL"
         );
@@ -281,6 +325,8 @@ impl WebRepository {
             .bind(request.heartbeat_interval_seconds)
             .bind(request.offline_threshold_seconds)
             .bind(&now)
+            .bind(request.lb_strategy.as_deref())
+            .bind(&served_domains)
             .execute(&self.pool)
             .await
             .map_err(|error| store_error("update webserver_cluster", error))?;
@@ -465,12 +511,18 @@ impl WebRepository {
     // Admin surface: instances
     // ------------------------------------------------------------------
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) async fn list_cluster_instances_repo(
         &self,
         cluster_id: Option<&str>,
         host_id: Option<&str>,
         status: Option<i32>,
         health_state: Option<&str>,
+        join_mode: Option<i32>,
+        sync_status: Option<i32>,
+        labels: &[(String, String)],
+        search: Option<&str>,
+        build_version: Option<&str>,
         page_size: i32,
         cursor: Option<&str>,
     ) -> WebServiceResult<ClusterInstancePage> {
@@ -498,6 +550,19 @@ impl WebRepository {
             None => None,
         };
 
+        // Label containment document ($10) and ILIKE pattern ($11) are built
+        // once for both branches.
+        let labels_json = if labels.is_empty() {
+            None
+        } else {
+            let pairs: serde_json::Map<String, Value> = labels
+                .iter()
+                .map(|(key, value)| (key.clone(), Value::String(value.clone())))
+                .collect();
+            Some(Value::Object(pairs).to_string())
+        };
+        let search_pattern = search
+            .map(|term| format!("%{}%", term.trim().to_ascii_lowercase()));
         let rows = if let Some(cursor) = cursor {
             let (cursor_updated_at, cursor_id) = decode_keyset_cursor(cursor)
                 .ok_or_else(|| WebServiceError::validation("cursor is invalid"))?;
@@ -512,7 +577,13 @@ impl WebRepository {
                    AND ($5::BIGINT IS NULL OR i.host_id = $5)
                    AND ($6::INT IS NULL OR i.status = $6)
                    AND ($7::TEXT IS NULL OR i.health_state = $7)
-                 ORDER BY i.updated_at DESC, i.id DESC LIMIT $8");
+                   AND ($8::INT IS NULL OR i.join_mode = $8)
+                   AND ($9::INT IS NULL OR i.sync_status = $9)
+                   AND ($10::JSONB IS NULL OR i.labels @> $10::JSONB)
+                   AND ($11::TEXT IS NULL OR i.name ILIKE $11
+                        OR i.public_endpoint ILIKE $11 OR ch.hostname ILIKE $11)
+                   AND ($12::TEXT IS NULL OR i.build_version = $12)
+                 ORDER BY i.updated_at DESC, i.id DESC LIMIT $13");
             sqlx::query(audited_sql(&sql))
                 .bind(0_i64)
                 .bind(&cursor_updated_at)
@@ -521,6 +592,11 @@ impl WebRepository {
                 .bind(host_internal)
                 .bind(status)
                 .bind(health_state)
+                .bind(join_mode)
+                .bind(sync_status)
+                .bind(labels_json)
+                .bind(&search_pattern)
+                .bind(build_version)
                 .bind(i64::from(page_size) + 1)
                 .fetch_all(&self.pool)
                 .await
@@ -536,6 +612,12 @@ impl WebRepository {
                    AND ($5::BIGINT IS NULL OR i.host_id = $5)
                    AND ($6::INT IS NULL OR i.status = $6)
                    AND ($7::TEXT IS NULL OR i.health_state = $7)
+                   AND ($8::INT IS NULL OR i.join_mode = $8)
+                   AND ($9::INT IS NULL OR i.sync_status = $9)
+                   AND ($10::JSONB IS NULL OR i.labels @> $10::JSONB)
+                   AND ($11::TEXT IS NULL OR i.name ILIKE $11
+                        OR i.public_endpoint ILIKE $11 OR ch.hostname ILIKE $11)
+                   AND ($12::TEXT IS NULL OR i.build_version = $12)
                  ORDER BY i.updated_at DESC, i.id DESC LIMIT $2 OFFSET $3");
             sqlx::query(audited_sql(&sql))
                 .bind(0_i64)
@@ -545,6 +627,11 @@ impl WebRepository {
                 .bind(host_internal)
                 .bind(status)
                 .bind(health_state)
+                .bind(join_mode)
+                .bind(sync_status)
+                .bind(&labels_json)
+                .bind(&search_pattern)
+                .bind(build_version)
                 .fetch_all(&self.pool)
                 .await
                 .map_err(|error| store_error("list webserver_cluster_instance", error))?
@@ -581,11 +668,29 @@ impl WebRepository {
     ) -> WebServiceResult<ClusterInstanceResponse> {
         let now = now_rfc3339();
         let now_expression = instant_write_expression("$6");
+        let labels_json = request
+            .labels
+            .as_ref()
+            .map(|labels| serde_json::to_string(labels))
+            .transpose()
+            .map_err(|error| WebServiceError::Internal(format!("encode labels: {error}")))?;
+        // Drain transitions stamp/clear `drain_started_at` alongside the flag.
+        let drain_started_expression = instant_write_expression("$9");
+        let labels_expression = json_write_expression("$11");
         let sql = format!(
             "UPDATE webserver_cluster_instance SET
                 name = COALESCE($3, name),
                 status = COALESCE($4, status),
                 public_endpoint = COALESCE($5, public_endpoint),
+                routing_enabled = COALESCE($7, routing_enabled),
+                draining = COALESCE($8, draining),
+                drain_started_at = CASE WHEN $8 = TRUE THEN {drain_started_expression}
+                                        WHEN $8 = FALSE THEN NULL
+                                        ELSE drain_started_at END,
+                probe_url = COALESCE($10, probe_url),
+                labels = COALESCE({labels_expression}, labels),
+                routing_weight = COALESCE($12, routing_weight),
+                maintenance_note = COALESCE($13, maintenance_note),
                 updated_at = {now_expression}, version = version + 1
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL"
         );
@@ -596,6 +701,13 @@ impl WebRepository {
             .bind(request.status)
             .bind(request.public_endpoint.as_deref())
             .bind(&now)
+            .bind(request.routing_enabled)
+            .bind(request.draining)
+            .bind(&now)
+            .bind(request.probe_url.as_deref())
+            .bind(&labels_json)
+            .bind(request.routing_weight)
+            .bind(request.maintenance_note.as_deref())
             .execute(&self.pool)
             .await
             .map_err(|error| store_error("update webserver_cluster_instance", error))?;
@@ -636,6 +748,7 @@ impl WebRepository {
         &self,
         cluster_id: Option<&str>,
         severity: Option<&str>,
+        instance_id: Option<&str>,
         page_size: i32,
         cursor: Option<&str>,
     ) -> WebServiceResult<ClusterEventPage> {
@@ -667,13 +780,15 @@ impl WebRepository {
                    AND (e.occurred_at, e.id) < (CAST($2 AS TIMESTAMPTZ), $3)
                    AND ($4::BIGINT IS NULL OR e.cluster_id = $4)
                    AND ($5::TEXT IS NULL OR e.severity = $5)
-                 ORDER BY e.occurred_at DESC, e.id DESC LIMIT $6");
+                   AND ($6::TEXT IS NULL OR i.uuid = $6)
+                 ORDER BY e.occurred_at DESC, e.id DESC LIMIT $7");
             sqlx::query(audited_sql(&sql))
                 .bind(0_i64)
                 .bind(&cursor_occurred_at)
                 .bind(cursor_id)
                 .bind(cluster_internal)
                 .bind(severity)
+                .bind(instance_id)
                 .bind(i64::from(page_size) + 1)
                 .fetch_all(&self.pool)
                 .await
@@ -688,6 +803,7 @@ impl WebRepository {
                  WHERE e.tenant_id = $1
                    AND ($4::BIGINT IS NULL OR e.cluster_id = $4)
                    AND ($5::TEXT IS NULL OR e.severity = $5)
+                   AND ($6::TEXT IS NULL OR i.uuid = $6)
                  ORDER BY e.occurred_at DESC, e.id DESC LIMIT $2 OFFSET $3");
             sqlx::query(audited_sql(&sql))
                 .bind(0_i64)
@@ -695,6 +811,7 @@ impl WebRepository {
                 .bind(0_i64)
                 .bind(cluster_internal)
                 .bind(severity)
+                .bind(instance_id)
                 .fetch_all(&self.pool)
                 .await
                 .map_err(|error| store_error("list webserver_cluster_event", error))?
@@ -953,17 +1070,25 @@ impl WebRepository {
             .map_err(|error| WebServiceError::Internal(format!("encode macAddresses: {error}")))?;
         let local_ips_expression = json_write_expression("$16");
         let mac_addresses_expression = json_write_expression("$17");
-        let now_expression = instant_write_expression("$19");
+        // `$19` is `join_mode` (an INT) and `$20`/`$21` are the tunnel columns,
+        // so the three timestamp columns need a placeholder of their own. They
+        // used to reuse `$19`, which made Postgres receive an `i32` for
+        // `last_heartbeat_at` / `created_at` / `updated_at` and fail with
+        // `cannot cast type integer to timestamp with time zone` — a masked 500
+        // on every cluster host upsert.
+        let now_expression = instant_write_expression("$22");
         let sql = format!(
             "INSERT INTO webserver_cluster_host (
                 id, uuid, tenant_id, cluster_id, name, hostname, machine_code,
                 os_name, os_version, kernel_version, arch, cpu_model, cpu_cores,
                 memory_total_mb, remote_ip, local_ips, mac_addresses, daemon_version,
+                join_mode, tunnel_route_domain, tunnel_endpoint,
                 status, last_heartbeat_at, metadata, created_at, updated_at, version
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7,
                 $8, $9, $10, $11, $12, $13,
                 $14, $15, {local_ips_expression}, {mac_addresses_expression}, $18,
+                $19, $20, $21,
                 1, {now_expression}, CAST('{{}}' AS JSONB), {now_expression}, {now_expression}, 0
             )
             ON CONFLICT (tenant_id, machine_code) WHERE deleted_at IS NULL DO UPDATE SET
@@ -981,6 +1106,9 @@ impl WebRepository {
                 local_ips = EXCLUDED.local_ips,
                 mac_addresses = EXCLUDED.mac_addresses,
                 daemon_version = EXCLUDED.daemon_version,
+                join_mode = EXCLUDED.join_mode,
+                tunnel_route_domain = EXCLUDED.tunnel_route_domain,
+                tunnel_endpoint = EXCLUDED.tunnel_endpoint,
                 updated_at = EXCLUDED.updated_at,
                 version = webserver_cluster_host.version + 1
             RETURNING id, uuid, (xmax = 0) AS inserted"
@@ -1004,6 +1132,9 @@ impl WebRepository {
             .bind(&local_ips)
             .bind(&mac_addresses)
             .bind(&write.daemon_version)
+            .bind(write.join_mode)
+            .bind(&write.tunnel_route_domain)
+            .bind(&write.tunnel_endpoint)
             .bind(&now)
             .fetch_one(&self.pool)
             .await
@@ -1024,19 +1155,28 @@ impl WebRepository {
         let now = now_rfc3339();
         let metadata = json!({ "instanceTokenHash": write.instance_token_hash }).to_string();
         let started_expression = instant_write_expression("$10");
-        let now_expression = instant_write_expression("$15");
-        let metrics_expression = json_write_expression("$16");
-        let metadata_expression = json_write_expression("$17");
+        // The bind chain is positional, so the timestamps, `metrics`, and
+        // `metadata` placeholders must follow the tunnel columns rather than
+        // reusing `$15`/`$16`. Sharing `$15` with `join_mode` handed Postgres an
+        // `i32` for every TIMESTAMPTZ column (`cannot cast type integer to
+        // timestamp with time zone`), and sharing `$16` with
+        // `tunnel_route_domain` handed it a string for `metrics` — a masked 500
+        // on every cluster instance upsert.
+        let now_expression = instant_write_expression("$17");
+        let metrics_expression = json_write_expression("$18");
+        let metadata_expression = json_write_expression("$19");
         let sql = format!(
             "INSERT INTO webserver_cluster_instance (
                 id, uuid, tenant_id, host_id, cluster_id, name, role, environment,
                 process_pid, process_started_at, bind_host, bind_port, public_endpoint,
-                build_version, status, health_state, last_heartbeat_at, last_online_at,
+                build_version, join_mode, tunnel_route_domain,
+                status, health_state, last_heartbeat_at, last_online_at,
                 uptime_seconds, metrics, metadata, created_at, updated_at, version
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8,
                 $9, {started_expression}, $11, $12, $13,
-                $14, 1, 'UNKNOWN', {now_expression}, {now_expression},
+                $14, $15, $16,
+                1, 'UNKNOWN', {now_expression}, {now_expression},
                 0, {metrics_expression}, {metadata_expression}, {now_expression}, {now_expression}, 0
             )
             ON CONFLICT (tenant_id, host_id, process_pid)
@@ -1047,6 +1187,16 @@ impl WebRepository {
                 role = EXCLUDED.role,
                 environment = EXCLUDED.environment,
                 process_started_at = EXCLUDED.process_started_at,
+                restart_count = CASE WHEN webserver_cluster_instance.process_started_at
+                                          IS DISTINCT FROM EXCLUDED.process_started_at
+                                     THEN webserver_cluster_instance.restart_count + 1
+                                     ELSE webserver_cluster_instance.restart_count END,
+                last_restarted_at = CASE WHEN webserver_cluster_instance.process_started_at
+                                          IS DISTINCT FROM EXCLUDED.process_started_at
+                                         THEN EXCLUDED.updated_at
+                                         ELSE webserver_cluster_instance.last_restarted_at END,
+                join_mode = EXCLUDED.join_mode,
+                tunnel_route_domain = EXCLUDED.tunnel_route_domain,
                 bind_host = EXCLUDED.bind_host,
                 bind_port = EXCLUDED.bind_port,
                 public_endpoint = EXCLUDED.public_endpoint,
@@ -1077,6 +1227,8 @@ impl WebRepository {
             .bind(write.bind_port)
             .bind(&write.public_endpoint)
             .bind(&write.build_version)
+            .bind(write.join_mode)
+            .bind(&write.tunnel_route_domain)
             .bind(&now)
             .bind(json!({}).to_string())
             .bind(&metadata)
@@ -1099,7 +1251,10 @@ impl WebRepository {
         // every cluster machine authentication.
         let sql = "SELECT i.id, i.uuid, i.host_id, i.cluster_id, i.tenant_id,
                 ch.uuid AS host_uuid, c.uuid AS cluster_uuid,
-                c.heartbeat_interval_seconds, c.offline_threshold_seconds
+                c.heartbeat_interval_seconds, c.offline_threshold_seconds,
+                i.desired_config_revision, i.applied_config_revision,
+                i.desired_applications_revision, i.applied_applications_revision,
+                i.sync_status, i.routing_enabled, i.draining
              FROM webserver_cluster_instance i
              JOIN webserver_cluster c ON c.id = i.cluster_id
              JOIN webserver_cluster_host ch ON ch.id = i.host_id
@@ -1125,7 +1280,10 @@ impl WebRepository {
     ) -> WebServiceResult<Option<ClusterInstanceAuthRow>> {
         let sql = "SELECT i.id, i.uuid, i.host_id, i.cluster_id, i.tenant_id,
                 ch.uuid AS host_uuid, c.uuid AS cluster_uuid,
-                c.heartbeat_interval_seconds, c.offline_threshold_seconds
+                c.heartbeat_interval_seconds, c.offline_threshold_seconds,
+                i.desired_config_revision, i.applied_config_revision,
+                i.desired_applications_revision, i.applied_applications_revision,
+                i.sync_status, i.routing_enabled, i.draining
              FROM webserver_cluster_instance i
              JOIN webserver_cluster c ON c.id = i.cluster_id
              JOIN webserver_cluster_host ch ON ch.id = i.host_id
@@ -1178,6 +1336,7 @@ impl WebRepository {
                 uptime_seconds = $7,
                 metrics = {metrics_expression},
                 build_version = COALESCE($8, build_version),
+                quality_score = COALESCE($9, quality_score),
                 updated_at = {now_expression},
                 version = version + 1
              WHERE id = $1 AND tenant_id = $2"
@@ -1191,6 +1350,7 @@ impl WebRepository {
             .bind(&write.metrics_json)
             .bind(write.uptime_seconds)
             .bind(&write.build_version)
+            .bind(write.quality_score)
             .execute(&mut *tx)
             .await
             .map_err(|error| store_error("heartbeat webserver_cluster_instance", error))?;
@@ -1255,6 +1415,7 @@ impl WebRepository {
     ) -> WebServiceResult<Vec<ClusterPeer>> {
         let sql = "SELECT i.uuid, i.name, i.role, i.status, i.environment, i.build_version,
                 i.public_endpoint, CAST(i.last_heartbeat_at AS TEXT) AS last_heartbeat_at,
+                i.join_mode, i.tunnel_route_domain,
                 ch.name AS host_name, ch.remote_ip
              FROM webserver_cluster_instance i
              JOIN webserver_cluster_host ch ON ch.id = i.host_id
@@ -1635,6 +1796,386 @@ impl WebRepository {
             .map_err(|error| store_error("purge webserver_cluster_heartbeat", error))?;
         Ok(result.rows_affected())
     }
+
+    /// Records one active-probe outcome and drives auto-eject / auto-recover:
+    /// `PROBE_FAILURES_FOR_EJECT` consecutive failures eject the instance
+    /// (out of routing, status error); any success recovers it.
+    pub(super) async fn record_cluster_probe_outcome_repo(
+        &self,
+        write: &sdkwork_intelligence_webserver_service::ClusterProbeWrite,
+    ) -> WebServiceResult<sdkwork_intelligence_webserver_service::ClusterProbeOutcome> {
+        const PROBE_FAILURES_FOR_EJECT: i32 = 3;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|error| store_error("begin cluster probe", error))?;
+
+        let row = sqlx::query(
+            "SELECT status, probe_failures, ejected_at IS NOT NULL AS ejected
+             FROM webserver_cluster_instance
+             WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL FOR UPDATE",
+        )
+        .bind(write.instance_id)
+        .bind(write.tenant_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|error| store_error("lock webserver_cluster_instance", error))?
+        .ok_or_else(|| WebServiceError::not_found("cluster instance not found"))?;
+        let status: i32 = row.try_get("status").map_err(store_map_error)?;
+        let previous_failures: i32 = row.try_get("probe_failures").map_err(store_map_error)?;
+        let previously_ejected: bool = row.try_get("ejected").map_err(store_map_error)?;
+
+        let now = now_rfc3339();
+        let now_expression = instant_write_expression("$5");
+        let (failures, eject, recovered) = if write.healthy {
+            (0, false, previously_ejected)
+        } else {
+            let failures = previous_failures + 1;
+            (failures, failures >= PROBE_FAILURES_FOR_EJECT, false)
+        };
+        let eject_now = eject && !previously_ejected;
+        let recover_now = recovered && previously_ejected;
+        let sql = format!(
+            "UPDATE webserver_cluster_instance SET
+                probe_failures = $3,
+                ejected_at = CASE WHEN $4 THEN CAST($5 AS TIMESTAMPTZ) ELSE NULL END,
+                status = CASE
+                    WHEN $4 THEN 4
+                    WHEN $6 AND status = 4 THEN 1
+                    ELSE status END,
+                updated_at = {now_expression}, version = version + 1
+             WHERE id = $1 AND tenant_id = $2"
+        );
+        sqlx::query(audited_sql(&sql))
+            .bind(write.instance_id)
+            .bind(write.tenant_id)
+            .bind(failures)
+            .bind(eject)
+            .bind(&now)
+            .bind(recover_now)
+            .execute(&mut *tx)
+            .await
+            .map_err(|error| store_error("probe webserver_cluster_instance", error))?;
+        tx.commit()
+            .await
+            .map_err(|error| store_error("commit cluster probe", error))?;
+        Ok(sdkwork_intelligence_webserver_service::ClusterProbeOutcome {
+            failures,
+            ejected: eject,
+            eject_transition: eject_now,
+            recovered: recover_now,
+            was_online: status == 1,
+        })
+    }
+
+    /// Node drain-completion acknowledgment: clears the drain flags and
+    /// marks the instance stopped (offline). Idempotent.
+    pub(super) async fn record_cluster_drain_complete_repo(
+        &self,
+        tenant_id: i64,
+        instance_uuid: &str,
+    ) -> WebServiceResult<()> {
+        let now = now_rfc3339();
+        let now_expression = instant_write_expression("$3");
+        let sql = format!(
+            "UPDATE webserver_cluster_instance SET
+                draining = FALSE,
+                drain_started_at = NULL,
+                routing_enabled = FALSE,
+                status = 0,
+                updated_at = {now_expression}, version = version + 1
+             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL"
+        );
+        sqlx::query(audited_sql(&sql))
+            .bind(tenant_id)
+            .bind(instance_uuid)
+            .bind(&now)
+            .execute(&self.pool)
+            .await
+            .map_err(|error| store_error("drain complete webserver_cluster_instance", error))?;
+        Ok(())
+    }
+
+    /// Auto-discovery: routeable instance inventory for one cluster.
+    pub(super) async fn discover_cluster_routing_repo(
+        &self,
+        cluster_code: &str,
+    ) -> WebServiceResult<
+        Option<sdkwork_intelligence_webserver_service::ClusterRoutingDiscovery>,
+    > {
+        let identity_sql = "SELECT id, uuid, lb_strategy,
+                CAST(served_domains AS TEXT) AS served_domains
+             FROM webserver_cluster
+             WHERE tenant_id = 0 AND code = $1 AND deleted_at IS NULL";
+        let cluster_row = sqlx::query(identity_sql)
+            .bind(cluster_code)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|error| store_error("discover webserver_cluster", error))?;
+        let Some(cluster_row) = cluster_row else {
+            return Ok(None);
+        };
+        let cluster_id: i64 = cluster_row.try_get("id").map_err(store_map_error)?;
+        let cluster_uuid: String = cluster_row.try_get("uuid").map_err(store_map_error)?;
+        let lb_strategy: String = cluster_row.try_get("lb_strategy").map_err(store_map_error)?;
+        let served_domains = string_vec_from_json(
+            cluster_row
+                .try_get::<Option<String>, _>("served_domains")
+                .map_err(store_map_error)?,
+        );
+
+        let instance_sql = "SELECT i.uuid,
+                    COALESCE(NULLIF(i.bind_host, '0.0.0.0'), '127.0.0.1') AS dial_host,
+                    i.bind_port, i.routing_weight, i.quality_score
+                 FROM webserver_cluster_instance i
+                 WHERE i.tenant_id = 0 AND i.cluster_id = $1
+                   AND i.deleted_at IS NULL AND i.status = 1
+                   AND i.routing_enabled = TRUE AND i.draining = FALSE
+                   AND i.ejected_at IS NULL
+                 ORDER BY i.id";
+        let rows = sqlx::query(instance_sql)
+            .bind(cluster_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|error| store_error("discover webserver_cluster instances", error))?;
+        let mut instances = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let dial_host: String = row.try_get("dial_host").map_err(store_map_error)?;
+            let bind_port: Option<i32> = row.try_get("bind_port").map_err(store_map_error)?;
+            // Bind port is required for east-west routing; instances without
+            // a bound port are skipped (they cannot receive routed traffic).
+            let Some(port) = bind_port else {
+                continue;
+            };
+            instances.push(sdkwork_intelligence_webserver_service::ClusterRoutingInstance {
+                uuid: row.try_get("uuid").map_err(store_map_error)?,
+                endpoint: format!("{dial_host}:{port}"),
+                weight: row.try_get("routing_weight").map_err(store_map_error)?,
+                quality_score: row.try_get("quality_score").map_err(store_map_error)?,
+            });
+        }
+        Ok(Some(
+            sdkwork_intelligence_webserver_service::ClusterRoutingDiscovery {
+                cluster_uuid,
+                lb_strategy,
+                served_domains,
+                instances,
+            },
+        ))
+    }
+
+    /// Latest desired revision per sync kind (config / applications).
+    pub(super) async fn latest_cluster_sync_desired_repo(
+        &self,
+        tenant_id: i64,
+        cluster_id: i64,
+    ) -> WebServiceResult<Vec<sdkwork_intelligence_webserver_service::ClusterSyncDesired>> {
+        let sql = "SELECT DISTINCT ON (kind) kind, revision
+             FROM webserver_cluster_sync_revision
+             WHERE tenant_id = $1 AND cluster_id = $2
+             ORDER BY kind, created_at DESC, id DESC";
+        let rows = sqlx::query(sql)
+            .bind(tenant_id)
+            .bind(cluster_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|error| store_error("latest webserver_cluster_sync_revision", error))?;
+        let mut desired = Vec::with_capacity(rows.len());
+        for row in &rows {
+            desired.push(sdkwork_intelligence_webserver_service::ClusterSyncDesired {
+                kind: row.try_get("kind").map_err(store_map_error)?,
+                revision: row.try_get("revision").map_err(store_map_error)?,
+            });
+        }
+        Ok(desired)
+    }
+
+    /// Payload of one stored sync revision (node fetch on drift).
+    pub(super) async fn cluster_sync_revision_payload_repo(
+        &self,
+        tenant_id: i64,
+        cluster_id: i64,
+        kind: i32,
+        revision: &str,
+    ) -> WebServiceResult<
+        Option<sdkwork_intelligence_webserver_service::ClusterSyncRevisionPayload>,
+    > {
+        let sql = "SELECT kind, revision, sha256, CAST(payload AS TEXT) AS payload,
+                CAST(created_at AS TEXT) AS created_at
+             FROM webserver_cluster_sync_revision
+             WHERE tenant_id = $1 AND cluster_id = $2 AND kind = $3 AND revision = $4";
+        let row = sqlx::query(sql)
+            .bind(tenant_id)
+            .bind(cluster_id)
+            .bind(kind)
+            .bind(revision)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|error| store_error("read webserver_cluster_sync_revision", error))?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let payload_text: String = row.try_get("payload").map_err(store_map_error)?;
+        let payload: serde_json::Value =
+            serde_json::from_str(&payload_text).unwrap_or(serde_json::Value::Null);
+        Ok(Some(
+            sdkwork_intelligence_webserver_service::ClusterSyncRevisionPayload {
+                kind: row.try_get("kind").map_err(store_map_error)?,
+                revision: row.try_get("revision").map_err(store_map_error)?,
+                sha256: row.try_get("sha256").map_err(store_map_error)?,
+                payload,
+                created_at: row.try_get("created_at").map_err(store_map_error)?,
+            },
+        ))
+    }
+
+    /// Publishes one desired-state revision and flips every non-deleted
+    /// instance of the cluster to PENDING with the new per-kind desired
+    /// revision (single transaction).
+    pub(super) async fn publish_cluster_sync_revision_repo(
+        &self,
+        write: &sdkwork_intelligence_webserver_service::ClusterSyncRevisionPublish,
+    ) -> WebServiceResult<()> {
+        let id = next_id(self.id_generator())?;
+        let uuid = new_uuid();
+        let now = now_rfc3339();
+        let payload = serde_json::to_string(&write.payload)
+            .map_err(|error| WebServiceError::Internal(format!("encode payload: {error}")))?;
+        let payload_expression = json_write_expression("$8");
+        let created_expression = instant_write_expression("$10");
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|error| store_error("begin cluster sync publish", error))?;
+        let insert_sql = format!(
+            "INSERT INTO webserver_cluster_sync_revision (
+                id, uuid, tenant_id, cluster_id, kind, revision, sha256, payload,
+                size_bytes, created_by, created_at
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, {payload_expression},
+                $9, $11, {created_expression}
+            )
+            ON CONFLICT (tenant_id, cluster_id, kind, revision) DO NOTHING"
+        );
+        sqlx::query(audited_sql(&insert_sql))
+            .bind(id)
+            .bind(&uuid)
+            .bind(write.tenant_id)
+            .bind(write.cluster_id)
+            .bind(write.kind)
+            .bind(&write.revision)
+            .bind(&write.sha256)
+            .bind(&payload)
+            .bind(write.size_bytes)
+            .bind(&write.created_by)
+            .bind(&write.created_at)
+            .execute(&mut *tx)
+            .await
+            .map_err(|error| store_error("insert webserver_cluster_sync_revision", error))?;
+        // Flip the cluster to the new desired revision (per-kind column).
+        // An instance that already reports the new revision as applied
+        // (re-registration) stays IN_SYNC; everything else goes PENDING.
+        let flip_target = if write.kind == 1 {
+            "desired_applications_revision"
+        } else {
+            "desired_config_revision"
+        };
+        let applied_target = if write.kind == 1 {
+            "applied_applications_revision"
+        } else {
+            "applied_config_revision"
+        };
+        let flip_sql = format!(
+            "UPDATE webserver_cluster_instance SET
+                {flip_target} = $3,
+                sync_status = CASE
+                    WHEN {applied_target} = $3 THEN 1
+                    ELSE 2 END,
+                updated_at = CAST($4 AS TIMESTAMPTZ),
+                version = version + 1
+             WHERE tenant_id = $1 AND cluster_id = $2 AND deleted_at IS NULL"
+        );
+        sqlx::query(audited_sql(&flip_sql))
+            .bind(write.tenant_id)
+            .bind(write.cluster_id)
+            .bind(&write.revision)
+            .bind(&now)
+            .execute(&mut *tx)
+            .await
+            .map_err(|error| store_error("flip webserver_cluster_instance sync", error))?;
+        tx.commit()
+            .await
+            .map_err(|error| store_error("commit cluster sync publish", error))?;
+        Ok(())
+    }
+
+    /// Records one instance sync acknowledgment: per-kind applied revision
+    /// plus aggregate sync-status recompute against the desired state.
+    pub(super) async fn record_cluster_sync_ack_repo(
+        &self,
+        write: &sdkwork_intelligence_webserver_service::ClusterSyncAckWrite,
+    ) -> WebServiceResult<()> {
+        let (applied_column, desired_column) = if write.kind == 1 {
+            (
+                "applied_applications_revision",
+                "desired_applications_revision",
+            )
+        } else {
+            ("applied_config_revision", "desired_config_revision")
+        };
+        let now_expression = instant_write_expression("$6");
+        let sql = format!(
+            "UPDATE webserver_cluster_instance SET
+                {applied_column} = $3,
+                sync_status = CASE
+                    WHEN {desired_column} IS NOT NULL AND {desired_column} = $3
+                      AND applied_config_revision IS NOT NULL
+                      AND desired_config_revision = applied_config_revision
+                      AND applied_applications_revision IS NOT NULL
+                      AND desired_applications_revision = applied_applications_revision
+                    THEN 1
+                    WHEN $4 = 3 THEN 3
+                    ELSE 2 END,
+                updated_at = {now_expression},
+                version = version + 1
+             WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL"
+        );
+        sqlx::query(audited_sql(&sql))
+            .bind(write.instance_id)
+            .bind(write.tenant_id)
+            .bind(&write.applied_revision)
+            .bind(write.status)
+            .bind(write.kind)
+            .bind(&write.updated_at)
+            .execute(&self.pool)
+            .await
+            .map_err(|error| store_error("ack webserver_cluster_instance sync", error))?;
+        Ok(())
+    }
+
+    /// Resolves a cluster identity by uuid (admin sync publication).
+    pub(super) async fn resolve_cluster_identity_by_uuid_repo(
+        &self,
+        tenant_id: i64,
+        cluster_uuid: &str,
+    ) -> WebServiceResult<ClusterIdentityRow> {
+        const IDENTITY_COLUMNS: &str = "id, uuid, name, code, heartbeat_interval_seconds,
+                offline_threshold_seconds";
+        let sql = format!(
+            "SELECT {IDENTITY_COLUMNS} FROM webserver_cluster
+             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL"
+        );
+        let row = sqlx::query(audited_sql(&sql))
+            .bind(tenant_id)
+            .bind(cluster_uuid)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|error| store_error("resolve webserver_cluster by uuid", error))?
+            .ok_or_else(|| WebServiceError::not_found("cluster not found"))?;
+        map_cluster_identity_row(&row)
+    }
 }
 
 /// Hashes a cluster instance heartbeat token for metadata storage/lookup.
@@ -1655,6 +2196,10 @@ fn map_cluster_row(row: &EngineRow) -> Result<ClusterResponse, sqlx::Error> {
         status: row.try_get("status")?,
         heartbeat_interval_seconds: row.try_get("heartbeat_interval_seconds")?,
         offline_threshold_seconds: row.try_get("offline_threshold_seconds")?,
+        lb_strategy: row.try_get("lb_strategy")?,
+        served_domains: Some(string_vec_from_json(
+            row.try_get::<Option<String>, _>("served_domains")?,
+        )),
         host_count: row.try_get("host_count")?,
         instance_count: row.try_get("instance_count")?,
         online_instance_count: row.try_get("online_instance_count")?,
@@ -1691,6 +2236,13 @@ fn map_cluster_host_row(row: &EngineRow) -> Result<ClusterHostResponse, sqlx::Er
         mac_addresses,
         daemon_version: row.try_get("daemon_version")?,
         status: row.try_get("status")?,
+        join_mode: Some(
+            sdkwork_webserver_contract::cluster_join_mode_label(
+                row.try_get::<i32, _>("join_mode").unwrap_or(0),
+            )
+            .to_owned(),
+        ),
+        tunnel_route_domain: row.try_get("tunnel_route_domain")?,
         last_heartbeat_at: optional_instant_from_row(row, "last_heartbeat_at")?,
         instance_count: row.try_get("instance_count")?,
         created_at: instant_from_row(row, "created_at")?,
@@ -1723,6 +2275,37 @@ fn map_cluster_instance_row(row: &EngineRow) -> Result<ClusterInstanceResponse, 
         last_online_at: optional_instant_from_row(row, "last_online_at")?,
         uptime_seconds: row.try_get("uptime_seconds")?,
         metrics,
+        join_mode: Some(
+            sdkwork_webserver_contract::cluster_join_mode_label(
+                row.try_get::<i32, _>("join_mode").unwrap_or(0),
+            )
+            .to_owned(),
+        ),
+        quality_score: row.try_get("quality_score")?,
+        desired_config_revision: row.try_get("desired_config_revision")?,
+        applied_config_revision: row.try_get("applied_config_revision")?,
+        desired_applications_revision: row.try_get("desired_applications_revision")?,
+        applied_applications_revision: row.try_get("applied_applications_revision")?,
+        sync_status: Some(
+            sdkwork_webserver_contract::cluster_sync_status_label(
+                row.try_get::<i32, _>("sync_status").unwrap_or(0),
+            )
+            .to_owned(),
+        ),
+        routing_enabled: row.try_get("routing_enabled")?,
+        draining: row.try_get("draining")?,
+        ejected: row.try_get("ejected")?,
+        restart_count: row.try_get::<Option<i32>, _>("restart_count")?,
+        labels: row
+            .try_get::<Option<String>, _>("labels")?
+            .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+            .and_then(|value| {
+                serde_json::from_value::<std::collections::BTreeMap<String, String>>(value).ok()
+            }),
+        routing_weight: row.try_get("routing_weight")?,
+        maintenance_note: row.try_get("maintenance_note")?,
+        probe_failures: row.try_get("probe_failures")?,
+        probe_url: row.try_get("probe_url")?,
         created_at: instant_from_row(row, "created_at")?,
         updated_at: instant_from_row(row, "updated_at")?,
     })
@@ -1748,7 +2331,16 @@ fn map_cluster_event_row(row: &EngineRow) -> Result<ClusterEventResponse, sqlx::
 }
 
 fn map_cluster_peer_row(row: &EngineRow) -> Result<ClusterPeer, sqlx::Error> {
+    let join_mode = row
+        .try_get::<Option<i32>, _>("join_mode")
+        .ok()
+        .flatten()
+        .map(|value| {
+            sdkwork_webserver_contract::cluster_join_mode_label(value).to_owned()
+        });
     Ok(ClusterPeer {
+        join_mode,
+        tunnel_route_domain: row.try_get("tunnel_route_domain")?,
         instance_id: row.try_get("uuid")?,
         name: row.try_get("name")?,
         role: row.try_get("role")?,
@@ -1773,6 +2365,25 @@ fn map_cluster_instance_auth_row(row: &EngineRow) -> ClusterInstanceAuthRow {
         tenant_id: row.try_get("tenant_id").unwrap_or(0),
         heartbeat_interval_seconds: row.try_get("heartbeat_interval_seconds").unwrap_or(15),
         offline_threshold_seconds: row.try_get("offline_threshold_seconds").unwrap_or(60),
+        desired_config_revision: row
+            .try_get::<Option<String>, _>("desired_config_revision")
+            .ok()
+            .flatten(),
+        applied_config_revision: row
+            .try_get::<Option<String>, _>("applied_config_revision")
+            .ok()
+            .flatten(),
+        desired_applications_revision: row
+            .try_get::<Option<String>, _>("desired_applications_revision")
+            .ok()
+            .flatten(),
+        applied_applications_revision: row
+            .try_get::<Option<String>, _>("applied_applications_revision")
+            .ok()
+            .flatten(),
+        sync_status: row.try_get("sync_status").unwrap_or(0),
+        routing_enabled: row.try_get("routing_enabled").unwrap_or(true),
+        draining: row.try_get("draining").unwrap_or(false),
     }
 }
 

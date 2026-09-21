@@ -52,7 +52,10 @@ mod website_delivery;
 pub use error::DataPlaneError;
 pub use operations::{probe_data_plane_operations_from_env, DataPlaneOperationsConfig};
 pub use runtime::DataPlaneReloadReport;
-pub use server::{run_data_plane_until, run_data_plane_with_operations_until};
+pub use server::{
+    run_data_plane_until, run_data_plane_until_with_cluster_overlay,
+    run_data_plane_with_operations_until,
+};
 pub use server::{
     run_website_data_plane_until, run_website_data_plane_with_operations_until,
     run_website_data_plane_with_tls_operations_until,

@@ -30,11 +30,13 @@ const MAX_AUTHORIZATIONS_PER_ORDER: usize = 100;
 pub(crate) enum AcmeChallengeMode<'a> {
     /// HTTP-01 through the edge webroot. Exact identifiers only.
     Http01,
-    /// DNS-01 through a provider presenter or a manual operator flow.
+    /// DNS-01 through a provider presenter or a manual operator flow. The
+    /// zone resolver maps each authorization's identifier to its hosted
+    /// zone, so certificates spanning multiple zones (and multiple cloud
+    /// accounts) renew unattended.
     Dns01 {
         presenter: &'a dyn Dns01Presenter,
-        /// Hosted zone apex the presented records belong to.
-        zone_apex: &'a str,
+        zones: &'a dyn crate::dns_zone::DnsZoneResolver,
     },
 }
 
@@ -207,16 +209,21 @@ async fn issue_lets_encrypt_inner(
                         .await?;
                     challenge_leases.push(lease);
                 }
-                AcmeChallengeMode::Dns01 {
-                    presenter,
-                    zone_apex,
-                } => {
+                AcmeChallengeMode::Dns01 { presenter, zones } => {
                     // The identifier is rendered with its wildcard marker, so a
                     // `*.example.com` authorization and its apex authorization
                     // both reduce to `_acme-challenge.example.com` while keeping
                     // distinct TXT values. Both must be published together; the
-                    // CA may validate them in either order.
+                    // CA may validate them in either order. The zone resolver
+                    // picks the hosted zone per identifier, so certificates
+                    // spanning multiple zones/accounts renew unattended.
                     let identifier = challenge.identifier().to_string();
+                    let zone_apex = zones.zone_for(&identifier).ok_or_else(|| {
+                        AcmeServiceError::validation(format!(
+                            "no cloud account is associated with identifier {identifier}; \
+                             associate its zone with a DNS provider account to renew"
+                        ))
+                    })?;
                     let record_name = dns01_record_name(&identifier)?;
                     let digest = challenge.key_authorization().digest();
                     let record_value = dns01_txt_value(digest.as_ref());
@@ -357,10 +364,13 @@ mod tests {
     fn challenge_labels_are_the_acme_wire_tokens() {
         assert_eq!(challenge_type_label(AcmeChallengeMode::Http01), "http-01");
         let presenter = crate::dns::InMemoryDns01Presenter::new();
+        let zones = crate::dns_zone::SingleZoneResolver {
+            zone_apex: "example.com".to_owned(),
+        };
         assert_eq!(
             challenge_type_label(AcmeChallengeMode::Dns01 {
                 presenter: &presenter,
-                zone_apex: "example.com",
+                zones: &zones,
             }),
             "dns-01"
         );

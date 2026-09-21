@@ -8,9 +8,9 @@ use axum::{
 };
 use sdkwork_routes_webserver_common::{created_resource, ok_resource, WebApiError};
 use sdkwork_webserver_contract::{
-    ClusterHeartbeatRequest, ClusterRegistrationRequest, CreateRuntimeObservationRequest,
-    PublishRuntimeAssignmentRequest, WebInternalApi, WebInternalRequestContext,
-    MAX_WEBSITE_RUNTIME_SET_BYTES,
+    ClusterHeartbeatRequest, ClusterRegistrationRequest, ClusterSyncAckRequest,
+    CreateRuntimeObservationRequest, PublishRuntimeAssignmentRequest, WebInternalApi,
+    WebInternalRequestContext, MAX_WEBSITE_RUNTIME_SET_BYTES,
 };
 use serde::Deserialize;
 
@@ -24,6 +24,12 @@ const HEARTBEAT_REQUEST_BYTES: usize = 64 * 1024;
 #[derive(Clone)]
 struct InternalState {
     api: Arc<dyn WebInternalApi>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ClusterSyncManifestQuery {
+    kind: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -73,6 +79,15 @@ pub fn build_router_with_shared_internal_api(api: Arc<dyn WebInternalApi>) -> Ro
             post(cluster_heartbeat).layer(DefaultBodyLimit::max(HEARTBEAT_REQUEST_BYTES)),
         )
         .route(paths::CLUSTER_PEERS, get(retrieve_cluster_peers))
+        .route(
+            paths::CLUSTER_SYNC_MANIFEST,
+            get(retrieve_cluster_sync_manifest),
+        )
+        .route(
+            paths::CLUSTER_SYNC_ACK,
+            post(cluster_sync_ack).layer(DefaultBodyLimit::max(HEARTBEAT_REQUEST_BYTES)),
+        )
+        .route(paths::CLUSTER_DRAIN_COMPLETE, post(cluster_drain_complete))
         .with_state(InternalState { api })
 }
 
@@ -96,12 +111,7 @@ async fn cluster_heartbeat(
     Json(request): Json<ClusterHeartbeatRequest>,
 ) -> Result<Response, WebApiError> {
     let context = require_internal_context(context)?;
-    ok_resource(
-        state
-            .api
-            .record_cluster_heartbeat(&context, &request)
-            .await,
-    )
+    ok_resource(state.api.record_cluster_heartbeat(&context, &request).await)
 }
 
 async fn retrieve_cluster_peers(
@@ -110,6 +120,37 @@ async fn retrieve_cluster_peers(
 ) -> Result<Response, WebApiError> {
     let context = require_internal_context(context)?;
     ok_resource(state.api.retrieve_cluster_peers(&context).await)
+}
+
+async fn retrieve_cluster_sync_manifest(
+    State(state): State<InternalState>,
+    context: Option<Extension<WebInternalRequestContext>>,
+    Query(params): Query<ClusterSyncManifestQuery>,
+) -> Result<Response, WebApiError> {
+    let context = require_internal_context(context)?;
+    ok_resource(
+        state
+            .api
+            .retrieve_cluster_sync_manifest(&context, &params.kind)
+            .await,
+    )
+}
+
+async fn cluster_sync_ack(
+    State(state): State<InternalState>,
+    context: Option<Extension<WebInternalRequestContext>>,
+    Json(request): Json<ClusterSyncAckRequest>,
+) -> Result<Response, WebApiError> {
+    let context = require_internal_context(context)?;
+    ok_resource(state.api.record_cluster_sync_ack(&context, &request).await)
+}
+
+async fn cluster_drain_complete(
+    State(state): State<InternalState>,
+    context: Option<Extension<WebInternalRequestContext>>,
+) -> Result<Response, WebApiError> {
+    let context = require_internal_context(context)?;
+    ok_resource(state.api.record_cluster_drain_complete(&context).await)
 }
 
 async fn publish_runtime_assignment(

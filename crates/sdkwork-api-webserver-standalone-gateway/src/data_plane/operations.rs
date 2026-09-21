@@ -1,6 +1,11 @@
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
-use axum::{http::StatusCode, response::IntoResponse, routing::get, Router};
+use axum::{
+    http::StatusCode,
+    response::IntoResponse,
+    routing::{delete, get, post},
+    Json, Router,
+};
 use hyper_util::{
     rt::{TokioExecutor, TokioIo, TokioTimer},
     server::conn::auto::Builder,
@@ -16,6 +21,8 @@ use tokio::{
     time::timeout,
 };
 use tower_http::timeout::TimeoutLayer;
+
+use sdkwork_webserver_tunnel::service::TunnelService;
 
 use crate::metric_dimensions::CanonicalMetricDimensions;
 
@@ -154,7 +161,39 @@ pub(crate) async fn serve_operations_listener(
     shutdown: watch::Receiver<bool>,
 ) -> Result<(), DataPlaneError> {
     let metrics_runtime = runtime.clone();
-    let router = Router::new().route(
+    let mut router = Router::new();
+    // Tunnel control surface (PRD SS35/SS82): served only when the app
+    // config enables the tunnel; otherwise the paths 404 like any other.
+    if runtime.tunnel.is_some() {
+        let status_runtime = runtime.clone();
+        let list_runtime = runtime.clone();
+        let create_runtime = runtime.clone();
+        let remove_runtime = runtime.clone();
+        router = router
+            .route(
+                "/tunnel/status",
+                get(move || async move { tunnel_status_response(&status_runtime).await }),
+            )
+            .route(
+                "/tunnel/routes",
+                get(move || async move { tunnel_routes_response(&list_runtime).await }),
+            )
+            .route(
+                "/tunnel/routes",
+                post(move |body: String| async move {
+                    tunnel_route_create(&create_runtime, &body).await
+                }),
+            )
+            .route(
+                "/tunnel/routes/:id",
+                delete(
+                    move |axum::extract::Path(route_id): axum::extract::Path<String>| async move {
+                        tunnel_route_remove(&remove_runtime, &route_id).await
+                    },
+                ),
+            );
+    }
+    let router = router.route(
         "/metrics",
         get(move || {
             let runtime = metrics_runtime.clone();
@@ -168,15 +207,19 @@ pub(crate) async fn serve_operations_listener(
                         None => None,
                     },
                 };
+                let mut text = runtime
+                    .metrics
+                    .render_prometheus(&runtime, provider_resolution_cache.as_ref());
+                if let Some(tunnel) = runtime.tunnel.as_ref() {
+                    text.push_str(&tunnel.metrics.render_prometheus());
+                }
                 (
                     StatusCode::OK,
                     [(
                         axum::http::header::CONTENT_TYPE,
                         "text/plain; version=0.0.4; charset=utf-8",
                     )],
-                    runtime
-                        .metrics
-                        .render_prometheus(&runtime, provider_resolution_cache.as_ref()),
+                    text,
                 )
                     .into_response()
             }
@@ -202,6 +245,173 @@ pub(crate) async fn serve_operations_listener(
             address: prepared.address,
             source,
         })
+}
+
+fn tunnel_service(
+    runtime: &Arc<DataPlaneRuntime>,
+) -> Option<Arc<sdkwork_webserver_tunnel::service::GatewayTunnelService>> {
+    runtime.tunnel.as_ref().map(|shared| {
+        Arc::new(sdkwork_webserver_tunnel::service::GatewayTunnelService {
+            shared: shared.clone(),
+        })
+    })
+}
+
+async fn tunnel_status_response(runtime: &Arc<DataPlaneRuntime>) -> axum::response::Response {
+    match tunnel_service(runtime) {
+        Some(service) => match service.status().await {
+            Ok(status) => (StatusCode::OK, Json(status)).into_response(),
+            Err(error) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": error.to_string() })),
+            )
+                .into_response(),
+        },
+        None => (
+            StatusCode::NOT_FOUND,
+            "tunnel is not enabled
+",
+        )
+            .into_response(),
+    }
+}
+
+async fn tunnel_routes_response(runtime: &Arc<DataPlaneRuntime>) -> axum::response::Response {
+    match tunnel_service(runtime) {
+        Some(service) => match service.list_routes().await {
+            Ok(routes) => (StatusCode::OK, Json(routes)).into_response(),
+            Err(error) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": error.to_string() })),
+            )
+                .into_response(),
+        },
+        None => (
+            StatusCode::NOT_FOUND,
+            "tunnel is not enabled
+",
+        )
+            .into_response(),
+    }
+}
+
+/// `POST /tunnel/routes` body (PRD SS36 + device binding):
+/// `{"deviceId": "dev_x", "name": "web", "protocol": "http", "domain":
+/// "demo.x", "port": 7000, "target": "127.0.0.1:3000", "allowPublic":
+/// true}`. The target is advisory: the agent activates only templates it
+/// recognizes and always dials its own configured target (PRD SS45).
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TunnelRouteCreateBody {
+    device_id: String,
+    name: String,
+    protocol: String,
+    domain: Option<String>,
+    port: Option<u16>,
+    target: String,
+    #[serde(default)]
+    allow_public: bool,
+}
+
+async fn tunnel_route_create(
+    runtime: &Arc<DataPlaneRuntime>,
+    body: &str,
+) -> axum::response::Response {
+    let Some(service) = tunnel_service(runtime) else {
+        return (
+            StatusCode::NOT_FOUND,
+            "tunnel is not enabled
+",
+        )
+            .into_response();
+    };
+    let parsed: TunnelRouteCreateBody = match serde_json::from_str(body) {
+        Ok(parsed) => parsed,
+        Err(error) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": error.to_string() })),
+            )
+                .into_response()
+        }
+    };
+    let template = sdkwork_webserver_tunnel_core::TunnelRouteTemplate {
+        name: parsed.name,
+        protocol: match parsed.protocol.as_str() {
+            "http" => sdkwork_webserver_tunnel_core::TunnelProtocolKind::Http,
+            "tcp" => sdkwork_webserver_tunnel_core::TunnelProtocolKind::Tcp,
+            other => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({
+                        "error": format!("protocol `{other}` must be http or tcp")
+                    })),
+                )
+                    .into_response()
+            }
+        },
+        domain: parsed.domain,
+        port: parsed.port,
+        target: parsed.target,
+        policy: Some(sdkwork_webserver_tunnel_core::RoutePolicy {
+            allow_public: parsed.allow_public,
+            ..sdkwork_webserver_tunnel_core::RoutePolicy::private()
+        }),
+    };
+    let device_id = match sdkwork_webserver_tunnel_core::DeviceId::parse(&parsed.device_id) {
+        Ok(device_id) => device_id,
+        Err(error) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": error.to_string() })),
+            )
+                .into_response()
+        }
+    };
+    match service.create_route(&device_id, &template).await {
+        Ok(registration) => (StatusCode::ACCEPTED, Json(registration)).into_response(),
+        Err(error) => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(serde_json::json!({ "error": error.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+async fn tunnel_route_remove(
+    runtime: &Arc<DataPlaneRuntime>,
+    route_id: &str,
+) -> axum::response::Response {
+    let Some(service) = tunnel_service(runtime) else {
+        return (
+            StatusCode::NOT_FOUND,
+            "tunnel is not enabled
+",
+        )
+            .into_response();
+    };
+    match sdkwork_webserver_tunnel_core::RouteId::parse(route_id) {
+        Ok(route_id) => match service.remove_route(&route_id).await {
+            Ok(()) => StatusCode::NO_CONTENT.into_response(),
+            Err(sdkwork_webserver_tunnel_core::TunnelError::RouteNotFound) => (
+                StatusCode::NOT_FOUND,
+                "route not found
+",
+            )
+                .into_response(),
+            Err(error) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": error.to_string() })),
+            )
+                .into_response(),
+        },
+        Err(_) => (
+            StatusCode::BAD_REQUEST,
+            "invalid route id
+",
+        )
+            .into_response(),
+    }
 }
 
 async fn serve_bounded_operations(

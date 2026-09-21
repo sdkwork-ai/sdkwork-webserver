@@ -1,0 +1,39 @@
+[package]
+name = "sdkwork-webserver-tunnel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "SDKWork WebServer tunnel composition: gateway, agent, session/route management, security, service facade, and the tunnel CLI"
+
+[lib]
+name = "sdkwork_webserver_tunnel"
+
+[[bin]]
+name = "sdkwork-webserver-tunnel"
+path = "src/bin/sdkwork-webserver-tunnel.rs"
+
+[dependencies]
+async-trait.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+futures-util.workspace = true
+rand.workspace = true
+rustls.workspace = true
+sdkwork-webserver-tunnel-core.workspace = true
+sdkwork-webserver-tunnel-protocol.workspace = true
+sdkwork-webserver-tunnel-transport.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+
+[dev-dependencies]
+bytes.workspace = true
+sdkwork-webserver-tunnel-protocol.workspace = true
+tempfile.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+
+[lints]
+workspace = true

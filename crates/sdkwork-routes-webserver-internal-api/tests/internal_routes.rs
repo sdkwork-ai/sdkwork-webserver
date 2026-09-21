@@ -7,8 +7,12 @@ use axum::{
 use http_body_util::BodyExt;
 use sdkwork_routes_webserver_internal_api::build_router_with_internal_api;
 use sdkwork_webserver_contract::{
-    CreateRuntimeObservationRequest, PublishRuntimeAssignmentRequest, RuntimeAssignment,
-    RuntimeAssignmentDelivery, RuntimeObservation, WebInternalApi, WebInternalRequestContext,
+    ClusterDrainCompleteResponse, ClusterHeartbeatRequest, ClusterHeartbeatResponse,
+    ClusterHostRef, ClusterInstanceRef, ClusterPeerDirectoryResponse, ClusterRef,
+    ClusterRegistrationRequest, ClusterRegistrationResponse, ClusterSyncAckRequest,
+    ClusterSyncManifest, ClusterSyncState, CreateRuntimeObservationRequest,
+    PublishRuntimeAssignmentRequest, RuntimeAssignment, RuntimeAssignmentDelivery,
+    RuntimeObservation, WebInternalApi, WebInternalRequestContext, WebServiceError,
     WebServiceResult,
 };
 use serde_json::{json, Value};
@@ -108,6 +112,104 @@ impl WebInternalApi for TestInternalApi {
             reason_code: None,
             detail: None,
             observed_at: "2026-07-22T00:00:04Z".to_owned(),
+        })
+    }
+
+    // Self-reporting cluster plane (added by 2e711dac). The stub only needs to
+    // satisfy the trait so the runtime-assignment routes can be exercised.
+    async fn register_cluster_instance(
+        &self,
+        context: &WebInternalRequestContext,
+        _request: &ClusterRegistrationRequest,
+    ) -> WebServiceResult<ClusterRegistrationResponse> {
+        Ok(ClusterRegistrationResponse {
+            cluster: ClusterRef {
+                id: "cluster-1".to_owned(),
+                name: "cluster".to_owned(),
+                code: "default".to_owned(),
+            },
+            host: ClusterHostRef {
+                id: "host-1".to_owned(),
+                name: "host".to_owned(),
+                hostname: "localhost".to_owned(),
+            },
+            instance: ClusterInstanceRef {
+                id: context
+                    .agent_node_uuid
+                    .clone()
+                    .unwrap_or_else(|| "instance-1".to_owned()),
+                name: "instance".to_owned(),
+                role: "edge".to_owned(),
+            },
+            instance_token: "winst_test".to_owned(),
+            heartbeat_interval_seconds: 30,
+            offline_threshold_seconds: 90,
+            peers: Vec::new(),
+        })
+    }
+
+    async fn record_cluster_heartbeat(
+        &self,
+        context: &WebInternalRequestContext,
+        _request: &ClusterHeartbeatRequest,
+    ) -> WebServiceResult<ClusterHeartbeatResponse> {
+        Ok(ClusterHeartbeatResponse {
+            instance_id: context
+                .agent_node_uuid
+                .clone()
+                .unwrap_or_else(|| "instance-1".to_owned()),
+            status: 1,
+            acknowledged_at: "2026-07-22T00:00:05Z".to_owned(),
+            heartbeat_interval_seconds: 30,
+            offline_threshold_seconds: 90,
+            peers: Vec::new(),
+            messages: Vec::new(),
+            sync: None,
+            ops: None,
+        })
+    }
+
+    async fn retrieve_cluster_sync_manifest(
+        &self,
+        _context: &WebInternalRequestContext,
+        _kind: &str,
+    ) -> WebServiceResult<ClusterSyncManifest> {
+        Err(WebServiceError::not_found("no sync revision"))
+    }
+
+    async fn record_cluster_sync_ack(
+        &self,
+        _context: &WebInternalRequestContext,
+        request: &ClusterSyncAckRequest,
+    ) -> WebServiceResult<ClusterSyncState> {
+        Ok(ClusterSyncState {
+            kind: request.kind.clone(),
+            desired_revision: Some(request.revision.clone()),
+            applied_revision: Some(request.revision.clone()),
+            status: request.status.clone(),
+            updated_at: None,
+        })
+    }
+
+    async fn record_cluster_drain_complete(
+        &self,
+        _context: &WebInternalRequestContext,
+    ) -> WebServiceResult<ClusterDrainCompleteResponse> {
+        Ok(ClusterDrainCompleteResponse {
+            acknowledged_at: "2026-07-22T00:00:05Z".to_owned(),
+        })
+    }
+
+    async fn retrieve_cluster_peers(
+        &self,
+        context: &WebInternalRequestContext,
+    ) -> WebServiceResult<ClusterPeerDirectoryResponse> {
+        Ok(ClusterPeerDirectoryResponse {
+            instance_id: context
+                .agent_node_uuid
+                .clone()
+                .unwrap_or_else(|| "instance-1".to_owned()),
+            peers: Vec::new(),
         })
     }
 }

@@ -19,7 +19,10 @@ name = "sdkwork-webserver-node-daemon"
 path = "src/bin/sdkwork-webserver-node-daemon.rs"
 
 [dependencies]
+
 anyhow.workspace = true
+async-trait.workspace = true
+bytes.workspace = true
 chrono.workspace = true
 dotenvy.workspace = true
 serde.workspace = true
@@ -33,8 +36,14 @@ url.workspace = true
 sdkwork-webserver-backend-sdk.workspace = true
 sdkwork-webserver-edge-runtime.workspace = true
 sdkwork-webserver-contract.workspace = true
+sdkwork-webserver-tunnel.workspace = true
+sdkwork-webserver-tunnel-transport.workspace = true
 sdkwork-webserver-core.workspace = true
 sdkwork-utils-rust.workspace = true
+
+[dev-dependencies]
+axum.workspace = true
+tokio = { workspace = true, features = ["macros"] }
 
 [lints]
 workspace = true

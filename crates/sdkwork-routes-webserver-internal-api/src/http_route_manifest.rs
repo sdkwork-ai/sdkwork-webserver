@@ -55,6 +55,31 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     .with_rate_limit_tier(RateLimitTier::AuthCritical),
     HttpRoute::ingress_token(
         HttpMethod::Get,
+        "/internal/v3/api/web/cluster/sync/manifest",
+        "cluster",
+        "cluster.sync.manifest",
+    )
+    .with_required_permission("web.cluster.write")
+    .with_rate_limit_tier(RateLimitTier::AuthCritical),
+    HttpRoute::ingress_token(
+        HttpMethod::Post,
+        "/internal/v3/api/web/cluster/sync/ack",
+        "cluster",
+        "cluster.sync.ack",
+    )
+    .with_required_permission("web.cluster.write")
+    .with_idempotent(true)
+    .with_rate_limit_tier(RateLimitTier::AuthCritical),
+    HttpRoute::ingress_token(
+        HttpMethod::Post,
+        "/internal/v3/api/web/cluster/instances/drain-complete",
+        "cluster",
+        "cluster.instances.drainComplete",
+    )
+    .with_required_permission("web.cluster.write")
+    .with_rate_limit_tier(RateLimitTier::AuthCritical),
+    HttpRoute::ingress_token(
+        HttpMethod::Get,
         "/internal/v3/api/web/cluster/peers",
         "cluster",
         "cluster.peers.retrieve",

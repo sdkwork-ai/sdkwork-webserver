@@ -1,3 +1,4 @@
+import { readBootstrapAccessTokenFromProcessEnv } from "@sdkwork/iam-credential-entry";
 import type { AuthTokenManager, AuthTokens } from "@sdkwork/sdk-common";
 
 import {
@@ -167,7 +168,7 @@ export function createWebserverMpTokenManager(
   };
 
   return {
-    getAccessToken: () => readSession()?.accessToken,
+    getAccessToken: () => readSession()?.accessToken ?? readBootstrapAccessTokenFromProcessEnv(),
     getAuthToken: () => readSession()?.authToken,
     getRefreshToken: () => readSession()?.refreshToken,
     getTokens: () => {
@@ -205,7 +206,8 @@ export function createWebserverMpTokenManager(
       return Boolean(session?.accessToken && session?.authToken);
     },
     hasAuthToken: () => Boolean(readSession()?.authToken),
-    hasAccessToken: () => Boolean(readSession()?.accessToken),
+    hasAccessToken: () => Boolean(readSession()?.accessToken)
+      || readBootstrapAccessTokenFromProcessEnv() !== undefined,
     willExpireIn: (seconds: number) => {
       const expiresAt = readSession()?.expiresAt;
       return typeof expiresAt === "number"

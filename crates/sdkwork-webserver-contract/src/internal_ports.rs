@@ -5,8 +5,9 @@ pub use sdkwork_webserver_core::website_runtime::{
 use serde::{Deserialize, Serialize};
 
 use crate::cluster::{
-    ClusterHeartbeatRequest, ClusterHeartbeatResponse, ClusterPeerDirectoryResponse,
-    ClusterRegistrationRequest, ClusterRegistrationResponse,
+    ClusterDrainCompleteResponse, ClusterHeartbeatRequest, ClusterHeartbeatResponse,
+    ClusterPeerDirectoryResponse, ClusterRegistrationRequest, ClusterRegistrationResponse,
+    ClusterSyncAckRequest, ClusterSyncManifest, ClusterSyncState,
 };
 use crate::problem::WebServiceResult;
 
@@ -206,4 +207,29 @@ pub trait WebInternalApi: Send + Sync {
         &self,
         context: &WebInternalRequestContext,
     ) -> WebServiceResult<ClusterPeerDirectoryResponse>;
+
+    /// Serves one desired-state sync manifest (config or applications) to
+    /// the authenticated instance. The subject id must be the instance
+    /// uuid; the manifest carries the cluster's current desired revision
+    /// payload for the requested kind.
+    async fn retrieve_cluster_sync_manifest(
+        &self,
+        context: &WebInternalRequestContext,
+        kind: &str,
+    ) -> WebServiceResult<ClusterSyncManifest>;
+
+    /// Records one node sync acknowledgment (applied revision + status),
+    /// updating the instance's drift state.
+    async fn record_cluster_sync_ack(
+        &self,
+        context: &WebInternalRequestContext,
+        request: &ClusterSyncAckRequest,
+    ) -> WebServiceResult<ClusterSyncState>;
+
+    /// Node acknowledges graceful-drain completion: registry clears the
+    /// drain flags and marks the instance stopped.
+    async fn record_cluster_drain_complete(
+        &self,
+        context: &WebInternalRequestContext,
+    ) -> WebServiceResult<ClusterDrainCompleteResponse>;
 }

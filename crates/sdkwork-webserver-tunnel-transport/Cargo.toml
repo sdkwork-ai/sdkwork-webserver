@@ -1,0 +1,30 @@
+[package]
+name = "sdkwork-webserver-tunnel-transport"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Transport abstraction for the SDKWork WebServer tunnel: connection/stream traits plus the QUIC (quinn + rustls TLS 1.3) implementation"
+
+[lib]
+name = "sdkwork_webserver_tunnel_transport"
+
+[dependencies]
+async-trait.workspace = true
+bytes.workspace = true
+quinn.workspace = true
+rand.workspace = true
+rcgen = { workspace = true, features = ["crypto", "pem", "aws_lc_rs"] }
+rustls.workspace = true
+sdkwork-webserver-tunnel-core.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+hex.workspace = true
+sdkwork-webserver-tunnel-protocol.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

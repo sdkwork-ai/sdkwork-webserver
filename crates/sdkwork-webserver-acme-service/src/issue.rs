@@ -37,6 +37,10 @@ pub struct CertificateIssuer {
     pub(crate) cert_root: String,
     pub(crate) operation_timeout: Duration,
     pub(crate) admission: Semaphore,
+    /// Associated cloud DNS accounts. When present (and covering every
+    /// identifier), issuance and renewal use DNS-01 — the only challenge
+    /// that renews wildcard certificates unattended.
+    pub(crate) dns_accounts: Option<Arc<crate::dns_account::DnsCloudAccountRegistry>>,
 }
 
 impl CertificateIssuer {
@@ -112,6 +116,7 @@ impl CertificateIssuer {
             cert_root,
             operation_timeout: Duration::from_millis(operation_timeout_ms),
             admission: Semaphore::new(MAX_CONCURRENT_CERTIFICATE_ISSUANCE),
+            dns_accounts: None,
         })
     }
 
@@ -125,6 +130,36 @@ impl CertificateIssuer {
 
     pub fn renew_before_days(&self) -> u32 {
         self.config.renew_before_days
+    }
+
+    /// Attaches the cloud-account registry. Renewals and new issuance then
+    /// use DNS-01 with per-identifier zone resolution; wildcards renew
+    /// unattended.
+    pub fn attach_dns_accounts(
+        &mut self,
+        accounts: Arc<crate::dns_account::DnsCloudAccountRegistry>,
+    ) {
+        self.dns_accounts = Some(accounts);
+    }
+
+    /// True when the registry covers every identifier: DNS-01 is available.
+    pub fn dns_accounts_cover(&self, hostnames: &[String]) -> bool {
+        self.dns_accounts
+            .as_ref()
+            .is_some_and(|registry| registry.covers_all(hostnames.iter().map(String::as_str)))
+    }
+
+    /// Builds the DNS-01 challenge context from the associated cloud
+    /// accounts (dispatching presenter + per-identifier zone resolution).
+    pub fn dns01_context(&self, hostnames: &[String]) -> Option<IssuerDns01Context> {
+        let registry = Arc::clone(self.dns_accounts.as_ref()?);
+        if !registry.covers_all(hostnames.iter().map(String::as_str)) {
+            return None;
+        }
+        Some(IssuerDns01Context {
+            presenter: registry.dispatch_presenter(),
+            registry,
+        })
     }
 
     pub async fn issue(
@@ -180,7 +215,7 @@ impl CertificateIssuer {
         let mode = match dns01 {
             Some(context) => AcmeChallengeMode::Dns01 {
                 presenter: context.presenter,
-                zone_apex: context.zone_apex,
+                zones: context.zones,
             },
             None => AcmeChallengeMode::Http01,
         };
@@ -216,10 +251,27 @@ impl CertificateIssuer {
 /// The presenter is supplied by the caller because only the caller knows which
 /// DNS provider owns the zone and holds the resolved credential; the engine
 /// never reads a secret store.
+/// Owned DNS-01 challenge context sourced from the issuer's cloud-account
+/// registry; yields the borrowing [`AcmeDns01Context`] for an issuance call.
+pub struct IssuerDns01Context {
+    presenter: Arc<crate::dns_account::DispatchingDns01Presenter>,
+    registry: Arc<crate::dns_account::DnsCloudAccountRegistry>,
+}
+
+impl IssuerDns01Context {
+    pub fn into_context(&self) -> AcmeDns01Context<'_> {
+        AcmeDns01Context {
+            presenter: self.presenter.as_ref(),
+            zones: self.registry.as_ref(),
+        }
+    }
+}
+
 pub struct AcmeDns01Context<'a> {
     pub presenter: &'a dyn Dns01Presenter,
-    /// Hosted zone apex that owns the `_acme-challenge` records.
-    pub zone_apex: &'a str,
+    /// Zone resolver: maps each authorization identifier to its hosted zone
+    /// apex (cloud-account registry or a single-zone adapter).
+    pub zones: &'a dyn crate::dns_zone::DnsZoneResolver,
 }
 
 fn validate_issued_material(

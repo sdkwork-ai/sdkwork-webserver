@@ -139,7 +139,7 @@ impl AdaptiveAppShellConfig {
         tablet_surface: Option<String>,
         bootstrap_access_token: Option<String>,
     ) -> Result<Option<Self>, String> {
-        if deployment_profile != "standalone" {
+        if !sdkwork_utils_rust::service_base_url::is_standalone_profile(Some(deployment_profile)) {
             for (env_name, value) in [
                 (PC_STATIC_ROOT_ENV, &pc_root),
                 (H5_STATIC_ROOT_ENV, &h5_root),

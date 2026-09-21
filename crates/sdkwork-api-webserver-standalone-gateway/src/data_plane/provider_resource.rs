@@ -423,6 +423,8 @@ mod tests {
             auth_basic: None,
             sub_filter: None,
             secure_link: None,
+            compression: None,
+            error_pages: Vec::new(),
         }
     }
 

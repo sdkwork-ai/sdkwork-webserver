@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "id": "sdkwork-webserver-tunnel",
+    "name": "SDKWork WebServer Tunnel",
+    "description": "Built-in network tunnel capability for the SDKWork WebServer: QUIC gateway, inside-network agent, STP/1 control plane, route/session management, HTTP/TCP relay, and CLI.",
+    "version": "0.1.0"
+  },
+  "canonicalSpecs": [
+    { "id": "tunnel-prd", "path": "../../../docs/tunnel.md", "role": "product-and-architecture" },
+    { "id": "rust-code-standard", "path": "../../../../sdkwork-specs/RUST_CODE_SPEC.md", "role": "language-standard" },
+    { "id": "naming-standard", "path": "../../../../sdkwork-specs/NAMING_SPEC.md", "role": "naming-standard" }
+  ],
+  "surfaces": {
+    "crates": [
+      {
+        "id": "sdkwork-webserver-tunnel-core",
+        "role": "domain-model",
+        "forbiddenDependencies": ["tokio", "quinn", "rustls", "hyper", "sdkwork-webserver-core"]
+      },
+      {
+        "id": "sdkwork-webserver-tunnel-protocol",
+        "role": "wire-protocol",
+        "protocol": "STP/1",
+        "notes": "Length-prefixed control frames (4-byte BE) + data-plane stream headers; unknown message types degrade to Error(UnsupportedProtocol)."
+      },
+      {
+        "id": "sdkwork-webserver-tunnel-transport",
+        "role": "transport-abstraction-and-quic",
+        "notes": "All quinn/rustls types are crate-internal; TLS 1.3 only; ALPN sdkwork-tunnel/1."
+      },
+      {
+        "id": "sdkwork-webserver-tunnel",
+        "role": "composition",
+        "bins": ["sdkwork-webserver-tunnel"]
+      }
+    ],
+    "integration": [
+      {
+        "crate": "sdkwork-webserver-core",
+        "surface": "WebServerAppConfig.tunnel: Option<TunnelConfig>; server.toml [tunnel] materialization"
+      },
+      {
+        "crate": "sdkwork-api-webserver-standalone-gateway",
+        "surface": "tunnel_bridge module; data-plane lifecycle spawn; Host-based relay dispatch; operations /tunnel/* REST; /metrics tunnel section"
+      }
+    ]
+  },
+  "commands": [
+    "cargo check --workspace",
+    "cargo test -p sdkwork-webserver-tunnel-core -p sdkwork-webserver-tunnel-protocol -p sdkwork-webserver-tunnel-transport -p sdkwork-webserver-tunnel",
+    "cargo test -p sdkwork-api-webserver-standalone-gateway --test tunnel_relay",
+    "cargo test -p sdkwork-webserver-core materializes_tunnel",
+    "node ../sdkwork-specs/tools/check-rust-crate-naming-standard.mjs --root .",
+    "node ../sdkwork-specs/tools/check-rust-manifest-standard.mjs --root ."
+  ],
+  "invariants": [
+    "tunnel.enabled=false leaves the webserver byte-for-byte unchanged (PRD 77)",
+    "relay targets always come from agent-local configuration (PRD 45)",
+    "control plane and data plane ride separate QUIC streams (PRD 21)",
+    "data-plane payloads are raw bytes; only control messages and the stream header are framed (PRD 20)",
+    "secrets live in environment variables, never in configuration files (PRD 40)"
+  ],
+  "knownLimitations": [
+    "in-memory gateway state; declarations for offline devices are lost on restart",
+    "gateway-side route removal does not notify the agent; templates re-register on reconnect",
+    "mTLS, ACME, bandwidth limits, UDP, multi-gateway, P2P are P1/P2 and not implemented"
+  ]
+}

@@ -1,11 +1,12 @@
 use async_trait::async_trait;
 use sdkwork_webserver_contract::{
-    AuthenticatedMachineCredential, CreateRuntimeObservationRequest,
-    ClusterHeartbeatRequest, ClusterHeartbeatResponse, ClusterPeerDirectoryResponse,
-    ClusterRegistrationRequest, ClusterRegistrationResponse, MachineCredentialAuthenticator,
-    PublishRuntimeAssignmentRequest, RuntimeAssignment,
-    RuntimeAssignmentDelivery, RuntimeObservation, RuntimeObservationState, WebInternalApi,
-    WebInternalRequestContext, WebServiceError, WebServiceResult,
+    AuthenticatedMachineCredential, ClusterDrainCompleteResponse, ClusterHeartbeatRequest,
+    ClusterHeartbeatResponse, ClusterPeerDirectoryResponse, ClusterRegistrationRequest,
+    ClusterRegistrationResponse, ClusterSyncAckRequest, ClusterSyncManifest, ClusterSyncState,
+    CreateRuntimeObservationRequest, MachineCredentialAuthenticator,
+    PublishRuntimeAssignmentRequest, RuntimeAssignment, RuntimeAssignmentDelivery,
+    RuntimeObservation, RuntimeObservationState, WebInternalApi, WebInternalRequestContext,
+    WebServiceError, WebServiceResult,
 };
 use sdkwork_webserver_core::website_runtime::{
     compile_website_runtime_set_snapshot, WebsiteRuntimeEnvironment,
@@ -87,6 +88,42 @@ impl WebInternalApi for WebService {
             return Err(WebServiceError::Forbidden);
         }
         self.cluster_peers(&context.subject_id).await
+    }
+
+    async fn retrieve_cluster_sync_manifest(
+        &self,
+        context: &WebInternalRequestContext,
+        kind: &str,
+    ) -> WebServiceResult<ClusterSyncManifest> {
+        if context.tenant_id != 0 {
+            return Err(WebServiceError::Forbidden);
+        }
+        self.cluster_sync_manifest(&context.subject_id, kind).await
+    }
+
+    async fn record_cluster_sync_ack(
+        &self,
+        context: &WebInternalRequestContext,
+        request: &ClusterSyncAckRequest,
+    ) -> WebServiceResult<ClusterSyncState> {
+        if context.tenant_id != 0 {
+            return Err(WebServiceError::Forbidden);
+        }
+        self.cluster_sync_ack(&context.subject_id, request).await
+    }
+
+    async fn record_cluster_drain_complete(
+        &self,
+        context: &WebInternalRequestContext,
+    ) -> WebServiceResult<ClusterDrainCompleteResponse> {
+        if context.tenant_id != 0 {
+            return Err(WebServiceError::Forbidden);
+        }
+        self.cluster_drain_complete(&context.subject_id).await?;
+        Ok(ClusterDrainCompleteResponse {
+            acknowledged_at: chrono::Utc::now()
+                .to_rfc3339_opts(chrono::SecondsFormat::Micros, true),
+        })
     }
 
     async fn publish_runtime_assignment(

@@ -1,0 +1,21 @@
+[package]
+name = "sdkwork-webserver-tunnel-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Tunnel domain model: device, session, route, matcher, policy, identifiers, configuration, and typed errors for the SDKWork WebServer tunnel capability"
+
+[lib]
+name = "sdkwork_webserver_tunnel_core"
+
+[dependencies]
+chrono = { workspace = true, features = ["serde"] }
+ipnet = { workspace = true, features = ["serde"] }
+serde = { workspace = true, features = ["derive"] }
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

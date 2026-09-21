@@ -1,0 +1,348 @@
+//! Bridge between the webserver data plane and the tunnel capability.
+//!
+//! Owns the HTTP relay (hyper over the relayed tunnel stream, PRD §30),
+//! the WebSocket upgrade pump (PRD §124), and the resolution of
+//! [`TunnelConfig`] into concrete gateway options. HTTP semantics live
+//! here, on the webserver side; the tunnel crate stays protocol-agnostic.
+
+use std::net::IpAddr;
+use std::sync::Arc;
+
+use axum::body::Body;
+use hyper_util::rt::TokioIo;
+use sdkwork_webserver_tunnel::gateway::{GatewayShared, RelayVisitor};
+use sdkwork_webserver_tunnel::TunnelGatewayOptions;
+use sdkwork_webserver_tunnel_core::TunnelConfig;
+
+/// Builds the gateway options from the app config's `[tunnel]` section.
+/// Returns `None` when the section is absent or disabled (PRD §77: a
+/// disabled tunnel leaves the runtime unchanged).
+pub(crate) fn build_gateway_options(
+    config: &TunnelConfig,
+    metrics: Arc<sdkwork_webserver_tunnel::TunnelMetrics>,
+) -> Option<TunnelGatewayOptions> {
+    if !config.enabled {
+        return None;
+    }
+    let bind: std::net::SocketAddr = config.gateway_or_default().listen.parse().ok()?;
+    let mut options = TunnelGatewayOptions::from_config(config, bind, Vec::new(), Vec::new());
+    let (cert_pem, key_pem) =
+        load_tls_material(&options.tls_cert_pem_env, &options.tls_key_pem_env)?;
+    options.cert_pem = cert_pem;
+    options.key_pem = key_pem;
+    options.metrics = metrics;
+    Some(options)
+}
+
+fn load_tls_material(
+    cert_env: &Option<String>,
+    key_env: &Option<String>,
+) -> Option<(Vec<u8>, Vec<u8>)> {
+    match (cert_env, key_env) {
+        (Some(cert_name), Some(key_name)) => {
+            let cert_path = std::env::var(cert_name).ok()?;
+            let key_path = std::env::var(key_name).ok()?;
+            let cert = std::fs::read(cert_path).ok()?;
+            let key = std::fs::read(key_path).ok()?;
+            Some((cert, key))
+        }
+        _ => {
+            let sans = vec!["localhost".to_owned(), "127.0.0.1".to_owned()];
+            let material =
+                sdkwork_webserver_tunnel_transport::tls::generate_self_signed(&sans).ok()?;
+            tracing::warn!(
+                pin = %material.sha256,
+                "tunnel gateway uses a SELF-SIGNED development certificate; agents should pin this fingerprint or supply TLS material via tlsCertPemEnv/tlsKeyPemEnv"
+            );
+            Some((
+                material.cert_pem.into_bytes(),
+                material.key_pem.into_bytes(),
+            ))
+        }
+    }
+}
+
+/// Tunnel relay failure surfaced to the request handler.
+#[derive(Debug)]
+pub(crate) enum TunnelRelayError {
+    /// No tunnel route matched; the caller falls through to the normal
+    /// virtual-host/404 handling.
+    NoRoute,
+    /// The relay was denied (ACL/auth) or failed mid-relay; surface as an
+    /// HTTP status instead of falling through.
+    Failure(sdkwork_webserver_tunnel_core::TunnelError),
+}
+
+/// Relays one visitor HTTP request through the tunnel toward the agent's
+/// local target (PRD §30 flow). WebSocket upgrades pump raw bytes in both
+/// directions after the 101 (PRD §124).
+#[allow(clippy::too_many_lines)]
+pub(crate) async fn relay_tunnel_http(
+    shared: &Arc<GatewayShared>,
+    metrics: &Arc<sdkwork_webserver_tunnel::TunnelMetrics>,
+    host: &str,
+    visitor_ip: IpAddr,
+    mut request: axum::http::Request<Body>,
+) -> Result<axum::response::Response<Body>, TunnelRelayError> {
+    let is_websocket = is_upgrade_request(&request);
+    let bearer = request
+        .headers()
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .map(str::to_owned);
+
+    let stream = shared
+        .connect_http_stream(
+            host,
+            RelayVisitor {
+                ip: visitor_ip,
+                bearer: bearer.as_deref(),
+            },
+        )
+        .await
+        .map_err(|error| match error {
+            sdkwork_webserver_tunnel_core::TunnelError::RouteNotFound => TunnelRelayError::NoRoute,
+            other => TunnelRelayError::Failure(other),
+        })?;
+
+    // The downstream upgrade must be captured before the request is split.
+    let downstream_upgrade = if is_websocket {
+        Some(hyper::upgrade::on(&mut request))
+    } else {
+        None
+    };
+
+    let (mut parts, body) = request.into_parts();
+    strip_hop_by_hop_headers(&mut parts.headers, is_websocket);
+    let upstream_request = axum::http::Request::from_parts(parts, body);
+
+    let (mut sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(stream))
+        .await
+        .map_err(|error| {
+            TunnelRelayError::Failure(
+                sdkwork_webserver_tunnel_core::TunnelError::ConnectionFailed(error.to_string()),
+            )
+        })?;
+    if is_websocket {
+        tokio::spawn(connection.with_upgrades());
+    } else {
+        tokio::spawn(connection);
+    }
+
+    let mut response = sender
+        .send_request(upstream_request)
+        .await
+        .map_err(|error| {
+            TunnelRelayError::Failure(
+                sdkwork_webserver_tunnel_core::TunnelError::ConnectionFailed(error.to_string()),
+            )
+        })?;
+
+    if is_websocket && response.status() == axum::http::StatusCode::SWITCHING_PROTOCOLS {
+        let upstream_upgrade = hyper::upgrade::on(&mut response);
+        if let Some(downstream) = downstream_upgrade {
+            let metrics = metrics.clone();
+            metrics.record_stream_open();
+            tokio::spawn(async move {
+                let outcome = async {
+                    let downstream = downstream
+                        .await
+                        .map_err(|error| std::io::Error::other(error.to_string()))?;
+                    let upstream = upstream_upgrade
+                        .await
+                        .map_err(|error| std::io::Error::other(error.to_string()))?;
+                    let mut downstream = TokioIo::new(downstream);
+                    let mut upstream = TokioIo::new(upstream);
+                    tokio::io::copy_bidirectional(&mut downstream, &mut upstream).await
+                };
+                match outcome.await {
+                    Ok((_, _)) => {}
+                    Err(error) => {
+                        tracing::debug!(error = %error, "tunnel websocket pump ended");
+                    }
+                }
+                metrics.record_stream_close();
+            });
+        }
+        let (mut parts, empty_body) = response.into_parts();
+        parts.headers.insert(
+            axum::http::header::CONNECTION,
+            axum::http::HeaderValue::from_static("upgrade"),
+        );
+        return Ok(axum::response::Response::from_parts(
+            parts,
+            Body::new(empty_body),
+        ));
+    }
+
+    let (parts, response_body) = response.into_parts();
+    Ok(axum::response::Response::from_parts(
+        parts,
+        Body::new(response_body),
+    ))
+}
+
+fn is_upgrade_request(request: &axum::http::Request<Body>) -> bool {
+    let connection_upgrades = request
+        .headers()
+        .get(axum::http::header::CONNECTION)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.to_ascii_lowercase().contains("upgrade"))
+        .unwrap_or(false);
+    connection_upgrades && request.headers().get(axum::http::header::UPGRADE).is_some()
+}
+
+fn strip_hop_by_hop_headers(headers: &mut axum::http::HeaderMap, keep_upgrade: bool) {
+    const KEEP_ALIVE: &str = "keep-alive";
+    const PROXY_AUTHENTICATE: &str = "proxy-authenticate";
+    const PROXY_AUTHORIZATION: &str = "proxy-authorization";
+    for name in [
+        axum::http::header::CONNECTION,
+        axum::http::header::PROXY_AUTHORIZATION,
+        axum::http::header::TE,
+        axum::http::header::TRAILER,
+        axum::http::header::TRANSFER_ENCODING,
+        axum::http::header::UPGRADE,
+    ] {
+        if keep_upgrade
+            && (name == axum::http::header::CONNECTION || name == axum::http::header::UPGRADE)
+        {
+            continue;
+        }
+        headers.remove(name);
+    }
+    for name in [KEEP_ALIVE, PROXY_AUTHENTICATE, PROXY_AUTHORIZATION] {
+        if let Ok(parsed) = axum::http::HeaderName::from_lowercase(name.as_bytes()) {
+            headers.remove(parsed);
+        }
+    }
+}
+
+/// Relays one request to a cluster instance over the internal network
+/// (auto-routing east-west hop): opens a TCP stream to the picked
+/// instance's bind endpoint and speaks HTTP/1.1 through it. WebSocket
+/// upgrades pump raw bytes after the 101, exactly like the tunnel relay.
+#[allow(clippy::too_many_lines)]
+pub(crate) async fn relay_cluster_http(
+    endpoint: &str,
+    mut request: axum::http::Request<Body>,
+) -> Result<axum::response::Response<Body>, TunnelRelayError> {
+    use std::str::FromStr;
+
+    let is_websocket = is_upgrade_request(&request);
+    let downstream_upgrade = if is_websocket {
+        Some(hyper::upgrade::on(&mut request))
+    } else {
+        None
+    };
+
+    // Cluster east-west hops are plain HTTP to the instance bind; strip
+    // hop-by-hop headers, keep everything else verbatim.
+    let (mut parts, body) = request.into_parts();
+    strip_hop_by_hop_headers(&mut parts.headers, is_websocket);
+    parts.headers.insert(
+        "x-served-by-cluster-hop",
+        "1".parse().expect("valid header"),
+    );
+    let upstream_request = axum::http::Request::from_parts(parts, body);
+
+    // Endpoint form: `host:port` (bind address reported by the instance).
+    let authority = endpoint
+        .trim_start_matches("http://")
+        .trim_start_matches("https://")
+        .trim_end_matches('/')
+        .to_owned();
+    let socket_addr: std::net::SocketAddr = authority
+        .parse()
+        .map_err(|_| TunnelRelayError::NoRoute)
+        .or_else(|_| {
+            use std::net::ToSocketAddrs;
+            authority
+                .to_socket_addrs()
+                .map_err(|error| {
+                    TunnelRelayError::Failure(
+                        sdkwork_webserver_tunnel_core::TunnelError::ConnectionFailed(
+                            error.to_string(),
+                        ),
+                    )
+                })?
+                .next()
+                .ok_or_else(|| {
+                    TunnelRelayError::Failure(
+                        sdkwork_webserver_tunnel_core::TunnelError::ConnectionFailed(format!(
+                            "unresolvable cluster endpoint {authority}"
+                        )),
+                    )
+                })
+        })?;
+    let tcp = tokio::net::TcpStream::connect(socket_addr)
+        .await
+        .map_err(|error| {
+            TunnelRelayError::Failure(
+                sdkwork_webserver_tunnel_core::TunnelError::ConnectionFailed(format!(
+                    "cluster instance {socket_addr}: {error}"
+                )),
+            )
+        })?;
+    let (mut sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(tcp))
+        .await
+        .map_err(|error| {
+            TunnelRelayError::Failure(
+                sdkwork_webserver_tunnel_core::TunnelError::ConnectionFailed(error.to_string()),
+            )
+        })?;
+    if is_websocket {
+        tokio::spawn(connection.with_upgrades());
+    } else {
+        tokio::spawn(connection);
+    }
+    let mut response = sender
+        .send_request(upstream_request)
+        .await
+        .map_err(|error| {
+            TunnelRelayError::Failure(
+                sdkwork_webserver_tunnel_core::TunnelError::ConnectionFailed(error.to_string()),
+            )
+        })?;
+
+    if is_websocket && response.status() == axum::http::StatusCode::SWITCHING_PROTOCOLS {
+        let mut upstream_upgrade = hyper::upgrade::on(&mut response);
+        if let Some(downstream) = downstream_upgrade {
+            tokio::spawn(async move {
+                let outcome = async {
+                    let downstream = downstream
+                        .await
+                        .map_err(|error| std::io::Error::other(error.to_string()))?;
+                    let upstream = upstream_upgrade
+                        .await
+                        .map_err(|error| std::io::Error::other(error.to_string()))?;
+                    let mut downstream = TokioIo::new(downstream);
+                    let mut upstream = TokioIo::new(upstream);
+                    tokio::io::copy_bidirectional(&mut downstream, &mut upstream).await
+                };
+                match outcome.await {
+                    Ok((_, _)) => {}
+                    Err(error) => {
+                        tracing::debug!(error = %error, "cluster websocket pump ended");
+                    }
+                }
+            });
+        }
+        let (mut parts, empty_body) = response.into_parts();
+        parts.headers.insert(
+            axum::http::header::CONNECTION,
+            axum::http::HeaderValue::from_static("upgrade"),
+        );
+        return Ok(axum::response::Response::from_parts(
+            parts,
+            Body::new(empty_body),
+        ));
+    }
+
+    let (parts, response_body) = response.into_parts();
+    Ok(axum::response::Response::from_parts(
+        parts,
+        Body::new(response_body),
+    ))
+}

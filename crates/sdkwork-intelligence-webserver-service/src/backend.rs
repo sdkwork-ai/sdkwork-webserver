@@ -2,18 +2,17 @@
 
 use async_trait::async_trait;
 use sdkwork_webserver_contract::{
-    CreateApplicationRequest, CreateDeploymentRequest, CreateDomainRequest,
-    CreateListenerCertificateBindingRequest, CreateManagedDomainRequest, CreateNginxConfigRequest,
-    CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
-    CreateSourceVersionRequest, ImportGitSourceVersionRequest, IssueCertificateRequest,
-    ClusterEventPage, ClusterHostPage, ClusterHostResponse, ClusterInstancePage,
-    ClusterHeartbeatSamplePage, ClusterInstanceResponse, ClusterOverviewResponse, ClusterPage,
-    ClusterResponse, CreateClusterRequest, EnqueueClusterPeerMessagesRequest,
-    EnqueueClusterPeerMessagesResponse, ListApplicationsQuery, ListNginxConfigsQuery,
-    ListRootDomainsQuery,
-    UpdateApplicationRequest, UpdateClusterHostRequest, UpdateClusterInstanceRequest,
-    UpdateClusterRequest,
-    UpdateCertificateRequest, UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest,
+    ClusterEventPage, ClusterHeartbeatSamplePage, ClusterHostPage, ClusterHostResponse,
+    ClusterInstancePage, ClusterInstanceResponse, ClusterOverviewResponse, ClusterPage,
+    ClusterResponse, ClusterSyncManifest, CreateApplicationRequest, CreateClusterRequest,
+    CreateDeploymentRequest, CreateDomainRequest, CreateListenerCertificateBindingRequest,
+    CreateManagedDomainRequest, CreateNginxConfigRequest, CreateRootDomainHostnameRequest,
+    CreateRootDomainRequest, CreateServerRequest, CreateSourceVersionRequest,
+    EnqueueClusterPeerMessagesRequest, EnqueueClusterPeerMessagesResponse,
+    ImportGitSourceVersionRequest, IssueCertificateRequest, ListApplicationsQuery,
+    ListNginxConfigsQuery, ListRootDomainsQuery, UpdateApplicationRequest,
+    UpdateCertificateRequest, UpdateClusterHostRequest, UpdateClusterInstanceRequest,
+    UpdateClusterRequest, UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest,
     WebAppApi, WebAppRequestContext, WebAppResourceScope, WebBackendApi, WebBackendRequestContext,
     WebServiceError, WebServiceResult,
 };
@@ -1100,6 +1099,11 @@ impl WebBackendApi for WebService {
         host_id: Option<&str>,
         status: Option<i32>,
         health_state: Option<&str>,
+        join_mode: Option<i32>,
+        sync_status: Option<i32>,
+        labels: Option<&str>,
+        search: Option<&str>,
+        build_version: Option<&str>,
         page_size: i32,
         cursor: Option<&str>,
     ) -> WebServiceResult<ClusterInstancePage> {
@@ -1109,10 +1113,68 @@ impl WebBackendApi for WebService {
             host_id,
             status,
             health_state,
+            join_mode,
+            sync_status,
+            labels,
+            search,
+            build_version,
             page_size,
             cursor,
         )
         .await
+    }
+
+    async fn drain_cluster_instance(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+    ) -> WebServiceResult<ClusterInstanceResponse> {
+        self.cluster_instance_drain(context, instance_id).await
+    }
+
+    async fn undrain_cluster_instance(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+    ) -> WebServiceResult<ClusterInstanceResponse> {
+        self.cluster_instance_undrain(context, instance_id).await
+    }
+
+    async fn cordon_cluster_instance(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+    ) -> WebServiceResult<ClusterInstanceResponse> {
+        self.cluster_instance_cordon(context, instance_id).await
+    }
+
+    async fn uncordon_cluster_instance(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+    ) -> WebServiceResult<ClusterInstanceResponse> {
+        self.cluster_instance_uncordon(context, instance_id).await
+    }
+
+    async fn cluster_instance_metrics_history(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+        limit: i32,
+    ) -> WebServiceResult<ClusterHeartbeatSamplePage> {
+        self.cluster_heartbeat_list(context, instance_id, limit, None)
+            .await
+    }
+
+    async fn publish_cluster_sync_revision(
+        &self,
+        context: &WebBackendRequestContext,
+        cluster_id: &str,
+        kind: &str,
+        payload: serde_json::Value,
+    ) -> WebServiceResult<ClusterSyncManifest> {
+        self.cluster_sync_publish(context, cluster_id, kind, payload)
+            .await
     }
 
     async fn retrieve_cluster_instance(
@@ -1146,11 +1208,19 @@ impl WebBackendApi for WebService {
         context: &WebBackendRequestContext,
         cluster_id: Option<&str>,
         severity: Option<&str>,
+        instance_id: Option<&str>,
         page_size: i32,
         cursor: Option<&str>,
     ) -> WebServiceResult<ClusterEventPage> {
-        self.cluster_events_list(context, cluster_id, severity, page_size, cursor)
-            .await
+        self.cluster_events_list(
+            context,
+            cluster_id,
+            severity,
+            instance_id,
+            page_size,
+            cursor,
+        )
+        .await
     }
 
     async fn retrieve_cluster_overview(

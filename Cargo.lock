@@ -4094,6 +4094,7 @@ dependencies = [
  "sdkwork-web-contract",
  "sdkwork-web-core",
  "sdkwork-web-store-sqlx",
+ "sdkwork-webserver-cluster",
  "sdkwork-webserver-contract",
  "sdkwork-webserver-core",
  "sdkwork-webserver-delivery-runtime",
@@ -4103,6 +4104,9 @@ dependencies = [
  "sdkwork-webserver-internal-sdk-generated-rust",
  "sdkwork-webserver-knowledgebase-provider",
  "sdkwork-webserver-resolver-cache",
+ "sdkwork-webserver-tunnel",
+ "sdkwork-webserver-tunnel-core",
+ "sdkwork-webserver-tunnel-transport",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -5467,6 +5471,9 @@ name = "sdkwork-webserver-agent"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
+ "axum",
+ "bytes",
  "chrono",
  "dotenvy",
  "sdkwork-utils-rust",
@@ -5474,6 +5481,8 @@ dependencies = [
  "sdkwork-webserver-contract",
  "sdkwork-webserver-core",
  "sdkwork-webserver-edge-runtime",
+ "sdkwork-webserver-tunnel",
+ "sdkwork-webserver-tunnel-transport",
  "serde",
  "serde_json",
  "tempfile",
@@ -5507,6 +5516,18 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "sdkwork-webserver-cluster"
+version = "0.1.0"
+dependencies = [
+ "arc-swap",
+ "async-trait",
+ "rand 0.9.5",
+ "serde",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -5554,6 +5575,7 @@ dependencies = [
  "sdkwork-deploy-core",
  "sdkwork-utils-rust",
  "sdkwork-webserver-resolver-cache",
+ "sdkwork-webserver-tunnel-core",
  "serde",
  "serde_json",
  "sha1 0.10.7",
@@ -5700,6 +5722,71 @@ dependencies = [
  "tokio",
  "url",
  "zip",
+]
+
+[[package]]
+name = "sdkwork-webserver-tunnel"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "chrono",
+ "futures-util",
+ "rand 0.9.5",
+ "rustls",
+ "sdkwork-webserver-tunnel-core",
+ "sdkwork-webserver-tunnel-protocol",
+ "sdkwork-webserver-tunnel-transport",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "sdkwork-webserver-tunnel-core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "ipnet",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "sdkwork-webserver-tunnel-protocol"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "sdkwork-webserver-tunnel-core",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+]
+
+[[package]]
+name = "sdkwork-webserver-tunnel-transport"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "hex",
+ "quinn",
+ "rand 0.9.5",
+ "rcgen",
+ "rustls",
+ "sdkwork-webserver-tunnel-core",
+ "sdkwork-webserver-tunnel-protocol",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

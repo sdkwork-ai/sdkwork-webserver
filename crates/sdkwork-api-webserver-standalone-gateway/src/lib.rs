@@ -22,6 +22,7 @@ mod packaged_runtime;
 #[cfg(feature = "management")]
 mod profile;
 mod provider_event_ingress;
+mod tunnel_bridge;
 mod usage_metering;
 mod website;
 mod website_runtime_cloud;
@@ -41,10 +42,10 @@ pub use credential_entry_bootstrap::issue_credential_entry_bootstrap_token_to_fi
 pub use data_plane::{
     probe_data_plane_operations_from_env, run_data_plane_from_config_until,
     run_data_plane_from_config_with_operations_until, run_data_plane_until,
-    run_data_plane_with_operations_until, run_website_data_plane_until,
-    run_website_data_plane_with_operations_until, run_website_data_plane_with_tls_operations_until,
-    DataPlaneError, DataPlaneOperationsConfig, DataPlaneReloadReport, FileTlsRuntimeConfig,
-    FileTlsRuntimeController, FileTlsRuntimeError,
+    run_data_plane_until_with_cluster_overlay, run_data_plane_with_operations_until,
+    run_website_data_plane_until, run_website_data_plane_with_operations_until,
+    run_website_data_plane_with_tls_operations_until, DataPlaneError, DataPlaneOperationsConfig,
+    DataPlaneReloadReport, FileTlsRuntimeConfig, FileTlsRuntimeController, FileTlsRuntimeError,
 };
 #[cfg(feature = "management")]
 pub use deploy_fallback::EmbeddedDeployServerLookup;

@@ -1,0 +1,23 @@
+[package]
+name = "sdkwork-webserver-cluster"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Cluster auto-discovery and auto-routing runtime for the SDKWork WebServer: topology snapshots, health-aware load balancing strategies (round robin default, least connections, random, power-of-two-choices, ip hash, consistent hash, smooth weighted), and a lock-free high-concurrency pick path"
+
+[lib]
+name = "sdkwork_webserver_cluster"
+
+[dependencies]
+arc-swap.workspace = true
+async-trait.workspace = true
+serde = { workspace = true, features = ["derive"] }
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+rand.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+
+[lints]
+workspace = true

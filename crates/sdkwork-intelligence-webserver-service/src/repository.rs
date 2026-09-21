@@ -6,10 +6,9 @@ use sdkwork_webserver_contract::{
     AgentHeartbeatRequest, AgentHeartbeatResponse, AgentSyncResponse, ApplicationPage,
     ApplicationResponse, AuditLogPage, CertificateDistributionPage, CertificateIssueUpdate,
     CertificateOperationAcceptedResponse, CertificateOperationLease, CertificateOperationResponse,
-    CertificatePage, CertificateResponse, ClusterEventPage,
+    CertificatePage, CertificateResponse, ClusterEventPage, ClusterHeartbeatSamplePage,
     ClusterHostPage, ClusterHostResponse, ClusterInstancePage, ClusterInstanceResponse,
-    ClusterHeartbeatSamplePage, ClusterOverviewResponse, ClusterPage, ClusterPeer,
-    ClusterPeerMessage, ClusterResponse,
+    ClusterOverviewResponse, ClusterPage, ClusterPeer, ClusterPeerMessage, ClusterResponse,
     CreateApplicationRequest, CreateClusterRequest, CreateDeploymentRequest, CreateDomainRequest,
     CreateEnvVariableRequest, CreateHealthCheckRequest, CreateListenerCertificateBindingRequest,
     CreateManagedDomainRequest, CreateNginxConfigRequest, CreatePlatformTargetRequest,
@@ -18,13 +17,13 @@ use sdkwork_webserver_contract::{
     DomainPage, DomainResponse, EnvVariablePage, EnvVariableResponse, HealthCheckPage,
     HealthCheckResponse, IssueCertificateRequest, ListApplicationsQuery, ListAuditLogsQuery,
     ListNginxConfigsQuery, ListRootDomainsQuery, ListenerCertificateBindingPage,
-    ListenerCertificateBindingResponse, NginxConfigPage, NginxConfigResponse,
-    NginxStatusResponse, PlatformTargetPage, PlatformTargetResponse, RevokeCertificateRequest,
-    RootDomainPage, RootDomainResponse, RuntimeAssignment, RuntimeAssignmentDelivery,
-    RuntimeObservation, RuntimeObservationState, ServerPage, SourceVersionPage,
-    SourceVersionResponse, TlsCertificateAssignmentMaterial, UpdateApplicationRequest,
-    UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest,
-    UpdateDomainApplicationBindingRequest, UpdateEnvVariableRequest, UpdateNginxConfigRequest,
+    ListenerCertificateBindingResponse, NginxConfigPage, NginxConfigResponse, NginxStatusResponse,
+    PlatformTargetPage, PlatformTargetResponse, RevokeCertificateRequest, RootDomainPage,
+    RootDomainResponse, RuntimeAssignment, RuntimeAssignmentDelivery, RuntimeObservation,
+    RuntimeObservationState, ServerPage, SourceVersionPage, SourceVersionResponse,
+    TlsCertificateAssignmentMaterial, UpdateApplicationRequest, UpdateClusterHostRequest,
+    UpdateClusterInstanceRequest, UpdateClusterRequest, UpdateDomainApplicationBindingRequest,
+    UpdateEnvVariableRequest, UpdateNginxConfigRequest,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -110,6 +109,13 @@ pub struct ClusterHostUpsert {
     pub local_ips: Vec<String>,
     pub mac_addresses: Vec<String>,
     pub daemon_version: Option<String>,
+    /// Join mode: `0` = LAN (same-subnet), `1` = TUNNEL (API-only through
+    /// the reverse tunnel).
+    pub join_mode: i32,
+    /// Tunnel route domain reaching this host (TUNNEL hosts only).
+    pub tunnel_route_domain: Option<String>,
+    /// Advertised gateway endpoint this host dials (TUNNEL hosts only).
+    pub tunnel_endpoint: Option<String>,
 }
 
 /// Process identity write used by cluster registration (one row per PID per
@@ -130,6 +136,11 @@ pub struct ClusterInstanceUpsert {
     pub public_endpoint: Option<String>,
     pub build_version: Option<String>,
     pub instance_token_hash: String,
+    /// Join mode: `0` = LAN (same-subnet), `1` = TUNNEL (API-only through
+    /// the reverse tunnel).
+    pub join_mode: i32,
+    /// Tunnel route domain reaching this instance (TUNNEL instances).
+    pub tunnel_route_domain: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -143,6 +154,110 @@ pub struct ClusterHeartbeatWrite {
     pub build_version: Option<String>,
     pub metrics_json: String,
     pub reported_at: String,
+    /// Node service quality score 0..=100 computed from the heartbeat
+    /// quality sample (`None` when no sample was reported).
+    pub quality_score: Option<i32>,
+}
+
+/// Desired-state revision publication (cluster admin action): registers one
+/// revision for a sync kind and marks it as the desired state for every
+/// instance of the cluster.
+#[derive(Clone, Debug)]
+pub struct ClusterSyncRevisionPublish {
+    pub tenant_id: i64,
+    pub cluster_id: i64,
+    /// Sync kind: `0` = config, `1` = applications.
+    pub kind: i32,
+    /// Monotonic revision label (snowflake id string).
+    pub revision: String,
+    /// SHA-256 of the canonical payload JSON.
+    pub sha256: String,
+    pub payload: serde_json::Value,
+    pub size_bytes: i64,
+    pub created_by: Option<String>,
+    pub created_at: String,
+}
+
+/// Latest desired revision for one sync kind (the instance-facing contract).
+#[derive(Clone, Debug)]
+pub struct ClusterSyncDesired {
+    pub kind: i32,
+    pub revision: String,
+}
+
+/// Payload of one stored sync revision (node fetch on drift detection).
+#[derive(Clone, Debug)]
+pub struct ClusterSyncRevisionPayload {
+    pub kind: i32,
+    pub revision: String,
+    pub sha256: String,
+    pub payload: serde_json::Value,
+    pub created_at: String,
+}
+
+/// Per-instance sync acknowledgment write: records the applied revision for
+/// one kind and recomputes the aggregate sync status.
+#[derive(Clone, Debug)]
+pub struct ClusterSyncAckWrite {
+    pub tenant_id: i64,
+    /// Instance internal id.
+    pub instance_id: i64,
+    /// Sync kind: `0` = config, `1` = applications.
+    pub kind: i32,
+    /// Revision the instance applied.
+    pub applied_revision: String,
+    /// Ack status: `1` = applied (in sync), `3` = failed.
+    pub status: i32,
+    pub updated_at: String,
+}
+
+/// Auto-discovery read model: everything the routing topology builder needs
+/// for one cluster, sourced from the registry (single source of truth).
+#[derive(Clone, Debug)]
+pub struct ClusterRoutingDiscovery {
+    pub cluster_uuid: String,
+    /// Configured strategy label (`round_robin` default).
+    pub lb_strategy: String,
+    /// Service domains the cluster serves (auto-routing match keys).
+    pub served_domains: Vec<String>,
+    /// Routeable instances (online, cordoned/draining/ejected excluded).
+    pub instances: Vec<ClusterRoutingInstance>,
+}
+
+/// One routeable instance of the discovered cluster.
+#[derive(Clone, Debug)]
+pub struct ClusterRoutingInstance {
+    /// Instance uuid (topology identity).
+    pub uuid: String,
+    /// Internal east-west endpoint (`host:port`, bind-derived).
+    pub endpoint: String,
+    /// Per-instance LB weight override (1..=10000).
+    pub weight: i32,
+    pub quality_score: Option<i32>,
+}
+
+/// One active health-probe outcome write (auto-eject / auto-recover driver).
+#[derive(Clone, Debug)]
+pub struct ClusterProbeWrite {
+    pub tenant_id: i64,
+    pub instance_id: i64,
+    /// Whether the probe considered the instance healthy.
+    pub healthy: bool,
+}
+
+/// Result of recording one probe outcome.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClusterProbeOutcome {
+    /// Consecutive failure count after this probe.
+    pub failures: i32,
+    /// The instance is ejected after this probe.
+    pub ejected: bool,
+    /// The eject transition happened on this probe (event emission edge).
+    pub eject_transition: bool,
+    /// A previously ejected instance recovered on this probe.
+    pub recovered: bool,
+    /// Instance status before the probe.
+    pub was_online: bool,
 }
 
 /// Cluster lifecycle event write addressed by uuids; the store resolves the
@@ -205,6 +320,20 @@ pub struct ClusterInstanceCredentials {
     pub tenant_id: i64,
     pub heartbeat_interval_seconds: i32,
     pub offline_threshold_seconds: i32,
+    /// Desired configuration revision (sync plane); `None` when unpublished.
+    pub desired_config_revision: Option<String>,
+    /// Applied configuration revision (last acknowledged).
+    pub applied_config_revision: Option<String>,
+    /// Desired applications-manifest revision (sync plane).
+    pub desired_applications_revision: Option<String>,
+    /// Applied applications-manifest revision (last acknowledged).
+    pub applied_applications_revision: Option<String>,
+    /// Aggregate sync status integer.
+    pub sync_status: i32,
+    /// Cordon switch: routed traffic admitted.
+    pub routing_enabled: bool,
+    /// Graceful drain in progress.
+    pub draining: bool,
 }
 
 /// Previous instance state observed during a heartbeat, used for lifecycle
@@ -874,12 +1003,21 @@ pub trait WebRepositoryPort: Send + Sync {
 
     async fn delete_cluster_host(&self, host_id: &str) -> WebServiceResult<()>;
 
+    #[allow(clippy::too_many_arguments)]
     async fn list_cluster_instances(
         &self,
         cluster_id: Option<&str>,
         host_id: Option<&str>,
         status: Option<i32>,
         health_state: Option<&str>,
+        join_mode: Option<i32>,
+        sync_status: Option<i32>,
+        // Label selector pairs: every pair must be present (`labels @>`).
+        labels: &[(String, String)],
+        // Free-text substring match over name / endpoint / hostname.
+        search: Option<&str>,
+        // Exact build version match (version-skew management).
+        build_version: Option<&str>,
         page_size: i32,
         cursor: Option<&str>,
     ) -> WebServiceResult<ClusterInstancePage>;
@@ -901,11 +1039,20 @@ pub trait WebRepositoryPort: Send + Sync {
         &self,
         cluster_id: Option<&str>,
         severity: Option<&str>,
+        instance_id: Option<&str>,
         page_size: i32,
         cursor: Option<&str>,
     ) -> WebServiceResult<ClusterEventPage>;
 
     async fn cluster_overview(&self) -> WebServiceResult<ClusterOverviewResponse>;
+
+    /// Resolves a cluster identity (internal + external ids) by its uuid;
+    /// used by admin-plane sync publication addressed by the public id.
+    async fn resolve_cluster_identity_by_uuid(
+        &self,
+        tenant_id: i64,
+        cluster_uuid: &str,
+    ) -> WebServiceResult<ClusterIdentity>;
 
     async fn resolve_cluster_identity(
         &self,
@@ -913,7 +1060,10 @@ pub trait WebRepositoryPort: Send + Sync {
         cluster_code: Option<&str>,
     ) -> WebServiceResult<ClusterIdentity>;
 
-    async fn upsert_cluster_host(&self, write: ClusterHostUpsert) -> WebServiceResult<ClusterUpsert>;
+    async fn upsert_cluster_host(
+        &self,
+        write: ClusterHostUpsert,
+    ) -> WebServiceResult<ClusterUpsert>;
 
     async fn upsert_cluster_instance(
         &self,
@@ -929,6 +1079,63 @@ pub trait WebRepositoryPort: Send + Sync {
         &self,
         instance_uuid: &str,
     ) -> WebServiceResult<ClusterInstanceCredentials>;
+
+    /// Next monotonic revision label (snowflake id string) for sync
+    /// publication.
+    async fn next_cluster_sync_revision_id(&self) -> WebServiceResult<String>;
+
+    /// Node acknowledges graceful-drain completion: drains flag cleared,
+    /// instance marked stopped (offline). Registry-driven, idempotent.
+    async fn record_cluster_drain_complete(
+        &self,
+        tenant_id: i64,
+        instance_uuid: &str,
+    ) -> WebServiceResult<()>;
+
+    /// Records one active-probe outcome and drives auto-eject / auto-recover.
+    async fn record_cluster_probe_outcome(
+        &self,
+        write: ClusterProbeWrite,
+    ) -> WebServiceResult<ClusterProbeOutcome>;
+
+    /// Auto-discovery: reads the routeable instance inventory of one
+    /// cluster (online, routing-enabled, not draining, not ejected) together
+    /// with the cluster's LB strategy and served domains. `None` when the
+    /// cluster code is unknown.
+    async fn discover_cluster_routing(
+        &self,
+        cluster_code: &str,
+    ) -> WebServiceResult<Option<ClusterRoutingDiscovery>>;
+
+    /// Latest desired revision per sync kind for a cluster (empty when the
+    /// cluster never published one).
+    async fn latest_cluster_sync_desired(
+        &self,
+        tenant_id: i64,
+        cluster_id: i64,
+    ) -> WebServiceResult<Vec<ClusterSyncDesired>>;
+
+    /// Payload of one stored sync revision, addressed by revision label.
+    async fn cluster_sync_revision_payload(
+        &self,
+        tenant_id: i64,
+        cluster_id: i64,
+        kind: i32,
+        revision: &str,
+    ) -> WebServiceResult<Option<ClusterSyncRevisionPayload>>;
+
+    /// Publishes one desired-state revision (admin action). The store marks
+    /// the revision as desired for every non-deleted instance of the
+    /// cluster by bumping its per-kind desired column and flipping the
+    /// aggregate sync status to PENDING.
+    async fn publish_cluster_sync_revision(
+        &self,
+        write: ClusterSyncRevisionPublish,
+    ) -> WebServiceResult<u64>;
+
+    /// Records one instance sync acknowledgment, updating the per-kind
+    /// applied revision and recomputing the aggregate sync status.
+    async fn record_cluster_sync_ack(&self, write: ClusterSyncAckWrite) -> WebServiceResult<()>;
 
     async fn record_cluster_heartbeat(
         &self,
@@ -974,8 +1181,7 @@ pub trait WebRepositoryPort: Send + Sync {
         limit: i32,
     ) -> WebServiceResult<Vec<ExpiredClusterHost>>;
 
-    async fn expire_cluster_peer_messages(&self, now: &str, limit: i32)
-        -> WebServiceResult<u64>;
+    async fn expire_cluster_peer_messages(&self, now: &str, limit: i32) -> WebServiceResult<u64>;
 
     async fn purge_cluster_heartbeats(&self, older_than: &str, limit: i32)
         -> WebServiceResult<u64>;

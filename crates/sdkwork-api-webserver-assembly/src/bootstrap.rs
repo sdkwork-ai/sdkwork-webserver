@@ -134,13 +134,13 @@ pub async fn assemble_business_routes(
         // (cluster_self_report module docs). Detached by design.
         match crate::cluster_self_report::ClusterSelfReportConfig::from_env() {
             Ok(config) => {
-                crate::cluster_self_report::spawn_cluster_self_report_task(
-                    service.clone(),
-                    config,
-                );
+                crate::cluster_self_report::spawn_cluster_self_report_task(service.clone(), config);
             }
             Err(detail) => {
-                tracing::warn!(detail, "cluster self-report disabled: invalid configuration");
+                tracing::warn!(
+                    detail,
+                    "cluster self-report disabled: invalid configuration"
+                );
             }
         }
         // Same-origin dependency surfaces are deliberately **not** composed

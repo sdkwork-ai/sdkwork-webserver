@@ -34,6 +34,35 @@ use super::{
 
 const MAX_TLS_MATERIAL_BYTES: u64 = 1024 * 1024;
 
+/// Builds the tunnel gateway shared state when the app config enables the
+/// tunnel; `None` (or a broken tunnel section) leaves the data plane
+/// unchanged apart from a warning (PRD SS77).
+fn build_tunnel(
+    config: &sdkwork_webserver_core::WebServerAppConfig,
+    metrics: &Arc<DataPlaneMetrics>,
+) -> (
+    Option<Arc<sdkwork_webserver_tunnel::gateway::GatewayShared>>,
+    Option<sdkwork_webserver_tunnel::TunnelGatewayOptions>,
+) {
+    let Some(tunnel_config) = config.tunnel.as_ref() else {
+        return (None, None);
+    };
+    if !tunnel_config.enabled {
+        return (None, None);
+    }
+    if let Err(error) = tunnel_config.validate() {
+        tracing::warn!(error = %error, "tunnel configuration is invalid; tunnel disabled");
+        return (None, None);
+    }
+    let tunnel_metrics = Arc::new(sdkwork_webserver_tunnel::TunnelMetrics::new());
+    let Some(options) = crate::tunnel_bridge::build_gateway_options(tunnel_config, tunnel_metrics)
+    else {
+        return (None, None);
+    };
+    let shared = sdkwork_webserver_tunnel::gateway::GatewayShared::from_options(&options);
+    (Some(shared), Some(options))
+}
+
 pub(crate) struct RuntimeGeneration {
     pub id: u64,
     pub revision: String,
@@ -171,6 +200,17 @@ pub(crate) struct DataPlaneRuntime {
     pub limit_req: ArcSwap<LimitReqRuntime>,
     pub limit_conn: ArcSwap<LimitConnRuntime>,
     pub tunnel_supervisor: Arc<TunnelSupervisor>,
+    /// Live tunnel gateway state when the app config enables the tunnel
+    /// capability; `None` keeps the runtime unchanged (PRD SS77).
+    pub tunnel: Option<Arc<sdkwork_webserver_tunnel::gateway::GatewayShared>>,
+    /// Resolved tunnel gateway options for the QUIC listener spawn; present
+    /// exactly when `tunnel` is present.
+    pub tunnel_options: Option<sdkwork_webserver_tunnel::TunnelGatewayOptions>,
+    /// Cluster auto-routing overlay: an atomically swapped topology handle.
+    /// Empty until a discovery refresher publishes a snapshot; readers never
+    /// block. Cluster hosts not present in the snapshot fall through to
+    /// normal virtual-host routing (PRD §77 compatibility).
+    pub cluster_overlay: Arc<arc_swap::ArcSwap<sdkwork_webserver_cluster::ClusterTopology>>,
     pub metrics: Arc<DataPlaneMetrics>,
 }
 /// Build the multi-layer resolution cache chain from the app config.
@@ -243,7 +283,7 @@ fn build_resolution_chain(
 impl DataPlaneRuntime {
     pub fn build(app: CompiledWebServerApp) -> Result<Arc<Self>, DataPlaneError> {
         let revision = revision_for_compiled_app(&app);
-        Self::build_inner(app, revision, CanonicalMetricDimensions::default())
+        Self::build_inner(app, revision, CanonicalMetricDimensions::default(), None)
     }
 
     pub(crate) fn build_with_metric_dimensions(
@@ -251,7 +291,7 @@ impl DataPlaneRuntime {
         dimensions: CanonicalMetricDimensions,
     ) -> Result<Arc<Self>, DataPlaneError> {
         let revision = revision_for_compiled_app(&app);
-        Self::build_inner(app, revision, dimensions)
+        Self::build_inner(app, revision, dimensions, None)
     }
 
     pub fn build_revision(
@@ -262,6 +302,7 @@ impl DataPlaneRuntime {
             revision.into_app(),
             sha256,
             CanonicalMetricDimensions::default(),
+            None,
         )
     }
 
@@ -270,13 +311,14 @@ impl DataPlaneRuntime {
         dimensions: CanonicalMetricDimensions,
     ) -> Result<Arc<Self>, DataPlaneError> {
         let sha256 = revision.sha256().to_owned();
-        Self::build_inner(revision.into_app(), sha256, dimensions)
+        Self::build_inner(revision.into_app(), sha256, dimensions, None)
     }
 
     fn build_inner(
         app: CompiledWebServerApp,
         revision: String,
         metric_dimensions: CanonicalMetricDimensions,
+        cluster_overlay: Option<Arc<arc_swap::ArcSwap<sdkwork_webserver_cluster::ClusterTopology>>>,
     ) -> Result<Arc<Self>, DataPlaneError> {
         let topology = ReloadTopology::from_app(&app)?;
         let maximum_connections = app.config().limits.max_connections;
@@ -294,6 +336,7 @@ impl DataPlaneRuntime {
             Duration::from_millis(app.config().limits.max_connection_age_ms),
             metrics.clone(),
         );
+        let (tunnel, tunnel_options) = build_tunnel(app.config(), &metrics);
         let initial = RuntimeGeneration::build(app, revision, 1, metrics.clone())?;
         let limit_req = ArcSwap::from_pointee(LimitReqRuntime::from_zones(
             &initial.app.config().limit_req_zones,
@@ -318,12 +361,36 @@ impl DataPlaneRuntime {
             limit_req,
             limit_conn,
             tunnel_supervisor,
+            tunnel,
+            tunnel_options,
+            cluster_overlay: cluster_overlay.unwrap_or_else(|| {
+                Arc::new(arc_swap::ArcSwap::from_pointee(
+                    sdkwork_webserver_cluster::ClusterTopology::default(),
+                ))
+            }),
             metrics,
         }))
     }
 
     pub fn current(&self) -> Arc<RuntimeGeneration> {
         self.current.load_full()
+    }
+
+    /// Builds the runtime with a caller-owned topology handle: the
+    /// discovery refresher publishes snapshots into it while the data plane
+    /// routes by them.
+    pub fn build_with_cluster_overlay(
+        app: CompiledWebServerApp,
+        overlay: Arc<arc_swap::ArcSwap<sdkwork_webserver_cluster::ClusterTopology>>,
+    ) -> Result<Arc<Self>, DataPlaneError> {
+        let revision = revision_for_compiled_app(&app);
+        let runtime = Self::build_inner(
+            app,
+            revision,
+            CanonicalMetricDimensions::default(),
+            Some(overlay),
+        )?;
+        Ok(runtime)
     }
 
     pub(crate) async fn start_active_health(&self) -> Result<(), DataPlaneError> {

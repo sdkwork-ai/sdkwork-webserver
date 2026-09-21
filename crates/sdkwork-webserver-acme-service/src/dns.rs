@@ -325,7 +325,7 @@ impl Dns01Presenter for InMemoryDns01Presenter {
     }
 }
 
-fn normalized_identifier_base(hostname: &str) -> AcmeServiceResult<String> {
+pub(crate) fn normalized_identifier_base(hostname: &str) -> AcmeServiceResult<String> {
     let trimmed = hostname.trim().trim_end_matches('.');
     let lowered = trimmed.to_ascii_lowercase();
     let base = lowered.strip_prefix("*.").unwrap_or(&lowered);

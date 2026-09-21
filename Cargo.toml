@@ -24,6 +24,11 @@ members = [
   "crates/sdkwork-routes-webserver-internal-api",
   "crates/sdkwork-api-webserver-standalone-gateway",
   "crates/sdkwork-webserver-website-delivery-edge-runtime",
+  "crates/sdkwork-webserver-tunnel-core",
+  "crates/sdkwork-webserver-tunnel-protocol",
+  "crates/sdkwork-webserver-tunnel-transport",
+  "crates/sdkwork-webserver-tunnel",
+  "crates/sdkwork-webserver-cluster",
 ]
 exclude = [
   "sdks/sdkwork-webserver-backend-sdk/sdkwork-webserver-backend-sdk-rust/generated/server-openapi",
@@ -95,6 +100,8 @@ sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio",
 thiserror = "2"
 tempfile = "3"
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs"] }
+rand = "0.9"
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.7", features = ["compression-gzip", "fs", "timeout", "trace"] }
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
@@ -130,6 +137,11 @@ sdkwork-webserver-agent = { path = "crates/sdkwork-webserver-agent" }
 sdkwork-webserver-certificate-worker = { path = "crates/sdkwork-webserver-certificate-worker" }
 sdkwork-webserver-contract = { path = "crates/sdkwork-webserver-contract" }
 sdkwork-webserver-core = { path = "crates/sdkwork-webserver-core" }
+sdkwork-webserver-tunnel-core = { path = "crates/sdkwork-webserver-tunnel-core" }
+sdkwork-webserver-tunnel-protocol = { path = "crates/sdkwork-webserver-tunnel-protocol" }
+sdkwork-webserver-tunnel-transport = { path = "crates/sdkwork-webserver-tunnel-transport" }
+sdkwork-webserver-tunnel = { path = "crates/sdkwork-webserver-tunnel" }
+sdkwork-webserver-cluster = { path = "crates/sdkwork-webserver-cluster" }
 sdkwork-webserver-resolver-cache = { path = "crates/sdkwork-webserver-resolver-cache" }
 sdkwork-webserver-delivery-runtime = { path = "crates/sdkwork-webserver-delivery-runtime" }
 sdkwork-webserver-drive-provider = { path = "crates/sdkwork-webserver-drive-provider" }

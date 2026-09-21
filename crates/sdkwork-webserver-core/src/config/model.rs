@@ -478,6 +478,11 @@ pub struct WebServerAppConfig {
     /// sdkwork-deployments billing tables.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage_metering: Option<UsageMeteringConfig>,
+    /// Built-in network tunnel capability (reverse connections / NAT
+    /// traversal, PRD SDKWORK WebServer Tunnel §38). Absent or `enabled =
+    /// false` leaves the runtime byte-for-byte unchanged (§77).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tunnel: Option<sdkwork_webserver_tunnel_core::TunnelConfig>,
     #[serde(default)]
     pub observability: ObservabilityConfig,
     #[serde(default)]

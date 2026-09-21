@@ -49,7 +49,10 @@ impl ClusterSelfReportConfig {
     pub fn from_env() -> Result<Self, String> {
         let enabled = std::env::var("SDKWORK_WEBSERVER_CLUSTER_SELF_REPORT_ENABLED")
             .map(|value| {
-                !matches!(value.trim().to_ascii_lowercase().as_str(), "0" | "false" | "off")
+                !matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "0" | "false" | "off"
+                )
             })
             .unwrap_or(true);
         let role = std::env::var("SDKWORK_WEBSERVER_CLUSTER_ROLE")
@@ -103,7 +106,9 @@ fn parse_bounded_interval(
                 .parse()
                 .map_err(|error| format!("invalid {key}: {error}"))?;
             if !(minimum..=maximum).contains(&parsed) {
-                return Err(format!("{key} must be between {minimum} and {maximum} seconds"));
+                return Err(format!(
+                    "{key} must be between {minimum} and {maximum} seconds"
+                ));
             }
             Ok(parsed)
         }
@@ -342,6 +347,8 @@ async fn run_self_report_loop(service: Arc<WebService>, config: ClusterSelfRepor
                     local_ips: host.local_ips.clone(),
                     mac_addresses: host.mac_addresses.clone(),
                     daemon_version: Some(build_version.clone()),
+                    join_mode: Some("LAN".to_owned()),
+                    tunnel: None,
                 },
                 instance: sdkwork_webserver_contract::ClusterInstanceDescriptor {
                     name: config.instance_name.clone(),
@@ -353,6 +360,7 @@ async fn run_self_report_loop(service: Arc<WebService>, config: ClusterSelfRepor
                     bind_port: config.bind_port,
                     public_endpoint: config.public_endpoint.clone(),
                     build_version: Some(build_version.clone()),
+                    join_mode: Some("LAN".to_owned()),
                 },
             };
             match service.cluster_register(None, &request).await {

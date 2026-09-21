@@ -11,3 +11,6 @@ pub const LATEST_RUNTIME_OBSERVATION: &str =
 pub const CLUSTER_REGISTER: &str = "/internal/v3/api/web/cluster/instances/register";
 pub const CLUSTER_HEARTBEAT: &str = "/internal/v3/api/web/cluster/instances/heartbeat";
 pub const CLUSTER_PEERS: &str = "/internal/v3/api/web/cluster/peers";
+pub const CLUSTER_SYNC_MANIFEST: &str = "/internal/v3/api/web/cluster/sync/manifest";
+pub const CLUSTER_SYNC_ACK: &str = "/internal/v3/api/web/cluster/sync/ack";
+pub const CLUSTER_DRAIN_COMPLETE: &str = "/internal/v3/api/web/cluster/instances/drain-complete";

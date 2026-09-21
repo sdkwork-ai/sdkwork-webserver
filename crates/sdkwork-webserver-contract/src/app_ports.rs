@@ -821,11 +821,63 @@ pub trait WebBackendApi: Send + Sync {
         host_id: Option<&str>,
         status: Option<i32>,
         health_state: Option<&str>,
+        join_mode: Option<i32>,
+        sync_status: Option<i32>,
+        labels: Option<&str>,
+        search: Option<&str>,
+        build_version: Option<&str>,
         page_size: i32,
         cursor: Option<&str>,
     ) -> WebServiceResult<ClusterInstancePage>;
 
+    /// Per-instance heartbeat metric history (bounded, newest first).
+    async fn cluster_instance_metrics_history(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+        limit: i32,
+    ) -> WebServiceResult<ClusterHeartbeatSamplePage>;
+
+    /// Publishes one desired-state revision (config or applications track)
+    /// to every instance of the cluster.
+    async fn publish_cluster_sync_revision(
+        &self,
+        context: &WebBackendRequestContext,
+        cluster_id: &str,
+        kind: &str,
+        payload: serde_json::Value,
+    ) -> WebServiceResult<ClusterSyncManifest>;
+
     async fn retrieve_cluster_instance(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+    ) -> WebServiceResult<ClusterInstanceResponse>;
+
+    /// Graceful drain: exclude the instance from routing; in-flight work
+    /// finishes before the node stops.
+    async fn drain_cluster_instance(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+    ) -> WebServiceResult<ClusterInstanceResponse>;
+
+    /// Clears drain and restores routing participation.
+    async fn undrain_cluster_instance(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+    ) -> WebServiceResult<ClusterInstanceResponse>;
+
+    /// Cordon: remove from routing without draining.
+    async fn cordon_cluster_instance(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+    ) -> WebServiceResult<ClusterInstanceResponse>;
+
+    /// Uncordon: restore routing participation.
+    async fn uncordon_cluster_instance(
         &self,
         context: &WebBackendRequestContext,
         instance_id: &str,
@@ -849,6 +901,7 @@ pub trait WebBackendApi: Send + Sync {
         context: &WebBackendRequestContext,
         cluster_id: Option<&str>,
         severity: Option<&str>,
+        instance_id: Option<&str>,
         page_size: i32,
         cursor: Option<&str>,
     ) -> WebServiceResult<ClusterEventPage>;

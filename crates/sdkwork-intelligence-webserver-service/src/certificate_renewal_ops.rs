@@ -119,12 +119,22 @@ async fn execute_certificate_operation(
     // original claim lease; a heartbeat keeps the fencing token's lease current
     // so a slow operation is never reaped or re-claimed while still running.
     let heartbeat = spawn_certificate_lease_heartbeat(Arc::clone(&repository), lease.clone());
+    // Challenge strategy: when cloud DNS accounts are associated and cover
+    // every identifier, renew via DNS-01 — the only challenge that renews
+    // wildcard certificates unattended. Otherwise the historical HTTP-01
+    // path applies (wildcards fail fast with an explicit validation error).
+    let dns01 = if certificate_issuer.dns_accounts_cover(&lease.hostnames) {
+        certificate_issuer.dns01_context(&lease.hostnames)
+    } else {
+        None
+    };
     let material = match certificate_issuer
-        .issue(
+        .issue_with_challenge(
             lease.cert_type,
             &lease.hostnames,
             &lease.cert_name,
             &lease.key_algorithm,
+            dns01.as_ref().map(|context| context.into_context()),
         )
         .await
     {

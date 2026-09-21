@@ -19,7 +19,7 @@ use sdkwork_intelligence_webserver_service::{
     ClusterPeerMessageEnqueue, WebRepositoryPort,
 };
 use sdkwork_utils_rust::crypto::sha256_hash;
-use sdkwork_webserver_contract::{WebServiceError, UpdateClusterRequest};
+use sdkwork_webserver_contract::{UpdateClusterRequest, WebServiceError};
 use sdkwork_webserver_database_host::bootstrap_web_database;
 use sqlx::Row;
 
@@ -108,11 +108,13 @@ async fn prepare_database(config: DatabaseConfig) -> TestContext {
         .expect("initialize PostgreSQL Web database lifecycle");
 
     let id_generator = SnowflakeIdGenerator::new(911).expect("create test Snowflake generator");
-    let repository = Arc::new(sdkwork_intelligence_webserver_repository_sqlx::PostgresWebRepository::new(
-        pool.clone(),
-        id_generator,
-        [0x5b; 32],
-    )) as Arc<dyn WebRepositoryPort>;
+    let repository = Arc::new(
+        sdkwork_intelligence_webserver_repository_sqlx::PostgresWebRepository::new(
+            pool.clone(),
+            id_generator,
+            [0x5b; 32],
+        ),
+    ) as Arc<dyn WebRepositoryPort>;
     TestContext { pool, repository }
 }
 
@@ -120,17 +122,29 @@ async fn verify_registration_and_authentication(context: &TestContext) {
     let repository = &context.repository;
 
     // The default cluster is provisioned lazily exactly once.
-    let default_first = repository.resolve_cluster_identity(0, None).await.expect("default cluster");
-    let default_again = repository.resolve_cluster_identity(0, None).await.expect("default cluster again");
+    let default_first = repository
+        .resolve_cluster_identity(0, None)
+        .await
+        .expect("default cluster");
+    let default_again = repository
+        .resolve_cluster_identity(0, None)
+        .await
+        .expect("default cluster again");
     assert_eq!(default_first.cluster_id, default_again.cluster_id);
     assert_eq!(default_first.code, "default");
 
     // Host upsert keys on (tenant, machine code); the second registration
     // updates instead of inserting.
     let host_a = host_write(0, default_first.cluster_id, "edge-a", "mc-edge-a");
-    let host_first = repository.upsert_cluster_host(host_a.clone()).await.expect("host insert");
+    let host_first = repository
+        .upsert_cluster_host(host_a.clone())
+        .await
+        .expect("host insert");
     assert!(host_first.created);
-    let host_again = repository.upsert_cluster_host(host_a).await.expect("host re-registration");
+    let host_again = repository
+        .upsert_cluster_host(host_a)
+        .await
+        .expect("host re-registration");
     assert!(!host_again.created);
     assert_eq!(host_first.uuid, host_again.uuid);
 
@@ -176,7 +190,12 @@ async fn verify_registration_and_authentication(context: &TestContext) {
 
     // A second host with the same PID is a distinct member.
     let host_b = repository
-        .upsert_cluster_host(host_write(0, default_first.cluster_id, "edge-b", "mc-edge-b"))
+        .upsert_cluster_host(host_write(
+            0,
+            default_first.cluster_id,
+            "edge-b",
+            "mc-edge-b",
+        ))
         .await
         .expect("host b insert");
     assert!(host_b.created);
@@ -204,8 +223,13 @@ async fn verify_registration_and_authentication(context: &TestContext) {
     assert_eq!(credentials.cluster_uuid, default_first.cluster_uuid);
     // Unknown tokens fail closed with NotFound at the port; the service maps
     // that to a rejected machine credential.
-    let stale = repository.authenticate_cluster_instance_token(token_one).await;
-    assert!(matches!(stale, Err(WebServiceError::NotFound(_))), "the previous registration token must stop resolving");
+    let stale = repository
+        .authenticate_cluster_instance_token(token_one)
+        .await;
+    assert!(
+        matches!(stale, Err(WebServiceError::NotFound(_))),
+        "the previous registration token must stop resolving"
+    );
     let unknown = repository
         .authenticate_cluster_instance_token("winst_never-issued")
         .await;
@@ -215,9 +239,17 @@ async fn verify_registration_and_authentication(context: &TestContext) {
 async fn verify_heartbeat_peers_and_mailbox(context: &TestContext) {
     let repository = &context.repository;
 
-    let default_cluster = repository.resolve_cluster_identity(0, None).await.expect("default cluster");
+    let default_cluster = repository
+        .resolve_cluster_identity(0, None)
+        .await
+        .expect("default cluster");
     let host = repository
-        .upsert_cluster_host(host_write(0, default_cluster.cluster_id, "hb-host", "mc-hb-host"))
+        .upsert_cluster_host(host_write(
+            0,
+            default_cluster.cluster_id,
+            "hb-host",
+            "mc-hb-host",
+        ))
         .await
         .expect("heartbeat host");
     let instance = repository
@@ -231,7 +263,12 @@ async fn verify_heartbeat_peers_and_mailbox(context: &TestContext) {
         .await
         .expect("heartbeat instance");
     let peer_host = repository
-        .upsert_cluster_host(host_write(0, default_cluster.cluster_id, "hb-peer", "mc-hb-peer"))
+        .upsert_cluster_host(host_write(
+            0,
+            default_cluster.cluster_id,
+            "hb-peer",
+            "mc-hb-peer",
+        ))
         .await
         .expect("peer host");
     let peer = repository
@@ -257,6 +294,7 @@ async fn verify_heartbeat_peers_and_mailbox(context: &TestContext) {
             build_version: Some("1.1.0".to_string()),
             metrics_json: r#"{"rssMb":128}"#.to_string(),
             reported_at: now.clone(),
+            quality_score: None,
         })
         .await
         .expect("first heartbeat");
@@ -277,7 +315,10 @@ async fn verify_heartbeat_peers_and_mailbox(context: &TestContext) {
         .await
         .expect("reload heartbeat host");
     assert_eq!(host_row.status, 1, "host liveness follows its members");
-    assert_eq!(host_row.instance_count, 1, "the heartbeat host carries exactly its own instance");
+    assert_eq!(
+        host_row.instance_count, 1,
+        "the heartbeat host carries exactly its own instance"
+    );
 
     // Peer directory excludes the requester and carries reachability fields.
     // The registry is shared across the whole test, so the expected size is
@@ -352,12 +393,17 @@ async fn verify_heartbeat_peers_and_mailbox(context: &TestContext) {
         .await
         .expect("claim messages");
     assert_eq!(messages.len(), 2, "direct copy + broadcast copy");
-    assert!(messages.iter().all(|message| message.payload["origin"] == "test"));
+    assert!(messages
+        .iter()
+        .all(|message| message.payload["origin"] == "test"));
     let replay = repository
         .claim_cluster_peer_messages(instance.id, 32, &deliver_watermark)
         .await
         .expect("claim again");
-    assert!(replay.is_empty(), "delivered messages must not be re-claimed");
+    assert!(
+        replay.is_empty(),
+        "delivered messages must not be re-claimed"
+    );
 
     // The peer instance receives exactly its own broadcast copy; the direct
     // message stays addressed to the other instance.
@@ -387,9 +433,17 @@ async fn verify_heartbeat_peers_and_mailbox(context: &TestContext) {
 async fn verify_liveness_sweep_events_and_pagination(context: &TestContext) {
     let repository = &context.repository;
 
-    let default_cluster = repository.resolve_cluster_identity(0, None).await.expect("default cluster");
+    let default_cluster = repository
+        .resolve_cluster_identity(0, None)
+        .await
+        .expect("default cluster");
     let host = repository
-        .upsert_cluster_host(host_write(0, default_cluster.cluster_id, "sweep-host", "mc-sweep"))
+        .upsert_cluster_host(host_write(
+            0,
+            default_cluster.cluster_id,
+            "sweep-host",
+            "mc-sweep",
+        ))
         .await
         .expect("sweep host");
     let instance = repository
@@ -414,6 +468,7 @@ async fn verify_liveness_sweep_events_and_pagination(context: &TestContext) {
             build_version: None,
             metrics_json: "{}".to_string(),
             reported_at: now.clone(),
+            quality_score: None,
         })
         .await
         .expect("sweep heartbeat");
@@ -454,7 +509,9 @@ async fn verify_liveness_sweep_events_and_pagination(context: &TestContext) {
         .expire_stale_cluster_hosts(&now, 512)
         .await
         .expect("host sweep");
-    assert!(expired_hosts.iter().any(|expired| expired.host_uuid == host.uuid));
+    assert!(expired_hosts
+        .iter()
+        .any(|expired| expired.host_uuid == host.uuid));
 
     // Lifecycle events back the admin timeline; severity filter + cursor work.
     repository
@@ -487,7 +544,7 @@ async fn verify_liveness_sweep_events_and_pagination(context: &TestContext) {
         .expect("event write");
 
     let warnings = repository
-        .list_cluster_events(None, Some("WARNING"), 200, None)
+        .list_cluster_events(None, Some("WARNING"), None, 200, None)
         .await
         .expect("filtered events");
     assert!(!warnings.items.is_empty());
@@ -501,7 +558,7 @@ async fn verify_liveness_sweep_events_and_pagination(context: &TestContext) {
     let mut visited = 0_usize;
     loop {
         let page = repository
-            .list_cluster_events(None, None, 2, cursor.as_deref())
+            .list_cluster_events(None, None, None, 2, cursor.as_deref())
             .await
             .expect("event page");
         visited += page.items.len();
@@ -510,33 +567,50 @@ async fn verify_liveness_sweep_events_and_pagination(context: &TestContext) {
             _ => break,
         }
     }
-    let total_events: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM webserver_cluster_event WHERE tenant_id = 0",
-    )
-    .fetch_one(&context.pool)
-    .await
-    .expect("count events");
-    assert_eq!(visited, total_events as usize, "cursor walk must visit every event exactly once");
+    let total_events: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM webserver_cluster_event WHERE tenant_id = 0")
+            .fetch_one(&context.pool)
+            .await
+            .expect("count events");
+    assert_eq!(
+        visited, total_events as usize,
+        "cursor walk must visit every event exactly once"
+    );
 
     // Instance listing filters by health state and paginates by cursor.
     let unhealthy_page = repository
-        .list_cluster_instances(None, None, None, Some("UNHEALTHY"), 200, None)
+        .list_cluster_instances(None, None, None, Some("UNHEALTHY"), None, None, &[], None, None, 200, None)
         .await
         .expect("unhealthy instances");
-    assert!(unhealthy_page.items.iter().all(|item| item.health_state == "UNHEALTHY"));
+    assert!(unhealthy_page
+        .items
+        .iter()
+        .all(|item| item.health_state == "UNHEALTHY"));
 
     let mut instance_cursor = None;
     let mut instance_visited = 0_usize;
     loop {
         let page = repository
-            .list_cluster_instances(None, None, None, None, 2, instance_cursor.as_deref())
+            .list_cluster_instances(
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                &[],
+                None,
+                None,
+                2,
+                instance_cursor.as_deref(),
+            )
             .await
             .expect("instance page");
         instance_visited += page.items.len();
-        assert!(page
-            .items
-            .iter()
-            .all(|item| item.host_name.as_deref().is_some_and(|name| !name.is_empty())));
+        assert!(page.items.iter().all(|item| item
+            .host_name
+            .as_deref()
+            .is_some_and(|name| !name.is_empty())));
         match (page.has_more, page.next_cursor) {
             (Some(true), Some(next)) => instance_cursor = Some(next),
             _ => break,
@@ -575,6 +649,8 @@ async fn verify_liveness_sweep_events_and_pagination(context: &TestContext) {
     // Cluster CRUD: partial update keeps untouched columns, delete soft-removes.
     let created = repository
         .create_cluster(&sdkwork_webserver_contract::CreateClusterRequest {
+            lb_strategy: Some("round_robin".to_string()),
+            served_domains: Some(vec!["svc.cluster.test".to_string()]),
             name: "Regression Cluster".to_string(),
             code: "regression".to_string(),
             description: None,
@@ -588,6 +664,8 @@ async fn verify_liveness_sweep_events_and_pagination(context: &TestContext) {
         .update_cluster(
             &created.id,
             &UpdateClusterRequest {
+                lb_strategy: None,
+                served_domains: None,
                 name: Some("Regression Cluster v2".to_string()),
                 description: None,
                 status: None,
@@ -599,8 +677,14 @@ async fn verify_liveness_sweep_events_and_pagination(context: &TestContext) {
         .expect("update cluster");
     assert_eq!(updated.name, "Regression Cluster v2");
     assert_eq!(updated.heartbeat_interval_seconds, 30);
-    assert_eq!(updated.offline_threshold_seconds, 60, "absent fields keep their value");
-    repository.delete_cluster(&created.id).await.expect("delete cluster");
+    assert_eq!(
+        updated.offline_threshold_seconds, 60,
+        "absent fields keep their value"
+    );
+    repository
+        .delete_cluster(&created.id)
+        .await
+        .expect("delete cluster");
     let missing = repository.retrieve_cluster(&created.id).await;
     assert!(matches!(missing, Err(WebServiceError::NotFound(_))));
 
@@ -631,14 +715,22 @@ async fn verify_liveness_sweep_events_and_pagination(context: &TestContext) {
         )
         .await
         .expect("purge samples");
-    assert!(purged >= 2, "both heartbeat samples are older than the watermark");
+    assert!(
+        purged >= 2,
+        "both heartbeat samples are older than the watermark"
+    );
 }
 
 fn hash(token: &str) -> String {
     sha256_hash(token.as_bytes())
 }
 
-fn host_write(tenant_id: i64, cluster_id: i64, hostname: &str, machine_code: &str) -> ClusterHostUpsert {
+fn host_write(
+    tenant_id: i64,
+    cluster_id: i64,
+    hostname: &str,
+    machine_code: &str,
+) -> ClusterHostUpsert {
     ClusterHostUpsert {
         tenant_id,
         cluster_id,
@@ -656,6 +748,9 @@ fn host_write(tenant_id: i64, cluster_id: i64, hostname: &str, machine_code: &st
         local_ips: vec!["10.0.0.1".to_string(), "10.0.0.2".to_string()],
         mac_addresses: vec!["02:00:00:00:00:01".to_string()],
         daemon_version: Some("1.1.0".to_string()),
+        join_mode: 0,
+        tunnel_route_domain: None,
+        tunnel_endpoint: None,
     }
 }
 
@@ -681,6 +776,8 @@ fn instance_write(
         public_endpoint: Some(format!("https://node-{process_pid}.example.test")),
         build_version: Some("1.1.0".to_string()),
         instance_token_hash,
+        join_mode: 0,
+        tunnel_route_domain: None,
     }
 }
 

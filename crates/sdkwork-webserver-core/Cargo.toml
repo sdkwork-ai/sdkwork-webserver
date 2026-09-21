@@ -13,6 +13,7 @@ base64.workspace = true
 bcrypt.workspace = true
 sdkwork-utils-rust.workspace = true
 sdkwork-webserver-resolver-cache.workspace = true
+sdkwork-webserver-tunnel-core.workspace = true
 sdkwork_deploy_core.workspace = true
 ipnet.workspace = true
 jsonschema.workspace = true

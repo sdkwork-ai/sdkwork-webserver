@@ -153,6 +153,7 @@ fn rewritten_target_encodes_canonical_reserved_and_unicode_path_bytes() {
         "/rewrite",
         "/rewrite/a%3Fb%23c%25d/%E4%B8%AD",
         "/rewrite/a?b#c%d/中",
+        false,
         Some("x=%2F&y=1"),
     )
     .expect("rewritten URL");
@@ -176,6 +177,7 @@ fn target_uri_replaces_the_route_prefix() {
         "/v1/",
         "/v1/items",
         "/v1/items",
+        false,
         Some("x=1"),
     )
     .expect("replacement URL");
@@ -187,6 +189,7 @@ fn target_uri_replaces_the_route_prefix() {
         "/v1/",
         "/v1/items",
         "/v1/items",
+        false,
         None,
     )
     .expect("root replacement URL");
@@ -203,6 +206,7 @@ fn no_rewrite_target_preserves_raw_path_and_query_encoding() {
         "/rewrite",
         "/rewrite/a%2Fb/%E4%B8%AD",
         "/rewrite/a/b/中",
+        false,
         Some("x=%2F&y=1"),
     )
     .expect("raw URL");

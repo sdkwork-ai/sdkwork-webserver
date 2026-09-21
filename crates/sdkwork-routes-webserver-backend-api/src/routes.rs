@@ -155,7 +155,10 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn WebBackendApi>) -> Rout
                 .patch(cluster_routes::update_cluster)
                 .delete(cluster_routes::delete_cluster),
         )
-        .route(paths::CLUSTER_HOSTS, get(cluster_routes::list_cluster_hosts))
+        .route(
+            paths::CLUSTER_HOSTS,
+            get(cluster_routes::list_cluster_hosts),
+        )
         .route(
             paths::CLUSTER_HOST,
             get(cluster_routes::retrieve_cluster_host)
@@ -165,6 +168,34 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn WebBackendApi>) -> Rout
         .route(
             paths::CLUSTER_INSTANCES,
             get(cluster_routes::list_cluster_instances),
+        )
+        .route(
+            paths::CLUSTER_SYNC_PUBLISH,
+            post(cluster_routes::publish_cluster_sync),
+        )
+        .route(
+            paths::CLUSTER_INSTANCE_METRICS_HISTORY,
+            get(cluster_routes::list_instance_metrics_history),
+        )
+        .route(
+            paths::CLUSTER_INSTANCE_PROBE,
+            post(cluster_routes::probe_cluster_instance),
+        )
+        .route(
+            paths::CLUSTER_INSTANCE_DRAIN,
+            post(cluster_routes::drain_cluster_instance),
+        )
+        .route(
+            paths::CLUSTER_INSTANCE_UNDRAIN,
+            post(cluster_routes::undrain_cluster_instance),
+        )
+        .route(
+            paths::CLUSTER_INSTANCE_CORDON,
+            post(cluster_routes::cordon_cluster_instance),
+        )
+        .route(
+            paths::CLUSTER_INSTANCE_UNCORDON,
+            post(cluster_routes::uncordon_cluster_instance),
         )
         .route(
             paths::CLUSTER_INSTANCE,
@@ -180,7 +211,10 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn WebBackendApi>) -> Rout
             paths::CLUSTER_MESSAGES,
             post(cluster_routes::enqueue_cluster_messages),
         )
-        .route(paths::CLUSTER_EVENTS, get(cluster_routes::list_cluster_events))
+        .route(
+            paths::CLUSTER_EVENTS,
+            get(cluster_routes::list_cluster_events),
+        )
         .route(
             paths::CLUSTER_OVERVIEW,
             get(cluster_routes::retrieve_cluster_overview),

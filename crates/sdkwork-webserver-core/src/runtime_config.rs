@@ -1720,6 +1720,7 @@ production = "deployments/webserver/static"
         let _ = std::fs::remove_dir_all(&temp);
         std::fs::create_dir_all(&temp).unwrap();
         let app = crate::config::WebServerAppConfig {
+            tunnel: None,
             schema_version: 1,
             kind: "test".to_owned(),
             app_key: "test".to_owned(),
@@ -1778,6 +1779,7 @@ production = "deployments/webserver/static"
         std::fs::create_dir_all(&temp.join("certs/example.com")).unwrap();
         std::fs::write(temp.join("certs/example.com/fullchain.pem"), "stale").unwrap();
         let app = crate::config::WebServerAppConfig {
+            tunnel: None,
             schema_version: 1,
             kind: "test".to_owned(),
             app_key: "test".to_owned(),

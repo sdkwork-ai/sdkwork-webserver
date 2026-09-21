@@ -1,0 +1,23 @@
+[package]
+name = "sdkwork-webserver-tunnel-protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "STP/1 wire protocol for the SDKWork WebServer tunnel: control-plane messages, stream headers, length-prefixed framing, encode/decode with size limits"
+
+[lib]
+name = "sdkwork_webserver_tunnel_protocol"
+
+[dependencies]
+bytes.workspace = true
+sdkwork-webserver-tunnel-core.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["io-util"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[lints]
+workspace = true

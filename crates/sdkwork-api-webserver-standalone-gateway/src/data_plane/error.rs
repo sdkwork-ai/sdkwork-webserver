@@ -74,6 +74,12 @@ pub enum DataPlaneError {
 
     #[error("cannot install a process-wide Rustls cryptography provider")]
     TlsCryptoProvider,
+    /// Tunnel gateway shared state was missing at listener start.
+    #[error("tunnel gateway state is unavailable")]
+    TunnelStateUnavailable,
+    /// The tunnel gateway failed to start or shut down.
+    #[error("tunnel gateway error: {0}")]
+    TunnelGateway(String),
 
     #[error("cannot load TLS certificate {certificate_file} or key {private_key_file}: {source}")]
     TlsFiles {

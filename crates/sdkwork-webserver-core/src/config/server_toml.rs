@@ -398,10 +398,12 @@ fn parse_listen(
             }
         }
     }
-    let (bind, port) = if let Some((host, port_text)) = address.rsplit_once(':') {
-        let port: u16 = port_text
-            .parse()
-            .map_err(|_| materialize_error(path, format!("invalid listen port in `{entry}`")))?;
+    let (bind, port) = if let Some((host, _)) = address.rsplit_once(':') {
+        // The numeric port parse is shared so this cannot drift from the other
+        // listeners; the nginx-specific bare-port fallback and IPv6 bracket
+        // stripping below stay local to this directive grammar.
+        let port: u16 = sdkwork_utils_rust::service_base_url::bind_port(address)
+            .ok_or_else(|| materialize_error(path, format!("invalid listen port in `{entry}`")))?;
         if host.starts_with('[') && host.ends_with(']') {
             (host[1..host.len() - 1].to_owned(), port)
         } else {
@@ -2186,16 +2188,18 @@ impl<'a> Materializer<'a> {
                 ));
             }
             let proxy_pass = as_str(server, &path, "proxyPass")?;
-            let target = if let Some((host, port_text)) = proxy_pass.rsplit_once(':') {
-                if host.is_empty() || !port_text.bytes().all(|byte| byte.is_ascii_digit()) {
-                    return Err(materialize_error(
-                        &path,
-                        format!("proxyPass `{proxy_pass}` must be host:port or a declared upstream name"),
-                    ));
-                }
-                let port: u16 = port_text.parse().map_err(|_| {
-                    materialize_error(&path, format!("invalid proxyPass port in `{proxy_pass}`"))
-                })?;
+            let target = if let Some((host, _)) = proxy_pass.rsplit_once(':') {
+                // The host/port validation is shared with every other listener
+                // in the workspace; a local copy is what lets one grammar
+                // accept a value another rejects.
+                let port: u16 = sdkwork_utils_rust::service_base_url::bind_port(proxy_pass)
+                    .filter(|_| !host.is_empty())
+                    .ok_or_else(|| {
+                        materialize_error(
+                            &path,
+                            format!("proxyPass `{proxy_pass}` must be host:port or a declared upstream name"),
+                        )
+                    })?;
                 crate::config::model::StreamTargetConfig::Literal {
                     host: host.to_owned(),
                     port,
@@ -2245,12 +2249,246 @@ impl<'a> Materializer<'a> {
         Ok(())
     }
 
+    /// Materializes the optional `[tunnel]` section (SDKWORK WebServer
+    /// Tunnel PRD SS38/SS39). Accepts snake_case aliases for the network
+    /// fields so the TOML surface reads naturally, and emits the camelCase
+    /// runtime model.
+    #[allow(clippy::too_many_lines)]
+    fn materialize_tunnel(effective: &Value) -> Result<Option<Value>, WebServerConfigError> {
+        let Some(tunnel) = effective.get("tunnel").and_then(Value::as_object) else {
+            return Ok(None);
+        };
+        check_supported_keys(
+            tunnel,
+            "server.toml.tunnel",
+            &[
+                "enabled", "gateway", "agent", "network", "timeout", "limits", "routes",
+            ],
+        )?;
+        let mut value = json!({
+            "enabled": tunnel.get("enabled").and_then(Value::as_bool).unwrap_or(false),
+        });
+        if let Some(gateway) = tunnel.get("gateway").and_then(Value::as_object) {
+            check_supported_keys(
+                gateway,
+                "server.toml.tunnel.gateway",
+                &[
+                    "listen",
+                    "domainSuffixes",
+                    "domain_suffixes",
+                    "agentTokenEnv",
+                    "agent_token_env",
+                    "tlsCertPemEnv",
+                    "tls_cert_pem_env",
+                    "tlsKeyPemEnv",
+                    "tls_key_pem_env",
+                ],
+            )?;
+            let mut mapped = json!({
+                "listen": gateway.get("listen").and_then(Value::as_str)
+                    .ok_or_else(|| materialize_error("server.toml.tunnel.gateway.listen", "listen is required"))?,
+            });
+            for (source, target) in [
+                ("domainSuffixes", "domainSuffixes"),
+                ("domain_suffixes", "domainSuffixes"),
+                ("agentTokenEnv", "agentTokenEnv"),
+                ("agent_token_env", "agentTokenEnv"),
+                ("tlsCertPemEnv", "tlsCertPemEnv"),
+                ("tls_cert_pem_env", "tlsCertPemEnv"),
+                ("tlsKeyPemEnv", "tlsKeyPemEnv"),
+                ("tls_key_pem_env", "tlsKeyPemEnv"),
+            ] {
+                if let Some(entry) = gateway.get(source) {
+                    mapped[target] = entry.clone();
+                }
+            }
+            value["gateway"] = mapped;
+        }
+        if let Some(agent) = tunnel.get("agent").and_then(Value::as_object) {
+            check_supported_keys(
+                agent,
+                "server.toml.tunnel.agent",
+                &[
+                    "endpoint",
+                    "tokenEnv",
+                    "token_env",
+                    "deviceIdEnv",
+                    "device_id_env",
+                    "deviceName",
+                    "device_name",
+                    "domainSuffix",
+                    "domain_suffix",
+                    "tls",
+                ],
+            )?;
+            let mut mapped = json!({});
+            if let Some(entry) = agent.get("endpoint") {
+                mapped["endpoint"] = entry.clone();
+            }
+            for (source, target) in [
+                ("tokenEnv", "tokenEnv"),
+                ("token_env", "tokenEnv"),
+                ("deviceIdEnv", "deviceIdEnv"),
+                ("device_id_env", "deviceIdEnv"),
+                ("deviceName", "deviceName"),
+                ("device_name", "deviceName"),
+                ("domainSuffix", "domainSuffix"),
+                ("domain_suffix", "domainSuffix"),
+            ] {
+                if let Some(entry) = agent.get(source) {
+                    mapped[target] = entry.clone();
+                }
+            }
+            if let Some(tls) = agent.get("tls") {
+                check_supported_keys(
+                    tls.as_object().ok_or_else(|| {
+                        materialize_error("server.toml.tunnel.agent.tls", "tls must be a table")
+                    })?,
+                    "server.toml.tunnel.agent.tls",
+                    &[
+                        "caPemPath",
+                        "ca_pem_path",
+                        "pinnedServerSha256",
+                        "pinned_server_sha256",
+                        "insecureSkipVerify",
+                        "insecure_skip_verify",
+                    ],
+                )?;
+                mapped["tls"] = json!({
+                    "caPemPath": tls.get("caPemPath").or_else(|| tls.get("ca_pem_path")).cloned(),
+                    "pinnedServerSha256": tls.get("pinnedServerSha256").or_else(|| tls.get("pinned_server_sha256")).cloned(),
+                    "insecureSkipVerify": tls.get("insecureSkipVerify").or_else(|| tls.get("insecure_skip_verify")).and_then(Value::as_bool).unwrap_or(false),
+                });
+            }
+            value["agent"] = mapped;
+        }
+        if let Some(network) = tunnel.get("network").and_then(Value::as_object) {
+            check_supported_keys(
+                network,
+                "server.toml.tunnel.network",
+                &[
+                    "heartbeatIntervalSecs",
+                    "heartbeat_interval",
+                    "reconnect",
+                    "initialBackoffSecs",
+                    "initial_backoff",
+                    "maxBackoffSecs",
+                    "max_backoff",
+                ],
+            )?;
+            value["network"] = json!({
+                "heartbeatIntervalSecs": network.get("heartbeatIntervalSecs").or_else(|| network.get("heartbeat_interval")).and_then(Value::as_u64).unwrap_or(10),
+                "reconnect": network.get("reconnect").and_then(Value::as_bool).unwrap_or(true),
+                "initialBackoffSecs": network.get("initialBackoffSecs").or_else(|| network.get("initial_backoff")).and_then(Value::as_u64).unwrap_or(1),
+                "maxBackoffSecs": network.get("maxBackoffSecs").or_else(|| network.get("max_backoff")).and_then(Value::as_u64).unwrap_or(60),
+            });
+        }
+        if let Some(timeout) = tunnel.get("timeout").and_then(Value::as_object) {
+            check_supported_keys(
+                timeout,
+                "server.toml.tunnel.timeout",
+                &["connect", "handshake", "streamOpen", "stream_open", "idle"],
+            )?;
+            value["timeout"] = json!({
+                "connect": timeout.get("connect").and_then(Value::as_u64).unwrap_or(10),
+                "handshake": timeout.get("handshake").and_then(Value::as_u64).unwrap_or(10),
+                "streamOpen": timeout.get("streamOpen").or_else(|| timeout.get("stream_open")).and_then(Value::as_u64).unwrap_or(10),
+                "idle": timeout.get("idle").and_then(Value::as_u64).unwrap_or(300),
+            });
+        }
+        if let Some(limits) = tunnel.get("limits").and_then(Value::as_object) {
+            check_supported_keys(
+                limits,
+                "server.toml.tunnel.limits",
+                &[
+                    "maxDevices",
+                    "max_devices",
+                    "maxSessions",
+                    "max_sessions",
+                    "maxStreamsPerSession",
+                    "max_streams_per_session",
+                    "maxRoutes",
+                    "max_routes",
+                    "maxControlMessageBytes",
+                    "max_control_message_bytes",
+                ],
+            )?;
+            let pick = |camel: &str, snake: &str| {
+                limits
+                    .get(camel)
+                    .or_else(|| limits.get(snake))
+                    .and_then(Value::as_u64)
+                    .map(Value::from)
+                    .unwrap_or(Value::Null)
+            };
+            value["limits"] = json!({
+                "maxDevices": pick("maxDevices", "max_devices"),
+                "maxSessions": pick("maxSessions", "max_sessions"),
+                "maxStreamsPerSession": pick("maxStreamsPerSession", "max_streams_per_session"),
+                "maxRoutes": pick("maxRoutes", "max_routes"),
+                "maxControlMessageBytes": pick("maxControlMessageBytes", "max_control_message_bytes"),
+            });
+        }
+        if let Some(routes) = tunnel.get("routes").and_then(Value::as_array) {
+            let mut mapped_routes = Vec::with_capacity(routes.len());
+            for route in routes {
+                let route = route.as_object().ok_or_else(|| {
+                    materialize_error("server.toml.tunnel.routes", "route entries must be tables")
+                })?;
+                check_supported_keys(
+                    route,
+                    "server.toml.tunnel.routes[]",
+                    &["name", "protocol", "domain", "port", "target", "policy"],
+                )?;
+                let mut mapped = json!({
+                    "name": route.get("name").and_then(Value::as_str)
+                        .ok_or_else(|| materialize_error("server.toml.tunnel.routes[].name", "name is required"))?,
+                    "protocol": route.get("protocol").and_then(Value::as_str)
+                        .ok_or_else(|| materialize_error("server.toml.tunnel.routes[].protocol", "protocol is required"))?,
+                    "target": route.get("target").and_then(Value::as_str)
+                        .ok_or_else(|| materialize_error("server.toml.tunnel.routes[].target", "target is required"))?,
+                });
+                if let Some(domain) = route.get("domain") {
+                    mapped["domain"] = domain.clone();
+                }
+                if let Some(port) = route.get("port") {
+                    mapped["port"] = port.clone();
+                }
+                if let Some(policy) = route.get("policy").and_then(Value::as_object) {
+                    check_supported_keys(
+                        policy,
+                        "server.toml.tunnel.routes[].policy",
+                        &[
+                            "allowPublic",
+                            "allow_public",
+                            "allowedIps",
+                            "allowed_ips",
+                            "auth",
+                            "visitorTokens",
+                            "visitor_tokens",
+                        ],
+                    )?;
+                    mapped["policy"] = json!({
+                        "allowPublic": policy.get("allowPublic").or_else(|| policy.get("allow_public")).and_then(Value::as_bool).unwrap_or(false),
+                        "allowedIps": policy.get("allowedIps").or_else(|| policy.get("allowed_ips")).cloned().unwrap_or(Value::Array(Vec::new())),
+                        "auth": policy.get("auth").cloned().unwrap_or(Value::String("none".to_owned())),
+                        "visitorTokens": policy.get("visitorTokens").or_else(|| policy.get("visitor_tokens")).cloned().unwrap_or(Value::Array(Vec::new())),
+                    });
+                }
+                mapped_routes.push(mapped);
+            }
+            value["routes"] = Value::Array(mapped_routes);
+        }
+        Ok(Some(value))
+    }
+
     fn finish(
         self,
         limits: Value,
         nginx: Value,
         gzip: Value,
         proxy_cache: Value,
+        tunnel: Option<Value>,
     ) -> Result<WebServerAppConfig, WebServerConfigError> {
         let instance = json!({
             "schemaVersion": 1,
@@ -2269,6 +2507,7 @@ impl<'a> Materializer<'a> {
             "virtualHosts": self.virtual_hosts,
             "streams": self.streams,
             "proxyCache": proxy_cache,
+            "tunnel": tunnel,
             "metadata": { "source": "deployments/webserver/server.toml" },
         });
         let config: WebServerAppConfig = serde_json::from_value(instance).map_err(|source| {
@@ -2848,6 +3087,7 @@ pub fn materialize_app(
             "http",
             "stream",
             "proxyCache",
+            "tunnel",
         ],
     )?;
     // Keep wording aligned with sdkwork-specs/tools/webserver/retired-nginx.mjs.
@@ -3018,7 +3258,8 @@ pub fn materialize_app(
                 .to_owned(),
         ));
     }
-    materializer.finish(limits, nginx, gzip, proxy_cache)
+    let tunnel = Materializer::materialize_tunnel(effective)?;
+    materializer.finish(limits, nginx, gzip, proxy_cache, tunnel)
 }
 
 #[cfg(test)]
@@ -3093,9 +3334,18 @@ match = "/"
 proxyPass = "http://gateway"
 "#;
 
-    fn minimal_examples_dir() -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("sdkwork-example-layout-{}", std::process::id()));
+    /// Builds a layout v3 example directory for one test.
+    ///
+    /// The path is keyed by `label`, not only by process id: Rust runs a test
+    /// binary's cases on multiple threads, and a single shared path let two
+    /// tests `remove_dir_all` each other's tree mid-load, which surfaced as an
+    /// intermittent "standalone example must load" failure with no source
+    /// change behind it.
+    fn minimal_examples_dir(label: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "sdkwork-example-layout-{}-{label}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("temp dir");
         let common =
@@ -3111,7 +3361,7 @@ proxyPass = "http://gateway"
 
     #[test]
     fn loads_cloud_profile_from_example_layout() {
-        let dir = minimal_examples_dir();
+        let dir = minimal_examples_dir("cloud-profile");
         let config = load_server_toml_app(&dir, "cloud", "production", "sdkwork-example")
             .expect("cloud example must load");
         assert_eq!(config.app_key, "sdkwork-example");
@@ -3129,8 +3379,57 @@ proxyPass = "http://gateway"
     }
 
     #[test]
+    fn materializes_tunnel_section_from_server_toml() {
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.gateway]
+listen = "127.0.0.1:8443"
+domain_suffixes = ["sdkwork.link"]
+[tunnel.network]
+heartbeat_interval = 5
+[[tunnel.routes]]
+name = "web"
+protocol = "http"
+domain = "demo.sdkwork.link"
+target = "127.0.0.1:3000"
+[tunnel.routes.policy]
+allow_public = true
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        assert!(config.enabled);
+        assert_eq!(config.gateway_or_default().listen, "127.0.0.1:8443");
+        assert_eq!(
+            config.gateway_or_default().domain_suffixes,
+            vec!["sdkwork.link".to_owned()]
+        );
+        assert_eq!(config.network_or_default().heartbeat_interval_secs, 5);
+        let routes = config.routes_or_empty();
+        assert_eq!(routes.len(), 1);
+        assert_eq!(routes[0].domain.as_deref(), Some("demo.sdkwork.link"));
+        assert!(routes[0].policy_or_default().allow_public);
+    }
+
+    #[test]
+    fn materializes_tunnel_absent_section_as_none() {
+        let toml_text = "specVersion = 1
+";
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective).expect("materializes");
+        assert!(tunnel.is_none());
+    }
+
+    #[test]
     fn loads_standalone_profile_with_gateway_target() {
-        let dir = minimal_examples_dir();
+        let dir = minimal_examples_dir("standalone-profile");
         let config = load_server_toml_app(&dir, "standalone", "production", "sdkwork-example")
             .expect("standalone example must load");
         let upstream = config

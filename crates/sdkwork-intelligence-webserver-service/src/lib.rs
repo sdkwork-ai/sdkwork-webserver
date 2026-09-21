@@ -5,8 +5,8 @@ pub mod app;
 pub mod audit_time;
 pub mod backend;
 pub mod certificate_ops;
-pub mod cluster_ops;
 pub mod certificate_renewal_ops;
+pub mod cluster_ops;
 pub mod domain_verification;
 pub mod nginx_ops;
 pub mod repository;
@@ -14,18 +14,20 @@ pub mod runtime_assignment_ops;
 pub mod source_import;
 pub mod tls_material_distribution;
 
+pub use cluster_ops::{ClusterMachineCredential, ClusterSweepReport};
 pub use domain_verification::{DnsTxtDomainOwnershipVerifier, DomainOwnershipVerifier};
 pub use repository::{
     AuditLogWrite, CertificateRevocationMaterial, ClusterEventWrite, ClusterHeartbeatTransition,
     ClusterHeartbeatWrite, ClusterHostUpsert, ClusterIdentity, ClusterInstanceCredentials,
-    ClusterInstanceUpsert, ClusterPeerMessageEnqueue, ClusterUpsert, DomainVerificationChallenge,
+    ClusterInstanceUpsert, ClusterPeerMessageEnqueue, ClusterProbeOutcome, ClusterProbeWrite,
+    ClusterRoutingDiscovery, ClusterRoutingInstance, ClusterSyncAckWrite, ClusterSyncDesired, ClusterSyncRevisionPayload,
+    ClusterSyncRevisionPublish, ClusterUpsert, DomainVerificationChallenge,
     DomainVerificationObservation, ExpiredClusterHost, ExpiredClusterInstance,
     RuntimeAssignmentTarget, RuntimeAssignmentWrite, RuntimeObservationWrite, WebRepositoryPort,
 };
 pub use source_import::{
     ApplicationSourceImporter, GitSourceImportRequest, ImportedApplicationSource,
 };
-pub use cluster_ops::{ClusterMachineCredential, ClusterSweepReport};
 pub use tls_material_distribution::TlsMaterialDistributionConfig;
 
 use std::sync::atomic::{AtomicU64, Ordering};

@@ -13,19 +13,23 @@ use chrono::{Duration, Utc};
 use sdkwork_database_id::uuid_v4;
 use sdkwork_utils_rust::crypto::{secure_compare, sha256_hash};
 use sdkwork_webserver_contract::{
-    ClusterEventPage, ClusterHeartbeatRequest, ClusterHeartbeatResponse,
+    cluster_quality_score, ClusterEventPage, ClusterHeartbeatRequest, ClusterHeartbeatResponse,
     ClusterHeartbeatSamplePage, ClusterHostPage, ClusterHostResponse, ClusterInstancePage,
     ClusterInstanceResponse, ClusterOverviewResponse, ClusterPage, ClusterPeerDirectoryResponse,
-    ClusterRegistrationRequest, ClusterRegistrationResponse, ClusterResponse,
+    ClusterQualityMetrics, ClusterRegistrationRequest, ClusterRegistrationResponse,
+    ClusterResponse, ClusterSyncAckRequest, ClusterSyncManifest, ClusterSyncState,
     CreateClusterRequest, EnqueueClusterPeerMessagesRequest, EnqueueClusterPeerMessagesResponse,
     UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest,
     WebBackendRequestContext, WebServiceError, WebServiceResult, CLUSTER_ENVIRONMENTS,
-    CLUSTER_EVENT_SEVERITIES, CLUSTER_HEALTH_STATES, CLUSTER_INSTANCE_ROLES,
+    CLUSTER_EVENT_SEVERITIES, CLUSTER_HEALTH_STATES, CLUSTER_INSTANCE_ROLES, CLUSTER_JOIN_MODES,
+    CLUSTER_JOIN_MODE_TUNNEL, CLUSTER_SYNC_KIND_APPLICATIONS, CLUSTER_SYNC_KIND_CONFIG,
+    CLUSTER_SYNC_STATUS_IN_SYNC, CLUSTER_SYNC_STATUS_PENDING,
 };
 
 use crate::repository::{
     ClusterEventWrite, ClusterHeartbeatWrite, ClusterHostUpsert, ClusterInstanceCredentials,
-    ClusterInstanceUpsert, ClusterPeerMessageEnqueue,
+    ClusterInstanceUpsert, ClusterPeerMessageEnqueue, ClusterProbeOutcome, ClusterProbeWrite,
+    ClusterSyncAckWrite, ClusterSyncRevisionPublish,
 };
 use crate::WebService;
 
@@ -92,13 +96,17 @@ impl WebService {
             request.heartbeat_interval_seconds.unwrap_or(15),
             request.offline_threshold_seconds.unwrap_or(60),
         )?;
-        let created = self.repository.create_cluster(request).await.map_err(|error| {
-            if matches!(error, WebServiceError::Conflict(_)) {
-                WebServiceError::conflict("cluster code already exists")
-            } else {
-                error
-            }
-        })?;
+        let created = self
+            .repository
+            .create_cluster(request)
+            .await
+            .map_err(|error| {
+                if matches!(error, WebServiceError::Conflict(_)) {
+                    WebServiceError::conflict("cluster code already exists")
+                } else {
+                    error
+                }
+            })?;
         self.record_cluster_event(
             &created.id,
             None,
@@ -286,6 +294,11 @@ impl WebService {
         host_id: Option<&str>,
         status: Option<i32>,
         health_state: Option<&str>,
+        join_mode: Option<i32>,
+        sync_status: Option<i32>,
+        labels: Option<&str>,
+        search: Option<&str>,
+        build_version: Option<&str>,
         page_size: i32,
         cursor: Option<&str>,
     ) -> WebServiceResult<ClusterInstancePage> {
@@ -297,6 +310,20 @@ impl WebService {
                 ));
             }
         }
+        if let Some(join_mode) = join_mode {
+            if !(0..=1).contains(&join_mode) {
+                return Err(WebServiceError::validation(
+                    "joinMode must be between 0 and 1",
+                ));
+            }
+        }
+        if let Some(sync_status) = sync_status {
+            if !(0..=3).contains(&sync_status) {
+                return Err(WebServiceError::validation(
+                    "syncStatus must be between 0 and 3",
+                ));
+            }
+        }
         if let Some(health_state) = health_state {
             if !CLUSTER_HEALTH_STATES.contains(&health_state) {
                 return Err(WebServiceError::validation(
@@ -304,8 +331,46 @@ impl WebService {
                 ));
             }
         }
+        // Label selector: `k1=v1,k2=v2` — every pair must match.
+        let label_pairs: Vec<(String, String)> = labels
+            .map(|raw| {
+                raw.split(',')
+                    .filter(|pair| !pair.trim().is_empty())
+                    .map(|pair| {
+                        let (key, value) = pair
+                            .split_once('=')
+                            .ok_or_else(|| {
+                                WebServiceError::validation(format!(
+                                    "label selector `{pair}` must be key=value"
+                                ))
+                            })?;
+                        Ok((key.trim().to_owned(), value.trim().to_owned()))
+                    })
+                    .collect::<WebServiceResult<Vec<_>>>()
+            })
+            .transpose()?
+            .unwrap_or_default();
+        if let Some(search) = search {
+            if search.trim().len() > 100 {
+                return Err(WebServiceError::validation(
+                    "search must be at most 100 bytes",
+                ));
+            }
+        }
         self.repository
-            .list_cluster_instances(cluster_id, host_id, status, health_state, page_size, cursor)
+            .list_cluster_instances(
+                cluster_id,
+                host_id,
+                status,
+                health_state,
+                join_mode,
+                sync_status,
+                &label_pairs,
+                search,
+                build_version,
+                page_size,
+                cursor,
+            )
             .await
     }
 
@@ -328,6 +393,12 @@ impl WebService {
         if request.name.is_none()
             && request.status.is_none()
             && request.public_endpoint.is_none()
+            && request.routing_enabled.is_none()
+            && request.draining.is_none()
+            && request.probe_url.is_none()
+            && request.labels.is_none()
+            && request.routing_weight.is_none()
+            && request.maintenance_note.is_none()
         {
             return Err(WebServiceError::validation(
                 "update request contains no fields",
@@ -337,6 +408,20 @@ impl WebService {
             if !(0..=5).contains(&status) {
                 return Err(WebServiceError::validation(
                     "instance status must be between 0 and 5",
+                ));
+            }
+        }
+        if let Some(weight) = request.routing_weight {
+            if !(1..=10_000).contains(&weight) {
+                return Err(WebServiceError::validation(
+                    "routingWeight must be between 1 and 10000",
+                ));
+            }
+        }
+        if let Some(note) = request.maintenance_note.as_deref() {
+            if note.len() > 255 {
+                return Err(WebServiceError::validation(
+                    "maintenanceNote must be at most 255 bytes",
                 ));
             }
         }
@@ -359,6 +444,176 @@ impl WebService {
         )
         .await;
         Ok(updated)
+    }
+
+    /// Graceful drain: excludes the instance from cluster routing and asks
+    /// the node to finish in-flight work and stop (industry drain, PRD
+    /// instance management). Fully reversible via [`Self::cluster_instance_undrain`].
+    pub async fn cluster_instance_drain(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+    ) -> WebServiceResult<ClusterInstanceResponse> {
+        let updated = self
+            .cluster_instance_update(
+                context,
+                instance_id,
+                &UpdateClusterInstanceRequest {
+                    routing_enabled: Some(false),
+                    draining: Some(true),
+                    ..UpdateClusterInstanceRequest::default()
+                },
+            )
+            .await?;
+        self.record_cluster_event(
+            &updated.cluster_id,
+            Some(&updated.host_id),
+            Some(instance_id),
+            "INSTANCE_DRAINING",
+            "WARNING",
+            &format!(
+                "instance {} draining: excluded from routing, in-flight work finishing",
+                updated.name
+            ),
+        )
+        .await;
+        Ok(updated)
+    }
+
+    /// Clears drain + cordon: the instance rejoins the routing pool.
+    pub async fn cluster_instance_undrain(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+    ) -> WebServiceResult<ClusterInstanceResponse> {
+        let updated = self
+            .cluster_instance_update(
+                context,
+                instance_id,
+                &UpdateClusterInstanceRequest {
+                    routing_enabled: Some(true),
+                    draining: Some(false),
+                    ..UpdateClusterInstanceRequest::default()
+                },
+            )
+            .await?;
+        self.record_cluster_event(
+            &updated.cluster_id,
+            Some(&updated.host_id),
+            Some(instance_id),
+            "INSTANCE_UNDRAINED",
+            "INFO",
+            &format!("instance {} rejoined the routing pool", updated.name),
+        )
+        .await;
+        Ok(updated)
+    }
+
+    /// Cordon: removes the instance from routing without draining (it keeps
+    /// serving; new routed requests avoid it).
+    pub async fn cluster_instance_cordon(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+    ) -> WebServiceResult<ClusterInstanceResponse> {
+        let updated = self
+            .cluster_instance_update(
+                context,
+                instance_id,
+                &UpdateClusterInstanceRequest {
+                    routing_enabled: Some(false),
+                    ..UpdateClusterInstanceRequest::default()
+                },
+            )
+            .await?;
+        self.record_cluster_event(
+            &updated.cluster_id,
+            Some(&updated.host_id),
+            Some(instance_id),
+            "INSTANCE_CORDONED",
+            "INFO",
+            &format!("instance {} cordoned out of routing", updated.name),
+        )
+        .await;
+        Ok(updated)
+    }
+
+    /// Uncordon: restores routing participation.
+    pub async fn cluster_instance_uncordon(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+    ) -> WebServiceResult<ClusterInstanceResponse> {
+        let updated = self
+            .cluster_instance_update(
+                context,
+                instance_id,
+                &UpdateClusterInstanceRequest {
+                    routing_enabled: Some(true),
+                    ..UpdateClusterInstanceRequest::default()
+                },
+            )
+            .await?;
+        self.record_cluster_event(
+            &updated.cluster_id,
+            Some(&updated.host_id),
+            Some(instance_id),
+            "INSTANCE_UNCORDONED",
+            "INFO",
+            &format!("instance {} restored to routing", updated.name),
+        )
+        .await;
+        Ok(updated)
+    }
+
+    /// Records one active-probe outcome for an instance (resolved by uuid)
+    /// and emits auto-eject / auto-recover lifecycle events.
+    pub async fn cluster_instance_probe_outcome(
+        &self,
+        instance_uuid: &str,
+        healthy: bool,
+    ) -> WebServiceResult<ClusterProbeOutcome> {
+        let credentials: ClusterInstanceCredentials = self
+            .repository
+            .resolve_cluster_instance_by_uuid(instance_uuid)
+            .await?;
+        let outcome = self
+            .repository
+            .record_cluster_probe_outcome(ClusterProbeWrite {
+                tenant_id: credentials.tenant_id,
+                instance_id: credentials.instance_id,
+                healthy,
+            })
+            .await?;
+        if outcome.eject_transition {
+            self.record_cluster_event(
+                &credentials.cluster_uuid,
+                Some(&credentials.host_uuid),
+                Some(&credentials.instance_uuid),
+                "INSTANCE_AUTO_EJECTED",
+                "ERROR",
+                &format!(
+                    "instance {} auto-ejected from routing after consecutive probe failures",
+                    credentials.instance_uuid
+                ),
+            )
+            .await;
+        }
+        if outcome.recovered {
+            self.record_cluster_event(
+                &credentials.cluster_uuid,
+                Some(&credentials.host_uuid),
+                Some(&credentials.instance_uuid),
+                "INSTANCE_AUTO_RECOVERED",
+                "INFO",
+                &format!(
+                    "instance {} recovered: probes healthy again, restored to routing",
+                    credentials.instance_uuid
+                ),
+            )
+            .await;
+        }
+        Ok(outcome)
     }
 
     pub async fn cluster_instance_delete(
@@ -392,6 +647,7 @@ impl WebService {
         context: &WebBackendRequestContext,
         cluster_id: Option<&str>,
         severity: Option<&str>,
+        instance_id: Option<&str>,
         page_size: i32,
         cursor: Option<&str>,
     ) -> WebServiceResult<ClusterEventPage> {
@@ -404,7 +660,7 @@ impl WebService {
             }
         }
         self.repository
-            .list_cluster_events(cluster_id, severity, page_size, cursor)
+            .list_cluster_events(cluster_id, severity, instance_id, page_size, cursor)
             .await
     }
 
@@ -429,6 +685,49 @@ impl WebService {
         request: &ClusterRegistrationRequest,
     ) -> WebServiceResult<ClusterRegistrationResponse> {
         validate_registration(request)?;
+        // Join mode: `LAN` (same-subnet) vs `TUNNEL` (API-only through the
+        // reverse tunnel). A TUNNEL host must advertise its tunnel route
+        // domain; a LAN host must not carry a tunnel descriptor.
+        let join_mode = request
+            .host
+            .join_mode
+            .as_deref()
+            .map(sdkwork_webserver_contract::cluster_join_mode_value)
+            .unwrap_or(Some(sdkwork_webserver_contract::CLUSTER_JOIN_MODE_LAN))
+            .ok_or_else(|| {
+                WebServiceError::Validation(format!(
+                    "invalid joinMode `{}`; expected one of {:?}",
+                    request.host.join_mode.as_deref().unwrap_or_default(),
+                    CLUSTER_JOIN_MODES
+                ))
+            })?;
+        if join_mode == CLUSTER_JOIN_MODE_TUNNEL {
+            let has_route = request
+                .host
+                .tunnel
+                .as_ref()
+                .is_some_and(|tunnel| !tunnel.route_domain.trim().is_empty());
+            if !has_route {
+                return Err(WebServiceError::Validation(
+                    "TUNNEL hosts must carry a tunnel descriptor with their route domain"
+                        .to_owned(),
+                ));
+            }
+        } else if request.host.tunnel.is_some() {
+            return Err(WebServiceError::Validation(
+                "LAN hosts must not carry a tunnel descriptor".to_owned(),
+            ));
+        }
+        let tunnel_route_domain = request
+            .host
+            .tunnel
+            .as_ref()
+            .map(|tunnel| tunnel.route_domain.clone());
+        let tunnel_endpoint = request
+            .host
+            .tunnel
+            .as_ref()
+            .and_then(|t| t.endpoint.clone());
         let cluster = self
             .repository
             .resolve_cluster_identity(0, request.cluster_code.as_deref())
@@ -455,6 +754,9 @@ impl WebService {
                 local_ips: request.host.local_ips.clone(),
                 mac_addresses: request.host.mac_addresses.clone(),
                 daemon_version: request.host.daemon_version.clone(),
+                join_mode,
+                tunnel_route_domain: tunnel_route_domain.clone(),
+                tunnel_endpoint: tunnel_endpoint.clone(),
             })
             .await?;
 
@@ -479,6 +781,14 @@ impl WebService {
                     .clone()
                     .or_else(|| request.host.daemon_version.clone()),
                 instance_token_hash: hash_cluster_instance_token(&instance_token),
+                join_mode: request
+                    .instance
+                    .join_mode
+                    .as_deref()
+                    .map(sdkwork_webserver_contract::cluster_join_mode_value)
+                    .flatten()
+                    .unwrap_or(join_mode),
+                tunnel_route_domain: tunnel_route_domain.clone(),
             })
             .await?;
 
@@ -555,6 +865,18 @@ impl WebService {
         let now = now_rfc3339();
         let metrics_json = serde_json::to_string(&request.metrics)
             .map_err(|error| WebServiceError::Internal(format!("encode metrics: {error}")))?;
+        // Node service quality: derive the 0..=100 score from the heartbeat
+        // quality sample (`metrics.quality`), when the node reports one.
+        let quality_score = request
+            .metrics
+            .get("quality")
+            .cloned()
+            .map(|value| serde_json::from_value::<ClusterQualityMetrics>(value))
+            .transpose()
+            .map_err(|error| {
+                WebServiceError::Validation(format!("invalid metrics.quality: {error}"))
+            })?
+            .map(|sample| cluster_quality_score(&sample));
         let transition = self
             .repository
             .record_cluster_heartbeat(ClusterHeartbeatWrite {
@@ -567,6 +889,7 @@ impl WebService {
                 build_version: request.build_version.clone(),
                 metrics_json,
                 reported_at: now.clone(),
+                quality_score,
             })
             .await?;
         self.record_heartbeat_transition_events(&credentials, &transition, request)
@@ -580,6 +903,7 @@ impl WebService {
             .repository
             .list_cluster_peers(instance_uuid, MAX_PEERS_PER_RESPONSE)
             .await?;
+        let sync = self.cluster_sync_states(&credentials).await?;
         Ok(ClusterHeartbeatResponse {
             instance_id: credentials.instance_uuid,
             status: request.status,
@@ -588,6 +912,280 @@ impl WebService {
             offline_threshold_seconds: credentials.offline_threshold_seconds,
             peers,
             messages,
+            sync,
+            ops: Some(sdkwork_webserver_contract::ClusterInstanceOpsDirectives {
+                routing_enabled: credentials.routing_enabled,
+                drain_requested: credentials.draining,
+            }),
+        })
+    }
+
+    /// Builds the per-track desired-vs-applied sync states for one
+    /// instance; `None` when the cluster never published any revision (the
+    /// sync plane is inactive).
+    async fn cluster_sync_states(
+        &self,
+        credentials: &ClusterInstanceCredentials,
+    ) -> WebServiceResult<Option<Vec<ClusterSyncState>>> {
+        let desired = self
+            .repository
+            .latest_cluster_sync_desired(credentials.tenant_id, credentials.cluster_id)
+            .await?;
+        if desired.is_empty() {
+            return Ok(None);
+        }
+        let now = now_rfc3339();
+        let mut states = Vec::with_capacity(desired.len());
+        for track in desired {
+            let (applied, desired_revision) = if track.kind == CLUSTER_SYNC_KIND_APPLICATIONS {
+                (
+                    credentials.applied_applications_revision.clone(),
+                    track.revision.clone(),
+                )
+            } else {
+                (
+                    credentials.applied_config_revision.clone(),
+                    track.revision.clone(),
+                )
+            };
+            let status = if applied.as_deref() == Some(desired_revision.as_str()) {
+                CLUSTER_SYNC_STATUS_IN_SYNC
+            } else {
+                CLUSTER_SYNC_STATUS_PENDING
+            };
+            states.push(ClusterSyncState {
+                kind: sdkwork_webserver_contract::cluster_sync_kind_label(track.kind).to_owned(),
+                desired_revision: Some(desired_revision),
+                applied_revision: applied,
+                status: sdkwork_webserver_contract::cluster_sync_status_label(status).to_owned(),
+                updated_at: Some(now.clone()),
+            });
+        }
+        Ok(Some(states))
+    }
+
+    /// Serves one sync manifest to a node: the desired revision payload of
+    /// `kind` for the instance's cluster (complete data synchronization for
+    /// configuration and application management).
+    pub async fn cluster_sync_manifest(
+        &self,
+        instance_uuid: &str,
+        kind: &str,
+    ) -> WebServiceResult<ClusterSyncManifest> {
+        let kind_value = match kind {
+            "config" => CLUSTER_SYNC_KIND_CONFIG,
+            "applications" => CLUSTER_SYNC_KIND_APPLICATIONS,
+            other => {
+                return Err(WebServiceError::Validation(format!(
+                    "invalid sync kind `{other}`; expected config or applications"
+                )))
+            }
+        };
+        let credentials: ClusterInstanceCredentials = self
+            .repository
+            .resolve_cluster_instance_by_uuid(instance_uuid)
+            .await?;
+        let desired = self
+            .repository
+            .latest_cluster_sync_desired(credentials.tenant_id, credentials.cluster_id)
+            .await?;
+        let track = desired
+            .into_iter()
+            .find(|track| track.kind == kind_value)
+            .ok_or_else(|| WebServiceError::NotFound("cluster sync revision not found".into()))?;
+        let payload = self
+            .repository
+            .cluster_sync_revision_payload(
+                credentials.tenant_id,
+                credentials.cluster_id,
+                kind_value,
+                &track.revision,
+            )
+            .await?
+            .ok_or_else(|| WebServiceError::NotFound("cluster sync revision not found".into()))?;
+        Ok(ClusterSyncManifest {
+            cluster_id: credentials.cluster_uuid,
+            kind: kind.to_owned(),
+            revision: payload.revision,
+            sha256: payload.sha256,
+            payload: payload.payload,
+            created_at: payload.created_at,
+        })
+    }
+
+    /// Records one node sync acknowledgment: validates the acknowledged
+    /// revision against the desired state, persists the applied revision,
+    /// and recomputes the aggregate sync status.
+    pub async fn cluster_sync_ack(
+        &self,
+        instance_uuid: &str,
+        request: &ClusterSyncAckRequest,
+    ) -> WebServiceResult<ClusterSyncState> {
+        let kind_value = match request.kind.as_str() {
+            "config" => CLUSTER_SYNC_KIND_CONFIG,
+            "applications" => CLUSTER_SYNC_KIND_APPLICATIONS,
+            other => {
+                return Err(WebServiceError::Validation(format!(
+                    "invalid sync kind `{other}`; expected config or applications"
+                )))
+            }
+        };
+        let status_value = match request.status.as_str() {
+            "IN_SYNC" => CLUSTER_SYNC_STATUS_IN_SYNC,
+            "FAILED" => sdkwork_webserver_contract::CLUSTER_SYNC_STATUS_FAILED,
+            other => {
+                return Err(WebServiceError::Validation(format!(
+                    "invalid sync status `{other}`; expected IN_SYNC or FAILED"
+                )))
+            }
+        };
+        let credentials: ClusterInstanceCredentials = self
+            .repository
+            .resolve_cluster_instance_by_uuid(instance_uuid)
+            .await?;
+        let desired = self
+            .repository
+            .latest_cluster_sync_desired(credentials.tenant_id, credentials.cluster_id)
+            .await?;
+        let desired_revision = desired
+            .into_iter()
+            .find(|track| track.kind == kind_value)
+            .map(|track| track.revision)
+            .ok_or_else(|| WebServiceError::NotFound("cluster sync revision not found".into()))?;
+        if desired_revision != request.revision {
+            return Err(WebServiceError::Validation(format!(
+                "acknowledged revision {} is not the desired revision {desired_revision}",
+                request.revision
+            )));
+        }
+        let now = now_rfc3339();
+        self.repository
+            .record_cluster_sync_ack(ClusterSyncAckWrite {
+                tenant_id: credentials.tenant_id,
+                instance_id: credentials.instance_id,
+                kind: kind_value,
+                applied_revision: request.revision.clone(),
+                status: status_value,
+                updated_at: now.clone(),
+            })
+            .await?;
+        Ok(ClusterSyncState {
+            kind: request.kind.clone(),
+            desired_revision: Some(desired_revision),
+            applied_revision: Some(request.revision.clone()),
+            status: request.status.clone(),
+            updated_at: Some(now),
+        })
+    }
+
+    /// Per-instance heartbeat metric history for the detail page (bounded,
+    /// newest first). Also used by availability/SLA views.
+    pub async fn cluster_instance_metrics_history(
+        &self,
+        context: &WebBackendRequestContext,
+        instance_id: &str,
+        limit: i32,
+    ) -> WebServiceResult<ClusterHeartbeatSamplePage> {
+        require_cluster_platform_operator(context)?;
+        if !(1..=500).contains(&limit) {
+            return Err(WebServiceError::validation(
+                "limit must be between 1 and 500",
+            ));
+        }
+        self.repository
+            .list_cluster_heartbeats(instance_id, limit, None)
+            .await
+    }
+
+    /// Node acknowledges graceful-drain completion (PRD instance management:
+    /// the drain loop closes on the registry). Marks the instance stopped and
+    /// records the lifecycle event.
+    pub async fn cluster_drain_complete(&self, instance_uuid: &str) -> WebServiceResult<()> {
+        let credentials: ClusterInstanceCredentials = self
+            .repository
+            .resolve_cluster_instance_by_uuid(instance_uuid)
+            .await?;
+        self.repository
+            .record_cluster_drain_complete(credentials.tenant_id, instance_uuid)
+            .await?;
+        self.record_cluster_event(
+            &credentials.cluster_uuid,
+            Some(&credentials.host_uuid),
+            Some(&credentials.instance_uuid),
+            "INSTANCE_DRAIN_COMPLETED",
+            "INFO",
+            &format!(
+                "instance {} completed draining and stopped",
+                credentials.instance_uuid
+            ),
+        )
+        .await;
+        Ok(())
+    }
+
+    /// Admin action wrapper with backend context enforcement: publishes one
+    /// desired-state revision for a cluster (config or applications track).
+    pub async fn cluster_sync_publish(
+        &self,
+        context: &WebBackendRequestContext,
+        cluster_id: &str,
+        kind: &str,
+        payload: serde_json::Value,
+    ) -> WebServiceResult<ClusterSyncManifest> {
+        require_cluster_platform_operator(context)?;
+        self.cluster_publish_sync_revision(cluster_id, kind, payload, None)
+            .await
+    }
+
+    /// Admin action: publishes one desired-state revision for a cluster
+    /// (config or applications track). Every non-deleted instance of the
+    /// cluster flips to PENDING until it acknowledges the new revision.
+    pub async fn cluster_publish_sync_revision(
+        &self,
+        cluster_uuid: &str,
+        kind: &str,
+        payload: serde_json::Value,
+        created_by: Option<&str>,
+    ) -> WebServiceResult<ClusterSyncManifest> {
+        let kind_value = match kind {
+            "config" => CLUSTER_SYNC_KIND_CONFIG,
+            "applications" => CLUSTER_SYNC_KIND_APPLICATIONS,
+            other => {
+                return Err(WebServiceError::Validation(format!(
+                    "invalid sync kind `{other}`; expected config or applications"
+                )))
+            }
+        };
+        let cluster = self
+            .repository
+            .resolve_cluster_identity_by_uuid(0, cluster_uuid)
+            .await?;
+        let revision = self.repository.next_cluster_sync_revision_id().await?;
+        let canonical = serde_json::to_vec(&payload)
+            .map_err(|error| WebServiceError::Internal(format!("encode payload: {error}")))?;
+        let sha256 = sha256_hash(&canonical);
+        let size_bytes = i64::try_from(canonical.len()).unwrap_or(i64::MAX);
+        let now = now_rfc3339();
+        self.repository
+            .publish_cluster_sync_revision(ClusterSyncRevisionPublish {
+                tenant_id: 0,
+                cluster_id: cluster.cluster_id,
+                kind: kind_value,
+                revision: revision.clone(),
+                sha256: sha256.clone(),
+                payload,
+                size_bytes,
+                created_by: created_by.map(str::to_owned),
+                created_at: now.clone(),
+            })
+            .await?;
+        Ok(ClusterSyncManifest {
+            cluster_id: cluster.cluster_uuid,
+            kind: kind.to_owned(),
+            revision,
+            sha256,
+            payload: serde_json::Value::Null,
+            created_at: now,
         })
     }
 
@@ -654,8 +1252,9 @@ impl WebService {
                 from_instance_uuid: request.from_instance_id.as_deref(),
                 to_instance_uuid: request.to_instance_id.as_deref(),
                 message_type: &request.message_type,
-                payload_json: &serde_json::to_string(&request.payload)
-                    .map_err(|error| WebServiceError::Internal(format!("encode payload: {error}")))?,
+                payload_json: &serde_json::to_string(&request.payload).map_err(|error| {
+                    WebServiceError::Internal(format!("encode payload: {error}"))
+                })?,
                 deliver_at: &now,
                 expires_at: &expires,
             })
@@ -984,11 +1583,7 @@ fn validate_bounded_text(
     Ok(())
 }
 
-fn validate_address_list(
-    values: &[String],
-    maximum: usize,
-    field: &str,
-) -> WebServiceResult<()> {
+fn validate_address_list(values: &[String], maximum: usize, field: &str) -> WebServiceResult<()> {
     if values.len() > maximum {
         return Err(WebServiceError::validation(format!(
             "{field} must contain at most {maximum} entries"

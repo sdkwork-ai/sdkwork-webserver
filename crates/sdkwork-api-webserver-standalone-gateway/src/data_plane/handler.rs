@@ -312,6 +312,116 @@ async fn route_admitted_request(
         }
         return response;
     }
+    // Tunnel routes: a Host matching a registered tunnel route is relayed
+    // toward the owning agent (PRD SS30). Configured virtual hosts and the
+    // website delivery surface take precedence by construction: the tunnel
+    // check runs only when local routing has a chance to miss anyway, and a
+    // tunnel domain that is also a configured vhost is an operator error
+    // that the virtual host wins.
+    if let Some(tunnel_shared) = state.runtime.tunnel.as_ref() {
+        let host = sdkwork_webserver_core::normalize_authority_host(&authority)
+            .unwrap_or_else(|| authority.to_ascii_lowercase());
+        if tunnel_shared.registry.match_domain(&host).is_some() {
+            if let Some(response) = classify_request(&state, admitted, false, request.version()) {
+                return response;
+            }
+            return match crate::tunnel_bridge::relay_tunnel_http(
+                tunnel_shared,
+                &tunnel_shared.metrics,
+                &host,
+                client_ip,
+                request,
+            )
+            .await
+            {
+                Ok(response) => {
+                    if generation.app.config().observability.access_log {
+                        tracing::info!(
+                            config_generation = generation.id,
+                            listener_id = %state.listener_id,
+                            host = %host,
+                            status = response.status().as_u16(),
+                            "tunnel request relayed"
+                        );
+                    }
+                    response
+                }
+                Err(crate::tunnel_bridge::TunnelRelayError::NoRoute) => text_response(
+                    StatusCode::NOT_FOUND,
+                    "tunnel route is not registered
+",
+                ),
+                Err(crate::tunnel_bridge::TunnelRelayError::Failure(error)) => {
+                    tracing::warn!(host = %host, error = %error, "tunnel relay failed");
+                    text_response(
+                        StatusCode::BAD_GATEWAY,
+                        "tunnel relay failed
+",
+                    )
+                }
+            };
+        }
+    }
+    // Cluster auto-routing: a Host served by the cluster's discovered
+    // instances (topology overlay, refreshed from the registry) is picked
+    // by the configured load balancing strategy and relayed to the winning
+    // instance over the internal network.
+    {
+        let snapshot = state.runtime.cluster_overlay.load_full();
+        let host = sdkwork_webserver_core::normalize_authority_host(&authority)
+            .unwrap_or_else(|| authority.to_ascii_lowercase());
+        if snapshot.group_for_host(&host).is_some() {
+            if let Some(response) = classify_request(&state, admitted, false, request.version()) {
+                return response;
+            }
+            let strategy_override = request
+                .headers()
+                .get("x-cluster-lb-strategy")
+                .and_then(|value| value.to_str().ok())
+                .map(sdkwork_webserver_cluster::LoadBalancingStrategy::parse)
+                .filter(|(_, known)| *known)
+                .map(|(strategy, _)| strategy);
+            let pick_key = sdkwork_webserver_cluster::PickKey::ClientIp(&client_ip.to_string());
+            return match sdkwork_webserver_cluster::ClusterLoadBalancer::pick(
+                &snapshot,
+                &host,
+                pick_key,
+                strategy_override,
+            ) {
+                Some(lease) => {
+                    if generation.app.config().observability.access_log {
+                        tracing::info!(
+                            host = %host,
+                            instance = %lease.instance().id,
+                            strategy = lease.decision().strategy.as_str(),
+                            "cluster request routed"
+                        );
+                    }
+                    let outcome =
+                        crate::tunnel_bridge::relay_cluster_http(lease.endpoint(), request).await;
+                    drop(lease);
+                    match outcome {
+                        Ok(response) => response,
+                        Err(crate::tunnel_bridge::TunnelRelayError::NoRoute) => {
+                            text_response(StatusCode::NOT_FOUND, "cluster route is unavailable\n")
+                        }
+                        Err(crate::tunnel_bridge::TunnelRelayError::Failure(error)) => {
+                            tracing::warn!(
+                                host = %host,
+                                error = %error,
+                                "cluster relay failed"
+                            );
+                            text_response(StatusCode::BAD_GATEWAY, "cluster relay failed\n")
+                        }
+                    }
+                }
+                None => text_response(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "no healthy cluster instance is available\n",
+                ),
+            };
+        }
+    }
     let mut rewrite_redirects = 0_u32;
     let selected = loop {
         let Some(candidate) =

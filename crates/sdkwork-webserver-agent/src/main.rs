@@ -1,5 +1,6 @@
 //! SDKWork Web Node Daemon control-plane synchronization runtime.
 
+pub mod cluster_member;
 #[path = "served_certificates.rs"]
 mod served_certificates;
 #[path = "state.rs"]

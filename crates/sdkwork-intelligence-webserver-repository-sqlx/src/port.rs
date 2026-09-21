@@ -4,9 +4,12 @@ use async_trait::async_trait;
 use sdkwork_intelligence_webserver_service::{
     AuditLogWrite, CertificateRevocationMaterial, ClusterEventWrite, ClusterHeartbeatTransition,
     ClusterHeartbeatWrite, ClusterHostUpsert, ClusterIdentity, ClusterInstanceCredentials,
-    ClusterInstanceUpsert, ClusterPeerMessageEnqueue, ClusterUpsert, DomainVerificationChallenge,
-    DomainVerificationObservation, ExpiredClusterHost, ExpiredClusterInstance,
-    RuntimeAssignmentTarget, RuntimeAssignmentWrite, RuntimeObservationWrite, WebRepositoryPort,
+    ClusterInstanceUpsert, ClusterPeerMessageEnqueue, ClusterProbeOutcome, ClusterProbeWrite,
+    ClusterRoutingDiscovery, ClusterSyncAckWrite, ClusterSyncDesired,
+    ClusterSyncRevisionPayload, ClusterSyncRevisionPublish, ClusterUpsert,
+    DomainVerificationChallenge, DomainVerificationObservation, ExpiredClusterHost,
+    ExpiredClusterInstance, RuntimeAssignmentTarget, RuntimeAssignmentWrite,
+    RuntimeObservationWrite, WebRepositoryPort,
 };
 use sdkwork_webserver_contract::{
     AgentHeartbeatRequest, AgentHeartbeatResponse, AgentSyncResponse, AuditLogPage,
@@ -38,6 +41,7 @@ use sdkwork_webserver_contract::{
 use sdkwork_webserver_contract::{WebServiceError, WebServiceResult};
 
 use super::agents::AuthenticatedAgent;
+use super::support::next_id;
 use super::WebRepository;
 
 #[async_trait]
@@ -908,6 +912,14 @@ impl WebRepositoryPort for WebRepository {
             request.description.as_deref(),
             request.heartbeat_interval_seconds.unwrap_or(15),
             request.offline_threshold_seconds.unwrap_or(60),
+            request
+                .lb_strategy
+                .as_deref()
+                .unwrap_or(sdkwork_webserver_contract::CLUSTER_LB_STRATEGIES[0]),
+            request
+                .served_domains
+                .as_deref()
+                .unwrap_or(&[]),
         )
         .await
     }
@@ -961,6 +973,11 @@ impl WebRepositoryPort for WebRepository {
         host_id: Option<&str>,
         status: Option<i32>,
         health_state: Option<&str>,
+        join_mode: Option<i32>,
+        sync_status: Option<i32>,
+        labels: &[(String, String)],
+        search: Option<&str>,
+        build_version: Option<&str>,
         page_size: i32,
         cursor: Option<&str>,
     ) -> WebServiceResult<ClusterInstancePage> {
@@ -969,6 +986,11 @@ impl WebRepositoryPort for WebRepository {
             host_id,
             status,
             health_state,
+            join_mode,
+            sync_status,
+            labels,
+            search,
+            build_version,
             page_size,
             cursor,
         )
@@ -998,10 +1020,11 @@ impl WebRepositoryPort for WebRepository {
         &self,
         cluster_id: Option<&str>,
         severity: Option<&str>,
+        instance_id: Option<&str>,
         page_size: i32,
         cursor: Option<&str>,
     ) -> WebServiceResult<ClusterEventPage> {
-        self.list_cluster_events_repo(cluster_id, severity, page_size, cursor)
+        self.list_cluster_events_repo(cluster_id, severity, instance_id, page_size, cursor)
             .await
     }
 
@@ -1070,6 +1093,13 @@ impl WebRepositoryPort for WebRepository {
             tenant_id: row.tenant_id,
             heartbeat_interval_seconds: row.heartbeat_interval_seconds,
             offline_threshold_seconds: row.offline_threshold_seconds,
+            desired_config_revision: row.desired_config_revision,
+            applied_config_revision: row.applied_config_revision,
+            desired_applications_revision: row.desired_applications_revision,
+            applied_applications_revision: row.applied_applications_revision,
+            sync_status: row.sync_status,
+            routing_enabled: row.routing_enabled,
+            draining: row.draining,
         })
     }
 
@@ -1091,6 +1121,13 @@ impl WebRepositoryPort for WebRepository {
             tenant_id: row.tenant_id,
             heartbeat_interval_seconds: row.heartbeat_interval_seconds,
             offline_threshold_seconds: row.offline_threshold_seconds,
+            desired_config_revision: row.desired_config_revision,
+            applied_config_revision: row.applied_config_revision,
+            desired_applications_revision: row.desired_applications_revision,
+            applied_applications_revision: row.applied_applications_revision,
+            sync_status: row.sync_status,
+            routing_enabled: row.routing_enabled,
+            draining: row.draining,
         })
     }
 
@@ -1102,6 +1139,84 @@ impl WebRepositoryPort for WebRepository {
         Ok(ClusterHeartbeatTransition {
             previous_status: row.previous_status,
             previous_health_state: row.previous_health_state,
+        })
+    }
+
+    async fn discover_cluster_routing(
+        &self,
+        cluster_code: &str,
+    ) -> WebServiceResult<Option<ClusterRoutingDiscovery>> {
+        self.discover_cluster_routing_repo(cluster_code).await
+    }
+
+    async fn next_cluster_sync_revision_id(&self) -> WebServiceResult<String> {
+        let id = next_id(self.id_generator())?;
+        Ok(id.to_string())
+    }
+
+    async fn latest_cluster_sync_desired(
+        &self,
+        tenant_id: i64,
+        cluster_id: i64,
+    ) -> WebServiceResult<Vec<ClusterSyncDesired>> {
+        self.latest_cluster_sync_desired_repo(tenant_id, cluster_id)
+            .await
+    }
+
+    async fn cluster_sync_revision_payload(
+        &self,
+        tenant_id: i64,
+        cluster_id: i64,
+        kind: i32,
+        revision: &str,
+    ) -> WebServiceResult<Option<ClusterSyncRevisionPayload>> {
+        self.cluster_sync_revision_payload_repo(tenant_id, cluster_id, kind, revision)
+            .await
+    }
+
+    async fn publish_cluster_sync_revision(
+        &self,
+        write: ClusterSyncRevisionPublish,
+    ) -> WebServiceResult<u64> {
+        self.publish_cluster_sync_revision_repo(&write).await?;
+        Ok(0)
+    }
+
+    async fn record_cluster_sync_ack(&self, write: ClusterSyncAckWrite) -> WebServiceResult<()> {
+        self.record_cluster_sync_ack_repo(&write).await
+    }
+
+    async fn record_cluster_drain_complete(
+        &self,
+        tenant_id: i64,
+        instance_uuid: &str,
+    ) -> WebServiceResult<()> {
+        self.record_cluster_drain_complete_repo(tenant_id, instance_uuid)
+            .await
+    }
+
+    async fn record_cluster_probe_outcome(
+        &self,
+        write: ClusterProbeWrite,
+    ) -> WebServiceResult<ClusterProbeOutcome> {
+        self.record_cluster_probe_outcome_repo(&write).await
+    }
+
+    async fn resolve_cluster_identity_by_uuid(
+        &self,
+        tenant_id: i64,
+        cluster_uuid: &str,
+    ) -> WebServiceResult<ClusterIdentity> {
+        let row = self
+            .resolve_cluster_identity_by_uuid_repo(tenant_id, cluster_uuid)
+            .await?;
+        Ok(ClusterIdentity {
+            cluster_id: row.cluster_id,
+            cluster_uuid: row.cluster_uuid,
+            name: row.name,
+            code: row.code,
+            heartbeat_interval_seconds: row.heartbeat_interval_seconds,
+            offline_threshold_seconds: row.offline_threshold_seconds,
         })
     }
 

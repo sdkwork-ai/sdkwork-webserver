@@ -100,6 +100,26 @@ where
     run_data_plane_with_operations_until(app, None, shutdown).await
 }
 
+/// Runs the data plane with an injected cluster auto-routing overlay: the
+/// discovery refresher (management assembly or tests) publishes topology
+/// snapshots, and request hosts served by the cluster are routed to picked
+/// healthy instances.
+pub async fn run_data_plane_until_with_cluster_overlay<F>(
+    app: CompiledWebServerApp,
+    overlay: Arc<arc_swap::ArcSwap<sdkwork_webserver_cluster::ClusterTopology>>,
+    shutdown: F,
+) -> Result<(), DataPlaneError>
+where
+    F: Future<Output = ()> + Send,
+{
+    let runtime = DataPlaneRuntime::build_with_cluster_overlay(app, overlay)?;
+    let result =
+        run_data_plane_runtime_until(runtime.clone(), None, None, None, None, None, shutdown).await;
+    let health_result = runtime.stop_active_health().await;
+    let resource_result = runtime.stop_resource_pressure().await;
+    result.and(health_result).and(resource_result)
+}
+
 pub async fn run_data_plane_with_operations_until<F>(
     app: CompiledWebServerApp,
     operations: Option<DataPlaneOperationsConfig>,
@@ -260,6 +280,26 @@ where
         Some(config) => Some(prepare_operations_listener(config).await?),
         None => None,
     };
+    // Tunnel gateway: QUIC listener rides the data-plane lifecycle (PRD SS77
+    // backward compatibility: absent/disabled config leaves nothing running).
+    let mut tunnel_gateway = match runtime.tunnel_options.as_ref() {
+        Some(options) => {
+            let shared = runtime
+                .tunnel
+                .clone()
+                .ok_or(DataPlaneError::TunnelStateUnavailable)?;
+            Some(
+                sdkwork_webserver_tunnel::TunnelGateway::spawn_with_shared(
+                    shared,
+                    options.clone(),
+                    None,
+                )
+                .await
+                .map_err(|error| DataPlaneError::TunnelGateway(error.to_string()))?,
+            )
+        }
+        None => None,
+    };
     runtime.start_resource_pressure().await?;
     runtime.start_active_health().await?;
 
@@ -385,6 +425,9 @@ where
         }
     };
     let remaining_drain = drain_deadline.saturating_duration_since(Instant::now());
+    if let Some(gateway) = tunnel_gateway.take() {
+        gateway.shutdown().await;
+    }
     if let Some(stop_tx) = tls_shutdown_tx {
         let _ = stop_tx.send(true);
     }

@@ -111,7 +111,12 @@ fn resolve_deployment_profile() -> Result<String, String> {
     let raw = env::var(DEPLOYMENT_PROFILE_ENV)
         .or_else(|_| env::var("SDKWORK_DEPLOYMENT_PROFILE"))
         .unwrap_or_else(|_| "standalone".to_owned())
+        .trim()
         .to_ascii_lowercase();
+    // The closed vocabulary is validated here for the operator-facing error
+    // message, but the mode predicate itself is shared: an inline `==` here
+    // would silently disagree with the resolver on blank or differently-cased
+    // values.
     if VALID_DEPLOYMENT_PROFILES.contains(&raw.as_str()) {
         Ok(raw)
     } else {

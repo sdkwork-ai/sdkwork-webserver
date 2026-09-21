@@ -20,6 +20,8 @@ use std::{
 
 use serde::Deserialize;
 
+use sdkwork_utils_rust::service_base_url::{mode_of_deployment_profile, ServiceMode};
+
 use crate::config::{
     load_server_toml_app, ConfigFormat, ConfigLoadOptions, ResourceConfig, WebServerAppConfig,
     WebServerConfigError, WebServerConfigLoader,
@@ -504,24 +506,42 @@ pub fn merge_import_specs(
 }
 
 /// Effective deployment profile for an import (`standalone` or `cloud`).
+///
+/// The profile vocabulary and the "which mode am I in" decision belong to
+/// `sdkwork-utils-rust::service_base_url`; a second classifier here would let
+/// the import loader and the base-URL resolver disagree about the same process
+/// (for example on blank or differently-cased values). Only the
+/// import-specific validation and error mapping live here.
 pub fn resolve_import_profile(import: &WebserverModuleImport) -> Result<String, ModuleImportError> {
     if let Some(profile) = import.profile.as_deref() {
-        if profile == "standalone" || profile == "cloud" {
-            return Ok(profile.to_owned());
+        let mode = mode_of_deployment_profile(Some(profile));
+        let normalized = match mode {
+            ServiceMode::Embedded => "standalone",
+            ServiceMode::Split => "cloud",
+        };
+        // The shared classifier maps every unrecognised value to `Split`, so a
+        // typo would silently become `cloud`. An explicit per-import profile is
+        // operator-authored, so reject anything outside the closed vocabulary
+        // instead of guessing.
+        if !matches!(
+            profile.trim().to_ascii_lowercase().as_str(),
+            "standalone" | "cloud"
+        ) {
+            return Err(ModuleImportError::InvalidSpec {
+                id: import.id.clone(),
+                message: format!("profile must be `standalone` or `cloud`, got `{profile}`"),
+            });
         }
-        return Err(ModuleImportError::InvalidSpec {
-            id: import.id.clone(),
-            message: format!("profile must be `standalone` or `cloud`, got `{profile}`"),
-        });
+        return Ok(normalized.to_owned());
     }
     let deployment_profile = std::env::var("SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE")
         .or_else(|_| std::env::var("SDKWORK_DEPLOYMENT_PROFILE"))
-        .unwrap_or_else(|_| "standalone".to_owned());
-    if deployment_profile == "cloud" {
-        Ok("cloud".to_owned())
-    } else {
-        Ok("standalone".to_owned())
-    }
+        .ok();
+    let normalized = match mode_of_deployment_profile(deployment_profile.as_deref()) {
+        ServiceMode::Embedded => "standalone",
+        ServiceMode::Split => "cloud",
+    };
+    Ok(normalized.to_owned())
 }
 
 /// Effective lifecycle environment for an import.
