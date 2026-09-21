@@ -22,7 +22,7 @@
   },
   "sdkOwner": "sdkwork-webserver",
   "apiAuthority": "sdkwork-webserver-internal-api",
-  "ownerOnlyOperationCount": 7,
+  "ownerOnlyOperationCount": 10,
   "standardProfile": "sdkwork-v3",
   "sdkSurface": "internal",
   "sdkType": "custom",

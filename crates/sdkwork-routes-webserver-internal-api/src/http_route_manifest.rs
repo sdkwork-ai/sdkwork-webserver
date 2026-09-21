@@ -72,7 +72,7 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     .with_rate_limit_tier(RateLimitTier::AuthCritical),
     HttpRoute::ingress_token(
         HttpMethod::Post,
-        "/internal/v3/api/web/cluster/instances/drain-complete",
+        "/internal/v3/api/web/cluster/instances/drain_complete",
         "cluster",
         "cluster.instances.drainComplete",
     )

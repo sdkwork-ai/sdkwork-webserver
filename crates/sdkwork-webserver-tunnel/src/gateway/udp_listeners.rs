@@ -27,7 +27,7 @@ use tokio::sync::mpsc;
 use sdkwork_webserver_tunnel_core::{RouteId, TunnelError};
 use sdkwork_webserver_tunnel_protocol::packet_frame;
 
-use super::GatewayShared;
+use super::{dispatch, GatewayShared};
 
 const UDP_SESSION_IDLE: Duration = Duration::from_secs(60);
 const UDP_REAP_INTERVAL: Duration = Duration::from_secs(5);
@@ -254,6 +254,11 @@ async fn open_session(
 ) -> Result<VisitorSession, TunnelError> {
     let registered =
         shared.registry.match_udp_port(port).ok_or(TunnelError::RouteNotFound)?;
+    // Same admission gate as the HTTP and TCP relay planes: network
+    // allow-list first, then the route publicity policy. Raw datagram
+    // visitors cannot present a bearer token, so bearer-protected routes
+    // deny anonymous datagrams (FRP SUDP parity: use a visitor client).
+    dispatch::admit(shared, &registered.route.policy, visitor.ip(), None)?;
     let Some(owner) = registered.session().cloned() else {
         return Err(TunnelError::RouteNotFound);
     };

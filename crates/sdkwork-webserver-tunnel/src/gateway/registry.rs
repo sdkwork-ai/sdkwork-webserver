@@ -35,6 +35,9 @@ pub struct RouteRegistry {
 #[derive(Debug, Default)]
 struct RegistryInner {
     by_domain: HashMap<String, Arc<RegisteredRoute>>,
+    /// Wildcard domain routes keyed by their suffix (`*.a.b` is stored under
+    /// `a.b`).
+    by_wildcard: HashMap<String, Arc<RegisteredRoute>>,
     /// Port-keyed index: TCP and UDP port namespaces are independent, so the
     /// same port number may legitimately host one route of each protocol.
     by_port: HashMap<(bool, u16), Arc<RegisteredRoute>>,
@@ -74,6 +77,15 @@ impl RouteRegistry {
                 }
             }
         }
+        if let Some(suffix) = wildcard_key(&route) {
+            if let Some(existing) = inner.by_wildcard.get(&suffix) {
+                if existing.session() != Some(&owner) {
+                    return Err(TunnelError::RouteConflict(format!(
+                        "wildcard domain *.{suffix} is already served by another device"
+                    )));
+                }
+            }
+        }
         let datagram = is_datagram(&route);
         if let Some(port) = port_key(&route) {
             let key = (datagram, port);
@@ -92,13 +104,18 @@ impl RouteRegistry {
             if let Some(domain) = domain_key(&existing.route) {
                 inner.by_domain.remove(domain);
             }
+            if let Some(suffix) = wildcard_key(&existing.route) {
+                inner.by_wildcard.remove(&suffix);
+            }
             if let Some(port) = port_key(&existing.route) {
-                let key = (datagram, port);
+                let key = (is_datagram(&existing.route), port);
                 inner.by_port.remove(&key);
             }
         }
         let registered = Arc::new(RegisteredRoute { route });
-        if let Some(domain) = domain_key(&registered.route) {
+        if let Some(suffix) = wildcard_key(&registered.route) {
+            inner.by_wildcard.insert(suffix, registered.clone());
+        } else if let Some(domain) = domain_key(&registered.route) {
             inner
                 .by_domain
                 .insert(domain.to_owned(), registered.clone());
@@ -140,6 +157,15 @@ impl RouteRegistry {
         for id in &domain_ids {
             remove_by_id(&mut inner, id);
         }
+        let wildcard_ids: Vec<RouteId> = inner
+            .by_wildcard
+            .values()
+            .filter(|route| route.session() == Some(session))
+            .map(|route| route.route.id.clone())
+            .collect();
+        for id in &wildcard_ids {
+            remove_by_id(&mut inner, id);
+        }
         let port_ids: Vec<RouteId> = inner
             .by_port
             .values()
@@ -149,10 +175,13 @@ impl RouteRegistry {
         for id in &port_ids {
             remove_by_id(&mut inner, id);
         }
-        if !domain_ids.is_empty() || !port_ids.is_empty() {
+        let mut removed = domain_ids;
+        removed.extend(wildcard_ids);
+        removed.extend(port_ids);
+        if !removed.is_empty() {
             self.version.fetch_add(1, Ordering::Relaxed);
         }
-        domain_ids
+        removed
     }
 
     /// Looks up one registered route by id.
@@ -164,18 +193,30 @@ impl RouteRegistry {
         inner
             .by_domain
             .values()
+            .chain(inner.by_wildcard.values())
             .chain(inner.by_port.values())
             .find(|route| &route.route.id == id)
             .cloned()
     }
 
-    /// Matches a visitor host (lowercase, port-less) to a live route.
+    /// Matches a visitor host (lowercase, port-less) to a live route. Exact
+    /// registrations win over wildcards; among wildcards the longest suffix
+    /// wins. A wildcard covers only subdomains (`*.a.b` does not match
+    /// `a.b` itself).
     pub fn match_domain(&self, host: &str) -> Option<Arc<RegisteredRoute>> {
         let inner = self
             .inner
             .read()
             .expect("route registry lock is never held across awaits");
-        inner.by_domain.get(host).cloned()
+        if let Some(exact) = inner.by_domain.get(host) {
+            return Some(exact.clone());
+        }
+        inner
+            .by_wildcard
+            .iter()
+            .filter(|(suffix, _)| host.ends_with(&format!(".{suffix}")))
+            .max_by_key(|(suffix, _)| suffix.len())
+            .map(|(_, route)| route.clone())
     }
 
     /// Matches a gateway TCP listener port to a live route.
@@ -205,6 +246,7 @@ impl RouteRegistry {
         let mut routes: Vec<TunnelRoute> = inner
             .by_domain
             .values()
+            .chain(inner.by_wildcard.values())
             .chain(inner.by_port.values())
             .map(|route| route.route.clone())
             .collect();
@@ -219,12 +261,19 @@ impl RouteRegistry {
             .inner
             .read()
             .expect("route registry lock is never held across awaits");
-        inner.by_domain.len() + inner.by_port.len()
+        inner.by_domain.len() + inner.by_wildcard.len() + inner.by_port.len()
     }
 }
 
 fn domain_key(route: &TunnelRoute) -> Option<&str> {
-    route.matcher.as_domain()
+    route
+        .matcher
+        .as_domain()
+        .filter(|domain| !domain.starts_with("*."))
+}
+
+fn wildcard_key(route: &TunnelRoute) -> Option<String> {
+    route.matcher.wildcard_suffix().map(str::to_owned)
 }
 
 fn is_datagram(route: &TunnelRoute) -> bool {
@@ -247,6 +296,7 @@ fn find_by_id(inner: &RegistryInner, id: &RouteId) -> Option<RegisteredRoute> {
     inner
         .by_domain
         .values()
+        .chain(inner.by_wildcard.values())
         .chain(inner.by_port.values())
         .find(|route| &route.route.id == id)
         .map(|route| (**route).clone())
@@ -260,6 +310,14 @@ fn remove_by_id(inner: &mut RegistryInner, id: &RouteId) -> Option<Arc<Registere
         .map(|(key, _)| key.clone());
     if let Some(key) = domain_removed {
         return inner.by_domain.remove(&key);
+    }
+    let wildcard_removed = inner
+        .by_wildcard
+        .iter()
+        .find(|(_, route)| &route.route.id == id)
+        .map(|(key, _)| key.clone());
+    if let Some(key) = wildcard_removed {
+        return inner.by_wildcard.remove(&key);
     }
     let port_removed = inner
         .by_port
@@ -335,6 +393,85 @@ mod tests {
         assert!(registry.match_domain("demo.sdkwork.link").is_none());
         assert!(registry.match_domain("demo2.sdkwork.link").is_some());
         assert_eq!(registry.count(), 1);
+    }
+
+    #[test]
+    fn wildcard_matches_subdomains_longest_suffix_wins() {
+        let registry = RouteRegistry::new();
+        registry
+            .register(sample_route("route_wild", "*.sdkwork.link", "session_a"))
+            .expect("register");
+        assert!(
+            registry.match_domain("app.sdkwork.link").is_some(),
+            "wildcard covers subdomains"
+        );
+        assert!(
+            registry.match_domain("deep.app.sdkwork.link").is_some(),
+            "wildcard covers nested subdomains"
+        );
+        assert!(
+            registry.match_domain("sdkwork.link").is_none(),
+            "wildcard does not cover the bare suffix"
+        );
+        assert!(registry.match_domain("app.other.link").is_none());
+
+        // A more specific wildcard wins over a broader one; an exact route
+        // wins over both.
+        registry
+            .register(sample_route("route_wild2", "*.app.sdkwork.link", "session_a"))
+            .expect("register nested wildcard");
+        let matched = registry.match_domain("x.app.sdkwork.link").expect("match");
+        assert_eq!(matched.route.id.to_string(), "route_wild2");
+        registry
+            .register(sample_route("route_exact", "y.app.sdkwork.link", "session_a"))
+            .expect("register exact");
+        let matched = registry.match_domain("y.app.sdkwork.link").expect("match");
+        assert_eq!(matched.route.id.to_string(), "route_exact");
+        assert_eq!(registry.count(), 3);
+    }
+
+    #[test]
+    fn conflicting_wildcard_is_rejected_and_teardown_sweeps() {
+        let registry = RouteRegistry::new();
+        registry
+            .register(sample_route("route_wild", "*.sdkwork.link", "session_a"))
+            .expect("register");
+        let error = registry
+            .register(sample_route("route_other", "*.sdkwork.link", "session_b"))
+            .expect_err("cross-session wildcard conflict");
+        assert!(matches!(error, TunnelError::RouteConflict(_)));
+
+        // Same-session hot update replaces the wildcard entry.
+        registry
+            .register(sample_route("route_wild", "*.renewed.link", "session_a"))
+            .expect("hot update");
+        assert!(registry.match_domain("x.sdkwork.link").is_none());
+        assert!(registry.match_domain("x.renewed.link").is_some());
+
+        // Session teardown returns every removed id (wildcard included).
+        let removed = registry
+            .remove_session(&SessionId::parse("session_a").expect("valid id"));
+        assert_eq!(removed.len(), 1);
+        assert!(registry.match_domain("x.renewed.link").is_none());
+    }
+
+    #[test]
+    fn teardown_returns_port_route_ids() {
+        let registry = RouteRegistry::new();
+        let route = TunnelRoute::new(
+            RouteId::parse("route_ssh").expect("valid id"),
+            "ssh",
+            TunnelProtocolKind::Tcp,
+            RouteMatcher::Port(7022),
+            local_target(22),
+            RoutePolicy::private(),
+        )
+        .expect("valid route")
+        .with_session(SessionId::parse("session_a").expect("valid id"), chrono::Utc::now());
+        registry.register(route).expect("register");
+        let removed = registry
+            .remove_session(&SessionId::parse("session_a").expect("valid id"));
+        assert_eq!(removed.len(), 1, "port routes must be reported to teardown");
     }
 
     #[test]

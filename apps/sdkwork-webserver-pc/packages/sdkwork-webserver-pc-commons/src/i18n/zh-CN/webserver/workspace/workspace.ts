@@ -163,9 +163,11 @@ export const webserverWorkspaceZhCn = {
 
   "module.clusterCenter": "集群管理",
   "module.clusterCenter.description": "分布式 Web Server 集群：宿主、实例与存活状态",
-  "resource.cluster-overview.label": "集群",
+  // 「集群」这个词同时属于总览页与集群资源列表，两个条目并排渲染会出现同名菜单；
+  // 总览页因此取「集群总览」，与「集群」列表一眼可分。
+  "resource.cluster-overview.label": "集群总览",
   "resource.cluster-overview.description": "分布式集群健康与存活总览",
-  "resource.cluster-overview.admin.label": "集群",
+  "resource.cluster-overview.admin.label": "集群总览",
   "resource.cluster-overview.admin.description": "分布式集群健康与存活总览",
   "resource.cluster-overview.loading": "正在加载集群概览",
   "resource.cluster-overview.loadFailed": "集群概览不可用",

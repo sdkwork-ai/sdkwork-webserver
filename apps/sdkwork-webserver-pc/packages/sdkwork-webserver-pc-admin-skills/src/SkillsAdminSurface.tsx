@@ -5,10 +5,10 @@ import {
   SkillsClientsProvider,
 } from "@sdkwork/skills-pc-core";
 import {
-  AdminCategoriesPage,
   AdminSkillsPage,
   PackageArtifactsPage,
   SkillCapabilitiesPage,
+  SkillCategoriesPage,
   UpdateSkillPackagePage,
 } from "@sdkwork/skills-pc-admin-skill";
 import { useMemo } from "react";
@@ -101,7 +101,7 @@ export function SkillsAdminSurface({
           />
           <Route path="edit/:packageId" element={<UpdateSkillPackagePage />} />
           <Route path="artifacts/:packageId" element={<PackageArtifactsPage />} />
-          <Route path="categories" element={<AdminCategoriesPage />} />
+          <Route path="categories" element={<SkillCategoriesPage />} />
           <Route path="capabilities" element={<SkillCapabilitiesPage />} />
         </Routes>
       </SkillsClientsProvider>

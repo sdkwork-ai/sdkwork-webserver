@@ -44,8 +44,25 @@ describe("skills and mcp console i18n", () => {
     expect(translateSkillsConsole("en-US", "create.title")).toBe("Create Skill Package");
     expect(translateSkillsConsole("zh-CN", "create.created", { id: "42" })).toContain("42");
     expect(translateSkillsConsole("zh-CN", "create.field.displayName")).toBe("显示名称");
-    expect(translateSkillsConsole("zh-CN", "edit.field.categories")).toBe("分类");
+    // The free-text "Categories" input was replaced by a managed picker.
+    expect(translateSkillsConsole("zh-CN", "edit.field.category")).toBe("分类");
+    expect(translateSkillsConsole("en-US", "edit.field.category")).toBe("Category");
+    expect(translateSkillsConsole("zh-CN", "create.field.category")).toBe("分类");
     expect(translateSkillsConsole("zh-CN", "mine.column.actions")).toBe("操作");
+  });
+
+  it("exposes the skills category picker and required-category copy", () => {
+    expect(translateSkillsConsole("zh-CN", "create.error.categoryRequired")).toBe(
+      "创建 Skill 包前，请先选择分类。",
+    );
+    expect(translateSkillsConsole("zh-CN", "edit.error.categoryRequired")).toBe(
+      "保存前请保持已选择受管分类。",
+    );
+    // The empty state must name the actor who unblocks the user.
+    expect(translateSkillsConsole("zh-CN", "category.empty.title")).toBe("暂无可用分类");
+    expect(translateSkillsConsole("en-US", "category.empty.title")).toBe("No categories available");
+    expect(translateSkillsConsole("zh-CN", "category.selected", { name: "通用" })).toContain("通用");
+    expect(translateSkillsConsole("zh-CN", "category.searchPlaceholder")).toBe("搜索分类");
   });
 
   it("localizes mcp console page copy and health", () => {

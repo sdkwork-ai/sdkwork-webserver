@@ -13,17 +13,17 @@ use chrono::{Duration, Utc};
 use sdkwork_database_id::uuid_v4;
 use sdkwork_utils_rust::crypto::{secure_compare, sha256_hash};
 use sdkwork_webserver_contract::{
-    cluster_quality_score, ClusterEventPage, ClusterHeartbeatRequest, ClusterHeartbeatResponse,
-    ClusterHeartbeatSamplePage, ClusterHostPage, ClusterHostResponse, ClusterInstancePage,
-    ClusterInstanceResponse, ClusterOverviewResponse, ClusterPage, ClusterPeerDirectoryResponse,
-    ClusterQualityMetrics, ClusterRegistrationRequest, ClusterRegistrationResponse,
-    ClusterResponse, ClusterSyncAckRequest, ClusterSyncManifest, ClusterSyncState,
-    CreateClusterRequest, EnqueueClusterPeerMessagesRequest, EnqueueClusterPeerMessagesResponse,
-    UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest,
-    WebBackendRequestContext, WebServiceError, WebServiceResult, CLUSTER_ENVIRONMENTS,
-    CLUSTER_EVENT_SEVERITIES, CLUSTER_HEALTH_STATES, CLUSTER_INSTANCE_ROLES, CLUSTER_JOIN_MODES,
-    CLUSTER_JOIN_MODE_TUNNEL, CLUSTER_SYNC_KIND_APPLICATIONS, CLUSTER_SYNC_KIND_CONFIG,
-    CLUSTER_SYNC_STATUS_IN_SYNC, CLUSTER_SYNC_STATUS_PENDING,
+    cluster_quality_score, web_is_platform_operator_tenant, ClusterEventPage,
+    ClusterHeartbeatRequest, ClusterHeartbeatResponse, ClusterHeartbeatSamplePage, ClusterHostPage,
+    ClusterHostResponse, ClusterInstancePage, ClusterInstanceResponse, ClusterOverviewResponse,
+    ClusterPage, ClusterPeerDirectoryResponse, ClusterQualityMetrics, ClusterRegistrationRequest,
+    ClusterRegistrationResponse, ClusterResponse, ClusterSyncAckRequest, ClusterSyncManifest,
+    ClusterSyncState, CreateClusterRequest, EnqueueClusterPeerMessagesRequest,
+    EnqueueClusterPeerMessagesResponse, UpdateClusterHostRequest, UpdateClusterInstanceRequest,
+    UpdateClusterRequest, WebBackendRequestContext, WebServiceError, WebServiceResult,
+    CLUSTER_ENVIRONMENTS, CLUSTER_EVENT_SEVERITIES, CLUSTER_HEALTH_STATES, CLUSTER_INSTANCE_ROLES,
+    CLUSTER_JOIN_MODES, CLUSTER_JOIN_MODE_TUNNEL, CLUSTER_SYNC_KIND_APPLICATIONS,
+    CLUSTER_SYNC_KIND_CONFIG, CLUSTER_SYNC_STATUS_IN_SYNC, CLUSTER_SYNC_STATUS_PENDING,
 };
 
 use crate::repository::{
@@ -337,13 +337,11 @@ impl WebService {
                 raw.split(',')
                     .filter(|pair| !pair.trim().is_empty())
                     .map(|pair| {
-                        let (key, value) = pair
-                            .split_once('=')
-                            .ok_or_else(|| {
-                                WebServiceError::validation(format!(
-                                    "label selector `{pair}` must be key=value"
-                                ))
-                            })?;
+                        let (key, value) = pair.split_once('=').ok_or_else(|| {
+                            WebServiceError::validation(format!(
+                                "label selector `{pair}` must be key=value"
+                            ))
+                        })?;
                         Ok((key.trim().to_owned(), value.trim().to_owned()))
                     })
                     .collect::<WebServiceResult<Vec<_>>>()
@@ -1451,8 +1449,20 @@ impl WebService {
     }
 }
 
+/// Second enforcement point for PRD-FR-030 on the cluster plane: the route layer
+/// already gated the surface, but the service re-checks so a direct in-process
+/// caller cannot bypass it.
+///
+/// Resolved through [`web_is_platform_operator_tenant`] rather than a literal so
+/// this guard, the route guard, and the IAM bootstrap all answer "which tenant
+/// is the platform operator" the same way. A previous literal `0` made the
+/// cluster plane unreachable in standalone deployments, where the operator
+/// tenant is the IAM bootstrap tenant.
+///
+/// [`web_is_platform_operator_tenant`]: sdkwork_webserver_contract::web_is_platform_operator_tenant
 fn require_cluster_platform_operator(context: &WebBackendRequestContext) -> WebServiceResult<()> {
-    if context.tenant_id == Some(0) {
+    let tenant_id = context.tenant_id.map(|id| id.to_string());
+    if web_is_platform_operator_tenant(tenant_id.as_deref()) {
         Ok(())
     } else {
         Err(WebServiceError::Forbidden)
@@ -1622,6 +1632,7 @@ pub(crate) fn now_rfc3339() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sdkwork_webserver_contract::web_platform_operator_tenant_id;
 
     #[test]
     fn cluster_thresholds_must_allow_two_missed_heartbeats() {
@@ -1629,6 +1640,40 @@ mod tests {
         assert!(validate_cluster_thresholds(60, 60).is_err());
         assert!(validate_cluster_thresholds(0, 60).is_err());
         assert!(validate_cluster_thresholds(15, 8).is_err());
+    }
+
+    fn cluster_context(tenant_id: Option<i64>) -> WebBackendRequestContext {
+        WebBackendRequestContext {
+            operator_id: Some(1),
+            tenant_id,
+            subject_id: Some("1".to_owned()),
+            idempotency_key: None,
+            permission_scope: vec!["web.cluster.read".to_owned()],
+        }
+    }
+
+    /// PRD-FR-030 on the cluster plane: the platform operator tenant is accepted
+    /// and any other tenant is forbidden. The positive half guards against the
+    /// regression where this compared against the literal `0` — no tenant is
+    /// ever `0`, which made every cluster operation unreachable.
+    #[test]
+    fn cluster_plane_admits_only_the_platform_operator_tenant() {
+        let operator_tenant = web_platform_operator_tenant_id()
+            .parse()
+            .expect("platform operator tenant id is numeric");
+        assert!(require_cluster_platform_operator(&cluster_context(Some(operator_tenant))).is_ok());
+        assert!(
+            require_cluster_platform_operator(&cluster_context(Some(operator_tenant + 1))).is_err()
+        );
+        assert!(require_cluster_platform_operator(&cluster_context(Some(0))).is_err());
+        assert!(require_cluster_platform_operator(&cluster_context(None)).is_err());
+        assert!(
+            matches!(
+                require_cluster_platform_operator(&cluster_context(None)),
+                Err(WebServiceError::Forbidden)
+            ),
+            "a non-operator tenant must be forbidden, not merely rejected"
+        );
     }
 
     #[test]

@@ -91,6 +91,10 @@ export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: Webs
     "storage-kinds": storageCenterSurface("storage-kinds"),
     "storage-buckets": storageCenterSurface("storage-buckets"),
     "storage-bindings": storageCenterSurface("storage-bindings"),
+    // The cluster pages read the admin SDK from the shell's provider (the
+    // overview polls it directly), so no per-page client is constructed here.
+    // `cluster-clusters` / `cluster-hosts` / `cluster-instances` /
+    // `cluster-events` are registry-driven and need no renderer entry.
     "cluster-overview": <ClusterOverviewSurface locale={locale} resource="cluster-overview" />,
   };
 

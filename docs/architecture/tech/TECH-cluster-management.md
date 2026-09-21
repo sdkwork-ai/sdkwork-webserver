@@ -18,8 +18,12 @@ The **cluster plane** models the sdkwork-webserver deployment itself:
 | Heartbeat | `webserver_cluster_heartbeat` | Bounded-retention liveness + metrics samples. |
 | Peer message | `webserver_cluster_peer_message` | Instance-to-instance mailbox delivered through the control plane (direct or broadcast, at-most-once handoff). |
 
-Cluster data is **platform infrastructure (tenant 0)**; the admin surface answers only the
-platform operator tenant (PRD-FR-030). One host runs many instances; hosts join clusters.
+Cluster data is **platform infrastructure**; the admin surface answers only the
+platform operator tenant (PRD-FR-030). The operator tenant is resolved through
+`web_platform_operator_tenant_id()` in `sdkwork-webserver-core`, which defaults to the
+IAM bootstrap tenant (`100001`) and can be overridden with
+`SDKWORK_WEBSERVER_PLATFORM_OPERATOR_TENANT_ID`. One host runs many instances; hosts join
+clusters.
 
 ## 2. Communication model
 
@@ -62,9 +66,15 @@ All sweep operations are bounded batches (PAGINATION_SPEC §2.5).
 - `GET /backend/v3/api/clusters/events` (cursor; filters cluster/severity).
 - `GET /backend/v3/api/clusters/overview` — aggregate counts for the polling dashboard.
 
-The PC console (`@sdkwork/webserver-pc-admin-cluster`) adds the **集群 / Cluster** tab group:
-auto-refreshing overview (10s polling), clusters / hosts / instances / events pages over the
-shared registry engine. Status wire enums: instance `0=offline,1=online,2=starting,3=stopping,4=error,5=maintenance`;
+The PC console (`@sdkwork/webserver-pc-admin-cluster`) adds the **集群管理 / Cluster** tab
+group, whose entries all live under `/admin/cluster/<child>` — `overview` (集群总览 / Cluster
+Overview), `clusters`, `hosts`, `instances`, `events`. The tab's own landing path is
+`/admin/cluster/overview`; no entry may claim the bare `/admin/cluster` prefix, which is only a
+navigation boundary (an entry owning it would give the operator two URL spellings for the same
+page). The sidebar labels of `overview` and `clusters` are deliberately distinct (集群总览 vs
+集群) — a shared word renders as two identically named menu items. The overview auto-refreshes
+(10s polling); clusters / hosts / instances / events pages run over the shared registry engine.
+Status wire enums: instance `0=offline,1=online,2=starting,3=stopping,4=error,5=maintenance`;
 host `0=offline,1=online,2=deploying,3=error,4=maintenance`.
 
 ## 5. Configuration (env)
@@ -214,7 +224,7 @@ Detail-page endpoints:
   bind endpoint / public endpoint, records the outcome through the
   auto-eject / auto-recover port, and returns
   `{ healthy, latencyMs, failures, ejected, recovered }`;
-- `POST /internal/v3/api/web/cluster/instances/drain-complete` — node-side
+- `POST /internal/v3/api/web/cluster/instances/drain_complete` — node-side
   drain completion acknowledgment (closes the drain loop: flags cleared,
   instance marked stopped, `INSTANCE_DRAIN_COMPLETED` event).
 

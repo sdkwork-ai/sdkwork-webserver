@@ -92,7 +92,9 @@ Current implemented baseline:
   buckets are hard-capped (`usageMetering.maxBuckets`); the Redis resolver-cache layer
   is lazily connected with bounded connect/operation timeouts (no executor blocking or
   `block_on` on the generation build path); anonymous security events persist under the
-  platform-shared tenant 0; environment-variable secrets derive a per-tenant +
+  platform-shared tenant 0 (a distinct concept from the **platform operator tenant** that
+  owns host-scoped admin surfaces — see `web_platform_operator_tenant_id()`); environment-variable
+  secrets derive a per-tenant +
   per-variable key; and the file explorer refuses credential-shaped file names.
 - 2026-09 hardening round 2: validation failures render HTTP `422` with
   `40001 VALIDATION_ERROR` everywhere the management OpenAPI declares the

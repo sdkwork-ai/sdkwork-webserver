@@ -8,7 +8,7 @@ SDKWORK WebServer 的内置网络穿透能力（FRP 同类能力的原生实现�
 Internet → SDKWORK Gateway (HTTP :80/:443) → Tunnel (QUIC) → Agent → 本地服务
 ```
 
-- **Gateway**（公网边缘）：QUIC 监听、设备认证、会话/路由管理、HTTP/TCP 分发、ACL、限速、Metrics。
+- **Gateway**（公网边缘）：QUIC 监听、设备认证、会话/路由管理、HTTP/TCP/UDP 分发、ACL、限速、Metrics。
 - **Agent**（内网侧）：主动连接网关、Token 认证、路由注册、心跳、自动重连、本地目标转发。
 
 ## Quick Start
@@ -71,7 +71,7 @@ sdkwork-webserver-tunnel-protocol    STP/1 控制面消息、数据面流头、�
         ↑
 sdkwork-webserver-tunnel-transport   Transport 抽象 trait + QUIC（quinn + rustls TLS 1.3）实现 + TLS 材料
         ↑
-sdkwork-webserver-tunnel             组合层：Gateway（监听/控制循环/注册表/会话表/TCP 监听/分发）、
+sdkwork-webserver-tunnel             组合层：Gateway（监听/控制循环/注册表/会话表/TCP/UDP 监听/分发）、
                                      Agent（连接/认证/注册/心跳/重连/本地转发）、Security、Service 门面、CLI
         ↑
 webserver 集成                       sdkwork-webserver-core（[tunnel] 配置节）、
@@ -89,13 +89,13 @@ webserver 集成                       sdkwork-webserver-core（[tunnel] 配置�
 
 - QUIC over **TLS 1.3**（rustls，进程级唯一 CryptoProvider）；agent 支持 CA / 指纹锁定 / 显式 skip-verify（仅开发，启动时告警）。
 - Agent 认证：环境变量解析的 Bearer Token（`SDKWORK_TUNNEL_GATEWAY_TOKEN` / `SDKWORK_TUNNEL_TOKEN`），常量时间比较；未配置 token 的网关拒绝所有 agent（fail closed）。
-- 认证失败按源 IP 固定窗口限速；访问者按路由策略（allowPublic / allowedIps / BearerToken）准入。
+- 认证失败按源 IP 固定窗口限速；访问者按路由策略（allowPublic / allowedIps / BearerToken）准入，HTTP / TCP / UDP 三个中继面走同一准入门。裸 UDP 数据报无法携带 Bearer 头：Bearer 保护的 UDP 路由拒绝匿名数据报（FRP SUDP 语义，需访客客户端），私有 UDP 路由以 allowedIps 网络白名单为主要准入手段。
 - 资源上限：maxDevices / maxSessions / maxStreamsPerSession（信号量预算）/ maxRoutes / maxControlMessageBytes；同设备重复连接替换旧会话。
-- 心跳（默认 10s）× 3 + idle 上限驱动过期会话清理；会话销毁级联注销路由并释放 TCP 监听端口。
+- 心跳（默认 10s）× 3 + idle 上限驱动过期会话清理；会话销毁级联注销路由并释放 TCP/UDP 监听端口。
 
 ## 可观测性（PRD §48–§49, §82）
 
-- Prometheus 指标（数据面 operations `/metrics` 追加）：`sdkwork_tunnel_connections[_active]`、`sessions[_active]`、`streams[_active]`、`bytes_in/out`、`reconnects`、`errors`、`auth_failures`、`routes_active`。
+- Prometheus 指标（数据面 operations `/metrics` 追加）：`sdkwork_tunnel_connections[_active]`、`sessions[_active]`、`streams[_active]`、`bytes_in/out`、`reconnects`、`errors`、`auth_failures`、`routes_active`。`status.ports` 聚合 TCP 与 UDP 监听端口。
 - operations REST（回环）：`GET /tunnel/status`、`GET|POST /tunnel/routes`、`DELETE /tunnel/routes/{id}`。
 - CLI：`sdkwork-webserver-tunnel status|list|remove --url <ops-base>`；诊断用 `doctor`（端点 → TLS → QUIC → STP 握手 → 认证 分级检查，PRD §83）。
 
@@ -106,10 +106,10 @@ Agent 断线后按 1s→2s→4s…60s 指数退避 + ±20% 抖动自动重连，
 ## 测试
 
 - 单元：领域模型、协议 round-trip（`decode(encode(m)) == m`）、未知消息降级、帧尺寸上限、TLS 材料与指纹、注册表冲突、会话预算、退避。
-- 集成：QUIC 回环、gateway+agent+本地 HTTP 端到端、数据面 `[tunnel]` 配置中继、§77 禁用兼容、认证拒绝、证书指纹拒绝。
+- 集成：QUIC 回环、gateway+agent+本地 HTTP/TCP/UDP 端到端（含 UDP 数据报往返、私有 UDP 拒绝匿名）、通配符域名子域路由、数据面 `[tunnel]` 配置中继、§77 禁用兼容、认证拒绝、证书指纹拒绝。
 
 ## 已知限制（V1，PRD §87/§133 对齐）
 
 - 状态存于内存（PRD §116）；网关重启后 agent 自动重连并重建路由，REST create-route 的离线设备声明不持久化。
 - Gateway→agent 的 remove（REST 删除）不通知 agent；agent 重连后会重新注册其模板路由。
-- mTLS、ACME、带宽限制、UDP、多网关、P2P/Mesh 为 P1/P2（PRD §8），未实现。
+- mTLS（agent 侧证书）、隧道专属 ACME、每路由带宽限制、多网关集群路由、P2P/Mesh（xtcp）为 P1/P2（PRD §8），未实现。

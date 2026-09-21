@@ -1,13 +1,24 @@
-use crate::audited_sql;
 use super::{EngineRow, WebRepository};
+use crate::audited_sql;
 use sdkwork_intelligence_webserver_service::{
     RuntimeAssignmentTarget, RuntimeAssignmentWrite, RuntimeObservationWrite,
 };
 use sdkwork_webserver_contract::{
-    RuntimeAssignment, RuntimeAssignmentDelivery, RuntimeObservation, RuntimeObservationState,
-    WebServiceError, WebServiceResult, WebsiteRuntimeSetSnapshot,
+    web_is_platform_operator_tenant, RuntimeAssignment, RuntimeAssignmentDelivery,
+    RuntimeObservation, RuntimeObservationState, WebServiceError, WebServiceResult,
+    WebsiteRuntimeSetSnapshot,
 };
 use sqlx::Row;
+
+/// Cross-tenant reads and writes are an explicit exception, granted only when the
+/// caller holds the cross-tenant permission *and* the caller belongs to the
+/// platform operator tenant. The platform operator tenant is resolved from the
+/// single authoritative environment predicate so it can never drift away from the
+/// IAM bootstrap tenant again (see `web_platform_operator_tenant_id`).
+fn requester_may_cross_tenant(requester_tenant_id: i64, can_cross_tenant: bool) -> bool {
+    can_cross_tenant
+        && web_is_platform_operator_tenant(Some(requester_tenant_id.to_string().as_str()))
+}
 
 use super::support::{
     instant_from_row, instant_write_expression, json_write_expression, new_uuid, next_id,
@@ -21,7 +32,7 @@ impl WebRepository {
         can_cross_tenant: bool,
         node_uuid: &str,
     ) -> WebServiceResult<RuntimeAssignmentTarget> {
-        let row = if can_cross_tenant && requester_tenant_id == 0 {
+        let row = if requester_may_cross_tenant(requester_tenant_id, can_cross_tenant) {
             sqlx::query(
                 "SELECT id, uuid, tenant_id, tenant_scope_hash
                  FROM webserver_server WHERE uuid = $1",
@@ -392,7 +403,7 @@ impl WebRepository {
         can_cross_tenant: bool,
         snapshot_uuid: &str,
     ) -> WebServiceResult<RuntimeObservation> {
-        let row = if can_cross_tenant && requester_tenant_id == 0 {
+        let row = if requester_may_cross_tenant(requester_tenant_id, can_cross_tenant) {
             sqlx::query(
                 "SELECT o.uuid AS observation_uuid, a.uuid AS assignment_uuid,
                         a.tenant_id AS observation_tenant_id, s.uuid AS node_uuid,
@@ -486,4 +497,30 @@ fn parse_state(value: &str) -> WebServiceResult<RuntimeObservationState> {
 
 fn map_row_error(error: sqlx::Error) -> WebServiceError {
     WebServiceError::Internal(format!("map web runtime distribution row: {error}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::requester_may_cross_tenant;
+    use sdkwork_webserver_contract::web_platform_operator_tenant_id;
+
+    #[test]
+    fn cross_tenant_requires_both_the_permission_and_the_platform_operator_tenant() {
+        let operator_tenant: i64 = web_platform_operator_tenant_id()
+            .parse()
+            .expect("platform operator tenant id is numeric");
+
+        // Both factors present -> the only admitting combination.
+        assert!(requester_may_cross_tenant(operator_tenant, true));
+
+        // Permission absent -> denied, even from the platform operator tenant.
+        assert!(!requester_may_cross_tenant(operator_tenant, false));
+
+        // Permission present but the caller is a normal tenant -> denied.
+        assert!(!requester_may_cross_tenant(operator_tenant + 1, true));
+
+        // The historical hardcoded `tenant 0` must never be admitted, because no
+        // account is ever bound to it (it left the cross-tenant path unreachable).
+        assert!(!requester_may_cross_tenant(0, true));
+    }
 }

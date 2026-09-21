@@ -163,9 +163,12 @@ export const webserverWorkspaceEnUs = {
 
   "module.clusterCenter": "Cluster",
   "module.clusterCenter.description": "Distributed Web Server cluster: hosts, instances, and liveness",
-  "resource.cluster-overview.label": "Cluster",
+  // "Cluster" is shared by the overview page and the cluster resource list, so
+  // rendering both side by side produced two identically named menu items. The
+  // overview therefore reads "Cluster Overview" and stays distinguishable.
+  "resource.cluster-overview.label": "Cluster Overview",
   "resource.cluster-overview.description": "Distributed cluster health and liveness overview",
-  "resource.cluster-overview.admin.label": "Cluster",
+  "resource.cluster-overview.admin.label": "Cluster Overview",
   "resource.cluster-overview.admin.description": "Distributed cluster health and liveness overview",
   "resource.cluster-overview.loading": "Loading cluster overview",
   "resource.cluster-overview.loadFailed": "Cluster overview is unavailable",

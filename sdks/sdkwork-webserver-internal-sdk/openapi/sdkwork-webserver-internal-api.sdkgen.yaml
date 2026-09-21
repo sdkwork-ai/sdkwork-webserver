@@ -611,6 +611,222 @@
         }
       }
     },
+    "/internal/v3/api/web/cluster/sync/manifest": {
+      "get": {
+        "operationId": "cluster.sync.manifest",
+        "summary": "Retrieve one desired-state sync manifest for the calling instance",
+        "description": "Serves the cluster's current desired revision payload for one sync\ntrack (`config` or `applications`) to the authenticated instance. The\ncaller must be a registered cluster instance: the manifest is resolved\nfrom the instance's own cluster membership, so an instance can never\nread another cluster's desired state.",
+        "tags": [
+          "cluster"
+        ],
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "x-sdkwork-api-surface": "internal-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-internal-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "ingress-token",
+        "x-sdkwork-route-auth": "ingress-token",
+        "x-sdkwork-permission": "web.cluster.write",
+        "x-sdkwork-rate-limit-tier": "auth-critical",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": true,
+            "description": "Sync track selector.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "config",
+                "applications"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sync manifest for the requested track.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/responses/ClusterSyncManifest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "SDKWork problem detail.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SDKWork problem detail.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SDKWork problem detail.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/v3/api/web/cluster/sync/ack": {
+      "post": {
+        "operationId": "cluster.sync.ack",
+        "summary": "Record one node sync acknowledgment",
+        "description": "Acknowledges that the calling instance applied (or failed to apply) one\ndesired sync revision. The revision and resulting status persist on the\ninstance row so the control plane can compute per-track drift.\nIdempotent: re-acknowledging the same revision is a no-op update.",
+        "tags": [
+          "cluster"
+        ],
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "x-sdkwork-api-surface": "internal-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-internal-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "ingress-token",
+        "x-sdkwork-route-auth": "ingress-token",
+        "x-sdkwork-permission": "web.cluster.write",
+        "x-sdkwork-idempotent": true,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sdkwork-rate-limit-tier": "auth-critical",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClusterSyncAckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sync acknowledgment recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/responses/ClusterSyncState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "SDKWork problem detail.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SDKWork problem detail.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SDKWork problem detail.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/v3/api/web/cluster/instances/drain_complete": {
+      "post": {
+        "operationId": "cluster.instances.drainComplete",
+        "summary": "Acknowledge graceful-drain completion",
+        "description": "The calling instance signals that its graceful drain finished. The\nregistry clears the drain flags and marks the instance stopped so the\nload balancer stops selecting it. Not idempotent: only the instance's\nown first transition out of draining is recorded.",
+        "tags": [
+          "cluster"
+        ],
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "x-sdkwork-api-surface": "internal-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-internal-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "ingress-token",
+        "x-sdkwork-route-auth": "ingress-token",
+        "x-sdkwork-permission": "web.cluster.write",
+        "x-sdkwork-rate-limit-tier": "auth-critical",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "responses": {
+          "200": {
+            "description": "Drain completion acknowledged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/responses/ClusterDrainCompleteResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SDKWork problem detail.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SDKWork problem detail.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/internal/v3/api/web/cluster/peers": {
       "get": {
         "operationId": "cluster.peers.retrieve",
@@ -874,6 +1090,108 @@
                       "properties": {
                         "item": {
                           "$ref": "#/components/schemas/ClusterHeartbeatResponse"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "ClusterSyncManifest": {
+        "description": "Desired-state sync manifest returned.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/SdkWorkApiResponse"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "item"
+                      ],
+                      "properties": {
+                        "item": {
+                          "$ref": "#/components/schemas/ClusterSyncManifest"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "ClusterSyncState": {
+        "description": "Sync acknowledgment recorded for the instance.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/SdkWorkApiResponse"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "item"
+                      ],
+                      "properties": {
+                        "item": {
+                          "$ref": "#/components/schemas/ClusterSyncState"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "ClusterDrainCompleteResponse": {
+        "description": "Graceful-drain completion acknowledged.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/SdkWorkApiResponse"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "item"
+                      ],
+                      "properties": {
+                        "item": {
+                          "$ref": "#/components/schemas/ClusterDrainCompleteResponse"
                         }
                       }
                     }
@@ -1277,6 +1595,137 @@
           "metrics": {
             "type": "object",
             "description": "Resource metrics snapshot (CPU/memory/connections); bounded to 16 KiB."
+          }
+        }
+      },
+      "ClusterSyncAckRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "revision",
+          "status"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "config",
+              "applications"
+            ]
+          },
+          "revision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "UNKNOWN",
+              "IN_SYNC",
+              "PENDING",
+              "FAILED"
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "maxLength": 1024
+          }
+        }
+      },
+      "ClusterSyncManifest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "clusterId",
+          "kind",
+          "revision",
+          "sha256",
+          "payload",
+          "createdAt"
+        ],
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "config",
+              "applications"
+            ]
+          },
+          "revision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "payload": {
+            "type": "object",
+            "description": "Track-specific desired-state payload (opaque to the transport)."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ClusterSyncState": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "status"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "config",
+              "applications"
+            ]
+          },
+          "desiredRevision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "appliedRevision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "UNKNOWN",
+              "IN_SYNC",
+              "PENDING",
+              "FAILED"
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ClusterDrainCompleteResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "acknowledgedAt"
+        ],
+        "properties": {
+          "acknowledgedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

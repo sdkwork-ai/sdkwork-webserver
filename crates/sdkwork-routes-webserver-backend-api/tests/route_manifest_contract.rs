@@ -230,3 +230,54 @@ fn root_domain_zone_routes_keep_authorization_and_navigation_contracts() {
         assert_eq!(route.idempotent, idempotent);
     }
 }
+
+/// The cluster plane is host-scoped (PRD-FR-030), so it is gated twice: the
+/// route carries a `web.cluster.*` permission *and* the handler requires the
+/// platform operator tenant.
+///
+/// Both halves are load-bearing. The tenant check alone would make the surface
+/// reachable by every tenant member inside the operator tenant; the permission
+/// check alone would let any tenant holding `web.cluster.*` reach another
+/// tenant's hosts. This locks the permission half in place, because the tenant
+/// half is covered by the handler tests in `cluster_routes` and
+/// `cluster_ops`.
+#[test]
+fn cluster_plane_routes_stay_behind_web_cluster_permissions() {
+    let expected = [
+        (HttpMethod::Get, "clusters.list", "web.cluster.read", false),
+        (
+            HttpMethod::Post,
+            "clusters.create",
+            "web.cluster.write",
+            true,
+        ),
+        (
+            HttpMethod::Get,
+            "clusters.hosts.list",
+            "web.cluster.read",
+            false,
+        ),
+        (
+            HttpMethod::Get,
+            "clusters.instances.list",
+            "web.cluster.read",
+            false,
+        ),
+    ];
+    let manifest = backend_route_manifest();
+
+    for (method, operation_id, permission, idempotent) in expected {
+        let route = manifest
+            .routes()
+            .iter()
+            .find(|route| route.operation_id == operation_id)
+            .unwrap_or_else(|| panic!("missing route manifest entry for {operation_id}"));
+        assert_eq!(route.method, method, "method mismatch for {operation_id}");
+        assert_eq!(
+            route.required_permission,
+            Some(permission),
+            "the platform operator tenant must not become a permission bypass for {operation_id}"
+        );
+        assert_eq!(route.idempotent, idempotent);
+    }
+}

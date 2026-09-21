@@ -138,16 +138,14 @@ pub async fn connect_http_stream(
 
 /// TCP relay admission: matches a gateway listener port against registered
 /// TCP routes and opens a data stream toward the owning agent (PRD §31).
+/// UDP routes are never matched here: their gateway listeners are datagram
+/// sockets and a TCP visitor hitting the same port number finds no listener.
 pub async fn connect_tcp_stream(
     shared: &Arc<GatewayShared>,
     port: u16,
     client_ip: IpAddr,
 ) -> Result<RelayedStream> {
-    let registered = shared
-        .registry
-        .match_port(port)
-        .or_else(|| shared.registry.match_udp_port(port))
-        .ok_or(TunnelError::RouteNotFound)?;
+    let registered = shared.registry.match_port(port).ok_or(TunnelError::RouteNotFound)?;
     admit(shared, &registered.route.policy, client_ip, None)?;
     let owner: SessionId = registered
         .session()
@@ -156,7 +154,11 @@ pub async fn connect_tcp_stream(
     open_data_stream(shared, &owner, &registered.route.id).await
 }
 
-fn admit(
+/// Shared admission gate for every relay plane (HTTP, TCP, UDP datagram
+/// sessions). Raw datagram visitors cannot carry a bearer header, so
+/// bearer-protected routes are only reachable over HTTP; private UDP routes
+/// are reachable through the network allow-list.
+pub(crate) fn admit(
     shared: &Arc<GatewayShared>,
     policy: &RoutePolicy,
     ip: IpAddr,

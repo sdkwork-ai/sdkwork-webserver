@@ -1931,8 +1931,28 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
 .sdkwork-surface-drawer-body {
   flex: 1 1 auto;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: auto;
   padding: 18px 20px 24px;
+}
+/* The drawer form owns the scroll column: it grows to fill the body so its
+   action bar can be pinned to the bottom even when content is short. */
+.sdkwork-surface-drawer-body > .skills-console-form,
+.sdkwork-surface-drawer-body > form {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* Cancel the body's bottom padding so the pinned action bar sits flush
+     against the drawer edge instead of floating above a padding band. */
+  margin-bottom: -24px;
+}
+/* Keep every form block at its natural height; only the action bar absorbs the
+   leftover space via `margin-top: auto`. */
+.sdkwork-surface-drawer-body > .skills-console-form > *:not(.sdkwork-surface-drawer-form-actions),
+.sdkwork-surface-drawer-body > form > *:not(.sdkwork-surface-drawer-form-actions) {
+  flex: 0 0 auto;
 }
 .sdkwork-surface-drawer-footer {
   display: flex;
@@ -1942,17 +1962,20 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   border-top: 1px solid var(--sdk-color-border-default);
 }
 .sdkwork-surface-drawer-form-actions {
-  position: sticky;
-  bottom: -24px;
+  /* `margin-top: auto` inside the flex-column form pushes this bar to the
+     bottom of the drawer no matter how short the form content is — the sticky
+     rule alone left a dead band whenever the body did not overflow. */
+  margin-top: auto;
   z-index: 2;
+  flex: 0 0 auto;
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: 8px;
-  margin: 16px -20px -24px;
-  padding: 12px 20px;
+  /* Bottom padding closes the 24px band the form cancels via `margin-bottom`. */
+  padding: 12px 0 24px;
   border-top: 1px solid var(--sdk-color-border-default);
-  background: color-mix(in srgb, var(--sdk-color-surface-panel, #fff) 92%, transparent);
-  backdrop-filter: blur(8px);
+  background: var(--sdk-color-surface-panel, #fff);
 }
 .sdkwork-surface-drawer-form-actions button[type="button"] {
   min-height: 34px;
@@ -2087,6 +2110,92 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
   word-break: break-all;
+}
+
+/* Managed category picker (Skills + MCP console forms).
+   Category codes are admin-issued; the console only ever offers published
+   records, so this replaces the old free-text inputs. Token-driven so it
+   follows the live colour mode (THEME_DARKMODE_SPEC §1/§4). */
+.skills-console-category-picker {
+  display: grid;
+  gap: 8px;
+}
+.skills-console-category-picker > input[type="search"] {
+  min-height: 32px;
+}
+.skills-console-category-options {
+  display: grid;
+  gap: 6px;
+  max-height: 15rem;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--sdk-color-border-default);
+  border-radius: 6px;
+  background: var(--sdk-color-surface-panel-muted, #f8fafc);
+}
+.skills-console-category-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.skills-console-category-option:hover {
+  border-color: var(--sdk-color-border-default);
+  background: var(--sdk-color-surface-panel);
+}
+.skills-console-category-option.is-selected {
+  border-color: var(--sdk-color-border-strong, var(--sdk-color-border-default));
+  background: var(--sdk-color-surface-panel);
+}
+.skills-console-category-option input[type="radio"] {
+  width: auto;
+  min-height: 0;
+  margin: 3px 0 0;
+  padding: 0;
+  accent-color: var(--sdk-color-brand-primary, #2563eb);
+}
+.skills-console-category-option-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.skills-console-category-option-name {
+  color: var(--sdk-color-text-primary);
+  font-weight: 600;
+}
+.skills-console-category-option-code {
+  color: var(--sdk-color-text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  word-break: break-all;
+}
+.skills-console-category-selected {
+  margin: 0;
+  color: var(--sdk-color-text-secondary);
+  font-size: 12px;
+}
+.skills-console-category-no-match {
+  margin: 0;
+  padding: 6px 9px;
+  color: var(--sdk-color-text-secondary);
+  font-size: 12px;
+}
+.skills-console-category-empty {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px dashed var(--sdk-color-border-default);
+  border-radius: 6px;
+  background: var(--sdk-color-surface-panel-muted, #f8fafc);
+  color: var(--sdk-color-text-secondary);
+  font-size: 12px;
+}
+.skills-console-category-empty strong {
+  color: var(--sdk-color-text-primary);
+  font-size: 13px;
 }
 .plugin-hint-valid {
   display: inline-flex;

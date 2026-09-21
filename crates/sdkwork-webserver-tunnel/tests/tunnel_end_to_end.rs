@@ -598,3 +598,191 @@ async fn udp_route_relays_datagrams_through_gateway() {
     echo_task.abort();
     gateway.shutdown().await;
 }
+
+#[tokio::test]
+async fn wildcard_http_route_matches_subdomains_only() {
+    crypto_provider();
+    init_logs();
+    let (cert_pem, key_pem, fingerprint) = tls_material();
+
+    let mut gateway_options = TunnelGatewayOptions::from_config(
+        &TunnelConfig::disabled(),
+        "127.0.0.1:0".parse().expect("bind"),
+        cert_pem.clone(),
+        key_pem.clone(),
+    );
+    gateway_options.authenticator = TokenAuthenticator::new(vec![TOKEN.to_owned()]);
+    let gateway = TunnelGateway::spawn(gateway_options, None)
+        .await
+        .expect("gateway spawns");
+    let quic_port = gateway.quic_port();
+
+    let (http_port, seen_http, http_task) = spawn_http_target().await;
+
+    let mut template = http_template("*.wild.test");
+    template.target = format!("127.0.0.1:{http_port}");
+    let device = Device::new(
+        DeviceId::parse("dev_wild").expect("valid id"),
+        "wild-runner",
+        DevicePlatform::Linux,
+    )
+    .expect("valid device");
+    let mut agent = AgentRuntime::spawn(AgentRuntimeOptions {
+        endpoint: RemoteEndpoint::new("127.0.0.1", quic_port),
+        tls: tls::ClientTlsOptions {
+            pinned_server_sha256: Some(fingerprint),
+            ..tls::ClientTlsOptions::default()
+        },
+        device,
+        token: TOKEN.to_owned(),
+        routes: vec![template],
+        network: Default::default(),
+        timeouts: Default::default(),
+        metrics: Arc::new(TunnelMetrics::new()),
+    });
+    let ready = wait_for_ready(&mut agent).await;
+    assert_eq!(ready.len(), 1);
+
+    let shared = gateway.shared();
+
+    // A subdomain of the wildcard relays to the local target.
+    let mut relayed = shared
+        .connect_http_stream(
+            "app.wild.test",
+            RelayVisitor {
+                ip: "203.0.113.5".parse().expect("ip"),
+                bearer: None,
+            },
+        )
+        .await
+        .expect("wildcard subdomain relays");
+    relayed
+        .write_all(b"GET / HTTP/1.0
+Host: app.wild.test
+
+")
+        .await
+        .expect("request written");
+    let mut buffer = [0_u8; 256];
+    let read = tokio::time::timeout(Duration::from_secs(5), relayed.read(&mut buffer))
+        .await
+        .expect("response within budget")
+        .expect("relay read");
+    assert!(read > 0, "expected a relayed response");
+
+    // The bare suffix and foreign hosts do not match the wildcard.
+    for host in ["wild.test", "app.other.test"] {
+        let outcome = shared
+            .connect_http_stream(
+                host,
+                RelayVisitor {
+                    ip: "203.0.113.5".parse().expect("ip"),
+                    bearer: None,
+                },
+            )
+            .await;
+        assert!(
+            matches!(
+                outcome,
+                Err(sdkwork_webserver_tunnel_core::TunnelError::RouteNotFound)
+            ),
+            "host {host} must not match the wildcard route"
+        );
+    }
+
+    drop(seen_http.lock().expect("seen lock"));
+    agent.shutdown().await;
+    http_task.abort();
+    gateway.shutdown().await;
+}
+
+#[tokio::test]
+async fn private_udp_route_denies_anonymous_visitors() {
+    crypto_provider();
+    init_logs();
+    let (cert_pem, key_pem, fingerprint) = tls_material();
+
+    // Local UDP recorder: echoes AND records every datagram it receives.
+    let echo = tokio::net::UdpSocket::bind("127.0.0.1:0")
+        .await
+        .expect("echo bind");
+    let echo_port = echo.local_addr().expect("echo addr").port();
+    let received = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let received_task = received.clone();
+    let echo_task = tokio::spawn(async move {
+        let mut buffer = [0_u8; 2048];
+        loop {
+            let Ok((size, peer)) = echo.recv_from(&mut buffer).await else {
+                return;
+            };
+            received_task.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let _ = echo.send_to(&buffer[..size], peer).await;
+        }
+    });
+
+    let mut gateway_options = TunnelGatewayOptions::from_config(
+        &TunnelConfig::disabled(),
+        "127.0.0.1:0".parse().expect("bind"),
+        cert_pem.clone(),
+        key_pem.clone(),
+    );
+    gateway_options.authenticator = TokenAuthenticator::new(vec![TOKEN.to_owned()]);
+    let gateway = TunnelGateway::spawn(gateway_options, None)
+        .await
+        .expect("gateway spawns");
+    let quic_port = gateway.quic_port();
+    let public_port = available_port();
+
+    // A PRIVATE udp route: anonymous datagrams must be refused by the same
+    // admission gate the HTTP and TCP planes use.
+    let template = TunnelRouteTemplate {
+        name: "secret-udp".to_owned(),
+        protocol: TunnelProtocolKind::Udp,
+        domain: None,
+        port: Some(public_port),
+        target: format!("127.0.0.1:{echo_port}"),
+        policy: Some(sdkwork_webserver_tunnel_core::RoutePolicy::private()),
+    };
+    let device = Device::new(
+        DeviceId::parse("dev_udp_priv").expect("valid id"),
+        "udp-private-runner",
+        DevicePlatform::Linux,
+    )
+    .expect("valid device");
+    let mut agent = AgentRuntime::spawn(AgentRuntimeOptions {
+        endpoint: RemoteEndpoint::new("127.0.0.1", quic_port),
+        tls: tls::ClientTlsOptions {
+            pinned_server_sha256: Some(fingerprint),
+            ..tls::ClientTlsOptions::default()
+        },
+        device,
+        token: TOKEN.to_owned(),
+        routes: vec![template],
+        network: Default::default(),
+        timeouts: Default::default(),
+        metrics: Arc::new(TunnelMetrics::new()),
+    });
+    let ready = wait_for_ready(&mut agent).await;
+    assert_eq!(ready.len(), 1);
+
+    let visitor = tokio::net::UdpSocket::bind("127.0.0.1:0")
+        .await
+        .expect("visitor bind");
+    for _ in 0..3 {
+        visitor
+            .send_to(b"denied-ping", ("127.0.0.1", public_port))
+            .await
+            .expect("datagram sent");
+    }
+    // Give any (incorrect) relay a chance to arrive, then assert silence.
+    tokio::time::sleep(Duration::from_millis(700)).await;
+    assert_eq!(
+        received.load(std::sync::atomic::Ordering::Relaxed),
+        0,
+        "private udp routes must not relay anonymous datagrams"
+    );
+
+    agent.shutdown().await;
+    echo_task.abort();
+    gateway.shutdown().await;
+}

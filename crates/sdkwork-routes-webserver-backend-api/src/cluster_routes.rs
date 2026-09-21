@@ -4,7 +4,7 @@
 //! hosts, hosts carry the machine identity (system basics, remote/local IPs,
 //! machine code, MAC addresses), and instances are the webserver processes.
 //! Per PRD-FR-030 the surface answers only the platform operator tenant
-//! (tenant 0) through [`require_platform_operator`].
+//! through [`require_platform_operator`].
 
 use std::sync::Arc;
 use std::time::Duration;

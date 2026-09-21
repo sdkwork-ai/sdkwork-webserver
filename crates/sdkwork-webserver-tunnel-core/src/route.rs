@@ -108,7 +108,7 @@ impl RouteMatcher {
         if labels.len() < 2
             || labels
                 .iter()
-                .any(|label| label.is_empty() || label.len() > 63)
+                .any(|label| label.is_empty() || label.len() > 63 || *label == "*")
         {
             return Err(TunnelError::Validation {
                 field: ValidationField::Domain,
@@ -275,6 +275,21 @@ mod tests {
         assert!(RouteMatcher::domain("https://demo.sdkwork.link").is_err());
         assert!(RouteMatcher::domain("demo:8443").is_err());
         assert!(RouteMatcher::domain("localhost").is_err());
+    }
+
+    #[test]
+    fn wildcard_domain_matcher_normalizes_and_validates() {
+        let matcher = RouteMatcher::domain("*.App.SDKWORK.link.").expect("valid wildcard");
+        assert_eq!(matcher.as_domain(), Some("*.app.sdkwork.link"));
+        assert!(matcher.is_wildcard_domain());
+        assert_eq!(matcher.wildcard_suffix(), Some("app.sdkwork.link"));
+        let exact = RouteMatcher::domain("app.sdkwork.link").expect("valid exact");
+        assert!(!exact.is_wildcard_domain());
+        assert_eq!(exact.wildcard_suffix(), None);
+        assert!(RouteMatcher::domain("*").is_err());
+        assert!(RouteMatcher::domain("*.").is_err());
+        assert!(RouteMatcher::domain("*.localhost").is_err());
+        assert!(RouteMatcher::domain("bad.*.sdkwork.link").is_err());
     }
 
     #[test]

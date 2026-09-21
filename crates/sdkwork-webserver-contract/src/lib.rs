@@ -17,6 +17,8 @@ pub use internal_ports::*;
 pub use problem::{WebServiceError, WebServiceErrorKind, WebServiceResult};
 pub use provider::*;
 pub use sdkwork_webserver_core::{
-    web_dev_auth_bypass_enabled, web_environment_name, web_is_production_like_environment,
-    web_use_dev_inline_auth_resolver,
+    web_dev_auth_bypass_enabled, web_environment_name, web_is_platform_operator_tenant,
+    web_is_production_like_environment, web_platform_operator_tenant_id,
+    web_use_dev_inline_auth_resolver, DEFAULT_PLATFORM_OPERATOR_TENANT_ID,
+    PLATFORM_OPERATOR_TENANT_ID_ENV,
 };

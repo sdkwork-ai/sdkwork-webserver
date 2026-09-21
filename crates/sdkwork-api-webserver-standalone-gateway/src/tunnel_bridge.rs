@@ -115,6 +115,7 @@ pub(crate) async fn relay_tunnel_http(
 
     let (mut parts, body) = request.into_parts();
     strip_hop_by_hop_headers(&mut parts.headers, is_websocket);
+    inject_forwarded_headers(&mut parts.headers, visitor_ip);
     let upstream_request = axum::http::Request::from_parts(parts, body);
 
     let (mut sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(stream))
@@ -191,6 +192,33 @@ fn is_upgrade_request(request: &axum::http::Request<Body>) -> bool {
         .map(|value| value.to_ascii_lowercase().contains("upgrade"))
         .unwrap_or(false);
     connection_upgrades && request.headers().get(axum::http::header::UPGRADE).is_some()
+}
+
+/// FRP-parity visitor identity propagation: appends the visitor address to
+/// `X-Forwarded-For` and fills `X-Real-IP` when absent, so services behind
+/// the agent observe the real client instead of the gateway hop.
+fn inject_forwarded_headers(headers: &mut axum::http::HeaderMap, visitor_ip: IpAddr) {
+    let visitor = visitor_ip.to_string();
+    match headers.get_mut("x-forwarded-for") {
+        Some(existing) => {
+            if let Ok(value) = existing.to_str() {
+                let appended = format!("{value}, {visitor}");
+                if let Ok(value) = axum::http::HeaderValue::from_str(&appended) {
+                    *existing = value;
+                }
+            }
+        }
+        None => {
+            if let Ok(value) = axum::http::HeaderValue::from_str(&visitor) {
+                headers.insert("x-forwarded-for", value);
+            }
+        }
+    }
+    if !headers.contains_key("x-real-ip") {
+        if let Ok(value) = axum::http::HeaderValue::from_str(&visitor) {
+            headers.insert("x-real-ip", value);
+        }
+    }
 }
 
 fn strip_hop_by_hop_headers(headers: &mut axum::http::HeaderMap, keep_upgrade: bool) {
@@ -345,4 +373,38 @@ pub(crate) async fn relay_cluster_http(
         parts,
         Body::new(response_body),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::IpAddr;
+
+    #[test]
+    fn forwarded_headers_are_appended_and_filled() {
+        let mut headers = axum::http::HeaderMap::new();
+        let ip: IpAddr = "203.0.113.7".parse().expect("ip");
+        inject_forwarded_headers(&mut headers, ip);
+        assert_eq!(
+            headers.get("x-forwarded-for").and_then(|value| value.to_str().ok()),
+            Some("203.0.113.7")
+        );
+        assert_eq!(
+            headers.get("x-real-ip").and_then(|value| value.to_str().ok()),
+            Some("203.0.113.7")
+        );
+
+        // A second hop appends instead of overwriting; X-Real-IP stays at
+        // the first observed client.
+        let upstream: IpAddr = "198.51.100.4".parse().expect("ip");
+        inject_forwarded_headers(&mut headers, upstream);
+        assert_eq!(
+            headers.get("x-forwarded-for").and_then(|value| value.to_str().ok()),
+            Some("203.0.113.7, 198.51.100.4")
+        );
+        assert_eq!(
+            headers.get("x-real-ip").and_then(|value| value.to_str().ok()),
+            Some("203.0.113.7")
+        );
+    }
 }

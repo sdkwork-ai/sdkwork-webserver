@@ -472,6 +472,7 @@ mod tests {
     use sdkwork_server_files_service::{
         BrowseDirectoryError, PathContainmentError, ProjectOperationKind,
     };
+    use sdkwork_webserver_contract::web_platform_operator_tenant_id;
 
     fn deploy_operation() -> sdkwork_server_files_service::ProjectOperation {
         sdkwork_server_files_service::ProjectOperation {
@@ -676,10 +677,17 @@ mod tests {
         );
     }
 
+    /// A platform operator context. The tenant id comes from the shared
+    /// definition rather than a literal so the fixtures cannot drift away from
+    /// the tenant `require_platform_operator` actually accepts.
     fn context_with(grants: &[&str]) -> WebBackendRequestContext {
         WebBackendRequestContext {
             operator_id: Some(7),
-            tenant_id: Some(0),
+            tenant_id: Some(
+                web_platform_operator_tenant_id()
+                    .parse()
+                    .expect("platform operator tenant id is numeric"),
+            ),
             subject_id: Some("7".to_owned()),
             idempotency_key: None,
             permission_scope: grants.iter().map(|grant| (*grant).to_owned()).collect(),
@@ -698,6 +706,22 @@ mod tests {
             .await
             .expect_err("tenant-bound principal must be rejected");
         assert_eq!(error.code(), SdkWorkResultCode::PermissionRequired);
+    }
+
+    /// The platform operator tenant itself is accepted. This is the positive
+    /// half of PRD-FR-030: without it the guard regression that compared
+    /// against the literal `0` (no tenant is ever `0`) stays invisible, because
+    /// every host-scoped test above only asserts rejection.
+    #[tokio::test]
+    async fn platform_operator_tenant_can_browse_server_files() {
+        let root = scratch_node_root();
+        let response = list_nodes(
+            scratch_state(&root),
+            Some(Extension(context_with(&["web.servers.files.read"]))),
+        )
+        .await
+        .expect("the platform operator tenant must be accepted");
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
     }
 
     #[test]

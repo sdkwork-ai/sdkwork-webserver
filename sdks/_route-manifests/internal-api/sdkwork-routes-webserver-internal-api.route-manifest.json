@@ -173,6 +173,84 @@
     },
     {
       "method": "GET",
+      "path": "/internal/v3/api/web/cluster/sync/manifest",
+      "operationId": "cluster.sync.manifest",
+      "tags": [
+        "cluster"
+      ],
+      "auth": {
+        "mode": "ingress-token",
+        "required": true
+      },
+      "routeAuth": "ingress-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-internal-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "internal-api",
+      "permission": "web.cluster.write",
+      "idempotent": false,
+      "rateLimitTier": "auth-critical"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/v3/api/web/cluster/sync/ack",
+      "operationId": "cluster.sync.ack",
+      "tags": [
+        "cluster"
+      ],
+      "auth": {
+        "mode": "ingress-token",
+        "required": true
+      },
+      "routeAuth": "ingress-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-internal-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "internal-api",
+      "permission": "web.cluster.write",
+      "idempotent": true,
+      "rateLimitTier": "auth-critical"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/v3/api/web/cluster/instances/drain_complete",
+      "operationId": "cluster.instances.drainComplete",
+      "tags": [
+        "cluster"
+      ],
+      "auth": {
+        "mode": "ingress-token",
+        "required": true
+      },
+      "routeAuth": "ingress-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-internal-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "internal-api",
+      "permission": "web.cluster.write",
+      "idempotent": false,
+      "rateLimitTier": "auth-critical"
+    },
+    {
+      "method": "GET",
       "path": "/internal/v3/api/web/cluster/peers",
       "operationId": "cluster.peers.retrieve",
       "tags": [

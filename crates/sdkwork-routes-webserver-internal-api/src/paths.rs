@@ -13,4 +13,4 @@ pub const CLUSTER_HEARTBEAT: &str = "/internal/v3/api/web/cluster/instances/hear
 pub const CLUSTER_PEERS: &str = "/internal/v3/api/web/cluster/peers";
 pub const CLUSTER_SYNC_MANIFEST: &str = "/internal/v3/api/web/cluster/sync/manifest";
 pub const CLUSTER_SYNC_ACK: &str = "/internal/v3/api/web/cluster/sync/ack";
-pub const CLUSTER_DRAIN_COMPLETE: &str = "/internal/v3/api/web/cluster/instances/drain-complete";
+pub const CLUSTER_DRAIN_COMPLETE: &str = "/internal/v3/api/web/cluster/instances/drain_complete";

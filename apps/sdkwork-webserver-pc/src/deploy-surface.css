@@ -118,23 +118,55 @@
    right. Two columns rather than a select plus a grid, because the root domain and
    its hostnames are one decision, and the left column is what turns choosing among
    several root domains into a comparison instead of a sequence of dropdowns. */
-.deploy-surface .hostname-picker{display:grid;grid-template-columns:minmax(0,232px) minmax(0,1fr);gap:0 16px;align-items:start}
+/* The left column is a fixed 208px rather than a range: it holds one short root
+   domain per row, and every pixel it does not claim is a pixel the right-hand
+   table gets. At 232px the table below needed 987px and was handed 760px, so it
+   scrolled sideways inside a dialog whose whole job is to let an operator compare
+   hostnames at a glance. */
+.deploy-surface .hostname-picker{display:grid;grid-template-columns:minmax(0,208px) minmax(0,1fr);gap:0 18px;align-items:start}
 .deploy-surface .hostname-picker-caption{display:block;margin-bottom:7px;font-size:12px;font-weight:700;color:var(--sdk-color-text-secondary)}
-.deploy-surface .hostname-picker-zones{display:grid;gap:4px;align-content:start;max-height:min(54vh,420px);overflow:auto;padding:0 12px 0 0;border-right:1px solid var(--sdk-color-border-subtle)}
-.deploy-surface .hostname-picker-zone{display:grid;gap:2px;width:100%;padding:8px 10px;border:1px solid transparent;border-radius:5px;background:transparent;color:var(--sdk-color-text-primary);text-align:left}
+.deploy-surface .hostname-picker-zones{display:grid;gap:4px;align-content:start;max-height:min(58vh,460px);overflow:auto;padding:0 14px 0 0;border-right:1px solid var(--sdk-color-border-subtle)}
+.deploy-surface .hostname-picker-zone{display:grid;gap:3px;width:100%;padding:9px 10px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--sdk-color-text-primary);text-align:left}
 .deploy-surface .hostname-picker-zone:hover{border-color:var(--sdk-color-border-default);background:var(--sdk-color-surface-elevated)}
 .deploy-surface .hostname-picker-zone[aria-pressed="true"]{border-color:var(--sdk-color-brand-primary);background:color-mix(in srgb, var(--sdk-color-brand-primary) 10%, var(--sdk-color-surface-panel))}
-.deploy-surface .hostname-picker-zone strong{overflow:hidden;text-overflow:ellipsis;font-size:13px}
+.deploy-surface .hostname-picker-zone strong{overflow-wrap:anywhere;font-size:13px;line-height:1.35}
 .deploy-surface .hostname-picker-zone small{font-size:11px;color:var(--sdk-color-text-muted)}
 .deploy-surface .hostname-picker-hostnames{min-width:0}
-.deploy-surface .hostname-picker-head{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;margin-bottom:6px}
+.deploy-surface .hostname-picker-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 12px;margin-bottom:6px}
 .deploy-surface .hostname-picker-head .hostname-picker-caption{margin-bottom:0}
 .deploy-surface .hostname-picker-hostnames>.form-hint{display:block;margin:0 0 9px}
 /* The count leads the footer rather than trailing the buttons: it reports on the
    set the buttons will act on, so it belongs on the side the reading starts. */
 .deploy-surface .hostname-picker-count{margin-right:auto;align-self:center;font-size:12px;color:var(--sdk-color-text-secondary)}
-.deploy-surface .delivery-dialog-picker{width:min(1040px,100%)}
-@media(max-width:900px){.deploy-surface .hostname-picker{grid-template-columns:minmax(0,1fr)}.deploy-surface .hostname-picker-zones{max-height:180px;padding:0 0 10px;border-right:0;border-bottom:1px solid var(--sdk-color-border-subtle)}}
+/* 1280px, not 1040px. At 1040px the table was handed 760px and its columns declare
+   770px of facts plus a checkbox column and the row buttons: `table-layout` is
+   auto, so the declared `width` on each `<th>` is a hint rather than a floor and
+   the browser shrank every data column instead of scrolling. Measured at 1440x900
+   against the old width: 主机记录 140->111, 完整域名 280->252, 所有权 130->98,
+   证书 110->81, 绑定 110->81, and the row actions 137->102. Every column lost
+   ~29px and the two facts an operator reads down the middle (the name, and whether
+   it is proven) lost the most, which is the cramped reading being complained
+   about. A scrollbar is not the symptom, compression is.
+   1280px gives the table 1000px and the columns their declared widths. The ladder
+   stays in order: default 620 < history 1120 < picker 1280. */
+.deploy-surface .delivery-dialog-picker{width:min(1280px,100%)}
+/* Below 1200px the two columns stop being affordable, so the rail becomes a strip
+   above the table instead of a narrower column beside it. Measured: the table needs
+   908px once its columns are at their declared width (a 48px checkbox column, 770px
+   of facts, and 90px of row buttons at compact density), and at a 1024px viewport
+   the dialog is clamped to 988px, which leaves 956px of content and 754px of pane
+   once a 188px rail and the gap are taken out — a 154px shortfall that shows up as
+   the same column compression the wider dialog was widened to remove. Stacked, the
+   table gets the whole content box (956px at 1024) and fits.
+   The rail is the cheaper half to move: it holds one short name per root domain and
+   is read once, where the table is read down. */
+@media(max-width:1200px){.deploy-surface .hostname-picker{grid-template-columns:minmax(0,1fr)}.deploy-surface .hostname-picker-zones{max-height:180px;padding:0 0 10px;border-right:0;border-bottom:1px solid var(--sdk-color-border-subtle)}}
+/* Under 1024px the backdrop's 18px gutter is the last thing standing between the
+   table and its 908px: at a 960px viewport the dialog is clamped to 924px, and the
+   36px of backdrop plus 32px of dialog padding is the 16px shortfall that still
+   compressed the last column by 3px. The gutter exists to keep a wide dialog off
+   the window edge, which a dialog already narrower than the window does not need. */
+@media(max-width:1024px){.deploy-surface .dialog-backdrop{padding:10px}}
 
 /* Suggestion field (the root-domain form's DNS provider).
    The list is drawn by the page inside the field's own box instead of by a native

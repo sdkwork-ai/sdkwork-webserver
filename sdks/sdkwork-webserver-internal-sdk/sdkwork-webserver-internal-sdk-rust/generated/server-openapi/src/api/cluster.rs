@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use crate::api::base::{RequestHeaders};
 use crate::api::paths::custom_path;
+use crate::api::paths::append_query_string;
 use crate::http::{SdkworkError, SdkworkHttpClient};
-use crate::models::{ClusterHeartbeatRequest, ClusterHeartbeatResponse, ClusterPeerDirectoryResponse, ClusterRegistrationRequest, ClusterRegistrationResponse};
+use crate::models::{ClusterDrainCompleteResponse, ClusterHeartbeatRequest, ClusterHeartbeatResponse, ClusterPeerDirectoryResponse, ClusterRegistrationRequest, ClusterRegistrationResponse, ClusterSyncAckRequest, ClusterSyncManifest, ClusterSyncState};
 
 #[derive(Clone)]
 pub struct ClusterApi {
@@ -37,6 +38,33 @@ impl ClusterApi {
             &[],
         );
         self.client.post(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
+    }
+
+    /// Retrieve one desired-state sync manifest for the calling instance
+    pub async fn sync_manifest(&self, kind: &str) -> Result<ClusterSyncManifest, SdkworkError> {
+        let query = build_query_string(&[
+            QueryParameterSpec::new("kind", kind, "form", true, false, None),
+        ]);
+        let path = append_query_string(custom_path(&"/web/cluster/sync/manifest".to_string()), &query);
+        self.client.get(&path, None, None).await
+    }
+
+    /// Record one node sync acknowledgment
+    pub async fn sync_ack(&self, body: &ClusterSyncAckRequest, idempotency_key: &str) -> Result<ClusterSyncState, SdkworkError> {
+        let path = custom_path(&"/web/cluster/sync/ack".to_string());
+        let headers = build_request_headers(
+            &[
+                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
+            ],
+            &[],
+        );
+        self.client.post(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
+    }
+
+    /// Acknowledge graceful-drain completion
+    pub async fn instances_drain_complete(&self) -> Result<ClusterDrainCompleteResponse, SdkworkError> {
+        let path = custom_path(&"/web/cluster/instances/drain_complete".to_string());
+        self.client.post(&path, Option::<&serde_json::Value>::None, None, None, None).await
     }
 
     /// Retrieve the authenticated instance's cluster peer directory
@@ -161,7 +189,149 @@ fn serialize_json_value(value: &serde_json::Value) -> Option<String> {
     }
 }
 
+struct QueryParameterSpec<'a> {
+    name: &'a str,
+    value: serde_json::Value,
+    style: &'a str,
+    explode: bool,
+    allow_reserved: bool,
+    content_type: Option<&'a str>,
+}
 
+impl<'a> QueryParameterSpec<'a> {
+    fn new<T: serde::Serialize>(
+        name: &'a str,
+        value: T,
+        style: &'a str,
+        explode: bool,
+        allow_reserved: bool,
+        content_type: Option<&'a str>,
+    ) -> Self {
+        Self {
+            name,
+            value: serde_json::to_value(value).unwrap_or(serde_json::Value::Null),
+            style,
+            explode,
+            allow_reserved,
+            content_type,
+        }
+    }
+}
+
+fn build_query_string(parameters: &[QueryParameterSpec<'_>]) -> String {
+    let mut pairs = Vec::new();
+    for parameter in parameters {
+        append_serialized_parameter(&mut pairs, parameter);
+    }
+    pairs.join("&")
+}
+
+fn append_serialized_parameter(pairs: &mut Vec<String>, parameter: &QueryParameterSpec<'_>) {
+    if parameter.value.is_null() {
+        return;
+    }
+    if parameter.content_type.is_some() {
+        pairs.push(format!(
+            "{}={}",
+            percent_encode(parameter.name),
+            encode_query_value(&parameter.value.to_string(), parameter.allow_reserved)
+        ));
+        return;
+    }
+
+    let style = if parameter.style.is_empty() { "form" } else { parameter.style };
+    match &parameter.value {
+        serde_json::Value::Array(values) => append_array_parameter(pairs, parameter.name, values, style, parameter.explode, parameter.allow_reserved),
+        serde_json::Value::Object(values) if style == "deepObject" => append_deep_object_parameter(pairs, parameter.name, values, parameter.allow_reserved),
+        serde_json::Value::Object(values) => append_object_parameter(pairs, parameter.name, values, style, parameter.explode, parameter.allow_reserved),
+        value => pairs.push(format!("{}={}", percent_encode(parameter.name), encode_query_value(&primitive_to_string(value), parameter.allow_reserved))),
+    }
+}
+
+fn append_array_parameter(
+    pairs: &mut Vec<String>,
+    name: &str,
+    values: &[serde_json::Value],
+    style: &str,
+    explode: bool,
+    allow_reserved: bool,
+) {
+    let serialized = values.iter().filter(|value| !value.is_null()).map(primitive_to_string).collect::<Vec<_>>();
+    if serialized.is_empty() {
+        return;
+    }
+    if style == "form" && explode {
+        for item in serialized {
+            pairs.push(format!("{}={}", percent_encode(name), encode_query_value(&item, allow_reserved)));
+        }
+        return;
+    }
+    pairs.push(format!("{}={}", percent_encode(name), encode_query_value(&serialized.join(","), allow_reserved)));
+}
+
+fn append_object_parameter(
+    pairs: &mut Vec<String>,
+    name: &str,
+    values: &serde_json::Map<String, serde_json::Value>,
+    style: &str,
+    explode: bool,
+    allow_reserved: bool,
+) {
+    let mut serialized = Vec::new();
+    for (key, value) in values {
+        if value.is_null() {
+            continue;
+        }
+        if style == "form" && explode {
+            pairs.push(format!("{}={}", percent_encode(key), encode_query_value(&primitive_to_string(value), allow_reserved)));
+        } else {
+            serialized.push(key.clone());
+            serialized.push(primitive_to_string(value));
+        }
+    }
+    if !serialized.is_empty() {
+        pairs.push(format!("{}={}", percent_encode(name), encode_query_value(&serialized.join(","), allow_reserved)));
+    }
+}
+
+fn append_deep_object_parameter(
+    pairs: &mut Vec<String>,
+    name: &str,
+    values: &serde_json::Map<String, serde_json::Value>,
+    allow_reserved: bool,
+) {
+    for (key, value) in values {
+        if !value.is_null() {
+            pairs.push(format!("{}={}", percent_encode(&format!("{}[{}]", name, key)), encode_query_value(&primitive_to_string(value), allow_reserved)));
+        }
+    }
+}
+
+fn encode_query_value(value: &str, allow_reserved: bool) -> String {
+    let mut encoded = percent_encode(value);
+    if !allow_reserved {
+        return encoded;
+    }
+    for (escaped, reserved) in [
+        ("%3A", ":"), ("%2F", "/"), ("%3F", "?"), ("%23", "#"),
+        ("%5B", "["), ("%5D", "]"), ("%40", "@"), ("%21", "!"),
+        ("%24", "$"), ("%26", "&"), ("%27", "'"), ("%28", "("),
+        ("%29", ")"), ("%2A", "*"), ("%2B", "+"), ("%2C", ","),
+        ("%3B", ";"), ("%3D", "="),
+    ] {
+        encoded = encoded.replace(escaped, reserved);
+    }
+    encoded
+}
+
+fn primitive_to_string(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(value) => value.clone(),
+        serde_json::Value::Number(value) => value.to_string(),
+        serde_json::Value::Bool(value) => value.to_string(),
+        other => other.to_string(),
+    }
+}
 
 fn percent_encode(value: &str) -> String {
     value

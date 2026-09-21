@@ -69,6 +69,27 @@ seed process, or deployed-service worker.
 `agent/development.env.example` and `SDKWORK_WEBSERVER_AGENT_*` remain wire/runtime compatibility aliases
 for the v3 Agent contract; conflicting canonical and compatibility values fail startup.
 
+### Platform Operator Tenant
+
+Host-scoped administration surfaces — the cluster plane (`/backend/v3/api/clusters*`), the server
+files explorer, and the Web Server configuration catalog — answer only the **platform operator
+tenant** (PRD-FR-030), because they act on the node's shared filesystem and host inventory rather
+than on one tenant's own records.
+
+| Role | Env | Default |
+| --- | --- | --- |
+| Platform operator tenant id | `SDKWORK_WEBSERVER_PLATFORM_OPERATOR_TENANT_ID` | `100001` |
+
+`100001` is the IAM bootstrap tenant (`SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_TENANT_ID` default in
+`sdkwork-iam-web-adapter`, and the tenant `credential_entry_bootstrap` issues its Access-Token for),
+so the guard and the bootstrap agree without extra configuration. Deployments that provision the
+platform tenant under a different id set this key; the value is resolved once through
+`web_platform_operator_tenant_id()` in `sdkwork-webserver-core` so no call site re-spells it.
+
+Route-level IAM authorization still runs first: holding `web.cluster.read` / `web.servers.files.read`
+never grants the surface on its own, and belonging to the operator tenant is likewise not a substitute
+for the permission (PRD-FR-030). Both must hold.
+
 `worker/development.env.example` configures the durable certificate operation worker. API issue and
 renew commands persist work before returning `202`; the worker claims that work with an expiring
 lease and fencing token, executes bounded ACME/material activation through the service, and writes
