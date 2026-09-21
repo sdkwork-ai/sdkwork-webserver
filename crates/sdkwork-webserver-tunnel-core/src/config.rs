@@ -325,9 +325,15 @@ impl TunnelRouteTemplate {
         self.to_route_id_and_matcher().map(|(_, matcher)| matcher)
     }
 
-    /// Parses the target declared by this template.
+    /// Parses the target declared by this template; the protocol decides the
+    /// target kind so UDP routes resolve to [`TunnelTarget::Udp`].
     pub fn target(&self) -> Result<TunnelTarget> {
-        TunnelTarget::parse_tcp(&self.target)
+        match self.protocol {
+            TunnelProtocolKind::Udp => TunnelTarget::parse_udp(&self.target),
+            TunnelProtocolKind::Http | TunnelProtocolKind::Tcp => {
+                TunnelTarget::parse_tcp(&self.target)
+            }
+        }
     }
 
     /// Policy with defaults applied.
@@ -353,10 +359,15 @@ impl TunnelRouteTemplate {
                     })?;
                 RouteMatcher::domain(domain)?
             }
-            TunnelProtocolKind::Tcp => {
+            TunnelProtocolKind::Tcp | TunnelProtocolKind::Udp => {
+                let protocol_label = if self.protocol == TunnelProtocolKind::Udp {
+                    "udp"
+                } else {
+                    "tcp"
+                };
                 let port = self.port.ok_or_else(|| TunnelError::Validation {
                     field: ValidationField::Config,
-                    reason: format!("tcp route `{}` requires a port", self.name),
+                    reason: format!("{protocol_label} route `{}` requires a port", self.name),
                 })?;
                 RouteMatcher::Port(port)
             }

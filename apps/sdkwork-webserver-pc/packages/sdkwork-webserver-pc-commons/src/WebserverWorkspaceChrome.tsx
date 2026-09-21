@@ -27,6 +27,7 @@ import { NavLink } from "react-router-dom";
 
 import type { WebserverMessageKey } from "./i18n/index.ts";
 import type { WebserverResourceKey } from "./types.ts";
+import { groupMenuEntries } from "./admin-modules.ts";
 
 type WorkspaceSurface = "app-console" | "backend-admin";
 type WorkspaceTranslator = (key: WebserverMessageKey, values?: Record<string, string | number>) => string;
@@ -153,26 +154,37 @@ export function WorkspaceHeader({
 }
 
 export function WorkspaceSidebar({ basePath, entries, surface, t }: WorkspaceSidebarProps) {
+  // Ungrouped entries keep the leading, unlabelled nav they always had; a
+  // declared section only adds a titled block beneath it, so a workspace with
+  // no grouped resource renders byte-for-byte the same markup as before.
+  const groups = groupMenuEntries(entries);
   return (
     <aside className="sidebar">
       <span className="sidebar-label">{t("nav.workspace")}</span>
-      <nav aria-label={t("nav.primary")}>
-        {entries.map((entry) => {
-          const label = resourceText(t, entry.resource, entry.label, surface);
-          const segment = entry.path?.trim() || entry.resource;
-          return (
-            <NavLink
-              aria-label={label}
-              key={entry.resource}
-              title={label}
-              to={`${basePath}/${segment}`}
-            >
-              <ResourceIcon resource={entry.resource} />
-              <span>{label}</span>
-            </NavLink>
-          );
-        })}
-      </nav>
+      {groups.map((group, index) => (
+        <nav
+          aria-label={group.labelKey ? t(group.labelKey) : t("nav.primary")}
+          className={group.labelKey ? "sidebar-section" : undefined}
+          key={group.id ?? `ungrouped-${index}`}
+        >
+          {group.labelKey ? <span className="sidebar-section-label">{t(group.labelKey)}</span> : null}
+          {group.entries.map((entry) => {
+            const label = resourceText(t, entry.resource, entry.label, surface);
+            const segment = entry.path?.trim() || entry.resource;
+            return (
+              <NavLink
+                aria-label={label}
+                key={entry.resource}
+                title={label}
+                to={`${basePath}/${segment}`}
+              >
+                <ResourceIcon resource={entry.resource} />
+                <span>{label}</span>
+              </NavLink>
+            );
+          })}
+        </nav>
+      ))}
     </aside>
   );
 }

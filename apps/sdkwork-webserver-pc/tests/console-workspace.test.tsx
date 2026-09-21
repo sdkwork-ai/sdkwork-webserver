@@ -39,7 +39,7 @@ function bridgedRenderers(): Partial<Record<WebserverResourceKey, ReactNode>> {
     apps: <DeployAppsManagementSurface {...deploy} />,
     domains: <DeployDomainManagementSurface {...deploy} resource="domains" />,
     certificates: <DeployDomainManagementSurface {...deploy} resource="certificates" />,
-    plugins: <PluginsConsoleSurface driveAppApiBaseUrl="/" resource="plugins" tokenManager={tokenManager} />,
+    plugins: <PluginsConsoleSurface driveAppApiBaseUrl="/" ownerKey="user-test" resource="plugins" tokenManager={tokenManager} />,
     skills: (
       <SkillsConsoleSurface
         appApiBaseUrl="/"

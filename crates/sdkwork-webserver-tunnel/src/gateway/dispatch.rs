@@ -146,6 +146,7 @@ pub async fn connect_tcp_stream(
     let registered = shared
         .registry
         .match_port(port)
+        .or_else(|| shared.registry.match_udp_port(port))
         .ok_or(TunnelError::RouteNotFound)?;
     admit(shared, &registered.route.policy, client_ip, None)?;
     let owner: SessionId = registered

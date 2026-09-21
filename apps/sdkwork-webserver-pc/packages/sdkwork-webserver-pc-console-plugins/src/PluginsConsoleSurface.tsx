@@ -11,13 +11,21 @@ type AttachSdkClientBoundaries = (
 
 /**
  * Bridges the Plugins self-service console into the Web Server console.
- * Catalog is browser-local for this phase; archives upload through Drive.
+ * The catalog persists browser-locally under a per-owner storage key
+ * (`sdkwork.webserver.plugins.catalog.v2.<ownerKey>`), so every IAM subject
+ * keeps an isolated plugin CRUD space; archives upload through Drive.
+ * Platform categories are admin-owned and shared across owners.
  * Styles are scoped by `.plugins-console-surface`.
  */
 export interface PluginsConsoleSurfaceProps {
   attachSdkClientBoundaries?: AttachSdkClientBoundaries;
   driveAppApiBaseUrl: string;
   locale?: string | null;
+  /**
+   * IAM subject owning this session. The plugin catalog is read and written
+   * under it, so each user gets an isolated plugin CRUD space in the browser.
+   */
+  ownerKey: string;
   resource: "plugins";
   tokenManager: AuthTokenManager;
 }
@@ -26,6 +34,7 @@ export function PluginsConsoleSurface({
   attachSdkClientBoundaries,
   driveAppApiBaseUrl,
   locale,
+  ownerKey,
   tokenManager,
 }: PluginsConsoleSurfaceProps) {
   const drive = useMemo(() => {
@@ -43,7 +52,7 @@ export function PluginsConsoleSurface({
   return (
     <div className="plugins-console-surface" lang={localeKey}>
       <PluginsLocaleProvider key={localeKey} locale={locale}>
-        <MyPluginsPage drive={drive} variant="console" />
+        <MyPluginsPage drive={drive} ownerKey={ownerKey} variant="console" />
       </PluginsLocaleProvider>
     </div>
   );

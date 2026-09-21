@@ -11,18 +11,26 @@ import {
   PluginContributionMultiSelect,
   PluginHostToolMultiSelect,
 } from "./PluginToolMultiSelect.tsx";
+import { PluginCategorySelect } from "./PluginCategorySelect.tsx";
 import { normalizePluginGitRef, type PluginRecord } from "./plugin-model.ts";
+import {
+  selectablePluginCategories,
+  type PluginCategoryRecord,
+} from "./plugin-category.ts";
 import type { PluginContributionKind, PluginHostToolId } from "./plugin-tool-catalog.ts";
 import { uploadPluginArchive } from "./plugin-upload.ts";
 
 export function EditPluginForm({
   drive,
   plugin,
+  categories,
   onCancel,
   onSuccess,
 }: {
   drive: SdkworkDriveAppClient;
   plugin: PluginRecord;
+  /** Platform category catalog curated in the admin console. */
+  categories: readonly PluginCategoryRecord[];
   onCancel?: () => void;
   onSuccess?: (record: PluginRecord) => void | Promise<void>;
 }) {
@@ -31,6 +39,7 @@ export function EditPluginForm({
   const [displayName, setDisplayName] = useState(plugin.displayName);
   const [summary, setSummary] = useState(plugin.summary);
   const [version, setVersion] = useState(plugin.version);
+  const [categoryId, setCategoryId] = useState(plugin.categoryId);
   const [gitRepository, setGitRepository] = useState(plugin.gitRepository ?? "");
   const [gitRef, setGitRef] = useState(plugin.gitRef ?? "main");
   const [artifactRef, setArtifactRef] = useState(plugin.artifactRef ?? "");
@@ -41,10 +50,12 @@ export function EditPluginForm({
     ...plugin.contributedCapabilities,
   ]);
   const [hostToolsError, setHostToolsError] = useState<string | null>(null);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const hasOfferedCategories = selectablePluginCategories(categories).length > 0;
   const gitLooksValid = plugin.sourceKind !== "git"
     || gitRepository.trim().length === 0
     || isValidGitRepositoryUrl(gitRepository);
@@ -76,8 +87,15 @@ export function EditPluginForm({
     event.preventDefault();
     setError(null);
     setHostToolsError(null);
+    setCategoryError(null);
     if (supportedHostTools.length === 0) {
       setHostToolsError(t("create.error.hostToolsRequired"));
+      return;
+    }
+    // Category is required on every plugin; a legacy record without one is
+    // forced to be filed on its first edit rather than staying uncategorized.
+    if (!categoryId) {
+      setCategoryError(t("create.error.categoryRequired"));
       return;
     }
     try {
@@ -86,6 +104,7 @@ export function EditPluginForm({
         displayName: displayName.trim() || plugin.pluginKey,
         summary: summary.trim(),
         version: version.trim() || plugin.version,
+        categoryId,
         supportedHostTools: [...supportedHostTools],
         contributedCapabilities: [...contributedCapabilities],
         updatedAt: new Date().toISOString(),
@@ -113,6 +132,7 @@ export function EditPluginForm({
   const canSubmit = !submitting
     && !uploading
     && supportedHostTools.length > 0
+    && categoryId.length > 0
     && (plugin.sourceKind === "git"
       ? isValidGitRepositoryUrl(gitRepository)
       : artifactRef.startsWith("drive://"));
@@ -129,6 +149,14 @@ export function EditPluginForm({
         <div className="skills-console-field">
           <span className="skills-console-field-label">{t("create.field.pluginKey")}</span>
           <p className="plugin-key-static">{plugin.pluginKey}</p>
+        </div>
+        {/* Ownership is an isolation boundary, not a user-editable field. */}
+        <div className="skills-console-field">
+          <span className="skills-console-field-label">
+            {t("edit.readonly.owner")}
+            <span className="skills-console-field-optional">{t("edit.readonly.label")}</span>
+          </span>
+          <p className="plugin-key-static">{plugin.ownerKey}</p>
         </div>
         <ConsoleField htmlFor="plugin-edit-display-name" label={t("create.field.displayName")} required>
           <input
@@ -158,6 +186,27 @@ export function EditPluginForm({
             required
           />
         </ConsoleField>
+      </ConsoleFormSection>
+
+      <ConsoleFormSection title={t("create.section.category")}>
+        <div className="skills-console-field">
+          <span className="skills-console-field-label">
+            {t("create.field.category")}
+            <span className="skills-console-field-required" aria-hidden="true">*</span>
+          </span>
+          <PluginCategorySelect
+            categories={categories}
+            value={categoryId}
+            onChange={(next) => {
+              setCategoryId(next);
+              setCategoryError(null);
+            }}
+            error={categoryError}
+          />
+          {hasOfferedCategories ? (
+            <small className="skills-console-field-hint">{t("create.hint.category")}</small>
+          ) : null}
+        </div>
       </ConsoleFormSection>
 
       <ConsoleFormSection title={t("create.section.compatibility")}>

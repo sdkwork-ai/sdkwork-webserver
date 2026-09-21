@@ -8,9 +8,16 @@ export const webserverModule = {
     {
       resource: "plugins",
       label: "Plugins Admin",
-      description: "Manage registered workspace plugins",
+      description: "Review and maintain registered workspace plugins",
       permission: "skills.packages.manage",
       order: 40,
+    },
+    {
+      resource: "plugin-categories",
+      label: "Plugin Categories",
+      description: "Curate the platform categories users file plugins under",
+      permission: "skills.packages.manage",
+      order: 41,
     },
   ],
 } as const satisfies WebserverPcModuleDefinition;

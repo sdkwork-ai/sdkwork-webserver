@@ -23,6 +23,9 @@ pub enum TunnelProtocolKind {
     Http,
     /// Raw byte relay bound to a dedicated gateway TCP listener port.
     Tcp,
+    /// Datagram relay bound to a dedicated gateway UDP listener port
+    /// (FRP UDP proxy parity).
+    Udp,
 }
 
 /// Where an agent delivers relayed traffic on its own network.
@@ -31,6 +34,8 @@ pub enum TunnelProtocolKind {
 pub enum TunnelTarget {
     /// Dial this IPv4/IPv6 socket address on the agent host.
     Tcp(SocketAddr),
+    /// Dial this UDP socket address on the agent host (datagram relay).
+    Udp(SocketAddr),
     /// Dial this Unix domain socket path (POSIX agents only).
     UnixSocket(PathBuf),
 }
@@ -38,11 +43,19 @@ pub enum TunnelTarget {
 impl TunnelTarget {
     /// Parses a `host:port` target string (PRD §36 request shape).
     pub fn parse_tcp(raw: &str) -> Result<Self> {
-        let addr: SocketAddr = raw.parse().map_err(|_| TunnelError::Validation {
+        Ok(Self::Tcp(Self::parse_address(raw)?))
+    }
+
+    /// Parses a UDP `host:port` target string.
+    pub fn parse_udp(raw: &str) -> Result<Self> {
+        Ok(Self::Udp(Self::parse_address(raw)?))
+    }
+
+    fn parse_address(raw: &str) -> Result<SocketAddr> {
+        raw.parse().map_err(|_| TunnelError::Validation {
             field: ValidationField::Target,
             reason: format!("`{raw}` is not an IP:port socket address"),
-        })?;
-        Ok(Self::Tcp(addr))
+        })
     }
 }
 
@@ -50,6 +63,7 @@ impl std::fmt::Display for TunnelTarget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Tcp(addr) => write!(f, "{addr}"),
+            Self::Udp(addr) => write!(f, "udp:{addr}"),
             Self::UnixSocket(path) => write!(f, "unix:{}", path.display()),
         }
     }
@@ -67,7 +81,9 @@ pub enum RouteMatcher {
 
 impl RouteMatcher {
     /// Validates and builds a domain matcher: lowercased, no scheme, no
-    /// port, no trailing dot, at least two DNS labels.
+    /// port, no trailing dot, at least two DNS labels. The wildcard form
+    /// `*.suffix` routes every subdomain of `suffix` (FRP subdomain-host
+    /// parity); the bare `suffix` itself is not covered by a wildcard.
     pub fn domain(raw: &str) -> Result<Self> {
         let lowered = raw.trim().to_ascii_lowercase();
         let host = lowered
@@ -86,7 +102,9 @@ impl RouteMatcher {
                 reason: format!("`{raw}` must be a bare hostname without scheme or port"),
             });
         }
-        let labels: Vec<&str> = host.split('.').collect();
+        // The wildcard label is syntax, not a DNS label; validate the rest.
+        let hostname = host.strip_prefix("*.").unwrap_or(&host);
+        let labels: Vec<&str> = hostname.split('.').collect();
         if labels.len() < 2
             || labels
                 .iter()
@@ -100,12 +118,23 @@ impl RouteMatcher {
         Ok(Self::Domain(host))
     }
 
-    /// The matched domain, when this is a domain matcher.
+    /// The matched domain, when this is a domain matcher. Wildcard matchers
+    /// keep their `*.suffix` form.
     pub fn as_domain(&self) -> Option<&str> {
         match self {
             Self::Domain(domain) => Some(domain),
             Self::Port(_) => None,
         }
+    }
+
+    /// True when this matcher is a wildcard domain (`*.suffix`).
+    pub fn is_wildcard_domain(&self) -> bool {
+        self.as_domain().is_some_and(|domain| domain.starts_with("*."))
+    }
+
+    /// The suffix covered by a wildcard domain matcher (without `*.`).
+    pub fn wildcard_suffix(&self) -> Option<&str> {
+        self.as_domain().and_then(|domain| domain.strip_prefix("*."))
     }
 
     /// The matched gateway port, when this is a port matcher.
@@ -218,6 +247,14 @@ pub fn local_target(port: u16) -> TunnelTarget {
 
 /// Convenience constructor for IPv6 loopback targets.
 #[allow(dead_code)]
+/// Convenience constructor for a local UDP target (datagram relay).
+pub fn local_udp_target(port: u16) -> TunnelTarget {
+    TunnelTarget::Udp(SocketAddr::V4(SocketAddrV4::new(
+        std::net::Ipv4Addr::LOCALHOST,
+        port,
+    )))
+}
+
 pub fn local_target_v6(port: u16) -> TunnelTarget {
     TunnelTarget::Tcp(SocketAddr::V6(SocketAddrV6::new(
         std::net::Ipv6Addr::LOCALHOST,

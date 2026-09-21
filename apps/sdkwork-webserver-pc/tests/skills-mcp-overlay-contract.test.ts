@@ -90,4 +90,55 @@ describe("skills and mcp list CRUD overlays", () => {
     expect(host).toContain("pluginsModule");
     expect(host).toMatch(/pluginsModule,\s*skillsModule,\s*mcpModule/);
   });
+
+  it("creates a plugin through a two-step wizard that picks agent tools first", () => {
+    const createForm = source(
+      "sdkwork-webserver/apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-console-plugins/src/CreatePluginForm.tsx",
+    );
+    // Step 1 is the agent-tool picker and it must gate step 2.
+    expect(createForm).toContain("plugin-wizard-steps");
+    expect(createForm).toContain("PluginHostToolMultiSelect");
+    expect(createForm).toMatch(/supportedHostTools\.length === 0[\s\S]{0,220}setStep\(1\)/);
+    // Category is required on the record the wizard persists.
+    expect(createForm).toContain("PluginCategorySelect");
+    expect(createForm).toContain("categoryId");
+    expect(createForm).not.toContain("登记插件");
+  });
+
+  it("curates plugin categories from a dedicated admin page", () => {
+    const categoriesPage = source(
+      "sdkwork-webserver/apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-console-plugins/src/PluginCategoriesAdminPage.tsx",
+    );
+    const adminModule = source(
+      "sdkwork-webserver/apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-plugins/src/module.ts",
+    );
+    const adminSurface = source(
+      "sdkwork-webserver/apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-plugins/src/PluginsAdminSurface.tsx",
+    );
+    const workspace = source(
+      "sdkwork-webserver/apps/sdkwork-webserver-pc/src/surfaces/WebserverAuthorizedWorkspace.tsx",
+    );
+    expect(categoriesPage).toContain("SurfaceDrawer");
+    expect(categoriesPage).toContain("ConfirmModal");
+    expect(categoriesPage).toContain("skills-console-primary");
+    expect(adminModule).toContain("plugin-categories");
+    expect(adminSurface).toContain("PluginCategoriesAdminPage");
+    expect(workspace).toContain("plugin-categories");
+  });
+
+  it("scopes the plugin catalog to the IAM subject on every surface", () => {
+    const consoleSurface = source(
+      "sdkwork-webserver/apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-console-plugins/src/PluginsConsoleSurface.tsx",
+    );
+    const plugins = source(
+      "sdkwork-webserver/apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-console-plugins/src/MyPluginsPage.tsx",
+    );
+    const workspace = source(
+      "sdkwork-webserver/apps/sdkwork-webserver-pc/src/surfaces/WebserverAuthorizedWorkspace.tsx",
+    );
+    expect(consoleSurface).toContain("ownerKey");
+    expect(plugins).toContain("filterPluginRecordsByOwner");
+    expect(plugins).toMatch(/savePluginCatalog\(owner/);
+    expect(workspace).toMatch(/ownerKey=\{operatorId\}/);
+  });
 });

@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import type { AuthTokenManager } from "@sdkwork/sdk-common";
+import { DataTable, type DataTableColumn } from "@sdkwork/ui-pc-react";
 import { useEffect, useMemo, useState } from "react";
 import type {
   ServerDirectoryListing,
@@ -32,6 +33,9 @@ import type {
 } from "./server-files-types.ts";
 import { createServerFilesClient, ServerFilesClient } from "./server-files-client.ts";
 import { PROJECT_TYPE_LABEL } from "./project-detection.ts";
+
+/** 目录一次读入，客户端分页；50 与后端默认列表页大小一致。 */
+const EXPLORER_PAGE_SIZES = [20, 50, 100] as const;
 
 export interface ServerFilesExplorerSurfaceProps {
   backendApiBaseUrl: string;
@@ -464,75 +468,63 @@ function EntryTable({
     if (a.kind !== "directory" && b.kind === "directory") return 1;
     return a.name.localeCompare(b.name);
   });
+  // 文件浏览器一次读入整个目录 ⇒ 客户端分页；列与既有五列一一对应。
+  const columns: DataTableColumn<ServerEntry>[] = [
+    {
+      id: "name",
+      header: "Name",
+      cell: (entry) => (
+        <button
+          className="inline-flex items-center gap-2 font-medium text-slate-700 hover:text-blue-600 dark:text-slate-200 dark:hover:text-blue-400"
+          onClick={() => onOpen(entry)}
+          title={entry.path}
+          type="button"
+        >
+          {entry.kind === "directory" ? (
+            <Folder className="text-amber-400" size={16} />
+          ) : (
+            <FileIcon name={entry.name} />
+          )}
+          {entry.name}
+        </button>
+      ),
+    },
+    { id: "kind", header: "Kind", cell: (entry) => <span className="text-xs text-slate-400 dark:text-slate-500">{entry.kind}</span> },
+    {
+      id: "projectType",
+      header: "Project",
+      cell: (entry) => entry.projectType && entry.projectType !== "generic" ? (
+        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${PROJECT_TYPE_BADGE[entry.projectType]}`}>
+          <Boxes size={11} />
+          {PROJECT_TYPE_LABEL[entry.projectType]}
+        </span>
+      ) : (
+        <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
+      ),
+    },
+    { id: "size", header: "Size", align: "right", cell: (entry) => <span className="text-xs text-slate-500 dark:text-slate-400">{formatBytes(entry.size)}</span> },
+  ];
   return (
-    <table className="w-full border-collapse text-sm">
-      <thead>
-        <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-400">
-          <th className="px-3 py-2">Name</th>
-          <th className="px-3 py-2">Kind</th>
-          <th className="px-3 py-2">Project</th>
-          <th className="px-3 py-2">Size</th>
-          <th className="px-3 py-2 text-right">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {sorted.map((entry) => (
-          <tr
-            className="border-b border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
-            key={entry.path}
-          >
-            <td className="px-3 py-2">
-              <button
-                className="inline-flex items-center gap-2 font-medium text-slate-700 hover:text-blue-600 dark:text-slate-200 dark:hover:text-blue-400"
-                onClick={() => onOpen(entry)}
-                title={entry.path}
-                type="button"
-              >
-                {entry.kind === "directory" ? (
-                  <Folder className="text-amber-400" size={16} />
-                ) : (
-                  <FileIcon name={entry.name} />
-                )}
-                {entry.name}
-              </button>
-            </td>
-            <td className="px-3 py-2 text-xs text-slate-400 dark:text-slate-500">{entry.kind}</td>
-            <td className="px-3 py-2">
-              {entry.projectType && entry.projectType !== "generic" ? (
-                <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${PROJECT_TYPE_BADGE[entry.projectType]}`}
-                >
-                  <Boxes size={11} />
-                  {PROJECT_TYPE_LABEL[entry.projectType]}
-                </span>
-              ) : (
-                <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
-              )}
-            </td>
-            <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">{formatBytes(entry.size)}</td>
-            <td className="px-3 py-2 text-right">
-              {entry.kind === "directory" ? (
-                <button
-                  className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-                  disabled={operationsLoading}
-                  onClick={() => void onInspectOperations(entry)}
-                  type="button"
-                >
-                  <Hammer size={12} /> Operations
-                </button>
-              ) : null}
-            </td>
-          </tr>
-        ))}
-        {sorted.length === 0 && (
-          <tr>
-            <td className="px-3 py-8 text-center text-slate-400 dark:text-slate-500" colSpan={5}>
-              Empty directory.
-            </td>
-          </tr>
-        )}
-      </tbody>
-    </table>
+    <DataTable<ServerEntry>
+      columns={columns}
+      density="compact"
+      emptyState={<span>Empty directory.</span>}
+      getRowId={(entry) => entry.path}
+      pagination={{ defaultPageSize: 50, mode: "client", pageSizeOptions: EXPLORER_PAGE_SIZES }}
+      rowActions={(entry) => entry.kind === "directory" ? (
+        <button
+          className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+          disabled={operationsLoading}
+          onClick={() => void onInspectOperations(entry)}
+          type="button"
+        >
+          <Hammer size={12} /> Operations
+        </button>
+      ) : null}
+      rowActionsLabel="Actions"
+      rows={sorted}
+      stickyHeader
+    />
   );
 }
 

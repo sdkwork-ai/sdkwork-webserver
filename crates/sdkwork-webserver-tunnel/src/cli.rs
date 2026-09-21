@@ -503,26 +503,27 @@ fn parse_agent_arguments(arguments: &[String]) -> Result<ParsedAgentArguments, S
 }
 
 /// Parses `name=http,domain,demo.example.com,127.0.0.1:3000` style route
-/// arguments: `name:<http|tcp>:<domain|port>:<target>`.
+/// arguments: `name:<http|tcp|udp>:<domain|port>:<target>`.
 fn parse_route(raw: &str) -> Result<TunnelRouteTemplate, String> {
-    // Shape: <name>:<http|tcp>:<domain-or-port>:<target>.
+    // Shape: <name>:<http|tcp|udp>:<domain-or-port>:<target>.
     let segments: Vec<&str> = raw.splitn(4, ':').collect();
     if segments.len() != 4 {
         return Err(format!(
-            "route `{raw}` must be <name>:<http|tcp>:<domain-or-port>:<target>"
+            "route `{raw}` must be <name>:<http|tcp|udp>:<domain-or-port>:<target>"
         ));
     }
     let name = segments[0].to_owned();
     let protocol = match segments[1] {
         "http" => TunnelProtocolKind::Http,
         "tcp" => TunnelProtocolKind::Tcp,
-        other => return Err(format!("route protocol `{other}` must be http or tcp")),
+        "udp" => TunnelProtocolKind::Udp,
+        other => return Err(format!("route protocol `{other}` must be http, tcp, or udp")),
     };
     let template = TunnelRouteTemplate {
         name: name.clone(),
         protocol,
         domain: (protocol == TunnelProtocolKind::Http).then(|| segments[2].to_owned()),
-        port: (protocol == TunnelProtocolKind::Tcp)
+        port: (matches!(protocol, TunnelProtocolKind::Tcp | TunnelProtocolKind::Udp))
             .then(|| {
                 segments[2]
                     .parse()

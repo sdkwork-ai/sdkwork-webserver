@@ -499,3 +499,102 @@ fn available_port() -> u16 {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("reserve port");
     listener.local_addr().expect("local addr").port()
 }
+
+#[tokio::test]
+async fn udp_route_relays_datagrams_through_gateway() {
+    crypto_provider();
+    init_logs();
+    let (cert_pem, key_pem, fingerprint) = tls_material();
+
+    // Local UDP echo target.
+    let echo = tokio::net::UdpSocket::bind("127.0.0.1:0")
+        .await
+        .expect("echo bind");
+    let echo_port = echo.local_addr().expect("echo addr").port();
+    let echo_task = tokio::spawn(async move {
+        let mut buffer = [0_u8; 2048];
+        loop {
+            let Ok((size, peer)) = echo.recv_from(&mut buffer).await else {
+                return;
+            };
+            let _ = echo.send_to(&buffer[..size], peer).await;
+        }
+    });
+
+    let mut gateway_options = TunnelGatewayOptions::from_config(
+        &TunnelConfig::disabled(),
+        "127.0.0.1:0".parse().expect("bind"),
+        cert_pem.clone(),
+        key_pem.clone(),
+    );
+    gateway_options.authenticator = TokenAuthenticator::new(vec![TOKEN.to_owned()]);
+    let gateway = TunnelGateway::spawn(gateway_options, None)
+        .await
+        .expect("gateway spawns");
+    let quic_port = gateway.quic_port();
+    let public_port = available_port();
+
+    let template = TunnelRouteTemplate {
+        name: "dns".to_owned(),
+        protocol: TunnelProtocolKind::Udp,
+        domain: None,
+        port: Some(public_port),
+        target: format!("127.0.0.1:{echo_port}"),
+        policy: Some(sdkwork_webserver_tunnel_core::RoutePolicy {
+            allow_public: true,
+            ..sdkwork_webserver_tunnel_core::RoutePolicy::private()
+        }),
+    };
+    let device = Device::new(
+        DeviceId::parse("dev_udp").expect("valid id"),
+        "udp-runner",
+        DevicePlatform::Linux,
+    )
+    .expect("valid device");
+    let mut agent = AgentRuntime::spawn(AgentRuntimeOptions {
+        endpoint: RemoteEndpoint::new("127.0.0.1", quic_port),
+        tls: tls::ClientTlsOptions {
+            pinned_server_sha256: Some(fingerprint),
+            ..tls::ClientTlsOptions::default()
+        },
+        device,
+        token: TOKEN.to_owned(),
+        routes: vec![template],
+        network: Default::default(),
+        timeouts: Default::default(),
+        metrics: Arc::new(TunnelMetrics::new()),
+    });
+    let ready = wait_for_ready(&mut agent).await;
+    assert_eq!(ready.len(), 1);
+
+    // Visitor sends a datagram to the gateway UDP port; the echo target
+    // replies through the tunnel.
+    let visitor = tokio::net::UdpSocket::bind("127.0.0.1:0")
+        .await
+        .expect("visitor bind");
+    let mut replies = Vec::new();
+    for attempt in 0..5 {
+        visitor
+            .send_to(b"udp-ping", ("127.0.0.1", public_port))
+            .await
+            .expect("datagram sent");
+        let mut buffer = [0_u8; 256];
+        match tokio::time::timeout(Duration::from_secs(2), visitor.recv_from(&mut buffer)).await {
+            Ok(Ok((size, _))) => {
+                replies.extend_from_slice(&buffer[..size]);
+                break;
+            }
+            _ if attempt < 4 => continue,
+            other => panic!("no udp reply: {other:?}"),
+        }
+    }
+    assert_eq!(replies, b"udp-ping");
+
+    let status = gateway.service().status().await.expect("status");
+    assert_eq!(status.routes, 1);
+    assert_eq!(status.ports, vec![public_port]);
+
+    agent.shutdown().await;
+    echo_task.abort();
+    gateway.shutdown().await;
+}

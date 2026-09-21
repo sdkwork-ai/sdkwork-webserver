@@ -336,6 +336,7 @@ async fn handle_register(
         }
     };
     let route_id = route.id.clone();
+    let route_protocol = route.protocol;
     let port = route.matcher.as_port();
     let registered = match shared.registry.register(route) {
         Ok(registered) => registered,
@@ -349,9 +350,11 @@ async fn handle_register(
         }
     };
     shared.metrics.record_route_change(1);
-    // TCP routes need a live gateway listener; bind inline so a port
-    // conflict is reported back to the agent synchronously.
-    if let Some(port) = port {
+    // Listener lifecycle per protocol: TCP routes bind a TcpListener, UDP
+    // routes bind a UdpSocket — both inline so a port conflict is reported
+    // back to the agent synchronously.
+    match (route_protocol, port) {
+        (TunnelProtocolKind::Tcp, Some(port)) => {
         match tokio::net::TcpListener::bind(("0.0.0.0", port)).await {
             Ok(listener) => {
                 shared
@@ -371,6 +374,29 @@ async fn handle_register(
                 });
             }
         }
+        }
+        (TunnelProtocolKind::Udp, Some(port)) => {
+            match tokio::net::UdpSocket::bind(("0.0.0.0", port)).await {
+                Ok(listener) => {
+                    shared
+                        .udp
+                        .lock()
+                        .expect("udp listener set lock is never held across awaits")
+                        .serve(shared, port, route_id.clone(), listener);
+                }
+                Err(error) => {
+                    shared.registry.unregister(&route_id);
+                    shared.metrics.record_route_change(-1);
+                    return ControlMessage::RegisterRouteResult(RegisterRouteResult {
+                        route_id: route_id.to_string(),
+                        ok: false,
+                        public_url: None,
+                        error: Some(format!("gateway udp port {port} bind failed: {error}")),
+                    });
+                }
+            }
+        }
+        _ => {}
     }
     tracing::info!(
         session = %session_id,
@@ -411,11 +437,20 @@ fn handle_unregister(
         return reply(false);
     };
     if let Some(port) = removed.route.matcher.as_port() {
-        shared
-            .tcp
-            .lock()
-            .expect("tcp listener set lock is never held across awaits")
-            .release(port, &route_id);
+        let datagram = removed.route.protocol == sdkwork_webserver_tunnel_core::TunnelProtocolKind::Udp;
+        if datagram {
+            shared
+                .udp
+                .lock()
+                .expect("udp listener set lock is never held across awaits")
+                .release(port, &route_id);
+        } else {
+            shared
+                .tcp
+                .lock()
+                .expect("tcp listener set lock is never held across awaits")
+                .release(port, &route_id);
+        }
     }
     shared.metrics.record_route_change(-1);
     tracing::info!(route = %removed.route.id, "tunnel route unregistered");
@@ -442,6 +477,7 @@ async fn flush_pending_declarations(
                 protocol: match declaration.protocol {
                     TunnelProtocolKind::Http => "http".to_owned(),
                     TunnelProtocolKind::Tcp => "tcp".to_owned(),
+                    TunnelProtocolKind::Udp => "udp".to_owned(),
                 },
                 domain: declaration.domain.clone(),
                 port: declaration.port,
@@ -491,6 +527,7 @@ fn validate_registration(
     let protocol = match request.protocol.as_str() {
         "http" => TunnelProtocolKind::Http,
         "tcp" => TunnelProtocolKind::Tcp,
+        "udp" => TunnelProtocolKind::Udp,
         other => {
             return Err(TunnelError::InvalidRoute(format!(
                 "unsupported route protocol `{other}`"
@@ -499,7 +536,8 @@ fn validate_registration(
     };
     let matcher = match (protocol, request.domain.as_deref(), request.port) {
         (TunnelProtocolKind::Http, Some(domain), _) => RouteMatcher::domain(domain)?,
-        (TunnelProtocolKind::Tcp, _, Some(port)) => RouteMatcher::Port(port),
+        (TunnelProtocolKind::Tcp, _, Some(port))
+        | (TunnelProtocolKind::Udp, _, Some(port)) => RouteMatcher::Port(port),
         _ => {
             return Err(TunnelError::InvalidRoute(
                 "route matcher does not match its protocol".to_owned(),
@@ -582,6 +620,15 @@ pub(crate) fn teardown_session(shared: &Arc<GatewayShared>, session_id: &Session
             .expect("tcp listener set lock is never held across awaits");
         for route_id in &removed_routes {
             listeners.release_route(route_id);
+        }
+    }
+    {
+        let mut udp = shared
+            .udp
+            .lock()
+            .expect("udp listener set lock is never held across awaits");
+        for route_id in &removed_routes {
+            udp.release_route(route_id);
         }
     }
     shared

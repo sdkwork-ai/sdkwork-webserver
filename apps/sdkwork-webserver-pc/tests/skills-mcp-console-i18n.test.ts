@@ -9,7 +9,11 @@ import {
   normalizeSkillsConsoleLocale,
   translateSkillsConsole,
 } from "../../../../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-console-skills/src/i18n.ts";
-import { translatePlugins, normalizePluginsLocale } from "../packages/sdkwork-webserver-pc-console-plugins/src/i18n.ts";
+import {
+  PLUGINS_MESSAGE_KEYS,
+  translatePlugins,
+  normalizePluginsLocale,
+} from "../packages/sdkwork-webserver-pc-console-plugins/src/i18n.ts";
 import { translateWebserver } from "../packages/sdkwork-webserver-pc-commons/src/i18n/index.ts";
 
 describe("skills and mcp console i18n", () => {
@@ -53,11 +57,41 @@ describe("skills and mcp console i18n", () => {
     expect(formatMcpHealthLocalized("en-US", "degraded")).toBe("Degraded");
   });
 
-  it("localizes plugins console registration copy", () => {
+  it("localizes plugins console creation copy", () => {
     expect(normalizePluginsLocale("zh-Hans-CN")).toBe("zh-CN");
     expect(translatePlugins("zh-CN", "mine.title")).toBe("我的插件");
-    expect(translatePlugins("zh-CN", "mine.empty.action")).toBe("登记插件");
+    // "登记插件" was renamed to "新增插件" across the plugin console.
+    expect(translatePlugins("zh-CN", "mine.empty.action")).toBe("新增插件");
+    expect(translatePlugins("zh-CN", "mine.create")).toBe("新增插件");
+    expect(translatePlugins("zh-CN", "create.title")).toBe("新增插件");
+    expect(translatePlugins("zh-CN", "create.submit")).toBe("新增插件");
     expect(translatePlugins("en-US", "create.source.git")).toBe("Git repository");
     expect(translatePlugins("zh-CN", "create.error.duplicateKey", { key: "plugin.a.b" })).toContain("plugin.a.b");
+  });
+
+  it("exposes the wizard and category copy the create flow depends on", () => {
+    expect(translatePlugins("zh-CN", "create.wizard.step1.title")).toBe("选择 Agent 工具");
+    expect(translatePlugins("zh-CN", "create.wizard.step2.title")).toBe("来源与详情");
+    expect(translatePlugins("zh-CN", "create.wizard.next")).toBe("下一步");
+    expect(translatePlugins("zh-CN", "create.wizard.back")).toBe("上一步");
+    expect(translatePlugins("zh-CN", "create.field.category")).toBe("分类");
+    expect(translatePlugins("zh-CN", "create.error.categoryRequired")).toBe("请为该插件选择分类。");
+    expect(translatePlugins("en-US", "create.field.category")).toBe("Category");
+    expect(translatePlugins("en-US", "categories.admin.title")).toBe("Plugin categories");
+    // The category picker's empty state must tell the user who unblocks them.
+    expect(translatePlugins("zh-CN", "create.category.empty.title")).toBe("暂无可用分类");
+    expect(translatePlugins("zh-CN", "create.wizard.selectedTools", { count: 3 })).toContain("3");
+  });
+
+  it("keeps the plugin locale catalogs symmetric", () => {
+    const keys = Object.keys(PLUGINS_MESSAGE_KEYS);
+    expect(keys.length).toBeGreaterThan(0);
+    for (const key of keys) {
+      const zh = translatePlugins("zh-CN", key as never);
+      const en = translatePlugins("en-US", key as never);
+      // A missing zh key falls back to the raw key string, which is the tell.
+      expect(zh).not.toBe(key);
+      expect(en).not.toBe(key);
+    }
   });
 });

@@ -173,12 +173,22 @@ impl TunnelService for GatewayTunnelService {
             sessions: u32::try_from(self.shared.sessions.session_count()).unwrap_or(u32::MAX),
             routes: u32::try_from(self.shared.registry.count()).unwrap_or(u32::MAX),
             ports: {
-                let listeners = self
+                let mut listeners = self
                     .shared
                     .tcp
                     .lock()
-                    .expect("tcp listener set lock is never held across awaits");
-                listeners.served_ports()
+                    .expect("tcp listener set lock is never held across awaits")
+                    .served_ports();
+                let udp = self
+                    .shared
+                    .udp
+                    .lock()
+                    .expect("udp listener set lock is never held across awaits")
+                    .served_ports();
+                listeners.extend(udp);
+                listeners.sort_unstable();
+                listeners.dedup();
+                listeners
             },
             metrics,
         })

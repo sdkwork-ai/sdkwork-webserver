@@ -20,8 +20,12 @@ describe("webserver workspace theme styles", () => {
   });
 
   it("keeps shared workspace components on semantic theme tokens", () => {
+    // The resource tables moved to the framework `DataTable`, which owns its own
+    // surface chrome (border/background/shadow) in the composite. The host keeps
+    // the semantic `--sdk-color-surface-panel` token on `.data-surface`, the frame
+    // that wraps the table; `.table-frame` no longer exists here.
     expect(workspaceStyles).toMatch(
-      /\.table-frame\s*\{[^}]*background:\s*var\(--sdk-color-surface-panel\)/s,
+      /\.data-surface\s*\{[^}]*background:\s*var\(--sdk-color-surface-panel\)/s,
     );
     expect(workspaceStyles).toMatch(
       /\.dialog\s*\{[^}]*color:\s*var\(--sdk-color-text-primary\)[^}]*background:\s*var\(--sdk-color-surface-panel\)/s,
@@ -59,19 +63,18 @@ describe("webserver workspace theme styles", () => {
     );
   });
 
-  it("keeps application row operations compact, fixed, and theme-aware", () => {
-    expect(stylesheet).toMatch(
-      /\.row-actions-cell\s*\{[^}]*position:\s*sticky[^}]*background:\s*var\(--sdk-color-surface-panel\)/s,
-    );
-    expect(stylesheet).toMatch(
-      /\.row-action-button\s*\{[^}]*width:\s*30px[^}]*height:\s*30px/s,
-    );
-    expect(stylesheet).toMatch(
-      /\.row-action-button-danger:not\(:disabled\):hover\s*\{[^}]*background:\s*var\(--webserver-color-danger-surface\)/s,
-    );
-    expect(stylesheet).toMatch(
-      /\.row-actions-column, \.row-actions-cell\s*\{[^}]*width:\s*236px[^}]*min-width:\s*236px/s,
-    );
+  it("delegates row operations chrome to the framework DataTable", () => {
+    // Row operations used to be host-owned: `.row-actions-column` / `.row-actions-cell`
+    // / `.row-action-button` painted a hand-rolled sticky action cell. The tables now
+    // pass `rowActions` to the framework `DataTable`, which owns that chrome, so the
+    // stale selectors must stay gone rather than linger as dead rules.
+    for (const dead of [
+      "row-actions-column",
+      "row-actions-cell",
+      "row-action-button",
+    ]) {
+      expect(stylesheet).not.toContain(dead);
+    }
   });
 
   it("keeps code updates in a focused centered modal", () => {
@@ -93,10 +96,13 @@ describe("webserver workspace theme styles", () => {
     expect(stylesheet).toMatch(
       /\.data-surface\s*\{[^}]*flex:\s*1 1 auto[^}]*grid-template-rows:\s*minmax\(0, 1fr\) auto[^}]*overflow:\s*hidden/s,
     );
-    expect(stylesheet).toMatch(
-      /\.table-frame\s*\{[^}]*min-height:\s*0[^}]*overflow:\s*auto[^}]*overscroll-behavior:\s*contain/s,
+    // The scrolling viewport now belongs to the framework `Table` primitive
+    // (`relative w-full overflow-auto`, `data-slot="table-viewport"`), so the host
+    // only has to guarantee the frame gives it a bounded height to scroll within.
+    expect(workspaceStyles).toMatch(
+      /\.data-surface\s*\{[^}]*min-height:\s*0[^}]*flex:\s*1 1 auto/s,
     );
-    expect(stylesheet).toMatch(
+    expect(workspaceStyles).toMatch(
       /\.workspace > \*\s*\{[^}]*height:\s*100%/s,
     );
     expect(stylesheet).toMatch(

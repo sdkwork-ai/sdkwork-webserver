@@ -5,7 +5,8 @@ import type {
 } from "@sdkwork/webserver-pc-admin-core";
 import type { WebserverLocale } from "@sdkwork/webserver-pc-core";
 import { translateWebserver } from "@sdkwork/webserver-pc-commons";
-import { useEffect, useRef, useState } from "react";
+import { DataTable, type DataTableColumn } from "@sdkwork/ui-pc-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 /**
  * Distributed cluster overview: platform-level health cards plus the most
@@ -103,6 +104,21 @@ export function ClusterOverviewSurface({ locale, resource }: ClusterOverviewSurf
     { label: t("resource.cluster-overview.unhealthyInstances"), value: overview.unhealthyInstances, tone: positive(overview.unhealthyInstances) ? "warn" : "ok" },
     { label: t("resource.cluster-overview.pendingPeerMessages"), value: overview.pendingPeerMessages, tone: positive(overview.pendingPeerMessages) ? "warn" : "ok" },
   ];
+  // 最近事件表：与既有四列一一对应。事件条数固定在 RECENT_EVENT_COUNT，不做分页。
+  const eventColumns: DataTableColumn<ClusterEventResponse>[] = [
+    { id: "occurredAt", header: t("resource.cluster-overview.eventTime"), cell: (event) => formatInstant(event.occurredAt, locale) },
+    {
+      id: "severity",
+      header: t("resource.cluster-overview.eventSeverity"),
+      cell: (event) => (
+        <span className={`status-badge cluster-severity-${event.severity.toLowerCase()}`}>
+          {t(SEVERITY_KEYS[event.severity] ?? "resource.cluster-overview.severity.info")}
+        </span>
+      ),
+    },
+    { id: "eventType", header: t("resource.cluster-overview.eventType"), cell: (event) => <code>{event.eventType}</code> },
+    { id: "message", header: t("resource.cluster-overview.eventMessage"), cell: (event) => event.message },
+  ];
 
   return (
     <section className="data-surface" data-resource={resource}>
@@ -121,34 +137,14 @@ export function ClusterOverviewSurface({ locale, resource }: ClusterOverviewSurf
         ))}
       </div>
       <h3>{t("resource.cluster-overview.recentEvents")}</h3>
-      {events.length === 0 ? (
-        <p className="bootstrap-state">{t("resource.cluster-overview.noEvents")}</p>
-      ) : (
-        <table className="resource-table">
-          <thead>
-            <tr>
-              <th scope="col">{t("resource.cluster-overview.eventTime")}</th>
-              <th scope="col">{t("resource.cluster-overview.eventSeverity")}</th>
-              <th scope="col">{t("resource.cluster-overview.eventType")}</th>
-              <th scope="col">{t("resource.cluster-overview.eventMessage")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {events.map((event) => (
-              <tr key={event.id}>
-                <td>{formatInstant(event.occurredAt, locale)}</td>
-                <td>
-                  <span className={`status-badge cluster-severity-${event.severity.toLowerCase()}`}>
-                    {t(SEVERITY_KEYS[event.severity] ?? "resource.cluster-overview.severity.info")}
-                  </span>
-                </td>
-                <td><code>{event.eventType}</code></td>
-                <td>{event.message}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <DataTable<ClusterEventResponse>
+        columns={eventColumns}
+        density="compact"
+        emptyState={<span>{t("resource.cluster-overview.noEvents")}</span>}
+        getRowId={(event) => event.id}
+        rows={events}
+        stickyHeader
+      />
       {error ? <p className="bootstrap-state" role="alert">{t("resource.cluster-overview.refreshFailed")}: {error}</p> : null}
     </section>
   );

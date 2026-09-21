@@ -35,7 +35,9 @@ pub struct RouteRegistry {
 #[derive(Debug, Default)]
 struct RegistryInner {
     by_domain: HashMap<String, Arc<RegisteredRoute>>,
-    by_port: HashMap<u16, Arc<RegisteredRoute>>,
+    /// Port-keyed index: TCP and UDP port namespaces are independent, so the
+    /// same port number may legitimately host one route of each protocol.
+    by_port: HashMap<(bool, u16), Arc<RegisteredRoute>>,
 }
 
 impl RouteRegistry {
@@ -72,8 +74,10 @@ impl RouteRegistry {
                 }
             }
         }
+        let datagram = is_datagram(&route);
         if let Some(port) = port_key(&route) {
-            if let Some(existing) = inner.by_port.get(&port) {
+            let key = (datagram, port);
+            if let Some(existing) = inner.by_port.get(&key) {
                 if existing.session() != Some(&owner) {
                     return Err(TunnelError::RouteConflict(format!(
                         "gateway port {port} is already served by another device"
@@ -89,7 +93,8 @@ impl RouteRegistry {
                 inner.by_domain.remove(domain);
             }
             if let Some(port) = port_key(&existing.route) {
-                inner.by_port.remove(&port);
+                let key = (datagram, port);
+                inner.by_port.remove(&key);
             }
         }
         let registered = Arc::new(RegisteredRoute { route });
@@ -99,7 +104,8 @@ impl RouteRegistry {
                 .insert(domain.to_owned(), registered.clone());
         }
         if let Some(port) = port_key(&registered.route) {
-            inner.by_port.insert(port, registered.clone());
+            let key = (datagram, port);
+            inner.by_port.insert(key, registered.clone());
         }
         self.version.fetch_add(1, Ordering::Relaxed);
         Ok(registered)
@@ -178,7 +184,16 @@ impl RouteRegistry {
             .inner
             .read()
             .expect("route registry lock is never held across awaits");
-        inner.by_port.get(&port).cloned()
+        inner_by_port(&inner, false, port)
+    }
+
+    /// Matches a gateway UDP listener port to a live route.
+    pub fn match_udp_port(&self, port: u16) -> Option<Arc<RegisteredRoute>> {
+        let inner = self
+            .inner
+            .read()
+            .expect("route registry lock is never held across awaits");
+        inner_by_port(&inner, true, port)
     }
 
     /// Every registered route, sorted by id for stable API output.
@@ -210,6 +225,18 @@ impl RouteRegistry {
 
 fn domain_key(route: &TunnelRoute) -> Option<&str> {
     route.matcher.as_domain()
+}
+
+fn is_datagram(route: &TunnelRoute) -> bool {
+    route.protocol == sdkwork_webserver_tunnel_core::TunnelProtocolKind::Udp
+}
+
+fn inner_by_port(
+    inner: &RegistryInner,
+    datagram: bool,
+    port: u16,
+) -> Option<Arc<RegisteredRoute>> {
+    inner.by_port.get(&(datagram, port)).cloned()
 }
 
 fn port_key(route: &TunnelRoute) -> Option<u16> {

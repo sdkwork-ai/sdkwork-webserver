@@ -36,6 +36,7 @@ import {
   type ReactNode,
 } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { DataTable } from "@sdkwork/ui-pc-react";
 import { uuid } from "@sdkwork/utils/id";
 
 import { translateWebserver, type WebserverLocale, type WebserverMessageKey } from "./i18n/index.ts";
@@ -66,6 +67,16 @@ import {
   resolveAdminModuleFromPath,
   resolveAdminModuleLandingPath,
 } from "./admin-modules.ts";
+
+/**
+ * Page-size choices offered by the resource table footer.
+ *
+ * These are request sizes the resource APIs are expected to accept, not a
+ * storage detail: raising the default raises the first-paint page load, so the
+ * options start at the historical 20 and only go up.
+ */
+const DEFAULT_RESOURCE_PAGE_SIZE = 20;
+const RESOURCE_PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
 
 export interface WebserverWorkspaceProps {
   locale: WebserverLocale;
@@ -239,7 +250,8 @@ function ResourcePage({
   // `requiresScope` any more, so a page carries no scope state.
   const [items, setItems] = useState<readonly Record<string, unknown>[]>([]);
   const [page, setPage] = useState(1);
-  const [pageInfo, setPageInfo] = useState<WebserverPageInfo>({ page: 1, pageSize: 20, hasMore: false, mode: "offset" });
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_RESOURCE_PAGE_SIZE);
+  const [pageInfo, setPageInfo] = useState<WebserverPageInfo>({ page: 1, pageSize: DEFAULT_RESOURCE_PAGE_SIZE, hasMore: false, mode: "offset" });
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
   /** Cursor that loaded the currently displayed page (its start token). */
   const [currentCursor, setCurrentCursor] = useState<string | undefined>(undefined);
@@ -283,7 +295,7 @@ function ResourcePage({
         cursor,
         filters: source.filters?.length ? filterValues : undefined,
         page,
-        pageSize: 20,
+        pageSize,
         search: search.trim() || undefined,
       });
       setItems(result.items);
@@ -332,10 +344,37 @@ function ResourcePage({
     }
   }
 
+  /**
+   * Absolute jump used by the table's numbered page list.
+   *
+   * Offset pages translate a page number into a request directly. Cursor pages
+   * cannot: a keyset backend only walks forwards from an opaque token, so a
+   * jump to an arbitrary page is not expressible at all. Cursor mode therefore
+   * honours only the one step the framework can express — forward to the next
+   * page — and ignores the rest, rather than requesting a page whose token it
+   * does not have.
+   */
+  function goToPage(nextPage: number): void {
+    if (busy) return;
+    if (pageInfo.mode === "cursor") {
+      if (nextPage > page) goToNextPage();
+      else if (nextPage < page) goToPreviousPage();
+      return;
+    }
+    if (nextPage < 1 || nextPage === page) return;
+    setPage(nextPage);
+  }
+
+  /** Rows-per-page selection. Changes the window size, so it restarts at page 1. */
+  function goToPageSize(nextPageSize: number): void {
+    if (busy || nextPageSize === pageSize) return;
+    setPageSize(nextPageSize);
+    resetPagination();
+  }
+
   useEffect(() => {
     void load();
-  }, [authorized, entry.resource, page]);
-  useEffect(() => {
+  }, [authorized, entry.resource, page, pageSize]);  useEffect(() => {
     resetPagination();
     setSelected(undefined);
   }, [entry.resource]);
@@ -494,79 +533,64 @@ function ResourcePage({
             </div>
           ) : null}
           <div className="data-surface">
-            <div aria-busy={busy} className="table-frame">
-              {busy && items.length > 0 ? <span aria-hidden="true" className="table-loading-bar" /> : null}
-              {busy && items.length === 0 ? (
+            {/* The data surface is the framework's `DataTable` rather than a
+                hand-rolled `<table>`: it owns the surface chrome, compact row
+                density, sticky header, row selection, and the whole pagination
+                footer in one place.
+
+                Pagination stays server-driven. The page's cursor/offset
+                machinery is the only thing that knows how this resource
+                paginates, so `mode: "server"` forbids the table from slicing
+                rows it never fetched. `hasMore` is what makes cursor pages
+                work: they publish no total, so the table renders a page ordinal
+                and drives Next from the backend's own flag instead of
+                inventing a page count. Offset pages additionally pass `rowCount`
+                and get the numbered page list. */}
+            <DataTable<Record<string, unknown>>
+              columns={columns.map((column) => ({
+                id: column,
+                header: fieldLabel(column, locale),
+                cell: (item: Record<string, unknown>) => displayValue(item[column], column, entry.resource, locale),
+              }))}
+              density="compact"
+              emptyState={busy ? (
                 <div className="empty-state" role="status">
                   <LoaderCircle aria-hidden="true" className="is-spinning" size={20} />
                   <span>{t("table.loading")}</span>
                 </div>
-              ) : items.length === 0 ? (
+              ) : (
                 <div className="empty-state">
                   <Inbox aria-hidden="true" size={20} />
                   <span>{t("table.empty")}</span>
                 </div>
-              ) : (
-                <table className="resource-table">
-                  <thead>
-                    <tr>
-                      <th aria-label={t("table.select")} />
-                      {columns.map((column) => <th key={column}>{fieldLabel(column, locale)}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((item, index) => (
-                      <tr
-                        className={selected === item ? "selected" : ""}
-                        key={recordKey(item, index)}
-                        onClick={() => setSelected(item)}
-                      >
-                        <td>
-                          <input
-                            aria-label={t("table.selectRow", { row: index + 1 })}
-                            checked={selected === item}
-                            readOnly
-                            type="radio"
-                          />
-                        </td>
-                        {columns.map((column) => (
-                          <td key={column}>{displayValue(item[column], column, entry.resource, locale)}</td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               )}
-            </div>
-            {(items.length > 0 || busy || page > 1) ? (
-              <footer className="pagination">
-                <span>
-                  {pageInfo.total === undefined
-                    ? t("pagination.page", { page: pageInfo.page })
-                    : t("pagination.total", { total: pageInfo.total })}
-                </span>
-                <button
-                  aria-label={t("pagination.previous")}
-                  className="icon-button"
-                  disabled={busy || (pageInfo.mode === "cursor" ? cursorHistory.length === 0 : page <= 1)}
-                  onClick={goToPreviousPage}
-                  title={t("pagination.previous")}
-                  type="button"
-                >
-                  <ChevronLeft aria-hidden="true" size={18} />
-                </button>
-                <button
-                  aria-label={t("pagination.next")}
-                  className="icon-button"
-                  disabled={busy || !pageInfo.hasMore}
-                  onClick={goToNextPage}
-                  title={t("pagination.next")}
-                  type="button"
-                >
-                  <ChevronRight aria-hidden="true" size={18} />
-                </button>
-              </footer>
-            ) : null}
+              getRowId={(item, index) => recordKey(item, index)}
+              loading={busy && items.length === 0}
+              onRowClick={(item) => setSelected(item)}
+              onSelectedRowIdsChange={(ids) => {
+                const [nextId] = ids;
+                setSelected(nextId === undefined
+                  ? undefined
+                  : items.find((item, index) => recordKey(item, index) === String(nextId)));
+              }}
+              onSortingChange={undefined}
+              pagination={{
+                hasMore: pageInfo.hasMore,
+                mode: "server",
+                onPageChange: goToPage,
+                onPageSizeChange: goToPageSize,
+                page,
+                pageSize: pageInfo.pageSize,
+                pageSizeOptions: RESOURCE_PAGE_SIZE_OPTIONS,
+                rowCount: pageInfo.total,
+              }}
+              rowActionsLabel={t("table.actions")}
+              rows={items as Record<string, unknown>[]}
+              selectable
+              selectedRowIds={selected === undefined ? [] : [recordKey(selected, items.indexOf(selected))]}
+              sortingMode="server"
+              stickyHeader
+            />
           </div>
           {action ? (
             <ActionDialog

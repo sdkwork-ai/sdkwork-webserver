@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { CheckIcon, SearchIcon } from "./plugin-icons.tsx";
 import { usePluginsT } from "./locale.tsx";
-import type { PluginListFilters } from "./plugin-filter.ts";
+import { EMPTY_PLUGIN_LIST_FILTERS, type PluginListFilters } from "./plugin-filter.ts";
+import { selectablePluginCategories, type PluginCategoryRecord } from "./plugin-category.ts";
 import {
   PLUGIN_CONTRIBUTION_KINDS,
   PLUGIN_HOST_TOOL_GROUPS,
@@ -206,13 +207,19 @@ export function PluginContributionMultiSelect({
 
 export function PluginListFilterBar({
   filters,
+  categories,
   onChange,
 }: {
   filters: PluginListFilters;
+  /** Platform category catalog; filters only offer categories that exist. */
+  categories: readonly PluginCategoryRecord[];
   onChange: (next: PluginListFilters) => void;
 }) {
   const t = usePluginsT();
-  const active = filters.hostTools.length > 0 || filters.capabilities.length > 0;
+  const offered = selectablePluginCategories(categories);
+  const active = filters.categoryIds.length > 0
+    || filters.hostTools.length > 0
+    || filters.capabilities.length > 0;
 
   return (
     <div className="plugin-filter-bar">
@@ -222,12 +229,42 @@ export function PluginListFilterBar({
           <button
             type="button"
             className="plugin-filter-clear"
-            onClick={() => onChange({ hostTools: [], capabilities: [] })}
+            onClick={() => onChange(EMPTY_PLUGIN_LIST_FILTERS)}
           >
             {t("mine.filter.clear")}
           </button>
         ) : null}
       </div>
+      {offered.length > 0 ? (
+        <div className="plugin-filter-section">
+          <span className="plugin-filter-label">{t("mine.filter.category")}</span>
+          <div className="plugin-filter-chips" role="group" aria-label={t("mine.filter.category")}>
+            {offered.map((category) => {
+              const checked = filters.categoryIds.includes(category.id);
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  className={`plugin-filter-chip${checked ? " plugin-filter-chip--active" : ""}`}
+                  aria-pressed={checked}
+                  onClick={() =>
+                    onChange({
+                      ...filters,
+                      categoryIds: toggleCatalogSelection(
+                        filters.categoryIds,
+                        category.id,
+                        !checked,
+                      ),
+                    })
+                  }
+                >
+                  {category.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
       <div className="plugin-filter-section">
         <span className="plugin-filter-label">{t("mine.filter.hostTools")}</span>
         <OptionGrid

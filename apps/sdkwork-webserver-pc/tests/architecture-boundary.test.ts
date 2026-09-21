@@ -31,4 +31,30 @@ describe("surface SDK boundaries", () => {
     expect(adminIndex).toContain("DeployAppsManagementSurface as DeployAppsAdminSurface");
     expect(adminIndex).toContain("@sdkwork/webserver-pc-console-delivery");
   });
+  // Console and admin tables are rendered by the framework `DataTable`, which owns
+  // pagination, sorting, sticky headers, selection, and row actions
+  // (`framework-governance.md`: dense table chrome belongs on the composite, not on
+  // hand-rolled markup). Authored `<table>` therefore only belongs in content
+  // surfaces that genuinely have no data semantics. `DocumentationContent` is the
+  // one such case — a two-row static comparison with prose cells, no sorting, no
+  // pagination, no selection — so it is allow-listed by path rather than by a
+  // blanket exemption that would silently re-admit a hand-rolled data table.
+  it("renders data tables through the framework DataTable", () => {
+    const contentOnly = resolve(root, "packages/sdkwork-webserver-pc-documentation");
+    // Strip comments and string literals first: prose that merely *mentions* a
+    // `<table>` (e.g. the comment above the workspace's `DataTable` explaining why
+    // it replaced one) is not authored markup, and matching it would make the gate
+    // fail for documenting the very rule it enforces.
+    const authored = (source: string) =>
+      /<table[\s>]/.test(
+        source
+          .replace(/\/\*[\s\S]*?\*\//g, "")
+          .replace(/(^|[^:])\/\/[^\n]*/g, "$1")
+          .replace(/\{[^{}]*\}/g, ""),
+      );
+    const offenders = files(resolve(root, "packages"))
+      .filter((path) => !path.startsWith(contentOnly))
+      .filter((path) => authored(readFileSync(path, "utf8")));
+    expect(offenders).toEqual([]);
+  });
 });

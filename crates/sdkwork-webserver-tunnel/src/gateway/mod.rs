@@ -29,6 +29,7 @@ use crate::service::TunnelService;
 pub mod control;
 pub mod dispatch;
 pub mod listeners;
+pub(crate) mod udp_listeners;
 pub mod registry;
 pub mod sessions;
 
@@ -61,6 +62,8 @@ pub struct GatewayShared {
     pub pending_declarations: AsyncMutex<HashMap<DeviceId, Vec<TunnelRouteTemplate>>>,
     /// Public TCP listeners for `tcp` routes (PRD §31).
     pub(crate) tcp: Mutex<listeners::TcpListenerSet>,
+    /// Public UDP listeners for `udp` routes (datagram relay).
+    pub(crate) udp: Mutex<udp_listeners::UdpListenerSet>,
     stream_counter: AtomicU64,
 }
 
@@ -83,6 +86,7 @@ impl GatewayShared {
             domain_suffixes: options.domain_suffixes.clone(),
             pending_declarations: AsyncMutex::new(HashMap::new()),
             tcp: Mutex::new(listeners::TcpListenerSet::default()),
+            udp: Mutex::new(udp_listeners::UdpListenerSet::default()),
             stream_counter: AtomicU64::new(0),
         })
     }
@@ -312,6 +316,11 @@ impl TunnelGateway {
             .tcp
             .lock()
             .expect("tcp listener set lock is never held across awaits")
+            .shutdown();
+        self.shared
+            .udp
+            .lock()
+            .expect("udp listener set lock is never held across awaits")
             .shutdown();
         tracing::info!("tunnel gateway stopped");
     }

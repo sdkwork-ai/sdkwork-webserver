@@ -374,10 +374,7 @@ async fn register_routes(
         let request = ControlMessage::RegisterRoute(RegisterRoute {
             route_id: route_id.to_string(),
             name: template.name.clone(),
-            protocol: match template.protocol {
-                sdkwork_webserver_tunnel_core::TunnelProtocolKind::Http => "http".to_owned(),
-                sdkwork_webserver_tunnel_core::TunnelProtocolKind::Tcp => "tcp".to_owned(),
-            },
+            protocol: protocol_label(template.protocol).to_owned(),
             domain: template.domain.clone(),
             port: template.port,
             target: template.target.clone(),
@@ -548,7 +545,8 @@ async fn handle_declaration(
             .zip(declaration.domain.as_deref())
             .map(|(local, declared)| local.eq_ignore_ascii_case(declared))
             .unwrap_or(false),
-        sdkwork_webserver_tunnel_core::TunnelProtocolKind::Tcp => template
+        sdkwork_webserver_tunnel_core::TunnelProtocolKind::Tcp
+        | sdkwork_webserver_tunnel_core::TunnelProtocolKind::Udp => template
             .port
             .zip(declaration.port)
             .map(|(local, declared)| local == declared)
@@ -564,10 +562,7 @@ async fn handle_declaration(
     let request = ControlMessage::RegisterRoute(RegisterRoute {
         route_id: route_id.to_string(),
         name: template.name.clone(),
-        protocol: match template.protocol {
-            sdkwork_webserver_tunnel_core::TunnelProtocolKind::Http => "http".to_owned(),
-            sdkwork_webserver_tunnel_core::TunnelProtocolKind::Tcp => "tcp".to_owned(),
-        },
+        protocol: protocol_label(template.protocol).to_owned(),
         domain: template.domain.clone(),
         port: template.port,
         target: template.target.clone(),
@@ -694,6 +689,22 @@ async fn handle_data_stream(
         metrics.record_stream_close();
         return;
     };
+    // Datagram targets ride a framed packet pump instead of copy_bidirectional.
+    if matches!(
+        template.protocol,
+        sdkwork_webserver_tunnel_core::TunnelProtocolKind::Udp
+    ) {
+        let TunnelTarget::Udp(addr) = template.target().unwrap_or_else(|_| {
+            TunnelTarget::parse_udp("127.0.0.1:1").expect("fallback target parses")
+        }) else {
+            tracing::debug!(route = %route_id, "udp route does not carry a udp target");
+            metrics.record_stream_close();
+            return;
+        };
+        udp_pump(stream.as_mut(), addr, &route_id, metrics, timeouts).await;
+        metrics.record_stream_close();
+        return;
+    }
     let TunnelTarget::Tcp(addr) = template.target().unwrap_or_else(|_| {
         TunnelTarget::parse_tcp("127.0.0.1:1").expect("fallback target parses")
     }) else {
@@ -736,6 +747,117 @@ async fn handle_data_stream(
 
 /// String-error variant used by the session functions, whose outcomes feed
 /// [`SessionOutcome::Ended`].
+
+/// UDP datagram pump (PRD: UDP 内网穿透): framed packets from the tunnel →
+/// the local UDP target, replies from the target → framed back to the
+/// tunnel. A datagram relay has no EOF, so both directions end on the
+/// configured idle timeout instead.
+async fn udp_pump(
+    stream: &mut dyn TunnelStream,
+    target: std::net::SocketAddr,
+    route_id: &sdkwork_webserver_tunnel_core::RouteId,
+    metrics: &Arc<TunnelMetrics>,
+    timeouts: &sdkwork_webserver_tunnel_core::TunnelTimeoutConfig,
+) {
+    use tokio::io::AsyncWriteExt as _;
+
+    let local = match tokio::time::timeout(
+        timeouts.connect_duration(),
+        tokio::net::UdpSocket::bind("0.0.0.0:0"),
+    )
+    .await
+    {
+        Ok(Ok(local)) => local,
+        Ok(Err(error)) => {
+            metrics.record_error();
+            tracing::info!(route = %route_id, error = %error, "udp local bind failed");
+            return;
+        }
+        Err(_) => {
+            metrics.record_error();
+            tracing::info!(route = %route_id, "udp local bind timed out");
+            return;
+        }
+    };
+    let local = std::sync::Arc::new(local);
+    if let Err(error) = local.connect(target).await {
+        tracing::info!(route = %route_id, %target, error = %error, "udp connect failed");
+    }
+
+    let idle = timeouts.idle_duration().min(Duration::from_secs(120));
+    let mut tunnel_scratch = BytesMut::with_capacity(2048);
+    let mut local_buffer = [0_u8; 2048];
+    let mut last_activity = tokio::time::Instant::now();
+    loop {
+        let tunnel_read =
+            sdkwork_webserver_tunnel_protocol::packet_frame::read_packet(
+                stream,
+                &mut tunnel_scratch,
+            );
+        let local_read = local.recv(&mut local_buffer);
+        tokio::select! {
+            biased;
+            _ = tokio::time::sleep_until(last_activity + idle) => {
+                tracing::debug!(route = %route_id, "udp pump idle timeout");
+                return;
+            }
+            read = tunnel_read => {
+                match read {
+                    Ok(datagram) => {
+                        if let Err(error) = local.send(&datagram).await {
+                            tracing::debug!(route = %route_id, error = %error, "udp local send failed");
+                            return;
+                        }
+                        metrics.add_bytes_in(u64::try_from(datagram.len()).unwrap_or(u64::MAX));
+                        last_activity = tokio::time::Instant::now();
+                    }
+                    Err(error) => {
+                        metrics.record_error();
+                        tracing::debug!(route = %route_id, error = %error, "udp tunnel read failed");
+                        return;
+                    }
+                }
+            }
+            read = local_read => {
+                match read {
+                    Ok(size) => {
+                        let datagram = &local_buffer[..size];
+                        let mut framed = bytes::BytesMut::with_capacity(
+                            sdkwork_webserver_tunnel_protocol::packet_frame::PACKET_LENGTH_BYTES
+                                + datagram.len(),
+                        );
+                        if let Err(error) = sdkwork_webserver_tunnel_protocol::packet_frame::encode_packet(datagram, &mut framed) {
+                            tracing::debug!(route = %route_id, error = %error, "udp reply frame failed");
+                            return;
+                        }
+                        if let Err(error) = stream.write_all(&framed).await {
+                            tracing::debug!(route = %route_id, error = %error, "udp tunnel write failed");
+                            return;
+                        }
+                        let _ = stream.flush().await;
+                        metrics.add_bytes_out(u64::try_from(size).unwrap_or(u64::MAX));
+                        last_activity = tokio::time::Instant::now();
+                    }
+                    Err(error) => {
+                        metrics.record_error();
+                        tracing::debug!(route = %route_id, error = %error, "udp local read failed");
+                        return;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The wire protocol label for one route template (`http` / `tcp` / `udp`).
+fn protocol_label(protocol: sdkwork_webserver_tunnel_core::TunnelProtocolKind) -> &'static str {
+    match protocol {
+        sdkwork_webserver_tunnel_core::TunnelProtocolKind::Http => "http",
+        sdkwork_webserver_tunnel_core::TunnelProtocolKind::Tcp => "tcp",
+        sdkwork_webserver_tunnel_core::TunnelProtocolKind::Udp => "udp",
+    }
+}
+
 async fn write_msg(
     stream: &mut dyn TunnelStream,
     message: &ControlMessage,

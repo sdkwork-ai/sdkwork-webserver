@@ -1,4 +1,75 @@
 import type { WebserverMessageKey } from "./i18n/index.ts";
+import type { WebserverResourceKey } from "./types.ts";
+
+/**
+ * Sidebar sections: a purely **presentational grouping** of the workspace menu.
+ *
+ * The flat resource routes never change — a section only decides where a menu
+ * item is drawn inside the sidebar. Entries owned by no declared section are
+ * rendered in the leading, unlabelled group, so an ungrouped resource keeps its
+ * exact former position and no deep link moves.
+ *
+ * Membership is declared by resource key rather than by path prefix on purpose:
+ * the same key (`skills`) is reachable both as `/console/skills` (self-service)
+ * and `/admin/skills` (operations) depending on the surface, and both should
+ * land in the same section.
+ */
+export interface WebserverMenuSectionDefinition {
+  id: WebserverMenuSectionId;
+  labelKey: WebserverMessageKey;
+  /** Resources drawn under this section, in declaration order. */
+  resources: readonly WebserverResourceKey[];
+}
+
+export type WebserverMenuSectionId = "aiEcosystem";
+
+/** Sidebar section order is the declaration order of this array. */
+export const MENU_SECTIONS: readonly WebserverMenuSectionDefinition[] = [
+  {
+    id: "aiEcosystem",
+    labelKey: "menuSection.aiEcosystem",
+    // The user-owned AI assets: Skills, MCP servers, plugins, and the platform
+    // plugin-category catalog those plugins file under. Grouped at the bottom
+    // of the sidebar, after the delivery and server resources.
+    resources: ["plugins", "plugin-categories", "skills", "mcp"],
+  },
+];
+
+/**
+ * Splits menu entries into the ungrouped leading group plus one group per
+ * declared section. The ungrouped group preserves the supplied entry order (a
+ * caller's `order`-sorted menu); a declared section follows **its own**
+ * `resources` order so the section reads the same regardless of how the caller
+ * sorted the flat menu.
+ *
+ * Empty sections are dropped: an operator without the AI-ecosystem resources
+ * must not see a dangling section heading.
+ */
+export interface WebserverMenuGroup<TEntry> {
+  id: WebserverMenuSectionId | null;
+  labelKey: WebserverMessageKey | null;
+  entries: readonly TEntry[];
+}
+
+export function groupMenuEntries<TEntry extends { resource: string }>(
+  entries: readonly TEntry[],
+): readonly WebserverMenuGroup<TEntry>[] {
+  const claimed = new Set<string>(MENU_SECTIONS.flatMap((section) => [...section.resources]));
+  const groups: WebserverMenuGroup<TEntry>[] = [{
+    id: null,
+    labelKey: null,
+    entries: entries.filter((entry) => !claimed.has(entry.resource)),
+  }];
+  for (const section of MENU_SECTIONS) {
+    const byResource = new Map(entries.map((entry) => [entry.resource, entry]));
+    const sectionEntries = section.resources
+      .map((resource) => byResource.get(resource))
+      .filter((entry): entry is TEntry => entry !== undefined);
+    if (sectionEntries.length === 0) continue;
+    groups.push({ id: section.id, labelKey: section.labelKey, entries: sectionEntries });
+  }
+  return groups;
+}
 
 /**
  * Top-level admin modules, rendered as tabs in the workspace header.

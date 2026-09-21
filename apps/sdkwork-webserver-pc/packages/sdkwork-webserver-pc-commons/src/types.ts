@@ -20,6 +20,7 @@ export type WebserverResourceKey =
   | "skills"
   | "mcp"
   | "plugins"
+  | "plugin-categories"
   | "storage-providers"
   | "storage-kinds"
   | "storage-buckets"
