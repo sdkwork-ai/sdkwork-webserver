@@ -73,6 +73,18 @@ const packages = [
   { id: "console-delivery", surface: "app-console", capability: "delivery", deps: { "@sdkwork/deployments-pc-commons": "workspace:*", "@sdkwork/deployments-pc-console-core": "workspace:*", "@sdkwork/deployments-pc-console-delivery": "workspace:*", "@sdkwork/deployments-pc-console-publishing": "workspace:*", "@sdkwork/sdk-common": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", react: "catalog:" }, module: [["apps", "Applications", "Publish and operate deploy_app applications", "deploy.apps.read"], ["domains", "Domains", "Your own domain ownership and routing", "deploy.domainZones.read"], ["certificates", "Certificates", "TLS certificates over the domains you own", "deploy.certificates.read"]], extraIndexExports: ['export * from "./DeployAppsManagementSurface.tsx";', 'export * from "./DeployDomainManagementSurface.tsx";'] },
   { id: "console-skills", surface: "app-console", capability: "skills", deps: { "@sdkwork/skills-pc-core": "workspace:*", "@sdkwork/skills-pc-console-skills": "workspace:*", "@sdkwork/sdk-common": "workspace:*", react: "catalog:", "react-router-dom": "^7.15.0" }, module: [["skills", "My Skills", "Skill packages owned by the authenticated user", "skills.marketplace.read"]], extraIndexExports: ['export * from "./SkillsConsoleSurface.tsx";'] },
   { id: "console-mcp", surface: "app-console", capability: "mcp", deps: { "@sdkwork/mcp-pc-core": "workspace:*", "@sdkwork/mcp-pc-console-mcp": "workspace:*", "@sdkwork/sdk-common": "workspace:*", react: "catalog:", "react-router-dom": "^7.15.0" }, module: [["mcp", "My MCP Servers", "MCP servers registered by the authenticated user", "mcp.marketplace.read"]], extraIndexExports: ['export * from "./McpConsoleSurface.tsx";'] },
+  // The data-statistics capability reads the Web Server's own traffic facts over
+  // the backend SDK's `trafficUsage` namespace. Two entries, one reading each:
+  // `dashboard` is the overview the landing page leads with, `traffic-usage` is
+  // the filterable reading that the `dataStatistics` sidebar section claims.
+  //
+  // `dashboard` is deliberately left unclaimed by any section so it renders in
+  // the leading, unlabelled group above Delivery — a section is a grouping, and
+  // the overview is what the workspace leads with rather than a member of the
+  // measurement group. Both entries carry `web.traffic.read`; the scope behind
+  // that permission is decided server-side (own tenant here, every tenant on the
+  // operations surface), never by a query parameter the client could flip.
+  { id: "console-data-statistics", surface: "app-console", capability: "data-statistics", deps: { "@sdkwork/sdk-common": "workspace:*", "@sdkwork/ui-pc-react": "workspace:*", "@sdkwork/webserver-pc-admin-core": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", "lucide-react": "catalog:", react: "catalog:" }, module: [["dashboard", "Dashboard", "Traffic this edge served you over the recent window", "web.traffic.read"], ["traffic-usage", "Traffic Statistics", "Requests, bytes, and per-app breakdown over a date window", "web.traffic.read"]], extraIndexExports: ['export * from "./DataStatisticsSurface.tsx";', 'export * from "./data-statistics-model.ts";', 'export * from "./traffic-usage-client.ts";'], dependencyPolicy: "Consumes the shared workspace chrome, the framework DataTable, and the i18n catalog from @sdkwork/webserver-pc-commons, and the Web Server backend client plus its wire types from @sdkwork/webserver-pc-admin-core, which is the only sanctioned point of entry to the generated backend SDK.", sdkPolicy: "This package imports no generated SDK. It constructs the backend client through `createWebserverAdminSdkClient` re-exported by @sdkwork/webserver-pc-admin-core and passes it the injected base URL and IAM token manager, so the dual-token session and the generated transport stay owned by core.", readme: "This package owns the data-statistics capability on the app-console surface: the Dashboard overview and the Traffic Statistics reading. Both call the Web Server backend's traffic-usage contract and render the totals, the daily series, the per-app breakdown, and — on the operations mount — the per-tenant breakdown. The pages are one implementation with two reaches: the symbols this surface registers read the caller's own tenant, the `*Platform*` symbols the operations surface re-exports read every tenant this edge serves, and which tenants answer is derived server-side from the authenticated context. A read the edge cannot produce (503) is rendered as an unavailable capability rather than as an empty chart, because \"not assembled\" and \"no traffic\" otherwise look identical." },
   // The cloud account center hosts the IAM-owned provider account plane
   // (`iam_provider_account` plus `iam_provider_credential`) inside the Web Server
   // console. It is a thin host adapter: the page, controller, vocabulary, and
@@ -197,6 +209,30 @@ const packages = [
     module: [["cloud-accounts", "Cloud Accounts", "Provider accounts across the personal, organization, tenant, and platform levels", "iam.provider_accounts.read"]],
     extraIndexExports: ['export * from "./CloudAccountAdminSurface.tsx";'],
   },
+  // The operations reading of the same two pages. Reach is the only difference
+  // and it is not a prop the host may choose: the console package reads the
+  // caller's own tenant, the admin mount reads every tenant this edge serves,
+  // and the backend decides which from the authenticated context. A host that
+  // could pass the scope in would make the two readings interchangeable, which
+  // is exactly the privacy boundary the two endpoints exist to keep.
+  //
+  // Alias, not a second implementation — the same shape `admin-apps` ->
+  // `console-delivery` and `admin-cloud-account` -> `console-cloud-account`
+  // already use; only the menu entries and the `surface` marker differ.
+  // The operations reading of the same two pages. Reach is the only difference,
+  // and it is not a prop the host may choose: the console symbols read the
+  // caller's own tenant, the `*Platform*` symbols re-exported here read every
+  // tenant this edge serves, and the backend decides which from the
+  // authenticated context. A host that could pass the reach in would make the
+  // two readings interchangeable, which is exactly the privacy boundary the
+  // platform operation exists to keep — and it fails closed besides, because
+  // that operation is restricted to the operator tenant and answers 40301 to
+  // anyone else.
+  //
+  // Alias, not a second implementation — the same shape `admin-apps` ->
+  // `console-delivery` and `admin-cloud-account` -> `console-cloud-account`
+  // already use; only the menu entries and the `surface` marker differ.
+  { id: "admin-data-statistics", surface: "backend-admin", capability: "data-statistics", deps: { "@sdkwork/webserver-pc-commons": "workspace:*", "@sdkwork/webserver-pc-console-data-statistics": "workspace:*" }, module: [["dashboard", "Dashboard", "Traffic this edge served across every tenant it serves", "web.traffic.read"], ["traffic-usage", "Traffic Statistics", "Requests, bytes, and per-tenant breakdown over a date window", "web.traffic.read"]], extraIndexExports: ['export { DashboardPlatformSurface as DashboardAdminSurface, TrafficStatisticsPlatformSurface as TrafficStatisticsAdminSurface } from "@sdkwork/webserver-pc-console-data-statistics";'], dependencyPolicy: "Alias only. The pages, the client facade, the formatting, and the i18n are consumed from @sdkwork/webserver-pc-console-data-statistics; nothing is re-implemented here.", sdkPolicy: "This package owns no SDK client and imports no generated SDK. The backend client is constructed inside the console package from the injected base URL and token manager.", readme: "This package owns the data-statistics capability on the backend-admin surface: it re-exports the console capability's platform-reach Dashboard and Traffic Statistics pages and adds only the admin menu entries plus the `backend-admin` surface marker. What separates the two surfaces is reach, and reach is decided server-side: the pages here call the platform operation, which answers every tenant this edge serves and refuses a tenant-bound context outright rather than narrowing to the caller's own slice." },
 ];
 
 for (const definition of packages) {

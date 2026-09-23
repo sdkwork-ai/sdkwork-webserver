@@ -21,7 +21,7 @@ export interface WebserverMenuSectionDefinition {
   resources: readonly WebserverResourceKey[];
 }
 
-export type WebserverMenuSectionId = "delivery" | "aiEcosystem";
+export type WebserverMenuSectionId = "delivery" | "aiEcosystem" | "dataStatistics";
 
 /** Sidebar section order is the declaration order of this array. */
 export const MENU_SECTIONS: readonly WebserverMenuSectionDefinition[] = [
@@ -48,6 +48,16 @@ export const MENU_SECTIONS: readonly WebserverMenuSectionDefinition[] = [
     // plugin-category catalog those plugins file under. Grouped at the bottom
     // of the sidebar, after the delivery and server resources.
     resources: ["plugins", "plugin-categories", "skills", "mcp"],
+  },
+  {
+    id: "dataStatistics",
+    labelKey: "menuSection.dataStatistics",
+    // The measurements this edge derives from the traffic it served. Declared
+    // last so the measurement group sits below the delivery and AI-asset groups
+    // rather than between them, and it claims only the readings: the Dashboard
+    // entry is intentionally absent here, because a section is a grouping of
+    // readings and the overview leads the sidebar rather than belonging to it.
+    resources: ["traffic-usage"],
   },
 ];
 

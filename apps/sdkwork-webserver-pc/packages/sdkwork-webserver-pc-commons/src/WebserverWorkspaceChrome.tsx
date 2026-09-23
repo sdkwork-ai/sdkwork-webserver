@@ -3,12 +3,14 @@ import {
   AppWindow,
   Bell,
   Boxes,
+  ChartLine,
   CloudCog,
   Cpu,
   FolderOpen,
   Globe2,
   HardDrive,
   House,
+  LayoutDashboard,
   Layers3,
   LogOut,
   Network,
@@ -245,6 +247,10 @@ function ResourceIcon({ resource }: { resource: WebserverResourceKey }): ReactNo
       return <Cpu {...iconProps} />;
     case "cluster-events":
       return <ScrollText {...iconProps} />;
+    case "dashboard":
+      return <LayoutDashboard {...iconProps} />;
+    case "traffic-usage":
+      return <ChartLine {...iconProps} />;
     default:
       return <Activity {...iconProps} />;
   }

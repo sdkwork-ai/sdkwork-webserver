@@ -40,6 +40,11 @@ export type {
   WebserverConfigFile,
   WebserverConfigWriteRequest,
   WebserverConfigWriteResult,
+  TrafficUsageAppTotal,
+  TrafficUsageDailyPoint,
+  TrafficUsageStatisticsResponse,
+  TrafficUsageTenantTotal,
+  TrafficUsageTotal,
 } from "@sdkwork/webserver-backend-sdk";
 
 export type WebserverAdminSdkClient = SdkworkBackendClient;

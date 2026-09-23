@@ -22,6 +22,13 @@ const WEBSERVER_ADMIN_PERMISSIONS = [
   // module is permanently filtered out of their menu.
   "web.cluster.read",
   "web.cluster.write",
+  // The platform-wide traffic reading is an operations capability of this edge:
+  // without it in this list a traffic operator cannot open the backend-admin
+  // surface at all, so the module would be permanently filtered out of their
+  // menu even though the reading is exactly what they were granted. The
+  // tenant-scoped reading needs no entry here — the console surface renders its
+  // entries for any authenticated user.
+  "web.traffic.read",
 ] as const;
 
 const WEBSERVER_SUPER_ADMIN_PERMISSIONS = [

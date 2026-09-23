@@ -32,7 +32,13 @@ export type WebserverResourceKey =
   | "cluster-clusters"
   | "cluster-hosts"
   | "cluster-instances"
-  | "cluster-events";
+  | "cluster-events"
+  // `dashboard` is the leading overview of the workspace and stays unclaimed by
+  // any sidebar section; `traffic-usage` is the filterable reading the
+  // `dataStatistics` section groups. Both read the Web Server's own traffic
+  // contract, and which tenant scope answers is decided server-side.
+  | "dashboard"
+  | "traffic-usage";
 
 export interface WebserverModuleEntry {
   description: string;

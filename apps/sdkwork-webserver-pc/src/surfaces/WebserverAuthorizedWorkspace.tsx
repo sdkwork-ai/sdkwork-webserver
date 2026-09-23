@@ -1,7 +1,9 @@
 import { useSdkworkAuthControllerState } from "@sdkwork/auth-pc-react";
+import type { AuthTokenManager } from "@sdkwork/sdk-common";
 import { DeployAppsAdminSurface, webserverModule as appsAdminModule } from "@sdkwork/webserver-pc-admin-apps";
 import { webserverModule as auditModule } from "@sdkwork/webserver-pc-admin-audit";
 import { CloudAccountAdminSurface, webserverModule as cloudAccountAdminModule } from "@sdkwork/webserver-pc-admin-cloud-account";
+import { DashboardAdminSurface, TrafficStatisticsAdminSurface, webserverModule as dataStatisticsAdminModule } from "@sdkwork/webserver-pc-admin-data-statistics";
 import { ClusterOverviewSurface, webserverModule as clusterModule } from "@sdkwork/webserver-pc-admin-cluster";
 import { ServedCertificateAdminSurface, ServedDomainAdminSurface, webserverModule as deliveryAdminModule } from "@sdkwork/webserver-pc-admin-delivery";
 import { webserverModule as diagnosticsModule } from "@sdkwork/webserver-pc-admin-diagnostics";
@@ -13,9 +15,10 @@ import { webserverModule as serversExplorerModule, ServerFilesExplorerSurface } 
 import { webserverModule as webserverConfigModule, WebserverConfigSurface } from "@sdkwork/webserver-pc-admin-webserver-config";
 import { webserverModule as skillsAdminModule, SkillsAdminSurface, type SkillsAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-skills";
 import { StorageCenterSurface, webserverModule as storageModule, type StorageCenterResource } from "@sdkwork/webserver-pc-admin-storage";
-import { hasWebserverAdminAccess, type WebserverPcModuleDefinition } from "@sdkwork/webserver-pc-commons";
+import { hasWebserverAdminAccess, type WebserverPcModuleDefinition, type WebserverPcSurface } from "@sdkwork/webserver-pc-commons";
 import type { WebserverLocale } from "@sdkwork/webserver-pc-core";
 import { CloudAccountManagementSurface, webserverModule as cloudAccountModule } from "@sdkwork/webserver-pc-console-cloud-account";
+import { DashboardSurface, TrafficStatisticsSurface, webserverModule as dataStatisticsModule } from "@sdkwork/webserver-pc-console-data-statistics";
 import { WebserverConsoleSdkProvider } from "@sdkwork/webserver-pc-console-core";
 import { DeployAppsManagementSurface, DeployDomainManagementSurface, webserverModule as deliveryModule } from "@sdkwork/webserver-pc-console-delivery";
 import { webserverModule as mcpModule, McpConsoleSurface, type McpConsoleSurfaceProps } from "@sdkwork/webserver-pc-console-mcp";
@@ -34,7 +37,13 @@ import { useSdkworkModuleMessages } from "@sdkwork/i18n-pc-react";
 // nothing else: the Web Server console keeps no local application lifecycle.
 // These are the *per-user* halves of each story — an authenticated operator
 // manages the applications, domains, and certificates they own.
-const consoleModules = [deliveryModule, pluginsModule, skillsModule, mcpModule, cloudAccountModule] satisfies readonly WebserverPcModuleDefinition[];
+//
+// Exported, together with `adminModules` below, so the real-browser acceptance
+// harness mounts the menu this file actually declares rather than a copy of it:
+// the failure this guards against is exactly a module that was implemented and
+// tested but never added here, which a harness carrying its own list of modules
+// reproduces instead of catching.
+export const consoleModules = [deliveryModule, pluginsModule, skillsModule, mcpModule, cloudAccountModule, dataStatisticsModule] satisfies readonly WebserverPcModuleDefinition[];
 // Domains and Certificates reappear here at the *tenant* level: the served root
 // domains / subdomains this edge answers for (reconciled from its configuration
 // at startup) and the TLS certificates over them. That is a different plane from
@@ -42,8 +51,42 @@ const consoleModules = [deliveryModule, pluginsModule, skillsModule, mcpModule, 
 // reconciled subdomains carry `user_id IS NULL` — so it is its own module on the
 // operations surface rather than folded into `appsAdminModule`, and only this
 // surface offers the whole-tenant edge inventory.
-const adminModules = [appsAdminModule, deliveryAdminModule, cloudAccountAdminModule, nginxModule, serversModule, serversExplorerModule, webserverConfigModule, clusterModule, diagnosticsModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule, storageModule] satisfies readonly WebserverPcModuleDefinition[];
+export const adminModules = [appsAdminModule, deliveryAdminModule, cloudAccountAdminModule, nginxModule, serversModule, serversExplorerModule, webserverConfigModule, clusterModule, diagnosticsModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule, storageModule, dataStatisticsAdminModule] satisfies readonly WebserverPcModuleDefinition[];
 const LazyAdminSurface = lazy(() => import("./WebserverAdminSurface.tsx").then((module) => ({ default: module.WebserverAdminSurface })));
+
+export interface TrafficPageRendererInput {
+  backendApiBaseUrl: string;
+  locale: WebserverLocale;
+  permissionScope: readonly string[];
+  surface: WebserverPcSurface;
+  tokenManager: AuthTokenManager;
+}
+
+/**
+ * The renderer entries for the two traffic pages, for the surface asking.
+ *
+ * The pages are one implementation with two reaches, and which reach a surface
+ * gets is the product's own rule rather than a per-mount choice: the console
+ * reads the caller's own tenant, the operations surface reads every tenant this
+ * edge serves, because the platform operation is restricted to the operator
+ * tenant (a tenant-bound caller gets `40301` rather than a wider reading). So
+ * the surface decides which *pair of symbols* is mounted, and each symbol binds
+ * its reach — nothing here is a prop a caller could point at the other pair.
+ *
+ * Extracted and exported so the acceptance harness mounts this same map. A
+ * harness that rebuilt it would still pass while the host's copy was missing an
+ * entry, and "implemented, tested, never mounted" is the failure mode this
+ * module has already been through once.
+ */
+export function trafficPageRenderers({ backendApiBaseUrl, locale, permissionScope, surface, tokenManager }: TrafficPageRendererInput) {
+  const admin = surface === "backend-admin";
+  const Dashboard = admin ? DashboardAdminSurface : DashboardSurface;
+  const TrafficStatistics = admin ? TrafficStatisticsAdminSurface : TrafficStatisticsSurface;
+  return {
+    dashboard: <Dashboard backendApiBaseUrl={backendApiBaseUrl} locale={locale} permissionScope={permissionScope} resource="dashboard" tokenManager={tokenManager} />,
+    "traffic-usage": <TrafficStatistics backendApiBaseUrl={backendApiBaseUrl} locale={locale} permissionScope={permissionScope} resource="traffic-usage" tokenManager={tokenManager} />,
+  };
+}
 
 export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: WebserverLocale; runtime: BootstrappedWebserverPcRuntime }) {
   const messages = useSdkworkModuleMessages(webserverApplicationCatalog);
@@ -84,6 +127,13 @@ export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: Webs
     // which is also what keeps the generated IAM clients out of a capability
     // package (`verify-repo` forbids that import).
     "cloud-accounts": <CloudAccountManagementSurface permissionScope={permissionScope} tenantId={tenantId} />,
+    ...trafficPageRenderers({
+      backendApiBaseUrl: runtime.config.backendApiBaseUrl,
+      locale,
+      permissionScope,
+      surface: "app-console",
+      tokenManager: runtime.tokenManager,
+    }),
   };
   // Storage Center mounts the drive-owned admin storage pages. The surface
   // picks the page from `resource`, so the host owns the menu entry and the
@@ -127,6 +177,13 @@ export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: Webs
     // `cluster-clusters` / `cluster-hosts` / `cluster-instances` /
     // `cluster-events` are registry-driven and need no renderer entry.
     "cluster-overview": <ClusterOverviewSurface locale={locale} resource="cluster-overview" />,
+    ...trafficPageRenderers({
+      backendApiBaseUrl: runtime.config.backendApiBaseUrl,
+      locale,
+      permissionScope,
+      surface: "backend-admin",
+      tokenManager: runtime.tokenManager,
+    }),
   };
 
   return (

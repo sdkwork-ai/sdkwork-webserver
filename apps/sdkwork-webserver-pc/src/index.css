@@ -2986,3 +2986,222 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* Data statistics: the Dashboard overview and the Traffic Statistics reading.
+
+   The reading arrives from this edge's own backend contract, so the page is
+   authored markup over the framework `DataTable` rather than a mirrored
+   composite. Only semantic theme tokens are used, which is what keeps the two
+   surfaces in the console's dark theme without a second rule block.
+
+   The pages own a frame class rather than reusing the registry page's
+   `.data-surface`. That class is the framework table's frame — a two-row grid
+   whose first row is the scrolling table and whose second is the pager — so a
+   document placed in it hands its toolbar the whole leftover height and pushes
+   everything else to the bottom of the panel. Same panel look, flow layout.
+
+   The scroll container has to be this element: `main.workspace` is
+   `overflow: hidden` and gives every child `height: 100%`, so a page that just
+   grows is clipped with nothing to scroll. `scrollbar-gutter` matches the
+   drawer/footer pattern used elsewhere in this sheet. */
+.statistics-surface {
+  margin-top: 12px;
+  padding: 16px 18px 20px;
+  border: 1px solid var(--sdk-color-border-default);
+  border-radius: 6px;
+  background: var(--sdk-color-surface-panel);
+  box-shadow: var(--sdk-shadow-sm);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.statistics-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--sdk-color-border-subtle);
+}
+.statistics-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--sdk-color-text-primary);
+}
+.statistics-meta {
+  font-size: 12px;
+  color: var(--sdk-color-text-muted);
+  text-align: right;
+}
+.statistics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin: 14px 0 22px;
+}
+.statistics-card {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--sdk-color-border-default);
+  border-radius: 7px;
+  background: var(--sdk-color-surface-panel);
+}
+.statistics-value {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--sdk-color-text-primary);
+}
+.statistics-label {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--sdk-color-text-secondary);
+}
+.statistics-block {
+  margin: 0 0 24px;
+}
+.statistics-block h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--sdk-color-text-secondary);
+}
+.statistics-note {
+  max-width: 760px;
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--sdk-color-text-muted);
+}
+.statistics-unattributed {
+  color: var(--sdk-color-text-muted);
+  font-style: italic;
+}
+
+/* The daily series.
+
+   Each series is indexed to its own peak, so the bars are read as shape rather
+   than as magnitude. The track gives the bars a common floor and the height is
+   the index in percent; the footnote above the block states what 100 means. */
+.statistics-series {
+  margin: 0 0 14px;
+}
+.statistics-series-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.statistics-series-name {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--sdk-color-text-primary);
+}
+.statistics-series-peak {
+  font-size: 12px;
+  color: var(--sdk-color-text-muted);
+}
+.statistics-series-track {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 56px;
+  padding: 0 2px;
+  border-bottom: 1px solid var(--sdk-color-border-subtle);
+}
+.statistics-series-bar {
+  flex: 1 1 0;
+  min-width: 2px;
+  min-height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--sdk-color-brand-primary);
+}
+
+/* The three states a reading can be in. "Unavailable" and "error" are split
+   because only one of them is the operator's to act on, and neither is drawn as
+   an empty chart: an empty chart asserts that no traffic was served. */
+.statistics-state {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 20px;
+  padding: 18px 20px;
+  border: 1px solid var(--sdk-color-border-default);
+  border-radius: 7px;
+  background: var(--sdk-color-surface-panel-muted);
+}
+.statistics-state strong {
+  color: var(--sdk-color-text-primary);
+}
+.statistics-state p {
+  max-width: 760px;
+  margin: 0;
+  line-height: 1.6;
+  color: var(--sdk-color-text-secondary);
+}
+.statistics-state[data-tone="unavailable"] {
+  border-color: var(--webserver-color-warning-border, var(--sdk-color-border-default));
+}
+.statistics-state[data-tone="error"] {
+  border-color: var(--webserver-color-danger-border, var(--sdk-color-border-default));
+}
+.statistics-state[data-tone="error"] .secondary-button {
+  justify-self: start;
+}
+.statistics-state-detail {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* The window form: one row of labelled fields over the reading it filters. */
+.statistics-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--sdk-color-border-default);
+  border-radius: 7px;
+  background: var(--sdk-color-surface-panel);
+}
+.statistics-filters-label {
+  align-self: center;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--sdk-color-text-secondary);
+}
+.statistics-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.statistics-field > span {
+  font-size: 12px;
+  color: var(--sdk-color-text-secondary);
+}
+.statistics-field input {
+  min-width: 140px;
+  padding: 6px 8px;
+  border: 1px solid var(--sdk-color-border-default);
+  border-radius: 5px;
+  background: var(--sdk-color-surface-panel-muted);
+  color: var(--sdk-color-text-primary);
+}
+.statistics-field input[aria-invalid="true"] {
+  border-color: var(--sdk-color-state-danger);
+}
+.statistics-filters-actions {
+  display: flex;
+  gap: 8px;
+}
+.statistics-filters-error {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--sdk-color-state-danger);
+}

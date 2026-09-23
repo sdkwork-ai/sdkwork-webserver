@@ -35,6 +35,29 @@ describe("workspace menu sections", () => {
     expect(section?.resources).toEqual(["plugins", "plugin-categories", "skills", "mcp"]);
   });
 
+  it("declares the data statistics section over the traffic reading only", () => {
+    const section = MENU_SECTIONS.find((candidate) => candidate.id === "dataStatistics");
+
+    expect(section?.labelKey).toBe("menuSection.dataStatistics");
+    // The Dashboard entry is deliberately absent: the overview leads the
+    // sidebar in the unlabelled leading group rather than belonging to a
+    // grouping of readings. A section that claimed it would move the landing
+    // entry down into the measurement group.
+    expect(section?.resources).toEqual(["traffic-usage"]);
+  });
+
+  it("places the traffic reading in the last section and the overview ungrouped", () => {
+    const groups = groupMenuEntries([
+      { resource: "dashboard" },
+      { resource: "traffic-usage" },
+      { resource: "apps" },
+    ]);
+
+    expect(groups.map((group) => group.id)).toEqual([null, "delivery", "dataStatistics"]);
+    expect(groups[0].entries.map((entry) => entry.resource)).toEqual(["dashboard"]);
+    expect(groups[2].entries.map((entry) => entry.resource)).toEqual(["traffic-usage"]);
+  });
+
   it("renders ungrouped entries first and in their supplied order", () => {
     const groups = groupMenuEntries([
       { resource: "nginx" },
