@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::cluster::*;
 use crate::dto::*;
 use crate::problem::WebServiceResult;
+use crate::usage::*;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -924,6 +925,20 @@ pub trait WebBackendApi: Send + Sync {
         context: &WebBackendRequestContext,
         request: &EnqueueClusterPeerMessagesRequest,
     ) -> WebServiceResult<EnqueueClusterPeerMessagesResponse>;
+
+    /// Aggregated traffic usage for the window in `query`.
+    ///
+    /// Scope is resolved here rather than taken from the request: the caller's
+    /// own tenant answers the console, and the platform operator tenant answers
+    /// the operations surface with every tenant. A context that carries neither
+    /// a tenant nor the platform operator tenant is rejected instead of
+    /// defaulting to one of the two, because a wrong default silently returns
+    /// either somebody else's traffic or an empty page.
+    async fn retrieve_traffic_usage_statistics(
+        &self,
+        context: &WebBackendRequestContext,
+        query: &TrafficUsageStatisticsQuery,
+    ) -> WebServiceResult<TrafficUsageStatisticsResponse>;
 }
 
 #[cfg(test)]

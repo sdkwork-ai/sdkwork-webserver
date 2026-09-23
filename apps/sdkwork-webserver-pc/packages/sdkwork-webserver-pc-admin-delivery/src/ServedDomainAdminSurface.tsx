@@ -1,8 +1,21 @@
 import { useWebserverAdminSdk } from "@sdkwork/webserver-pc-admin-core";
 import type { ApplicationDomainResponse, RootDomainResponse } from "@sdkwork/webserver-pc-admin-core";
-import { translateWebserver, type WebserverLocale } from "@sdkwork/webserver-pc-commons";
-import { Button, DataTable, Input, StatusBadge, type DataTableColumn } from "@sdkwork/ui-pc-react";
-import { useCallback, useEffect, useState } from "react";
+import type { WebserverLocale } from "@sdkwork/webserver-pc-commons";
+import { ArrowLeft, Globe2, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link, Route, Routes, useParams } from "react-router-dom";
+
+import {
+  ConfirmDialog,
+  FormDialog,
+  Metric,
+  Pagination,
+  StatusBadge,
+  errorText,
+  formatInstant,
+  newIdempotencyKey,
+  translator,
+} from "./AdminSurfaceAtoms.tsx";
 
 /**
  * The served-domain inventory: which root domains this edge answers for, and
@@ -20,342 +33,572 @@ import { useCallback, useEffect, useState } from "react";
  * is why this page lives on the operations surface and not in the tenant
  * console.
  *
+ * ## Why this page is dressed in the Deployments surface vocabulary
+ *
+ * The tenant console's Domains page and this one show the same entity at two
+ * ownership levels, and an operator reads them side by side. The console pair is
+ * the canonical `sdkwork-deployments` page, bridged in through
+ * `DeployDomainManagementSurface`, so its look comes from the mirror stylesheet
+ * in `src/deploy-surface.css` — every rule scoped under `.deploy-surface`.
+ * Authoring this page against the host's *registry* vocabulary instead
+ * (`resource-toolbar` / `toolbar-meta` / the framework `DataTable`) is what made
+ * it read as a different product: neither of those two class names has a single
+ * rule in this app, so the toolbar rendered as unstyled stacked children, and
+ * `.data-surface` is a two-row grid that six children fell out of.
+ *
+ * Wrapping the page in `.deploy-surface` and speaking that vocabulary is the
+ * whole fix: the geometry, the command bar, the ledger, the empty state, the
+ * status chips, the pager and the operation column all become the console's,
+ * because they are literally the same rules. It also matches what
+ * `DeployAppsAdminSurface` already does — the admin Applications page *is* the
+ * console page, not a re-drawing of it.
+ *
  * The page renders inside `WebserverAdminSdkProvider`, so the client is
  * injected through the admin-core hook; no transport is constructed here.
  */
 
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 50;
+
+/** Root-domain lifecycle on the wire: 0=pending, 1=active, 2=disabled. */
+const ALL_STATUSES = "ALL";
+const STATUS_FILTERS = [ALL_STATUSES, 1, 0, 2] as const;
+type StatusFilter = (typeof STATUS_FILTERS)[number];
 
 export interface ServedDomainAdminSurfaceProps {
   locale: WebserverLocale;
   resource: "domains";
 }
 
-interface RootSnapshot {
-  items: RootDomainResponse[];
-  hasMore: boolean;
-  page: number;
-}
-
-interface SubdomainSnapshot {
-  items: ApplicationDomainResponse[];
-  hasMore: boolean;
-  page: number;
-}
-
 export function ServedDomainAdminSurface({ locale, resource }: ServedDomainAdminSurfaceProps) {
-  const client = useWebserverAdminSdk();
-  const [roots, setRoots] = useState<RootSnapshot | null>(null);
-  const [selectedRoot, setSelectedRoot] = useState<RootDomainResponse | null>(null);
-  const [subdomains, setSubdomains] = useState<SubdomainSnapshot | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [rootPage, setRootPage] = useState(1);
-  const [subdomainPage, setSubdomainPage] = useState(1);
-  const [rootDraft, setRootDraft] = useState("");
-  const [subdomainDraft, setSubdomainDraft] = useState("");
-
-  const t = (key: Parameters<typeof translateWebserver>[1], values?: Record<string, string | number>) =>
-    translateWebserver(locale, key, values);
-
-  const loadRoots = useCallback(async () => {
-    try {
-      const page = await client.domain.rootDomains.list({ page: rootPage, pageSize: PAGE_SIZE });
-      // `PageInfo.hasMore` is optional on the wire; absent means no continuation.
-      setRoots({ items: page.items, hasMore: page.pageInfo.hasMore === true, page: rootPage });
-      setError(null);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  }, [client, rootPage]);
-
-  useEffect(() => {
-    void loadRoots();
-  }, [loadRoots]);
-
-  const loadSubdomains = useCallback(async (root: RootDomainResponse, page: number) => {
-    try {
-      const result = await client.domain.rootDomains.subdomains.list(root.id, { page, pageSize: PAGE_SIZE });
-      setSubdomains({ items: result.items, hasMore: result.pageInfo.hasMore === true, page });
-      setError(null);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  }, [client]);
-
-  useEffect(() => {
-    if (!selectedRoot) {
-      setSubdomains(null);
-      return;
-    }
-    void loadSubdomains(selectedRoot, subdomainPage);
-  }, [selectedRoot, subdomainPage, loadSubdomains]);
-
-  const run = async (operation: () => Promise<unknown>) => {
-    setBusy(true);
-    try {
-      await operation();
-      setError(null);
-      await loadRoots();
-      if (selectedRoot) await loadSubdomains(selectedRoot, subdomainPage);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const createRoot = () =>
-    run(async () => {
-      const hostname = rootDraft.trim();
-      if (!hostname) return;
-      await client.domain.rootDomains.create({ hostname }, { idempotencyKey: newIdempotencyKey() });
-      setRootDraft("");
-    });
-
-  const createSubdomain = () =>
-    run(async () => {
-      const recordName = subdomainDraft.trim();
-      if (!recordName || !selectedRoot) return;
-      await client.domain.rootDomains.subdomains.create(
-        selectedRoot.id,
-        { recordName, sslEnabled: true },
-        { idempotencyKey: newIdempotencyKey() },
-      );
-      setSubdomainDraft("");
-    });
-
-  const deleteRoot = (root: RootDomainResponse) =>
-    run(async () => {
-      if (!window.confirm(t("resource.domains.deleteRootConfirm", { hostname: root.hostname }))) return;
-      await client.domain.rootDomains.delete(root.id, { idempotencyKey: newIdempotencyKey() });
-      if (selectedRoot?.id === root.id) {
-        setSelectedRoot(null);
-        setSubdomainPage(1);
-      }
-    });
-
-  const deleteSubdomain = (domain: ApplicationDomainResponse) =>
-    run(async () => {
-      if (!window.confirm(t("resource.domains.deleteSubdomainConfirm", { hostname: domain.hostname }))) return;
-      await client.domain.delete(domain.id, { idempotencyKey: newIdempotencyKey() });
-    });
-
-  const rootColumns: DataTableColumn<RootDomainResponse>[] = [
-    { id: "hostname", header: t("resource.domains.rootHostname"), cell: (root) => <code>{root.hostname}</code> },
-    { id: "subdomainCount", header: t("resource.domains.subdomainCount"), cell: (root) => root.subdomainCount },
-    { id: "verifiedSubdomainCount", header: t("resource.domains.verifiedCount"), cell: (root) => root.verifiedSubdomainCount },
-    { id: "httpsSubdomainCount", header: t("resource.domains.httpsCount"), cell: (root) => root.httpsSubdomainCount },
-    {
-      id: "status",
-      header: t("resource.domains.status"),
-      cell: (root) => <StatusBadge status={root.status === 1 ? "active" : "disabled"} variant={root.status === 1 ? "success" : "secondary"} />,
-    },
-    { id: "createdAt", header: t("resource.domains.createdAt"), cell: (root) => formatInstant(root.createdAt, locale) },
-    {
-      id: "actions",
-      header: t("resource.domains.actions"),
-      cell: (root) => (
-        // `stopPropagation` is load-bearing: the row itself selects the root on
-        // click, and without it a delete would also re-select the row it just
-        // removed — leaving the subdomain panel pointing at a deleted root.
-        <Button
-          disabled={busy}
-          onClick={(event) => {
-            event.stopPropagation();
-            void deleteRoot(root);
-          }}
-          size="sm"
-          variant="ghost"
-        >
-          {t("resource.domains.delete")}
-        </Button>
-      ),
-    },
-  ];
-
-  const subdomainColumns: DataTableColumn<ApplicationDomainResponse>[] = [
-    { id: "hostname", header: t("resource.domains.subdomainHostname"), cell: (domain) => <code>{domain.hostname}</code> },
-    { id: "recordName", header: t("resource.domains.recordName"), cell: (domain) => domain.recordName ?? "-" },
-    {
-      id: "isVerified",
-      header: t("resource.domains.verification"),
-      cell: (domain) => (
-        <StatusBadge
-          status={domain.isVerified ? "verified" : "pending"}
-          variant={domain.isVerified ? "success" : "warning"}
-        />
-      ),
-    },
-    {
-      id: "sslEnabled",
-      header: t("resource.domains.ssl"),
-      cell: (domain) => (domain.sslEnabled ? domain.sslProvider ?? "enabled" : t("resource.domains.sslOff")),
-    },
-    { id: "isPrimary", header: t("resource.domains.primary"), cell: (domain) => (domain.isPrimary ? t("resource.domains.yes") : "") },
-    { id: "applicationName", header: t("resource.domains.application"), cell: (domain) => domain.applicationName ?? "-" },
-    { id: "certificateCount", header: t("resource.domains.certificateCount"), cell: (domain) => domain.certificateCount },
-    {
-      id: "actions",
-      header: t("resource.domains.actions"),
-      cell: (domain) => (
-        <Button disabled={busy} onClick={() => void deleteSubdomain(domain)} size="sm" variant="ghost">
-          {t("resource.domains.delete")}
-        </Button>
-      ),
-    },
-  ];
-
   return (
-    <section className="data-surface" data-resource={resource}>
-      <header className="resource-toolbar">
-        <h2>{t("resource.domains.admin.label")}</h2>
-        <span className="toolbar-meta">
-          {roots ? t("resource.domains.reconciledHint", { count: roots.items.length }) : t("resource.domains.loading")}
-        </span>
-      </header>
-
-      <div className="resource-toolbar">
-        <Input
-          aria-label={t("resource.domains.addRoot")}
-          onChange={(event) => setRootDraft(event.target.value)}
-          placeholder={t("resource.domains.addRootPlaceholder")}
-          value={rootDraft}
-        />
-        <Button disabled={busy || rootDraft.trim().length === 0} onClick={() => void createRoot()}>
-          {t("resource.domains.addRoot")}
-        </Button>
-        <Button disabled={busy} onClick={() => void loadRoots()} variant="secondary">
-          {t("resource.domains.refresh")}
-        </Button>
-      </div>
-
-      {error ? <p className="bootstrap-state" role="alert">{t("resource.domains.loadFailed")}: {error}</p> : null}
-
-      {roots === null ? (
-        <p className="bootstrap-state" role="status">{t("resource.domains.loading")}</p>
-      ) : (
-        <>
-          <DataTable<RootDomainResponse>
-            columns={rootColumns}
-            density="compact"
-            emptyState={<span>{t("resource.domains.noRoots")}</span>}
-            getRowId={(root) => root.id}
-            onRowClick={(root) => {
-              setSelectedRoot(root);
-              setSubdomainPage(1);
-            }}
-            rows={roots.items}
-            selectedRowIds={selectedRoot ? [selectedRoot.id] : []}
-            stickyHeader
-          />
-          <Pager
-            hasMore={roots.hasMore}
-            label={t("resource.domains.page", { page: roots.page })}
-            nextLabel={t("resource.domains.next")}
-            onNext={() => setRootPage((current) => current + 1)}
-            onPrevious={() => setRootPage((current) => Math.max(1, current - 1))}
-            previousLabel={t("resource.domains.previous")}
-            showPrevious={roots.page > 1}
-          />
-
-          {selectedRoot ? (
-            <>
-              <h3>{t("resource.domains.subdomainsOf", { hostname: selectedRoot.hostname })}</h3>
-              <div className="resource-toolbar">
-                <Input
-                  aria-label={t("resource.domains.addSubdomain")}
-                  onChange={(event) => setSubdomainDraft(event.target.value)}
-                  placeholder={t("resource.domains.addSubdomainPlaceholder")}
-                  value={subdomainDraft}
-                />
-                <Button disabled={busy || subdomainDraft.trim().length === 0} onClick={() => void createSubdomain()}>
-                  {t("resource.domains.addSubdomain")}
-                </Button>
-              </div>
-              <DataTable<ApplicationDomainResponse>
-                columns={subdomainColumns}
-                density="compact"
-                emptyState={<span>{t("resource.domains.noSubdomains")}</span>}
-                getRowId={(domain) => domain.id}
-                rows={subdomains?.items ?? []}
-                stickyHeader
-              />
-              {subdomains ? (
-                <Pager
-                  hasMore={subdomains.hasMore}
-                  label={t("resource.domains.page", { page: subdomains.page })}
-                  nextLabel={t("resource.domains.next")}
-                  onNext={() => setSubdomainPage((current) => current + 1)}
-                  onPrevious={() => setSubdomainPage((current) => Math.max(1, current - 1))}
-                  previousLabel={t("resource.domains.previous")}
-                  showPrevious={subdomains.page > 1}
-                />
-              ) : null}
-            </>
-          ) : (
-            <p className="bootstrap-state">{t("resource.domains.selectRoot")}</p>
-          )}
-        </>
-      )}
-    </section>
-  );
-}
-
-function Pager({
-  hasMore,
-  label,
-  nextLabel,
-  onNext,
-  onPrevious,
-  previousLabel,
-  showPrevious,
-}: {
-  hasMore: boolean;
-  label: string;
-  nextLabel: string;
-  onNext(): void;
-  onPrevious(): void;
-  previousLabel: string;
-  showPrevious: boolean;
-}) {
-  if (!hasMore && !showPrevious) return null;
-  return (
-    <div className="resource-toolbar">
-      <span className="toolbar-meta">{label}</span>
-      {showPrevious ? <Button onClick={onPrevious} size="sm" variant="secondary">{previousLabel}</Button> : null}
-      {hasMore ? <Button onClick={onNext} size="sm" variant="secondary">{nextLabel}</Button> : null}
+    <div className="deploy-surface" data-resource={resource}>
+      {/* Two levels, two routes — the shape the console uses, so opening a root
+          domain is a navigation an operator can link to and come back from. An
+          unparsable tail renders the root ledger rather than a blank pane. */}
+      <Routes>
+        <Route element={<RootDomainLedger locale={locale} />} index />
+        <Route element={<RootDomainHostnames locale={locale} />} path=":rootDomainId" />
+        <Route element={<RootDomainLedger locale={locale} />} path="*" />
+      </Routes>
     </div>
   );
 }
 
-function formatInstant(instant: string, locale: WebserverLocale): string {
-  const parsed = new Date(instant);
-  if (Number.isNaN(parsed.getTime())) return instant;
-  return parsed.toLocaleString(locale === "zh-CN" ? "zh-CN" : "en-US", { hour12: false });
+function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
+  const client = useWebserverAdminSdk();
+  const t = translator(locale);
+  const [roots, setRoots] = useState<RootDomainResponse[] | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [status, setStatus] = useState<StatusFilter>(ALL_STATUSES);
+  const [searchDraft, setSearchDraft] = useState("");
+  const [keyword, setKeyword] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<RootDomainResponse>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    let active = true;
+    setBusy(true);
+    setError(undefined);
+    void client.domain.rootDomains
+      .list({
+        page,
+        pageSize: PAGE_SIZE,
+        // Absent means "every status", which is what the ALL segment means too —
+        // so ALL omits the parameter rather than naming a wildcard the wire has
+        // no value for.
+        status: status === ALL_STATUSES ? undefined : status,
+        q: keyword || undefined,
+      })
+      .then((result) => {
+        if (!active) return;
+        setRoots(result.items);
+        // `PageInfo.hasMore` is optional on the wire; an absent flag means "no
+        // continuation", never "unknown".
+        setHasMore(result.pageInfo.hasMore === true);
+      })
+      .catch((cause) => {
+        if (active) setError(errorText(cause));
+      })
+      .finally(() => {
+        if (active) setBusy(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client, keyword, page, status]);
+
+  const removeRoot = (root: RootDomainResponse) => {
+    setBusy(true);
+    void client.domain.rootDomains
+      .delete(root.id, { idempotencyKey: newIdempotencyKey() })
+      .then(() => {
+        setDeleteTarget(undefined);
+        // Re-read rather than splice in place: the delete only succeeds on an
+        // empty root, and a refused delete has to leave the row and its
+        // counters exactly as the server still reports them.
+        setRoots(null);
+        setPage(1);
+      })
+      .catch((cause) => {
+        setDeleteTarget(undefined);
+        setError(errorText(cause));
+      })
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <section className="resource-page domain-page">
+      <div className="resource-commandbar">
+        <div className="resource-identity">
+          <h1>{t("resource.domains.admin.label")}</h1>
+        </div>
+        <div className="resource-query">
+          <form
+            className="search-box"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setPage(1);
+              setKeyword(searchDraft.trim());
+            }}
+          >
+            <Search size={16} />
+            <input
+              aria-label={t("resource.domains.search")}
+              onChange={(event) => setSearchDraft(event.target.value)}
+              placeholder={t("resource.domains.search")}
+              value={searchDraft}
+            />
+          </form>
+          {/* The state filter keeps the console's exact control; the ownership
+              tabs the page is also meant to carry slot in beside it without
+              competing, because they answer a different question. */}
+          <div aria-label={t("resource.domains.status")} className="segmented-control" role="group">
+            {STATUS_FILTERS.map((value) => (
+              <button
+                aria-pressed={status === value}
+                key={String(value)}
+                onClick={() => {
+                  setPage(1);
+                  setStatus(value);
+                }}
+                type="button"
+              >
+                {statusLabel(value, t)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="actions">
+          <button
+            className="icon-button"
+            disabled={busy}
+            onClick={() => {
+              setRoots(null);
+              setPage(1);
+            }}
+            title={t("resource.domains.refresh")}
+            type="button"
+          >
+            <RefreshCw size={17} />
+          </button>
+          <button className="command-button" onClick={() => setCreateOpen(true)} type="button">
+            <Plus size={16} />
+            {t("resource.domains.defineRoot")}
+          </button>
+        </div>
+      </div>
+
+      {error ? (
+        <div className="error-banner" role="alert">
+          {error}
+        </div>
+      ) : null}
+
+      {roots === null && !error ? (
+        <div className="resource-loading" role="status">
+          <p>{t("resource.domains.loading")}</p>
+        </div>
+      ) : (
+        <>
+          <div aria-busy={busy} className="table-frame domain-table-frame">
+            <table className="domain-table">
+              <thead>
+                <tr>
+                  <th>{t("resource.domains.rootHostname")}</th>
+                  <th>{t("resource.domains.status")}</th>
+                  <th>{t("resource.domains.subdomainCount")}</th>
+                  <th>{t("resource.domains.httpsCount")}</th>
+                  <th>{t("resource.domains.boundCount")}</th>
+                  <th>{t("resource.domains.deploymentCount")}</th>
+                  <th>{t("resource.domains.updatedAt")}</th>
+                  <th className="operations-column">{t("resource.domains.operations")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(roots ?? []).map((root) => (
+                  <tr key={root.id}>
+                    <td>
+                      <Link className="primary-cell-link" to={root.id}>
+                        <Globe2 size={17} />
+                        <span>
+                          <strong>{root.hostname}</strong>
+                        </span>
+                      </Link>
+                    </td>
+                    <td>
+                      <StatusBadge t={t} value={rootStatusLabel(root.status)} />
+                    </td>
+                    <td>
+                      <strong>{root.subdomainCount}</strong>
+                      <small className="cell-subtitle">
+                        {t("resource.domains.verifiedSummary", {
+                          total: root.subdomainCount,
+                          verified: root.verifiedSubdomainCount,
+                        })}
+                      </small>
+                    </td>
+                    <td>{root.httpsSubdomainCount}</td>
+                    <td>{root.boundSubdomainCount}</td>
+                    <td>{root.activeDeploymentCount}</td>
+                    <td>{formatInstant(root.updatedAt, locale)}</td>
+                    <td>
+                      <div className="row-actions">
+                        {/* Text label rather than a bare glyph, exactly as the
+                            console's zone ledger does it: entering the hostname
+                            list is the thing an operator opens this table for,
+                            and it is not guessable from a globe icon alone. The
+                            literal word also stays inside the accessible name. */}
+                        <Link
+                          aria-label={`${t("resource.domains.openHostnames")} · ${root.hostname}`}
+                          className="table-action table-action-text"
+                          title={t("resource.domains.openHostnames")}
+                          to={root.id}
+                        >
+                          <Globe2 size={15} />
+                          <span>{t("resource.domains.openHostnames")}</span>
+                        </Link>
+                        <button
+                          aria-label={`${t("resource.domains.delete")} ${root.hostname}`}
+                          className="table-action danger-action"
+                          disabled={busy}
+                          onClick={() => setDeleteTarget(root)}
+                          title={t("resource.domains.delete")}
+                          type="button"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!busy && (roots ?? []).length === 0 ? (
+              <div className="empty-state">
+                <Globe2 size={24} />
+                {t("resource.domains.noRoots")}
+              </div>
+            ) : null}
+          </div>
+          <Pagination
+            busy={busy}
+            hasMore={hasMore}
+            onNext={() => setPage((current) => current + 1)}
+            onPrevious={() => setPage((current) => Math.max(1, current - 1))}
+            page={page}
+            t={t}
+          />
+        </>
+      )}
+
+      {createOpen ? (
+        <FormDialog
+          close={() => setCreateOpen(false)}
+          submit={async (hostname) => {
+            await client.domain.rootDomains.create({ hostname }, { idempotencyKey: newIdempotencyKey() });
+            setCreateOpen(false);
+            setRoots(null);
+            setPage(1);
+          }}
+          submitLabel={t("resource.domains.create")}
+          t={t}
+          title={t("resource.domains.defineRoot")}
+        >
+          {(disabled) => (
+            <label>
+              {t("resource.domains.rootHostname")}
+              <input
+                disabled={disabled}
+                name="hostname"
+                placeholder={t("resource.domains.addRootPlaceholder")}
+                required
+                type="text"
+              />
+            </label>
+          )}
+        </FormDialog>
+      ) : null}
+
+      {deleteTarget ? (
+        <ConfirmDialog
+          close={() => setDeleteTarget(undefined)}
+          confirmLabel={t("resource.domains.delete")}
+          dangerous
+          message={t("resource.domains.deleteRootConfirm", { hostname: deleteTarget.hostname })}
+          onConfirm={() => removeRoot(deleteTarget)}
+          t={t}
+          title={t("resource.domains.delete")}
+        />
+      ) : null}
+    </section>
+  );
 }
 
-/**
- * Idempotency key for one mutation.
- *
- * Same shape `webserver-config-client.ts` uses: `crypto.randomUUID` is absent —
- * or throws — outside a secure context, and a dev edge reached over plain HTTP at
- * a LAN address is exactly that, so the UUID is assembled from
- * `getRandomValues` rather than assumed.
- */
-function newIdempotencyKey(): string {
-  const crypto = globalThis.crypto;
-  if (typeof crypto?.randomUUID === "function") {
-    try {
-      return crypto.randomUUID();
-    } catch {
-      // Non-secure contexts may reject randomUUID; fall through.
-    }
-  }
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
-  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
-  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
+  const client = useWebserverAdminSdk();
+  const t = translator(locale);
+  const { rootDomainId = "" } = useParams();
+  const [root, setRoot] = useState<RootDomainResponse>();
+  const [hostnames, setHostnames] = useState<ApplicationDomainResponse[] | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ApplicationDomainResponse>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    let active = true;
+    setBusy(true);
+    setError(undefined);
+    // Both reads in one pass: the heading is the root's own hostname, and a
+    // hostname ledger titled "-" because its zone read had not landed yet is the
+    // one state an operator would read as a failure.
+    void Promise.all([
+      client.domain.rootDomains.retrieve(rootDomainId),
+      client.domain.rootDomains.subdomains.list(rootDomainId, { page, pageSize: PAGE_SIZE }),
+    ])
+      .then(([rootResult, hostnameResult]) => {
+        if (!active) return;
+        setRoot(rootResult);
+        setHostnames(hostnameResult.items);
+        setHasMore(hostnameResult.pageInfo.hasMore === true);
+      })
+      .catch((cause) => {
+        if (active) setError(errorText(cause));
+      })
+      .finally(() => {
+        if (active) setBusy(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client, page, rootDomainId]);
+
+  const removeHostname = (hostname: ApplicationDomainResponse) => {
+    setBusy(true);
+    void client.domain
+      .delete(hostname.id, { idempotencyKey: newIdempotencyKey() })
+      .then(() => {
+        setDeleteTarget(undefined);
+        setHostnames(null);
+        setPage(1);
+      })
+      .catch((cause) => {
+        setDeleteTarget(undefined);
+        setError(errorText(cause));
+      })
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <section className="resource-page domain-page">
+      <Link className="back-link" to="..">
+        <ArrowLeft size={16} />
+        {t("resource.domains.backToDomains")}
+      </Link>
+      <div className="resource-commandbar">
+        <div className="resource-identity">
+          <h1>{root?.hostname ?? "-"}</h1>
+        </div>
+        <div className="actions">
+          <button
+            className="icon-button"
+            disabled={busy}
+            onClick={() => {
+              setHostnames(null);
+              setPage(1);
+            }}
+            title={t("resource.domains.refresh")}
+            type="button"
+          >
+            <RefreshCw size={17} />
+          </button>
+          <button className="command-button" onClick={() => setCreateOpen(true)} type="button">
+            <Plus size={16} />
+            {t("resource.domains.addSubdomain")}
+          </button>
+        </div>
+      </div>
+
+      {root ? (
+        <div className="metric-strip">
+          <Metric
+            label={t("resource.domains.verifiedCount")}
+            value={t("resource.domains.verifiedSummary", {
+              total: root.subdomainCount,
+              verified: root.verifiedSubdomainCount,
+            })}
+          />
+          <Metric label={t("resource.domains.httpsCount")} value={root.httpsSubdomainCount} />
+          <Metric label={t("resource.domains.boundCount")} value={root.boundSubdomainCount} />
+          <Metric label={t("resource.domains.deploymentCount")} value={root.activeDeploymentCount} />
+        </div>
+      ) : null}
+
+      {error ? (
+        <div className="error-banner" role="alert">
+          {error}
+        </div>
+      ) : null}
+
+      {hostnames === null && !error ? (
+        <div className="resource-loading" role="status">
+          <p>{t("resource.domains.loading")}</p>
+        </div>
+      ) : (
+        <div aria-busy={busy} className="table-frame domain-table-frame">
+          <table className="domain-table">
+            <thead>
+              <tr>
+                <th>{t("resource.domains.subdomainHostname")}</th>
+                <th>{t("resource.domains.recordName")}</th>
+                <th>{t("resource.domains.verification")}</th>
+                <th>{t("resource.domains.ssl")}</th>
+                <th>{t("resource.domains.application")}</th>
+                <th>{t("resource.domains.certificateCount")}</th>
+                <th className="operations-column">{t("resource.domains.operations")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(hostnames ?? []).map((hostname) => (
+                <tr key={hostname.id}>
+                  <td>
+                    <span className="hostname-cell">
+                      <Globe2 size={16} />
+                      <span>
+                        <strong>{hostname.hostname}</strong>
+                        {hostname.isPrimary ? <small>{t("resource.domains.primary")}</small> : null}
+                      </span>
+                    </span>
+                  </td>
+                  <td>{hostname.recordName || "-"}</td>
+                  <td>
+                    <StatusBadge t={t} value={hostname.isVerified ? "VERIFIED" : "PENDING"} />
+                  </td>
+                  <td>
+                    {hostname.sslEnabled ? hostname.sslProvider || t("resource.domains.yes") : t("resource.domains.sslOff")}
+                  </td>
+                  <td>{hostname.applicationName || "-"}</td>
+                  <td>{hostname.certificateCount}</td>
+                  <td>
+                    <div className="row-actions">
+                      <button
+                        aria-label={`${t("resource.domains.delete")} ${hostname.hostname}`}
+                        className="table-action danger-action"
+                        disabled={busy || hostname.isPrimary}
+                        onClick={() => setDeleteTarget(hostname)}
+                        // The apex row cannot go on its own: removing it is what
+                        // removing the whole root domain does, and that is a row
+                        // action on the ledger above.
+                        title={hostname.isPrimary ? t("resource.domains.deleteApexBlocked") : t("resource.domains.delete")}
+                        type="button"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!busy && (hostnames ?? []).length === 0 ? (
+            <div className="empty-state">
+              <Globe2 size={24} />
+              {t("resource.domains.noSubdomains")}
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      <Pagination
+        busy={busy}
+        hasMore={hasMore}
+        onNext={() => setPage((current) => current + 1)}
+        onPrevious={() => setPage((current) => Math.max(1, current - 1))}
+        page={page}
+        t={t}
+      />
+
+      {createOpen ? (
+        <FormDialog
+          close={() => setCreateOpen(false)}
+          submit={async (recordName) => {
+            await client.domain.rootDomains.subdomains.create(
+              rootDomainId,
+              { recordName, sslEnabled: true },
+              { idempotencyKey: newIdempotencyKey() },
+            );
+            setCreateOpen(false);
+            setHostnames(null);
+            setPage(1);
+          }}
+          submitLabel={t("resource.domains.create")}
+          t={t}
+          title={t("resource.domains.addSubdomain")}
+        >
+          {(disabled) => (
+            <label>
+              {t("resource.domains.recordName")}
+              <input
+                disabled={disabled}
+                name="recordName"
+                placeholder={t("resource.domains.addSubdomainPlaceholder")}
+                required
+                type="text"
+              />
+            </label>
+          )}
+        </FormDialog>
+      ) : null}
+
+      {deleteTarget ? (
+        <ConfirmDialog
+          close={() => setDeleteTarget(undefined)}
+          confirmLabel={t("resource.domains.delete")}
+          dangerous
+          message={t("resource.domains.deleteSubdomainConfirm", { hostname: deleteTarget.hostname })}
+          onConfirm={() => removeHostname(deleteTarget)}
+          t={t}
+          title={t("resource.domains.delete")}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function statusLabel(value: StatusFilter, t: ReturnType<typeof translator>): string {
+  if (value === ALL_STATUSES) return t("resource.domains.all");
+  if (value === 1) return t("resource.domains.active");
+  if (value === 0) return t("resource.domains.pending");
+  return t("resource.domains.disabled");
+}
+
+function rootStatusLabel(status: number): string {
+  if (status === 1) return "ACTIVE";
+  if (status === 2) return "DISABLED";
+  return "PENDING";
 }

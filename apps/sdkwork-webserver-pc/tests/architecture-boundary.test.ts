@@ -39,6 +39,32 @@ describe("surface SDK boundaries", () => {
   // one such case — a two-row static comparison with prose cells, no sorting, no
   // pagination, no selection — so it is allow-listed by path rather than by a
   // blanket exemption that would silently re-admit a hand-rolled data table.
+  //
+  // ## The second exemption: pages that *mirror* a Deployments page
+  //
+  // `webserver-pc-admin-delivery` carries the tenant-level Domains and Certificates
+  // ledgers. Those two pages are not a host-owned resource page with its own design;
+  // they are the same entity the tenant console shows, at a different ownership
+  // level, read by the same operator in the same session. Their whole brief is to
+  // be indistinguishable from the console pair — and the console pair is an
+  // authored `table.domain-table` owned by `sdkwork-deployments`, whose
+  // `operations-column` / `row-actions` / `table-action` hooks the mirror
+  // stylesheet in `src/deploy-surface.css` defines *only* for that markup.
+  //
+  // So the composite cannot express these two pages: `DataTable` emits its own
+  // table shell and has no hook that produces `.domain-table`, which means routing
+  // them through it is precisely what made them look like a different product. The
+  // same thing is already true of the admin Applications page, which is a re-export
+  // of the console page — this gate never saw its authored table because that table
+  // lives in the deployments repository.
+  //
+  // The exemption is therefore narrow and self-checking: exact paths, and the test
+  // asserts each entry still exists *and* still authors a table, so a stale
+  // exemption turns red instead of quietly widening the hole.
+  const mirrored = [
+    resolve(root, "packages/sdkwork-webserver-pc-admin-delivery/src/ServedDomainAdminSurface.tsx"),
+    resolve(root, "packages/sdkwork-webserver-pc-admin-delivery/src/ServedCertificateAdminSurface.tsx"),
+  ];
   it("renders data tables through the framework DataTable", () => {
     const contentOnly = resolve(root, "packages/sdkwork-webserver-pc-documentation");
     // Strip comments and string literals first: prose that merely *mentions* a
@@ -54,7 +80,28 @@ describe("surface SDK boundaries", () => {
       );
     const offenders = files(resolve(root, "packages"))
       .filter((path) => !path.startsWith(contentOnly))
+      .filter((path) => !mirrored.includes(path))
       .filter((path) => authored(readFileSync(path, "utf8")));
     expect(offenders).toEqual([]);
+  });
+
+  it("keeps every mirrored-page exemption justified", () => {
+    // A mirror exemption that outlives the table it was granted for is a hole with
+    // no occupant: the page would be free to hand-roll a table the composite could
+    // have rendered. Re-check both halves here.
+    for (const path of mirrored) {
+      const source = readFileSync(path, "utf8");
+      const authored = /<table[\s>]/.test(
+        source
+          .replace(/\/\*[\s\S]*?\*\//g, "")
+          .replace(/(^|[^:])\/\/[^\n]*/g, "$1")
+          .replace(/\{[^{}]*\}/g, ""),
+      );
+      expect(authored, `${path} no longer authors a table`).toBe(true);
+      // And it must still be a *mirror*: the rendered scope class is what puts it
+      // in the Deployments stylesheet, which is the only reason its table has the
+      // console's look instead of the composite's.
+      expect(source).toContain('className="deploy-surface"');
+    }
   });
 });

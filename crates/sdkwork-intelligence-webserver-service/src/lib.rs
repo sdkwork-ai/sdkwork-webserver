@@ -39,7 +39,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use sdkwork_webserver_acme_service::CertificateIssuer;
-use sdkwork_webserver_contract::{WebServiceError, WebServiceResult};
+use sdkwork_webserver_contract::{
+    TrafficUsageReadPort, WebServiceError, WebServiceResult,
+};
 use sdkwork_webserver_edge_runtime::EdgeRuntime;
 
 /// Application service for SDKWork Web control plane operations.
@@ -49,6 +51,13 @@ pub struct WebService {
     pub(crate) edge_runtime: Arc<EdgeRuntime>,
     pub(crate) source_importer: Arc<dyn ApplicationSourceImporter>,
     pub(crate) domain_ownership_verifier: Arc<dyn DomainOwnershipVerifier>,
+    /// Read model for aggregated traffic usage. The facts live in the Deploy
+    /// control plane, so the host injects an adapter after construction rather
+    /// than this crate depending on another module's persistence layer. Absent
+    /// means the statistics endpoint reports an unavailable capability instead
+    /// of an empty chart, which would read as "no traffic" rather than
+    /// "not wired".
+    pub(crate) traffic_usage: Option<Arc<dyn TrafficUsageReadPort>>,
     /// Count of audit log persistence failures so the audit gap stays
     /// observable through health/readiness surfaces instead of being silent.
     audit_persistence_failures: AtomicU64,
@@ -96,8 +105,23 @@ impl WebService {
             edge_runtime,
             source_importer,
             domain_ownership_verifier,
+            traffic_usage: None,
             audit_persistence_failures: AtomicU64::new(0),
         }
+    }
+
+    /// Injects the aggregated traffic usage read model.
+    ///
+    /// Consuming builder rather than another `new_with_*` parameter: the port
+    /// depends on a module this service deliberately does not depend on, so
+    /// every existing construction site keeps working and only a host that can
+    /// actually supply the adapter has to know about it.
+    pub fn with_traffic_usage_reader(
+        mut self,
+        port: Arc<dyn TrafficUsageReadPort>,
+    ) -> Self {
+        self.traffic_usage = Some(port);
+        self
     }
 
     pub async fn ready_check(&self) -> WebServiceResult<()> {

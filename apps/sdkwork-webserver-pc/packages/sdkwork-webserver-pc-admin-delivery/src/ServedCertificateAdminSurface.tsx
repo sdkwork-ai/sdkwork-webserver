@@ -1,8 +1,20 @@
 import { useWebserverAdminSdk } from "@sdkwork/webserver-pc-admin-core";
 import type { ApplicationDomainResponse, CertificateResponse } from "@sdkwork/webserver-pc-admin-core";
-import { translateWebserver, type WebserverLocale } from "@sdkwork/webserver-pc-commons";
-import { Button, Checkbox, DataTable, StatusBadge, type DataTableColumn } from "@sdkwork/ui-pc-react";
-import { useCallback, useEffect, useState } from "react";
+import type { WebserverLocale } from "@sdkwork/webserver-pc-commons";
+import { Ban, CalendarClock, FileKey2, Plus, RefreshCw, RotateCw, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+
+import {
+  ConfirmDialog,
+  Pagination,
+  StatusBadge,
+  errorText,
+  formatInstant,
+  newIdempotencyKey,
+  translator,
+  type MessageKey,
+  type Translator,
+} from "./AdminSurfaceAtoms.tsx";
 
 /**
  * TLS certificate lifecycle for the hostnames this edge serves.
@@ -13,14 +25,23 @@ import { useCallback, useEffect, useState } from "react";
  * leaving the edge that terminates the TLS in the first place.
  *
  * Issuance needs an identifier set, so the issue form is driven by the served
- * domain inventory (`/domains`) rather than by free text: the operator picks the
+ * domain inventory (`/domains`) rather than by free text: the operator ticks the
  * hostnames, and the ids come from the same rows the Domains page shows. That
  * keeps a certificate from naming a hostname this edge does not answer for.
+ *
+ * ## Look
+ *
+ * Same Deployments surface vocabulary as `ServedDomainAdminSurface` — see the
+ * long note there for why the tenant-level pair is dressed in the console's
+ * stylesheet rather than the host's registry chrome. The command bar, the
+ * certificate ledger, the identifier chips, the status chips, the dialogs and the
+ * pager are the console's rules; the console's Certificates page carries no
+ * search box either, because this plane offers no free-text parameter.
  *
  * The page renders inside `WebserverAdminSdkProvider`; no transport is built here.
  */
 
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 50;
 
 const REVOKE_REASONS = [
   "keyCompromise",
@@ -39,315 +60,493 @@ export interface ServedCertificateAdminSurfaceProps {
 }
 
 export function ServedCertificateAdminSurface({ locale, resource }: ServedCertificateAdminSurfaceProps) {
+  return (
+    <div className="deploy-surface" data-resource={resource}>
+      <CertificateLedger locale={locale} />
+    </div>
+  );
+}
+
+function CertificateLedger({ locale }: { locale: WebserverLocale }) {
   const client = useWebserverAdminSdk();
+  const t = translator(locale);
   const [certificates, setCertificates] = useState<CertificateResponse[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [build, setBuild] = useState(0);
   const [issueOpen, setIssueOpen] = useState(false);
-  const [identifiers, setIdentifiers] = useState<ApplicationDomainResponse[]>([]);
-  const [selectedDomainIds, setSelectedDomainIds] = useState<string[]>([]);
-  const [certType, setCertType] = useState<CertificateType>(1);
-  const [autoRenew, setAutoRenew] = useState(true);
-  const [revokeReason, setRevokeReason] = useState<RevokeReason>("superseded");
-
-  const t = (key: Parameters<typeof translateWebserver>[1], values?: Record<string, string | number>) =>
-    translateWebserver(locale, key, values);
-
-  const load = useCallback(async () => {
-    try {
-      const result = await client.certificate.list({ page, pageSize: PAGE_SIZE });
-      setCertificates(result.items);
-      // `PageInfo.hasMore` is optional on the wire (`PageInfo` at
-      // `types/page-info.ts`); an absent flag means "no continuation", never
-      // "unknown", so it folds to `false` rather than leaking `undefined` into
-      // the pager.
-      setHasMore(result.pageInfo.hasMore === true);
-      setError(null);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  }, [client, page]);
+  const [renewTarget, setRenewTarget] = useState<CertificateResponse>();
+  const [revokeTarget, setRevokeTarget] = useState<CertificateResponse>();
+  const [deleteTarget, setDeleteTarget] = useState<CertificateResponse>();
 
   useEffect(() => {
-    void load();
-  }, [load]);
-
-  const openIssue = async () => {
-    setIssueOpen(true);
-    if (identifiers.length > 0) return;
-    try {
-      const served = await client.domain.list({ page: 1, pageSize: PAGE_SIZE });
-      setIdentifiers(served.items);
-      setError(null);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  };
-
-  const run = async (operation: () => Promise<unknown>) => {
+    let active = true;
     setBusy(true);
-    try {
-      await operation();
-      setError(null);
-      await load();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setBusy(false);
-    }
+    setError(undefined);
+    void client.certificate
+      .list({ page, pageSize: PAGE_SIZE })
+      .then((result) => {
+        if (!active) return;
+        setCertificates(result.items);
+        // `PageInfo.hasMore` is optional on the wire; an absent flag means "no
+        // continuation", never "unknown", so it folds to `false` rather than
+        // leaking `undefined` into the pager.
+        setHasMore(result.pageInfo.hasMore === true);
+      })
+      .catch((cause) => {
+        if (active) setError(errorText(cause));
+      })
+      .finally(() => {
+        if (active) setBusy(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [build, client, page]);
+
+  const reload = () => {
+    setCertificates(null);
+    setBuild((value) => value + 1);
   };
 
-  const issue = () =>
-    run(async () => {
-      if (selectedDomainIds.length === 0) return;
-      await client.certificate.issue(
-        { domainIds: selectedDomainIds, certType, autoRenew },
-        { idempotencyKey: newIdempotencyKey() },
-      );
-      setSelectedDomainIds([]);
-      setIssueOpen(false);
-    });
-
-  const renew = (certificate: CertificateResponse) =>
-    run(async () => {
-      await client.certificate.renew(certificate.id, { idempotencyKey: newIdempotencyKey() });
-    });
-
-  const revoke = (certificate: CertificateResponse) =>
-    run(async () => {
-      if (!window.confirm(t("resource.certificates.revokeConfirm", { name: certificate.certName }))) return;
-      await client.certificate.revoke(
-        certificate.id,
-        { reason: revokeReason },
-        { idempotencyKey: newIdempotencyKey() },
-      );
-    });
-
-  const remove = (certificate: CertificateResponse) =>
-    run(async () => {
-      if (!window.confirm(t("resource.certificates.deleteConfirm", { name: certificate.certName }))) return;
-      await client.certificate.delete(certificate.id, { idempotencyKey: newIdempotencyKey() });
-    });
-
-  const toggleAutoRenew = (certificate: CertificateResponse) =>
-    run(async () => {
-      await client.certificate.update(
-        certificate.id,
-        { autoRenew: certificate.autoRenew !== true },
-        { idempotencyKey: newIdempotencyKey() },
-      );
-    });
-
-  // Built per render rather than memoized: every cell closes over the current
-  // `busy` / `revokeReason`, and the translation helper is itself render-scoped,
-  // so a memo would only be able to hold a stale copy of both.
-  const columns: DataTableColumn<CertificateResponse>[] = [
-      { id: "certName", header: t("resource.certificates.certName"), cell: (certificate) => certificate.certName },
-      {
-        id: "identifiers",
-        header: t("resource.certificates.identifiers"),
-        cell: (certificate) => (
-          <span>
-            {certificate.identifiers.length > 0
-              ? certificate.identifiers.map((identifier) => identifier.hostname).join(", ")
-              : "-"}
-          </span>
-        ),
-      },
-      {
-        id: "status",
-        header: t("resource.certificates.status"),
-        cell: (certificate) => (
-          <StatusBadge status={certificate.status} variant={certificateStatusVariant(certificate.status)} />
-        ),
-      },
-      { id: "issuer", header: t("resource.certificates.issuer"), cell: (certificate) => certificate.issuer ?? "-" },
-      { id: "keyAlgorithm", header: t("resource.certificates.keyAlgorithm"), cell: (certificate) => certificate.keyAlgorithm },
-      { id: "notAfter", header: t("resource.certificates.notAfter"), cell: (certificate) => formatInstant(certificate.notAfter, locale) },
-      {
-        id: "autoRenew",
-        header: t("resource.certificates.autoRenew"),
-        cell: (certificate) =>
-          certificate.autoRenew === true ? t("resource.domains.yes") : t("resource.domains.no"),
-      },
-      {
-        id: "actions",
-        header: t("resource.domains.actions"),
-        cell: (certificate) => (
-          <span>
-            <Button disabled={busy} onClick={() => void renew(certificate)} size="sm" variant="ghost">
-              {t("resource.certificates.renew")}
-            </Button>
-            <Button disabled={busy} onClick={() => void toggleAutoRenew(certificate)} size="sm" variant="ghost">
-              {certificate.autoRenew === true ? t("resource.certificates.autoRenewOff") : t("resource.certificates.autoRenewOn")}
-            </Button>
-            <Button disabled={busy} onClick={() => void revoke(certificate)} size="sm" variant="ghost">
-              {t("resource.certificates.revoke")}
-            </Button>
-            <Button disabled={busy} onClick={() => void remove(certificate)} size="sm" variant="ghost">
-              {t("resource.domains.delete")}
-            </Button>
-          </span>
-        ),
-      },
-  ];
+  const run = (operation: () => Promise<unknown>, done?: () => void) => {
+    setBusy(true);
+    void operation()
+      .then(() => {
+        done?.();
+        reload();
+      })
+      .catch((cause) => {
+        done?.();
+        setError(errorText(cause));
+      })
+      .finally(() => setBusy(false));
+  };
 
   return (
-    <section className="data-surface" data-resource={resource}>
-      <header className="resource-toolbar">
-        <h2>{t("resource.certificates.admin.label")}</h2>
-        <span className="toolbar-meta">
-          {certificates ? t("resource.certificates.countHint", { count: certificates.length }) : t("resource.certificates.loading")}
-        </span>
-      </header>
-
-      <div className="resource-toolbar">
-        <Button disabled={busy} onClick={() => void openIssue()}>
-          {t("resource.certificates.issue")}
-        </Button>
-        <Button disabled={busy} onClick={() => void load()} variant="secondary">
-          {t("resource.domains.refresh")}
-        </Button>
-        <label>
-          {t("resource.certificates.revokeReason")}
-          <select
-            aria-label={t("resource.certificates.revokeReason")}
-            onChange={(event) => setRevokeReason(event.target.value as RevokeReason)}
-            value={revokeReason}
-          >
-            {REVOKE_REASONS.map((reason) => (
-              <option key={reason} value={reason}>
-                {t(`resource.certificates.reason.${reason}` as Parameters<typeof translateWebserver>[1])}
-              </option>
-            ))}
-          </select>
-        </label>
+    <section className="resource-page domain-page">
+      <div className="resource-commandbar">
+        <div className="resource-identity">
+          <h1>{t("resource.certificates.admin.label")}</h1>
+        </div>
+        <div className="actions">
+          <button className="icon-button" disabled={busy} onClick={reload} title={t("resource.domains.refresh")} type="button">
+            <RefreshCw size={17} />
+          </button>
+          <button className="command-button" onClick={() => setIssueOpen(true)} type="button">
+            <Plus size={16} />
+            {t("resource.certificates.issue")}
+          </button>
+        </div>
       </div>
 
-      {issueOpen ? (
-        <div className="resource-toolbar">
-          <label>
-            {t("resource.certificates.selectIdentifiers")}
-            <select
-              aria-label={t("resource.certificates.selectIdentifiers")}
-              multiple
-              onChange={(event) => {
-                const next = Array.from(event.target.selectedOptions).map((option) => option.value);
-                setSelectedDomainIds(next);
-              }}
-              size={Math.min(8, Math.max(3, identifiers.length))}
-              value={selectedDomainIds}
-            >
-              {identifiers.map((domain) => (
-                <option key={domain.id} value={domain.id}>
-                  {domain.hostname}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <input
-              checked={certType === 1}
-              name="certType"
-              onChange={() => setCertType(1)}
-              type="radio"
-            />
-            {t("resource.certificates.letsEncrypt")}
-          </label>
-          <label>
-            <input
-              checked={certType === 3}
-              name="certType"
-              onChange={() => setCertType(3)}
-              type="radio"
-            />
-            {t("resource.certificates.selfSigned")}
-          </label>
-          <label>
-            <Checkbox checked={autoRenew} onCheckedChange={(checked) => setAutoRenew(checked === true)} />
-            {t("resource.certificates.autoRenew")}
-          </label>
-          <Button disabled={busy || selectedDomainIds.length === 0} onClick={() => void issue()}>
-            {t("resource.certificates.issueSubmit")}
-          </Button>
-          <Button disabled={busy} onClick={() => setIssueOpen(false)} variant="secondary">
-            {t("resource.certificates.cancel")}
-          </Button>
+      {error ? (
+        <div className="error-banner" role="alert">
+          {error}
         </div>
       ) : null}
 
-      {error ? <p className="bootstrap-state" role="alert">{t("resource.certificates.loadFailed")}: {error}</p> : null}
-
-      {certificates === null ? (
-        <p className="bootstrap-state" role="status">{t("resource.certificates.loading")}</p>
+      {certificates === null && !error ? (
+        <div className="resource-loading" role="status">
+          <p>{t("resource.certificates.loading")}</p>
+        </div>
       ) : (
         <>
-          <DataTable<CertificateResponse>
-            columns={columns}
-            density="compact"
-            emptyState={<span>{t("resource.certificates.noCertificates")}</span>}
-            getRowId={(certificate) => certificate.id}
-            rows={certificates}
-            stickyHeader
+          <div aria-busy={busy} className="table-frame domain-table-frame certificate-table-frame">
+            <table className="domain-table">
+              <thead>
+                <tr>
+                  <th>{t("resource.certificates.certName")}</th>
+                  <th>{t("resource.certificates.identifiers")}</th>
+                  <th>{t("resource.certificates.status")}</th>
+                  <th>{t("resource.certificates.issuer")}</th>
+                  <th>{t("resource.certificates.keyAlgorithm")}</th>
+                  <th>{t("resource.certificates.notAfter")}</th>
+                  <th>{t("resource.certificates.autoRenew")}</th>
+                  <th className="operations-column">{t("resource.domains.operations")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(certificates ?? []).map((certificate) => (
+                  <tr key={certificate.id}>
+                    <td>
+                      <span className="certificate-name">
+                        <FileKey2 size={17} />
+                        <strong>{certificate.certName}</strong>
+                      </span>
+                    </td>
+                    <td>
+                      {/* The identifiers are a set, not a sentence: an operator
+                          scans them for the one hostname they came about. */}
+                      <div className="identifier-list">
+                        {certificate.identifiers.length > 0 ? (
+                          certificate.identifiers.map((identifier) => (
+                            <span key={`${identifier.domainId}-${identifier.position}`}>{identifier.hostname}</span>
+                          ))
+                        ) : (
+                          <span>-</span>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <StatusBadge t={t} value={certificate.status} />
+                    </td>
+                    <td>{certificate.issuer || "-"}</td>
+                    <td>{certificate.keyAlgorithm}</td>
+                    <td>{formatInstant(certificate.notAfter, locale)}</td>
+                    <td>{certificate.autoRenew === true ? t("resource.domains.yes") : t("resource.domains.no")}</td>
+                    <td>
+                      <div className="row-actions">
+                        <button
+                          aria-label={`${t("resource.certificates.renew")} ${certificate.certName}`}
+                          className="table-action"
+                          disabled={busy || certificate.status === "REVOKED"}
+                          onClick={() => setRenewTarget(certificate)}
+                          title={t("resource.certificates.renew")}
+                          type="button"
+                        >
+                          <RotateCw size={16} />
+                        </button>
+                        <button
+                          aria-label={`${
+                            certificate.autoRenew === true
+                              ? t("resource.certificates.autoRenewOff")
+                              : t("resource.certificates.autoRenewOn")
+                          } ${certificate.certName}`}
+                          className="table-action"
+                          disabled={busy || certificate.status === "REVOKED"}
+                          onClick={() =>
+                            run(() =>
+                              client.certificate.update(
+                                certificate.id,
+                                { autoRenew: certificate.autoRenew !== true },
+                                { idempotencyKey: newIdempotencyKey() },
+                              ),
+                            )
+                          }
+                          title={
+                            certificate.autoRenew === true
+                              ? t("resource.certificates.autoRenewOff")
+                              : t("resource.certificates.autoRenewOn")
+                          }
+                          type="button"
+                        >
+                          <CalendarClock size={16} />
+                        </button>
+                        <button
+                          aria-label={`${t("resource.certificates.revoke")} ${certificate.certName}`}
+                          className="table-action danger-action"
+                          disabled={busy || certificate.status === "REVOKED"}
+                          onClick={() => setRevokeTarget(certificate)}
+                          title={t("resource.certificates.revoke")}
+                          type="button"
+                        >
+                          <Ban size={16} />
+                        </button>
+                        {/* Row delete stays separate from revocation: revoking
+                            withdraws the certificate while keeping the record
+                            that it existed, deleting forgets the record. */}
+                        <button
+                          aria-label={`${t("resource.domains.delete")} ${certificate.certName}`}
+                          className="table-action danger-action"
+                          disabled={busy}
+                          onClick={() => setDeleteTarget(certificate)}
+                          title={t("resource.domains.delete")}
+                          type="button"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!busy && (certificates ?? []).length === 0 ? (
+              <div className="empty-state">
+                <FileKey2 size={24} />
+                {t("resource.certificates.noCertificates")}
+              </div>
+            ) : null}
+          </div>
+          <Pagination
+            busy={busy}
+            hasMore={hasMore}
+            onNext={() => setPage((current) => current + 1)}
+            onPrevious={() => setPage((current) => Math.max(1, current - 1))}
+            page={page}
+            t={t}
           />
-          {hasMore || page > 1 ? (
-            <div className="resource-toolbar">
-              <span className="toolbar-meta">{t("resource.domains.page", { page })}</span>
-              {page > 1 ? (
-                <Button onClick={() => setPage((current) => Math.max(1, current - 1))} size="sm" variant="secondary">
-                  {t("resource.domains.previous")}
-                </Button>
-              ) : null}
-              {hasMore ? (
-                <Button onClick={() => setPage((current) => current + 1)} size="sm" variant="secondary">
-                  {t("resource.domains.next")}
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
         </>
       )}
+
+      {issueOpen ? (
+        <IssueCertificateDialog
+          close={() => setIssueOpen(false)}
+          done={reload}
+          onError={setError}
+          t={t}
+        />
+      ) : null}
+
+      {renewTarget ? (
+        <ConfirmDialog
+          close={() => setRenewTarget(undefined)}
+          confirmLabel={t("resource.certificates.renew")}
+          message={t("resource.certificates.renewConfirm", { name: renewTarget.certName })}
+          onConfirm={() =>
+            run(() => client.certificate.renew(renewTarget.id, { idempotencyKey: newIdempotencyKey() }), () =>
+              setRenewTarget(undefined),
+            )
+          }
+          t={t}
+          title={t("resource.certificates.renew")}
+        />
+      ) : null}
+
+      {revokeTarget ? (
+        <RevokeDialog
+          certificate={revokeTarget}
+          close={() => setRevokeTarget(undefined)}
+          done={reload}
+          onError={setError}
+          t={t}
+        />
+      ) : null}
+
+      {deleteTarget ? (
+        <ConfirmDialog
+          close={() => setDeleteTarget(undefined)}
+          confirmLabel={t("resource.domains.delete")}
+          dangerous
+          message={t("resource.certificates.deleteConfirm", { name: deleteTarget.certName })}
+          onConfirm={() =>
+            run(
+              () => client.certificate.delete(deleteTarget.id, { idempotencyKey: newIdempotencyKey() }),
+              () => setDeleteTarget(undefined),
+            )
+          }
+          t={t}
+          title={t("resource.domains.delete")}
+        />
+      ) : null}
     </section>
   );
 }
 
-function certificateStatusVariant(status: CertificateResponse["status"]): "success" | "warning" | "danger" | "secondary" {
-  if (status === "ISSUED") return "success";
-  if (status === "PENDING") return "warning";
-  if (status === "FAILED" || status === "EXPIRED" || status === "REVOKED") return "danger";
-  return "secondary";
-}
+/**
+ * Issue form.
+ *
+ * The identifier picker reads the served-domain inventory and renders it as a
+ * checkbox grid rather than a multi-select: the coverage of a certificate is a
+ * set an operator builds and re-reads, and a native multi-select shows neither
+ * the whole set nor what is not in it. The rows come from the same plane the
+ * Domains page reads, so a certificate cannot name a hostname this edge does not
+ * answer for.
+ */
+function IssueCertificateDialog({
+  close,
+  done,
+  onError,
+  t,
+}: {
+  close(): void;
+  done(): void;
+  onError(message: string | undefined): void;
+  t: Translator;
+}) {
+  const client = useWebserverAdminSdk();
+  const [identifiers, setIdentifiers] = useState<ApplicationDomainResponse[] | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [certType, setCertType] = useState<CertificateType>(1);
+  const [autoRenew, setAutoRenew] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
 
-function formatInstant(instant: string | undefined, locale: WebserverLocale): string {
-  if (!instant) return "-";
-  const parsed = new Date(instant);
-  if (Number.isNaN(parsed.getTime())) return instant;
-  return parsed.toLocaleString(locale === "zh-CN" ? "zh-CN" : "en-US", { hour12: false });
+  useEffect(() => {
+    let active = true;
+    void client.domain
+      .list({ page: 1, pageSize: 200 })
+      .then((result) => {
+        if (active) setIdentifiers(result.items);
+      })
+      .catch((cause) => {
+        if (active) setError(errorText(cause));
+      });
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  const toggle = (id: string) =>
+    setSelected((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
+
+  const submit = () => {
+    if (selected.length === 0) return;
+    setBusy(true);
+    setError(undefined);
+    void client.certificate
+      .issue({ domainIds: selected, certType, autoRenew }, { idempotencyKey: newIdempotencyKey() })
+      .then(() => {
+        close();
+        done();
+      })
+      .catch((cause) => {
+        const message = errorText(cause);
+        setError(message);
+        onError(message);
+      })
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }} role="presentation">
+      <div
+        aria-labelledby="served-certificate-issue-title"
+        aria-modal="true"
+        className="dialog delivery-dialog delivery-dialog-wide"
+        role="dialog"
+      >
+        <header>
+          <h2 id="served-certificate-issue-title">{t("resource.certificates.issue")}</h2>
+        </header>
+        <div className="form-grid single-column">
+          <fieldset className="form-fieldset">
+            <legend>{t("resource.certificates.selectIdentifiers")}</legend>
+            {identifiers === null ? (
+              <p className="form-hint">{t("resource.certificates.loading")}</p>
+            ) : identifiers.length === 0 ? (
+              <p className="form-hint">{t("resource.domains.noSubdomains")}</p>
+            ) : (
+              <div className="hostname-selector-list">
+                {identifiers.map((domain) => (
+                  <label key={domain.id}>
+                    <input
+                      checked={selected.includes(domain.id)}
+                      disabled={busy}
+                      onChange={() => toggle(domain.id)}
+                      type="checkbox"
+                    />
+                    <span>
+                      <strong>{domain.hostname}</strong>
+                      {domain.applicationName ? <small>{domain.applicationName}</small> : null}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </fieldset>
+          <fieldset className="form-fieldset">
+            <legend>{t("resource.certificates.certName")}</legend>
+            <div className="hostname-summary">
+              <label className="checkbox-field">
+                <input
+                  checked={certType === 1}
+                  disabled={busy}
+                  name="certType"
+                  onChange={() => setCertType(1)}
+                  type="radio"
+                />
+                {t("resource.certificates.letsEncrypt")}
+              </label>
+              <label className="checkbox-field">
+                <input
+                  checked={certType === 3}
+                  disabled={busy}
+                  name="certType"
+                  onChange={() => setCertType(3)}
+                  type="radio"
+                />
+                {t("resource.certificates.selfSigned")}
+              </label>
+              <label className="checkbox-field">
+                <input checked={autoRenew} disabled={busy} onChange={() => setAutoRenew((value) => !value)} type="checkbox" />
+                {t("resource.certificates.autoRenew")}
+              </label>
+            </div>
+          </fieldset>
+        </div>
+        {error ? (
+          <div className="error-banner" role="alert">
+            {error}
+          </div>
+        ) : null}
+        <footer className="dialog-footer">
+          <button className="secondary-button" onClick={close} type="button">
+            {t("resource.certificates.cancel")}
+          </button>
+          <button className="command-button" disabled={busy || selected.length === 0} onClick={submit} type="button">
+            {t("resource.certificates.issueSubmit")}
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
 }
 
 /**
- * Idempotency key for one mutation.
+ * Revocation.
  *
- * Same shape `webserver-config-client.ts` uses: `crypto.randomUUID` is absent —
- * or throws — outside a secure context, and a dev edge reached over plain HTTP at
- * a LAN address is exactly that, so the UUID is assembled from
- * `getRandomValues` rather than assumed.
+ * The reason is part of the request, not a page-level setting: RFC 5280 pins it
+ * to the act of revoking, and a toolbar control would let the choice that
+ * applies to *this* revocation be changed by the next operator without touching
+ * the dialog it belongs to.
  */
-function newIdempotencyKey(): string {
-  const crypto = globalThis.crypto;
-  if (typeof crypto?.randomUUID === "function") {
-    try {
-      return crypto.randomUUID();
-    } catch {
-      // Non-secure contexts may reject randomUUID; fall through.
-    }
-  }
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
-  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
-  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+function RevokeDialog({
+  certificate,
+  close,
+  done,
+  onError,
+  t,
+}: {
+  certificate: CertificateResponse;
+  close(): void;
+  done(): void;
+  onError(message: string | undefined): void;
+  t: Translator;
+}) {
+  const client = useWebserverAdminSdk();
+  const [reason, setReason] = useState<RevokeReason>("superseded");
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <ConfirmDialog
+      close={close}
+      confirmLabel={t("resource.certificates.revoke")}
+      dangerous
+      extra={
+        <label>
+          {t("resource.certificates.revokeReason")}
+          <select
+            aria-label={t("resource.certificates.revokeReason")}
+            disabled={busy}
+            onChange={(event) => setReason(event.target.value as RevokeReason)}
+            value={reason}
+          >
+            {REVOKE_REASONS.map((value) => (
+              <option key={value} value={value}>
+                {t(`resource.certificates.reason.${value}` as Parameters<typeof translator>[0] extends never ? never : never)}
+              </option>
+            ))}
+          </select>
+        </label>
+      }
+      message={t("resource.certificates.revokeConfirm", { name: certificate.certName })}
+      onConfirm={() => {
+        setBusy(true);
+        void client.certificate
+          .revoke(certificate.id, { reason }, { idempotencyKey: newIdempotencyKey() })
+          .then(() => {
+            close();
+            done();
+          })
+          .catch((cause) => onError(errorText(cause)))
+          .finally(() => setBusy(false));
+      }}
+      t={t}
+      title={t("resource.certificates.revoke")}
+    />
+  );
 }
