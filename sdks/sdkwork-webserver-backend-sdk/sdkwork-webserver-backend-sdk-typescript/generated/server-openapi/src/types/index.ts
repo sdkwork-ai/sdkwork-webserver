@@ -97,6 +97,11 @@ export type { ClusterInstanceResponse } from './cluster-instance-response';
 export type { UpdateClusterInstanceRequest } from './update-cluster-instance-request';
 export type { ClusterEventResponse } from './cluster-event-response';
 export type { ClusterOverviewResponse } from './cluster-overview-response';
+export type { TrafficUsageStatisticsResponse } from './traffic-usage-statistics-response';
+export type { TrafficUsageTotal } from './traffic-usage-total';
+export type { TrafficUsageDailyPoint } from './traffic-usage-daily-point';
+export type { TrafficUsageAppTotal } from './traffic-usage-app-total';
+export type { TrafficUsageTenantTotal } from './traffic-usage-tenant-total';
 export type { ApplicationsListResponse } from './applications-list-response';
 export type { ApplicationsCreateResponse201 } from './applications-create-response201';
 export type { ApplicationsRetrieveResponse } from './applications-retrieve-response';
@@ -173,3 +178,5 @@ export type { ClustersInstancesUndrainResponse } from './clusters-instances-undr
 export type { ClustersInstancesCordonResponse } from './clusters-instances-cordon-response';
 export type { ClustersInstancesUncordonResponse } from './clusters-instances-uncordon-response';
 export type { ClustersMessagesCreateResponse201 } from './clusters-messages-create-response201';
+export type { TrafficUsagesRetrieveResponse } from './traffic-usages-retrieve-response';
+export type { PlatformTrafficUsagesRetrieveResponse } from './platform-traffic-usages-retrieve-response';

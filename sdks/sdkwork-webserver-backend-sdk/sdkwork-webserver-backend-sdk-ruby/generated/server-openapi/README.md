@@ -55,6 +55,7 @@ client.set_header('X-Custom-Header', 'value')
 - `client.agent` - agent API
 - `client.audit` - audit API
 - `client.cluster` - cluster API
+- `client.traffic_usage` - traffic_usage API
 
 ## Usage Examples
 
@@ -180,6 +181,15 @@ puts result.inspect
 ```ruby
 # Retrieve the cluster health overview for status polling
 result = client.cluster.clusters_overview_retrieve()
+puts result.inspect
+```
+
+### traffic_usage
+
+```ruby
+# Retrieve aggregated traffic usage of the caller's own tenant
+params = { 'date_from' => 'date-from', 'date_to' => 'date-to', 'dimension' => 'dimension', 'top_apps' => 4 }
+result = client.traffic_usage.traffic_usages_retrieve(params: params)
 puts result.inspect
 ```
 

@@ -128,6 +128,27 @@ pub struct TrafficUsageStatisticsQuery {
     pub top_apps: Option<i32>,
 }
 
+/// A **resolved** window handed to [`TrafficUsageReadPort`].
+///
+/// Distinct from [`TrafficUsageStatisticsQuery`] on purpose: that one mirrors
+/// the wire, where every field is optional and the caller may omit anything.
+/// By the time a window reaches the read model the bounds are concrete, so the
+/// port cannot be asked to interpret "no window given" — an interpretation
+/// that would silently differ between implementations (all time, today only,
+/// an empty result) while all three look like a working chart.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrafficUsageWindow {
+    /// Inclusive UTC day (`YYYY-MM-DD`).
+    pub date_from: String,
+    /// Exclusive UTC day (`YYYY-MM-DD`).
+    pub date_to: String,
+    /// Restrict to one dimension; `None` returns every dimension.
+    pub dimension: Option<String>,
+    /// Bound on the per-app breakdown.
+    pub top_apps: i32,
+}
+
 /// Read model port for aggregated traffic usage.
 ///
 /// Implemented by the host over the repository that owns the usage facts; the
@@ -140,6 +161,35 @@ pub trait TrafficUsageReadPort: Send + Sync {
     async fn retrieve_traffic_usage_statistics(
         &self,
         tenant_id: Option<i64>,
-        query: &TrafficUsageStatisticsQuery,
+        window: &TrafficUsageWindow,
     ) -> WebServiceResult<TrafficUsageStatisticsResponse>;
 }
+
+/// Window span applied when the caller names neither bound: the trailing 30
+/// days including today. Expressed in days of the window rather than as a
+/// pair of dates so the default moves with the clock instead of freezing at
+/// the day the code was written.
+pub const DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS: i64 = 30;
+
+/// Largest window a single read may cover.
+///
+/// A bound on the *work*, not a policy about how far back an operator may look:
+/// the daily series returns one row per (day, dimension), so an unchecked span
+/// makes one request able to ask for a response the size of the whole retention
+/// period, and makes the aggregate scan the entire fact table. A year is wide
+/// enough for every question the surface asks (month over month, season over
+/// season) and still bounds both the scan and the response. Reaching further
+/// back is a sequence of windows, which keeps one slow request from holding a
+/// connection of the shared database pool.
+pub const MAX_TRAFFIC_USAGE_WINDOW_DAYS: i64 = 366;
+
+/// Per-app breakdown size when the caller does not ask for one. Ten rows is
+/// what a dashboard panel can show without its own pagination.
+pub const DEFAULT_TRAFFIC_USAGE_TOP_APPS: i32 = 10;
+
+/// Ceiling on the requested per-app breakdown.
+///
+/// A surface bound, not the storage bound: the read model additionally refuses
+/// to rank more than its own hard limit, so a caller that bypasses this
+/// validation still cannot turn one request into an unbounded sort.
+pub const MAX_TRAFFIC_USAGE_TOP_APPS: i32 = 100;

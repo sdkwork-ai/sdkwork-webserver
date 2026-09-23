@@ -69,6 +69,7 @@ client.SetHeader("X-Custom-Header", "value")
 - `client.Agent` - agent API
 - `client.Audit` - audit API
 - `client.Cluster` - cluster API
+- `client.TrafficUsage` - traffic_usage API
 
 ## Usage Examples
 
@@ -273,6 +274,23 @@ fmt.Println(result)
 ```go
 // Retrieve the cluster health overview for status polling
 result, err := client.Cluster.ClustersOverviewRetrieve()
+if err != nil {
+    panic(err)
+}
+fmt.Println(result)
+```
+
+### traffic_usage
+
+```go
+// Retrieve aggregated traffic usage of the caller's own tenant
+params := map[string]interface{}{
+    "date_from": "date_from",
+    "date_to": "date_to",
+    "dimension": "dimension",
+    "top_apps": 4,
+}
+result, err := client.TrafficUsage.TrafficUsagesRetrieve(params)
 if err != nil {
     panic(err)
 }

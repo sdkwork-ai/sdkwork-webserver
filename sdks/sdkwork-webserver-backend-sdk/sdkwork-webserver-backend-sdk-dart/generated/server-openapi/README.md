@@ -57,6 +57,7 @@ client.setHeader('X-Custom-Header', 'value');
 - `client.agent` - agent API
 - `client.audit` - audit API
 - `client.cluster` - cluster API
+- `client.trafficUsage` - traffic_usage API
 
 ## Usage Examples
 
@@ -222,6 +223,20 @@ print(result);
 ```dart
 // Retrieve the cluster health overview for status polling
 final result = await client.cluster.clustersOverviewRetrieve();
+print(result);
+```
+
+### traffic_usage
+
+```dart
+// Retrieve aggregated traffic usage of the caller's own tenant
+final params = <String, dynamic>{
+  'date_from': 'date-from',
+  'date_to': 'date-to',
+  'dimension': 'dimension',
+  'top_apps': 4,
+};
+final result = await client.trafficUsage.trafficUsagesRetrieve(params);
 print(result);
 ```
 

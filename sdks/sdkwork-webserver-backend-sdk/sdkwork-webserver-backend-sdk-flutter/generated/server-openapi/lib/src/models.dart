@@ -6073,6 +6073,318 @@ class ClusterOverviewResponse {
   }
 }
 
+class TrafficUsageStatisticsResponse {
+  final String dateFrom;
+  final String dateTo;
+  final bool platformScope;
+  final List<TrafficUsageTotal> totals;
+  final List<TrafficUsageDailyPoint> daily;
+  final List<TrafficUsageAppTotal> apps;
+  final List<TrafficUsageTenantTotal> tenants;
+
+  TrafficUsageStatisticsResponse({
+    required this.dateFrom,
+    required this.dateTo,
+    required this.platformScope,
+    required this.totals,
+    required this.daily,
+    required this.apps,
+    required this.tenants
+  });
+
+  factory TrafficUsageStatisticsResponse.fromJson(Map<String, dynamic> json) {
+    return TrafficUsageStatisticsResponse(
+      dateFrom: (() {
+        final value = json['dateFrom']?.toString();
+        if (value == null) {
+          throw FormatException('TrafficUsageStatisticsResponse.dateFrom is required');
+        }
+        return value;
+      })(),
+      dateTo: (() {
+        final value = json['dateTo']?.toString();
+        if (value == null) {
+          throw FormatException('TrafficUsageStatisticsResponse.dateTo is required');
+        }
+        return value;
+      })(),
+      platformScope: (() {
+        final value = json['platformScope'];
+        if (value is! bool) {
+          throw FormatException('TrafficUsageStatisticsResponse.platformScope is required');
+        }
+        return value;
+      })(),
+      totals: (() {
+        final list = _sdkworkAsList(json['totals']);
+        if (list == null) {
+          throw FormatException('TrafficUsageStatisticsResponse.totals is required');
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : TrafficUsageTotal.fromJson(map);
+      })())
+            .whereType<TrafficUsageTotal>()
+            .toList();
+      })(),
+      daily: (() {
+        final list = _sdkworkAsList(json['daily']);
+        if (list == null) {
+          throw FormatException('TrafficUsageStatisticsResponse.daily is required');
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : TrafficUsageDailyPoint.fromJson(map);
+      })())
+            .whereType<TrafficUsageDailyPoint>()
+            .toList();
+      })(),
+      apps: (() {
+        final list = _sdkworkAsList(json['apps']);
+        if (list == null) {
+          throw FormatException('TrafficUsageStatisticsResponse.apps is required');
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : TrafficUsageAppTotal.fromJson(map);
+      })())
+            .whereType<TrafficUsageAppTotal>()
+            .toList();
+      })(),
+      tenants: (() {
+        final list = _sdkworkAsList(json['tenants']);
+        if (list == null) {
+          throw FormatException('TrafficUsageStatisticsResponse.tenants is required');
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : TrafficUsageTenantTotal.fromJson(map);
+      })())
+            .whereType<TrafficUsageTenantTotal>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'dateFrom': dateFrom,
+      'dateTo': dateTo,
+      'platformScope': platformScope,
+      'totals': totals.map((item) => item.toJson()).toList(),
+      'daily': daily.map((item) => item.toJson()).toList(),
+      'apps': apps.map((item) => item.toJson()).toList(),
+      'tenants': tenants.map((item) => item.toJson()).toList(),
+    };
+  }
+}
+
+class TrafficUsageTotal {
+  final String dimension;
+  final String quantity;
+  final String unit;
+
+  TrafficUsageTotal({
+    required this.dimension,
+    required this.quantity,
+    required this.unit
+  });
+
+  factory TrafficUsageTotal.fromJson(Map<String, dynamic> json) {
+    return TrafficUsageTotal(
+      dimension: (() {
+        final value = json['dimension']?.toString();
+        if (value == null) {
+          throw FormatException('TrafficUsageTotal.dimension is required');
+        }
+        return value;
+      })(),
+      quantity: (() {
+        final value = json['quantity']?.toString();
+        if (value == null) {
+          throw FormatException('TrafficUsageTotal.quantity is required');
+        }
+        return value;
+      })(),
+      unit: (() {
+        final value = json['unit']?.toString();
+        if (value == null) {
+          throw FormatException('TrafficUsageTotal.unit is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'dimension': dimension,
+      'quantity': quantity,
+      'unit': unit,
+    };
+  }
+}
+
+class TrafficUsageDailyPoint {
+  final String usageDate;
+  final String dimension;
+  final String quantity;
+
+  TrafficUsageDailyPoint({
+    required this.usageDate,
+    required this.dimension,
+    required this.quantity
+  });
+
+  factory TrafficUsageDailyPoint.fromJson(Map<String, dynamic> json) {
+    return TrafficUsageDailyPoint(
+      usageDate: (() {
+        final value = json['usageDate']?.toString();
+        if (value == null) {
+          throw FormatException('TrafficUsageDailyPoint.usageDate is required');
+        }
+        return value;
+      })(),
+      dimension: (() {
+        final value = json['dimension']?.toString();
+        if (value == null) {
+          throw FormatException('TrafficUsageDailyPoint.dimension is required');
+        }
+        return value;
+      })(),
+      quantity: (() {
+        final value = json['quantity']?.toString();
+        if (value == null) {
+          throw FormatException('TrafficUsageDailyPoint.quantity is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'usageDate': usageDate,
+      'dimension': dimension,
+      'quantity': quantity,
+    };
+  }
+}
+
+class TrafficUsageAppTotal {
+  final String? appUuid;
+  final String? appSlug;
+  final String dimension;
+  final String quantity;
+  final String unit;
+
+  TrafficUsageAppTotal({
+    this.appUuid,
+    this.appSlug,
+    required this.dimension,
+    required this.quantity,
+    required this.unit
+  });
+
+  factory TrafficUsageAppTotal.fromJson(Map<String, dynamic> json) {
+    return TrafficUsageAppTotal(
+      appUuid: json['appUuid']?.toString(),
+      appSlug: json['appSlug']?.toString(),
+      dimension: (() {
+        final value = json['dimension']?.toString();
+        if (value == null) {
+          throw FormatException('TrafficUsageAppTotal.dimension is required');
+        }
+        return value;
+      })(),
+      quantity: (() {
+        final value = json['quantity']?.toString();
+        if (value == null) {
+          throw FormatException('TrafficUsageAppTotal.quantity is required');
+        }
+        return value;
+      })(),
+      unit: (() {
+        final value = json['unit']?.toString();
+        if (value == null) {
+          throw FormatException('TrafficUsageAppTotal.unit is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'appUuid': appUuid,
+      'appSlug': appSlug,
+      'dimension': dimension,
+      'quantity': quantity,
+      'unit': unit,
+    };
+  }
+}
+
+class TrafficUsageTenantTotal {
+  final String tenantId;
+  final String dimension;
+  final String quantity;
+  final String unit;
+
+  TrafficUsageTenantTotal({
+    required this.tenantId,
+    required this.dimension,
+    required this.quantity,
+    required this.unit
+  });
+
+  factory TrafficUsageTenantTotal.fromJson(Map<String, dynamic> json) {
+    return TrafficUsageTenantTotal(
+      tenantId: (() {
+        final value = json['tenantId']?.toString();
+        if (value == null) {
+          throw FormatException('TrafficUsageTenantTotal.tenantId is required');
+        }
+        return value;
+      })(),
+      dimension: (() {
+        final value = json['dimension']?.toString();
+        if (value == null) {
+          throw FormatException('TrafficUsageTenantTotal.dimension is required');
+        }
+        return value;
+      })(),
+      quantity: (() {
+        final value = json['quantity']?.toString();
+        if (value == null) {
+          throw FormatException('TrafficUsageTenantTotal.quantity is required');
+        }
+        return value;
+      })(),
+      unit: (() {
+        final value = json['unit']?.toString();
+        if (value == null) {
+          throw FormatException('TrafficUsageTenantTotal.unit is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'tenantId': tenantId,
+      'dimension': dimension,
+      'quantity': quantity,
+      'unit': unit,
+    };
+  }
+}
+
 class ApplicationsListResponse {
   final int code;
   final dynamic data;
@@ -9494,6 +9806,98 @@ class ClustersMessagesCreateResponse201 {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('ClustersMessagesCreateResponse201.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class TrafficUsagesRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  TrafficUsagesRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory TrafficUsagesRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return TrafficUsagesRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('TrafficUsagesRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('TrafficUsagesRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('TrafficUsagesRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class PlatformTrafficUsagesRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  PlatformTrafficUsagesRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory PlatformTrafficUsagesRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return PlatformTrafficUsagesRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('PlatformTrafficUsagesRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('PlatformTrafficUsagesRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('PlatformTrafficUsagesRetrieveResponse.traceId is required');
         }
         return value;
       })()

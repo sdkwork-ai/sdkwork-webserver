@@ -1867,6 +1867,85 @@ public struct ClusterOverviewResponse: Codable {
     }
 }
 
+public struct TrafficUsageStatisticsResponse: Codable {
+    public let dateFrom: String?
+    public let dateTo: String?
+    public let platformScope: Bool?
+    public let totals: [TrafficUsageTotal]?
+    public let daily: [TrafficUsageDailyPoint]?
+    public let apps: [TrafficUsageAppTotal]?
+    public let tenants: [TrafficUsageTenantTotal]?
+
+
+    public init(dateFrom: String? = nil, dateTo: String? = nil, platformScope: Bool? = nil, totals: [TrafficUsageTotal]? = nil, daily: [TrafficUsageDailyPoint]? = nil, apps: [TrafficUsageAppTotal]? = nil, tenants: [TrafficUsageTenantTotal]? = nil) {
+        self.dateFrom = dateFrom
+        self.dateTo = dateTo
+        self.platformScope = platformScope
+        self.totals = totals
+        self.daily = daily
+        self.apps = apps
+        self.tenants = tenants
+    }
+}
+
+public struct TrafficUsageTotal: Codable {
+    public let dimension: String?
+    public let quantity: String?
+    public let unit: String?
+
+
+    public init(dimension: String? = nil, quantity: String? = nil, unit: String? = nil) {
+        self.dimension = dimension
+        self.quantity = quantity
+        self.unit = unit
+    }
+}
+
+public struct TrafficUsageDailyPoint: Codable {
+    public let usageDate: String?
+    public let dimension: String?
+    public let quantity: String?
+
+
+    public init(usageDate: String? = nil, dimension: String? = nil, quantity: String? = nil) {
+        self.usageDate = usageDate
+        self.dimension = dimension
+        self.quantity = quantity
+    }
+}
+
+public struct TrafficUsageAppTotal: Codable {
+    public let appUuid: String?
+    public let appSlug: String?
+    public let dimension: String?
+    public let quantity: String?
+    public let unit: String?
+
+
+    public init(appUuid: String? = nil, appSlug: String? = nil, dimension: String? = nil, quantity: String? = nil, unit: String? = nil) {
+        self.appUuid = appUuid
+        self.appSlug = appSlug
+        self.dimension = dimension
+        self.quantity = quantity
+        self.unit = unit
+    }
+}
+
+public struct TrafficUsageTenantTotal: Codable {
+    public let tenantId: String?
+    public let dimension: String?
+    public let quantity: String?
+    public let unit: String?
+
+
+    public init(tenantId: String? = nil, dimension: String? = nil, quantity: String? = nil, unit: String? = nil) {
+        self.tenantId = tenantId
+        self.dimension = dimension
+        self.quantity = quantity
+        self.unit = unit
+    }
+}
+
 public struct ApplicationsListResponse: Codable {
     public let code: Int?
     public let data: Any?
@@ -2843,6 +2922,32 @@ public struct ClustersInstancesUncordonResponse: Codable {
 }
 
 public struct ClustersMessagesCreateResponse201: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct TrafficUsagesRetrieveResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct PlatformTrafficUsagesRetrieveResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?

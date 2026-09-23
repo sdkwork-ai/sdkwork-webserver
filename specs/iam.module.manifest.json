@@ -151,6 +151,15 @@
         "status": "active",
         "since": "1.1.0",
         "replacementCode": null
+      },
+      {
+        "code": "web.traffic.read",
+        "name": "Read aggregated traffic usage",
+        "resource": "traffic",
+        "action": "read",
+        "status": "active",
+        "since": "1.2.0",
+        "replacementCode": null
       }
     ],
     "openapiAuthorities": []
@@ -161,7 +170,8 @@
       {
         "roleCode": "app_user",
         "patterns": [
-          "web.certificates.*"
+          "web.certificates.*",
+          "web.traffic.read"
         ]
       },
       {

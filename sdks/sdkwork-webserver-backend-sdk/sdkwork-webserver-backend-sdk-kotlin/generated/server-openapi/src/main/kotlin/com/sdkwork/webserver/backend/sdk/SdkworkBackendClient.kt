@@ -16,6 +16,7 @@ import com.sdkwork.webserver.backend.sdk.api.WebserverConfigApi
 import com.sdkwork.webserver.backend.sdk.api.AgentApi
 import com.sdkwork.webserver.backend.sdk.api.AuditApi
 import com.sdkwork.webserver.backend.sdk.api.ClusterApi
+import com.sdkwork.webserver.backend.sdk.api.TrafficUsageApi
 
 open class SdkworkBackendClient {
     private val httpClient: HttpClient
@@ -34,6 +35,7 @@ open class SdkworkBackendClient {
     lateinit var agent: AgentApi
     lateinit var audit: AuditApi
     lateinit var cluster: ClusterApi
+    lateinit var trafficUsage: TrafficUsageApi
 
     constructor(baseUrl: String) {
         this.httpClient = HttpClient(baseUrl)
@@ -51,6 +53,7 @@ open class SdkworkBackendClient {
         agent = AgentApi(httpClient)
         audit = AuditApi(httpClient)
         cluster = ClusterApi(httpClient)
+        trafficUsage = TrafficUsageApi(httpClient)
     }
 
     constructor(config: SdkConfig) {
@@ -69,6 +72,7 @@ open class SdkworkBackendClient {
         agent = AgentApi(httpClient)
         audit = AuditApi(httpClient)
         cluster = ClusterApi(httpClient)
+        trafficUsage = TrafficUsageApi(httpClient)
     }
     fun setAuthToken(token: String): SdkworkBackendClient {
         httpClient.setAuthToken(token)

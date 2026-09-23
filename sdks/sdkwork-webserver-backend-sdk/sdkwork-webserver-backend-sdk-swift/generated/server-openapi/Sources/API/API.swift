@@ -16,4 +16,5 @@ public struct API {
     public static let agent = AgentApi.self
     public static let audit = AuditApi.self
     public static let cluster = ClusterApi.self
+    public static let trafficUsage = TrafficUsageApi.self
 }

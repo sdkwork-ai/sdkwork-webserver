@@ -519,6 +519,18 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "cluster",
         "clusters.messages.create",
     ).with_required_permission("web.cluster.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::AuthCritical),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/traffic_usage",
+        "trafficUsage",
+        "trafficUsages.retrieve",
+    ).with_required_permission("web.traffic.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/platform_traffic_usage",
+        "trafficUsage",
+        "platformTrafficUsages.retrieve",
+    ).with_required_permission("web.traffic.read"),
 ];
 
 pub fn backend_route_manifest() -> HttpRouteManifest {

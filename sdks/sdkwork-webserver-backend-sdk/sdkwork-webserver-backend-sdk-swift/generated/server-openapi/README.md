@@ -62,6 +62,7 @@ client.setHeader("X-Custom-Header", value: "value")
 - `client.agent` - agent API
 - `client.audit` - audit API
 - `client.cluster` - cluster API
+- `client.trafficUsage` - traffic_usage API
 
 ## Usage Examples
 
@@ -227,6 +228,20 @@ print(result)
 ```swift
 // Retrieve the cluster health overview for status polling
 let result = try await client.cluster.clustersOverviewRetrieve()
+print(result)
+```
+
+### traffic_usage
+
+```swift
+// Retrieve aggregated traffic usage of the caller's own tenant
+let params: [String: Any] = [
+    "date_from": "date-from",
+    "date_to": "date-to",
+    "dimension": "dimension",
+    "top_apps": 4
+]
+let result = try await client.trafficUsage.trafficUsagesRetrieve(params: params)
 print(result)
 ```
 

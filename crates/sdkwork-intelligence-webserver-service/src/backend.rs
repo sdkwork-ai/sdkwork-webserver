@@ -1,20 +1,23 @@
 //! Backend-api service surface implementation.
 
 use async_trait::async_trait;
+use chrono::{Duration, NaiveDate, Utc};
 use sdkwork_webserver_contract::{
-    ClusterEventPage, ClusterHeartbeatSamplePage, ClusterHostPage, ClusterHostResponse,
-    ClusterInstancePage, ClusterInstanceResponse, ClusterOverviewResponse, ClusterPage,
-    ClusterResponse, ClusterSyncManifest, CreateApplicationRequest, CreateClusterRequest,
-    CreateDeploymentRequest, CreateDomainRequest, CreateListenerCertificateBindingRequest,
-    CreateManagedDomainRequest, CreateNginxConfigRequest, CreateRootDomainHostnameRequest,
-    CreateRootDomainRequest, CreateServerRequest, CreateSourceVersionRequest,
-    EnqueueClusterPeerMessagesRequest, EnqueueClusterPeerMessagesResponse,
-    ImportGitSourceVersionRequest, IssueCertificateRequest, ListApplicationsQuery,
-    ListNginxConfigsQuery, ListRootDomainsQuery, UpdateApplicationRequest,
+    web_is_platform_operator_tenant, ClusterEventPage, ClusterHeartbeatSamplePage, ClusterHostPage,
+    ClusterHostResponse, ClusterInstancePage, ClusterInstanceResponse, ClusterOverviewResponse,
+    ClusterPage, ClusterResponse, ClusterSyncManifest, CreateApplicationRequest,
+    CreateClusterRequest, CreateDeploymentRequest, CreateDomainRequest,
+    CreateListenerCertificateBindingRequest, CreateManagedDomainRequest, CreateNginxConfigRequest,
+    CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
+    CreateSourceVersionRequest, EnqueueClusterPeerMessagesRequest,
+    EnqueueClusterPeerMessagesResponse, ImportGitSourceVersionRequest, IssueCertificateRequest,
+    ListApplicationsQuery, ListNginxConfigsQuery, ListRootDomainsQuery, TrafficUsageStatisticsQuery,
+    TrafficUsageStatisticsResponse, TrafficUsageWindow, UpdateApplicationRequest,
     UpdateCertificateRequest, UpdateClusterHostRequest, UpdateClusterInstanceRequest,
     UpdateClusterRequest, UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest,
     WebAppApi, WebAppRequestContext, WebAppResourceScope, WebBackendApi, WebBackendRequestContext,
-    WebServiceError, WebServiceResult,
+    WebServiceError, WebServiceResult, DEFAULT_TRAFFIC_USAGE_TOP_APPS,
+    DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS, MAX_TRAFFIC_USAGE_TOP_APPS, MAX_TRAFFIC_USAGE_WINDOW_DAYS,
 };
 
 use crate::{AuditLogWrite, WebService};
@@ -1248,9 +1251,50 @@ impl WebBackendApi for WebService {
     ) -> WebServiceResult<EnqueueClusterPeerMessagesResponse> {
         self.cluster_message_enqueue(context, request).await
     }
+
+    async fn retrieve_traffic_usage_statistics(
+        &self,
+        context: &WebBackendRequestContext,
+        query: &TrafficUsageStatisticsQuery,
+    ) -> WebServiceResult<TrafficUsageStatisticsResponse> {
+        let tenant_id = Some(Self::require_backend_tenant(context)?);
+        let window = resolve_traffic_usage_window(query)?;
+        self.read_traffic_usage_statistics(tenant_id, &window).await
+    }
+
+    async fn retrieve_platform_traffic_usage_statistics(
+        &self,
+        context: &WebBackendRequestContext,
+        query: &TrafficUsageStatisticsQuery,
+    ) -> WebServiceResult<TrafficUsageStatisticsResponse> {
+        require_traffic_usage_platform_operator(context)?;
+        let window = resolve_traffic_usage_window(query)?;
+        self.read_traffic_usage_statistics(None, &window).await
+    }
 }
 
 impl WebService {
+    /// Shared body of both traffic-usage readings; `tenant_id: None` means
+    /// "every tenant" and is reachable only through the platform operation.
+    ///
+    /// A missing reader is reported as `503 unavailable` rather than as an
+    /// empty result: the two are indistinguishable in a chart, and "this
+    /// deployment assembles no usage read model" must not be presented to an
+    /// operator as "this edge served no traffic".
+    async fn read_traffic_usage_statistics(
+        &self,
+        tenant_id: Option<i64>,
+        window: &TrafficUsageWindow,
+    ) -> WebServiceResult<TrafficUsageStatisticsResponse> {
+        let port = self.traffic_usage.as_ref().ok_or_else(|| {
+            WebServiceError::unavailable(
+                "the aggregated traffic usage read model is not assembled in this deployment",
+            )
+        })?;
+        port.retrieve_traffic_usage_statistics(tenant_id, window)
+            .await
+    }
+
     /// Rolls the deployed Nginx site back to the previously active
     /// configuration after a control-plane activation failure. Best effort:
     /// the original error is preserved and the rollback failure is logged.
@@ -1369,17 +1413,270 @@ fn validate_tenant_scope_hash(value: &str) -> WebServiceResult<()> {
     Ok(())
 }
 
+/// Gate for the cross-tenant traffic reading.
+///
+/// Resolved through [`web_is_platform_operator_tenant`] rather than a literal
+/// so this guard, the route guard, and the IAM bootstrap cannot disagree about
+/// which tenant the platform operator is — the same rule the cluster plane
+/// already follows. A context bound to any other tenant is rejected rather
+/// than silently narrowed to that tenant's slice: a narrowed answer looks like
+/// a working platform total and would be believed.
+fn require_traffic_usage_platform_operator(
+    context: &WebBackendRequestContext,
+) -> WebServiceResult<()> {
+    let tenant_id = context.tenant_id.map(|id| id.to_string());
+    if web_is_platform_operator_tenant(tenant_id.as_deref()) {
+        Ok(())
+    } else {
+        Err(WebServiceError::Forbidden)
+    }
+}
+
+/// Turns the wire query into a concrete window.
+///
+/// Split out of both operation bodies so "what does an omitted bound mean" has
+/// exactly one answer: the trailing
+/// [`DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS`] days, ending at tomorrow (UTC) — the
+/// end bound is **exclusive**, so the default always covers today's partial
+/// day instead of dropping it.
+fn resolve_traffic_usage_window(
+    query: &TrafficUsageStatisticsQuery,
+) -> WebServiceResult<TrafficUsageWindow> {
+    let date_to = match query.date_to.as_deref() {
+        Some(value) => parse_traffic_usage_date("dateTo", value)?,
+        None => Utc::now().date_naive() + Duration::days(1),
+    };
+    let date_from = match query.date_from.as_deref() {
+        Some(value) => parse_traffic_usage_date("dateFrom", value)?,
+        None => date_to - Duration::days(DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS),
+    };
+    if date_from >= date_to {
+        return Err(WebServiceError::validation(
+            "dateFrom must be earlier than dateTo (dateTo is exclusive)",
+        ));
+    }
+    // A bound on the work, not on how far back an operator may look: the daily
+    // series is one row per (day, dimension) and the aggregate scans the fact
+    // table, so an unchecked span lets one request ask for the whole retention
+    // period and hold a shared-pool connection while it does.
+    let span_days = (date_to - date_from).num_days();
+    if span_days > MAX_TRAFFIC_USAGE_WINDOW_DAYS {
+        return Err(WebServiceError::validation(format!(
+            "the window must not exceed {MAX_TRAFFIC_USAGE_WINDOW_DAYS} days; read a longer range as consecutive windows"
+        )));
+    }
+    let dimension = match query.dimension.as_deref() {
+        Some(value) => {
+            let trimmed = value.trim();
+            if trimmed.is_empty() || trimmed.len() > 64 {
+                return Err(WebServiceError::validation(
+                    "dimension must contain 1 to 64 characters",
+                ));
+            }
+            Some(trimmed.to_owned())
+        }
+        None => None,
+    };
+    let top_apps = query.top_apps.unwrap_or(DEFAULT_TRAFFIC_USAGE_TOP_APPS);
+    if !(1..=MAX_TRAFFIC_USAGE_TOP_APPS).contains(&top_apps) {
+        return Err(WebServiceError::validation(format!(
+            "topApps must be between 1 and {MAX_TRAFFIC_USAGE_TOP_APPS}"
+        )));
+    }
+    Ok(TrafficUsageWindow {
+        date_from: date_from.format("%Y-%m-%d").to_string(),
+        date_to: date_to.format("%Y-%m-%d").to_string(),
+        dimension,
+        top_apps,
+    })
+}
+
+/// Strict `YYYY-MM-DD`. The shape is checked before the calendar: `chrono`
+/// accepts single-digit month/day, and a value that only reaches the read
+/// model after being silently reshaped is a value the caller cannot reproduce
+/// from what they sent.
+fn parse_traffic_usage_date(field: &str, value: &str) -> WebServiceResult<NaiveDate> {
+    let invalid = || {
+        WebServiceError::validation(format!(
+            "{field} must be a UTC calendar day formatted YYYY-MM-DD"
+        ))
+    };
+    let bytes = value.as_bytes();
+    if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
+        return Err(invalid());
+    }
+    if !bytes
+        .iter()
+        .enumerate()
+        .all(|(index, byte)| matches!(index, 4 | 7) || byte.is_ascii_digit())
+    {
+        return Err(invalid());
+    }
+    NaiveDate::parse_from_str(value, "%Y-%m-%d").map_err(|_| invalid())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
+        resolve_traffic_usage_window, require_traffic_usage_platform_operator,
         validate_create_nginx_config_request, validate_create_server_request,
         validate_tenant_scope_hash, validate_update_nginx_config_request, WebService,
         MAX_NGINX_CONFIG_BYTES,
     };
+    use chrono::{Duration, Utc};
     use sdkwork_webserver_contract::{
-        CreateNginxConfigRequest, CreateServerRequest, UpdateNginxConfigRequest,
-        WebAppResourceScope, WebBackendRequestContext,
+        web_platform_operator_tenant_id, CreateNginxConfigRequest, CreateServerRequest,
+        TrafficUsageStatisticsQuery, UpdateNginxConfigRequest, WebAppResourceScope,
+        WebBackendRequestContext, DEFAULT_TRAFFIC_USAGE_TOP_APPS, DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS,
+        MAX_TRAFFIC_USAGE_TOP_APPS, MAX_TRAFFIC_USAGE_WINDOW_DAYS,
     };
+
+    fn traffic_usage_query(
+        date_from: Option<&str>,
+        date_to: Option<&str>,
+        dimension: Option<&str>,
+        top_apps: Option<i32>,
+    ) -> TrafficUsageStatisticsQuery {
+        TrafficUsageStatisticsQuery {
+            date_from: date_from.map(str::to_owned),
+            date_to: date_to.map(str::to_owned),
+            dimension: dimension.map(str::to_owned),
+            top_apps,
+        }
+    }
+
+    fn backend_context(tenant_id: Option<i64>) -> WebBackendRequestContext {
+        WebBackendRequestContext {
+            tenant_id,
+            operator_id: Some(7),
+            subject_id: Some("7".to_owned()),
+            idempotency_key: None,
+            permission_scope: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn traffic_usage_window_defaults_to_trailing_thirty_days_ending_tomorrow() {
+        let window =
+            resolve_traffic_usage_window(&traffic_usage_query(None, None, None, None)).unwrap();
+
+        // Exclusive end, so the default window always contains today.
+        let expected_end = Utc::now().date_naive() + Duration::days(1);
+        assert_eq!(window.date_to, expected_end.format("%Y-%m-%d").to_string());
+        assert_eq!(
+            window.date_from,
+            (expected_end - Duration::days(DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS))
+                .format("%Y-%m-%d")
+                .to_string()
+        );
+        assert_eq!(window.top_apps, DEFAULT_TRAFFIC_USAGE_TOP_APPS);
+        assert_eq!(window.dimension, None);
+    }
+
+    #[test]
+    fn traffic_usage_window_rejects_unshaped_or_inverted_bounds() {
+        for query in [
+            // Single-digit month: `chrono` would accept it and silently reshape
+            // the value the caller sent.
+            traffic_usage_query(Some("2026-9-01"), Some("2026-10-01"), None, None),
+            traffic_usage_query(Some("2026-09-01T00:00:00Z"), Some("2026-10-01"), None, None),
+            traffic_usage_query(Some("20260901"), Some("2026-10-01"), None, None),
+            traffic_usage_query(Some("2026-13-01"), Some("2026-14-01"), None, None),
+            // Reversed and empty windows are both rejected: an inverted range
+            // returns no rows, which a surface draws as "no traffic".
+            traffic_usage_query(Some("2026-10-01"), Some("2026-09-01"), None, None),
+            traffic_usage_query(Some("2026-10-01"), Some("2026-10-01"), None, None),
+            // One day past the span bound: the daily series and the aggregate
+            // scan both grow with the window, so the bound is on the work.
+            traffic_usage_query(Some("2020-01-01"), Some("2021-06-01"), None, None),
+        ] {
+            assert!(resolve_traffic_usage_window(&query).is_err());
+        }
+    }
+
+    #[test]
+    fn traffic_usage_window_span_bound_admits_exactly_the_configured_maximum() {
+        // The bound is inclusive of the maximum span and exclusive of anything
+        // wider, so the widest accepted window is exactly
+        // `MAX_TRAFFIC_USAGE_WINDOW_DAYS`.
+        let widest = resolve_traffic_usage_window(&traffic_usage_query(
+            Some("2026-01-01"),
+            Some("2027-01-02"),
+            None,
+            None,
+        ))
+        .unwrap();
+        assert_eq!(
+            (chrono::NaiveDate::parse_from_str(&widest.date_to, "%Y-%m-%d").unwrap()
+                - chrono::NaiveDate::parse_from_str(&widest.date_from, "%Y-%m-%d").unwrap())
+            .num_days(),
+            MAX_TRAFFIC_USAGE_WINDOW_DAYS
+        );
+
+        assert!(
+            resolve_traffic_usage_window(&traffic_usage_query(
+                Some("2026-01-01"),
+                Some("2027-01-03"),
+                None,
+                None,
+            ))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn traffic_usage_window_trims_dimension_and_bounds_top_apps() {
+        let window = resolve_traffic_usage_window(&traffic_usage_query(
+            Some("2026-09-01"),
+            Some("2026-10-01"),
+            Some(" traffic.requests "),
+            Some(MAX_TRAFFIC_USAGE_TOP_APPS),
+        ))
+        .unwrap();
+        assert_eq!(window.dimension.as_deref(), Some("traffic.requests"));
+        assert_eq!(window.top_apps, MAX_TRAFFIC_USAGE_TOP_APPS);
+
+        for query in [
+            traffic_usage_query(Some("2026-09-01"), Some("2026-10-01"), Some("   "), None),
+            traffic_usage_query(
+                Some("2026-09-01"),
+                Some("2026-10-01"),
+                Some(&"d".repeat(65)),
+                None,
+            ),
+            traffic_usage_query(Some("2026-09-01"), Some("2026-10-01"), None, Some(0)),
+            traffic_usage_query(Some("2026-09-01"), Some("2026-10-01"), None, Some(-1)),
+            traffic_usage_query(
+                Some("2026-09-01"),
+                Some("2026-10-01"),
+                None,
+                Some(MAX_TRAFFIC_USAGE_TOP_APPS + 1),
+            ),
+        ] {
+            assert!(resolve_traffic_usage_window(&query).is_err());
+        }
+    }
+
+    #[test]
+    fn platform_traffic_usage_is_restricted_to_the_operator_tenant() {
+        let operator_tenant_id = web_platform_operator_tenant_id();
+        let operator_id: i64 = operator_tenant_id.parse().expect(
+            "the configured platform operator tenant id must be numeric for the context to carry it",
+        );
+
+        // The operator tenant reads every tenant ...
+        require_traffic_usage_platform_operator(&backend_context(Some(operator_id))).unwrap();
+        // ... and nothing else does: a tenant-bound context is rejected rather
+        // than narrowed to its own slice, and an absent tenant is rejected
+        // rather than treated as "all".
+        for context in [
+            backend_context(Some(operator_id + 1)),
+            backend_context(Some(0)),
+            backend_context(None),
+        ] {
+            assert!(require_traffic_usage_platform_operator(&context).is_err());
+        }
+    }
 
     #[test]
     fn tenant_scope_hash_is_exact_lowercase_sha256_shape() {

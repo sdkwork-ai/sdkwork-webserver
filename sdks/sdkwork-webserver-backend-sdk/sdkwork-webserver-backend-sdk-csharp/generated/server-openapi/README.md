@@ -64,6 +64,7 @@ client.SetHeader("X-Custom-Header", "value");
 - `client.Agent` - agent API
 - `client.Audit` - audit API
 - `client.Cluster` - cluster API
+- `client.TrafficUsage` - traffic_usage API
 
 ## Usage Examples
 
@@ -239,6 +240,21 @@ Console.WriteLine(result);
 ```csharp
 // Retrieve the cluster health overview for status polling
 var result = await client.Cluster.ClustersOverviewRetrieveAsync();
+Console.WriteLine(result);
+```
+
+### traffic_usage
+
+```csharp
+// Retrieve aggregated traffic usage of the caller's own tenant
+var query = new Dictionary<string, object>
+{
+    ["date_from"] = "date-from",
+    ["date_to"] = "date-to",
+    ["dimension"] = "dimension",
+    ["top_apps"] = 4,
+};
+var result = await client.TrafficUsage.TrafficUsagesRetrieveAsync(query);
 Console.WriteLine(result);
 ```
 

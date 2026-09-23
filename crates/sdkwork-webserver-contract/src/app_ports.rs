@@ -926,15 +926,30 @@ pub trait WebBackendApi: Send + Sync {
         request: &EnqueueClusterPeerMessagesRequest,
     ) -> WebServiceResult<EnqueueClusterPeerMessagesResponse>;
 
-    /// Aggregated traffic usage for the window in `query`.
+    /// Aggregated traffic usage of **the caller's own tenant** — the console
+    /// reading.
     ///
-    /// Scope is resolved here rather than taken from the request: the caller's
-    /// own tenant answers the console, and the platform operator tenant answers
-    /// the operations surface with every tenant. A context that carries neither
-    /// a tenant nor the platform operator tenant is rejected instead of
-    /// defaulting to one of the two, because a wrong default silently returns
-    /// either somebody else's traffic or an empty page.
+    /// The reach is a property of this operation, never of who calls it. The
+    /// same principal that may read its own traffic here also holds
+    /// [`Self::retrieve_platform_traffic_usage_statistics`] when it belongs to
+    /// the operator tenant, and the two must not be distinguishable by a
+    /// parameter: with one identity-derived scope a user of the operator tenant
+    /// browsing the console would silently read every tenant's traffic, and the
+    /// response would look exactly like their own.
     async fn retrieve_traffic_usage_statistics(
+        &self,
+        context: &WebBackendRequestContext,
+        query: &TrafficUsageStatisticsQuery,
+    ) -> WebServiceResult<TrafficUsageStatisticsResponse>;
+
+    /// Aggregated traffic usage of **every tenant this edge serves** — the
+    /// operations reading.
+    ///
+    /// Restricted to the platform operator tenant; a tenant-bound context is
+    /// rejected rather than narrowed to its own slice, so a misrouted admin
+    /// page fails loudly instead of quietly rendering a single tenant's traffic
+    /// as the platform total.
+    async fn retrieve_platform_traffic_usage_statistics(
         &self,
         context: &WebBackendRequestContext,
         query: &TrafficUsageStatisticsQuery,

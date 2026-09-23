@@ -75,6 +75,7 @@ client.getHttpClient().setHeader("X-Custom-Header", "value");
 - `client.getAgent()` - agent API
 - `client.getAudit()` - audit API
 - `client.getCluster()` - cluster API
+- `client.getTrafficUsage()` - traffic_usage API
 
 ## Usage Examples
 
@@ -230,6 +231,19 @@ System.out.println(result);
 ```java
 // Retrieve the cluster health overview for status polling
 ClustersOverviewRetrieveResponse result = client.getCluster().clustersOverviewRetrieve();
+System.out.println(result);
+```
+
+### traffic_usage
+
+```java
+// Retrieve aggregated traffic usage of the caller's own tenant
+Map<String, Object> params = new LinkedHashMap<>();
+params.put("date_from", "date-from");
+params.put("date_to", "date-to");
+params.put("dimension", "dimension");
+params.put("top_apps", 4);
+TrafficUsagesRetrieveResponse result = client.getTrafficUsage().trafficUsagesRetrieve(params);
 System.out.println(result);
 ```
 

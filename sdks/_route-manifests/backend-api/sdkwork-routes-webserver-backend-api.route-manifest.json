@@ -2250,6 +2250,58 @@
       "permission": "web.cluster.write",
       "idempotent": true,
       "rateLimitTier": "auth-critical"
+    },
+    {
+      "method": "GET",
+      "path": "/backend/v3/api/traffic_usage",
+      "operationId": "trafficUsages.retrieve",
+      "tags": [
+        "trafficUsage"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.traffic.read",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "GET",
+      "path": "/backend/v3/api/platform_traffic_usage",
+      "operationId": "platformTrafficUsages.retrieve",
+      "tags": [
+        "trafficUsage"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.traffic.read",
+      "idempotent": false,
+      "rateLimitTier": null
     }
   ]
 }

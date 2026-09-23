@@ -32,7 +32,7 @@
     "sdkType": "backend",
     "sdkSurface": "backend",
     "standardProfile": "sdkwork-v3",
-    "ownerOnlyOperationCount": 86
+    "ownerOnlyOperationCount": 88
   },
   "generator": {
     "package": "@sdkwork/sdk-generator",

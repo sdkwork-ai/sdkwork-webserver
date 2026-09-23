@@ -17,7 +17,7 @@ use sdkwork_webserver_contract::{
 use serde::Deserialize;
 use std::sync::Arc;
 
-use crate::{agent_routes, auth::require_backend_context, cluster_routes, paths};
+use crate::{agent_routes, auth::require_backend_context, cluster_routes, paths, traffic_usage_routes};
 use sdkwork_routes_webserver_common::{
     accepted_async, created_resource, no_content, ok_application_page, ok_audit_log_page,
     ok_certificate_distribution_page, ok_certificate_page, ok_deployment_page, ok_domain_page,
@@ -25,9 +25,15 @@ use sdkwork_routes_webserver_common::{
     ok_server_page, ok_source_version_page, validate_pagination_query, WebApiError,
 };
 
+/// Router state shared by every handler of this surface.
+///
+/// `pub(crate)` because the surface's handlers live in sibling modules
+/// (`traffic_usage_routes`) that are mounted into the same state; keeping the
+/// state private would force those handlers onto the concrete service type and
+/// bypass [`WebBackendApi`], which is the port the surface is built on.
 #[derive(Clone)]
-struct BackendState {
-    api: Arc<dyn WebBackendApi>,
+pub(crate) struct BackendState {
+    pub(crate) api: Arc<dyn WebBackendApi>,
 }
 
 pub fn build_router_with_backend_api<A>(api: A) -> Router
@@ -218,6 +224,14 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn WebBackendApi>) -> Rout
         .route(
             paths::CLUSTER_OVERVIEW,
             get(cluster_routes::retrieve_cluster_overview),
+        )
+        .route(
+            paths::TRAFFIC_USAGE,
+            get(traffic_usage_routes::retrieve_tenant_traffic_usage),
+        )
+        .route(
+            paths::PLATFORM_TRAFFIC_USAGE,
+            get(traffic_usage_routes::retrieve_platform_traffic_usage),
         )
         .layer(axum::middleware::from_fn(validate_pagination_query))
         .with_state(BackendState { api })

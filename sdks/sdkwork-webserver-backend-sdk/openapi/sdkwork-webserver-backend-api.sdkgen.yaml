@@ -6370,6 +6370,206 @@
         },
         "x-sdkwork-route-auth": "dual-token"
       }
+    },
+    "/backend/v3/api/traffic_usage": {
+      "get": {
+        "operationId": "trafficUsages.retrieve",
+        "summary": "Retrieve aggregated traffic usage of the caller's own tenant",
+        "description": "Aggregates the traffic facts this edge recorded for the caller's tenant over a date window. The reach is fixed by this operation: it is always the caller's own tenant, taken from the authenticated context, so no query parameter can widen it. The platform-wide reading lives at `/backend/v3/api/platform_traffic_usage` and is restricted to the platform operator tenant.",
+        "tags": [
+          "trafficUsage"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.traffic.read",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "parameters": [
+          {
+            "name": "date_from",
+            "in": "query",
+            "description": "Inclusive UTC calendar day (`YYYY-MM-DD`). Defaults to the trailing 30 days.",
+            "schema": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 10
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "description": "Exclusive UTC calendar day (`YYYY-MM-DD`). Defaults to tomorrow (UTC).",
+            "schema": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 10
+            }
+          },
+          {
+            "name": "dimension",
+            "in": "query",
+            "description": "Restrict the totals and the series to one usage dimension.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "top_apps",
+            "in": "query",
+            "description": "Size of the per-app breakdown.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aggregated traffic usage returned successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/TrafficUsageStatisticsResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
+    },
+    "/backend/v3/api/platform_traffic_usage": {
+      "get": {
+        "operationId": "platformTrafficUsages.retrieve",
+        "summary": "Retrieve aggregated traffic usage of every tenant",
+        "description": "Aggregates the traffic facts this edge recorded for every tenant it serves, and additionally fills the per-tenant breakdown. Restricted to the platform operator tenant: a tenant-bound context is rejected with 40301 rather than narrowed to its own slice, so a misrouted admin page fails loudly instead of rendering one tenant's traffic as the platform total.",
+        "tags": [
+          "trafficUsage"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.traffic.read",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "parameters": [
+          {
+            "name": "date_from",
+            "in": "query",
+            "description": "Inclusive UTC calendar day (`YYYY-MM-DD`). Defaults to the trailing 30 days.",
+            "schema": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 10
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "description": "Exclusive UTC calendar day (`YYYY-MM-DD`). Defaults to tomorrow (UTC).",
+            "schema": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 10
+            }
+          },
+          {
+            "name": "dimension",
+            "in": "query",
+            "description": "Restrict the totals and the series to one usage dimension.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "top_apps",
+            "in": "query",
+            "description": "Size of the per-app breakdown.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aggregated traffic usage returned successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/TrafficUsageStatisticsResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
     }
   },
   "components": {
@@ -10408,6 +10608,167 @@
           "generatedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "TrafficUsageStatisticsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Aggregated traffic usage over a **half-open** date window (`dateFrom <= day < dateTo`). Every view is derived from the same append-only traffic facts, so the totals, the daily series, and the per-app breakdown are consistent with each other by construction rather than by a reconciliation job having run most recently.",
+        "required": [
+          "dateFrom",
+          "dateTo",
+          "platformScope",
+          "totals",
+          "daily",
+          "apps",
+          "tenants"
+        ],
+        "properties": {
+          "dateFrom": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "dateTo": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "platformScope": {
+            "type": "boolean",
+            "description": "Whether the figures cover every tenant rather than the caller's own. Reported so a surface cannot render a platform-wide number as if it were the caller's own, or the reverse."
+          },
+          "totals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrafficUsageTotal"
+            }
+          },
+          "daily": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrafficUsageDailyPoint"
+            }
+          },
+          "apps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrafficUsageAppTotal"
+            }
+          },
+          "tenants": {
+            "type": "array",
+            "description": "Per-tenant breakdown. Empty for a tenant-scoped read, where the answer would be the caller's own totals repeated once per dimension.",
+            "items": {
+              "$ref": "#/components/schemas/TrafficUsageTenantTotal"
+            }
+          }
+        }
+      },
+      "TrafficUsageTotal": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "dimension",
+          "quantity",
+          "unit"
+        ],
+        "properties": {
+          "dimension": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "quantity": {
+            "$ref": "#/components/schemas/Int64String"
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          }
+        }
+      },
+      "TrafficUsageDailyPoint": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "usageDate",
+          "dimension",
+          "quantity"
+        ],
+        "properties": {
+          "usageDate": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "dimension": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "quantity": {
+            "$ref": "#/components/schemas/Int64String"
+          }
+        }
+      },
+      "TrafficUsageAppTotal": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "One app's aggregate over the window. A row carrying neither `appUuid` nor `appSlug` is the **unattributed** bucket: traffic served for a hostname the edge could not resolve to an app. It is reported rather than dropped so the per-app rows keep summing back to the total; a surface must render it as its own row, or the breakdown appears to lose traffic.",
+        "required": [
+          "dimension",
+          "quantity",
+          "unit"
+        ],
+        "properties": {
+          "appUuid": {
+            "type": "string",
+            "maxLength": 36
+          },
+          "appSlug": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "dimension": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "quantity": {
+            "$ref": "#/components/schemas/Int64String"
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          }
+        }
+      },
+      "TrafficUsageTenantTotal": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tenantId",
+          "dimension",
+          "quantity",
+          "unit"
+        ],
+        "properties": {
+          "tenantId": {
+            "$ref": "#/components/schemas/Int64String"
+          },
+          "dimension": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "quantity": {
+            "$ref": "#/components/schemas/Int64String"
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
           }
         }
       }

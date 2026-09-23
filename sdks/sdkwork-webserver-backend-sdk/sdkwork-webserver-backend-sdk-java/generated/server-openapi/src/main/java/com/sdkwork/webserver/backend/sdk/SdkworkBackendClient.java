@@ -16,6 +16,7 @@ import com.sdkwork.webserver.backend.sdk.api.WebserverConfigApi;
 import com.sdkwork.webserver.backend.sdk.api.AgentApi;
 import com.sdkwork.webserver.backend.sdk.api.AuditApi;
 import com.sdkwork.webserver.backend.sdk.api.ClusterApi;
+import com.sdkwork.webserver.backend.sdk.api.TrafficUsageApi;
 
 public class SdkworkBackendClient {
     private final HttpClient httpClient;
@@ -33,6 +34,7 @@ public class SdkworkBackendClient {
     private AgentApi agent;
     private AuditApi audit;
     private ClusterApi cluster;
+    private TrafficUsageApi trafficUsage;
 
     public SdkworkBackendClient(String baseUrl) {
         this.httpClient = new HttpClient(baseUrl);
@@ -50,6 +52,7 @@ public class SdkworkBackendClient {
         this.agent = new AgentApi(httpClient);
         this.audit = new AuditApi(httpClient);
         this.cluster = new ClusterApi(httpClient);
+        this.trafficUsage = new TrafficUsageApi(httpClient);
     }
 
     public SdkworkBackendClient(Types.SdkConfig config) {
@@ -68,6 +71,7 @@ public class SdkworkBackendClient {
         this.agent = new AgentApi(httpClient);
         this.audit = new AuditApi(httpClient);
         this.cluster = new ClusterApi(httpClient);
+        this.trafficUsage = new TrafficUsageApi(httpClient);
     }
 
     public ApplicationApi getApplication() {
@@ -124,6 +128,10 @@ public class SdkworkBackendClient {
 
     public ClusterApi getCluster() {
         return this.cluster;
+    }
+
+    public TrafficUsageApi getTrafficUsage() {
+        return this.trafficUsage;
     }
     public SdkworkBackendClient setAuthToken(String token) {
         httpClient.setAuthToken(token);

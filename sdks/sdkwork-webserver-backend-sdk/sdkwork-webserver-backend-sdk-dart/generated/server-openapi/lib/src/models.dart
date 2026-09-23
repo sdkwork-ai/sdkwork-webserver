@@ -4267,6 +4267,222 @@ class ClusterOverviewResponse {
   }
 }
 
+class TrafficUsageStatisticsResponse {
+  final String? dateFrom;
+  final String? dateTo;
+  final bool? platformScope;
+  final List<TrafficUsageTotal>? totals;
+  final List<TrafficUsageDailyPoint>? daily;
+  final List<TrafficUsageAppTotal>? apps;
+  final List<TrafficUsageTenantTotal>? tenants;
+
+  TrafficUsageStatisticsResponse({
+    this.dateFrom,
+    this.dateTo,
+    this.platformScope,
+    this.totals,
+    this.daily,
+    this.apps,
+    this.tenants
+  });
+
+  factory TrafficUsageStatisticsResponse.fromJson(Map<String, dynamic> json) {
+    return TrafficUsageStatisticsResponse(
+      dateFrom: json['dateFrom']?.toString(),
+      dateTo: json['dateTo']?.toString(),
+      platformScope: json['platformScope'] is bool ? json['platformScope'] : null,
+      totals: (() {
+        final list = _sdkworkAsList(json['totals']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : TrafficUsageTotal.fromJson(map);
+      })())
+            .whereType<TrafficUsageTotal>()
+            .toList();
+      })(),
+      daily: (() {
+        final list = _sdkworkAsList(json['daily']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : TrafficUsageDailyPoint.fromJson(map);
+      })())
+            .whereType<TrafficUsageDailyPoint>()
+            .toList();
+      })(),
+      apps: (() {
+        final list = _sdkworkAsList(json['apps']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : TrafficUsageAppTotal.fromJson(map);
+      })())
+            .whereType<TrafficUsageAppTotal>()
+            .toList();
+      })(),
+      tenants: (() {
+        final list = _sdkworkAsList(json['tenants']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : TrafficUsageTenantTotal.fromJson(map);
+      })())
+            .whereType<TrafficUsageTenantTotal>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'dateFrom': dateFrom,
+      'dateTo': dateTo,
+      'platformScope': platformScope,
+      'totals': totals?.map((item) => item.toJson()).toList(),
+      'daily': daily?.map((item) => item.toJson()).toList(),
+      'apps': apps?.map((item) => item.toJson()).toList(),
+      'tenants': tenants?.map((item) => item.toJson()).toList(),
+    };
+  }
+}
+
+class TrafficUsageTotal {
+  final String? dimension;
+  final String? quantity;
+  final String? unit;
+
+  TrafficUsageTotal({
+    this.dimension,
+    this.quantity,
+    this.unit
+  });
+
+  factory TrafficUsageTotal.fromJson(Map<String, dynamic> json) {
+    return TrafficUsageTotal(
+      dimension: json['dimension']?.toString(),
+      quantity: json['quantity']?.toString(),
+      unit: json['unit']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'dimension': dimension,
+      'quantity': quantity,
+      'unit': unit,
+    };
+  }
+}
+
+class TrafficUsageDailyPoint {
+  final String? usageDate;
+  final String? dimension;
+  final String? quantity;
+
+  TrafficUsageDailyPoint({
+    this.usageDate,
+    this.dimension,
+    this.quantity
+  });
+
+  factory TrafficUsageDailyPoint.fromJson(Map<String, dynamic> json) {
+    return TrafficUsageDailyPoint(
+      usageDate: json['usageDate']?.toString(),
+      dimension: json['dimension']?.toString(),
+      quantity: json['quantity']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'usageDate': usageDate,
+      'dimension': dimension,
+      'quantity': quantity,
+    };
+  }
+}
+
+class TrafficUsageAppTotal {
+  final String? appUuid;
+  final String? appSlug;
+  final String? dimension;
+  final String? quantity;
+  final String? unit;
+
+  TrafficUsageAppTotal({
+    this.appUuid,
+    this.appSlug,
+    this.dimension,
+    this.quantity,
+    this.unit
+  });
+
+  factory TrafficUsageAppTotal.fromJson(Map<String, dynamic> json) {
+    return TrafficUsageAppTotal(
+      appUuid: json['appUuid']?.toString(),
+      appSlug: json['appSlug']?.toString(),
+      dimension: json['dimension']?.toString(),
+      quantity: json['quantity']?.toString(),
+      unit: json['unit']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'appUuid': appUuid,
+      'appSlug': appSlug,
+      'dimension': dimension,
+      'quantity': quantity,
+      'unit': unit,
+    };
+  }
+}
+
+class TrafficUsageTenantTotal {
+  final String? tenantId;
+  final String? dimension;
+  final String? quantity;
+  final String? unit;
+
+  TrafficUsageTenantTotal({
+    this.tenantId,
+    this.dimension,
+    this.quantity,
+    this.unit
+  });
+
+  factory TrafficUsageTenantTotal.fromJson(Map<String, dynamic> json) {
+    return TrafficUsageTenantTotal(
+      tenantId: json['tenantId']?.toString(),
+      dimension: json['dimension']?.toString(),
+      quantity: json['quantity']?.toString(),
+      unit: json['unit']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'tenantId': tenantId,
+      'dimension': dimension,
+      'quantity': quantity,
+      'unit': unit,
+    };
+  }
+}
+
 class ApplicationsListResponse {
   final int? code;
   final dynamic data;
@@ -6380,6 +6596,62 @@ class ClustersMessagesCreateResponse201 {
 
   factory ClustersMessagesCreateResponse201.fromJson(Map<String, dynamic> json) {
     return ClustersMessagesCreateResponse201(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class TrafficUsagesRetrieveResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  TrafficUsagesRetrieveResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory TrafficUsagesRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return TrafficUsagesRetrieveResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class PlatformTrafficUsagesRetrieveResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  PlatformTrafficUsagesRetrieveResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory PlatformTrafficUsagesRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return PlatformTrafficUsagesRetrieveResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()

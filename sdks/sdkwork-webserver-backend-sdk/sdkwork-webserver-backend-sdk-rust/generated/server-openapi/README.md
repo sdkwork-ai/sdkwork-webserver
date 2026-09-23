@@ -57,6 +57,7 @@ client.set_header("X-Custom-Header", "value");
 - `client.agent()` - agent API
 - `client.audit()` - audit API
 - `client.cluster()` - cluster API
+- `client.traffic_usage()` - traffic_usage API
 
 ## Usage Examples
 
@@ -222,6 +223,20 @@ println!("{result:?}");
 ```rust
 // Retrieve the cluster health overview for status polling
 let result = client.cluster().clusters_overview_retrieve().await?;
+println!("{result:?}");
+```
+
+### traffic_usage
+
+```rust
+use std::collections::HashMap;
+// Retrieve aggregated traffic usage of the caller's own tenant
+let mut query = HashMap::new();
+query.insert("date_from".to_string(), serde_json::json!("date-from"));
+query.insert("date_to".to_string(), serde_json::json!("date-to"));
+query.insert("dimension".to_string(), serde_json::json!("dimension"));
+query.insert("top_apps".to_string(), serde_json::json!(4));
+let result = client.traffic_usage().traffic_usages_retrieve(Some(&query)).await?;
 println!("{result:?}");
 ```
 

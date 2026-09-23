@@ -79,3 +79,5 @@ pub const CLUSTER_EVENTS: &str = "/backend/v3/api/clusters/events";
 pub const CLUSTER_OVERVIEW: &str = "/backend/v3/api/clusters/overview";
 pub const AGENT_HEARTBEAT: &str = "/backend/v3/api/agent/heartbeat";
 pub const AGENT_SYNC: &str = "/backend/v3/api/agent/sync";
+pub const TRAFFIC_USAGE: &str = "/backend/v3/api/traffic_usage";
+pub const PLATFORM_TRAFFIC_USAGE: &str = "/backend/v3/api/platform_traffic_usage";

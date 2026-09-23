@@ -64,6 +64,7 @@ $client->setHeader('X-Custom-Header', 'value');
 - `$client->agent` - agent API
 - `$client->audit` - audit API
 - `$client->cluster` - cluster API
+- `$client->trafficUsage` - traffic_usage API
 
 ## Usage Examples
 
@@ -217,6 +218,17 @@ var_dump($result);
 
 // Retrieve the cluster health overview for status polling
 $result = $client->cluster->clustersOverviewRetrieve();
+var_dump($result);
+```
+
+### traffic_usage
+
+```php
+<?php
+
+// Retrieve aggregated traffic usage of the caller's own tenant
+$params = ['date_from' => 'date-from', 'date_to' => 'date-to', 'dimension' => 'dimension', 'top_apps' => 4];
+$result = $client->trafficUsage->trafficUsagesRetrieve($params);
 var_dump($result);
 ```
 

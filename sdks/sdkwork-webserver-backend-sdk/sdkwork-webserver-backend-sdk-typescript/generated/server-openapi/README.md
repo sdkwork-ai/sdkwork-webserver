@@ -68,6 +68,7 @@ const client = new SdkworkBackendClient({
 - `client.agent` - agent API
 - `client.audit` - audit API
 - `client.cluster` - cluster API
+- `client.trafficUsage` - traffic_usage API
 
 ## Usage Examples
 
@@ -220,6 +221,19 @@ const result = await client.audit.auditLogs.list(params);
 ```typescript
 // Retrieve the cluster health overview for status polling
 const result = await client.cluster.overview.retrieve();
+```
+
+### traffic_usage
+
+```typescript
+// Retrieve aggregated traffic usage of the caller's own tenant
+const params = {
+  date_from: 'date_from',
+  date_to: 'date_to',
+  dimension: 'dimension',
+  top_apps: 4,
+};
+const result = await client.trafficUsage.retrieve(params);
 ```
 
 ## Error Handling

@@ -62,6 +62,7 @@ client.set_header('X-Custom-Header', 'value')
 - `client.agent` - agent API
 - `client.audit` - audit API
 - `client.cluster` - cluster API
+- `client.traffic_usage` - traffic_usage API
 
 ## Usage Examples
 
@@ -227,6 +228,20 @@ print(result)
 ```python
 # Retrieve the cluster health overview for status polling
 result = client.cluster.overview.list()
+print(result)
+```
+
+### traffic_usage
+
+```python
+# Retrieve aggregated traffic usage of the caller's own tenant
+params = {
+    'date_from': 'date_from',
+    'date_to': 'date_to',
+    'dimension': 'dimension',
+    'top_apps': 4,
+}
+result = client.traffic_usage.list(params)
 print(result)
 ```
 

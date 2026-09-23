@@ -16,6 +16,7 @@ import { WebserverConfigApi, createWebserverConfigApi } from './api/webserver-co
 import { AgentApi, createAgentApi } from './api/agent';
 import { AuditApi, createAuditApi } from './api/audit';
 import { ClusterApi, createClusterApi } from './api/cluster';
+import { TrafficUsageApi, createTrafficUsageApi } from './api/traffic-usage';
 
 export class SdkworkBackendClient {
   private httpClient: HttpClient;
@@ -34,6 +35,7 @@ export class SdkworkBackendClient {
   public readonly agent: AgentApi;
   public readonly audit: AuditApi;
   public readonly cluster: ClusterApi;
+  public readonly trafficUsage: TrafficUsageApi;
 
   constructor(config: SdkworkBackendConfig) {
     this.httpClient = createHttpClient(config);
@@ -64,6 +66,8 @@ export class SdkworkBackendClient {
     this.audit = createAuditApi(this.httpClient);
 
     this.cluster = createClusterApi(this.httpClient);
+
+    this.trafficUsage = createTrafficUsageApi(this.httpClient);
   }
   setAuthToken(token: string): this {
     this.httpClient.setAuthToken(token);

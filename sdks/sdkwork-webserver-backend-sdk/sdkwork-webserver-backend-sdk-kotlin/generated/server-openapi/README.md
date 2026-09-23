@@ -67,6 +67,7 @@ val client = SdkworkBackendClient(config)
 - `client.agent` - agent API
 - `client.audit` - audit API
 - `client.cluster` - cluster API
+- `client.trafficUsage` - traffic_usage API
 
 ## Usage Examples
 
@@ -232,6 +233,20 @@ println(result)
 ```kotlin
 // Retrieve the cluster health overview for status polling
 val result = client.cluster.clustersOverviewRetrieve()
+println(result)
+```
+
+### traffic_usage
+
+```kotlin
+// Retrieve aggregated traffic usage of the caller's own tenant
+val params = linkedMapOf<String, Any>(
+    "date_from" to "date-from",
+    "date_to" to "date-to",
+    "dimension" to "dimension",
+    "top_apps" to 4
+)
+val result = client.trafficUsage.trafficUsagesRetrieve(params)
 println(result)
 ```
 
