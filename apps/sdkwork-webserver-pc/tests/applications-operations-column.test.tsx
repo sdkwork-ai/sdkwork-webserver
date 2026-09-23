@@ -14,9 +14,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
  * missing once already (`311f7f61` deleted the host-owned action list, and the
  * bridged page replaced it without re-exposing the operations).
  *
- * The four operations mirror the retired host ledger's `update` / `update-source` /
- * `publish` / `delete`. `delete` is rendered but permanently disabled because the
- * deploy app-api contract defines no `apps.delete`.
+ * The six operations are the union of both sides of the merge that bridged this page:
+ * the retired host ledger's `update` / `update-source` / `publish` / `delete`, **plus**
+ * the deployments page's own `domains` / `detail` commands, which it had grown while the
+ * other branch was in flight. Taking either side alone loses a real capability, so the
+ * contract here is the union. `delete` is rendered but permanently disabled because the
+ * deploy app-api contract defines no `apps.delete` — the `apps` resource exposes only
+ * list / create / retrieve / update / activate / pause / domains.list / composition.update
+ * / envVariables.* / healthChecks.*.
  */
 const APP_ROW = {
   id: "app-1",
@@ -70,6 +75,7 @@ describe("applications ledger operations column", () => {
       "Slug",
       "Kind",
       "Status",
+      "Domain",
       "Platform targets",
       "Version",
       "Updated",
@@ -77,7 +83,7 @@ describe("applications ledger operations column", () => {
     ]);
   });
 
-  it("exposes the four host-ledger operations on every row", async () => {
+  it("exposes the six bridged operations on every row", async () => {
     stubAppsList();
     renderAppsSurface();
     const nameCell = await screen.findByText("Store Front");
@@ -88,15 +94,17 @@ describe("applications ledger operations column", () => {
     // Asserted through the accessible name, not `textContent`: the operations
     // render as the module's icon buttons (`table-action`), exactly as
     // `DeliveryManagement.tsx` renders its ledgers, so the glyph carries no text
-    // and the label lives in `aria-label` / `title`. Keeping the assertion on
-    // the accessible name means the test survives either rendering — what it
-    // guards is that the four operations stay present and named.
+    // and the label lives in `aria-label` / `title`. Asserting on the accessible
+    // name is also what keeps this test honest across either rendering — what it
+    // guards is that all six operations stay present and named.
     const buttons = within(row as HTMLElement).getAllByRole("button");
-    expect(buttons).toHaveLength(4);
+    expect(buttons).toHaveLength(6);
     expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
       "Edit Store Front",
       "Modify source code Store Front",
       "Publish Store Front",
+      "Domains Store Front",
+      "Details Store Front",
       "Delete Store Front",
     ]);
     for (const button of buttons) {
@@ -105,20 +113,20 @@ describe("applications ledger operations column", () => {
     }
   });
 
-  it("keeps delete disabled with the reason, while the other three stay actionable", async () => {
+  it("keeps delete disabled with the reason, while the other five stay actionable", async () => {
     stubAppsList();
     renderAppsSurface();
     const nameCell = await screen.findByText("Store Front");
 
     const row = nameCell.closest("tr") as HTMLElement;
-    const [edit, source, publish, remove] = within(row).getAllByRole("button");
+    const [edit, source, publish, domains, detail, remove] = within(row).getAllByRole("button");
 
     // The contract has no `apps.delete`, so the slot must not promise a call it
     // cannot make — it says so in its title instead.
     expect((remove as HTMLButtonElement).disabled).toBe(true);
     expect(remove?.getAttribute("title")).toContain("no delete operation");
 
-    for (const button of [edit, source, publish]) {
+    for (const button of [edit, source, publish, domains, detail]) {
       expect((button as HTMLButtonElement).disabled, `${button?.getAttribute("aria-label")} is actionable`).toBe(false);
     }
   });
