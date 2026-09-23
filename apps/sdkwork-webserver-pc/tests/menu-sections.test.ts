@@ -60,8 +60,8 @@ describe("workspace menu sections", () => {
 
   it("renders ungrouped entries first and in their supplied order", () => {
     const groups = groupMenuEntries([
-      { resource: "nginx" },
-      { resource: "servers" },
+      { resource: "audit" },
+      { resource: "diagnostics" },
       { resource: "apps" },
       { resource: "domains" },
       { resource: "certificates" },
@@ -70,7 +70,7 @@ describe("workspace menu sections", () => {
 
     expect(groups.map((group) => group.id)).toEqual([null, "delivery", "aiEcosystem"]);
     // Ungrouped entries lead and keep the order the caller supplied.
-    expect(groups[0].entries.map((entry) => entry.resource)).toEqual(["nginx", "servers"]);
+    expect(groups[0].entries.map((entry) => entry.resource)).toEqual(["audit", "diagnostics"]);
     expect(groups[1].entries.map((entry) => entry.resource)).toEqual([
       "apps",
       "domains",

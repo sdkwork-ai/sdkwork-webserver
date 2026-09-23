@@ -94,7 +94,8 @@ impl WebRepository {
         let sql = "SELECT uuid, name, host, tenant_scope_hash, ssh_port, status,
                     CAST(metadata AS TEXT) AS metadata,
                     CAST(updated_at AS TEXT) AS updated_at,
-                    CAST(created_at AS TEXT) AS created_at
+                    CAST(created_at AS TEXT) AS created_at,
+                    id
              FROM webserver_server
              WHERE tenant_id = $1
                AND (updated_at, id) < (CAST($2 AS TIMESTAMPTZ), $3)

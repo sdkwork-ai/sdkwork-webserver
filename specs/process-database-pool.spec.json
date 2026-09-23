@@ -26,28 +26,209 @@
         {
           "module": "Web database lifecycle",
           "poolMode": "installed-process-pool",
-          "evidence": ["crates/sdkwork-webserver-database-host/src/lib.rs"]
+          "evidence": [
+            "crates/sdkwork-webserver-database-host/src/lib.rs"
+          ]
         },
         {
           "module": "Web SQLx repository",
           "poolMode": "installed-process-pool",
-          "evidence": ["crates/sdkwork-intelligence-webserver-repository-sqlx/src/runtime.rs"]
+          "evidence": [
+            "crates/sdkwork-intelligence-webserver-repository-sqlx/src/runtime.rs"
+          ]
         },
         {
-          "module": "sdkwork-iam App API",
+          "module": "sdkwork-iam",
+          "ownerAssembly": "sdkwork-api-iam-assembly",
           "poolMode": "installed-process-pool",
           "evidence": [
             "../sdkwork-iam/crates/sdkwork-api-iam-assembly/src/bootstrap.rs"
           ]
         },
         {
-          "module": "sdkwork-drive App API",
+          "module": "sdkwork-drive",
+          "ownerAssembly": "sdkwork-api-drive-assembly",
           "poolMode": "installed-process-pool",
           "evidence": [
             "../sdkwork-drive/crates/sdkwork-api-drive-assembly/src/bootstrap.rs"
           ]
+        },
+        {
+          "module": "sdkwork-skills",
+          "ownerAssembly": "sdkwork-api-skills-assembly",
+          "poolMode": "installed-process-pool",
+          "evidence": [
+            "../sdkwork-skills/crates/sdkwork-api-skills-assembly/src/bootstrap.rs"
+          ]
+        },
+        {
+          "module": "sdkwork-mcp",
+          "ownerAssembly": "sdkwork-api-mcp-assembly",
+          "poolMode": "installed-process-pool",
+          "evidence": [
+            "../sdkwork-mcp/crates/sdkwork-api-mcp-assembly/src/bootstrap.rs"
+          ]
+        },
+        {
+          "module": "sdkwork-deployments",
+          "ownerAssembly": "sdkwork-api-deployments-assembly",
+          "poolMode": "installed-process-pool",
+          "evidence": [
+            "../sdkwork-deployments/crates/sdkwork-api-deployments-assembly/src/bootstrap.rs"
+          ]
         }
       ],
+      "nestedLifecycleDependencies": [
+        {
+          "dependencyAssembly": "sdkwork-api-iam-assembly",
+          "module": "sdkwork-iam",
+          "order": "iam-lifecycle-before-management-routes",
+          "invokedVia": "gateway",
+          "stages": [
+            "init",
+            "migrate",
+            "drift"
+          ],
+          "lifecycleEntrypoint": "bootstrap_database_with_pool",
+          "servePathEvidence": [
+            "crates/sdkwork-api-webserver-standalone-gateway/src/bootstrap.rs"
+          ],
+          "evidence": [
+            "../sdkwork-iam/crates/sdkwork-api-iam-assembly/src/bootstrap.rs"
+          ],
+          "hostEvidence": [
+            "../sdkwork-iam/crates/sdkwork-iam-database-host/src/lib.rs"
+          ],
+          "migrationPath": {
+            "entrypoint": "sdkwork_api_iam_assembly::bootstrap_database_with_pool",
+            "evidence": [
+              "crates/sdkwork-api-webserver-standalone-gateway/src/bootstrap.rs"
+            ]
+          }
+        },
+        {
+          "dependencyAssembly": "sdkwork-api-drive-assembly",
+          "module": "sdkwork-drive",
+          "order": "drive-lifecycle-with-its-same-origin-contribution",
+          "invokedVia": "gateway",
+          "stages": [
+            "init",
+            "migrate",
+            "drift"
+          ],
+          "lifecycleEntrypoint": "assemble_same_origin_contribution_with_pool",
+          "servePathEvidence": [
+            "crates/sdkwork-api-webserver-standalone-gateway/src/dependency_assembly.rs"
+          ],
+          "evidence": [
+            "../sdkwork-drive/crates/sdkwork-api-drive-assembly/src/bootstrap.rs"
+          ],
+          "hostEvidence": [
+            "../sdkwork-drive/crates/sdkwork-drive-database-host/src/bootstrap.rs"
+          ],
+          "migrationPath": {
+            "entrypoint": "sdkwork_api_drive_assembly::ensure_database_lifecycle_with_pool",
+            "evidence": [
+              "crates/sdkwork-api-webserver-standalone-gateway/src/bootstrap.rs"
+            ]
+          }
+        },
+        {
+          "dependencyAssembly": "sdkwork-api-skills-assembly",
+          "module": "sdkwork-skills",
+          "order": "skills-lifecycle-before-webserver-management-serve",
+          "invokedVia": "owner-assembly",
+          "ownerAssembly": "sdkwork-api-webserver-assembly",
+          "ownerLifecycleEntrypoint": "ensure_database_lifecycle_from_env",
+          "stages": [
+            "init",
+            "migrate",
+            "drift"
+          ],
+          "lifecycleEntrypoint": "bootstrap_database_from_env",
+          "servePathEvidence": [
+            "crates/sdkwork-api-webserver-standalone-gateway/src/main.rs"
+          ],
+          "evidence": [
+            "crates/sdkwork-api-webserver-assembly/src/bootstrap.rs"
+          ],
+          "hostEvidence": [
+            "../sdkwork-skills/crates/sdkwork-skills-database-host/src/lib.rs"
+          ],
+          "migrationPath": {
+            "entrypoint": "sdkwork_api_webserver_assembly::migrate_database_from_env",
+            "evidence": [
+              "crates/sdkwork-api-webserver-standalone-gateway/src/bootstrap.rs"
+            ]
+          }
+        },
+        {
+          "dependencyAssembly": "sdkwork-api-mcp-assembly",
+          "module": "sdkwork-mcp",
+          "order": "mcp-lifecycle-before-webserver-management-serve",
+          "invokedVia": "owner-assembly",
+          "ownerAssembly": "sdkwork-api-webserver-assembly",
+          "ownerLifecycleEntrypoint": "ensure_database_lifecycle_from_env",
+          "stages": [
+            "init",
+            "migrate",
+            "drift"
+          ],
+          "lifecycleEntrypoint": "bootstrap_database_from_env",
+          "servePathEvidence": [
+            "crates/sdkwork-api-webserver-standalone-gateway/src/main.rs"
+          ],
+          "evidence": [
+            "crates/sdkwork-api-webserver-assembly/src/bootstrap.rs"
+          ],
+          "hostEvidence": [
+            "../sdkwork-mcp/crates/sdkwork-mcp-database-host/src/lib.rs"
+          ],
+          "migrationPath": {
+            "entrypoint": "sdkwork_api_webserver_assembly::migrate_database_from_env",
+            "evidence": [
+              "crates/sdkwork-api-webserver-standalone-gateway/src/bootstrap.rs"
+            ]
+          }
+        },
+        {
+          "dependencyAssembly": "sdkwork-api-deployments-assembly",
+          "module": "sdkwork-deployments",
+          "order": "deployments-lifecycle-before-webserver-management-serve",
+          "invokedVia": "owner-assembly",
+          "ownerAssembly": "sdkwork-api-webserver-assembly",
+          "ownerLifecycleEntrypoint": "ensure_database_lifecycle_from_env",
+          "stages": [
+            "init",
+            "migrate",
+            "drift"
+          ],
+          "lifecycleEntrypoint": "ensure_database_lifecycle_from_env",
+          "servePathEvidence": [
+            "crates/sdkwork-api-webserver-standalone-gateway/src/main.rs"
+          ],
+          "evidence": [
+            "crates/sdkwork-api-webserver-assembly/src/bootstrap.rs"
+          ],
+          "hostEvidence": [
+            "../sdkwork-deployments/crates/sdkwork-deploy-database-host/src/lib.rs"
+          ],
+          "migrationPath": {
+            "entrypoint": "sdkwork_api_webserver_assembly::migrate_database_from_env",
+            "evidence": [
+              "crates/sdkwork-api-webserver-standalone-gateway/src/bootstrap.rs"
+            ]
+          }
+        }
+      ],
+      "migrationClosure": {
+        "command": "db-migrate",
+        "scope": "run_database_migrate_only",
+        "description": "The standalone gateway's explicit migration subcommand. It must converge every module the serve path converges, because it is the only path that repairs a drifted schema: a module absent here turns its own fail-closed drift gate into a permanent outage that names a command which cannot fix it. `scope` restricts the reachability check to this function, since the serve path calls the same dependency entrypoints from a different function in the same file.",
+        "evidence": [
+          "crates/sdkwork-api-webserver-standalone-gateway/src/bootstrap.rs"
+        ]
+      },
       "temporaryDriverExceptions": []
     },
     {
@@ -68,12 +249,16 @@
         {
           "module": "Certificate renewal lifecycle",
           "poolMode": "installed-process-pool",
-          "evidence": ["crates/sdkwork-webserver-certificate-worker/src/main.rs"]
+          "evidence": [
+            "crates/sdkwork-webserver-certificate-worker/src/main.rs"
+          ]
         },
         {
           "module": "Web SQLx repository",
           "poolMode": "installed-process-pool",
-          "evidence": ["crates/sdkwork-intelligence-webserver-repository-sqlx/src/runtime.rs"]
+          "evidence": [
+            "crates/sdkwork-intelligence-webserver-repository-sqlx/src/runtime.rs"
+          ]
         }
       ],
       "temporaryDriverExceptions": []

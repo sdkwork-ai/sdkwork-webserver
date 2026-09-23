@@ -1124,20 +1124,47 @@ async fn verify_liveness_sweep_events_and_pagination(context: &TestContext) {
         .iter()
         .all(|event| event.severity == "WARNING" && event.detail.is_object()));
 
+    // A third event pushes the collection past one small page, so the walk
+    // below really mints and consumes a keyset cursor. With only two rows the
+    // first page reports `has_more == false`, the cursor path never executes,
+    // and a projection that omits the internal `id` stays invisible.
+    repository
+        .record_cluster_event(ClusterEventWrite {
+            tenant_id: 0,
+            cluster_uuid: &default_cluster.cluster_uuid,
+            host_uuid: Some(&host.uuid),
+            instance_uuid: Some(&instance.uuid),
+            event_type: "INSTANCE_RECOVERED",
+            severity: "INFO",
+            message: "instance resumed heartbeating",
+            detail_json: "{}",
+            occurred_at: &now,
+        })
+        .await
+        .expect("event write");
+
     // Walk the event cursor to exhaustion with a tiny page.
     let mut cursor = None;
     let mut visited = 0_usize;
+    let mut pages = 0_usize;
     loop {
         let page = repository
             .list_cluster_events(None, None, None, 2, cursor.as_deref())
             .await
             .expect("event page");
         visited += page.items.len();
+        pages += 1;
         match (page.has_more, page.next_cursor) {
             (Some(true), Some(next)) => cursor = Some(next),
-            _ => break,
+            (Some(false), None) => break,
+            other => panic!("an event page either continues with a cursor or stops: {other:?}"),
         }
     }
+    assert!(
+        pages > 1,
+        "a three-event collection must span more than one page of two, otherwise the \
+         keyset cursor was never exercised"
+    );
     let total_events: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM webserver_cluster_event WHERE tenant_id = 0")
             .fetch_one(&context.pool)

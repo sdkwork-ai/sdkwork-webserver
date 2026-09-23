@@ -116,7 +116,18 @@ pub async fn assemble_business_routes(
     let runtime = bootstrap_web_runtime_from_env()
         .await
         .map_err(|detail| ApiAssemblyError::Initialization { detail })?;
-    let service = Arc::new(runtime.service);
+    // The aggregated traffic usage facts live in the Deploy control plane, which
+    // the standalone host composes into this process over the same pool. The
+    // reader is attached **before** the service is shared, because
+    // `with_traffic_usage_reader` consumes the service and a port behind an `Arc`
+    // can no longer be replaced. An unassembled reader is not an error: the
+    // service reports the capability as unavailable (`503`) instead of rendering
+    // an empty chart as "this edge served no traffic".
+    let service = match crate::traffic_usage::shared_deploy_traffic_usage_reader().await {
+        Some(reader) => runtime.service.with_traffic_usage_reader(reader),
+        None => runtime.service,
+    };
+    let service = Arc::new(service);
     let audit_emitter: Arc<dyn AuditEmitter> =
         Arc::new(WebFrameworkAuditEmitter::new(service.clone()));
     let security_event_emitter: Arc<dyn SecurityEventEmitter> =
@@ -233,19 +244,34 @@ pub async fn seed_space_repository() -> Result<std::path::PathBuf, String> {
         .map_err(|error| error.to_string())
 }
 
-pub async fn migrate_database_from_env() -> Result<(), ApiAssemblyError> {
-    // Migrate every in-process database module in startup order
-    // (DATABASE_FRAMEWORK_SPEC §4.3): the Web module first, then the
-    // Deployments domain/certificate blocks, Skills, and MCP modules that the
-    // standalone gateway composes as same-origin dependencies. Each module's
-    // baseline bootstraps empty databases; versioned forward migrations converge
-    // existing ones.
-    std::env::set_var("SDKWORK_DATABASE_AUTO_MIGRATE", "true");
+/// Converge every in-process database module the standalone gateway composes
+/// (DATABASE_FRAMEWORK_SPEC §4.3/§4.4.1): the Web module first, then the
+/// Deployments domain/certificate blocks, Skills, and MCP modules the gateway
+/// serves as same-origin dependencies. Each module's baseline bootstraps an
+/// empty database; versioned forward migrations converge existing ones.
+///
+/// Whether forward migrations are applied is **governed by
+/// `SDKWORK_DATABASE_AUTO_MIGRATE`**, falling back to each module manifest's
+/// `lifecycle.autoMigrate` (§4.4). The serve path deliberately does **not**
+/// force it, because forcing it here made the authored policy
+/// undecidable: `[database] auto_migrate = false` in the runtime config was
+/// overwritten by this call before any module could read it, so the switch
+/// looked wired while nothing could turn migrations off. The authored
+/// authorities are the runtime config (`etc`/generated TOML, applied to env by
+/// `runtime_config.rs`) and the dev launcher; every shipped standalone profile
+/// declares it on, so behaviour is unchanged — but the declaration is now the
+/// only thing that decides.
+///
+/// The drift check still runs per module and aborts startup on error, so a
+/// schema that is behind fails the boot instead of serving routes over missing
+/// tables. [`migrate_database_from_env`] is the explicit entrypoint that
+/// authorizes migration regardless of the ambient setting.
+pub async fn ensure_database_lifecycle_from_env() -> Result<(), ApiAssemblyError> {
     sdkwork_webserver_database_host::bootstrap_web_database_from_env()
         .await
         .map(|_| ())
         .map_err(|detail| ApiAssemblyError::DatabaseMigration { detail })?;
-    sdkwork_api_deployments_assembly::migrate_database_from_env()
+    sdkwork_api_deployments_assembly::ensure_database_lifecycle_from_env()
         .await
         .map_err(|detail| ApiAssemblyError::DatabaseMigration { detail })?;
     sdkwork_api_skills_assembly::bootstrap_database_from_env()
@@ -255,6 +281,15 @@ pub async fn migrate_database_from_env() -> Result<(), ApiAssemblyError> {
         .await
         .map_err(|detail| ApiAssemblyError::DatabaseMigration { detail })?;
     Ok(())
+}
+
+/// Explicit migration entrypoint (`db-migrate`, and the packaged credential
+/// entry). Running this command **is** the operator's authorization to apply
+/// forward migrations, so it forces `SDKWORK_DATABASE_AUTO_MIGRATE` on for this
+/// process and then converges the module set the serve path converges.
+pub async fn migrate_database_from_env() -> Result<(), ApiAssemblyError> {
+    std::env::set_var("SDKWORK_DATABASE_AUTO_MIGRATE", "true");
+    ensure_database_lifecycle_from_env().await
 }
 
 fn permission_catalog(routes: &[HttpRoute]) -> Vec<&'static str> {

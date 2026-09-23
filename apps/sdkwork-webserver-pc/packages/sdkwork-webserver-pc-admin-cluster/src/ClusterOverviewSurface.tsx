@@ -79,16 +79,21 @@ export function ClusterOverviewSurface({ locale, resource }: ClusterOverviewSurf
 
   if (error && !snapshot) {
     return (
-      <section className="data-surface" data-resource={resource}>
-        <p className="bootstrap-state" role="alert">{t("resource.cluster-overview.loadFailed")}: {error}</p>
+      <section className="cluster-overview-surface" data-resource={resource}>
+        <div className="cluster-overview-state" role="alert">
+          <strong>{t("resource.cluster-overview.loadFailed")}</strong>
+          <p>{error}</p>
+        </div>
       </section>
     );
   }
 
   if (!snapshot) {
     return (
-      <section className="data-surface" data-resource={resource}>
-        <p className="bootstrap-state" role="status">{t("resource.cluster-overview.loading")}</p>
+      <section className="cluster-overview-surface" data-resource={resource}>
+        <div className="cluster-overview-state" role="status">
+          <p>{t("resource.cluster-overview.loading")}</p>
+        </div>
       </section>
     );
   }
@@ -121,10 +126,10 @@ export function ClusterOverviewSurface({ locale, resource }: ClusterOverviewSurf
   ];
 
   return (
-    <section className="data-surface" data-resource={resource}>
-      <header className="resource-toolbar">
+    <section className="cluster-overview-surface" data-resource={resource}>
+      <header className="cluster-overview-header">
         <h2>{t("resource.cluster-overview.label")}</h2>
-        <span className="toolbar-meta" aria-live="polite">
+        <span className="cluster-overview-meta" aria-live="polite">
           {refreshing ? t("resource.cluster-overview.refreshing") : `${t("resource.cluster-overview.updatedAt")}: ${formatInstant(overview.generatedAt, locale)}`}
         </span>
       </header>
@@ -136,16 +141,18 @@ export function ClusterOverviewSurface({ locale, resource }: ClusterOverviewSurf
           </article>
         ))}
       </div>
-      <h3>{t("resource.cluster-overview.recentEvents")}</h3>
-      <DataTable<ClusterEventResponse>
-        columns={eventColumns}
-        density="compact"
-        emptyState={<span>{t("resource.cluster-overview.noEvents")}</span>}
-        getRowId={(event) => event.id}
-        rows={events}
-        stickyHeader
-      />
-      {error ? <p className="bootstrap-state" role="alert">{t("resource.cluster-overview.refreshFailed")}: {error}</p> : null}
+      <section className="cluster-overview-events">
+        <h3>{t("resource.cluster-overview.recentEvents")}</h3>
+        <DataTable<ClusterEventResponse>
+          columns={eventColumns}
+          density="compact"
+          emptyState={<span>{t("resource.cluster-overview.noEvents")}</span>}
+          getRowId={(event) => event.id}
+          rows={events}
+          stickyHeader
+        />
+      </section>
+      {error ? <p className="warning" role="alert">{t("resource.cluster-overview.refreshFailed")}: {error}</p> : null}
     </section>
   );
 }

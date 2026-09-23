@@ -1538,9 +1538,6 @@ function recordKey(item: Record<string, unknown>, index: number): string {
  */
 function displayValue(value: unknown, column: string, resource: WebserverResourceKey, locale: WebserverLocale): ReactNode {
   if (value === null || value === undefined || value === "") return "-";
-  if (resource === "servers" && column === "status") {
-    return <span className={`status-badge server-status-${String(value).toLowerCase()}`}>{serverStatus(value, locale)}</span>;
-  }
   if (resource.startsWith("cluster-")) {
     const clusterCell = clusterCellValue(value, column, resource, locale);
     if (clusterCell !== undefined) return clusterCell;
@@ -2306,8 +2303,6 @@ const RESOURCE_COLUMN_PLANS: Partial<Record<WebserverResourceKey, readonly Webse
  * workspace has no other description of a resource owned by another SDK.
  */
 const PREFERRED_FIELD_ORDER: Partial<Record<WebserverResourceKey, readonly string[]>> = {
-  nginx: ["id", "configName", "configType", "isActive", "status", "versionNo", "deployedAt", "updatedAt"],
-  servers: ["id", "name", "host", "sshPort", "status", "lastHeartbeatAt", "createdAt"],
   audit: ["operatorId", "operatorType", "action", "targetType", "targetUuid", "ipAddress", "createdAt"],
 };
 
@@ -2560,13 +2555,5 @@ function addressList(value: unknown): string | undefined {
   if (items.length === 0) return undefined;
   const head = items.slice(0, 3).join(", ");
   return items.length > 3 ? `${head} +${items.length - 3}` : head;
-}
-
-function serverStatus(value: unknown, locale: WebserverLocale): string {
-  const statuses: Record<WebserverLocale, Record<string, string>> = {
-    "en-US": { "0": "Offline", "1": "Online" },
-    "zh-CN": { "0": "离线", "1": "在线" },
-  };
-  return statuses[locale][String(value)] ?? String(value);
 }
 

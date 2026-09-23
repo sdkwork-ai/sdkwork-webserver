@@ -527,7 +527,7 @@ CREATE TABLE IF NOT EXISTS webserver_certificate_operation (
 COMMENT ON TABLE webserver_certificate_operation IS 'Durable certificate issuance and renewal operation with lease fencing and bounded retry';
 COMMENT ON COLUMN webserver_certificate_operation.idempotency_key_hash IS 'SHA-256 of the tenant, actor, operation scope, and raw Idempotency-Key; raw keys are never stored';
 COMMENT ON COLUMN webserver_certificate_operation.request_sha256 IS 'Canonical request fingerprint used to reject conflicting idempotency-key replay';
-COMMENT ON COLUMN webserver_certificate_operation.failure_detail IS 'What the failure actually said: the provider's own diagnostic, redacted and bounded, so an operator can act on it without reading the server log';
+COMMENT ON COLUMN webserver_certificate_operation.failure_detail IS 'What the failure actually said: the provider''s own diagnostic, redacted and bounded, so an operator can act on it without reading the server log';
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_webserver_certificate_operation_idempotency
     ON webserver_certificate_operation (tenant_id, idempotency_key_hash)

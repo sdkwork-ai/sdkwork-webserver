@@ -349,11 +349,10 @@ label.paginated-option-item.disabled { cursor: not-allowed; opacity: .55; }
 .operation-result dd { min-width: 0; margin: 0; padding: 6px 8px 6px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-left: 1px solid var(--sdk-color-border-subtle); }
 .operation-result code { min-width: 0; overflow-wrap: anywhere; color: var(--sdk-color-text-primary); font-size: 12px; }
 .status-badge { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 8px; border-radius: 999px; background: var(--sdk-color-surface-elevated); color: var(--sdk-color-text-secondary); font-size: 12px; font-weight: 650; }
-.status-active, .status-success, .status-1, .application-status-1, .server-status-1, .deployment-status-2 { background: var(--webserver-color-success-surface); color: var(--webserver-color-success-text); }
+.status-active, .status-success, .status-1, .application-status-1, .deployment-status-2 { background: var(--webserver-color-success-surface); color: var(--webserver-color-success-text); }
 .status-failed, .status-error, .status-3 { background: var(--webserver-color-danger-surface); color: var(--webserver-color-danger-text); }
 .status-pending, .status-0, .application-status-0, .deployment-status-0, .deployment-status-1 { background: var(--webserver-color-warning-surface); color: var(--webserver-color-warning-text); }
 .application-status-2 { background: var(--sdk-color-surface-elevated); color: var(--sdk-color-text-secondary); }
-.server-status-0 { background: var(--webserver-color-danger-surface); color: var(--webserver-color-danger-text); }
 .deployment-status-3 { background: var(--webserver-color-danger-surface); color: var(--webserver-color-danger-text); }
 .deployment-status-4, .deployment-status-5, .deployment-status-6 { background: var(--sdk-color-surface-elevated); color: var(--sdk-color-text-secondary); }
 .source-version-status-1 { background: var(--webserver-color-success-surface); color: var(--webserver-color-success-text); }
@@ -2800,8 +2799,85 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   align-self: center;
 }
 
-/* Cluster overview: health cards and severity badges (auto-refreshing
-   monitoring surface for the distributed Web Server cluster). */
+/* Cluster overview: the fleet's health summary and its recent-events ledger
+   (auto-refreshing monitoring surface for the distributed Web Server cluster).
+
+   The page owns a frame class instead of reusing the registry page's
+   `.data-surface`, for the reason the data-statistics pages document: that class
+   is the framework table's frame — a two-row grid whose first row is the
+   scrolling table and whose second is the pager. This page has four flow
+   children (header, cards, ledger heading, ledger), so the grid handed the
+   header the entire leftover height and dropped the cards to the bottom of the
+   panel with the ledger below them. Same panel look, flow layout.
+
+   The header classes are the page's own too. `resource-toolbar` / `toolbar-meta`
+   have no rule anywhere in this app, so the header rendered as unstyled stacked
+   children — a bare browser `h2` over a bare span.
+
+   The scroll container has to be this element: `main.workspace` is
+   `overflow: hidden` and gives every child `height: 100%`, so a page that only
+   grows is clipped with nothing to scroll. That is also what makes the ledger's
+   `stickyHeader` stick: it sticks to this frame, the nearest scrollport. */
+.cluster-overview-surface {
+  margin-top: 12px;
+  padding: 16px 18px 20px;
+  border: 1px solid var(--sdk-color-border-default);
+  border-radius: 6px;
+  background: var(--sdk-color-surface-panel);
+  box-shadow: var(--sdk-shadow-sm);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.cluster-overview-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--sdk-color-border-subtle);
+}
+.cluster-overview-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--sdk-color-text-primary);
+}
+.cluster-overview-meta {
+  font-size: 12px;
+  color: var(--sdk-color-text-muted);
+  text-align: right;
+}
+/* Loading and load failure: the page has no header data to render yet, so the
+   state is the whole body rather than a banner above one. */
+.cluster-overview-state {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0 20px;
+  padding: 18px 20px;
+  border: 1px solid var(--sdk-color-border-default);
+  border-radius: 7px;
+  background: var(--sdk-color-surface-panel-muted);
+}
+.cluster-overview-state strong {
+  color: var(--sdk-color-text-primary);
+}
+.cluster-overview-state p {
+  max-width: 760px;
+  margin: 0;
+  line-height: 1.6;
+  color: var(--sdk-color-text-secondary);
+}
+.cluster-overview-events {
+  margin: 0 0 4px;
+}
+.cluster-overview-events > h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--sdk-color-text-secondary);
+}
 .cluster-overview-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));

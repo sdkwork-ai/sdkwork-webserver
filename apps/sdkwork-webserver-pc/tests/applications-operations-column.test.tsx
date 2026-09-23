@@ -2,7 +2,7 @@
 
 import { createTokenManager } from "@sdkwork/sdk-common";
 import { DeployAppsManagementSurface } from "@sdkwork/webserver-pc-console-delivery";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -24,6 +24,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
  * `AppStatus.ARCHIVED` — so the ledger exposes it as a real, confirming command.
  * `pause` / `activate` likewise exist as their own operations, and the ledger shows
  * whichever direction is legal for the row's current status.
+ *
+ * The same "declared upstream, rendered here" hazard applies to the ownership
+ * columns. `deploy_app.owner_type` is what tells a platform-operated app apart
+ * from a tenant's shared app and from one person's own, and the ledger is
+ * tenant-wide — so if the branch loses those two columns, every row looks alike
+ * again while this repo still builds and still renders a valid-looking table.
+ * The fixture therefore carries the contract's required ownership fields and the
+ * assertions below cover both a shared level and a personal one.
  */
 const APP_ROW = {
   id: "app-1",
@@ -31,6 +39,11 @@ const APP_ROW = {
   slug: "store-front",
   appKind: "SPA_WEB",
   appStatus: "DRAFT",
+  // Required by the `AppResponse` contract. The fixture has to carry them or it
+  // is not a shape the server can actually produce (`sdkwork-contract-fixture-shape-audit`).
+  ownerType: "TENANT",
+  tenantId: "tenant-1",
+  nginxConfigOverridden: false,
   platformTargetCount: 1,
   latestReleaseTag: null,
   updatedAt: "2026-09-23T04:00:00Z",
@@ -80,6 +93,14 @@ async function rowActionNames(): Promise<(string | null)[]> {
   return within(row as HTMLElement).getAllByRole("button").map((button) => button.getAttribute("aria-label"));
 }
 
+/** The `scope` query value of every list request, in call order (`null` = absent). */
+function requestedScopes(fetchMock: ReturnType<typeof vi.fn>): (string | null)[] {
+  return fetchMock.mock.calls
+    .map(([input]) => String(input))
+    .filter((url) => url.includes("/apps"))
+    .map((url) => new URL(url, "http://console.test").searchParams.get("scope"));
+}
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -96,6 +117,8 @@ describe("applications ledger operations column", () => {
       "Slug",
       "Kind",
       "Status",
+      "Ownership",
+      "Owner",
       "Domain",
       "Platform targets",
       "Version",
@@ -177,5 +200,59 @@ describe("applications ledger operations column", () => {
     stubAppsList({ ...APP_ROW, appStatus: "PAUSED" });
     renderAppsSurface();
     expect(await rowActionNames()).toEqual([...BASE_ACTIONS, "Enable Store Front", "Archive Store Front"]);
+  });
+});
+
+describe("applications ledger ownership columns", () => {
+  /**
+   * The whole point of the two columns is that the three levels stop looking
+   * identical, so the test has to cover at least one shared level *and* the
+   * personal one — a single row would pass even if the owner column printed the
+   * level name twice.
+   */
+  it("names the level and the owner subject for a shared level and for a person", async () => {
+    // Platform-wide: the owner *is* the level, so no single subject exists and the
+    // owner column says so instead of repeating the level badge.
+    stubAppsList({ ...APP_ROW, ownerType: "PLATFORM" });
+    renderAppsSurface();
+    const platformRow = (await screen.findByText("Store Front")).closest("tr") as HTMLElement;
+    expect(within(platformRow).getByText("Platform app")).toBeTruthy();
+    expect(within(platformRow).getByText("Whole platform")).toBeTruthy();
+
+    cleanup();
+
+    // Personal: the owner column carries the user id the server resolved.
+    stubAppsList({ ...APP_ROW, ownerType: "USER", ownerUserId: "user-42", ownerId: "user-42" });
+    renderAppsSurface();
+    const personalRow = (await screen.findByText("Store Front")).closest("tr") as HTMLElement;
+    expect(within(personalRow).getByText("Personal app")).toBeTruthy();
+    expect(within(personalRow).getByText("user-42")).toBeTruthy();
+  });
+
+  /**
+   * The facet must reach the *server*: the ledger is windowed (`page_size=50`), so
+   * filtering in the browser would only ever filter the page that happens to be
+   * loaded. Asserting on the request also pins the default — an unfiltered first
+   * load, which is what makes the server's ownership gate the only thing deciding
+   * what is reachable.
+   */
+  it("asks the server for the chosen ownership level", async () => {
+    const fetchMock = stubAppsList();
+    renderAppsSurface();
+    await screen.findByText("Store Front");
+
+    expect(requestedScopes(fetchMock)[0], "the first load is unfiltered").toBeNull();
+
+    const select = screen.getByRole("combobox", { name: "Ownership" }) as HTMLSelectElement;
+    const urlsAfterMount = fetchMock.mock.calls.map(([input]) => String(input));
+    fireEvent.change(select, { target: { value: "PLATFORM" } });
+    console.log("DIAG afterMount=", JSON.stringify(urlsAfterMount),
+      "value=", JSON.stringify(select.value),
+      "valueNow=", JSON.stringify((screen.getByRole("combobox", { name: "Ownership" }) as HTMLSelectElement).value),
+      "urlsNow=", JSON.stringify(fetchMock.mock.calls.map(([input]) => String(input))));
+
+    await waitFor(() => {
+      expect(requestedScopes(fetchMock)).toContain("PLATFORM");
+    });
   });
 });

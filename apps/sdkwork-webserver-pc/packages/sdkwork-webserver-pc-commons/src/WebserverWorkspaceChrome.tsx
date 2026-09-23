@@ -6,7 +6,6 @@ import {
   ChartLine,
   CloudCog,
   Cpu,
-  FolderOpen,
   Globe2,
   HardDrive,
   House,
@@ -19,7 +18,6 @@ import {
   Rocket,
   ScrollText,
   Server,
-  ServerCog,
   Settings2,
   ShieldCheck,
   Sparkles,
@@ -219,12 +217,6 @@ function ResourceIcon({ resource }: { resource: WebserverResourceKey }): ReactNo
       return <Sparkles {...iconProps} />;
     case "mcp":
       return <Plug {...iconProps} />;
-    case "nginx":
-      return <ServerCog {...iconProps} />;
-    case "servers":
-      return <Server {...iconProps} />;
-    case "servers-explorer":
-      return <FolderOpen {...iconProps} />;
     case "audit":
       return <ScrollText {...iconProps} />;
     case "diagnostics":

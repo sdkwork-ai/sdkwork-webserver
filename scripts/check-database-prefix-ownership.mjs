@@ -2,11 +2,19 @@
 /**
  * 跨仓数据库前缀归属门禁（DATABASE_SPEC §7）。
  *
- * 检查四类缺陷：
+ * 检查六类缺陷：
  *   F1 UNREGISTERED_PREFIX —— 某仓声明了工作区模块注册表里没有的前缀
  *   F2 PREFIX_COLLISION    —— 同一前缀被 ≥2 个仓声明（命名空间撞车）
  *   F3 OWNER_MISMATCH      —— 某仓声明的前缀在注册表里归属另一个仓
  *   F4 TABLE_COLLISION     —— 同一张表被 ≥2 个仓的 table-registry 声明
+ *   F5 REGISTRY_STALE      —— 注册表登记的前缀没有任何仓声明（"权威"与事实脱节）
+ *   F6 DUPLICATE_MODULE_ID —— 两个仓声明同一个 moduleId（同模块两套实现，
+ *                             基线锚表会互相焊死对方的 baseline 闸门）
+ *
+ * ⚠️ F4/F6 是同一故障机制的**前置信号**：当仓 A 建了仓 B 的 `baselineAnchorTable` 同名表，
+ *    B 下一次启动会静默跳过整份 baseline 并写下假 `bootstrapped`，直到 migrate 期才以
+ *    `relation ... does not exist` 炸出 50301。见
+ *    `sdkwork-specs/docs/engineering/reviews/REVIEW-20260923-database-prefix-ownership-gap-register.md`。
  *
  * 用法：
  *   node scripts/check-database-prefix-ownership.mjs [--workspace D:/sdkwork-space] [--json]
@@ -67,11 +75,24 @@ function main() {
   const claims = new Map(); // prefix -> [{repo, owner, domain}]
   const tableClaims = new Map(); // table -> [repo]
   const repoPrefixes = new Map(); // repo -> [prefix]
+  const moduleIdClaims = new Map(); // moduleId -> [repo]
 
   for (const repo of listRepos(args.workspace)) {
     const repoName = path.basename(repo);
     const prefixPath = path.join(repo, 'database/contract/prefix-registry.json');
     const tablePath = path.join(repo, 'database/contract/table-registry.json');
+    const manifestPath = path.join(repo, 'database/database.manifest.json');
+    if (existsSync(manifestPath)) {
+      try {
+        const moduleId = readJson(manifestPath).moduleId;
+        if (typeof moduleId === 'string' && moduleId.length > 0) {
+          if (!moduleIdClaims.has(moduleId)) moduleIdClaims.set(moduleId, []);
+          moduleIdClaims.get(moduleId).push(repoName);
+        }
+      } catch {
+        // 坏 manifest 由各仓自己的 db:validate 报，这里只做归属比对。
+      }
+    }
     const prefixes = existsSync(prefixPath) ? (readJson(prefixPath).prefixes ?? []) : [];
     if (prefixes.length > 0) {
       repoPrefixes.set(repoName, prefixes.map((p) => p.prefix));
@@ -137,10 +158,37 @@ function main() {
     }
   }
 
+  for (const entry of registryEntries) {
+    if (!entry?.tablePrefix) continue;
+    if (claims.has(entry.tablePrefix)) continue;
+    findings.push({
+      code: 'F5_REGISTRY_STALE_ENTRY',
+      prefix: entry.tablePrefix,
+      detail: `registered to ${entry.repo} (moduleId=${entry.moduleId}) but no repository declares it; confirm the module's real prefix family before trusting this entry`,
+      repos: [entry.repo],
+    });
+  }
+
+  for (const [moduleId, repos] of moduleIdClaims) {
+    const unique = [...new Set(repos)];
+    if (unique.length > 1) {
+      findings.push({
+        code: 'F6_DUPLICATE_MODULE_ID',
+        moduleId,
+        detail: `declared by ${unique.length} repos: ${unique.join(', ')} — one baseline anchor per moduleId, so the second repository's baseline is silently skipped`,
+        repos: unique,
+      });
+    }
+  }
+
+  const counts = {};
+  for (const f of findings) counts[f.code] = (counts[f.code] ?? 0) + 1;
+
   const summary = {
     workspace: args.workspace,
     registeredPrefixes: registeredPrefix.size,
     reposWithPrefixRegistry: repoPrefixes.size,
+    counts,
     findings,
   };
 
@@ -151,7 +199,8 @@ function main() {
     console.log(`registered prefixes  : ${registeredPrefix.size}`);
     console.log(`repos declaring prefix: ${repoPrefixes.size}`);
     console.log(`findings             : ${findings.length}`);
-    for (const f of findings) console.log(`  [${f.code}] ${f.prefix ?? f.table} — ${f.detail}`);
+    for (const [code, n] of Object.entries(counts).sort()) console.log(`  ${code.padEnd(24)} ${n}`);
+    for (const f of findings) console.log(`  [${f.code}] ${f.prefix ?? f.table ?? f.moduleId} — ${f.detail}`);
   }
   process.exit(findings.length === 0 ? 0 : 1);
 }

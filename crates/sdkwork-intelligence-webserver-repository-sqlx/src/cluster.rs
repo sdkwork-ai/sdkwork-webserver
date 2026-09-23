@@ -98,6 +98,11 @@ pub(crate) struct ExpiredClusterHostRow {
 /// columns are cast to TEXT because the mappers decode strings (RFC 3339
 /// instants, JSON objects) — a bare `SELECT *` would return native JSONB and
 /// fail the decode.
+///
+/// Every projection consumed by a keyset-paginated query MUST also carry the
+/// table's internal `id`: `finalize_*_page` reads it back to mint the next
+/// cursor. Dropping it only fails once a page actually has more rows than the
+/// requested size, so a thin fixture hides the defect.
 const HOST_PROJECTION: &str = "h.uuid, ch.uuid AS cluster_uuid, h.name, h.hostname,
         h.machine_code, h.os_name, h.os_version, h.kernel_version, h.arch,
         h.cpu_model, h.cpu_cores, h.memory_total_mb, h.remote_ip,
@@ -134,7 +139,8 @@ const EVENT_PROJECTION: &str = "e.uuid, c.uuid AS cluster_uuid, h.uuid AS host_u
         i.uuid AS instance_uuid, e.event_type, e.severity, e.message,
         CAST(e.detail AS TEXT) AS detail,
         CAST(e.occurred_at AS TEXT) AS occurred_at,
-        CAST(e.created_at AS TEXT) AS created_at";
+        CAST(e.created_at AS TEXT) AS created_at,
+        e.id";
 
 /// Maximum members one broadcast enqueue may address (PAGINATION_SPEC §2.5
 /// bounded batch discipline).

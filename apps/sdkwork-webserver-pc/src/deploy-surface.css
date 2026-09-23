@@ -39,23 +39,51 @@
    column that deserves the slack is the name, so an even split reads as a table with
    its contents shaken loose rather than as a ledger.
 
-   The fix dimensions the six narrow columns and leaves the name column to absorb
+   The fix dimensions the narrow columns and leaves the name column to absorb
    whatever is left, which is the shape the data actually has. Widths are set as
    `width` on `th` only: with `table-layout:auto` the browser treats them as minimum
    hints and still grows a column whose value needs more room, so a long slug ellipsises
    via the shared `max-width:360px` instead of forcing the table to overflow.
+
+   The page also declares these same widths as `column.width`, which the DataTable
+   renders as an inline `width` on `th` and therefore wins over this block — so in
+   practice these rules only carry the case where a column stops declaring one.
+   They are kept in step with the page's `width` props (name / slug / kind / status /
+   ownership level / owner / domain / platform targets / version / updated) rather
+   than left at the older seven-column numbers, which no longer lined up with the
+   markup. This block has no counterpart in the upstream stylesheet, which is where
+   the mirroring normally runs the other way; it is host-side because the ledger is
+   only ever rendered at this column count here.
 
    Scoped to `.publishing-apps-page` because `.deploy-surface` is shared with the
    Domains and Certificates surfaces, whose tables (`min-width:980px` / `1200px`) have
    a different column story and must not inherit these tracks. The class is the page
    section's own, so no markup change was needed. Dropped together with the skeleton
    above by 256a65f6; restored with it. */
-.deploy-surface .publishing-apps-page th:nth-child(2){width:180px}
-.deploy-surface .publishing-apps-page th:nth-child(3){width:110px}
-.deploy-surface .publishing-apps-page th:nth-child(4){width:130px}
-.deploy-surface .publishing-apps-page th:nth-child(5){width:110px}
+.deploy-surface .publishing-apps-page th:nth-child(2){width:160px}
+.deploy-surface .publishing-apps-page th:nth-child(3){width:140px}
+.deploy-surface .publishing-apps-page th:nth-child(4){width:110px}
+.deploy-surface .publishing-apps-page th:nth-child(5){width:120px}
 .deploy-surface .publishing-apps-page th:nth-child(6){width:150px}
-.deploy-surface .publishing-apps-page th:nth-child(7){width:200px}
+.deploy-surface .publishing-apps-page th:nth-child(7){width:260px}
+.deploy-surface .publishing-apps-page th:nth-child(8){width:130px}
+.deploy-surface .publishing-apps-page th:nth-child(9){width:140px}
+.deploy-surface .publishing-apps-page th:nth-child(10){width:180px}
+/* Ownership badge and facet selector, mirrored from the upstream `styles.css`.
+   The applications ledger reports `deploy_app.owner_type` in its own column, so
+   the same `scope-badge` vocabulary the root-domain ledger uses is carried here
+   — a bridged page must not render its badge in one console and not the other. */
+.deploy-surface .scope-badge{display:inline-flex;align-items:center;min-height:22px;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:650;white-space:nowrap;background:var(--sdk-color-surface-elevated);color:var(--sdk-color-text-secondary)}
+.deploy-surface .scope-badge-user{background:var(--sdk-color-surface-elevated);color:var(--sdk-color-text-secondary)}
+.deploy-surface .scope-badge-tenant{background:var(--webserver-color-success-surface);color:var(--webserver-color-success-text)}
+.deploy-surface .scope-badge-organization{background:var(--sdk-color-brand-primary-soft);color:var(--sdk-color-brand-primary)}
+.deploy-surface .scope-badge-platform{background:var(--webserver-color-warning-surface);color:var(--webserver-color-warning-text)}
+.deploy-surface .scope-filter{height:38px;display:flex;align-items:center;gap:8px;background:var(--sdk-color-surface-panel);border:1px solid var(--sdk-color-border-default);padding:0 10px;border-radius:5px}
+.deploy-surface .scope-filter-label{color:var(--sdk-color-text-secondary);font-size:12px;font-weight:650;white-space:nowrap}
+.deploy-surface .scope-filter select{min-width:0;border:0;outline:none;background:transparent;color:var(--sdk-color-text-primary)}
+/* Used by the publishing page's empty domain cell; absent here until now, so it
+   rendered at full contrast in this console only. */
+.deploy-surface .muted{color:var(--sdk-color-text-muted)}
 .deploy-surface .pagination{min-height:50px;display:flex;justify-content:flex-end;align-items:center;gap:8px;color:var(--sdk-color-text-secondary)}
 /* The Domains and Certificates ledgers, and the hostname picker inside them.
    `DeliveryManagement.tsx` renders `table-frame domain-table-frame` /
@@ -103,6 +131,22 @@
 .deploy-surface .form-grid .form-field-wide{grid-column:1/-1}
 .deploy-surface .form-error{display:block;margin:0;font-size:12px;line-height:1.5;color:var(--sdk-color-state-danger);font-weight:500}
 .deploy-surface .form-grid input[aria-invalid="true"], .deploy-surface .form-grid select[aria-invalid="true"], .deploy-surface .form-grid textarea[aria-invalid="true"]{border-color:var(--sdk-color-state-danger);background:color-mix(in srgb, var(--sdk-color-state-danger) 10%, var(--sdk-color-surface-panel))}
+/* A locked value (the root domain of an existing zone) reads as a value, not as a
+   field: a filled surface, a default cursor, and the text at whatever colour this
+   scope gives an input. `disabled` was the mechanism, and this scope's `:disabled`
+   rule two lines above is what it cost: the field took the elevated surface (a
+   lighter block that reads as a control rather than a value), and the browser
+   withdrew focus, selection and copy from the one string that names what is being
+   edited. The invalid state is excluded rather than reordered around: a locked
+   field that also fails validation should still say so. Mirrors the same rule in
+   sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css. */
+.deploy-surface .form-grid input[readonly]:not([aria-invalid="true"]){background:var(--sdk-color-surface-panel-muted);cursor:default}
+/* A validation message can carry a machine identifier longer than the dialog is
+   wide. `anywhere` breaks it inside the box instead of letting it widen the box;
+   `flex-start` so a wrapped message is not vertically centred against an action
+   button, which read as a blob. Mirrors the same rule in
+   sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css. */
+.deploy-surface .error-banner{align-items:flex-start;line-height:1.5;overflow-wrap:anywhere}
 .deploy-surface .row-actions .table-action-text{width:auto;flex:0 0 auto;gap:5px;padding:0 9px;margin-right:0;font-size:12px;font-weight:500;white-space:nowrap;border-color:var(--sdk-color-border-default);background:var(--sdk-color-surface-panel)}
 .deploy-surface .row-actions .table-action-text:hover{border-color:var(--sdk-color-border-strong);background:var(--sdk-color-surface-elevated);color:var(--sdk-color-text-primary)}
 .deploy-surface .delivery-dialog.delivery-dialog-history{width:min(1120px,100%)}
@@ -592,26 +636,41 @@
    of it. */
 @media(max-width:760px){.deploy-surface .delivery-dialog.delivery-drawer{width:100%}}
 
-/* The cloud-account field: a summary line plus its actions, kept as one row so the
-   field reads as a single choice rather than three separate controls.
-   Mirrored late. The scoped copy had never carried this rule set, so in the Web
-   Server console the field fell back to `display:block` and its three buttons
-   stacked under the summary at full width, while the same field rendered as one row
-   in the deployments console — a mirror gap that reads as a form laid out wrong
-   rather than as a missing rule. Colours are the host tokens; the selectors, the
-   `>div:first-child` scoping and the two media queries are the source of truth's.
-   Mirrors the same rule set in
+/* The cloud account: the answer on its own row, the ways to change it on the row
+   below. The answer used to share a line with three buttons and got a quarter of
+   the track (measured 147px of 586px), which made the account's own name the
+   narrowest thing in the block and made "use automatic" look like a peer of
+   "choose" and "register" instead of a revision of the answer.
+   The box is drawn only for the pinned state, so it means "a value is set" rather
+   than decorating a state; the automatic caption is the longer of the two and the
+   one seen most often, so it stays unboxed and reserves the same padding as the
+   boxed form to keep the two aligned.
+   Grid rather than flex because the three tracks are fixed in role — mark, answer,
+   revision — and the answer is the only one that may shrink.
+   Colours are the host tokens; the track list, the two media-query rules and the
+   `data-state` split are the source of truth's. Mirrors the same rule set in
    sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css. */
-.deploy-surface .cloud-account-field{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
-/* Scoped to the summary block, not to "any div": `.cloud-account-field > div`
-   outranks `.cloud-account-actions` on specificity, so the loose form restyles the
-   actions cluster as a one-column grid — both buttons stretched to equal width and
-   stacked, with this grid's gap beating the cluster's. */
-.deploy-surface .cloud-account-field>div:first-child{display:grid;gap:5px;min-width:0}
-.deploy-surface .cloud-account-field>div:first-child strong{font-size:13px}
-.deploy-surface .cloud-account-actions{display:flex;flex-wrap:wrap;gap:7px}
+.deploy-surface .cloud-account-selection{display:grid;grid-template-columns:20px minmax(0,1fr) auto;align-items:center;gap:10px;padding:9px 11px;border:1px solid transparent;border-radius:6px}
+/* A four-line automatic caption beside a 20px mark: centred, the mark floats in
+   the middle of the paragraph. The pinned row is two lines, where centred is right. */
+.deploy-surface .cloud-account-selection[data-state="auto"]{align-items:start}
+.deploy-surface .cloud-account-selection[data-state="pinned"]{border-color:var(--sdk-color-border-default);background:var(--sdk-color-surface-panel-muted)}
+.deploy-surface .cloud-account-mark{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:999px;background:var(--sdk-color-surface-elevated);color:var(--sdk-color-text-secondary)}
+.deploy-surface .cloud-account-selection[data-state="auto"] .cloud-account-mark{margin-top:1px}
+.deploy-surface .cloud-account-selection[data-state="pinned"] .cloud-account-mark{background:var(--webserver-color-success-surface);color:var(--webserver-color-success-text)}
+.deploy-surface .cloud-account-summary{display:grid;gap:3px;min-width:0}
+.deploy-surface .cloud-account-summary strong{font-size:13px;overflow:hidden;text-overflow:ellipsis}
+/* A revision of the answer, not a third way to produce one, so it carries no
+   button chrome until it is reached for. */
+.deploy-surface .cloud-account-clear{min-height:28px;padding:0 9px;border:1px solid transparent;border-radius:5px;background:transparent;color:var(--sdk-color-text-secondary);font-size:12px;flex:0 0 auto}
+.deploy-surface .cloud-account-clear:hover{border-color:var(--sdk-color-border-default);background:var(--sdk-color-surface-panel);color:var(--sdk-color-text-primary)}
+.deploy-surface .cloud-account-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .deploy-surface .cloud-account-actions .secondary-button{min-height:34px}
-@media(max-width:760px){.deploy-surface .cloud-account-field{align-items:stretch}.deploy-surface .cloud-account-actions{width:100%}}
+@media(max-width:760px){
+  .deploy-surface .cloud-account-selection{grid-template-columns:20px minmax(0,1fr)}
+  .deploy-surface .cloud-account-clear{grid-column:2;justify-self:start;margin-top:2px}
+  .deploy-surface .cloud-account-actions{width:100%}
+}
 /* Single-candidate shortcut: it shortens the choice above it, so it sits below the
    row rather than inside the actions cluster (a third equally-weighted button there
    would look like a peer of "choose" and "register"). The amber tint marks it as a

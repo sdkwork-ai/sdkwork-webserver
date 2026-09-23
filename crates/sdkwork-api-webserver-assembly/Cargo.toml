@@ -23,8 +23,14 @@ sdkwork-utils-rust.workspace = true
 sdkwork-intelligence-webserver-repository-sqlx.workspace = true
 sdkwork-intelligence-webserver-service.workspace = true
 sdkwork_intelligence_deploy_repository_sqlx = { workspace = true }
+sdkwork_deploy_contract.workspace = true
 sdkwork-webserver-contract.workspace = true
 sdkwork-webserver-database-host.workspace = true
+# The traffic usage read model is injected from the process-shared pool over the
+# Deploy control plane's repository, so this composition root resolves that pool
+# and resolves the fact table's presence itself.
+sdkwork-database-sqlx.workspace = true
+sqlx.workspace = true
 sdkwork-web-contract.workspace = true
 sdkwork-api-deployments-assembly.workspace = true
 sdkwork-api-skills-assembly.workspace = true

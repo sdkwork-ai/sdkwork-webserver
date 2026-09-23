@@ -46,7 +46,7 @@ export const MENU_SECTIONS: readonly WebserverMenuSectionDefinition[] = [
     labelKey: "menuSection.aiEcosystem",
     // The user-owned AI assets: Skills, MCP servers, plugins, and the platform
     // plugin-category catalog those plugins file under. Grouped at the bottom
-    // of the sidebar, after the delivery and server resources.
+    // of the sidebar, after the delivery group.
     resources: ["plugins", "plugin-categories", "skills", "mcp"],
   },
   {

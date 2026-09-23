@@ -8,6 +8,18 @@ export type WebserverPcSurface = "app-console" | "backend-admin";
  * either by an owning package's surface or by the admin registry. The retired
  * `applications` / `configuration` / `source-versions` / `deployments` /
  * `sites` / `application-*` keys went with the local application lifecycle.
+ *
+ * `nginx` / `servers` / `servers-explorer` / `webserver-config` are **declared
+ * but not mounted**. Their capability packages still ship these module
+ * declarations, so the keys have to stay resolvable for those packages to
+ * type-check; what went away is every consumer of them in this host. The edge is
+ * operated as a cluster, so one machine's nginx runtime, a hand-kept inventory of
+ * machines, and node-scoped browsing or online editing over a deployment tree are
+ * the cluster plane's business now (`cluster-hosts` / `cluster-instances` and
+ * their liveness) rather than a menu of their own. No menu entry, no
+ * `resourceRenderers` entry, no admin-registry source, no column plan or
+ * preferred field order, no icon branch, and no i18n label remains for them — a
+ * re-added entry with no page behind it is the failure this shape prevents.
  */
 export type WebserverResourceKey =
   | "apps"

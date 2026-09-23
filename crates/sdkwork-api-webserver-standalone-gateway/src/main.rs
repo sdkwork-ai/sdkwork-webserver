@@ -388,6 +388,42 @@ async fn run_management_plane() -> MainResult<()> {
         )
         .into());
     }
+    // Serve-time database lifecycle for every same-origin dependency this edge
+    // composes (DATABASE_FRAMEWORK_SPEC §4.4, API_ASSEMBLY_SPEC §4.1).
+    //
+    // Composing a dependency's routes without initializing its schema leaves a
+    // live route surface over tables that may not exist, and the failure only
+    // surfaces as a raw SQL error on the first authenticated request: on
+    // 2026-09-23 the shared dev database had been rebuilt at 20:41 and
+    // `sdkwork-deployments` was never re-migrated, so `deploy_*` (58 tables) was
+    // absent while `/app/v3/api/apps` stayed mounted and answered
+    // `relation "deploy_app" does not exist`. Startup never noticed, because the
+    // only entry that migrated a dependency was the separate `db-migrate`
+    // subcommand — `serve` never ran it.
+    //
+    // The owner assembly owns the module catalog and ordering; the gateway only
+    // selects it and provides the process-shared pool. It runs init + drift per
+    // module and aborts startup on drift, so a missing or behind dependency
+    // schema is a boot failure (fail closed) instead of a runtime 500.
+    //
+    // Whether forward migrations run here is **not** this binary's decision: it
+    // is governed by `SDKWORK_DATABASE_AUTO_MIGRATE`, falling back to each
+    // module manifest's `lifecycle.autoMigrate` (DATABASE_FRAMEWORK_SPEC §4.4).
+    // Every shipped standalone profile declares it on — the runtime config's
+    // `[database] auto_migrate` (applied to env by `runtime_config.rs`), the dev
+    // launcher, and the container entrypoint — so startup converges the schema
+    // as the operator asked. What changed on 2026-09-23 is that the declaration
+    // is now the *only* authority: this call used to force the flag on, which
+    // made `auto_migrate = false` undecidable for every module. Repairing a
+    // drifted schema is the job of the explicit `db-migrate` subcommand, the
+    // only path that forces migrations on (DATABASE_FRAMEWORK_SPEC §4.4.1).
+    sdkwork_api_webserver_assembly::ensure_database_lifecycle_from_env()
+        .await
+        .map_err(|error| {
+            io::Error::other(format!(
+                "serve-time database lifecycle bootstrap failed: {error}"
+            ))
+        })?;
     let app = build_router()
         .await
         .map_err(|error| io::Error::other(format!("management bootstrap failed: {error}")))?;

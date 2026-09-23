@@ -61,4 +61,42 @@ describe("workspace delivery surfaces", () => {
     expect(renderers).toMatch(/domains:\s*<ServedDomainAdminSurface\b/);
     expect(renderers).toMatch(/certificates:\s*<ServedCertificateAdminSurface\b/);
   });
+
+  it("keeps the single-node menus and their pages off the operations surface", () => {
+    const admin = moduleList("adminModules");
+
+    // The edge is operated as a cluster: one machine's nginx runtime, a hand-kept
+    // inventory of machines, SSH-scoped server files, and the node's own config
+    // plane are the cluster plane's ground (`cluster-hosts` / `cluster-instances`
+    // and their liveness). Re-mounting any of the four would put a single-node
+    // control surface back beside `clusterModule`.
+    for (const moduleName of [
+      "nginxModule",
+      "serversModule",
+      "serversExplorerModule",
+      "webserverConfigModule",
+    ]) {
+      expect(admin).not.toContain(moduleName);
+    }
+    // The control that keeps the four `not.toContain` assertions above honest:
+    // `moduleList` extracts the array with a regex, and a regex that stopped
+    // matching would leave it comparing against an empty string, where every
+    // `not.toContain` passes vacuously.
+    expect(admin).toContain("clusterModule");
+
+    // The pages went with the menu entries. A renderer left behind is reachable
+    // by deep link even though the sidebar no longer lists it — the half-wired
+    // state this removal was meant to end — so the wiring is asserted too.
+    const renderers = rendererBlock("adminResourceRenderers");
+    expect(renderers).not.toContain("ServerFilesExplorerSurface");
+    expect(renderers).not.toContain("WebserverConfigSurface");
+    for (const pkg of [
+      "@sdkwork/webserver-pc-admin-nginx",
+      "@sdkwork/webserver-pc-admin-servers",
+      "@sdkwork/webserver-pc-admin-servers-explorer",
+      "@sdkwork/webserver-pc-admin-webserver-config",
+    ]) {
+      expect(workspace).not.toContain(pkg);
+    }
+  });
 });

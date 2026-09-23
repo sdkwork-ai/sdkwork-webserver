@@ -98,7 +98,8 @@ impl WebRepository {
             .ok_or_else(|| WebServiceError::validation("cursor is invalid"))?;
         let sql = "SELECT uuid, version_tag, source_type, source_ref, commit_hash, artifact_path,
                     artifact_size, artifact_hash, CAST(config_snapshot AS TEXT) AS config_snapshot,
-                    status, CAST(created_at AS TEXT) AS created_at
+                    status, CAST(created_at AS TEXT) AS created_at,
+                    id
              FROM webserver_source_version
              WHERE tenant_id = $1 AND site_id = $2
                AND (created_at, id) < (CAST($3 AS TIMESTAMPTZ), $4)

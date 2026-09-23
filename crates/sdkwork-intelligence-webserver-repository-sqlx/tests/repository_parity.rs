@@ -2110,6 +2110,11 @@ async fn verify_public_repository_surface(
         .items
         .iter()
         .any(|item| item.id == server.server.id && item.last_heartbeat_at.is_some()));
+    // NOTE: `servers.list` declares cursor mode, but the page-one (offset)
+    // branch returns `has_more: None` / `next_cursor: None`, so this endpoint
+    // never issues a cursor and its keyset continuation branch cannot be
+    // reached from a normal first page. The SELECT there still has to carry
+    // the internal `id` for the cursors other collections mint.
     let sync = repository
         .build_agent_sync_manifest(&server.server.id, TENANT_A, None)
         .await

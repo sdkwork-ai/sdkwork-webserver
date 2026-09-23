@@ -286,6 +286,12 @@ username = "${DB_USER}"
 password_file = "${DB_SECRET_FILE}"
 ssl_mode = "disable"
 max_connections = 10
+# Standalone installer: every module this edge composes (Web, IAM, Drive,
+# Skills, MCP, Deployments) converges on service start, and `db-migrate`
+# covers that same full set, so either path repairs a drifted schema.
+# Operators preferring strict manual migrations may set this to false after
+# the first start; startup then verifies and fails closed instead of applying
+# DDL, and `db-migrate` remains the only repair path.
 auto_migrate = true
 
 [secrets]

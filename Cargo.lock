@@ -4021,6 +4021,8 @@ dependencies = [
  "sdkwork-api-deployments-assembly",
  "sdkwork-api-mcp-assembly",
  "sdkwork-api-skills-assembly",
+ "sdkwork-database-sqlx",
+ "sdkwork-deploy-contract",
  "sdkwork-intelligence-deploy-repository-sqlx",
  "sdkwork-intelligence-webserver-repository-sqlx",
  "sdkwork-intelligence-webserver-service",
@@ -4033,6 +4035,7 @@ dependencies = [
  "sdkwork-webserver-contract",
  "sdkwork-webserver-database-host",
  "serde_json",
+ "sqlx",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -4430,6 +4433,7 @@ version = "0.1.0"
 dependencies = [
  "dotenvy",
  "sdkwork-database-config",
+ "sdkwork-database-drift",
  "sdkwork-database-lifecycle",
  "sdkwork-database-spi",
  "sdkwork-database-sqlx",
@@ -4891,6 +4895,7 @@ version = "0.1.0"
 dependencies = [
  "dotenvy",
  "sdkwork-database-config",
+ "sdkwork-database-drift",
  "sdkwork-database-lifecycle",
  "sdkwork-database-spi",
  "sdkwork-database-sqlx",
@@ -5325,6 +5330,7 @@ version = "0.1.0"
 dependencies = [
  "dotenvy",
  "sdkwork-database-config",
+ "sdkwork-database-drift",
  "sdkwork-database-id",
  "sdkwork-database-lifecycle",
  "sdkwork-database-spi",

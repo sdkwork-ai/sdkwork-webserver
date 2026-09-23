@@ -111,3 +111,81 @@ test('Web Server runtime configuration does not retain cross-application IM owne
     .map(relative);
   assert.deepEqual(stale, [], `stale sdkwork-im development ownership remains: ${stale.join(', ')}`);
 });
+
+// Comments are stripped before any source scan below: a quoted signature inside
+// a doc comment is not an implementation, and a commented-out wiring line is not
+// an injection. Both were live false negatives before this gate existed.
+function withoutRustComments(source) {
+  return source.replaceAll(/\/\*[\s\S]*?\*\//gu, '').replaceAll(/\/\/[^\n]*/gu, '');
+}
+
+// `crates/<crate>/src/…` -> `crates/<crate>`. Crate identity is compared by this
+// directory, never by a substring of the file path: `sdkwork-webserver-service/`
+// is *not* part of `crates/sdkwork-intelligence-webserver-service/src/lib.rs`, so
+// a substring test silently fails to exclude the declaring crate and the gate
+// passes on the definition it was supposed to police.
+function crateOf(relativePath) {
+  return relativePath.split('/').slice(0, 2).join('/');
+}
+
+test('every capability the service consumes optionally is implemented and injected', () => {
+  // The service consumes cross-module capabilities as optional ports. An
+  // optional port is only honest when a composition root fills it: a declared
+  // port with no implementation reaches the operator as a permanent 503 on a
+  // surface the application advertises, and no shared validator catches it —
+  // `component.spec.json` port lists are checked for shape, never for `impl`.
+  const servicePath = 'crates/sdkwork-intelligence-webserver-service/src/lib.rs';
+  const serviceLib = withoutRustComments(readFileSync(path.join(ROOT, servicePath), 'utf8'));
+  const optionalPorts = [...serviceLib.matchAll(/pub\(crate\)\s+(\w+)\s*:\s*Option<Arc<dyn\s+(\w+)>>/gu)]
+    .map((match) => ({ field: match[1], port: match[2] }));
+
+  // Positive control: this scan is the whole gate, so a rename or a formatting
+  // change here must fail loudly instead of leaving the assertions below with
+  // nothing to check.
+  assert.deepEqual(
+    optionalPorts.map((entry) => entry.port),
+    ['TrafficUsageReadPort'],
+    'the set of optionally-consumed capability ports changed; re-point this gate at the new set',
+  );
+
+  const rustSources = filesBelow(
+    'crates',
+    (file) => file.endsWith('.rs') && !relative(file).includes('/tests/'),
+  );
+  const sources = rustSources.map((file) => ({
+    path: relative(file),
+    text: withoutRustComments(readFileSync(file, 'utf8')),
+  }));
+  const serviceCrate = crateOf(servicePath);
+
+  for (const { field, port } of optionalPorts) {
+    // The trait's own declaration is not an implementation, and neither crate
+    // that declares the contract can satisfy the two rules below.
+    const traitCrate = sources
+      .filter((source) => new RegExp(`pub\\s+trait\\s+${port}\\b`, 'u').test(source.text))
+      .map((source) => crateOf(source.path));
+    assert.ok(traitCrate.length > 0, `${port} is consumed but no crate declares the trait`);
+
+    const implementedIn = sources
+      .filter((source) => !traitCrate.includes(crateOf(source.path)))
+      .filter((source) => new RegExp(`impl\\s+${port}\\s+for\\s`, 'u').test(source.text))
+      .map((source) => source.path);
+    assert.ok(
+      implementedIn.length > 0,
+      `${port} is consumed optionally but no crate implements it; the endpoint can only answer 503`,
+    );
+
+    // Injection is checked outside the service crate on purpose: the service
+    // owns the builder, and the bug this gate locks is a builder nobody calls.
+    // The consuming-builder ordering (attach before sharing the service behind
+    // an `Arc`) needs no static check — it is a compile error, not a convention.
+    const injectedIn = sources
+      .filter((source) => crateOf(source.path) !== serviceCrate)
+      .filter((source) => source.text.includes(`with_${field}`))
+      .map((source) => source.path);
+    assert.ok(
+      injectedIn.length > 0,
+      `no host injects ${port}; the service was built with the capability left out (${field}: None)`,
+    );
+  }
+});

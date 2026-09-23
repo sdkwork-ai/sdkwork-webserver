@@ -111,18 +111,35 @@ pub async fn build_router() -> Result<Router, String> {
 }
 
 pub async fn run_database_migrate_only() -> Result<(), String> {
+    // The owner assembly converges its own module and the same-origin
+    // dependencies whose lifecycle it owns, forcing forward migrations on for
+    // this process: running this command **is** the operator's authorization to
+    // apply DDL (DATABASE_FRAMEWORK_SPEC §4.4.1).
     sdkwork_api_webserver_assembly::migrate_database_from_env()
         .await
         .map_err(|error| error.to_string())?;
     info!("Web database migration completed");
-    // The IAM module is owned by the standalone gateway; its lifecycle
-    // (init + auto-migrate + drift) runs through the same process-shared pool.
-    let iam_pool = process_shared_database_pool().ok_or_else(|| {
+    // IAM and Drive are owned by the standalone gateway rather than by the web
+    // assembly, so they converge here on the same process-shared pool. This
+    // keeps exactly one pool per process, in this exit-on-completion command as
+    // well as in `serve`.
+    //
+    // They must be listed here even though `serve` already converges them
+    // through the dependency composition, because this is the **only** path that
+    // repairs a drifted schema. A module missing from this list turns its own
+    // fail-closed drift gate into a permanent outage: boot aborts and names
+    // `db-migrate`, which would not fix it. Drive was missing exactly that way
+    // until 2026-09-23 (DATABASE_FRAMEWORK_SPEC §4.4.1).
+    let shared_pool = process_shared_database_pool().ok_or_else(|| {
         "standalone gateway requires the process-shared database pool; bootstrap the database lifecycle first".to_string()
     })?;
-    sdkwork_api_iam_assembly::bootstrap_database_with_pool(iam_pool)
+    sdkwork_api_iam_assembly::bootstrap_database_with_pool(shared_pool.clone())
         .await
         .map_err(|error| format!("IAM database bootstrap failed: {error}"))?;
     info!("IAM database migration completed");
+    sdkwork_api_drive_assembly::ensure_database_lifecycle_with_pool(shared_pool)
+        .await
+        .map_err(|error| format!("Drive database bootstrap failed: {error}"))?;
+    info!("Drive database migration completed");
     Ok(())
 }

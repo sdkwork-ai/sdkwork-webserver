@@ -18,10 +18,15 @@ mod cluster_self_report;
 mod framework_observability;
 mod generated;
 mod runtime_shutdown;
+// The traffic usage read model is built here because the facts belong to a
+// sibling module: the assembly is the crate allowed to construct a repository,
+// and the service port it satisfies is injected by `bootstrap.rs`.
+mod traffic_usage;
 
 pub use bootstrap::{
-    assemble_api_router, assemble_business_routes, migrate_database_from_env,
-    seed_space_repository, web_module, web_module_with_context, ApiAssembly, ApiAssemblyContext,
+    assemble_api_router, assemble_business_routes, ensure_database_lifecycle_from_env,
+    migrate_database_from_env, seed_space_repository, web_module, web_module_with_context, ApiAssembly,
+    ApiAssemblyContext,
 };
 
 // SDKWORK-ASSEMBLY-LIB-CUSTOM: the process-wide graceful-shutdown trigger. The

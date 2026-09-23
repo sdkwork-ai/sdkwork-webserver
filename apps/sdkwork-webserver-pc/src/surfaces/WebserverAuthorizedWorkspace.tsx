@@ -8,11 +8,7 @@ import { ClusterOverviewSurface, webserverModule as clusterModule } from "@sdkwo
 import { ServedCertificateAdminSurface, ServedDomainAdminSurface, webserverModule as deliveryAdminModule } from "@sdkwork/webserver-pc-admin-delivery";
 import { webserverModule as diagnosticsModule } from "@sdkwork/webserver-pc-admin-diagnostics";
 import { webserverModule as mcpAdminModule, McpAdminSurface, type McpAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-mcp";
-import { webserverModule as nginxModule } from "@sdkwork/webserver-pc-admin-nginx";
 import { webserverModule as pluginsAdminModule, PluginsAdminSurface, type PluginsAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-plugins";
-import { webserverModule as serversModule } from "@sdkwork/webserver-pc-admin-servers";
-import { webserverModule as serversExplorerModule, ServerFilesExplorerSurface } from "@sdkwork/webserver-pc-admin-servers-explorer";
-import { webserverModule as webserverConfigModule, WebserverConfigSurface } from "@sdkwork/webserver-pc-admin-webserver-config";
 import { webserverModule as skillsAdminModule, SkillsAdminSurface, type SkillsAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-skills";
 import { StorageCenterSurface, webserverModule as storageModule, type StorageCenterResource } from "@sdkwork/webserver-pc-admin-storage";
 import { hasWebserverAdminAccess, type WebserverPcModuleDefinition, type WebserverPcSurface } from "@sdkwork/webserver-pc-commons";
@@ -51,7 +47,17 @@ export const consoleModules = [deliveryModule, pluginsModule, skillsModule, mcpM
 // reconciled subdomains carry `user_id IS NULL` — so it is its own module on the
 // operations surface rather than folded into `appsAdminModule`, and only this
 // surface offers the whole-tenant edge inventory.
-export const adminModules = [appsAdminModule, deliveryAdminModule, cloudAccountAdminModule, nginxModule, serversModule, serversExplorerModule, webserverConfigModule, clusterModule, diagnosticsModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule, storageModule, dataStatisticsAdminModule] satisfies readonly WebserverPcModuleDefinition[];
+// Nginx, Servers, Server Files, and Server Config are deliberately absent. The
+// edge is deployed as a cluster, so the per-node shapes those four menus
+// described are no longer the operational model: a single nginx runtime's
+// config/validate/reload cycle, a hand-maintained inventory of machines, and
+// SSH-scoped browsing or online editing over one node's deployment tree. The
+// cluster plane owns that ground now — hosts, instances, and their liveness are
+// read off `clusterModule` (its own `clusterCenter` tab), which is what an
+// operator actually remediates. Re-adding any of the four here would reintroduce
+// a single-node control surface next to the cluster one, which is the duplicate
+// the removal is meant to end.
+export const adminModules = [appsAdminModule, deliveryAdminModule, cloudAccountAdminModule, clusterModule, diagnosticsModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule, storageModule, dataStatisticsAdminModule] satisfies readonly WebserverPcModuleDefinition[];
 const LazyAdminSurface = lazy(() => import("./WebserverAdminSurface.tsx").then((module) => ({ default: module.WebserverAdminSurface })));
 
 export interface TrafficPageRendererInput {
@@ -166,8 +172,6 @@ export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: Webs
     "plugin-categories": <PluginsAdminSurface attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as PluginsAdminSurfaceProps["attachSdkClientBoundaries"]} driveAppApiBaseUrl={driveBaseUrl} locale={locale} ownerKey={operatorId} resource="plugin-categories" tokenManager={runtime.tokenManager} />,
     skills: <SkillsAdminSurface appApiBaseUrl={runtime.config.appApiBaseUrl} attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as SkillsAdminSurfaceProps["attachSdkClientBoundaries"]} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={driveBaseUrl} resource="skills" tokenManager={runtime.tokenManager} permissionScope={permissionScope} />,
     mcp: <McpAdminSurface appApiBaseUrl={runtime.config.appApiBaseUrl} attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as McpAdminSurfaceProps["attachSdkClientBoundaries"]} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={driveBaseUrl} resource="mcp" tokenManager={runtime.tokenManager} />,
-    "servers-explorer": <ServerFilesExplorerSurface backendApiBaseUrl={runtime.config.backendApiBaseUrl} permissionScope={permissionScope} resource="servers-explorer" tokenManager={runtime.tokenManager} />,
-    "webserver-config": <WebserverConfigSurface backendApiBaseUrl={runtime.config.backendApiBaseUrl} permissionScope={permissionScope} resource="webserver-config" tokenManager={runtime.tokenManager} />,
     "storage-providers": storageCenterSurface("storage-providers"),
     "storage-kinds": storageCenterSurface("storage-kinds"),
     "storage-buckets": storageCenterSurface("storage-buckets"),
