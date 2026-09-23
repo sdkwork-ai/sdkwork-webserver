@@ -7,6 +7,16 @@ export type WebserverOperationStatus =
 
 export interface WebserverOperation {
   failureCode?: string;
+  /**
+   * What the failure said, as the provider worded it.
+   *
+   * `failureCode` classifies a failure so the UI can localize and the scheduler
+   * can branch on it, which is precisely why it cannot also explain one. Without
+   * this, a refused DNS credential, a revoked API token and an unowned zone all
+   * reached the operator as the same string, and the only place the provider's
+   * own sentence existed was the server log.
+   */
+  failureDetail?: string;
   status: WebserverOperationStatus | Lowercase<WebserverOperationStatus>;
 }
 
@@ -22,6 +32,7 @@ export class WebserverOperationError extends Error {
     readonly kind: WebserverOperationErrorKind,
     readonly operationId: string,
     readonly failureCode: string,
+    readonly failureDetail?: string,
     options?: ErrorOptions,
   ) {
     super(failureCode, options);
@@ -85,6 +96,7 @@ export async function pollWebserverOperation<T extends WebserverOperation>(
           "failed",
           normalizedOperationId,
           normalizedFailureCode(operation.failureCode, "CERTIFICATE_OPERATION_FAILED"),
+          operation.failureDetail,
         );
       }
       if (status === "CANCELLED") {

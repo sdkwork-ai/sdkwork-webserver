@@ -20,6 +20,13 @@ const DEPENDENCY_MODULE_CATALOG_REFS = {
     moduleId: "drive",
     manifestRef: "../../../../../sdkwork-iam/iam/modules/drive/iam.module.manifest.json",
   },
+  // IAM's own catalog lives in the kernel module and carries the `iam` domain, so
+  // the identity the validator matches is the same one `iam.provider_accounts.*`
+  // is prefixed with. (sdkwork-appstore references this exact manifest.)
+  iam: {
+    moduleId: "iam-kernel",
+    manifestRef: "../../../../../sdkwork-iam/iam/modules/iam-kernel/iam.module.manifest.json",
+  },
 };
 
 const packages = [
@@ -35,16 +42,64 @@ const packages = [
   // so an orphaned port would have stayed green forever). The app SDK the
   // console constructs is deployments' own generated client as well — the
   // legacy webserver app-api surface has no console consumer left.
-  { id: "console-core", surface: "app-console", capability: "console-core", deps: { "@sdkwork/deployments-app-sdk": "workspace:*", "@sdkwork/drive-app-sdk": "workspace:*", "@sdkwork/sdk-common": "workspace:*", react: "catalog:" }, sdk: "sdkwork-deployments-app-sdk", sdkPackage: "@sdkwork/deployments-app-sdk", sdkAuthority: "sdkwork-deploy-app-api", sdkClients: ["SdkworkDeployAppClient", "SdkworkDriveAppClient"], sdkDependencies: [{ workspace: "sdkwork-deployments-app-sdk", permissionModuleId: "deploy", surface: "app-api", credentialMode: "authenticated-app-api" }, { workspace: "sdkwork-drive-app-sdk", permissionModuleId: "drive", surface: "app-api", credentialMode: "authenticated-app-api" }], coreComposition: true },
+  //
+  // The IAM cloud account center added a third pair. IAM's generated clients sit
+  // on the capability-import denylist (`verify-repo` rejects a capability package
+  // whose source imports `@sdkwork/iam-app-sdk` or `@sdkwork/iam-backend-sdk`), so
+  // this core is the one place in the console allowed to compose them: the cloud
+  // account page is handed the `SdkworkIamService` facade built here instead of a
+  // transport. Only the app SDK is declared in `sdkDependencies` — the contract
+  // check permits an app-console core to inherit app-api catalog entries and
+  // rejects a `backend-api` one, and both faces belong to the same IAM module, so
+  // the backend client needs no catalog entry of its own.
+  { id: "console-core", surface: "app-console", capability: "console-core", deps: { "@sdkwork/deployments-app-sdk": "workspace:*", "@sdkwork/drive-app-sdk": "workspace:*", "@sdkwork/iam-app-sdk": "workspace:*", "@sdkwork/iam-backend-sdk": "workspace:*", "@sdkwork/iam-sdk-adapter": "workspace:*", "@sdkwork/iam-service": "workspace:*", "@sdkwork/sdk-common": "workspace:*", react: "catalog:" }, sdk: "sdkwork-deployments-app-sdk", sdkPackage: "@sdkwork/deployments-app-sdk", sdkAuthority: "sdkwork-deploy-app-api", sdkClients: ["SdkworkDeployAppClient", "SdkworkDriveAppClient", "SdkworkAppClient", "SdkworkBackendClient"], sdkDependencies: [{ workspace: "sdkwork-deployments-app-sdk", permissionModuleId: "deploy", surface: "app-api", credentialMode: "authenticated-app-api" }, { workspace: "sdkwork-drive-app-sdk", permissionModuleId: "drive", surface: "app-api", credentialMode: "authenticated-app-api" }, { workspace: "sdkwork-iam-app-sdk", permissionModuleId: "iam", surface: "app-api", credentialMode: "authenticated-app-api" }], coreComposition: true },
   { id: "console-shell", surface: "app-console", capability: "console-shell", deps: { "@sdkwork/webserver-pc-commons": "workspace:*", react: "catalog:" }, canonicalSpecs: frontendCanonicalSpecs("Console package naming."), layerRole: "frontend-feature", publicExports: ["."], providedPorts: [{ name: "webserverConsoleShell", export: "." }], requiredPorts: [{ name: "webserverWorkspace", export: ".", provider: "@sdkwork/webserver-pc-commons" }, { name: "portalNavigation", export: "." }, { name: "notificationCenterNavigation", export: "." }], dependencyApiExports: [], dependencyApiSurfaces: [], permissionComposition: false, dependencyPolicy: "The application root injects Portal and Messaging notification-center navigation while the shell consumes the shared workspace through its public root export.", sdkPolicy: "The shell owns no SDK client; app SDK access remains isolated behind console-core.", readme: "This package owns the app-console shell boundary. The application root injects a required Portal navigation target, an optional Messaging notification-center target, authenticated viewer context, and the console resource registry. Feature packages remain unaware of Portal, Messaging, and shell chrome." },
-  // Applications / domains / certificates all render the canonical
-  // sdkwork-deployments pages. `deploy_app` is owned by that module and its
-  // console packages are host-agnostic (clients arrive as props), so this host
-  // keeps only the menu entries plus the SDK and authority wiring — there is no
-  // local re-implementation of the application lifecycle here any more.
-  { id: "console-delivery", surface: "app-console", capability: "delivery", deps: { "@sdkwork/deployments-pc-commons": "workspace:*", "@sdkwork/deployments-pc-console-core": "workspace:*", "@sdkwork/deployments-pc-console-delivery": "workspace:*", "@sdkwork/deployments-pc-console-publishing": "workspace:*", "@sdkwork/sdk-common": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", react: "catalog:" }, module: [["apps", "Applications", "Publish and operate deploy_app applications", "deploy.apps.read"], ["domains", "Domains", "Domain ownership and routing", "deploy.domainZones.read"], ["certificates", "Certificates", "TLS certificate lifecycle", "deploy.certificates.read"]], extraIndexExports: ['export * from "./DeployAppsManagementSurface.tsx";', 'export * from "./DeployDomainManagementSurface.tsx";'] },
+  // Applications, domains, and certificates all render the canonical
+  // sdkwork-deployments pages. `deploy_app`, `deploy_domain_zone`, and the
+  // certificate entities are owned by that module and its console packages are
+  // host-agnostic (clients arrive as props), so this host keeps only the menu
+  // entries plus the SDK and authority wiring — there is no local
+  // re-implementation of the application lifecycle here any more.
+  //
+  // These three entries are the *per-user* half of the domain story: an
+  // authenticated operator creates and manages the domains and certificates they
+  // own, and which rows those are is decided server-side by the Deployments
+  // module against the shared IAM session rather than by a client-side filter.
+  // The tenant-level half — the root domains and subdomains this edge actually
+  // serves, reconciled from its own configuration at startup — is a different
+  // plane and lives on the operations surface (`admin-delivery`, over
+  // `webserver_root_domain` / `webserver_domain`). Same two menus, two ownership
+  // levels; neither surface is a copy of the other.
+  { id: "console-delivery", surface: "app-console", capability: "delivery", deps: { "@sdkwork/deployments-pc-commons": "workspace:*", "@sdkwork/deployments-pc-console-core": "workspace:*", "@sdkwork/deployments-pc-console-delivery": "workspace:*", "@sdkwork/deployments-pc-console-publishing": "workspace:*", "@sdkwork/sdk-common": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", react: "catalog:" }, module: [["apps", "Applications", "Publish and operate deploy_app applications", "deploy.apps.read"], ["domains", "Domains", "Your own domain ownership and routing", "deploy.domainZones.read"], ["certificates", "Certificates", "TLS certificates over the domains you own", "deploy.certificates.read"]], extraIndexExports: ['export * from "./DeployAppsManagementSurface.tsx";', 'export * from "./DeployDomainManagementSurface.tsx";'] },
   { id: "console-skills", surface: "app-console", capability: "skills", deps: { "@sdkwork/skills-pc-core": "workspace:*", "@sdkwork/skills-pc-console-skills": "workspace:*", "@sdkwork/sdk-common": "workspace:*", react: "catalog:", "react-router-dom": "^7.15.0" }, module: [["skills", "My Skills", "Skill packages owned by the authenticated user", "skills.marketplace.read"]], extraIndexExports: ['export * from "./SkillsConsoleSurface.tsx";'] },
   { id: "console-mcp", surface: "app-console", capability: "mcp", deps: { "@sdkwork/mcp-pc-core": "workspace:*", "@sdkwork/mcp-pc-console-mcp": "workspace:*", "@sdkwork/sdk-common": "workspace:*", react: "catalog:", "react-router-dom": "^7.15.0" }, module: [["mcp", "My MCP Servers", "MCP servers registered by the authenticated user", "mcp.marketplace.read"]], extraIndexExports: ['export * from "./McpConsoleSurface.tsx";'] },
+  // The cloud account center hosts the IAM-owned provider account plane
+  // (`iam_provider_account` plus `iam_provider_credential`) inside the Web Server
+  // console. It is a thin host adapter: the page, controller, vocabulary, and
+  // service port all come from the shared `sdkwork-iam-pc-console-cloud-account`
+  // package, and the transport is composed by console-core, so the Web Server
+  // keeps no second implementation of the account lifecycle.
+  //
+  // One menu entry covers all three ownership levels (personal, organization,
+  // tenant): they share one server-side route set and the tabs only pin a filter,
+  // so splitting them would claim a separation the API does not have.
+  {
+    id: "console-cloud-account",
+    surface: "app-console",
+    capability: "cloud-account",
+    deps: {
+      "@sdkwork/iam-contracts": "workspace:*",
+      "@sdkwork/iam-pc-console-cloud-account": "workspace:*",
+      "@sdkwork/iam-service": "workspace:*",
+      "@sdkwork/webserver-pc-console-core": "workspace:*",
+      react: "catalog:",
+    },
+    dependencyPolicy: "Host adapter only. The page, controller, vocabulary, i18n, and list pagination are consumed from the shared @sdkwork/iam-pc-console-cloud-account package, the permission predicates from @sdkwork/iam-contracts, and the SdkworkIamService facade from @sdkwork/webserver-pc-console-core; no page, form, or request shape is re-implemented here.",
+    sdkPolicy: "This package owns no SDK client and imports no generated SDK. IAM's generated clients may only be composed by a core package, so the console-core built service facade arrives as a prop.",
+    readme: "This package owns the cloud account capability on the app-console surface. It is a thin host adapter over the IAM-owned provider account plane: the page, its controller, the scope vocabulary, and its i18n all come from `@sdkwork/iam-pc-console-cloud-account`, and the `SdkworkIamService` facade it drives is composed by `@sdkwork/webserver-pc-console-core` from the IAM app and backend clients. The adapter contributes the menu entry, the resource key, and the `manageShared` rendering decision read off the session permission scope.",
+    module: [["cloud-accounts", "Cloud Accounts", "Provider accounts owned by you, your organization, or the tenant", "iam.provider_accounts.read"]],
+    extraIndexExports: ['export * from "./CloudAccountManagementSurface.tsx";'],
+  },
   { id: "admin-core", surface: "backend-admin", capability: "admin-core", deps: { "@sdkwork/drive-app-sdk": "workspace:*", "@sdkwork/webserver-backend-sdk": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", "@sdkwork/sdk-common": "workspace:*", react: "catalog:" }, sdk: "sdkwork-webserver-backend-sdk", sdkPackage: "@sdkwork/webserver-backend-sdk", sdkAuthority: "sdkwork-webserver-backend-api", coreComposition: true },
   { id: "admin-shell", surface: "backend-admin", capability: "admin-shell", deps: { "@sdkwork/webserver-pc-commons": "workspace:*", react: "catalog:" } },
   // The backend-admin "Applications" entry renders the exact same canonical
@@ -58,12 +113,34 @@ const packages = [
   // core package from depending on a capability package, and this direction
   // mirrors the existing `admin-plugins` -> `console-plugins` precedent.
   { id: "admin-apps", surface: "backend-admin", capability: "apps", deps: { "@sdkwork/webserver-pc-commons": "workspace:*", "@sdkwork/webserver-pc-console-delivery": "workspace:*" }, module: [["apps", "Applications", "Publish and operate deploy_app applications", "deploy.apps.read"]], extraIndexExports: ['export { DeployAppsManagementSurface as DeployAppsAdminSurface } from "@sdkwork/webserver-pc-console-delivery";'] },
+  // Domains and Certificates here are the *tenant-level* half of the domain
+  // story: the hostnames this edge actually answers for (`webserver_root_domain`
+  // / `webserver_domain`, reconciled from the effective sidecar and module
+  // imports at startup) and the TLS certificates that cover them
+  // (`webserver_certificate`). Both planes are tenant-wide by construction — the
+  // root table has no `user_id` column at all and the reconciled subdomains carry
+  // `user_id IS NULL` — which is exactly what makes the operations surface the
+  // place the shared edge inventory is read and managed from. The console keeps
+  // its own Domains / Certificates entries (see `console-delivery` above), but
+  // those are the *per-user* assets served by the Deployments plane: same two
+  // menu labels, a different ownership level, and a different table. The pages
+  // are authored here and read the injected admin SDK client off
+  // `WebserverAdminSdkProvider`, so this package imports no generated SDK and
+  // constructs no transport.
+  { id: "admin-delivery", surface: "backend-admin", capability: "delivery", deps: { "@sdkwork/sdk-common": "workspace:*", "@sdkwork/ui-pc-react": "workspace:*", "@sdkwork/webserver-pc-admin-core": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", "lucide-react": "catalog:", react: "catalog:", "react-router-dom": "^7.15.0" }, sdkPolicy: "This package consumes the backend admin SDK exclusively through @sdkwork/webserver-pc-admin-core public exports (useWebserverAdminSdk and wire types); raw HTTP and direct generated-SDK imports are forbidden in authored UI code.", dependencyPolicy: "Host adapter only. The pages are authored here because the root-domain/subdomain relationship and the certificate lifecycle are Web Server-owned planes with no shared upstream implementation; the SDK client and its wire types are consumed from admin-core.", readme: "This package owns the Domains and Certificates capability on the backend-admin surface. Its two pages read the Web Server's own tenant-level infrastructure planes: the root domains and subdomains this edge serves (reconciled from its effective configuration at startup, so the inventory is not hand-maintained) and the TLS certificates covering them. The admin SDK client arrives through `WebserverAdminSdkProvider`, so the package composes no transport of its own.", module: [["domains", "Domains", "Root domains and subdomains this edge serves, reconciled from its configuration", "web.sites.read"], ["certificates", "Certificates", "TLS certificate lifecycle for the served hostnames", "web.certificates.read"]], extraIndexExports: ['export * from "./ServedDomainAdminSurface.tsx";', 'export * from "./ServedCertificateAdminSurface.tsx";'] },
   { id: "admin-nginx", surface: "backend-admin", capability: "nginx", deps: { "@sdkwork/webserver-pc-commons": "workspace:*" }, module: [["nginx", "Nginx", "Validate, deploy and reload Nginx configuration", "web.nginx.write"]] },
   { id: "admin-skills", surface: "backend-admin", capability: "skills", deps: { "@sdkwork/skills-pc-core": "workspace:*", "@sdkwork/skills-pc-admin-core": "workspace:*", "@sdkwork/skills-pc-admin-skill": "workspace:*", "@sdkwork/sdk-common": "workspace:*", react: "catalog:", "react-router-dom": "^7.15.0" }, module: [["skills", "Skills Admin", "Manage skill packages, categories, and capabilities", "skills.packages.manage"]], extraIndexExports: ['export * from "./SkillsAdminSurface.tsx";'] },
   { id: "admin-mcp", surface: "backend-admin", capability: "mcp", deps: { "@sdkwork/mcp-pc-core": "workspace:*", "@sdkwork/mcp-pc-admin": "workspace:*", "@sdkwork/sdk-common": "workspace:*", react: "catalog:", "react-router-dom": "^7.15.0" }, module: [["mcp", "MCP Admin", "Manage MCP servers, categories, and invocations", "mcp.admin.server.manage"]], extraIndexExports: ['export * from "./McpAdminSurface.tsx";'] },
   { id: "admin-servers", surface: "backend-admin", capability: "servers", deps: { "@sdkwork/webserver-pc-commons": "workspace:*" }, module: [["servers", "Servers", "Managed Web Server inventory", "web.servers.read"]] },
-  { id: "admin-cluster", surface: "backend-admin", capability: "cluster", deps: { "@sdkwork/webserver-pc-admin-core": "workspace:*", "@sdkwork/sdk-common": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", "lucide-react": "catalog:", react: "catalog:", "react-router-dom": "^7.15.0" }, sdkPolicy: "This package consumes the backend admin SDK exclusively through @sdkwork/webserver-pc-admin-core public exports (createWebserverAdminSdkClient and wire types); raw HTTP and direct generated-SDK imports are forbidden in authored UI code.", module: [["cluster-overview", "Cluster", "Distributed cluster health and liveness overview", "web.cluster.read", "cluster"], ["cluster-clusters", "Clusters", "Cluster grouping and heartbeat thresholds", "web.cluster.read", "cluster/clusters"], ["cluster-hosts", "Cluster Hosts", "Host machines with system and network identity", "web.cluster.read", "cluster/hosts"], ["cluster-instances", "Cluster Instances", "Webserver process instances and liveness", "web.cluster.read", "cluster/instances"], ["cluster-events", "Cluster Events", "Cluster lifecycle event evidence", "web.cluster.read", "cluster/events"]], extraIndexExports: ['export * from "./ClusterOverviewSurface.tsx";'] },
-  { id: "admin-servers-explorer", surface: "backend-admin", capability: "servers-explorer", deps: { "@sdkwork/webserver-pc-admin-core": "workspace:*", "@sdkwork/sdk-common": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", "lucide-react": "catalog:", react: "catalog:", "react-router-dom": "^7.15.0" }, sdkPolicy: "This package consumes the backend admin SDK exclusively through @sdkwork/webserver-pc-admin-core public exports (createWebserverAdminSdkClient and wire types); raw HTTP and direct generated-SDK imports are forbidden in authored UI code.", module: [["servers-explorer", "Server Files", "Browse, classify, and operate server deployment projects and files", "web.servers.files.read"]], extraIndexExports: ['export * from "./ServerFilesExplorerSurface.tsx";', 'export * from "./server-files-client.ts";', 'export * from "./project-detection.ts";'] },
+  { id: "admin-cluster", surface: "backend-admin", capability: "cluster", deps: { "@sdkwork/webserver-pc-admin-core": "workspace:*", "@sdkwork/sdk-common": "workspace:*", "@sdkwork/ui-pc-react": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", "lucide-react": "catalog:", react: "catalog:", "react-router-dom": "^7.15.0" }, sdkPolicy: "This package consumes the backend admin SDK exclusively through @sdkwork/webserver-pc-admin-core public exports (createWebserverAdminSdkClient and wire types); raw HTTP and direct generated-SDK imports are forbidden in authored UI code.", module: [["cluster-overview", "Cluster", "Distributed cluster health and liveness overview", "web.cluster.read", "cluster/overview"], ["cluster-clusters", "Clusters", "Cluster grouping and heartbeat thresholds", "web.cluster.read", "cluster/clusters"], ["cluster-hosts", "Cluster Hosts", "Host machines with system and network identity", "web.cluster.read", "cluster/hosts"], ["cluster-instances", "Cluster Instances", "Webserver process instances and liveness", "web.cluster.read", "cluster/instances"], ["cluster-events", "Cluster Events", "Cluster lifecycle event evidence", "web.cluster.read", "cluster/events"]], moduleNote: [
+      "Every entry sits under the module's own `/admin/cluster` prefix, exactly",
+      "like Storage Center's `/admin/storage/<child>`. The overview deliberately",
+      "does **not** claim `path: \"cluster\"` (the bare prefix): that path is the",
+      "`clusterCenter` tab's landing route, and an entry owning it would make",
+      "`/admin/cluster` resolve to a page while the tab treats it as its own",
+      "root — two different \"cluster\" URLs for the same operator.",
+    ], extraIndexExports: ['export * from "./ClusterOverviewSurface.tsx";'] },
+  { id: "admin-servers-explorer", surface: "backend-admin", capability: "servers-explorer", deps: { "@sdkwork/webserver-pc-admin-core": "workspace:*", "@sdkwork/sdk-common": "workspace:*", "@sdkwork/ui-pc-react": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", "lucide-react": "catalog:", react: "catalog:", "react-router-dom": "^7.15.0" }, sdkPolicy: "This package consumes the backend admin SDK exclusively through @sdkwork/webserver-pc-admin-core public exports (createWebserverAdminSdkClient and wire types); raw HTTP and direct generated-SDK imports are forbidden in authored UI code.", module: [["servers-explorer", "Server Files", "Browse, classify, and operate server deployment projects and files", "web.servers.files.read"]], extraIndexExports: ['export * from "./ServerFilesExplorerSurface.tsx";', 'export * from "./server-files-client.ts";', 'export * from "./project-detection.ts";'] },
   { id: "admin-webserver-config", surface: "backend-admin", capability: "webserver-config", deps: { "@sdkwork/webserver-pc-admin-core": "workspace:*", "@sdkwork/sdk-common": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", "@monaco-editor/react": "catalog:", "monaco-editor": "catalog:", "lucide-react": "catalog:", react: "catalog:", "react-router-dom": "^7.15.0" }, sdkPolicy: "This package consumes the backend admin SDK exclusively through @sdkwork/webserver-pc-admin-core public exports (createWebserverAdminSdkClient and wire types); raw HTTP and direct generated-SDK imports are forbidden in authored UI code.", module: [["webserver-config", "Server Config", "Edit the deployed default config, import plane, and module sidecar configuration online", "web.servers.files.read"]], extraIndexExports: ['export * from "./WebserverConfigSurface.tsx";', 'export * from "./webserver-config-client.ts";', 'export * from "./config-language.ts";'] },
   { id: "admin-diagnostics", surface: "backend-admin", capability: "diagnostics", deps: { "@sdkwork/webserver-pc-commons": "workspace:*" }, module: [["diagnostics", "Diagnostics", "Runtime status and convergence diagnostics", "web.servers.read"]] },
   { id: "admin-audit", surface: "backend-admin", capability: "audit", deps: { "@sdkwork/webserver-pc-commons": "workspace:*" }, module: [["audit", "Audit", "Operator action evidence", "web.auditLogs.read"]] },
@@ -95,6 +172,30 @@ const packages = [
       ["storage-bindings", "Bindings", "Route each space type to a default storage provider", "drive.storage.admin", "storage/bindings"],
     ],
     extraIndexExports: ['export * from "./StorageCenterSurface.tsx";'],
+  },
+  // The platform admin needs the same cloud account center the tenant console
+  // mounts, because publishing the global (`platform`) default is precisely the
+  // operation no tenant console may reach. The resource, the route set, and the
+  // page implementation are one thing, so this package is an alias over the
+  // console adapter — the same shape `admin-apps` -> `console-delivery` and
+  // `admin-plugins` -> `console-plugins` already use — and only the menu entry
+  // and the `surface` marker are surface-specific. What separates the two surfaces
+  // is the ownership levels the host projects, which the shared contract helper
+  // derives from the session; this package never re-decides it.
+  {
+    id: "admin-cloud-account",
+    surface: "backend-admin",
+    capability: "cloud-account",
+    deps: {
+      "@sdkwork/webserver-pc-commons": "workspace:*",
+      "@sdkwork/webserver-pc-console-cloud-account": "workspace:*",
+      react: "catalog:",
+    },
+    dependencyPolicy: "Alias only. The page, controller, scope vocabulary, i18n, and the level projection are consumed from @sdkwork/webserver-pc-console-cloud-account, which in turn consumes them from the IAM-owned @sdkwork/iam-pc-console-cloud-account; nothing is re-implemented here.",
+    sdkPolicy: "This package owns no SDK client and imports no generated SDK. The IAM service facade arrives through the console SDK provider that already wraps the admin route tree.",
+    readme: "This package owns the cloud account capability on the backend-admin surface. It renders the same IAM-owned provider account page the tenant console does — one resource, one route set — and adds only the admin menu entry and the `admin` surface marker that selects the admin descriptive copy. The offered ownership levels are not decided here: the shared contract helper projects them from the session, so the platform admin and the tenant console cannot drift apart in which levels they offer.",
+    module: [["cloud-accounts", "Cloud Accounts", "Provider accounts across the personal, organization, tenant, and platform levels", "iam.provider_accounts.read"]],
+    extraIndexExports: ['export * from "./CloudAccountAdminSurface.tsx";'],
   },
 ];
 
@@ -307,11 +408,19 @@ function moduleSource(definition) {
   // route segment equals the resource key. A module sub-path (`storage/providers`)
   // is what lets a module group entries under its own URL subtree while keeping
   // a stable, slash-free resource key for i18n and the data-source registry.
+  //
+  // `moduleNote` carries authored prose that has to survive regeneration: the
+  // routing invariants a hand-edited `src/module.ts` accumulated (why cluster's
+  // overview must not claim the bare `/admin/cluster` prefix, say). Without a
+  // slot here that comment is dropped the next time this script runs, and the
+  // invariant it documents regresses with it — which is exactly how the cluster
+  // overview lost `path: "cluster/overview"` before.
+  const noteLines = (definition.moduleNote ?? []).map((line) => `  // ${line}\n`).join("");
   const entries = definition.module.map(([resource, label, description, permission, path], index) => {
     const pathField = path ? `, path: "${path}"` : "";
     return `    { resource: "${resource}", label: "${label}", description: "${description}", permission: "${permission}", order: ${index + 1}${pathField} }`;
   }).join(",\n");
-  return `import type { WebserverPcModuleDefinition } from "@sdkwork/webserver-pc-commons";\n\nexport const webserverModule = {\n  id: "${definition.capability}",\n  label: "${definition.capability.replaceAll("-", " ")}",\n  surface: "${definition.surface}",\n  entries: [\n${entries}\n  ],\n} as const satisfies WebserverPcModuleDefinition;\n`;
+  return `import type { WebserverPcModuleDefinition } from "@sdkwork/webserver-pc-commons";\n\nexport const webserverModule = {\n  id: "${definition.capability}",\n  label: "${definition.capability.replaceAll("-", " ")}",\n  surface: "${definition.surface}",\n${noteLines}  entries: [\n${entries}\n  ],\n} as const satisfies WebserverPcModuleDefinition;\n`;
 }
 
 function specsReadme(definition) {

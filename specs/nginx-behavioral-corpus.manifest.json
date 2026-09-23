@@ -62,7 +62,19 @@
       "nginxConf": "nginx.conf",
       "probe": "probe.py",
       "listenPort": 19890,
-      "notes": "Single-page full-surface behavioral regression (REQ-2026-0040): routing, URI semantics, static, proxying, LB, filters, limits, TLS SNI, http2 ALPN, stream; the probe owns mock upstreams, staging render, and server lifecycle (see the REQ for the alignment findings it closed)"
+      "cases": 76,
+      "notes": "Single-page full-surface behavioral regression (REQ-2026-0040): routing, URI semantics, static, proxying, LB, filters, limits, TLS SNI, http2 ALPN, stream; the probe owns mock upstreams, staging render, and server lifecycle (see the REQ for the alignment findings it closed). `cases` is the executed-case floor: tools/run-nginx-behavioral-corpus.mjs fails the gate when the probe reports fewer cases than declared, so deleting a case cannot silently shrink coverage."
+    },
+    {
+      "id": "conditional-cache",
+      "req": "REQ-2026-0071",
+      "dir": "differential",
+      "nginxConf": "nginx.conf",
+      "probe": "battery.py",
+      "listenPort": 20990,
+      "cases": 50,
+      "orchestrator": "tools/run-nginx-differential.mjs",
+      "notes": "Conditional requests, byte ranges and cache policy compared field by field against a real nginx binary (REQ-2026-0071). Uniquely, this slice owns its oracle: tests/nginx/differential/nginx-oracle.json is the real-nginx side, so the comparison still runs where nginx is absent. `cases` is the executed-case floor enforced by tools/run-nginx-differential.mjs."
     }
   ]
 }

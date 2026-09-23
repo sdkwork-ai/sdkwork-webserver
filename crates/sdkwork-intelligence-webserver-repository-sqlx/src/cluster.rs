@@ -67,6 +67,9 @@ pub(crate) struct ClusterInstanceAuthRow {
 pub(crate) struct ClusterHeartbeatTransitionRow {
     pub previous_status: i32,
     pub previous_health_state: String,
+    /// The status the heartbeat stored (operator maintenance outranks the
+    /// node's reported `online`; see `cluster_operator_owned_status`).
+    pub status: i32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1076,6 +1079,16 @@ impl WebRepository {
         // `last_heartbeat_at` / `created_at` / `updated_at` and fail with
         // `cannot cast type integer to timestamp with time zone` — a masked 500
         // on every cluster host upsert.
+        //
+        // `name` is absent from the `DO UPDATE` list for the same reason as on
+        // the instance upsert: it seeds the row on first registration and is
+        // then the operator's to rename (`update_cluster_host_repo` writes
+        // `name = COALESCE($3, name)`), while `host_display_name` re-derives a
+        // default from the node's own report on every registration. Writing it
+        // back made a console rename a value that silently reverted on the next
+        // node restart — which is exactly what maintenance work does, so the
+        // two resources disagreed about who owns the same field. `hostname` and
+        // `machine_code` stay: those are the machine's own facts.
         let now_expression = instant_write_expression("$22");
         let sql = format!(
             "INSERT INTO webserver_cluster_host (
@@ -1093,7 +1106,6 @@ impl WebRepository {
             )
             ON CONFLICT (tenant_id, machine_code) WHERE deleted_at IS NULL DO UPDATE SET
                 cluster_id = EXCLUDED.cluster_id,
-                name = EXCLUDED.name,
                 hostname = EXCLUDED.hostname,
                 os_name = EXCLUDED.os_name,
                 os_version = EXCLUDED.os_version,
@@ -1146,6 +1158,22 @@ impl WebRepository {
         })
     }
 
+    /// Registers one instance against its **listening slot** and returns the
+    /// row that owns it.
+    ///
+    /// Identity is `(tenant_id, host_id, instance_key)`, where `instance_key`
+    /// is the generated `bindHost:bindPort` slot (migration
+    /// `0018_webserver_cluster_instance_slot_identity`). A restarted process
+    /// reports a new pid, a new start instant, and the same slot, so it lands on
+    /// the existing row: `id` and `uuid` are fixed for the lifetime of the slot
+    /// and are deliberately absent from the `DO UPDATE` list. Only run-state
+    /// (pid, started-at, uptime, metrics, heartbeat bookkeeping) is rewritten,
+    /// and `restart_count` bumps when `process_started_at` moves.
+    ///
+    /// This replaced a `(tenant_id, host_id, process_pid)` conflict target. A
+    /// pid is never stable across restarts, so that target never matched and
+    /// every restart inserted a fresh row with a fresh uuid — the defect that
+    /// turned a single dev edge into a twenty-row instance inventory.
     pub(super) async fn upsert_cluster_instance_repo(
         &self,
         write: &sdkwork_intelligence_webserver_service::ClusterInstanceUpsert,
@@ -1165,6 +1193,29 @@ impl WebRepository {
         let now_expression = instant_write_expression("$17");
         let metrics_expression = json_write_expression("$18");
         let metadata_expression = json_write_expression("$19");
+        // `name` is absent from the `DO UPDATE` list on purpose: it seeds the
+        // row on first registration and is then the operator's to rename. The
+        // registration path re-derives a default name on every heartbeat-cycle
+        // re-registration, so writing it back would erase an operator rename the
+        // next time the process restarted.
+        //
+        // `public_endpoint` is the third operator-writable field on this row
+        // (`update_cluster_instance_repo` writes `COALESCE($5, public_endpoint)`),
+        // so it follows the same rule, in the weaker form the field allows: the
+        // node's value wins *when it reports one*, but a node that reports
+        // nothing does not get to erase one it never knew. Reporting nothing is
+        // the common case - the address comes from an optional
+        // `SDKWORK_WEBSERVER_INSTANCE_PUBLIC_ENDPOINT`, and an instance behind
+        // NAT is exactly the one an operator pins by hand - so an outright
+        // overwrite made the pin a value that reverted on every restart.
+        //
+        // `status` follows the same ownership rule as the heartbeat: a restart
+        // (which is exactly what maintenance work does) must not end an
+        // operator's maintenance mark. The literal `5` is the maintenance code
+        // the SQL cannot name through `cluster_operator_owned_status` — an
+        // `INSERT … ON CONFLICT` cannot call a Rust function — so the value is
+        // pinned by `postgres_registration_preserves_operator_maintenance` in
+        // `tests/cluster_repository.rs`.
         let sql = format!(
             "INSERT INTO webserver_cluster_instance (
                 id, uuid, tenant_id, host_id, cluster_id, name, role, environment,
@@ -1179,13 +1230,13 @@ impl WebRepository {
                 1, 'UNKNOWN', {now_expression}, {now_expression},
                 0, {metrics_expression}, {metadata_expression}, {now_expression}, {now_expression}, 0
             )
-            ON CONFLICT (tenant_id, host_id, process_pid)
-              WHERE deleted_at IS NULL AND process_pid IS NOT NULL
+            ON CONFLICT (tenant_id, host_id, instance_key)
+              WHERE deleted_at IS NULL AND instance_key IS NOT NULL
             DO UPDATE SET
                 cluster_id = EXCLUDED.cluster_id,
-                name = EXCLUDED.name,
                 role = EXCLUDED.role,
                 environment = EXCLUDED.environment,
+                process_pid = EXCLUDED.process_pid,
                 process_started_at = EXCLUDED.process_started_at,
                 restart_count = CASE WHEN webserver_cluster_instance.process_started_at
                                           IS DISTINCT FROM EXCLUDED.process_started_at
@@ -1199,9 +1250,9 @@ impl WebRepository {
                 tunnel_route_domain = EXCLUDED.tunnel_route_domain,
                 bind_host = EXCLUDED.bind_host,
                 bind_port = EXCLUDED.bind_port,
-                public_endpoint = EXCLUDED.public_endpoint,
+                public_endpoint = COALESCE(EXCLUDED.public_endpoint, webserver_cluster_instance.public_endpoint),
                 build_version = EXCLUDED.build_version,
-                status = 1,
+                status = CASE WHEN webserver_cluster_instance.status = 5 THEN 5 ELSE 1 END,
                 health_state = 'UNKNOWN',
                 last_heartbeat_at = EXCLUDED.last_heartbeat_at,
                 last_online_at = EXCLUDED.last_online_at,
@@ -1323,6 +1374,14 @@ impl WebRepository {
         let previous_health: String = previous
             .try_get("health_state")
             .map_err(store_map_error)?;
+        // The node always claims `online` while its process runs, so the
+        // reported status is a proposal, not a fact: an operator's maintenance
+        // mark must survive it (otherwise the mark, and the routing exclusion
+        // that hangs off `status = online`, lasted one heartbeat interval).
+        let recorded_status = sdkwork_intelligence_webserver_service::cluster_operator_owned_status(
+            previous_status,
+            write.status,
+        );
 
         let now_expression = instant_write_expression("$4");
         let metrics_expression = json_write_expression("$6");
@@ -1344,7 +1403,7 @@ impl WebRepository {
         sqlx::query(audited_sql(&update_sql))
             .bind(write.instance_id)
             .bind(write.tenant_id)
-            .bind(write.status)
+            .bind(recorded_status)
             .bind(&write.reported_at)
             .bind(&write.health_state)
             .bind(&write.metrics_json)
@@ -1405,6 +1464,7 @@ impl WebRepository {
         Ok(ClusterHeartbeatTransitionRow {
             previous_status,
             previous_health_state: previous_health,
+            status: recorded_status,
         })
     }
 
@@ -1836,12 +1896,22 @@ impl WebRepository {
         };
         let eject_now = eject && !previously_ejected;
         let recover_now = recovered && previously_ejected;
+        // The prober's `error` is a machine observation, so it yields to an
+        // operator's maintenance mark exactly like the node's `online` claim.
+        let ejected_status = sdkwork_intelligence_webserver_service::cluster_operator_owned_status(
+            status,
+            sdkwork_intelligence_webserver_service::CLUSTER_INSTANCE_STATUS_ERROR,
+        );
+        // `ejected_at` records the ejection instant, so a still-failing instance
+        // keeps the instant it was ejected at: re-stamping it on every failed
+        // probe made the ejection age unreadable and the column
+        // indistinguishable from `updated_at`.
         let sql = format!(
             "UPDATE webserver_cluster_instance SET
                 probe_failures = $3,
-                ejected_at = CASE WHEN $4 THEN CAST($5 AS TIMESTAMPTZ) ELSE NULL END,
+                ejected_at = CASE WHEN $4 THEN COALESCE(ejected_at, CAST($5 AS TIMESTAMPTZ)) ELSE NULL END,
                 status = CASE
-                    WHEN $4 THEN 4
+                    WHEN $4 THEN $7
                     WHEN $6 AND status = 4 THEN 1
                     ELSE status END,
                 updated_at = {now_expression}, version = version + 1
@@ -1854,6 +1924,7 @@ impl WebRepository {
             .bind(eject)
             .bind(&now)
             .bind(recover_now)
+            .bind(ejected_status)
             .execute(&mut *tx)
             .await
             .map_err(|error| store_error("probe webserver_cluster_instance", error))?;

@@ -25,6 +25,11 @@ pub struct CertificateOperationResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure_code: Option<String>,
 
+    /// What the failure said, as the named provider worded it, redacted and bounded. The code classifies a failure; this is the part an operator acts on.
+    #[serde(rename = "failureDetail")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_detail: Option<String>,
+
     #[serde(rename = "createdAt")]
     pub created_at: String,
 

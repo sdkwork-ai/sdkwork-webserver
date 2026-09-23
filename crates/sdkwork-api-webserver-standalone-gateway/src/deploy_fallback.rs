@@ -188,6 +188,45 @@ struct CacheEntry {
 /// beyond the bound a host simply recompiles on its next request.
 const MAXIMUM_COMPILED_SITE_CACHE_ENTRIES: usize = 32;
 
+/// 主机名解析缓存的硬上限。
+///
+/// 条目按请求 Host 键入，而 Host 在面向互联网的监听器上是攻击者可控的：
+/// TTL 只在同名主机再次被请求时惰性生效，没有上限的地图会随出现过的不同
+/// 主机名单调增长。写入时清扫过期条目并在达到上限时按到期时间驱逐最早
+/// 的条目——被驱逐的主机下一条请求只是重新解析一次。
+const MAXIMUM_FALLBACK_CACHE_ENTRIES: usize = 4096;
+
+/// nginx 站点物化台账的硬上限。台账只是"同一配置不重复落盘"的去重优化，
+/// 条目键入与 Host 相同、无 TTL；达到上限时整体清空一次，代价是每个主机
+/// 至多一次按摘要判等的重新物化。
+const MAXIMUM_NGINX_APPLICATION_LEDGER_ENTRIES: usize = 4096;
+
+/// 清扫过期条目并在达到上限时按到期时间驱逐最早条目，返回更新后的地图。
+///
+/// 抽成自由函数以便对"清扫 + 驱逐"行为直接做单元测试（与
+/// `data_plane::wechat_verify` 的缓存同款约束）。
+fn remember_resolution(
+    mut cache: HashMap<String, CacheEntry>,
+    hostname: String,
+    entry: CacheEntry,
+    now: Instant,
+) -> HashMap<String, CacheEntry> {
+    cache.retain(|_, cached| cached.expires_at > now);
+    if cache.len() >= MAXIMUM_FALLBACK_CACHE_ENTRIES && !cache.contains_key(&hostname) {
+        let mut by_expiry: Vec<(String, Instant)> = cache
+            .iter()
+            .map(|(name, cached)| (name.clone(), cached.expires_at))
+            .collect();
+        by_expiry.sort_by_key(|(_, expires_at)| *expires_at);
+        let evict = cache.len() + 1 - MAXIMUM_FALLBACK_CACHE_ENTRIES;
+        for (name, _) in by_expiry.into_iter().take(evict) {
+            cache.remove(&name);
+        }
+    }
+    cache.insert(hostname, entry);
+    cache
+}
+
 impl Clone for CacheEntry {
     fn clone(&self) -> Self {
         Self {
@@ -384,6 +423,13 @@ impl DeployFallbackResolver {
             .applied_nginx_conf
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if recorded.len() >= MAXIMUM_NGINX_APPLICATION_LEDGER_ENTRIES
+            && !recorded.contains_key(hostname)
+        {
+            // 台账是去重优化而非事实源；达到上限时整体清空一次，每个主机
+            // 至多付出一次按摘要判等的重新物化，正确性不受影响。
+            recorded.clear();
+        }
         recorded.insert(
             hostname.to_owned(),
             NginxSiteApplication {
@@ -523,24 +569,22 @@ impl DeployFallbackResolver {
                             (None, None, None, None)
                         }
                     };
-                    self.cache.store(Arc::new({
-                        let mut cache = (**self.cache.load()).clone();
-                        cache.insert(
-                            hostname.clone(),
-                            CacheEntry {
-                                descriptor: descriptor.clone(),
-                                descriptor_sha256: descriptor_sha256.clone(),
-                                attribution: attribution.clone(),
-                                nginx_conf: nginx_conf.clone(),
-                                expires_at: if descriptor.is_some() {
-                                    now + Duration::from_millis(self.config.cache_ttl_ms)
-                                } else {
-                                    now + Duration::from_millis(self.config.negative_cache_ttl_ms)
-                                },
+                    self.cache.store(Arc::new(remember_resolution(
+                        (**self.cache.load()).clone(),
+                        hostname.clone(),
+                        CacheEntry {
+                            descriptor: descriptor.clone(),
+                            descriptor_sha256: descriptor_sha256.clone(),
+                            attribution: attribution.clone(),
+                            nginx_conf: nginx_conf.clone(),
+                            expires_at: if descriptor.is_some() {
+                                now + Duration::from_millis(self.config.cache_ttl_ms)
+                            } else {
+                                now + Duration::from_millis(self.config.negative_cache_ttl_ms)
                             },
-                        );
-                        cache
-                    }));
+                        },
+                        now,
+                    )));
                     (descriptor, descriptor_sha256, attribution, nginx_conf)
                 }
             };
@@ -770,6 +814,60 @@ impl DeployServerLookup for EmbeddedDeployServerLookup {
 
 #[cfg(test)]
 mod tests {
+    use super::{remember_resolution, CacheEntry};
+    use std::collections::HashMap;
+    use std::time::{Duration, Instant};
+
+    fn entry(expires_at: Instant) -> CacheEntry {
+        CacheEntry {
+            descriptor: None,
+            descriptor_sha256: None,
+            attribution: None,
+            nginx_conf: None,
+            expires_at,
+        }
+    }
+
+    #[test]
+    fn the_resolution_cache_is_capped_under_host_diversity() {
+        let now = Instant::now();
+        let mut cache = HashMap::new();
+        // 超出上限一截的不同主机名全部写入。
+        for index in 0..(MAXIMUM_FALLBACK_CACHE_ENTRIES + 64) {
+            cache = remember_resolution(
+                cache,
+                format!("host-{index}.example.com"),
+                entry(now + Duration::from_secs(60)),
+                now,
+            );
+        }
+        assert!(
+            cache.len() <= MAXIMUM_FALLBACK_CACHE_ENTRIES,
+            "cache grew to {} entries; the cap must hold",
+            cache.len()
+        );
+    }
+
+    #[test]
+    fn expired_entries_are_swept_and_still_live_ones_kept() {
+        let now = Instant::now();
+        let mut cache = HashMap::new();
+        cache.insert("expired.example.com".to_owned(), entry(now));
+        cache.insert(
+            "live.example.com".to_owned(),
+            entry(now + Duration::from_secs(60)),
+        );
+        let cache = remember_resolution(
+            cache,
+            "fresh.example.com".to_owned(),
+            entry(now + Duration::from_secs(60)),
+            now + Duration::from_secs(1),
+        );
+        assert!(!cache.contains_key("expired.example.com"));
+        assert!(cache.contains_key("live.example.com"));
+        assert!(cache.contains_key("fresh.example.com"));
+    }
+
     use super::*;
 
     fn suffixes() -> Vec<String> {

@@ -29,9 +29,9 @@ use crate::service::TunnelService;
 pub mod control;
 pub mod dispatch;
 pub mod listeners;
-pub(crate) mod udp_listeners;
 pub mod registry;
 pub mod sessions;
+pub(crate) mod udp_listeners;
 
 pub use dispatch::{RelayVisitor, RelayedStream};
 pub use registry::RegisteredRoute;

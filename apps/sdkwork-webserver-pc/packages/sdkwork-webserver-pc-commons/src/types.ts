@@ -2,7 +2,9 @@ export type WebserverPcSurface = "app-console" | "backend-admin";
 
 /**
  * Resource keys the Web Server workspace can route to. `apps`, `domains`, and
- * `certificates` are bridged from sdkwork-deployments; the rest are rendered
+ * `certificates` are bridged from sdkwork-deployments, and `cloud-accounts` from
+ * sdkwork-iam (the IAM module owns cloud providers and their credentials, so the
+ * workspace only mounts its console capability package); the rest are rendered
  * either by an owning package's surface or by the admin registry. The retired
  * `applications` / `configuration` / `source-versions` / `deployments` /
  * `sites` / `application-*` keys went with the local application lifecycle.
@@ -11,6 +13,7 @@ export type WebserverResourceKey =
   | "apps"
   | "domains"
   | "certificates"
+  | "cloud-accounts"
   | "nginx"
   | "servers"
   | "servers-explorer"

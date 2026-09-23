@@ -17,6 +17,13 @@ const MAX_RENEWAL_SCHEDULE_INTERVAL_SECS: u64 = 86_400;
 const MIN_CYCLE_TIMEOUT_SECS: u64 = 60;
 const MAX_CYCLE_TIMEOUT_SECS: u64 = 600;
 
+/// Domain-ownership challenges checked per cycle.
+///
+/// Each check is one bounded DNS lookup, so the batch keeps a sweep well inside
+/// the cycle watchdog while still draining a backlog of newly added domains
+/// within a few poll intervals.
+const DOMAIN_VERIFICATION_SWEEP_BATCH: i32 = 32;
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
@@ -129,6 +136,31 @@ async fn main() -> anyhow::Result<()> {
                     failed = report.failed,
                     "certificate operation cycle completed"
                 );
+            }
+        }
+        // Domain ownership verification runs on the same cadence. It is the
+        // gate in front of issuance — a hostname that is not VERIFIED cannot be
+        // a certificate identifier — so it must not depend on an operator
+        // re-submitting the verify request. Failure here is logged and retried
+        // next cycle; it must not stop certificate operations.
+        match runtime
+            .service
+            .run_domain_verification_cycle(DOMAIN_VERIFICATION_SWEEP_BATCH)
+            .await
+        {
+            Ok(report) if !report.is_idle() => {
+                info!(
+                    due = report.due,
+                    verified = report.verified,
+                    pending = report.pending,
+                    failed = report.failed,
+                    deferred = report.deferred,
+                    "automatic domain verification sweep completed"
+                );
+            }
+            Ok(_) => {}
+            Err(error) => {
+                warn!(error = %error, "automatic domain verification sweep failed");
             }
         }
         // Exponential backoff on failure (bounded) plus per-cycle jitter so

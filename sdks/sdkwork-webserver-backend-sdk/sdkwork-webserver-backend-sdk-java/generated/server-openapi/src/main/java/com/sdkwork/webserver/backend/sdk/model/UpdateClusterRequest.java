@@ -1,5 +1,6 @@
 package com.sdkwork.webserver.backend.sdk.model;
 
+import java.util.List;
 
 public class UpdateClusterRequest {
     private String name;
@@ -7,6 +8,8 @@ public class UpdateClusterRequest {
     private Integer status;
     private Integer heartbeatIntervalSeconds;
     private Integer offlineThresholdSeconds;
+    private String lbStrategy;
+    private List<String> servedDomains;
 
     public String getName() {
         return this.name;
@@ -46,5 +49,21 @@ public class UpdateClusterRequest {
 
     public void setOfflineThresholdSeconds(Integer offlineThresholdSeconds) {
         this.offlineThresholdSeconds = offlineThresholdSeconds;
+    }
+
+    public String getLbStrategy() {
+        return this.lbStrategy;
+    }
+
+    public void setLbStrategy(String lbStrategy) {
+        this.lbStrategy = lbStrategy;
+    }
+
+    public List<String> getServedDomains() {
+        return this.servedDomains;
+    }
+
+    public void setServedDomains(List<String> servedDomains) {
+        this.servedDomains = servedDomains;
     }
 }

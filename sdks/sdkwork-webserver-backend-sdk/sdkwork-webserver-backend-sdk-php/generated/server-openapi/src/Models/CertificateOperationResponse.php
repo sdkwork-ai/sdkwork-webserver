@@ -22,6 +22,9 @@ final class CertificateOperationResponse
 
     public ?string $failureCode = null;
 
+    /** What the failure said, as the named provider worded it, redacted and bounded. The code classifies a failure; this is the part an operator acts on. */
+    public ?string $failureDetail = null;
+
     public ?string $createdAt = null;
 
     public ?string $updatedAt = null;
@@ -54,6 +57,9 @@ final class CertificateOperationResponse
         $this->failureCode = array_key_exists('failureCode', $data)
             ? $data['failureCode']
             : null;
+        $this->failureDetail = array_key_exists('failureDetail', $data)
+            ? $data['failureDetail']
+            : null;
         $this->createdAt = array_key_exists('createdAt', $data)
             ? $data['createdAt']
             : null;
@@ -81,6 +87,7 @@ final class CertificateOperationResponse
             'maxAttempts' => $this->maxAttempts,
             'nextAttemptAt' => $this->nextAttemptAt,
             'failureCode' => $this->failureCode,
+            'failureDetail' => $this->failureDetail,
             'createdAt' => $this->createdAt,
             'updatedAt' => $this->updatedAt,
             'completedAt' => $this->completedAt,

@@ -43,7 +43,9 @@ sdkwork-utils-rust.workspace = true
 
 [dev-dependencies]
 axum.workspace = true
+rustls.workspace = true
 tokio = { workspace = true, features = ["macros"] }
+sdkwork-webserver-tunnel-core.workspace = true
 
 [lints]
 workspace = true

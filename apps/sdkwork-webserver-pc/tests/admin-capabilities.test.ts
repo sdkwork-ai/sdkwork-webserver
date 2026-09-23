@@ -102,6 +102,18 @@ describe("admin control-plane capability", () => {
     await registry["cluster-instances"]?.actions.find((candidate) => candidate.id === "maintain")?.execute({ body: {}, idempotencyKey: "instance-maintain-1", selectedItem: { id: "instance-1" } });
     expect(updateInstance).toHaveBeenCalledWith("instance-1", { status: 5 }, { idempotencyKey: "instance-maintain-1" });
 
+    // Mark maintenance is only reversible if the console can write a
+    // non-maintenance status back: the registry refuses to let the node's
+    // heartbeat, its re-registration, or the prober clear an operator mark, so
+    // without this counterpart a marked instance never returns to the routing
+    // pool. The write itself is what ends the mark; the gate is the status.
+    const endMaintenance = registry["cluster-instances"]?.actions.find((candidate) => candidate.id === "endMaintenance");
+    expect(endMaintenance?.availableWhen?.({ body: {}, selectedItem: { status: 5 } })).toBe(true);
+    expect(endMaintenance?.availableWhen?.({ body: {}, selectedItem: { status: 1 } })).toBe(false);
+    expect(endMaintenance?.availableWhen?.({ body: {} })).toBe(false);
+    await endMaintenance?.execute({ body: {}, idempotencyKey: "instance-end-maintenance-1", selectedItem: { id: "instance-1" } });
+    expect(updateInstance).toHaveBeenCalledWith("instance-1", { status: 1 }, { idempotencyKey: "instance-end-maintenance-1" });
+
     await registry["cluster-instances"]?.actions.find((candidate) => candidate.id === "delete")?.execute({ body: {}, idempotencyKey: "instance-delete-1", selectedItem: { id: "instance-1" } });
     expect(deleteInstance).toHaveBeenCalledWith("instance-1", { idempotencyKey: "instance-delete-1" });
 

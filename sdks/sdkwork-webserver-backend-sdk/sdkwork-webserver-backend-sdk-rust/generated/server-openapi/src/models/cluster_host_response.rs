@@ -65,6 +65,16 @@ pub struct ClusterHostResponse {
     #[serde(rename = "instanceCount")]
     pub instance_count: String,
 
+    /// `LAN` = same-subnet host with shared-database or direct-API reachability; `TUNNEL` = API-only host reached through the reverse tunnel.
+    #[serde(rename = "joinMode")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub join_mode: Option<String>,
+
+    /// Tunnel route domain for `TUNNEL` hosts; absent on `LAN` hosts.
+    #[serde(rename = "tunnelRouteDomain")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tunnel_route_domain: Option<String>,
+
     #[serde(rename = "createdAt")]
     pub created_at: String,
 

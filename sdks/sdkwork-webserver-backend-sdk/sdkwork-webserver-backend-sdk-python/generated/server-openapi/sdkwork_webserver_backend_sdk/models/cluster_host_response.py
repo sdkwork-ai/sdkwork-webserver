@@ -26,3 +26,5 @@ class ClusterHostResponse:
     remote_ip: Optional[str] = None
     daemon_version: Optional[str] = None
     last_heartbeat_at: Optional[str] = None
+    join_mode: Optional[str] = None
+    tunnel_route_domain: Optional[str] = None

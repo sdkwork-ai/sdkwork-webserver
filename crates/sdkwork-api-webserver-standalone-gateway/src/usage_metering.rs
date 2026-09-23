@@ -271,61 +271,77 @@ impl UsageMeteringAggregator {
         if drained.is_empty() {
             return;
         }
-        let mut windows = Vec::with_capacity(drained.len());
-        for (key, counters) in drained.iter() {
-            let window_start = epoch_to_rfc3339(key.window_start_epoch);
-            windows.push(UsageWindow {
-                node_uuid: self.node_uuid.clone(),
-                tenant_id: key.tenant_id,
-                organization_id: key.organization_id,
-                app_uuid: (!key.app_uuid.is_empty()).then_some(key.app_uuid.clone()),
-                binding_uuid: (!key.binding_uuid.is_empty()).then_some(key.binding_uuid.clone()),
-                hostname: key.hostname.clone(),
-                server_ip: key.server_ip.clone(),
-                server_port: key.server_port,
-                listener_id: key.listener_id.clone(),
-                app_id: (!key.app_id.is_empty()).then_some(key.app_id.clone()),
-                app_slug: None,
-                status_class: key.status_class.clone(),
-                window_start,
-                requests: counters.requests,
-                ingress_bytes: counters.ingress_bytes,
-                egress_bytes: counters.egress_bytes,
-            });
-        }
-        match self.channel.ingest(&self.node_uuid, windows).await {
-            Ok(()) => {
-                self.ingested_windows
-                    .fetch_add(drained.len() as u64, Ordering::Relaxed);
-            }
-            Err(error) => {
-                tracing::warn!(
-                    error = %error,
-                    windows = drained.len(),
-                    "usage metering ingest failed; windows re-queued"
-                );
-                self.dropped_windows
-                    .fetch_add(drained.len() as u64, Ordering::Relaxed);
-                let Ok(mut buckets) = self.buckets.lock() else {
-                    return;
-                };
-                for (key, counters) in drained {
-                    // Re-merge under the same hard cap as `record`: existing
-                    // keys always merge back, new keys beyond the cap are
-                    // dropped (counted) so an extended ingest outage cannot
-                    // grow memory without bound.
-                    if !buckets.contains_key(&key)
-                        && buckets.len() >= self.config.max_buckets.max(1)
-                    {
-                        continue;
+        // 控制面单次 ingest 有事件数上限（10,000）。把整批分片为多个请求：
+        // 每个分片都在上限之内，失败只可能是控制面不可用；某个分片失败时
+        // 只把该分片的窗口回桶重排，其余分片照常入库——消除"整批超限被
+        // 永久拒绝、重排后再超限"的丢数死循环。
+        const MAX_EVENTS_PER_INGEST: usize = 10_000;
+        let pairs: Vec<(&BucketKey, &Counters)> = drained.iter().collect();
+        let mut ingested: u64 = 0;
+        let mut dropped: u64 = 0;
+        for chunk in pairs.chunks(MAX_EVENTS_PER_INGEST) {
+            let windows: Vec<UsageWindow> = chunk
+                .iter()
+                .map(|(key, counters)| {
+                    let window_start = epoch_to_rfc3339(key.window_start_epoch);
+                    UsageWindow {
+                        node_uuid: self.node_uuid.clone(),
+                        tenant_id: key.tenant_id,
+                        organization_id: key.organization_id,
+                        app_uuid: (!key.app_uuid.is_empty()).then_some(key.app_uuid.clone()),
+                        binding_uuid: (!key.binding_uuid.is_empty())
+                            .then_some(key.binding_uuid.clone()),
+                        hostname: key.hostname.clone(),
+                        server_ip: key.server_ip.clone(),
+                        server_port: key.server_port,
+                        listener_id: key.listener_id.clone(),
+                        app_id: (!key.app_id.is_empty()).then_some(key.app_id.clone()),
+                        app_slug: None,
+                        status_class: key.status_class.clone(),
+                        window_start,
+                        requests: counters.requests,
+                        ingress_bytes: counters.ingress_bytes,
+                        egress_bytes: counters.egress_bytes,
                     }
-                    let entry = buckets.entry(key).or_default();
-                    entry.requests = entry.requests.saturating_add(counters.requests);
-                    entry.ingress_bytes =
-                        entry.ingress_bytes.saturating_add(counters.ingress_bytes);
-                    entry.egress_bytes = entry.egress_bytes.saturating_add(counters.egress_bytes);
+                })
+                .collect();
+            match self.channel.ingest(&self.node_uuid, windows).await {
+                Ok(()) => ingested += chunk.len() as u64,
+                Err(error) => {
+                    tracing::warn!(
+                        error = %error,
+                        windows = chunk.len(),
+                        "usage metering ingest failed; the failed shard is re-queued"
+                    );
+                    dropped += chunk.len() as u64;
+                    let Ok(mut buckets) = self.buckets.lock() else {
+                        return;
+                    };
+                    for (key, counters) in chunk {
+                        // Re-merge under the same hard cap as `record`: existing
+                        // keys always merge back, new keys beyond the cap are
+                        // dropped (counted) so an extended ingest outage cannot
+                        // grow memory without bound.
+                        if !buckets.contains_key(*key)
+                            && buckets.len() >= self.config.max_buckets.max(1)
+                        {
+                            continue;
+                        }
+                        let entry = buckets.entry((*key).clone()).or_default();
+                        entry.requests = entry.requests.saturating_add(counters.requests);
+                        entry.ingress_bytes =
+                            entry.ingress_bytes.saturating_add(counters.ingress_bytes);
+                        entry.egress_bytes =
+                            entry.egress_bytes.saturating_add(counters.egress_bytes);
+                    }
                 }
             }
+        }
+        if ingested > 0 {
+            self.ingested_windows.fetch_add(ingested, Ordering::Relaxed);
+        }
+        if dropped > 0 {
+            self.dropped_windows.fetch_add(dropped, Ordering::Relaxed);
         }
     }
 

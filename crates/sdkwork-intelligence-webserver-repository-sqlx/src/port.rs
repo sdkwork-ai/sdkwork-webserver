@@ -216,6 +216,14 @@ impl WebRepositoryPort for WebRepository {
             .await
     }
 
+    async fn due_domain_verification_challenges(
+        &self,
+        limit: i32,
+    ) -> WebServiceResult<Vec<DomainVerificationChallenge>> {
+        self.list_due_domain_verification_challenges_repo(limit)
+            .await
+    }
+
     async fn list_root_domains(
         &self,
         tenant_id: i64,
@@ -601,16 +609,18 @@ impl WebRepositoryPort for WebRepository {
         &self,
         lease: &CertificateOperationLease,
         failure_code: &str,
+        failure_detail: Option<&str>,
         retry_at: &str,
         terminal_retry_at: &str,
     ) -> WebServiceResult<CertificateOperationResponse> {
         self.fail_certificate_operation_repo(
             lease,
             failure_code,
+            failure_detail,
             retry_at,
             terminal_retry_at,
         )
-            .await
+        .await
     }
 
     async fn update_certificate_auto_renew(
@@ -1139,6 +1149,7 @@ impl WebRepositoryPort for WebRepository {
         Ok(ClusterHeartbeatTransition {
             previous_status: row.previous_status,
             previous_health_state: row.previous_health_state,
+            status: row.status,
         })
     }
 

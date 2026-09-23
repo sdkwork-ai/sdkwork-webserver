@@ -145,7 +145,10 @@ pub async fn connect_tcp_stream(
     port: u16,
     client_ip: IpAddr,
 ) -> Result<RelayedStream> {
-    let registered = shared.registry.match_port(port).ok_or(TunnelError::RouteNotFound)?;
+    let registered = shared
+        .registry
+        .match_port(port)
+        .ok_or(TunnelError::RouteNotFound)?;
     admit(shared, &registered.route.policy, client_ip, None)?;
     let owner: SessionId = registered
         .session()

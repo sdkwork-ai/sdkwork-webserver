@@ -153,6 +153,77 @@ impl WebService {
         }
         Ok(domain_verification_response(challenge))
     }
+
+    /// Runs one automatic domain-verification sweep.
+    ///
+    /// Domain ownership is the gate in front of certificate issuance: the
+    /// control plane only accepts a `VERIFIED` hostname as a certificate
+    /// identifier. Verification used to happen **only** when an operator
+    /// re-submitted the verify request, so a domain whose TXT record was
+    /// published after the first check stayed `PENDING` forever and no
+    /// certificate could ever be issued for it. This sweep is what makes
+    /// "configure the domain, publish the record, get a certificate" run
+    /// without a human in the loop.
+    pub async fn run_domain_verification_cycle(
+        &self,
+        limit: i32,
+    ) -> WebServiceResult<DomainVerificationCycleReport> {
+        let due = self
+            .repository
+            .due_domain_verification_challenges(limit)
+            .await?;
+        let mut report = DomainVerificationCycleReport {
+            due: due.len(),
+            ..DomainVerificationCycleReport::default()
+        };
+        for challenge in due {
+            // One challenge per tenant call: the sweep is cross-tenant, and the
+            // observation write stays scoped to the row's owning tenant.
+            let tenant_id = challenge.tenant_id;
+            let challenge_id = challenge.challenge_id.clone();
+            match self.execute_domain_verification(tenant_id, challenge).await {
+                Ok(response) => match response.status.as_str() {
+                    "VERIFIED" => report.verified += 1,
+                    "FAILED" | "EXPIRED" => report.failed += 1,
+                    _ => report.pending += 1,
+                },
+                Err(error) => {
+                    // A single unresolvable challenge must not abort the sweep:
+                    // the remaining tenants' domains would then never converge.
+                    report.deferred += 1;
+                    tracing::warn!(
+                        tenant_id,
+                        challenge_id = %challenge_id,
+                        error = ?error,
+                        "automatic domain verification attempt failed"
+                    );
+                }
+            }
+        }
+        Ok(report)
+    }
+}
+
+/// Outcome of one automatic domain-verification sweep.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct DomainVerificationCycleReport {
+    /// Challenges taken for this sweep.
+    pub due: usize,
+    /// Challenges that reached `VERIFIED`.
+    pub verified: usize,
+    /// Challenges still `PENDING` (the record was not observable yet).
+    pub pending: usize,
+    /// Challenges that reached `FAILED` or `EXPIRED`.
+    pub failed: usize,
+    /// Challenges whose check itself errored and will be retried.
+    pub deferred: usize,
+}
+
+impl DomainVerificationCycleReport {
+    /// True when the sweep did any work; used to keep idle cycles quiet.
+    pub fn is_idle(&self) -> bool {
+        self.due == 0
+    }
 }
 
 fn evaluate_txt_payloads(

@@ -87,7 +87,21 @@ describe('Vite browser topology', () => {
 
   it('keeps React workspace deduplication enabled', () => {
     const viteConfig = readFileSync(path.join(appRoot, 'vite.config.ts'), 'utf8');
-    expect(viteConfig).toMatch(/dedupe:\s*\["react",\s*"react-dom",\s*"react-router",\s*"react-router-dom",\s*"@sdkwork\/utils"\]/u);
+    // The guard is about the property - these packages resolve to a single copy,
+    // because a second React breaks hooks and a stale nested `@sdkwork/*` copy
+    // silently drops exports - not about how the list is laid out. It used to
+    // match the one-line literal, so it failed the moment a sixth entry was
+    // added above it on its own line.
+    const declared = viteConfig.match(/dedupe:\s*\[([^\]]*)\]/u);
+    expect(declared, 'vite.config.ts declares no resolve.dedupe list').not.toBeNull();
+    const deduped = [...declared[1].matchAll(/"([^"]+)"/gu)].map((entry) => entry[1]);
+    expect(deduped).toEqual(expect.arrayContaining([
+      'react',
+      'react-dom',
+      'react-router',
+      'react-router-dom',
+      '@sdkwork/utils',
+    ]));
   });
 });
 

@@ -104,6 +104,19 @@ export function formatWebserverErrorMessage(
   options: WebserverErrorMessageOptions = {},
 ): string {
   if (error instanceof WebserverOperationError) {
+    // The provider's own sentence is the only part of a failed operation an
+    // operator can act on: the code says a provider refused something, not which
+    // credential or which zone, and it is stable precisely because retry and
+    // cooldown logic branch on it. The detail comes from a third-party HTTP
+    // response body, so it goes through the same guard as any other server-
+    // authored text rather than being trusted because it arrived over our API.
+    const failureDetail = safeDisplayText(error.failureDetail, 320);
+    if (error.kind === "failed" && failureDetail) {
+      return translate("error.asyncOperationFailedDetail", {
+        failureCode: error.failureCode,
+        failureDetail,
+      });
+    }
     const key = error.kind === "timeout"
       ? "error.asyncOperationTimeout"
       : error.kind === "cancelled"

@@ -1040,6 +1040,19 @@ pub struct AcmeSection {
     pub contact_email: Option<String>,
     pub webroot: Option<String>,
     pub account_root: Option<String>,
+    /// Where ACME-issued material lives. Defaults to the platform certificate
+    /// root (`/etc/sdkwork/certs/letsencrypt` on Linux,
+    /// `%ProgramData%\sdkwork\certs\letsencrypt` on Windows); set it explicitly
+    /// when a deployment puts certificate material elsewhere.
+    pub cert_live_root: Option<String>,
+    /// `AUTO` (default) | `HTTP_01` | `DNS_01`. `AUTO` issues single-domain
+    /// certificates over HTTP-01 and requires DNS-01 for wildcards.
+    pub challenge_method: Option<String>,
+    /// JSON file describing the DNS provider accounts
+    /// (`[{accountId, provider, zoneApex, credentials}]`). DNS-01 — and
+    /// therefore any wildcard certificate — is unavailable without it.
+    /// Credentials live in the file, never in this config.
+    pub dns_accounts_file: Option<String>,
     pub renew_before_days: Option<u64>,
     pub worker_id: Option<String>,
     pub operation_poll_interval_secs: Option<u64>,
@@ -1062,6 +1075,15 @@ impl AcmeSection {
         }
         if let Some(value) = &self.account_root {
             set_env("SDKWORK_WEBSERVER_ACME_ACCOUNT_ROOT", value);
+        }
+        if let Some(value) = &self.cert_live_root {
+            set_env(crate::config_paths::ACME_CERT_LIVE_ROOT_ENV, value);
+        }
+        if let Some(value) = &self.challenge_method {
+            set_env(crate::runtime_env::ACME_CHALLENGE_METHOD_ENV, value);
+        }
+        if let Some(value) = &self.dns_accounts_file {
+            set_env(crate::runtime_env::ACME_DNS_ACCOUNTS_FILE_ENV, value);
         }
         if let Some(value) = self.renew_before_days {
             set_env(
@@ -1370,6 +1392,57 @@ production = "deployments/webserver/static"
         let error = parse_runtime_toml_config(&path).expect_err("unknown fields must be rejected");
         assert!(error.contains("unknown_key"));
         let _ = std::fs::remove_file(&path);
+    }
+
+    /// The `[acme]` section is `deny_unknown_fields`, so a key name the struct
+    /// does not declare makes the whole runtime config unloadable — the process
+    /// fails at startup with a parse error, not at the first issuance. The
+    /// container entrypoint writes these three keys, and the certificate worker
+    /// only ever sees them through this environment mapping, so both halves are
+    /// asserted together: a rename on either side turns this red.
+    #[test]
+    fn acme_section_accepts_the_challenge_policy_keys_and_maps_them_to_env() {
+        let _guard = env_test_lock();
+        let section: AcmeSection = toml::from_str(
+            r#"
+cert_live_root = "D:/sdkwork/certs/letsencrypt"
+challenge_method = "AUTO"
+dns_accounts_file = "D:/sdkwork/dns-accounts.json"
+"#,
+        )
+        .expect("the three challenge-policy keys are part of the public config surface");
+
+        section.apply_to_env();
+        assert_eq!(
+            std::env::var(crate::config_paths::ACME_CERT_LIVE_ROOT_ENV).unwrap(),
+            "D:/sdkwork/certs/letsencrypt"
+        );
+        assert_eq!(
+            std::env::var(crate::runtime_env::ACME_CHALLENGE_METHOD_ENV).unwrap(),
+            "AUTO"
+        );
+        assert_eq!(
+            std::env::var(crate::runtime_env::ACME_DNS_ACCOUNTS_FILE_ENV).unwrap(),
+            "D:/sdkwork/dns-accounts.json"
+        );
+
+        // Negative control: without it the positive case above would still pass
+        // if `deny_unknown_fields` had been dropped from `AcmeSection`, and a
+        // typo'd key would then be silently ignored — the operator would set a
+        // knob that does nothing and get no diagnostic.
+        let misspelled: Result<AcmeSection, _> = toml::from_str("challengeMethod = \"AUTO\"\n");
+        assert!(
+            misspelled.is_err(),
+            "a misspelled ACME key must fail loudly, not be ignored"
+        );
+
+        for key in [
+            crate::config_paths::ACME_CERT_LIVE_ROOT_ENV,
+            crate::runtime_env::ACME_CHALLENGE_METHOD_ENV,
+            crate::runtime_env::ACME_DNS_ACCOUNTS_FILE_ENV,
+        ] {
+            std::env::remove_var(key);
+        }
     }
 
     fn write_import_file(

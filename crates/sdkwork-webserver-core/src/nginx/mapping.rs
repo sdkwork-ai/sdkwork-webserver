@@ -8,6 +8,11 @@
 //! - `location <match> { proxy_pass http(s)://<upstream|host:port>[/uri]; … }`
 //! - `location <match> { return <code> <url-with-$host/$request_uri/$scheme>; }`
 //! - `location <match> { root <absolute>; try_files $uri $uri/ /index.html; }`
+//! - `location ^~ /.well-known/acme-challenge/ { root <webroot>; }` — the
+//!   reserved ACME HTTP-01 namespace. It declares the listener's
+//!   `acmeHttp01.webroot` instead of an ordinary static route, so the nginx
+//!   artifact and the JSON artifact describe the same narrow-precedence
+//!   challenge endpoint.
 //! - `location <match> { alias <absolute-dir>; }` (nginx prefix replacement)
 //! - `location` `rewrite`, `allow`/`deny`, `limit_req`, `auth_basic` +
 //!   `auth_basic_user_file` (htpasswd loaded at materialize)
@@ -30,9 +35,12 @@ use serde_json::{json, Value};
 use thiserror::Error;
 
 use crate::config::{
+    cache_policy::{parse_expires_arguments, parse_if_modified_since_token},
     format_proxy_set_header_entry, hostname_upstream_allowed_cidrs, parse_htpasswd,
     parse_limit_conn, parse_limit_conn_zone, parse_limit_req, parse_limit_req_zone,
-    ConfigDiagnostic, StreamTargetConfig, StreamTlsMode, WebServerAppConfig, WebServerConfigError,
+    CachePolicyConfig, ConfigDiagnostic, ExpiresMode, IfModifiedSinceMode, StreamTargetConfig,
+    StreamTlsMode, TlsVersion, WebServerAppConfig, WebServerConfigError,
+    ACME_HTTP_01_CHALLENGE_PREFIX,
 };
 
 use super::parser::NginxDirective;
@@ -79,7 +87,6 @@ const ACCEPTED_IGNORED: &[&str] = &[
     "proxy_send_timeout",
     "proxy_buffer_size",
     "proxy_buffers",
-    "ssl_protocols",
     "ssl_prefer_server_ciphers",
     "ssl_session_cache",
     "ssl_session_timeout",
@@ -180,15 +187,16 @@ const ACCEPTED_IGNORED: &[&str] = &[
     "working_directory",
     "epoll_events",
     // Response-behavior knobs the runtime owns via its own defaults (error
-    // page mapping, directory autoindex, cache/entity headers). Accepted and
-    // ignored like the safe tuning directives above; the conformance corpus
+    // page mapping, directory autoindex). Accepted and ignored like the safe
+    // tuning directives above; the conformance corpus
     // (config-source-fixtures/nginx/full-nginx.conf) exercises `autoindex on`
     // as part of the accepted surface, and the TOML spec treats autoindex as
     // an operator policy knob (§11.2).
+    //
+    // `expires` / `etag` / `if_modified_since` are NOT here: they compile to
+    // `CachePolicyConfig` on the route or virtual host so the data plane can
+    // emit the freshness headers instead of dropping the operator's policy.
     "autoindex",
-    "expires",
-    "etag",
-    "if_modified_since",
     // events / OS tuning
     "use",
     "accept_mutex",
@@ -314,6 +322,21 @@ pub fn materialize_nginx_app(
                     "`proxy_ssl_name` (custom upstream SNI name) is not supported; the runtime sends the upstream hostname as SNI",
                 ));
             }
+            "ssl_protocols" => {
+                mapper.http_ssl_protocols = Some(parse_ssl_protocols(directive)?);
+            }
+            // nginx `expires` / `etag` / `if_modified_since` are each
+            // inherited down the http → server → location chain.
+            "expires" => {
+                mapper.http_cache.expires = Some(parse_expires_directive(directive)?);
+            }
+            "etag" => {
+                mapper.http_cache.etag = Some(parse_on_off(directive, "etag")?);
+            }
+            "if_modified_since" => {
+                mapper.http_cache.if_modified_since =
+                    Some(parse_if_modified_since(directive)?);
+            }
             "set_real_ip_from" | "real_ip_header" | "real_ip_recursive" => {
                 parse_real_ip_directive(&mut mapper.http_real_ip, directive)?;
             }
@@ -423,7 +446,180 @@ struct LocationExtras {
     gzip_types: Option<Vec<String>>,
     gzip_min_length: Option<u64>,
     error_pages: Vec<Value>,
+    /// Location-level `expires` / `etag` / `if_modified_since` declarations;
+    /// the route builder overlays them on the resolved host policy.
+    cache: CacheDirectives,
 }
+
+/// Resolved nginx `ssl_protocols` policy as an inclusive version window.
+///
+/// nginx stores the directive as a bitmask, but the runtime TLS stack
+/// (`rustls`) offers only TLS 1.2 and 1.3, so the declaration is read as a set
+/// and intersected with that supported window. The intersection can only
+/// *narrow* what a client may negotiate, so an honored declaration is never
+/// less secure than the operator asked for, and a declaration that keeps
+/// neither 1.2 nor 1.3 is refused instead of silently reverting to the broad
+/// default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SslProtocolRange {
+    minimum: TlsVersion,
+    maximum: TlsVersion,
+}
+
+impl Default for SslProtocolRange {
+    fn default() -> Self {
+        Self {
+            minimum: TlsVersion::Tls12,
+            maximum: TlsVersion::Tls13,
+        }
+    }
+}
+
+/// Every token nginx accepts in `ssl_protocols`, oldest first, mapped to the
+/// runtime version that can serve it. `None` marks a protocol the rustls core
+/// cannot enable (TLS 1.0/1.1); declaring one stays legal because narrowing is
+/// the only safe reading, but it contributes no protocol to the window.
+const NGINX_TLS_PROTOCOLS: &[(&str, Option<TlsVersion>)] = &[
+    ("TLSv1", None),
+    ("TLSv1.1", None),
+    ("TLSv1.2", Some(TlsVersion::Tls12)),
+    ("TLSv1.3", Some(TlsVersion::Tls13)),
+];
+
+fn parse_ssl_protocols(
+    directive: &NginxDirective,
+) -> Result<SslProtocolRange, NginxConfigError> {
+    if directive.args.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "ssl_protocols requires at least one protocol token",
+        ));
+    }
+    let mut minimum: Option<TlsVersion> = None;
+    let mut maximum: Option<TlsVersion> = None;
+    for token in &directive.args {
+        let Some((_, supported)) = NGINX_TLS_PROTOCOLS
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case(token))
+        else {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!(
+                    "ssl_protocols accepts TLSv1|TLSv1.1|TLSv1.2|TLSv1.3, found `{token}`"
+                ),
+            ));
+        };
+        if let Some(version) = supported {
+            minimum = Some(minimum.map_or(*version, |current| current.min(*version)));
+            maximum = Some(maximum.map_or(*version, |current| current.max(*version)));
+        }
+    }
+    let (Some(minimum), Some(maximum)) = (minimum, maximum) else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "ssl_protocols `{}` enables only TLS 1.0/1.1, which the rustls-based runtime cannot serve; declare TLSv1.2 and/or TLSv1.3",
+                directive.args.join(" ")
+            ),
+        ));
+    };
+    Ok(SslProtocolRange { minimum, maximum })
+}
+
+/// nginx `expires` / `etag` / `if_modified_since` declarations seen at one
+/// configuration level.
+///
+/// Each of the three directives owns an independent nginx inheritance chain
+/// (http → server → location, replace-on-declare), so they are carried as
+/// three separate `Option`s until the effective triple is assembled. A
+/// location that declares only `etag off` therefore keeps the server's
+/// `expires 1d` instead of silently resetting it (which is what a single
+/// combined `Option<CachePolicyConfig>` would do).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct CacheDirectives {
+    expires: Option<(ExpiresMode, i64)>,
+    etag: Option<bool>,
+    if_modified_since: Option<IfModifiedSinceMode>,
+}
+
+impl CacheDirectives {
+    /// Overlay `inner` (the more specific level) on `self`, the way nginx
+    /// merges http → server → location: a directive declared at the inner
+    /// level replaces the inherited value; an undeclared directive keeps it.
+    fn overlay(self, inner: Self) -> Self {
+        Self {
+            expires: inner.expires.or(self.expires),
+            etag: inner.etag.or(self.etag),
+            if_modified_since: inner.if_modified_since.or(self.if_modified_since),
+        }
+    }
+
+    fn is_empty(self) -> bool {
+        self.expires.is_none() && self.etag.is_none() && self.if_modified_since.is_none()
+    }
+
+    /// Materialize the effective triple. `None` means *no* level declared any
+    /// of the three directives, so the route or host keeps the
+    /// deployment-level defaults instead of pinning nginx defaults.
+    fn resolve(self) -> Option<CachePolicyConfig> {
+        if self.is_empty() {
+            return None;
+        }
+        let (expires, expires_seconds) = self.expires.unwrap_or((ExpiresMode::Off, 0));
+        Some(CachePolicyConfig {
+            expires,
+            expires_seconds,
+            etag: self.etag.unwrap_or(true),
+            if_modified_since: self
+                .if_modified_since
+                .unwrap_or(IfModifiedSinceMode::Exact),
+        })
+    }
+}
+
+/// Parse one `expires` directive into its mode and signed seconds argument.
+///
+/// The grammar itself lives in `config::cache_policy`, shared with the typed
+/// TOML plane (`expires = "1d"`), so the two configuration surfaces cannot
+/// drift into accepting different subsets of the nginx syntax
+/// (NGINX_SPEC.md §3 response behavior; SDKWORK_WEBSERVER_SPEC.md §11.2).
+fn parse_expires_directive(
+    directive: &NginxDirective,
+) -> Result<(ExpiresMode, i64), NginxConfigError> {
+    parse_expires_arguments(&directive.args)
+        .map_err(|detail| NginxConfigError::unsupported(directive, detail))
+}
+
+/// `CachePolicyConfig` as it appears in the materialized JSON plane. Kept in
+/// step with the model's `camelCase`/`kebab-case` serde names by
+/// `cache_policy_json_matches_the_model_wire_form`.
+fn cache_policy_json(policy: &CachePolicyConfig) -> Value {
+    json!({
+        "expires": policy.expires.wire(),
+        "expiresSeconds": policy.expires_seconds,
+        "etag": policy.etag,
+        "ifModifiedSince": policy.if_modified_since.wire(),
+    })
+}
+
+fn parse_if_modified_since(
+    directive: &NginxDirective,
+) -> Result<IfModifiedSinceMode, NginxConfigError> {
+    match directive.args.first().map(String::as_str) {
+        Some(token) => parse_if_modified_since_token(token).ok_or_else(|| {
+            NginxConfigError::unsupported(
+                directive,
+                format!("if_modified_since accepts off|exact|before, found `{token}`"),
+            )
+        }),
+        None => Err(NginxConfigError::unsupported(
+            directive,
+            "if_modified_since requires off|exact|before",
+        )),
+    }
+}
+
+
 
 struct Mapper<'a> {
     app_key: &'a str,
@@ -454,6 +650,12 @@ struct Mapper<'a> {
     /// http-level `http2 on|off` inherited by every server's ssl listeners
     /// (nginx 1.25.1+ `http2` directive).
     http_http2: Option<bool>,
+    /// http-level `ssl_protocols` window inherited by every server that does
+    /// not declare its own (nginx http-context inheritance).
+    http_ssl_protocols: Option<SslProtocolRange>,
+    /// http-level `expires` / `etag` / `if_modified_since`, inherited by every
+    /// server and location that does not declare its own.
+    http_cache: CacheDirectives,
     /// http-level `set_real_ip_from` / `real_ip_header` /
     /// `real_ip_recursive` settings inherited by every server.
     http_real_ip: RealIpSettings,
@@ -503,6 +705,8 @@ impl<'a> Mapper<'a> {
             http_proxy_intercept_errors: false,
             http_proxy_ssl: ProxySslSettings::default(),
             http_http2: None,
+            http_ssl_protocols: None,
+            http_cache: CacheDirectives::default(),
             http_real_ip: RealIpSettings::default(),
             real_ip_by_listener: HashMap::new(),
             listeners: Vec::new(),
@@ -796,6 +1000,94 @@ impl<'a> Mapper<'a> {
         Ok(())
     }
 
+    /// Recognize the reserved ACME HTTP-01 challenge location and take it out of
+    /// the ordinary location list.
+    ///
+    /// nginx would serve `location ^~ /.well-known/acme-challenge/ { root X; }`
+    /// as a static file tree. The runtime must not: the challenge namespace is
+    /// served by a dedicated endpoint with narrow precedence that reads one
+    /// bounded regular file, rejects any token outside the ACME character set,
+    /// and fails closed instead of falling through to unrelated routes.
+    /// `acmeHttp01.webroot` is how that endpoint is configured, so a sidecar
+    /// asking for nginx's behavior has to declare it here rather than silently
+    /// receiving a weaker generic static route.
+    ///
+    /// A challenge location that also declares `proxy_pass`, `alias`,
+    /// `try_files`, `return`, or `rewrite` is left in the ordinary list: the
+    /// operator asked for a different mechanism, and reinterpreting it as a
+    /// filesystem challenge root would be worse than honoring it as written.
+    fn take_acme_challenge_webroot(
+        &self,
+        locations: &mut Vec<&NginxDirective>,
+    ) -> Result<Option<String>, NginxConfigError> {
+        let Some(index) = locations
+            .iter()
+            .position(|location| is_acme_challenge_location(location))
+        else {
+            return Ok(None);
+        };
+        let location = locations[index];
+        let mut root_directive = None;
+        for child in &location.children {
+            match child.name.as_str() {
+                "root" => root_directive = Some(child),
+                "proxy_pass" | "alias" | "try_files" | "return" | "rewrite" => return Ok(None),
+                _ => {}
+            }
+        }
+        let Some(root_directive) = root_directive else {
+            return Err(NginxConfigError::unsupported(
+                location,
+                format!(
+                    "the ACME challenge location `{ACME_HTTP_01_CHALLENGE_PREFIX}` requires `root <webroot>`; the runtime serves the exact challenge path from that directory"
+                ),
+            ));
+        };
+        let webroot = self.resolve_path(root_directive)?;
+        locations.remove(index);
+        Ok(Some(webroot))
+    }
+
+    /// Declare `acmeHttp01.webroot` on one listener.
+    ///
+    /// One listener serves one webroot. The certificate worker writes every
+    /// challenge for its hosts into a single directory; a listener that served
+    /// two would make the CA's fetch depend on which server block happened to
+    /// match, so a second and different declaration is a configuration error
+    /// rather than a silent last-wins.
+    fn declare_listener_acme_webroot(
+        &mut self,
+        context: &NginxDirective,
+        listener_id: &str,
+        webroot: &str,
+    ) -> Result<(), NginxConfigError> {
+        let declared = json!({ "webroot": webroot });
+        let Some(listener) = self
+            .listeners
+            .iter_mut()
+            .find(|listener| listener.get("id").and_then(Value::as_str) == Some(listener_id))
+        else {
+            return Ok(());
+        };
+        match listener.get("acmeHttp01") {
+            None => listener["acmeHttp01"] = declared,
+            Some(existing) if *existing == declared => {}
+            Some(existing) => {
+                let previous = existing
+                    .get("webroot")
+                    .and_then(Value::as_str)
+                    .unwrap_or("(unreadable)");
+                return Err(NginxConfigError::unsupported(
+                    context,
+                    format!(
+                        "listener `{listener_id}` already serves ACME HTTP-01 challenges from `{previous}`; one listener serves one webroot"
+                    ),
+                ));
+            }
+        }
+        Ok(())
+    }
+
     fn materialize_server(
         &mut self,
         directive: &NginxDirective,
@@ -824,6 +1116,8 @@ impl<'a> Mapper<'a> {
         let mut server_real_ip = RealIpSettings::default();
         let mut ssl_verify_client: Option<&str> = None;
         let mut ssl_client_certificate: Option<String> = None;
+        let mut server_ssl_protocols: Option<SslProtocolRange> = None;
+        let mut server_cache = CacheDirectives::default();
         // nginx http-level gzip state snapshot: server-level `gzip*`
         // directives overlay it (single-value on/off inherits; the type list
         // and min length replace when declared).
@@ -954,12 +1248,25 @@ impl<'a> Mapper<'a> {
                 | "proxy_read_timeout"
                 | "proxy_send_timeout"
                 | "proxy_connect_timeout"
-                | "ssl_protocols"
                 | "ssl_prefer_server_ciphers"
                 | "ssl_session_cache"
                 | "ssl_trusted_certificate"
                 | "client_body_timeout"
                 | "client_header_timeout" => {}
+                // nginx inheritance: an explicit server-level `ssl_protocols`
+                // replaces the http-level window.
+                "ssl_protocols" => {
+                    server_ssl_protocols = Some(parse_ssl_protocols(child)?);
+                }
+                "expires" => {
+                    server_cache.expires = Some(parse_expires_directive(child)?);
+                }
+                "etag" => {
+                    server_cache.etag = Some(parse_on_off(child, "etag")?);
+                }
+                "if_modified_since" => {
+                    server_cache.if_modified_since = Some(parse_if_modified_since(child)?);
+                }
                 "http2" => {
                     let Some(value) = child.args.first() else {
                         return Err(NginxConfigError::unsupported(
@@ -1093,6 +1400,9 @@ impl<'a> Mapper<'a> {
         }
 
         validate_server_names(directive, &server_names)?;
+        // The ACME challenge namespace is a listener property, not a route, so
+        // it is extracted before locations are materialized.
+        let acme_webroot = self.take_acme_challenge_webroot(&mut locations)?;
         let primary_name = server_names[0].clone();
         // nginx inheritance: server-level `http2` overrides the http level.
         let http2_on = server_http2.or(self.http_http2).unwrap_or(false);
@@ -1146,11 +1456,17 @@ impl<'a> Mapper<'a> {
                     "privateKeyFile": certificate_key,
                 },
             }));
+            // nginx inheritance: an explicit server-level `ssl_protocols`
+            // replaces the http-level window; the runtime default applies when
+            // neither level declares one.
+            let ssl_protocols = server_ssl_protocols
+                .or(self.http_ssl_protocols)
+                .unwrap_or_default();
             let mut tls_policy = json!({
                 "id": format!("tls-{certificate_name}"),
                 "certificateRefs": [certificate_name],
-                "minimumVersion": "tls1.2",
-                "maximumVersion": "tls1.3",
+                "minimumVersion": ssl_protocols.minimum.wire(),
+                "maximumVersion": ssl_protocols.maximum.wire(),
                 // ALPN MUST match the listener protocols exactly (http2 only
                 // when `listen … ssl http2` or `http2 on;` is declared).
                 "alpn": if any_http2 {
@@ -1274,6 +1590,9 @@ impl<'a> Mapper<'a> {
                 self.listeners_by_port.insert(key, id.clone());
                 id
             };
+            if let Some(webroot) = acme_webroot.as_deref() {
+                self.declare_listener_acme_webroot(directive, &listener_id, webroot)?;
+            }
             if !listener_refs.contains(&listener_id) {
                 listener_refs.push(listener_id.clone());
             }
@@ -1423,6 +1742,15 @@ impl<'a> Mapper<'a> {
         }
         virtual_host["recursiveErrorPages"] =
             Value::Bool(server_recursive_error_pages.unwrap_or(self.http_recursive_error_pages));
+        // nginx inherits `expires`/`etag`/`if_modified_since` from the http
+        // context; a server-level declaration replaces the inherited value per
+        // directive. Emitting the resolved triple here (instead of only when
+        // the server itself declares one) is what makes an http-level policy
+        // actually reach the routes.
+        let effective_cache = self.http_cache.overlay(server_cache);
+        if let Some(policy) = effective_cache.resolve() {
+            virtual_host["cachePolicy"] = cache_policy_json(&policy);
+        }
         // Rewrite route matches with their actual path types (exact/prefix).
         let mut route_entries = Vec::new();
         for (index, location) in locations.iter().enumerate().take(catch_all_iterations) {
@@ -1515,6 +1843,16 @@ impl<'a> Mapper<'a> {
             }
             if let Some(secure_link) = &location_extras[index].secure_link {
                 route["secureLink"] = secure_link.clone();
+            }
+            // Location-level `expires`/`etag`/`if_modified_since` overlay the
+            // host policy per directive; a location that declares none keeps
+            // the host policy by omitting the key entirely.
+            if let Some(policy) = effective_cache
+                .overlay(location_extras[index].cache)
+                .resolve()
+                .filter(|_| !location_extras[index].cache.is_empty())
+            {
+                route["cachePolicy"] = cache_policy_json(&policy);
             }
             route_entries.push(route);
         }
@@ -1739,6 +2077,17 @@ impl<'a> Mapper<'a> {
                 }
                 "error_page" => {
                     extras.error_pages.push(parse_error_page(child)?);
+                }
+                // nginx inheritance: a location-level declaration replaces the
+                // server/http value for that directive only.
+                "expires" => {
+                    extras.cache.expires = Some(parse_expires_directive(child)?);
+                }
+                "etag" => {
+                    extras.cache.etag = Some(parse_on_off(child, "etag")?);
+                }
+                "if_modified_since" => {
+                    extras.cache.if_modified_since = Some(parse_if_modified_since(child)?);
                 }
                 "proxy_intercept_errors" => {
                     proxy_intercept_errors = parse_on_off(child, "proxy_intercept_errors")?;
@@ -2016,6 +2365,19 @@ impl<'a> Mapper<'a> {
         self.note_client_max_body_size(client_max_body_size);
         let _ = server_name;
 
+        // nginx resolves a static location through `clcf->alias` first and
+        // only then through `clcf->root` (`ngx_http_static_handler`): a
+        // location that declares `alias` must never fall back to an
+        // inherited server/http `root`. Falling back here silently rewrote
+        // the document root, which both 404s working configurations and can
+        // expose files that `alias` deliberately points outside the
+        // document root.
+        let effective_root: Option<String> = if alias.is_some() {
+            None
+        } else {
+            root.or_else(|| inherited_root.map(str::to_owned))
+        };
+
         if let Some(target) = dynamic_target {
             if !effective_proxy_ssl.is_empty() {
                 return Err(NginxConfigError::unsupported(
@@ -2212,7 +2574,7 @@ impl<'a> Mapper<'a> {
                     ));
                 }
             }
-        } else if let Some(root) = root.or_else(|| inherited_root.map(str::to_owned)) {
+        } else if let Some(root) = effective_root {
             // nginx `root` uses POSIX path semantics: a leading `/` is
             // absolute regardless of the host platform, and the full request
             // path is appended to the root (no prefix stripping).
@@ -3688,6 +4050,22 @@ fn parse_location_match(
     }
 }
 
+/// True when a location targets the reserved ACME HTTP-01 challenge namespace.
+///
+/// Only prefix matches qualify. An `=` exact match names a single token rather
+/// than the namespace, and a regex match is not the directory the runtime
+/// serves, so neither is read as an `acmeHttp01` declaration. The trailing
+/// slash is optional because both spellings appear in the wild and nginx treats
+/// them alike for a directory prefix.
+fn is_acme_challenge_location(location: &NginxDirective) -> bool {
+    let Ok((path_type, path)) = parse_location_match(location) else {
+        return false;
+    };
+    matches!(path_type, "prefix" | "prefix-exclusive")
+        && (path == ACME_HTTP_01_CHALLENGE_PREFIX
+            || path == ACME_HTTP_01_CHALLENGE_PREFIX.trim_end_matches('/'))
+}
+
 /// Only the variable combinations the redirect data plane expands are
 /// accepted in `return` URLs and TOML `returnLocation` values.
 pub(crate) fn redirect_variables_ok(url: &str) -> bool {
@@ -4263,6 +4641,332 @@ server {{
     }
 
     #[test]
+    fn ssl_protocols_declaration_selects_the_tls_window() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        std::fs::write(directory.path().join("site.pem"), "cert").unwrap();
+        std::fs::write(directory.path().join("site.key"), "key").unwrap();
+        let materialize = |protocols: &str| {
+            let parsed = parse_nginx_config(
+                &format!(
+                    r#"
+server {{
+    listen 443 ssl;
+    server_name secure.example.com;
+
+    ssl_certificate site.pem;
+    ssl_certificate_key site.key;
+    ssl_protocols {protocols};
+
+    location / {{
+        proxy_pass http://127.0.0.1:9443;
+    }}
+}}
+"#
+                ),
+                std::path::Path::new("site.conf"),
+            )
+            .expect("parse");
+            materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize")
+        };
+        // TLS 1.3 only is a genuine hardening declaration; it must reach the
+        // TLS policy instead of being dropped and silently re-opening 1.2.
+        let tls13 = materialize("TLSv1.3");
+        assert_eq!(tls13.tls_policies.len(), 1);
+        assert_eq!(tls13.tls_policies[0].minimum_version, TlsVersion::Tls13);
+        assert_eq!(tls13.tls_policies[0].maximum_version, TlsVersion::Tls13);
+        // TLS 1.2 only is the mirror case.
+        let tls12 = materialize("TLSv1.2");
+        assert_eq!(tls12.tls_policies[0].minimum_version, TlsVersion::Tls12);
+        assert_eq!(tls12.tls_policies[0].maximum_version, TlsVersion::Tls12);
+        // The legacy tokens nginx accepts are intersected with the rustls
+        // window (never widening it, never failing the load).
+        let mixed = materialize("TLSv1 TLSv1.1 TLSv1.2 TLSv1.3");
+        assert_eq!(mixed.tls_policies[0].minimum_version, TlsVersion::Tls12);
+        assert_eq!(mixed.tls_policies[0].maximum_version, TlsVersion::Tls13);
+        // An undeclared `ssl_protocols` keeps the documented runtime default.
+        assert_eq!(
+            materialize("TLSv1.2 TLSv1.3").tls_policies[0].minimum_version,
+            TlsVersion::Tls12
+        );
+    }
+
+    #[test]
+    fn ssl_protocols_inherits_http_level_and_server_overrides() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        for name in ["a", "b"] {
+            std::fs::write(directory.path().join(format!("{name}.pem")), "cert").unwrap();
+            std::fs::write(directory.path().join(format!("{name}.key")), "key").unwrap();
+        }
+        let parsed = parse_nginx_config(
+            r#"
+http {
+    ssl_protocols TLSv1.3;
+
+    server {
+        listen 443 ssl;
+        server_name inherited.example.com;
+        ssl_certificate a.pem;
+        ssl_certificate_key a.key;
+        location / { proxy_pass http://127.0.0.1:9443; }
+    }
+
+    server {
+        listen 8443 ssl;
+        server_name override.example.com;
+        ssl_certificate b.pem;
+        ssl_certificate_key b.key;
+        ssl_protocols TLSv1.2;
+        location / { proxy_pass http://127.0.0.1:9443; }
+    }
+}
+"#,
+            std::path::Path::new("nginx.conf"),
+        )
+        .expect("parse");
+        let config = materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize");
+        assert_eq!(config.tls_policies.len(), 2);
+        let mut windows: Vec<(TlsVersion, TlsVersion)> = config
+            .tls_policies
+            .iter()
+            .map(|policy| (policy.minimum_version, policy.maximum_version))
+            .collect();
+        windows.sort();
+        assert_eq!(
+            windows,
+            vec![
+                (TlsVersion::Tls12, TlsVersion::Tls12),
+                (TlsVersion::Tls13, TlsVersion::Tls13),
+            ],
+            "the http-level window is inherited while an explicit server-level declaration replaces it"
+        );
+    }
+
+    #[test]
+    fn ssl_protocols_that_keeps_no_servable_protocol_is_refused() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        std::fs::write(directory.path().join("site.pem"), "cert").unwrap();
+        std::fs::write(directory.path().join("site.key"), "key").unwrap();
+        let parsed = parse_nginx_config(
+            r#"
+server {
+    listen 443 ssl;
+    server_name legacy.example.com;
+    ssl_certificate site.pem;
+    ssl_certificate_key site.key;
+    ssl_protocols TLSv1 TLSv1.1;
+    location / { proxy_pass http://127.0.0.1:9443; }
+}
+"#,
+            std::path::Path::new("site.conf"),
+        )
+        .expect("parse");
+        let error = materialize_nginx_app(&parsed, directory.path(), "test")
+            .expect_err("TLS 1.0/1.1 only must be refused, not silently defaulted");
+        assert!(
+            format!("{error}").contains("TLS 1.0/1.1"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn ssl_protocols_rejects_an_unknown_token() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        std::fs::write(directory.path().join("site.pem"), "cert").unwrap();
+        std::fs::write(directory.path().join("site.key"), "key").unwrap();
+        let parsed = parse_nginx_config(
+            r#"
+server {
+    listen 443 ssl;
+    server_name future.example.com;
+    ssl_certificate site.pem;
+    ssl_certificate_key site.key;
+    ssl_protocols TLSv1.4;
+    location / { proxy_pass http://127.0.0.1:9443; }
+}
+"#,
+            std::path::Path::new("site.conf"),
+        )
+        .expect("parse");
+        let error = materialize_nginx_app(&parsed, directory.path(), "test")
+            .expect_err("an unknown protocol token must be refused");
+        assert!(
+            format!("{error}").contains("TLSv1.4"),
+            "unexpected error: {error}"
+        );
+    }
+
+    /// The materialized JSON is the contract with the data plane, so the
+    /// hand-built `cache_policy_json` must stay parseable as the model type it
+    /// stands for — otherwise a mismatched key would only surface as a 500 at
+    /// request time.
+    #[test]
+    fn cache_policy_json_matches_the_model_wire_form() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let parsed = parse_nginx_config(
+            "server {\n    listen 80;\n    server_name cache.example.com;\n    expires modified 2h;\n    etag off;\n    if_modified_since before;\n    location / { return 200 \"ok\"; }\n}\n",
+            std::path::Path::new("site.conf"),
+        )
+        .expect("parse");
+        let config = materialize_nginx_app(&parsed, directory.path(), "cache").expect("materialize");
+        let policy = config.virtual_hosts[0]
+            .cache_policy
+            .as_ref()
+            .expect("host cache policy");
+        let json = serde_json::to_value(policy).expect("serialize");
+        assert_eq!(json["expires"], "modified");
+        assert_eq!(json["expiresSeconds"], 7_200);
+        assert_eq!(json["etag"], false);
+        assert_eq!(json["ifModifiedSince"], "before");
+        // Round-trips through the model's own serde names, which is what the
+        // data plane deserializes.
+        let reparsed: CachePolicyConfig =
+            serde_json::from_value(json.clone()).expect("deserialize");
+        assert_eq!(&reparsed, policy);
+    }
+
+    #[test]
+    fn expires_declaration_selects_the_mode_and_reaches_the_route() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let parsed = parse_nginx_config(
+            "server {\n    listen 80;\n    server_name cache.example.com;\n    location /assets/ { expires 7d; root /srv/www; }\n    location /api/ { expires epoch; root /srv/www; }\n    location /max/ { expires max; root /srv/www; }\n    location /daily/ { expires @15h30m; root /srv/www; }\n    location /never/ { expires -1h; root /srv/www; }\n    location /plain/ { root /srv/www; }\n}\n",
+            std::path::Path::new("site.conf"),
+        )
+        .expect("parse");
+        let config = materialize_nginx_app(&parsed, directory.path(), "cache").expect("materialize");
+        let routes = &config.virtual_hosts[0].routes;
+        let policy = |index: usize| {
+            routes[index]
+                .cache_policy
+                .as_ref()
+                .unwrap_or_else(|| panic!("route {index} must carry a cache policy"))
+        };
+        assert_eq!(policy(0).expires, ExpiresMode::Access);
+        assert_eq!(policy(0).expires_seconds, 604_800);
+        assert_eq!(policy(1).expires, ExpiresMode::Epoch);
+        assert_eq!(policy(2).expires, ExpiresMode::Max);
+        assert_eq!(policy(3).expires, ExpiresMode::Daily);
+        assert_eq!(policy(3).expires_seconds, 55_800);
+        assert_eq!(policy(4).expires, ExpiresMode::Access);
+        assert_eq!(policy(4).expires_seconds, -3_600);
+        // A location that declares nothing keeps no policy of its own, so it
+        // inherits the host/app default rather than pinning `expires off`.
+        assert!(
+            routes[5].cache_policy.is_none(),
+            "an undeclared location must not emit a policy"
+        );
+    }
+
+    #[test]
+    fn cache_directives_inherit_independently_http_server_location() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let parsed = parse_nginx_config(
+            r#"
+http {
+    expires 1h;
+    etag off;
+    server {
+        listen 80;
+        server_name cache.example.com;
+        if_modified_since before;
+        location /override/ { expires modified 30m; root /srv/www; }
+        location /inherit/ { root /srv/www; }
+        location /etaon/ { etag on; root /srv/www; }
+    }
+}
+"#,
+            std::path::Path::new("site.conf"),
+        )
+        .expect("parse");
+        let config = materialize_nginx_app(&parsed, directory.path(), "cache").expect("materialize");
+        let host = config.virtual_hosts[0]
+            .cache_policy
+            .as_ref()
+            .expect("http-level declarations must reach the host");
+        assert_eq!(host.expires, ExpiresMode::Access);
+        assert_eq!(host.expires_seconds, 3_600);
+        assert_eq!(host.etag, false);
+        assert_eq!(host.if_modified_since, IfModifiedSinceMode::Before);
+
+        let routes = &config.virtual_hosts[0].routes;
+        // Location replaces `expires` only; the http `etag off` and the server
+        // `if_modified_since before` survive.
+        let override_policy = routes[0].cache_policy.as_ref().expect("override policy");
+        assert_eq!(override_policy.expires, ExpiresMode::Modified);
+        assert_eq!(override_policy.expires_seconds, 1_800);
+        assert_eq!(override_policy.etag, false);
+        assert_eq!(override_policy.if_modified_since, IfModifiedSinceMode::Before);
+        // A location with no declaration emits nothing and inherits the host.
+        assert!(routes[1].cache_policy.is_none());
+        // `etag on` at the location re-enables what the http context disabled.
+        let etag_on = routes[2].cache_policy.as_ref().expect("etag policy");
+        assert_eq!(etag_on.etag, true);
+        assert_eq!(etag_on.expires, ExpiresMode::Access);
+        assert_eq!(etag_on.expires_seconds, 3_600);
+    }
+
+    #[test]
+    fn expires_off_at_the_location_reverts_an_inherited_policy() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let parsed = parse_nginx_config(
+            "server {\n    listen 80;\n    server_name cache.example.com;\n    expires 1d;\n    location /fresh/ { root /srv/www; }\n    location /volatile/ { expires off; root /srv/www; }\n}\n",
+            std::path::Path::new("site.conf"),
+        )
+        .expect("parse");
+        let config = materialize_nginx_app(&parsed, directory.path(), "cache").expect("materialize");
+        let host = config.virtual_hosts[0]
+            .cache_policy
+            .as_ref()
+            .expect("server-level policy");
+        assert_eq!(host.expires, ExpiresMode::Access);
+        assert_eq!(host.expires_seconds, 86_400);
+        let routes = &config.virtual_hosts[0].routes;
+        assert!(
+            routes[0].cache_policy.is_none(),
+            "a silent location inherits the host policy instead of repeating it"
+        );
+        let explicit_off = routes[1]
+            .cache_policy
+            .as_ref()
+            .expect("`expires off` is an explicit declaration");
+        assert_eq!(
+            explicit_off.expires,
+            ExpiresMode::Off,
+            "`expires off` must be distinguishable from an omission, otherwise \
+             it could not turn off an inherited policy"
+        );
+    }
+
+    #[test]
+    fn malformed_cache_directives_fail_closed() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let cases = [
+            ("expires 1x;", "invalid expires value"),
+            ("expires modified;", "invalid value"),
+            ("expires modified epoch;", "invalid expires modified value"),
+            ("expires @25h;", "less than 24 hours"),
+            ("expires @-1h;", "invalid value"),
+            ("expires beginning 1h;", "expires accepts"),
+            ("etag maybe;", "etag requires on or off"),
+            ("if_modified_since sometimes;", "if_modified_since accepts"),
+        ];
+        for (directive, expected) in cases {
+            let text = format!(
+                "server {{\n    listen 80;\n    server_name cache.example.com;\n    {directive}\n    location / {{ return 200 \"ok\"; }}\n}}\n"
+            );
+            let parsed = parse_nginx_config(&text, std::path::Path::new("site.conf"))
+                .unwrap_or_else(|error| panic!("`{directive}` must parse: {error}"));
+            let error = materialize_nginx_app(&parsed, directory.path(), "cache")
+                .err()
+                .unwrap_or_else(|| panic!("`{directive}` must be refused"));
+            let message = format!("{error}");
+            assert!(
+                message.contains(expected),
+                "`{directive}`: expected `{expected}` in `{message}`"
+            );
+        }
+    }
+
+    #[test]
     fn materializes_redirect_with_host_variables_and_static_root() {
         let directory = tempfile::tempdir().expect("temp dir");
         let parsed = parse_nginx_config(
@@ -4827,6 +5531,123 @@ server {
     }
 
     #[test]
+    fn location_alias_wins_over_an_inherited_server_root() {
+        // nginx consults `clcf->alias` before `clcf->root`, so a location
+        // that declares `alias` while the server declares `root` must use
+        // the alias. Falling back to the inherited root silently rewrote the
+        // document root: working configurations 404, and an alias that
+        // deliberately points outside the document root stops doing so.
+        let config = materialize(
+            r#"
+server {
+    listen 80;
+    server_name alias-shadow.example.com;
+    root /srv/www;
+    location /docs/ {
+        alias /srv/shared/docs/;
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        let static_resource = config
+            .resources
+            .iter()
+            .find_map(|resource| match resource {
+                crate::config::ResourceConfig::Static {
+                    root, strip_prefix, ..
+                } => Some((root.clone(), *strip_prefix)),
+                _ => None,
+            })
+            .expect("static resource");
+        assert_eq!(static_resource.0, "/srv/shared/docs/");
+        assert!(
+            static_resource.1,
+            "a location alias must still replace the matched prefix"
+        );
+    }
+
+    #[test]
+    fn location_alias_survives_a_root_declared_on_another_location() {
+        // Two locations on the same server: only one declares `root`, the
+        // other declares `alias`. The alias must not pick up its sibling's
+        // root, and the root location must keep the full request path.
+        let config = materialize(
+            r#"
+server {
+    listen 80;
+    server_name siblings.example.com;
+    location /a/ {
+        root /srv/www;
+    }
+    location /b/ {
+        alias /srv/external/b/;
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        let static_resources: Vec<(String, bool)> = config
+            .resources
+            .iter()
+            .filter_map(|resource| match resource {
+                crate::config::ResourceConfig::Static {
+                    root, strip_prefix, ..
+                } => Some((root.clone(), *strip_prefix)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(static_resources.len(), 2, "{static_resources:?}");
+        assert!(
+            static_resources.contains(&("/srv/www".to_owned(), false)),
+            "the root location keeps the full request path: {static_resources:?}"
+        );
+        assert!(
+            static_resources.contains(&("/srv/external/b/".to_owned(), true)),
+            "the alias location replaces the matched prefix: {static_resources:?}"
+        );
+    }
+
+    #[test]
+    fn try_files_only_location_still_inherits_the_server_root() {
+        // The alias precedence fix must not break the other direction: a
+        // location with only `try_files` still inherits the server root and
+        // keeps the full request path (SPA fallback layout).
+        let config = materialize(
+            r#"
+server {
+    listen 80;
+    server_name spa.example.com;
+    root /srv/www;
+    location / {
+        try_files $uri /index.html;
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        let static_resource = config
+            .resources
+            .iter()
+            .find_map(|resource| match resource {
+                crate::config::ResourceConfig::Static {
+                    root,
+                    strip_prefix,
+                    spa_fallback,
+                    ..
+                } => Some((root.clone(), *strip_prefix, spa_fallback.clone())),
+                _ => None,
+            })
+            .expect("static resource");
+        assert_eq!(static_resource.0, "/srv/www");
+        assert!(
+            !static_resource.1,
+            "an inherited root keeps the full request path"
+        );
+        assert_eq!(static_resource.2.as_deref(), Some("index.html"));
+    }
+
+    #[test]
     fn root_materializes_without_prefix_stripping() {
         let config = materialize(
             r#"
@@ -4855,6 +5676,189 @@ server {
             !static_resource.1,
             "nginx root must keep the full request path"
         );
+    }
+
+    #[test]
+    fn acme_challenge_location_declares_the_listener_webroot() {
+        let config = materialize(
+            r#"
+upstream gateway {
+    server 127.0.0.1:3800;
+}
+server {
+    listen 443 ssl;
+    listen 80;
+    server_name edge.example.com;
+    ssl_certificate /etc/ssl/edge/fullchain.pem;
+    ssl_certificate_key /etc/ssl/edge/privkey.pem;
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/lib/sdkwork/webserver/acme-webroot;
+    }
+    location / {
+        proxy_pass http://gateway;
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        assert_eq!(
+            config.listeners.len(),
+            2,
+            "`listen 443 ssl` and `listen 80` are one listener each"
+        );
+        for listener in &config.listeners {
+            let acme = listener
+                .acme_http_01
+                .as_ref()
+                .expect("every listener of the server serves the challenge namespace");
+            assert_eq!(acme.webroot, "/var/lib/sdkwork/webserver/acme-webroot");
+        }
+        assert!(
+            !config.resources.iter().any(|resource| matches!(
+                resource,
+                crate::config::ResourceConfig::Static { root, .. }
+                    if root == "/var/lib/sdkwork/webserver/acme-webroot"
+            )),
+            "the challenge namespace is a listener endpoint, not a static route"
+        );
+    }
+
+    #[test]
+    fn acme_challenge_match_accepts_the_directory_without_a_trailing_slash() {
+        let config = materialize(
+            r#"
+upstream gateway {
+    server 127.0.0.1:3800;
+}
+server {
+    listen 80;
+    server_name edge.example.com;
+    location ^~ /.well-known/acme-challenge {
+        root /var/lib/acme;
+    }
+    location / {
+        proxy_pass http://gateway;
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        assert_eq!(
+            config.listeners[0]
+                .acme_http_01
+                .as_ref()
+                .map(|acme| acme.webroot.as_str()),
+            Some("/var/lib/acme")
+        );
+    }
+
+    #[test]
+    fn acme_challenge_shared_across_domains_keeps_one_listener_webroot() {
+        // One port-80 listener serves every domain of the edge, so the same
+        // declaration repeated per server block must agree rather than conflict.
+        let config = materialize(
+            r#"
+upstream gateway {
+    server 127.0.0.1:3800;
+}
+server {
+    listen 80;
+    server_name a.example.com;
+    location ^~ /.well-known/acme-challenge/ { root /var/lib/acme; }
+    location / { proxy_pass http://gateway; }
+}
+server {
+    listen 80;
+    server_name b.example.com;
+    location ^~ /.well-known/acme-challenge/ { root /var/lib/acme; }
+    location / { proxy_pass http://gateway; }
+}
+"#,
+        )
+        .expect("materialize");
+        assert_eq!(config.listeners.len(), 1);
+        assert_eq!(
+            config.listeners[0]
+                .acme_http_01
+                .as_ref()
+                .map(|acme| acme.webroot.as_str()),
+            Some("/var/lib/acme")
+        );
+    }
+
+    #[test]
+    fn conflicting_acme_webroots_on_one_listener_fail_closed() {
+        let error = materialize(
+            r#"
+upstream gateway {
+    server 127.0.0.1:3800;
+}
+server {
+    listen 80;
+    server_name a.example.com;
+    location ^~ /.well-known/acme-challenge/ { root /var/lib/acme-a; }
+    location / { proxy_pass http://gateway; }
+}
+server {
+    listen 80;
+    server_name b.example.com;
+    location ^~ /.well-known/acme-challenge/ { root /var/lib/acme-b; }
+    location / { proxy_pass http://gateway; }
+}
+"#,
+        )
+        .expect_err("one listener cannot serve two challenge webroots");
+        let message = error.to_string();
+        assert!(
+            message.contains("one listener serves one webroot"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn a_proxied_acme_challenge_location_is_not_reinterpreted() {
+        // Proxying the challenge path asks for a mechanism the narrow endpoint
+        // cannot express. It must stay an ordinary route rather than being
+        // silently rewritten into a filesystem webroot the operator never
+        // provisioned.
+        let config = materialize(
+            r#"
+upstream gateway {
+    server 127.0.0.1:3800;
+}
+server {
+    listen 80;
+    server_name legacy.example.com;
+    location ^~ /.well-known/acme-challenge/ {
+        proxy_pass http://gateway;
+    }
+    location / {
+        proxy_pass http://gateway;
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        assert!(config.listeners[0].acme_http_01.is_none());
+        assert_eq!(config.resources.len(), 2, "both locations stay proxy routes");
+    }
+
+    #[test]
+    fn an_acme_challenge_location_without_a_root_fails_closed() {
+        let error = materialize(
+            r#"
+server {
+    listen 80;
+    server_name edge.example.com;
+    location ^~ /.well-known/acme-challenge/ {
+        index index.html;
+    }
+}
+"#,
+        )
+        .expect_err("a challenge location must name the webroot");
+        let message = error.to_string();
+        assert!(message.contains("requires `root <webroot>`"), "{message}");
     }
 
     #[test]
@@ -5622,7 +6626,6 @@ server {
             ("proxy_send_timeout", "60s"),
             ("proxy_buffer_size", "4k"),
             ("proxy_buffers", "8 4k"),
-            ("ssl_protocols", "TLSv1.2 TLSv1.3"),
             ("ssl_prefer_server_ciphers", "on"),
             ("ssl_session_cache", "shared:SSL:10m"),
             ("ssl_session_timeout", "10m"),
@@ -5720,9 +6723,6 @@ server {
             ("epoll_events", "512"),
             // Response-behavior knobs the runtime owns via its own defaults.
             ("error_page", "500 502 503 504 /50x.html"),
-            ("expires", "1d"),
-            ("etag", "off"),
-            ("if_modified_since", "before"),
             ("autoindex", "off"),
             ("use", "epoll"),
             ("accept_mutex", "off"),

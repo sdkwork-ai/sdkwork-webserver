@@ -280,11 +280,7 @@ fn is_datagram(route: &TunnelRoute) -> bool {
     route.protocol == sdkwork_webserver_tunnel_core::TunnelProtocolKind::Udp
 }
 
-fn inner_by_port(
-    inner: &RegistryInner,
-    datagram: bool,
-    port: u16,
-) -> Option<Arc<RegisteredRoute>> {
+fn inner_by_port(inner: &RegistryInner, datagram: bool, port: u16) -> Option<Arc<RegisteredRoute>> {
     inner.by_port.get(&(datagram, port)).cloned()
 }
 
@@ -335,7 +331,7 @@ mod tests {
     use super::*;
     use chrono::Utc;
     use sdkwork_webserver_tunnel_core::{
-        local_target, RouteMatcher, RoutePolicy, TunnelProtocolKind,
+        local_target, local_udp_target, RouteMatcher, RoutePolicy, TunnelProtocolKind,
     };
 
     fn sample_route(id: &str, domain: &str, session: &str) -> TunnelRoute {
@@ -345,6 +341,32 @@ mod tests {
             TunnelProtocolKind::Http,
             RouteMatcher::domain(domain).expect("valid domain"),
             local_target(3000),
+            RoutePolicy::private(),
+        )
+        .expect("valid route")
+        .with_session(SessionId::parse(session).expect("valid id"), Utc::now())
+    }
+
+    fn sample_port_route(id: &str, port: u16, session: &str) -> TunnelRoute {
+        TunnelRoute::new(
+            RouteId::parse(id).expect("valid id"),
+            "ssh",
+            TunnelProtocolKind::Tcp,
+            RouteMatcher::Port(port),
+            local_target(22),
+            RoutePolicy::private(),
+        )
+        .expect("valid route")
+        .with_session(SessionId::parse(session).expect("valid id"), Utc::now())
+    }
+
+    fn sample_udp_route(id: &str, port: u16, session: &str) -> TunnelRoute {
+        TunnelRoute::new(
+            RouteId::parse(id).expect("valid id"),
+            "dns",
+            TunnelProtocolKind::Udp,
+            RouteMatcher::Port(port),
+            local_udp_target(53),
             RoutePolicy::private(),
         )
         .expect("valid route")
@@ -418,12 +440,20 @@ mod tests {
         // A more specific wildcard wins over a broader one; an exact route
         // wins over both.
         registry
-            .register(sample_route("route_wild2", "*.app.sdkwork.link", "session_a"))
+            .register(sample_route(
+                "route_wild2",
+                "*.app.sdkwork.link",
+                "session_a",
+            ))
             .expect("register nested wildcard");
         let matched = registry.match_domain("x.app.sdkwork.link").expect("match");
         assert_eq!(matched.route.id.to_string(), "route_wild2");
         registry
-            .register(sample_route("route_exact", "y.app.sdkwork.link", "session_a"))
+            .register(sample_route(
+                "route_exact",
+                "y.app.sdkwork.link",
+                "session_a",
+            ))
             .expect("register exact");
         let matched = registry.match_domain("y.app.sdkwork.link").expect("match");
         assert_eq!(matched.route.id.to_string(), "route_exact");
@@ -449,8 +479,7 @@ mod tests {
         assert!(registry.match_domain("x.renewed.link").is_some());
 
         // Session teardown returns every removed id (wildcard included).
-        let removed = registry
-            .remove_session(&SessionId::parse("session_a").expect("valid id"));
+        let removed = registry.remove_session(&SessionId::parse("session_a").expect("valid id"));
         assert_eq!(removed.len(), 1);
         assert!(registry.match_domain("x.renewed.link").is_none());
     }
@@ -467,10 +496,12 @@ mod tests {
             RoutePolicy::private(),
         )
         .expect("valid route")
-        .with_session(SessionId::parse("session_a").expect("valid id"), chrono::Utc::now());
+        .with_session(
+            SessionId::parse("session_a").expect("valid id"),
+            chrono::Utc::now(),
+        );
         registry.register(route).expect("register");
-        let removed = registry
-            .remove_session(&SessionId::parse("session_a").expect("valid id"));
+        let removed = registry.remove_session(&SessionId::parse("session_a").expect("valid id"));
         assert_eq!(removed.len(), 1, "port routes must be reported to teardown");
     }
 
@@ -491,5 +522,208 @@ mod tests {
         assert!(registry.match_port(7022).is_some());
         registry.remove_session(&SessionId::parse("session_a").expect("valid id"));
         assert!(registry.match_port(7022).is_none());
+    }
+
+    #[test]
+    fn tcp_and_udp_port_namespaces_are_independent() {
+        // One port number may legitimately host one route of each protocol:
+        // the gateway binds a stream listener and a datagram socket, and the
+        // two indexes must never hand a visitor the other plane's route.
+        let registry = RouteRegistry::new();
+        registry
+            .register(sample_port_route("route_tcp", 7000, "session_a"))
+            .expect("register tcp");
+        registry
+            .register(sample_udp_route("route_udp", 7000, "session_a"))
+            .expect("register udp on the same port number");
+        assert_eq!(registry.count(), 2, "both planes keep their own entry");
+
+        assert_eq!(
+            registry
+                .match_port(7000)
+                .expect("tcp match")
+                .route
+                .id
+                .to_string(),
+            "route_tcp"
+        );
+        assert_eq!(
+            registry
+                .match_udp_port(7000)
+                .expect("udp match")
+                .route
+                .id
+                .to_string(),
+            "route_udp"
+        );
+
+        // Removing one plane leaves the other's claim intact.
+        registry
+            .unregister(&RouteId::parse("route_udp").expect("valid id"))
+            .expect("udp route present");
+        assert!(registry.match_port(7000).is_some());
+        assert!(registry.match_udp_port(7000).is_none());
+    }
+
+    #[test]
+    fn a_udp_only_port_is_invisible_to_tcp_visitors() {
+        // A TCP visitor hitting a port that only hosts a datagram route must
+        // find nothing: the TCP plane carries no routing key that could
+        // distinguish datagram sessions.
+        let registry = RouteRegistry::new();
+        registry
+            .register(sample_udp_route("route_dns", 7000, "session_a"))
+            .expect("register udp");
+        assert!(registry.match_port(7000).is_none());
+        assert!(registry.match_udp_port(7000).is_some());
+    }
+
+    #[test]
+    fn port_conflicts_are_per_namespace_and_per_session() {
+        let registry = RouteRegistry::new();
+        registry
+            .register(sample_port_route("route_tcp", 7000, "session_a"))
+            .expect("register tcp");
+        // Same protocol, same port, different device ⇒ conflict.
+        let error = registry
+            .register(sample_port_route("route_other", 7000, "session_b"))
+            .expect_err("cross-session tcp port conflict");
+        assert!(matches!(error, TunnelError::RouteConflict(_)));
+        // Same port number on the other namespace is not a conflict (proven
+        // above, re-asserted here for the cross-session variant).
+        registry
+            .register(sample_udp_route("route_dns", 7000, "session_b"))
+            .expect("udp namespace is free");
+    }
+
+    #[test]
+    fn a_route_without_an_owning_session_is_rejected() {
+        // Ownership is what makes every later conflict and teardown check
+        // meaningful, so a session-less route must never enter the indexes.
+        let registry = RouteRegistry::new();
+        let orphan = TunnelRoute::new(
+            RouteId::parse("route_orphan").expect("valid id"),
+            "web",
+            TunnelProtocolKind::Http,
+            RouteMatcher::domain("orphan.sdkwork.link").expect("valid domain"),
+            local_target(3000),
+            RoutePolicy::private(),
+        )
+        .expect("valid route");
+        let error = registry.register(orphan).expect_err("session is required");
+        assert!(matches!(error, TunnelError::InvalidRoute(_)));
+        assert_eq!(registry.count(), 0);
+        assert!(registry.match_domain("orphan.sdkwork.link").is_none());
+    }
+
+    #[test]
+    fn version_changes_on_every_mutation_and_not_on_a_no_op() {
+        let registry = RouteRegistry::new();
+        let start = registry.version();
+
+        registry
+            .register(sample_route("route_a", "demo.sdkwork.link", "session_a"))
+            .expect("register");
+        let after_register = registry.version();
+        assert!(after_register > start, "registration is a mutation");
+
+        registry
+            .unregister(&RouteId::parse("route_a").expect("valid id"))
+            .expect("present");
+        let after_unregister = registry.version();
+        assert!(after_unregister > after_register, "removal is a mutation");
+
+        registry
+            .register(sample_route("route_b", "b.sdkwork.link", "session_a"))
+            .expect("register");
+        let after_second = registry.version();
+        registry.remove_session(&SessionId::parse("session_a").expect("valid id"));
+        assert!(registry.version() > after_second, "teardown is a mutation");
+
+        // A no-op must not bump the version, or every dispatcher cache would
+        // be invalidated by traffic that changed nothing.
+        let idle = registry.version();
+        assert!(registry
+            .unregister(&RouteId::parse("route_ghost").expect("valid id"))
+            .is_none());
+        assert!(registry
+            .remove_session(&SessionId::parse("session_ghost").expect("valid id"))
+            .is_empty());
+        assert_eq!(registry.version(), idle);
+    }
+
+    #[test]
+    fn list_covers_every_index_family_sorted_and_without_duplicates() {
+        let registry = RouteRegistry::new();
+        registry
+            .register(sample_route("route_c", "c.sdkwork.link", "session_a"))
+            .expect("register");
+        registry
+            .register(sample_route("route_a", "a.sdkwork.link", "session_a"))
+            .expect("register");
+        registry
+            .register(sample_route("route_wild", "*.wild.link", "session_a"))
+            .expect("register wildcard");
+        registry
+            .register(sample_port_route("route_ssh", 7022, "session_a"))
+            .expect("register port");
+        registry
+            .register(sample_udp_route("route_dns", 7053, "session_a"))
+            .expect("register udp");
+
+        let ids: Vec<String> = registry
+            .list()
+            .into_iter()
+            .map(|route| route.id.to_string())
+            .collect();
+        assert_eq!(
+            ids,
+            vec!["route_a", "route_c", "route_dns", "route_ssh", "route_wild"],
+            "list() must be a stable, duplicate-free view over every index"
+        );
+        assert_eq!(registry.count(), ids.len(), "count and list agree");
+    }
+
+    #[test]
+    fn get_resolves_routes_from_every_index_family() {
+        let registry = RouteRegistry::new();
+        registry
+            .register(sample_route("route_wild", "*.wild.link", "session_a"))
+            .expect("register wildcard");
+        registry
+            .register(sample_udp_route("route_dns", 7053, "session_a"))
+            .expect("register udp");
+        for id in ["route_wild", "route_dns"] {
+            assert!(
+                registry
+                    .get(&RouteId::parse(id).expect("valid id"))
+                    .is_some(),
+                "{id} must be reachable by id"
+            );
+        }
+        assert!(registry
+            .get(&RouteId::parse("route_ghost").expect("valid id"))
+            .is_none());
+    }
+
+    #[test]
+    fn hot_update_moves_a_route_between_matcher_families() {
+        // A same-session re-registration may change the *kind* of public
+        // surface (domain → port). The old index entry must be released, or
+        // the route would keep answering on a surface it no longer declares.
+        let registry = RouteRegistry::new();
+        registry
+            .register(sample_route("route_x", "demo.sdkwork.link", "session_a"))
+            .expect("register domain route");
+        registry
+            .register(sample_port_route("route_x", 7022, "session_a"))
+            .expect("hot update to a port route");
+
+        assert!(
+            registry.match_domain("demo.sdkwork.link").is_none(),
+            "the vacated domain must stop resolving"
+        );
+        assert!(registry.match_port(7022).is_some());
+        assert_eq!(registry.count(), 1, "a hot update never duplicates");
     }
 }

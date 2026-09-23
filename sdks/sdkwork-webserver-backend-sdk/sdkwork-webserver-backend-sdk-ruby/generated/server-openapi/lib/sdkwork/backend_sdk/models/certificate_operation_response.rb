@@ -2,7 +2,7 @@ module Sdkwork
   module BackendSdk
     module Models
       class CertificateOperationResponse
-              attr_accessor :id, :certificate_id, :operation_type, :status, :attempt_count, :max_attempts, :next_attempt_at, :failure_code, :created_at, :updated_at, :completed_at
+              attr_accessor :id, :certificate_id, :operation_type, :status, :attempt_count, :max_attempts, :next_attempt_at, :failure_code, :failure_detail, :created_at, :updated_at, :completed_at
 
               def initialize(attributes = {})
                 attributes = (attributes || {}).transform_keys(&:to_s)
@@ -14,6 +14,7 @@ module Sdkwork
                 @max_attempts = attributes['maxAttempts']
                 @next_attempt_at = attributes['nextAttemptAt']
                 @failure_code = attributes['failureCode']
+                @failure_detail = attributes['failureDetail']
                 @created_at = attributes['createdAt']
                 @updated_at = attributes['updatedAt']
                 @completed_at = attributes['completedAt']
@@ -35,6 +36,7 @@ module Sdkwork
                   'maxAttempts' => @max_attempts,
                   'nextAttemptAt' => @next_attempt_at,
                   'failureCode' => @failure_code,
+                  'failureDetail' => @failure_detail,
                   'createdAt' => @created_at,
                   'updatedAt' => @updated_at,
                   'completedAt' => @completed_at,

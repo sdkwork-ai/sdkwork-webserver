@@ -83,6 +83,16 @@ func (a *ClusterApi) ClustersDelete(clusterId string, idempotencyKey string) (st
     return decodeResult[struct{}](raw)
 }
 
+// Publish a desired-state revision to every instance of the cluster
+func (a *ClusterApi) ClustersSync(clusterId string, body sdktypes.PublishClusterSyncRequest) (sdktypes.ClustersSyncResponse, error) {
+    raw, err := a.client.Post(BackendApiPath(fmt.Sprintf("/clusters/%s/sync", SerializePathParameter(clusterId, PathParameterSpec{Name: "clusterId", Style: "simple", Explode: false}))), body, nil, nil, "application/json")
+    if err != nil {
+        var zero sdktypes.ClustersSyncResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.ClustersSyncResponse](raw)
+}
+
 // List cluster hosts with system and network identity
 func (a *ClusterApi) ClustersHostsList(pageSize *int, cursor *string, clusterId *string, status *int) (sdktypes.ClustersHostsListResponse, error) {
     query := BuildQueryString([]QueryParameterSpec{
@@ -231,6 +241,69 @@ func (a *ClusterApi) ClustersInstancesHeartbeatsList(instanceId string, pageSize
         return zero, err
     }
     return decodeResult[sdktypes.ClustersInstancesHeartbeatsListResponse](raw)
+}
+
+// List one instance's heartbeat metric samples for trend charts
+func (a *ClusterApi) ClustersInstancesMetricsList(instanceId string, limit *int) (sdktypes.ClustersInstancesMetricsListResponse, error) {
+    query := BuildQueryString([]QueryParameterSpec{
+        {Name: "limit", Value: func() interface{} { if limit == nil { return nil }; return *limit }(), Style: "form", Explode: true, AllowReserved: false},
+    })
+    raw, err := a.client.Get(AppendQueryString(BackendApiPath(fmt.Sprintf("/clusters/instances/%s/metrics/history", SerializePathParameter(instanceId, PathParameterSpec{Name: "instanceId", Style: "simple", Explode: false}))), query), nil, nil)
+    if err != nil {
+        var zero sdktypes.ClustersInstancesMetricsListResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.ClustersInstancesMetricsListResponse](raw)
+}
+
+// Probe one instance's connectivity and record the outcome
+func (a *ClusterApi) ClustersInstancesProbe(instanceId string, body *sdktypes.ProbeClusterInstanceRequest) (sdktypes.ClustersInstancesProbeResponse, error) {
+    raw, err := a.client.Post(BackendApiPath(fmt.Sprintf("/clusters/instances/%s/probe", SerializePathParameter(instanceId, PathParameterSpec{Name: "instanceId", Style: "simple", Explode: false}))), body, nil, nil, "application/json")
+    if err != nil {
+        var zero sdktypes.ClustersInstancesProbeResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.ClustersInstancesProbeResponse](raw)
+}
+
+// Gracefully drain one instance out of routing
+func (a *ClusterApi) ClustersInstancesDrain(instanceId string) (sdktypes.ClustersInstancesDrainResponse, error) {
+    raw, err := a.client.Post(BackendApiPath(fmt.Sprintf("/clusters/instances/%s/drain", SerializePathParameter(instanceId, PathParameterSpec{Name: "instanceId", Style: "simple", Explode: false}))), nil, nil, nil, "")
+    if err != nil {
+        var zero sdktypes.ClustersInstancesDrainResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.ClustersInstancesDrainResponse](raw)
+}
+
+// Clear the drain flag and restore routing participation
+func (a *ClusterApi) ClustersInstancesUndrain(instanceId string) (sdktypes.ClustersInstancesUndrainResponse, error) {
+    raw, err := a.client.Post(BackendApiPath(fmt.Sprintf("/clusters/instances/%s/undrain", SerializePathParameter(instanceId, PathParameterSpec{Name: "instanceId", Style: "simple", Explode: false}))), nil, nil, nil, "")
+    if err != nil {
+        var zero sdktypes.ClustersInstancesUndrainResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.ClustersInstancesUndrainResponse](raw)
+}
+
+// Cordon one instance out of routing without draining it
+func (a *ClusterApi) ClustersInstancesCordon(instanceId string) (sdktypes.ClustersInstancesCordonResponse, error) {
+    raw, err := a.client.Post(BackendApiPath(fmt.Sprintf("/clusters/instances/%s/cordon", SerializePathParameter(instanceId, PathParameterSpec{Name: "instanceId", Style: "simple", Explode: false}))), nil, nil, nil, "")
+    if err != nil {
+        var zero sdktypes.ClustersInstancesCordonResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.ClustersInstancesCordonResponse](raw)
+}
+
+// Uncordon one instance back into routing
+func (a *ClusterApi) ClustersInstancesUncordon(instanceId string) (sdktypes.ClustersInstancesUncordonResponse, error) {
+    raw, err := a.client.Post(BackendApiPath(fmt.Sprintf("/clusters/instances/%s/uncordon", SerializePathParameter(instanceId, PathParameterSpec{Name: "instanceId", Style: "simple", Explode: false}))), nil, nil, nil, "")
+    if err != nil {
+        var zero sdktypes.ClustersInstancesUncordonResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.ClustersInstancesUncordonResponse](raw)
 }
 
 // Enqueue a peer message to one instance or broadcast to online members

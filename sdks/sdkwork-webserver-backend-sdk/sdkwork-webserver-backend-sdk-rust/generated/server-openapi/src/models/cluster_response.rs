@@ -29,6 +29,16 @@ pub struct ClusterResponse {
     #[serde(rename = "onlineInstanceCount")]
     pub online_instance_count: String,
 
+    /// Request routing strategy across the cluster's instances.
+    #[serde(rename = "lbStrategy")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lb_strategy: Option<String>,
+
+    /// Service domains auto-routed to this cluster's instances.
+    #[serde(rename = "servedDomains")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub served_domains: Option<Vec<String>>,
+
     #[serde(rename = "createdAt")]
     pub created_at: String,
 

@@ -51,6 +51,17 @@ impl TunnelTarget {
         Ok(Self::Udp(Self::parse_address(raw)?))
     }
 
+    /// Parses a target string for the relay protocol that will use it: UDP
+    /// routes dial a datagram socket, every other kind dials a stream. Single
+    /// entry point so agent templates and gateway registrations can never
+    /// disagree about a route's target kind.
+    pub fn parse_for_protocol(protocol: TunnelProtocolKind, raw: &str) -> Result<Self> {
+        match protocol {
+            TunnelProtocolKind::Udp => Self::parse_udp(raw),
+            TunnelProtocolKind::Http | TunnelProtocolKind::Tcp => Self::parse_tcp(raw),
+        }
+    }
+
     fn parse_address(raw: &str) -> Result<SocketAddr> {
         raw.parse().map_err(|_| TunnelError::Validation {
             field: ValidationField::Target,
@@ -208,6 +219,24 @@ impl TunnelRoute {
                 reason: "http routes must match a domain".to_owned(),
             });
         }
+        if protocol == TunnelProtocolKind::Udp && matcher.as_port().is_none() {
+            return Err(TunnelError::Validation {
+                field: ValidationField::Config,
+                reason: "udp routes must match a gateway port".to_owned(),
+            });
+        }
+        // A bearer token can only travel in an HTTP `Authorization` header.
+        // Rejecting the combination here keeps a TCP/UDP route from being
+        // registered into permanent unreachability.
+        if !policy.auth.is_satisfiable_on(protocol) {
+            return Err(TunnelError::Validation {
+                field: ValidationField::Config,
+                reason: format!(
+                    "{protocol:?} routes cannot require bearer visitor authentication; \
+                     use allowed_ips to restrict access"
+                ),
+            });
+        }
         Ok(Self {
             id,
             name,
@@ -245,8 +274,6 @@ pub fn local_target(port: u16) -> TunnelTarget {
     )))
 }
 
-/// Convenience constructor for IPv6 loopback targets.
-#[allow(dead_code)]
 /// Convenience constructor for a local UDP target (datagram relay).
 pub fn local_udp_target(port: u16) -> TunnelTarget {
     TunnelTarget::Udp(SocketAddr::V4(SocketAddrV4::new(
@@ -255,6 +282,7 @@ pub fn local_udp_target(port: u16) -> TunnelTarget {
     )))
 }
 
+/// Convenience constructor for IPv6 loopback targets.
 pub fn local_target_v6(port: u16) -> TunnelTarget {
     TunnelTarget::Tcp(SocketAddr::V6(SocketAddrV6::new(
         std::net::Ipv6Addr::LOCALHOST,
@@ -267,6 +295,7 @@ pub fn local_target_v6(port: u16) -> TunnelTarget {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::policy::AuthPolicy;
 
     #[test]
     fn domain_matcher_normalizes_and_validates() {
@@ -345,5 +374,131 @@ mod tests {
             Some("https://a8f3k2.sdkwork.link")
         );
         assert!(public_url(&RouteMatcher::Port(7000)).is_none());
+    }
+
+    #[test]
+    fn udp_route_requires_port_matcher() {
+        // A `udp` route is addressed by a gateway datagram port; a domain
+        // matcher would leave it permanently unreachable on that plane.
+        let route = TunnelRoute::new(
+            RouteId::parse("route_dns").expect("valid id"),
+            "dns",
+            TunnelProtocolKind::Udp,
+            RouteMatcher::domain("dns.sdkwork.link").expect("valid domain"),
+            local_udp_target(53),
+            RoutePolicy::private(),
+        );
+        assert!(route.is_err(), "udp routes must match a gateway port");
+    }
+
+    #[test]
+    fn bearer_visitor_auth_is_rejected_on_tcp_and_udp_routes() {
+        // docs/tunnel.md § security: a bearer token can only travel in an
+        // HTTP `Authorization` header, so a TCP/UDP route demanding one would
+        // reject every visitor forever. The combination must fail loudly at
+        // construction time instead of registering into silent unreachability.
+        let policy = RoutePolicy {
+            auth: AuthPolicy::BearerToken,
+            visitor_tokens: vec!["tok".to_owned()],
+            ..RoutePolicy::private()
+        };
+
+        let tcp = TunnelRoute::new(
+            RouteId::parse("route_ssh").expect("valid id"),
+            "ssh",
+            TunnelProtocolKind::Tcp,
+            RouteMatcher::Port(7022),
+            local_target(22),
+            policy.clone(),
+        );
+        assert!(
+            matches!(tcp, Err(TunnelError::Validation { .. })),
+            "tcp + bearer must be rejected, got {tcp:?}"
+        );
+
+        let udp = TunnelRoute::new(
+            RouteId::parse("route_dns").expect("valid id"),
+            "dns",
+            TunnelProtocolKind::Udp,
+            RouteMatcher::Port(7053),
+            local_udp_target(53),
+            policy.clone(),
+        );
+        assert!(
+            matches!(udp, Err(TunnelError::Validation { .. })),
+            "udp + bearer must be rejected, got {udp:?}"
+        );
+
+        // The identical policy is legitimate on the HTTP plane.
+        assert!(TunnelRoute::new(
+            RouteId::parse("route_web").expect("valid id"),
+            "web",
+            TunnelProtocolKind::Http,
+            RouteMatcher::domain("demo.sdkwork.link").expect("valid domain"),
+            local_target(3000),
+            policy,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn zero_port_target_is_rejected() {
+        let route = TunnelRoute::new(
+            RouteId::parse("route_ssh").expect("valid id"),
+            "ssh",
+            TunnelProtocolKind::Tcp,
+            RouteMatcher::Port(7022),
+            TunnelTarget::Tcp("127.0.0.1:0".parse().expect("parses")),
+            RoutePolicy::private(),
+        );
+        assert!(route.is_err(), "a target port of 0 is not routable");
+    }
+
+    #[test]
+    fn route_name_length_is_bounded() {
+        let build = |name: String| {
+            TunnelRoute::new(
+                RouteId::parse("route_ssh").expect("valid id"),
+                name,
+                TunnelProtocolKind::Tcp,
+                RouteMatcher::Port(7022),
+                local_target(22),
+                RoutePolicy::private(),
+            )
+        };
+        for name in [String::new(), "x".repeat(129)] {
+            assert!(
+                build(name.clone()).is_err(),
+                "name of {} chars must be rejected",
+                name.len()
+            );
+        }
+        assert!(build("x".repeat(128)).is_ok(), "128 chars is the ceiling");
+    }
+
+    #[test]
+    fn protocol_decides_the_target_kind_and_its_label() {
+        // `parse_for_protocol` is the single entry point shared by agent
+        // templates and gateway registrations, so the protocol must be what
+        // decides stream vs datagram — never the caller.
+        assert_eq!(
+            TunnelTarget::parse_for_protocol(TunnelProtocolKind::Udp, "127.0.0.1:53")
+                .expect("valid target"),
+            TunnelTarget::Udp("127.0.0.1:53".parse().expect("parses"))
+        );
+        assert_eq!(
+            TunnelTarget::parse_for_protocol(TunnelProtocolKind::Tcp, "127.0.0.1:53")
+                .expect("valid target"),
+            TunnelTarget::Tcp("127.0.0.1:53".parse().expect("parses"))
+        );
+        assert_eq!(
+            TunnelTarget::parse_for_protocol(TunnelProtocolKind::Http, "10.0.0.7:8080")
+                .expect("valid target")
+                .to_string(),
+            "10.0.0.7:8080"
+        );
+        assert_eq!(local_udp_target(53).to_string(), "udp:127.0.0.1:53");
+        assert_eq!(local_target_v6(8443).to_string(), "[::1]:8443");
+        assert!(TunnelTarget::parse_udp("not-an-address").is_err());
     }
 }

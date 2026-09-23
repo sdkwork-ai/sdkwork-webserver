@@ -69,6 +69,10 @@ pub struct RuntimeObservationWrite {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DomainVerificationChallenge {
+    /// Owning tenant. Carried on the challenge because the automatic
+    /// verification sweep is cross-tenant: it selects due challenges for the
+    /// whole deployment and then records each observation under its own tenant.
+    pub tenant_id: i64,
     pub challenge_id: String,
     pub hostname: String,
     pub method: String,
@@ -336,12 +340,61 @@ pub struct ClusterInstanceCredentials {
     pub draining: bool,
 }
 
-/// Previous instance state observed during a heartbeat, used for lifecycle
-/// transition events.
+/// Instance status values, mirroring the authored
+/// `ClusterInstanceResponse.status` dictionary and the DDL comment on
+/// `webserver_cluster_instance.status`
+/// (`0=offline, 1=online, 2=starting, 3=stopping, 4=error, 5=maintenance`).
+pub const CLUSTER_INSTANCE_STATUS_OFFLINE: i32 = 0;
+pub const CLUSTER_INSTANCE_STATUS_ONLINE: i32 = 1;
+pub const CLUSTER_INSTANCE_STATUS_ERROR: i32 = 4;
+pub const CLUSTER_INSTANCE_STATUS_MAINTENANCE: i32 = 5;
+
+/// The status a **machine** writer actually stores, given the status already on
+/// the row and the status that writer proposes.
+///
+/// `status` is written by three parties that disagree by design:
+///
+/// * the **node** reports its own liveness, and its reporter always claims
+///   `online` while the process runs (`cluster_self_report` sends a fixed
+///   `status: 1`), so registration and every heartbeat propose `1`;
+/// * the **active prober** proposes `error` when it ejects a failing instance;
+/// * the **platform operator** declares `maintenance` through the instance
+///   update endpoint, and maintenance is nothing but an exclusion: the routing
+///   pool admits `status = 1` only.
+///
+/// Because the node's claim arrives on a timer (15s by default), a plain
+/// overwrite made an operator's maintenance mark survive at most one heartbeat
+/// interval, and the transition recorder even logged a phantom
+/// `INSTANCE_ONLINE` right after the mark. Maintenance is therefore the one
+/// status no machine writer may clear.
+///
+/// The operator's own write does **not** come through here — the update path
+/// stores what the operator asked for verbatim, which is what lets "End
+/// maintenance" end it. Every other machine value keeps the previous
+/// last-writer-wins behaviour, including the node's own `drain-complete`
+/// report of `offline` (a stopped process is a stronger fact than the mark).
+pub fn cluster_operator_owned_status(previous_status: i32, machine_proposed_status: i32) -> i32 {
+    if previous_status == CLUSTER_INSTANCE_STATUS_MAINTENANCE
+        && machine_proposed_status != CLUSTER_INSTANCE_STATUS_MAINTENANCE
+    {
+        previous_status
+    } else {
+        machine_proposed_status
+    }
+}
+
+/// Previous instance state observed during a heartbeat, plus the status the
+/// heartbeat actually recorded, used for lifecycle transition events.
+///
+/// `status` is the recorded value, not the reported one: the two differ while
+/// an operator maintenance mark outranks the node's `online` claim, and
+/// lifecycle events must describe what the registry did, not what the node
+/// asked for.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ClusterHeartbeatTransition {
     pub previous_status: i32,
     pub previous_health_state: String,
+    pub status: i32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -513,6 +566,23 @@ pub trait WebRepositoryPort: Send + Sync {
         challenge_id: &str,
         observation: &DomainVerificationObservation,
     ) -> WebServiceResult<DomainVerificationChallenge>;
+
+    /// Due domain-ownership challenges across every tenant, oldest first.
+    ///
+    /// The automatic verification sweep's work queue. Without it a challenge
+    /// only advanced when an operator re-submitted the verify request, so a
+    /// domain whose TXT record was published after the first check stayed
+    /// `PENDING` forever — and `certificates.issue` requires `VERIFIED`
+    /// hostnames, so no certificate could ever be issued for it.
+    ///
+    /// Rows are selected with `FOR UPDATE SKIP LOCKED` so a fleet of workers
+    /// takes disjoint batches. A duplicate check in the rare interleaving is
+    /// harmless: the observation write is keyed by challenge and re-reads the
+    /// row under a lock, and a `VERIFIED` row is never downgraded.
+    async fn due_domain_verification_challenges(
+        &self,
+        limit: i32,
+    ) -> WebServiceResult<Vec<DomainVerificationChallenge>>;
 
     async fn list_root_domains(
         &self,
@@ -770,6 +840,7 @@ pub trait WebRepositoryPort: Send + Sync {
         &self,
         lease: &CertificateOperationLease,
         failure_code: &str,
+        failure_detail: Option<&str>,
         retry_at: &str,
         terminal_retry_at: &str,
     ) -> WebServiceResult<CertificateOperationResponse>;
@@ -1185,4 +1256,54 @@ pub trait WebRepositoryPort: Send + Sync {
 
     async fn purge_cluster_heartbeats(&self, older_than: &str, limit: i32)
         -> WebServiceResult<u64>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Exhaustive over the whole status domain rather than sampled pairs: the
+    /// rule is "maintenance survives every machine writer", and a sampled test
+    /// cannot show that no other value became sticky by accident.
+    #[test]
+    fn only_operator_maintenance_survives_a_machine_status_write() {
+        for previous in 0..=5 {
+            for proposed in 0..=5 {
+                let recorded = cluster_operator_owned_status(previous, proposed);
+                if proposed == CLUSTER_INSTANCE_STATUS_MAINTENANCE {
+                    assert_eq!(
+                        recorded, CLUSTER_INSTANCE_STATUS_MAINTENANCE,
+                        "an operator writing maintenance back must be stored as-is"
+                    );
+                } else if previous == CLUSTER_INSTANCE_STATUS_MAINTENANCE {
+                    assert_eq!(
+                        recorded, CLUSTER_INSTANCE_STATUS_MAINTENANCE,
+                        "nothing but an operator may clear maintenance (previous={previous}, proposed={proposed})"
+                    );
+                } else {
+                    assert_eq!(
+                        recorded, proposed,
+                        "every other status stays last-writer-wins (previous={previous})"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The three machine writers, by the value each proposes.
+    #[test]
+    fn machine_writers_cannot_end_an_operator_maintenance_mark() {
+        let maintenance = CLUSTER_INSTANCE_STATUS_MAINTENANCE;
+        // The node's heartbeat reporter claims `online`…
+        assert_eq!(cluster_operator_owned_status(maintenance, 1), maintenance);
+        // …its registration after a restart claims `online` too…
+        assert_eq!(cluster_operator_owned_status(maintenance, 1), maintenance);
+        // …and the prober ejects with `error`.
+        assert_eq!(cluster_operator_owned_status(maintenance, 4), maintenance);
+        // A fresh row is not in maintenance, so the machine writers still own
+        // the ordinary status: nothing here made `online` sticky.
+        assert_eq!(cluster_operator_owned_status(0, 1), 1);
+        assert_eq!(cluster_operator_owned_status(1, 0), 0);
+        assert_eq!(cluster_operator_owned_status(1, 4), 4);
+    }
 }

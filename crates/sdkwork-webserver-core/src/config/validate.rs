@@ -9,10 +9,11 @@ use url::Url;
 
 use super::{
     is_supported_upstream_allowed_cidr, upstream_ip_is_allowed, AppDomainFallbackLookup,
-    CertificateSource, ConfigDiagnostic, ListenerProtocol, ResourceConfig, RouteConfig,
-    RoutePathType, SecurityHeadersConfig, StreamTargetConfig, TlsCertificateResolution, TlsVersion,
-    UpstreamConfig, UpstreamLoadBalancingStrategy, UpstreamTlsTrustMode, UsageMeteringChannel,
-    WebServerAppConfig, WebServerConfigError, WebServerLimits,
+    CachePolicyConfig, CertificateSource, ConfigDiagnostic, ExpiresMode, ListenerProtocol,
+    ResourceConfig, RouteConfig, RoutePathType, SecurityHeadersConfig, StreamTargetConfig,
+    TlsCertificateResolution, TlsVersion, UpstreamConfig, UpstreamLoadBalancingStrategy,
+    UpstreamTlsTrustMode, UsageMeteringChannel, WebServerAppConfig, WebServerConfigError,
+    WebServerLimits,
 };
 
 const MAX_DIAGNOSTICS: usize = 128;
@@ -476,15 +477,25 @@ impl SemanticValidator {
                     "minimumVersion must not be greater than maximumVersion",
                 );
             }
-            if policy.minimum_version < TlsVersion::Tls12 {
+            if policy.minimum_version < TlsVersion::PLATFORM_FLOOR {
                 self.push(&path, "TLS versions below 1.2 are forbidden");
             }
-            if policy.minimum_version != TlsVersion::Tls12
-                || policy.maximum_version != TlsVersion::Tls13
+            // `PRD-https-and-certificates.md` §2: "An application may select an
+            // approved policy or a stricter compatible policy, but it cannot
+            // silently weaken the platform minimum." §3 requires every policy to
+            // carry both a minimum and a maximum version. So any window that
+            // stays inside [floor, ceiling] with minimum <= maximum is legal —
+            // including the singletons `TLS1.2..TLS1.2` and `TLS1.3..TLS1.3`
+            // that a narrower operator policy produces. `TlsVersion` cannot
+            // currently express anything outside that span, so this guard only
+            // fires if a future variant widens the enum past the platform floor
+            // or ceiling without updating them.
+            if policy.minimum_version < TlsVersion::PLATFORM_FLOOR
+                || policy.maximum_version > TlsVersion::PLATFORM_CEILING
             {
                 self.push(
                     &path,
-                    "REQ-2026-0003 currently supports the TLS 1.2 through TLS 1.3 policy only",
+                    "TLS versions outside the supported TLS 1.2 through TLS 1.3 span are forbidden",
                 );
             }
         }
@@ -906,6 +917,11 @@ impl SemanticValidator {
                 &config.limit_req_zones,
             );
             validate_security_headers(self, &path, virtual_host.security_headers.as_ref());
+            validate_cache_policy(
+                self,
+                &format!("{path}/cachePolicy"),
+                virtual_host.cache_policy.as_ref(),
+            );
         }
         if total_routes > MAX_TOTAL_ROUTES {
             self.push(
@@ -1863,6 +1879,11 @@ fn validate_routes(
                 );
             }
         }
+        validate_cache_policy(
+            validator,
+            &format!("{path}/cachePolicy"),
+            route.cache_policy.as_ref(),
+        );
 
         for (other_index, other) in routes.iter().take(index).enumerate() {
             if route.route_match.path_type == other.route_match.path_type
@@ -1961,6 +1982,40 @@ fn redirect_template_is_well_formed(location: &str) -> bool {
         remainder = &rest[variable.len()..];
     }
     saw_variable && remainder.bytes().all(|byte| (0x21..=0x7e).contains(&byte))
+}
+
+/// Validate a resolved `expires` / `etag` / `if_modified_since` policy.
+///
+/// The parsers already reject malformed nginx syntax, but the JSON and typed
+/// TOML planes can carry a hand-written policy straight into the model, so the
+/// runtime invariants are enforced here as well: a daily (`@`) offset must stay
+/// inside one day (nginx refuses anything above 24h), and every other offset
+/// must stay small enough that the computed `Expires` date remains a formatable
+/// HTTP date.
+fn validate_cache_policy(
+    validator: &mut SemanticValidator,
+    path: &str,
+    policy: Option<&CachePolicyConfig>,
+) {
+    let Some(policy) = policy else {
+        return;
+    };
+    if policy.expires == ExpiresMode::Daily {
+        if !(0..=86_400).contains(&policy.expires_seconds) {
+            validator.push(
+                path,
+                "a daily `expires @<time>` offset must be between 0 and 24 hours",
+            );
+        }
+        return;
+    }
+    // 253402300799 == 9999-12-31T23:59:59Z, the last date `httpdate` formats.
+    if policy.expires_seconds.unsigned_abs() > 253_402_300_799 {
+        validator.push(
+            path,
+            "expires offset is outside the range an HTTP date can represent",
+        );
+    }
 }
 
 fn validate_security_headers(

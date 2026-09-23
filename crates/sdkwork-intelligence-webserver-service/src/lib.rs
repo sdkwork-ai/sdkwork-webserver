@@ -15,11 +15,16 @@ pub mod source_import;
 pub mod tls_material_distribution;
 
 pub use cluster_ops::{ClusterMachineCredential, ClusterSweepReport};
-pub use domain_verification::{DnsTxtDomainOwnershipVerifier, DomainOwnershipVerifier};
+pub use domain_verification::{
+    DnsTxtDomainOwnershipVerifier, DomainOwnershipVerifier, DomainVerificationCycleReport,
+};
 pub use repository::{
-    AuditLogWrite, CertificateRevocationMaterial, ClusterEventWrite, ClusterHeartbeatTransition,
-    ClusterHeartbeatWrite, ClusterHostUpsert, ClusterIdentity, ClusterInstanceCredentials,
-    ClusterInstanceUpsert, ClusterPeerMessageEnqueue, ClusterProbeOutcome, ClusterProbeWrite,
+    cluster_operator_owned_status, AuditLogWrite, CertificateRevocationMaterial, ClusterEventWrite,
+    ClusterHeartbeatTransition, ClusterHeartbeatWrite, ClusterHostUpsert, ClusterIdentity,
+    ClusterInstanceCredentials, ClusterInstanceUpsert,
+    CLUSTER_INSTANCE_STATUS_ERROR, CLUSTER_INSTANCE_STATUS_MAINTENANCE,
+    CLUSTER_INSTANCE_STATUS_OFFLINE, CLUSTER_INSTANCE_STATUS_ONLINE,
+    ClusterPeerMessageEnqueue, ClusterProbeOutcome, ClusterProbeWrite,
     ClusterRoutingDiscovery, ClusterRoutingInstance, ClusterSyncAckWrite, ClusterSyncDesired, ClusterSyncRevisionPayload,
     ClusterSyncRevisionPublish, ClusterUpsert, DomainVerificationChallenge,
     DomainVerificationObservation, ExpiredClusterHost, ExpiredClusterInstance,

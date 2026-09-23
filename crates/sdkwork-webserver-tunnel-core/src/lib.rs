@@ -27,7 +27,7 @@ pub use config::{
 pub use device::{Device, DevicePlatform};
 pub use error::{Result, TunnelError, ValidationField};
 pub use ids::{DeviceId, RouteId, SessionId, StreamId};
-pub use policy::{AuthPolicy, RoutePolicy};
+pub use policy::{parse_allowed_ips, AuthPolicy, RoutePolicy};
 pub use route::{
     local_target, local_udp_target, public_url, RouteMatcher, TunnelProtocolKind,
     TunnelRoute, TunnelTarget,

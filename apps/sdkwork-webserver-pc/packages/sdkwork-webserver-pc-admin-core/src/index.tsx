@@ -21,11 +21,14 @@ export { createDriveAppClient };
 // backend SDK only through these core exports, never via direct imports
 // (frontend composition feature-package import rule).
 export type {
+  ApplicationDomainResponse,
+  CertificateResponse,
   ClusterEventResponse,
   ClusterHostResponse,
   ClusterInstanceResponse,
   ClusterOverviewResponse,
   ClusterResponse,
+  RootDomainResponse,
   ServerDirectoryListing,
   ServerEntry,
   ServerFileContent,
@@ -73,7 +76,53 @@ export function createWebserverAdminRegistry(client: WebserverAdminSdkClient): W
     },
     "cluster-instances": {
       ...source((query) => client.cluster.instances.list({ cursor: query.cursor, pageSize: query.pageSize, clusterId: filterValue(query.filters, "clusterId"), hostId: filterValue(query.filters, "hostId"), status: optionalIntegerFilter(query.filters, "status"), healthState: healthStateFilter(query.filters) }), [
+        // Lifecycle operations, in the order an operator reaches for them. The
+        // backend has exposed drain/cordon/probe since the cluster plane landed;
+        // the console used to offer only "mark maintenance" and "unregister", so
+        // a graceful drain or a cordon was not reachable from the product at
+        // all. Each action is offered only when the selected instance's current
+        // posture makes it meaningful, and drain asks for confirmation because
+        // it ends the instance's service.
+        action("cordon", "Cordon", {}, (context) => client.cluster.instances.cordon(selectedId(context, "id")), {
+          availableWhen: ({ selectedItem }) => instanceFlag(selectedItem, "routingEnabled") === true && instanceFlag(selectedItem, "draining") !== true,
+          permission: "web.cluster.write",
+          selection: true,
+        }),
+        action("uncordon", "Restore routing", {}, (context) => client.cluster.instances.uncordon(selectedId(context, "id")), {
+          availableWhen: ({ selectedItem }) => instanceFlag(selectedItem, "routingEnabled") === false && instanceFlag(selectedItem, "draining") !== true,
+          permission: "web.cluster.write",
+          selection: true,
+        }),
+        action("drain", "Drain", {}, (context) => client.cluster.instances.drain(selectedId(context, "id")), {
+          availableWhen: ({ selectedItem }) => instanceFlag(selectedItem, "draining") !== true,
+          dangerous: true,
+          permission: "web.cluster.write",
+          requiresConfirmation: true,
+          selection: true,
+        }),
+        action("undrain", "Return to rotation", {}, (context) => client.cluster.instances.undrain(selectedId(context, "id")), {
+          availableWhen: ({ selectedItem }) => instanceFlag(selectedItem, "draining") === true || instanceFlag(selectedItem, "routingEnabled") === false,
+          permission: "web.cluster.write",
+          selection: true,
+        }),
+        action("probe", "Probe now", {}, (context) => client.cluster.instances.probe(selectedId(context, "id")), {
+          availableWhen: ({ selectedItem }) => selectedItem !== undefined,
+          permission: "web.cluster.write",
+          resultFields: ["healthy", "latencyMs", "failures", "ejected", "recovered"],
+          selection: true,
+        }),
         action("maintain", "Mark maintenance", {}, async (context) => client.cluster.instances.update(selectedId(context, "id"), maintenanceRequest(), idempotencyParams(context)), { permission: "web.cluster.write", selection: true }),
+        // The counterpart of "Mark maintenance". It is not decoration: the
+        // registry keeps an operator's maintenance mark against every machine
+        // writer (the node's heartbeat claims `online` every 15s, registration
+        // claims it on restart, the prober claims `error`), so without an
+        // operator-side write that clears it, a marked instance would stay out
+        // of the routing pool for good.
+        action("endMaintenance", "End maintenance", {}, async (context) => client.cluster.instances.update(selectedId(context, "id"), endMaintenanceRequest(), idempotencyParams(context)), {
+          availableWhen: ({ selectedItem }) => selectedItem?.status === 5,
+          permission: "web.cluster.write",
+          selection: true,
+        }),
         action("delete", "Unregister", {}, (context) => client.cluster.instances.delete(selectedId(context, "id"), idempotencyParams(context)), { dangerous: true, permission: "web.cluster.write", selection: true }),
       ]),
       filters: [
@@ -115,6 +164,15 @@ export function createWebserverAdminRegistry(client: WebserverAdminSdkClient): W
 function source(load: WebserverResourceDataSource["load"] extends (query: infer Q) => Promise<unknown> ? (query: Q) => Promise<unknown> : never, actions: readonly WebserverResourceAction[]): WebserverResourceDataSource { return { actions, async load(query) { return normalizeWebserverPage(await load(query)); } }; }
 function action(id: string, label: string, bodyTemplate: Record<string, unknown>, execute: WebserverResourceAction["execute"], options: Omit<WebserverResourceAction, "bodyTemplate" | "execute" | "id" | "label" | "requiresSelection"> & { selection?: boolean } = {}): WebserverResourceAction { return { id, label, bodyTemplate, execute, ...options, requiresSelection: options.selection }; }
 function selectedId(context: WebserverResourceActionContext, key: string): string { const value = context.selectedItem?.[key]; if (typeof value !== "string" && typeof value !== "number") throw new Error(`${key} is unavailable`); return String(value); }
+/**
+ * Reads a boolean state flag off a selected instance row.
+ *
+ * `undefined` means the row does not report the flag, which is read as "not
+ * actionable" rather than "false": the SDK omits optional fields the registry
+ * never set, and guessing would offer an operator an operation the instance has
+ * no state to apply.
+ */
+function instanceFlag(item: Record<string, unknown> | undefined, key: string): boolean | undefined { const value = item?.[key]; return typeof value === "boolean" ? value : undefined; }
 function idempotencyParams(context: WebserverResourceActionContext): { idempotencyKey: string } { const idempotencyKey = context.idempotencyKey?.trim(); if (!idempotencyKey) throw new Error("Idempotency key is required"); return { idempotencyKey }; }
 function filterValue(filters: Readonly<Record<string, string>> | undefined, key: string): string | undefined { const value = filters?.[key]?.trim(); return value || undefined; }
 
@@ -201,6 +259,17 @@ function updateClusterInstanceRequest(body: Readonly<Record<string, unknown>>): 
 
 function maintenanceRequest(): UpdateClusterInstanceRequest {
   return { status: 5 };
+}
+
+/**
+ * Hands the instance's status back to its own reporter.
+ *
+ * The registry treats a maintenance mark as operator-owned and refuses to let
+ * the node's heartbeat (a fixed `online` every 15s), its re-registration or the
+ * prober's `error` clear it, so an explicit operator write is the only way out.
+ */
+function endMaintenanceRequest(): UpdateClusterInstanceRequest {
+  return { status: 1 };
 }
 
 function requiredClusterCode(value: unknown): string {

@@ -46,6 +46,54 @@ final class ClusterInstanceResponse
     /** Latest resource metrics snapshot (CPU/memory/connections). */
     public array $metrics = [];
 
+    /** `LAN` = same-subnet member; `TUNNEL` = API-only member reached through the reverse tunnel. */
+    public ?string $joinMode = null;
+
+    /** Service quality 0-100 derived from the latest heartbeat sample. */
+    public ?int $qualityScore = null;
+
+    /** Desired configuration revision; absent until the cluster publishes one. */
+    public ?string $desiredConfigRevision = null;
+
+    /** Configuration revision this instance last acknowledged as applied. */
+    public ?string $appliedConfigRevision = null;
+
+    /** Desired applications-manifest revision; absent until the cluster publishes one. */
+    public ?string $desiredApplicationsRevision = null;
+
+    /** Applications-manifest revision this instance last acknowledged as applied. */
+    public ?string $appliedApplicationsRevision = null;
+
+    /** Aggregate desired-vs-applied sync status for this instance. */
+    public ?string $syncStatus = null;
+
+    /** Cordon switch: `false` keeps the instance serving but removes it from the routing pool. */
+    public ?bool $routingEnabled = null;
+
+    /** Graceful drain in progress. */
+    public ?bool $draining = null;
+
+    /** Taken out of the routing pool by the active prober after consecutive failures. */
+    public ?bool $ejected = null;
+
+    /** Process restarts observed for this instance slot (auto-recovery evidence). */
+    public ?int $restartCount = null;
+
+    /** Operator labels. */
+    public array $labels = [];
+
+    /** Per-instance load balancing weight. */
+    public ?int $routingWeight = null;
+
+    /** Operator maintenance reason/context. */
+    public ?string $maintenanceNote = null;
+
+    /** Consecutive active-probe failures; reset on success. */
+    public ?int $probeFailures = null;
+
+    /** Active-probe target override. */
+    public ?string $probeUrl = null;
+
     public ?string $createdAt = null;
 
     public ?string $updatedAt = null;
@@ -109,6 +157,56 @@ final class ClusterInstanceResponse
         $this->metrics = array_key_exists('metrics', $data)
             ? is_array($data['metrics']) ? $data['metrics'] : []
             : [];
+        $this->joinMode = array_key_exists('joinMode', $data)
+            ? $data['joinMode']
+            : null;
+        $this->qualityScore = array_key_exists('qualityScore', $data)
+            ? $data['qualityScore']
+            : null;
+        $this->desiredConfigRevision = array_key_exists('desiredConfigRevision', $data)
+            ? $data['desiredConfigRevision']
+            : null;
+        $this->appliedConfigRevision = array_key_exists('appliedConfigRevision', $data)
+            ? $data['appliedConfigRevision']
+            : null;
+        $this->desiredApplicationsRevision = array_key_exists('desiredApplicationsRevision', $data)
+            ? $data['desiredApplicationsRevision']
+            : null;
+        $this->appliedApplicationsRevision = array_key_exists('appliedApplicationsRevision', $data)
+            ? $data['appliedApplicationsRevision']
+            : null;
+        $this->syncStatus = array_key_exists('syncStatus', $data)
+            ? $data['syncStatus']
+            : null;
+        $this->routingEnabled = array_key_exists('routingEnabled', $data)
+            ? $data['routingEnabled']
+            : null;
+        $this->draining = array_key_exists('draining', $data)
+            ? $data['draining']
+            : null;
+        $this->ejected = array_key_exists('ejected', $data)
+            ? $data['ejected']
+            : null;
+        $this->restartCount = array_key_exists('restartCount', $data)
+            ? $data['restartCount']
+            : null;
+        $this->labels = array_key_exists('labels', $data)
+            ? is_array($data['labels'])
+                ? array_map(static fn($item) => $item, $data['labels'])
+                : []
+            : [];
+        $this->routingWeight = array_key_exists('routingWeight', $data)
+            ? $data['routingWeight']
+            : null;
+        $this->maintenanceNote = array_key_exists('maintenanceNote', $data)
+            ? $data['maintenanceNote']
+            : null;
+        $this->probeFailures = array_key_exists('probeFailures', $data)
+            ? $data['probeFailures']
+            : null;
+        $this->probeUrl = array_key_exists('probeUrl', $data)
+            ? $data['probeUrl']
+            : null;
         $this->createdAt = array_key_exists('createdAt', $data)
             ? $data['createdAt']
             : null;
@@ -144,6 +242,22 @@ final class ClusterInstanceResponse
             'lastOnlineAt' => $this->lastOnlineAt,
             'uptimeSeconds' => $this->uptimeSeconds,
             'metrics' => $this->metrics,
+            'joinMode' => $this->joinMode,
+            'qualityScore' => $this->qualityScore,
+            'desiredConfigRevision' => $this->desiredConfigRevision,
+            'appliedConfigRevision' => $this->appliedConfigRevision,
+            'desiredApplicationsRevision' => $this->desiredApplicationsRevision,
+            'appliedApplicationsRevision' => $this->appliedApplicationsRevision,
+            'syncStatus' => $this->syncStatus,
+            'routingEnabled' => $this->routingEnabled,
+            'draining' => $this->draining,
+            'ejected' => $this->ejected,
+            'restartCount' => $this->restartCount,
+            'labels' => array_map(static fn($item) => $item, $this->labels),
+            'routingWeight' => $this->routingWeight,
+            'maintenanceNote' => $this->maintenanceNote,
+            'probeFailures' => $this->probeFailures,
+            'probeUrl' => $this->probeUrl,
             'createdAt' => $this->createdAt,
             'updatedAt' => $this->updatedAt,
         ];

@@ -76,6 +76,16 @@ class ClusterApi {
     await _client.delete(ApiPaths.backendPath('/clusters/${serializePathParameter(clusterId, const PathParameterSpec('clusterId', 'simple', false))}'), headers: requestHeaders);
   }
 
+  /// Publish a desired-state revision to every instance of the cluster
+  Future<ClustersSyncResponse?> clustersSync(String clusterId, PublishClusterSyncRequest body) async {
+    final payload = body.toJson();
+    final response = await _client.post(ApiPaths.backendPath('/clusters/${serializePathParameter(clusterId, const PathParameterSpec('clusterId', 'simple', false))}/sync'), body: payload, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ClustersSyncResponse.fromJson(map);
+    })();
+  }
+
   /// List cluster hosts with system and network identity
   Future<ClustersHostsListResponse?> clustersHostsList([int? pageSize, String? cursor, String? clusterId, int? status]) async {
     final query = buildQueryString([
@@ -214,6 +224,64 @@ class ClusterApi {
     return (() {
       final map = sdkworkResponseAsMap(response);
       return map == null ? null : ClustersInstancesHeartbeatsListResponse.fromJson(map);
+    })();
+  }
+
+  /// List one instance's heartbeat metric samples for trend charts
+  Future<ClustersInstancesMetricsListResponse?> clustersInstancesMetricsList(String instanceId, [int? limit]) async {
+    final query = buildQueryString([
+      QueryParameterSpec('limit', limit, 'form', true, false, null)
+    ]);
+    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.backendPath('/clusters/instances/${serializePathParameter(instanceId, const PathParameterSpec('instanceId', 'simple', false))}/metrics/history'), query));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ClustersInstancesMetricsListResponse.fromJson(map);
+    })();
+  }
+
+  /// Probe one instance's connectivity and record the outcome
+  Future<ClustersInstancesProbeResponse?> clustersInstancesProbe(String instanceId, [ProbeClusterInstanceRequest? body]) async {
+    final payload = body?.toJson();
+    final response = await _client.post(ApiPaths.backendPath('/clusters/instances/${serializePathParameter(instanceId, const PathParameterSpec('instanceId', 'simple', false))}/probe'), body: payload, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ClustersInstancesProbeResponse.fromJson(map);
+    })();
+  }
+
+  /// Gracefully drain one instance out of routing
+  Future<ClustersInstancesDrainResponse?> clustersInstancesDrain(String instanceId) async {
+    final response = await _client.post(ApiPaths.backendPath('/clusters/instances/${serializePathParameter(instanceId, const PathParameterSpec('instanceId', 'simple', false))}/drain'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ClustersInstancesDrainResponse.fromJson(map);
+    })();
+  }
+
+  /// Clear the drain flag and restore routing participation
+  Future<ClustersInstancesUndrainResponse?> clustersInstancesUndrain(String instanceId) async {
+    final response = await _client.post(ApiPaths.backendPath('/clusters/instances/${serializePathParameter(instanceId, const PathParameterSpec('instanceId', 'simple', false))}/undrain'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ClustersInstancesUndrainResponse.fromJson(map);
+    })();
+  }
+
+  /// Cordon one instance out of routing without draining it
+  Future<ClustersInstancesCordonResponse?> clustersInstancesCordon(String instanceId) async {
+    final response = await _client.post(ApiPaths.backendPath('/clusters/instances/${serializePathParameter(instanceId, const PathParameterSpec('instanceId', 'simple', false))}/cordon'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ClustersInstancesCordonResponse.fromJson(map);
+    })();
+  }
+
+  /// Uncordon one instance back into routing
+  Future<ClustersInstancesUncordonResponse?> clustersInstancesUncordon(String instanceId) async {
+    final response = await _client.post(ApiPaths.backendPath('/clusters/instances/${serializePathParameter(instanceId, const PathParameterSpec('instanceId', 'simple', false))}/uncordon'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ClustersInstancesUncordonResponse.fromJson(map);
     })();
   }
 

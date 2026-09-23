@@ -227,6 +227,45 @@ fn exact_host_ownership_does_not_fall_back_to_a_wildcard_site() {
 }
 
 #[test]
+fn declares_authority_is_host_granular_and_covers_the_wildcard_form() {
+    // `declares_authority` is the guard that stops another surface (the tunnel
+    // relay) from claiming a host the publishing surface owns. It therefore has
+    // to answer about the *host*: it stays true for a declared host whose
+    // requested path has no route, which is precisely the case route outcomes
+    // cannot separate — a missing route on a declared host and an undeclared
+    // host both surface as 404.
+    let bytes = signed_runtime_set(runtime_set_fixture(vec![
+        signed_descriptor(descriptor_fixture(
+            "site-a",
+            "example.com",
+            "/private",
+            "website-root-a",
+        )),
+        signed_descriptor(descriptor_fixture(
+            "site-b",
+            "*.example.com",
+            "/",
+            "website-root-b",
+        )),
+    ]));
+    let compiled = compile_website_runtime_set_snapshot(&bytes).unwrap();
+
+    // No route for "/" under the exact host — and still declared.
+    assert_eq!(selected_provider(&bytes, "example.com", "/"), None);
+    assert!(compiled.declares_authority("example.com"));
+    // An authority carries a port; the host match must not depend on it.
+    assert!(compiled.declares_authority("example.com:8443"));
+
+    // The wildcard site declares its own one-label subdomains.
+    assert!(compiled.declares_authority("preview.example.com"));
+
+    // Nothing else, however it is written.
+    assert!(!compiled.declares_authority("other.test"));
+    assert!(!compiled.declares_authority("deep.preview.example.com"));
+    assert!(!compiled.declares_authority(""));
+}
+
+#[test]
 fn rejects_cross_site_host_and_path_conflicts() {
     let bytes = signed_runtime_set(runtime_set_fixture(vec![
         signed_descriptor(descriptor_fixture(

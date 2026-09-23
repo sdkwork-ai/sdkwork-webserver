@@ -21,6 +21,10 @@ export interface ClusterHostResponse {
   status: number;
   lastHeartbeatAt?: string;
   instanceCount: Int64String;
+  /** `LAN` = same-subnet host with shared-database or direct-API reachability; `TUNNEL` = API-only host reached through the reverse tunnel. */
+  joinMode?: 'LAN' | 'TUNNEL';
+  /** Tunnel route domain for `TUNNEL` hosts; absent on `LAN` hosts. */
+  tunnelRouteDomain?: string;
   createdAt: string;
   updatedAt: string;
 }

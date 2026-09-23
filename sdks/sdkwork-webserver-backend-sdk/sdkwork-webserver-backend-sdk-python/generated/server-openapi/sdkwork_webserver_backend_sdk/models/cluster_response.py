@@ -17,3 +17,5 @@ class ClusterResponse:
     created_at: str
     updated_at: str
     description: Optional[str] = None
+    lb_strategy: Optional[str] = None
+    served_domains: Optional[List[str]] = None

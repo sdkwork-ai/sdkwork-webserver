@@ -22,6 +22,7 @@ rustls.workspace = true
 sdkwork-webserver-tunnel-core.workspace = true
 sdkwork-webserver-tunnel-protocol.workspace = true
 sdkwork-webserver-tunnel-transport.workspace = true
+sdkwork-utils-rust.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

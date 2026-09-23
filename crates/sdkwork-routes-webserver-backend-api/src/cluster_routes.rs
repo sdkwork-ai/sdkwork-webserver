@@ -20,9 +20,8 @@ use sdkwork_routes_webserver_common::{
     ok_cluster_host_page, ok_cluster_instance_page, ok_cluster_page, ok_resource, WebApiError,
 };
 use sdkwork_webserver_contract::{
-    ClusterHeartbeatSamplePage, CreateClusterRequest, EnqueueClusterPeerMessagesRequest,
-    UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest, WebBackendApi,
-    WebBackendRequestContext,
+    CreateClusterRequest, EnqueueClusterPeerMessagesRequest, UpdateClusterHostRequest,
+    UpdateClusterInstanceRequest, UpdateClusterRequest, WebBackendApi, WebBackendRequestContext,
 };
 use serde::Deserialize;
 
@@ -398,7 +397,7 @@ pub(crate) async fn list_instance_metrics_history(
     Query(query): Query<InstanceMetricsHistoryQuery>,
 ) -> Result<Response, WebApiError> {
     let context = require_cluster_context(context)?;
-    ok_resource(
+    ok_cluster_heartbeat_page(
         service
             .cluster_instance_metrics_history(&context, &instance_id, query.limit)
             .await,

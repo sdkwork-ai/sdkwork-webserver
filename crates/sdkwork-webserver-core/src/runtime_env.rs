@@ -35,6 +35,33 @@ pub fn web_is_production_like_environment() -> bool {
 /// process.
 pub const TLS_RUNTIME_SNAPSHOT_FILE_ENV: &str = "SDKWORK_WEBSERVER_TLS_RUNTIME_SNAPSHOT_FILE";
 
+/// Declared ACME challenge method (`AUTO` | `HTTP_01` | `DNS_01`).
+///
+/// Shared because the semantics are a cross-process contract: the certificate
+/// worker resolves the challenge from it, and an operator reading a deployment
+/// needs one name to set. `AUTO` is the product default — single-domain
+/// certificates are proven over HTTP-01, wildcards over DNS-01.
+pub const ACME_CHALLENGE_METHOD_ENV: &str = "SDKWORK_WEBSERVER_ACME_CHALLENGE_METHOD";
+
+/// JSON file listing the DNS provider accounts used for DNS-01.
+///
+/// A *file* rather than an inline value, because it carries provider
+/// credentials: this crate's configuration surfaces reference secrets by path
+/// and never embed them. Absent file ⇒ DNS-01 is unavailable ⇒ wildcard
+/// certificates fail closed with an actionable error instead of reaching the CA.
+pub const ACME_DNS_ACCOUNTS_FILE_ENV: &str = "SDKWORK_WEBSERVER_ACME_DNS_ACCOUNTS_FILE";
+
+/// The directory the certificate worker writes HTTP-01 challenge tokens into.
+///
+/// This is the *write* half of a rendezvous: the data plane serves the same
+/// directory back to the CA through a listener that declares
+/// `acmeHttp01.webroot` (`compiled.rs`). The two are configured in different
+/// files by different tools, so they are compared at compile time
+/// (`config::acme_webroot`) rather than assumed to agree — when they disagree,
+/// HTTP-01 can never succeed and issuance fails with a CA-side error that says
+/// nothing about the cause.
+pub const ACME_WEBROOT_ENV: &str = "SDKWORK_WEBSERVER_ACME_WEBROOT";
+
 fn env_truthy(key: &str) -> bool {
     std::env::var(key)
         .ok()

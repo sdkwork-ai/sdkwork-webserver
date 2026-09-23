@@ -16,6 +16,8 @@ namespace SDKWork.WebserverBackendSdk.Models
         public string HostCount { get; set; }
         public string InstanceCount { get; set; }
         public string OnlineInstanceCount { get; set; }
+        public string? LbStrategy { get; set; }
+        public List<string>? ServedDomains { get; set; }
         public string CreatedAt { get; set; }
         public string UpdatedAt { get; set; }
     }

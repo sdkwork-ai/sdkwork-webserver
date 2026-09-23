@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 from ..http_client import HttpClient
-from ..models import ClustersCreateResponse201, ClustersEventsListResponse, ClustersHostsListResponse, ClustersHostsRetrieveResponse, ClustersHostsUpdateResponse, ClustersInstancesHeartbeatsListResponse, ClustersInstancesListResponse, ClustersInstancesRetrieveResponse, ClustersInstancesUpdateResponse, ClustersListResponse, ClustersMessagesCreateResponse201, ClustersOverviewRetrieveResponse, ClustersRetrieveResponse, ClustersUpdateResponse, CreateClusterRequest, EnqueueClusterPeerMessagesRequest, UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest
+from ..models import ClustersCreateResponse201, ClustersEventsListResponse, ClustersHostsListResponse, ClustersHostsRetrieveResponse, ClustersHostsUpdateResponse, ClustersInstancesCordonResponse, ClustersInstancesDrainResponse, ClustersInstancesHeartbeatsListResponse, ClustersInstancesListResponse, ClustersInstancesMetricsListResponse, ClustersInstancesProbeResponse, ClustersInstancesRetrieveResponse, ClustersInstancesUncordonResponse, ClustersInstancesUndrainResponse, ClustersInstancesUpdateResponse, ClustersListResponse, ClustersMessagesCreateResponse201, ClustersOverviewRetrieveResponse, ClustersRetrieveResponse, ClustersSyncResponse, ClustersUpdateResponse, CreateClusterRequest, EnqueueClusterPeerMessagesRequest, ProbeClusterInstanceRequest, PublishClusterSyncRequest, UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest
 
 def _append_query_string(path: str, raw_query_string: str) -> str:
     query = raw_query_string.lstrip('?')
@@ -291,6 +291,10 @@ class ClusterApi:
         )
         return self._client.delete(f"/backend/v3/api/clusters/{serialize_path_parameter(cluster_id, {'name': 'clusterId', 'style': 'simple', 'explode': False})}", headers=request_headers)
 
+    def create_sync(self, cluster_id: str, body: PublishClusterSyncRequest) -> ClustersSyncResponse:
+        """Publish a desired-state revision to every instance of the cluster"""
+        return self._client.post(f"/backend/v3/api/clusters/{serialize_path_parameter(cluster_id, {'name': 'clusterId', 'style': 'simple', 'explode': False})}/sync", json=body)
+
 class ClusterHostsApi:
     """cluster clusters.hosts API client."""
 
@@ -338,6 +342,7 @@ class ClusterInstancesApi:
     def __init__(self, client: HttpClient):
         self._client = client
         self.heartbeats = ClusterInstancesHeartbeatsApi(client)
+        self.metrics = ClusterInstancesMetricsApi(client)
 
 
     def list(self, page_size: Optional[int] = None, cursor: Optional[str] = None, cluster_id: Optional[str] = None, host_id: Optional[str] = None, status: Optional[int] = None, health_state: Optional[str] = None) -> ClustersInstancesListResponse:
@@ -376,6 +381,26 @@ class ClusterInstancesApi:
         )
         return self._client.delete(f"/backend/v3/api/clusters/instances/{serialize_path_parameter(instance_id, {'name': 'instanceId', 'style': 'simple', 'explode': False})}", headers=request_headers)
 
+    def create_probe(self, instance_id: str, body: Optional[ProbeClusterInstanceRequest] = None) -> ClustersInstancesProbeResponse:
+        """Probe one instance's connectivity and record the outcome"""
+        return self._client.post(f"/backend/v3/api/clusters/instances/{serialize_path_parameter(instance_id, {'name': 'instanceId', 'style': 'simple', 'explode': False})}/probe", json=body)
+
+    def create_drain(self, instance_id: str) -> ClustersInstancesDrainResponse:
+        """Gracefully drain one instance out of routing"""
+        return self._client.post(f"/backend/v3/api/clusters/instances/{serialize_path_parameter(instance_id, {'name': 'instanceId', 'style': 'simple', 'explode': False})}/drain")
+
+    def create_undrain(self, instance_id: str) -> ClustersInstancesUndrainResponse:
+        """Clear the drain flag and restore routing participation"""
+        return self._client.post(f"/backend/v3/api/clusters/instances/{serialize_path_parameter(instance_id, {'name': 'instanceId', 'style': 'simple', 'explode': False})}/undrain")
+
+    def create_cordon(self, instance_id: str) -> ClustersInstancesCordonResponse:
+        """Cordon one instance out of routing without draining it"""
+        return self._client.post(f"/backend/v3/api/clusters/instances/{serialize_path_parameter(instance_id, {'name': 'instanceId', 'style': 'simple', 'explode': False})}/cordon")
+
+    def create_uncordon(self, instance_id: str) -> ClustersInstancesUncordonResponse:
+        """Uncordon one instance back into routing"""
+        return self._client.post(f"/backend/v3/api/clusters/instances/{serialize_path_parameter(instance_id, {'name': 'instanceId', 'style': 'simple', 'explode': False})}/uncordon")
+
 class ClusterInstancesHeartbeatsApi:
     """cluster clusters.instances.heartbeats API client."""
 
@@ -390,6 +415,20 @@ class ClusterInstancesHeartbeatsApi:
             {'name': 'cursor', 'value': cursor, 'style': 'form', 'explode': True, 'allow_reserved': False},
         ])
         return self._client.get(_append_query_string(f"/backend/v3/api/clusters/instances/{serialize_path_parameter(instance_id, {'name': 'instanceId', 'style': 'simple', 'explode': False})}/heartbeats", query))
+
+class ClusterInstancesMetricsApi:
+    """cluster clusters.instances.metrics API client."""
+
+    def __init__(self, client: HttpClient):
+        self._client = client
+
+
+    def list_history(self, instance_id: str, limit: Optional[int] = None) -> ClustersInstancesMetricsListResponse:
+        """List one instance's heartbeat metric samples for trend charts"""
+        query = build_query_string([
+            {'name': 'limit', 'value': limit, 'style': 'form', 'explode': True, 'allow_reserved': False},
+        ])
+        return self._client.get(_append_query_string(f"/backend/v3/api/clusters/instances/{serialize_path_parameter(instance_id, {'name': 'instanceId', 'style': 'simple', 'explode': False})}/metrics/history", query))
 
 class ClusterEventsApi:
     """cluster clusters.events API client."""

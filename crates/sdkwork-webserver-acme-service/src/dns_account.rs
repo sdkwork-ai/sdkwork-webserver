@@ -21,7 +21,8 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::dns::{
-    normalize_dns_name, Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest, DnsProviderKind,
+    normalize_dns_name, Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest,
+    DnsAccountVerification, DnsProviderKind,
 };
 use crate::{AcmeServiceError, AcmeServiceResult};
 
@@ -33,13 +34,15 @@ pub struct DnsCloudAccountConfig {
     /// Stable operator-facing reference.
     #[serde(rename = "accountId")]
     pub account_id: String,
-    /// Provider family: `ALIYUN_DNS`, `DNSPOD`, `CLOUDFLARE`.
+    /// Provider family: `ALIYUN_DNS`, `DNSPOD`, `CLOUDFLARE`, `HTTP_REQUEST`.
     pub provider: String,
     /// Hosted zone apex the account owns, e.g. `example.com`.
     #[serde(rename = "zoneApex")]
     pub zone_apex: String,
     /// Provider credentials. Aliyun/DNSPod: `{ accessKeyId, accessKeySecret }`;
-    /// Cloudflare: `{ apiToken }`.
+    /// Cloudflare: `{ apiToken }`; `HTTP_REQUEST`: the request configuration
+    /// document itself (see `dns_http_request`), because that family treats its
+    /// requests as data rather than as a fixed credential shape.
     pub credentials: serde_json::Value,
 }
 
@@ -118,6 +121,18 @@ impl DnsCloudAccountRegistry {
         self.accounts.len()
     }
 
+    /// Every associated zone apex, in registration order.
+    ///
+    /// For startup diagnostics: "which zones can renew unattended" must be
+    /// answerable from a log line, and it never exposes the account id or any
+    /// credential.
+    pub fn zone_apices(&self) -> Vec<String> {
+        self.accounts
+            .iter()
+            .map(|account| account.zone_apex.clone())
+            .collect()
+    }
+
     /// True when no cloud account is associated.
     pub fn is_empty(&self) -> bool {
         self.accounts.is_empty()
@@ -175,6 +190,20 @@ impl DnsCloudAccountRegistry {
                         client, api_token, None,
                     )?)
                 }
+                (DnsProviderKind::HttpRequest, credentials) => {
+                    let client = crate::dns_http::DnsApiClient::new()?;
+                    // The whole credential *is* the request configuration: this
+                    // family has no fixed field names of its own, so the
+                    // document round-trips back into the presenter verbatim.
+                    let document = serde_json::to_string(credentials).map_err(|error| {
+                        AcmeServiceError::validation(format!(
+                            "HTTP_REQUEST credentials are not serializable: {error}"
+                        ))
+                    })?;
+                    Arc::new(crate::dns_http_request::HttpRequestDns01Presenter::new(
+                        client, &document,
+                    )?)
+                }
                 (provider, _) => {
                     return Err(AcmeServiceError::validation(format!(
                         "credentials for {provider} must be an object with provider-specific keys"
@@ -209,6 +238,65 @@ impl DnsCloudAccountRegistry {
         Arc::new(DispatchingDns01Presenter {
             registry: Arc::clone(self),
         })
+    }
+
+    /// Probes every associated account, in registration order.
+    ///
+    /// The registry is where the accounts are known, so it is where they can be
+    /// checked as a set. One account's failure never stops the next: an operator
+    /// fixing three credentials should learn about all three from one run, not
+    /// about the first and then the second after another restart.
+    pub async fn verify_accounts(&self) -> Vec<DnsAccountVerificationReport> {
+        let mut reports = Vec::with_capacity(self.accounts.len());
+        for account in &self.accounts {
+            reports.push(DnsAccountVerificationReport {
+                account_id: account.account_id.clone(),
+                provider: account.provider,
+                zone_apex: account.zone_apex.clone(),
+                outcome: account.presenter.verify_account(&account.zone_apex).await,
+            });
+        }
+        reports
+    }
+}
+
+/// What probing one configured account established.
+///
+/// Carries the account identity alongside the outcome because the caller's next
+/// step is to tell the operator *which* account is wrong, and a bare error text
+/// does not say that.
+#[derive(Debug)]
+pub struct DnsAccountVerificationReport {
+    pub account_id: String,
+    pub provider: DnsProviderKind,
+    pub zone_apex: String,
+    /// The provider's own refusal when the account was rejected, or the reason
+    /// no check was possible.
+    pub outcome: AcmeServiceResult<DnsAccountVerification>,
+}
+
+impl DnsAccountVerificationReport {
+    /// True when the provider actively refused the account, as opposed to not
+    /// being asked.
+    ///
+    /// The distinction matters to a caller deciding whether to fail a startup:
+    /// a refusal is a configuration mistake worth stopping for, while an
+    /// unverifiable family is not a problem at all.
+    pub fn is_rejected(&self) -> bool {
+        self.outcome.is_err()
+    }
+
+    /// A single operator-facing line, with the provider's own words when it
+    /// refused.
+    pub fn describe(&self) -> String {
+        let header = format!(
+            "{} account `{}` for zone {}",
+            self.provider, self.account_id, self.zone_apex
+        );
+        match &self.outcome {
+            Ok(verification) => format!("{header}: {}", verification.describe()),
+            Err(error) => format!("{header}: {error}"),
+        }
     }
 }
 
@@ -264,6 +352,18 @@ impl Dns01Presenter for DispatchingDns01Presenter {
             .withdraw(handle)
             .await
     }
+
+    /// Probes the account that owns `zone_apex`.
+    ///
+    /// Routing by the zone rather than probing every account keeps the meaning
+    /// identical to `publish`: the account asked about is the account that would
+    /// have been used.
+    async fn verify_account(&self, zone_apex: &str) -> AcmeServiceResult<DnsAccountVerification> {
+        self.account_for(zone_apex)?
+            .presenter
+            .verify_account(zone_apex)
+            .await
+    }
 }
 
 fn credential_string(
@@ -280,6 +380,48 @@ fn credential_string(
                 "cloud account credentials must contain non-empty `{key}`"
             ))
         })
+}
+
+/// Maximum accepted size of a DNS accounts file (64 KiB).
+pub const MAX_DNS_ACCOUNTS_FILE_BYTES: u64 = 64 * 1024;
+
+/// Reads and validates the DNS provider account file.
+///
+/// The file is the deployment's *only* source of DNS-01 credentials, so every
+/// failure mode is reported as a configuration error naming the file: a
+/// malformed file that silently degraded to "no accounts" would disable every
+/// wildcard renewal without a single log line pointing at the cause.
+///
+/// Credentials are read from a file rather than an inline config value on
+/// purpose — the configuration surface references secrets by path and never
+/// embeds them.
+pub fn load_dns_account_configs(
+    path: &std::path::Path,
+) -> AcmeServiceResult<Vec<DnsCloudAccountConfig>> {
+    let describe = |detail: String| {
+        AcmeServiceError::config(format!(
+            "ACME DNS accounts file {} is invalid: {detail}",
+            path.display()
+        ))
+    };
+    let metadata =
+        std::fs::metadata(path).map_err(|error| describe(format!("cannot be read ({error})")))?;
+    if !metadata.is_file() {
+        return Err(describe("not a regular file".to_string()));
+    }
+    if metadata.len() > MAX_DNS_ACCOUNTS_FILE_BYTES {
+        return Err(describe(format!(
+            "exceeds the {MAX_DNS_ACCOUNTS_FILE_BYTES} byte limit"
+        )));
+    }
+    let raw = std::fs::read(path).map_err(|error| describe(format!("cannot be read ({error})")))?;
+    let configs: Vec<DnsCloudAccountConfig> =
+        serde_json::from_slice(&raw).map_err(|error| describe(error.to_string()))?;
+    // Build the registry now, not on the first issuance: a broken credential or
+    // a duplicate zone is a startup problem an operator can act on, not a
+    // certificate failure that surfaces hours later in a renewal window.
+    DnsCloudAccountRegistry::from_configs(&configs)?;
+    Ok(configs)
 }
 
 #[cfg(test)]
@@ -396,5 +538,222 @@ mod tests {
         )
         .expect("request");
         assert!(presenter.publish(&unknown).await.is_err());
+    }
+
+    /// A presenter that refuses an account the way a misconfigured provider does.
+    struct RejectingPresenter(&'static str);
+
+    /// A presenter whose provider answers its read-only probe.
+    struct VerifyingPresenter;
+
+    #[async_trait::async_trait]
+    impl Dns01Presenter for VerifyingPresenter {
+        async fn publish(
+            &self,
+            _request: &Dns01RecordRequest,
+        ) -> AcmeServiceResult<Dns01RecordHandle> {
+            Err(AcmeServiceError::provider("unused in this test"))
+        }
+
+        async fn withdraw(&self, _handle: &Dns01RecordHandle) -> AcmeServiceResult<()> {
+            Ok(())
+        }
+
+        async fn verify_account(
+            &self,
+            _zone_apex: &str,
+        ) -> AcmeServiceResult<DnsAccountVerification> {
+            Ok(DnsAccountVerification::Verified)
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl Dns01Presenter for RejectingPresenter {
+        async fn publish(
+            &self,
+            _request: &Dns01RecordRequest,
+        ) -> AcmeServiceResult<Dns01RecordHandle> {
+            Err(AcmeServiceError::provider("unused in this test"))
+        }
+
+        async fn withdraw(&self, _handle: &Dns01RecordHandle) -> AcmeServiceResult<()> {
+            Ok(())
+        }
+
+        async fn verify_account(
+            &self,
+            zone_apex: &str,
+        ) -> AcmeServiceResult<DnsAccountVerification> {
+            Err(AcmeServiceError::provider(format!(
+                "{} for {zone_apex}",
+                self.0
+            )))
+        }
+    }
+
+    fn account_with(zone: &str, id: &str, presenter: Arc<dyn Dns01Presenter>) -> DnsCloudAccount {
+        DnsCloudAccount {
+            account_id: id.to_owned(),
+            zone_apex: zone.to_owned(),
+            provider: DnsProviderKind::Cloudflare,
+            presenter,
+        }
+    }
+
+    /// The report has to name the account, not just the failure: an operator with
+    /// three zones needs to know which one the provider refused.
+    #[tokio::test]
+    async fn a_rejected_account_is_reported_with_its_identity_and_the_provider_error() {
+        let mut registry = DnsCloudAccountRegistry::empty();
+        registry
+            .register(account_with(
+                "example.com",
+                "cf-main",
+                Arc::new(RejectingPresenter(
+                    "CLOUDFLARE rejected the request with HTTP 401: Authentication error (10000)",
+                )),
+            ))
+            .expect("register");
+
+        let reports = registry.verify_accounts().await;
+        assert_eq!(reports.len(), 1);
+        assert!(reports[0].is_rejected());
+        assert_eq!(reports[0].account_id, "cf-main");
+        assert_eq!(reports[0].zone_apex, "example.com");
+        let line = reports[0].describe();
+        assert!(line.contains("Authentication error"), "{line}");
+        assert!(line.contains("cf-main"), "{line}");
+        assert!(line.contains("example.com"), "{line}");
+    }
+
+    /// One broken account must not hide the others: an operator fixing three
+    /// credentials should learn about all three from one run.
+    #[tokio::test]
+    async fn one_rejected_account_does_not_hide_the_others() {
+        let mut registry = DnsCloudAccountRegistry::empty();
+        registry
+            .register(account_with(
+                "ok.example",
+                "healthy",
+                Arc::new(VerifyingPresenter),
+            ))
+            .expect("register healthy");
+        registry
+            .register(account_with(
+                "bad.example",
+                "broken",
+                Arc::new(RejectingPresenter("provider refused the credential")),
+            ))
+            .expect("register broken");
+        registry
+            .register(account("unverifiable.example", "no-read-only-call"))
+            .expect("register unverifiable");
+        let reports = registry.verify_accounts().await;
+        assert_eq!(reports.len(), 3);
+        assert!(!reports[0].is_rejected());
+        assert!(reports[0].outcome.as_ref().expect("ok").is_verified());
+        assert!(reports[1].is_rejected());
+        assert!(reports[1]
+            .describe()
+            .contains("provider refused the credential"));
+        // A family with no read-only probe reports "could not check", never
+        // "checked and fine".
+        assert!(!reports[2].is_rejected());
+        assert!(!reports[2].outcome.as_ref().expect("ok").is_verified());
+        assert!(reports[2].describe().contains("no read-only call"));
+    }
+
+    #[test]
+    fn dns_accounts_file_round_trips_and_validates_at_load_time() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let path = directory.path().join("dns-accounts.json");
+        std::fs::write(
+            &path,
+            serde_json::to_vec(&serde_json::json!([
+                {
+                    "accountId": "cf-main",
+                    "provider": "CLOUDFLARE",
+                    "zoneApex": "example.com",
+                    "credentials": { "apiToken": "token" }
+                }
+            ]))
+            .expect("serialize"),
+        )
+        .expect("write");
+
+        let configs = load_dns_account_configs(&path).expect("load");
+        assert_eq!(configs.len(), 1);
+        assert_eq!(configs[0].zone_apex, "example.com");
+        let registry = DnsCloudAccountRegistry::from_configs(&configs).expect("registry");
+        assert_eq!(
+            registry.zone_for("*.example.com").as_deref(),
+            Some("example.com")
+        );
+    }
+
+    /// Every failure mode names the file. A silently-empty registry would
+    /// disable DNS-01 — and with it every wildcard renewal — with no clue.
+    #[test]
+    fn dns_accounts_file_failures_are_configuration_errors_naming_the_file() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let missing = directory.path().join("absent.json");
+        let error = load_dns_account_configs(&missing).expect_err("missing file");
+        assert!(matches!(error, AcmeServiceError::Config(_)));
+        assert!(error.to_string().contains("absent.json"), "{error}");
+
+        let malformed = directory.path().join("malformed.json");
+        std::fs::write(&malformed, b"{ not json").expect("write");
+        let error = load_dns_account_configs(&malformed).expect_err("malformed json");
+        assert!(error.to_string().contains("malformed.json"), "{error}");
+
+        // A missing credential is a startup failure, not a first-issuance one.
+        let incomplete = directory.path().join("incomplete.json");
+        std::fs::write(
+            &incomplete,
+            br#"[{"accountId":"cf","provider":"CLOUDFLARE","zoneApex":"example.com","credentials":{}}]"#,
+        )
+        .expect("write");
+        let error = load_dns_account_configs(&incomplete).expect_err("missing credential");
+        assert!(error.to_string().contains("apiToken"), "{error}");
+
+        // Unknown fields are rejected rather than ignored: a typo in a
+        // credential key must not look like a successfully configured account.
+        let typo = directory.path().join("typo.json");
+        std::fs::write(
+            &typo,
+            br#"[{"accountId":"cf","provider":"CLOUDFLARE","zoneApex":"example.com","credentials":{"apiToken":"t"},"extra":1}]"#,
+        )
+        .expect("write");
+        assert!(load_dns_account_configs(&typo).is_err());
+
+        // Two entries for one zone is a configuration mistake: one zone has one
+        // authoritative account.
+        let duplicate = directory.path().join("duplicate.json");
+        std::fs::write(
+            &duplicate,
+            br#"[{"accountId":"a","provider":"CLOUDFLARE","zoneApex":"example.com","credentials":{"apiToken":"t"}},
+                 {"accountId":"b","provider":"CLOUDFLARE","zoneApex":"example.com","credentials":{"apiToken":"t"}}]"#,
+        )
+        .expect("write");
+        let error = load_dns_account_configs(&duplicate).expect_err("duplicate zone");
+        assert!(error.to_string().contains("already associated"), "{error}");
+
+        // A directory where a file is expected must not be read as empty.
+        assert!(load_dns_account_configs(directory.path()).is_err());
+    }
+
+    /// An empty list is legal and means "no DNS accounts": the certificate path
+    /// then reports the actionable wildcard error rather than pretending DNS-01
+    /// is configured.
+    #[test]
+    fn an_empty_dns_accounts_file_is_an_empty_registry_not_an_error() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let path = directory.path().join("empty.json");
+        std::fs::write(&path, b"[]").expect("write");
+        let configs = load_dns_account_configs(&path).expect("empty list loads");
+        assert!(configs.is_empty());
+        assert!(DnsCloudAccountRegistry::from_configs(&configs)
+            .expect("registry")
+            .is_empty());
     }
 }

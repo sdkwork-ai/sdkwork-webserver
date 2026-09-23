@@ -17,6 +17,64 @@ public struct ClusterHeartbeatSampleResponse: Codable {
     }
 }
 
+public struct PublishClusterSyncRequest: Codable {
+    public let kind: String?
+    public let payload: [String: Any]?
+
+
+    public init(kind: String? = nil, payload: [String: Any]? = nil) {
+        self.kind = kind
+        self.payload = payload
+    }
+}
+
+public struct ClusterSyncManifest: Codable {
+    public let clusterId: String?
+    public let kind: String?
+    public let revision: String?
+    public let sha256: String?
+    public let payload: [String: Any]?
+    public let createdAt: String?
+
+
+    public init(clusterId: String? = nil, kind: String? = nil, revision: String? = nil, sha256: String? = nil, payload: [String: Any]? = nil, createdAt: String? = nil) {
+        self.clusterId = clusterId
+        self.kind = kind
+        self.revision = revision
+        self.sha256 = sha256
+        self.payload = payload
+        self.createdAt = createdAt
+    }
+}
+
+public struct ProbeClusterInstanceRequest: Codable {
+    public let path: String?
+    public let timeoutMs: Int?
+
+
+    public init(path: String? = nil, timeoutMs: Int? = nil) {
+        self.path = path
+        self.timeoutMs = timeoutMs
+    }
+}
+
+public struct ClusterProbeRunResponse: Codable {
+    public let healthy: Bool?
+    public let latencyMs: Int?
+    public let failures: Int?
+    public let ejected: Bool?
+    public let recovered: Bool?
+
+
+    public init(healthy: Bool? = nil, latencyMs: Int? = nil, failures: Int? = nil, ejected: Bool? = nil, recovered: Bool? = nil) {
+        self.healthy = healthy
+        self.latencyMs = latencyMs
+        self.failures = failures
+        self.ejected = ejected
+        self.recovered = recovered
+    }
+}
+
 public struct EnqueueClusterPeerMessagesRequest: Codable {
     public let clusterId: String?
     public let toInstanceId: String?
@@ -717,12 +775,13 @@ public struct CertificateOperationResponse: Codable {
     public let maxAttempts: Int?
     public let nextAttemptAt: String?
     public let failureCode: String?
+    public let failureDetail: String?
     public let createdAt: String?
     public let updatedAt: String?
     public let completedAt: String?
 
 
-    public init(id: String? = nil, certificateId: String? = nil, operationType: String? = nil, status: String? = nil, attemptCount: Int? = nil, maxAttempts: Int? = nil, nextAttemptAt: String? = nil, failureCode: String? = nil, createdAt: String? = nil, updatedAt: String? = nil, completedAt: String? = nil) {
+    public init(id: String? = nil, certificateId: String? = nil, operationType: String? = nil, status: String? = nil, attemptCount: Int? = nil, maxAttempts: Int? = nil, nextAttemptAt: String? = nil, failureCode: String? = nil, failureDetail: String? = nil, createdAt: String? = nil, updatedAt: String? = nil, completedAt: String? = nil) {
         self.id = id
         self.certificateId = certificateId
         self.operationType = operationType
@@ -731,6 +790,7 @@ public struct CertificateOperationResponse: Codable {
         self.maxAttempts = maxAttempts
         self.nextAttemptAt = nextAttemptAt
         self.failureCode = failureCode
+        self.failureDetail = failureDetail
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.completedAt = completedAt
@@ -1523,11 +1583,13 @@ public struct ClusterResponse: Codable {
     public let hostCount: String?
     public let instanceCount: String?
     public let onlineInstanceCount: String?
+    public let lbStrategy: String?
+    public let servedDomains: [String]?
     public let createdAt: String?
     public let updatedAt: String?
 
 
-    public init(id: String? = nil, name: String? = nil, code: String? = nil, description: String? = nil, status: Int? = nil, heartbeatIntervalSeconds: Int? = nil, offlineThresholdSeconds: Int? = nil, hostCount: String? = nil, instanceCount: String? = nil, onlineInstanceCount: String? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
+    public init(id: String? = nil, name: String? = nil, code: String? = nil, description: String? = nil, status: Int? = nil, heartbeatIntervalSeconds: Int? = nil, offlineThresholdSeconds: Int? = nil, hostCount: String? = nil, instanceCount: String? = nil, onlineInstanceCount: String? = nil, lbStrategy: String? = nil, servedDomains: [String]? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
         self.id = id
         self.name = name
         self.code = code
@@ -1538,6 +1600,8 @@ public struct ClusterResponse: Codable {
         self.hostCount = hostCount
         self.instanceCount = instanceCount
         self.onlineInstanceCount = onlineInstanceCount
+        self.lbStrategy = lbStrategy
+        self.servedDomains = servedDomains
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -1549,14 +1613,18 @@ public struct CreateClusterRequest: Codable {
     public let description: String?
     public let heartbeatIntervalSeconds: Int?
     public let offlineThresholdSeconds: Int?
+    public let lbStrategy: String?
+    public let servedDomains: [String]?
 
 
-    public init(name: String? = nil, code: String? = nil, description: String? = nil, heartbeatIntervalSeconds: Int? = nil, offlineThresholdSeconds: Int? = nil) {
+    public init(name: String? = nil, code: String? = nil, description: String? = nil, heartbeatIntervalSeconds: Int? = nil, offlineThresholdSeconds: Int? = nil, lbStrategy: String? = nil, servedDomains: [String]? = nil) {
         self.name = name
         self.code = code
         self.description = description
         self.heartbeatIntervalSeconds = heartbeatIntervalSeconds
         self.offlineThresholdSeconds = offlineThresholdSeconds
+        self.lbStrategy = lbStrategy
+        self.servedDomains = servedDomains
     }
 }
 
@@ -1566,14 +1634,18 @@ public struct UpdateClusterRequest: Codable {
     public let status: Int?
     public let heartbeatIntervalSeconds: Int?
     public let offlineThresholdSeconds: Int?
+    public let lbStrategy: String?
+    public let servedDomains: [String]?
 
 
-    public init(name: String? = nil, description: String? = nil, status: Int? = nil, heartbeatIntervalSeconds: Int? = nil, offlineThresholdSeconds: Int? = nil) {
+    public init(name: String? = nil, description: String? = nil, status: Int? = nil, heartbeatIntervalSeconds: Int? = nil, offlineThresholdSeconds: Int? = nil, lbStrategy: String? = nil, servedDomains: [String]? = nil) {
         self.name = name
         self.description = description
         self.status = status
         self.heartbeatIntervalSeconds = heartbeatIntervalSeconds
         self.offlineThresholdSeconds = offlineThresholdSeconds
+        self.lbStrategy = lbStrategy
+        self.servedDomains = servedDomains
     }
 }
 
@@ -1597,11 +1669,13 @@ public struct ClusterHostResponse: Codable {
     public let status: Int?
     public let lastHeartbeatAt: String?
     public let instanceCount: String?
+    public let joinMode: String?
+    public let tunnelRouteDomain: String?
     public let createdAt: String?
     public let updatedAt: String?
 
 
-    public init(id: String? = nil, clusterId: String? = nil, name: String? = nil, hostname: String? = nil, machineCode: String? = nil, osName: String? = nil, osVersion: String? = nil, kernelVersion: String? = nil, arch: String? = nil, cpuModel: String? = nil, cpuCores: Int? = nil, memoryTotalMb: String? = nil, remoteIp: String? = nil, localIps: [String]? = nil, macAddresses: [String]? = nil, daemonVersion: String? = nil, status: Int? = nil, lastHeartbeatAt: String? = nil, instanceCount: String? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
+    public init(id: String? = nil, clusterId: String? = nil, name: String? = nil, hostname: String? = nil, machineCode: String? = nil, osName: String? = nil, osVersion: String? = nil, kernelVersion: String? = nil, arch: String? = nil, cpuModel: String? = nil, cpuCores: Int? = nil, memoryTotalMb: String? = nil, remoteIp: String? = nil, localIps: [String]? = nil, macAddresses: [String]? = nil, daemonVersion: String? = nil, status: Int? = nil, lastHeartbeatAt: String? = nil, instanceCount: String? = nil, joinMode: String? = nil, tunnelRouteDomain: String? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
         self.id = id
         self.clusterId = clusterId
         self.name = name
@@ -1621,6 +1695,8 @@ public struct ClusterHostResponse: Codable {
         self.status = status
         self.lastHeartbeatAt = lastHeartbeatAt
         self.instanceCount = instanceCount
+        self.joinMode = joinMode
+        self.tunnelRouteDomain = tunnelRouteDomain
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -1657,11 +1733,27 @@ public struct ClusterInstanceResponse: Codable {
     public let lastOnlineAt: String?
     public let uptimeSeconds: String?
     public let metrics: [String: Any]?
+    public let joinMode: String?
+    public let qualityScore: Int?
+    public let desiredConfigRevision: String?
+    public let appliedConfigRevision: String?
+    public let desiredApplicationsRevision: String?
+    public let appliedApplicationsRevision: String?
+    public let syncStatus: String?
+    public let routingEnabled: Bool?
+    public let draining: Bool?
+    public let ejected: Bool?
+    public let restartCount: Int?
+    public let labels: [String: String]?
+    public let routingWeight: Int?
+    public let maintenanceNote: String?
+    public let probeFailures: Int?
+    public let probeUrl: String?
     public let createdAt: String?
     public let updatedAt: String?
 
 
-    public init(id: String? = nil, clusterId: String? = nil, hostId: String? = nil, hostName: String? = nil, name: String? = nil, role: String? = nil, environment: String? = nil, processPid: Int? = nil, processStartedAt: String? = nil, bindHost: String? = nil, bindPort: Int? = nil, publicEndpoint: String? = nil, buildVersion: String? = nil, status: Int? = nil, healthState: String? = nil, lastHeartbeatAt: String? = nil, lastOnlineAt: String? = nil, uptimeSeconds: String? = nil, metrics: [String: Any]? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
+    public init(id: String? = nil, clusterId: String? = nil, hostId: String? = nil, hostName: String? = nil, name: String? = nil, role: String? = nil, environment: String? = nil, processPid: Int? = nil, processStartedAt: String? = nil, bindHost: String? = nil, bindPort: Int? = nil, publicEndpoint: String? = nil, buildVersion: String? = nil, status: Int? = nil, healthState: String? = nil, lastHeartbeatAt: String? = nil, lastOnlineAt: String? = nil, uptimeSeconds: String? = nil, metrics: [String: Any]? = nil, joinMode: String? = nil, qualityScore: Int? = nil, desiredConfigRevision: String? = nil, appliedConfigRevision: String? = nil, desiredApplicationsRevision: String? = nil, appliedApplicationsRevision: String? = nil, syncStatus: String? = nil, routingEnabled: Bool? = nil, draining: Bool? = nil, ejected: Bool? = nil, restartCount: Int? = nil, labels: [String: String]? = nil, routingWeight: Int? = nil, maintenanceNote: String? = nil, probeFailures: Int? = nil, probeUrl: String? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
         self.id = id
         self.clusterId = clusterId
         self.hostId = hostId
@@ -1681,6 +1773,22 @@ public struct ClusterInstanceResponse: Codable {
         self.lastOnlineAt = lastOnlineAt
         self.uptimeSeconds = uptimeSeconds
         self.metrics = metrics
+        self.joinMode = joinMode
+        self.qualityScore = qualityScore
+        self.desiredConfigRevision = desiredConfigRevision
+        self.appliedConfigRevision = appliedConfigRevision
+        self.desiredApplicationsRevision = desiredApplicationsRevision
+        self.appliedApplicationsRevision = appliedApplicationsRevision
+        self.syncStatus = syncStatus
+        self.routingEnabled = routingEnabled
+        self.draining = draining
+        self.ejected = ejected
+        self.restartCount = restartCount
+        self.labels = labels
+        self.routingWeight = routingWeight
+        self.maintenanceNote = maintenanceNote
+        self.probeFailures = probeFailures
+        self.probeUrl = probeUrl
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -1690,12 +1798,24 @@ public struct UpdateClusterInstanceRequest: Codable {
     public let name: String?
     public let status: Int?
     public let publicEndpoint: String?
+    public let routingEnabled: Bool?
+    public let draining: Bool?
+    public let probeUrl: String?
+    public let labels: [String: String]?
+    public let routingWeight: Int?
+    public let maintenanceNote: String?
 
 
-    public init(name: String? = nil, status: Int? = nil, publicEndpoint: String? = nil) {
+    public init(name: String? = nil, status: Int? = nil, publicEndpoint: String? = nil, routingEnabled: Bool? = nil, draining: Bool? = nil, probeUrl: String? = nil, labels: [String: String]? = nil, routingWeight: Int? = nil, maintenanceNote: String? = nil) {
         self.name = name
         self.status = status
         self.publicEndpoint = publicEndpoint
+        self.routingEnabled = routingEnabled
+        self.draining = draining
+        self.probeUrl = probeUrl
+        self.labels = labels
+        self.routingWeight = routingWeight
+        self.maintenanceNote = maintenanceNote
     }
 }
 
@@ -2514,6 +2634,19 @@ public struct ClustersUpdateResponse: Codable {
     }
 }
 
+public struct ClustersSyncResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
 public struct ClustersHostsListResponse: Codable {
     public let code: Int?
     public let data: Any?
@@ -2619,6 +2752,84 @@ public struct ClustersOverviewRetrieveResponse: Codable {
 }
 
 public struct ClustersInstancesHeartbeatsListResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ClustersInstancesMetricsListResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ClustersInstancesProbeResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ClustersInstancesDrainResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ClustersInstancesUndrainResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ClustersInstancesCordonResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ClustersInstancesUncordonResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?

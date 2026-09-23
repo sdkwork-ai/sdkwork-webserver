@@ -29,7 +29,7 @@ use sdkwork_webserver_contract::{
 use crate::repository::{
     ClusterEventWrite, ClusterHeartbeatWrite, ClusterHostUpsert, ClusterInstanceCredentials,
     ClusterInstanceUpsert, ClusterPeerMessageEnqueue, ClusterProbeOutcome, ClusterProbeWrite,
-    ClusterSyncAckWrite, ClusterSyncRevisionPublish,
+    ClusterSyncAckWrite, ClusterSyncRevisionPublish, CLUSTER_INSTANCE_STATUS_ONLINE,
 };
 use crate::WebService;
 
@@ -50,6 +50,9 @@ const MAX_LOCAL_IPS: usize = 64;
 const MAX_MAC_ADDRESSES: usize = 64;
 const MAX_ADDRESS_BYTES: usize = 64;
 const SWEEP_BATCH_LIMIT: i32 = 512;
+/// Width of `webserver_cluster_instance.name`; derived default names are
+/// truncated to it so a long hostname can never fail the registration insert.
+const MAX_INSTANCE_NAME_CHARS: usize = 100;
 /// Default heartbeat sample retention applied by the liveness sweep when the
 /// `SDKWORK_WEBSERVER_CLUSTER_HEARTBEAT_RETENTION_HOURS` env is absent.
 const DEFAULT_HEARTBEAT_RETENTION_HOURS: i64 = 72;
@@ -135,12 +138,7 @@ impl WebService {
         request: &UpdateClusterRequest,
     ) -> WebServiceResult<ClusterResponse> {
         require_cluster_platform_operator(context)?;
-        if request.name.is_none()
-            && request.description.is_none()
-            && request.status.is_none()
-            && request.heartbeat_interval_seconds.is_none()
-            && request.offline_threshold_seconds.is_none()
-        {
+        if cluster_update_is_empty(request) {
             return Err(WebServiceError::validation(
                 "update request contains no fields",
             ));
@@ -388,16 +386,7 @@ impl WebService {
         request: &UpdateClusterInstanceRequest,
     ) -> WebServiceResult<ClusterInstanceResponse> {
         require_cluster_platform_operator(context)?;
-        if request.name.is_none()
-            && request.status.is_none()
-            && request.public_endpoint.is_none()
-            && request.routing_enabled.is_none()
-            && request.draining.is_none()
-            && request.probe_url.is_none()
-            && request.labels.is_none()
-            && request.routing_weight.is_none()
-            && request.maintenance_note.is_none()
-        {
+        if cluster_instance_update_is_empty(request) {
             return Err(WebServiceError::validation(
                 "update request contains no fields",
             ));
@@ -478,7 +467,8 @@ impl WebService {
         Ok(updated)
     }
 
-    /// Clears drain + cordon: the instance rejoins the routing pool.
+    /// Clears drain + cordon: the instance rejoins the routing pool on the
+    /// conditions [`routing_pool_absence`] states.
     pub async fn cluster_instance_undrain(
         &self,
         context: &WebBackendRequestContext,
@@ -495,15 +485,8 @@ impl WebService {
                 },
             )
             .await?;
-        self.record_cluster_event(
-            &updated.cluster_id,
-            Some(&updated.host_id),
-            Some(instance_id),
-            "INSTANCE_UNDRAINED",
-            "INFO",
-            &format!("instance {} rejoined the routing pool", updated.name),
-        )
-        .await;
+        self.record_routing_restore_event(&updated, "INSTANCE_UNDRAINED", "rejoined the routing pool")
+            .await;
         Ok(updated)
     }
 
@@ -536,7 +519,8 @@ impl WebService {
         Ok(updated)
     }
 
-    /// Uncordon: restores routing participation.
+    /// Uncordon: restores routing participation on the conditions
+    /// [`routing_pool_absence`] states.
     pub async fn cluster_instance_uncordon(
         &self,
         context: &WebBackendRequestContext,
@@ -552,16 +536,50 @@ impl WebService {
                 },
             )
             .await?;
+        self.record_routing_restore_event(&updated, "INSTANCE_UNCORDONED", "restored to routing")
+            .await;
+        Ok(updated)
+    }
+
+    /// Records the outcome of an operator operation that asked an instance to
+    /// rejoin the routing pool.
+    ///
+    /// The event type is the operator's action either way — the switch did
+    /// change — but the message states the outcome, because clearing a cordon
+    /// and leaving the pool are not the same fact: an ejected or offline
+    /// instance stays out (see [`routing_pool_absence`]), and a confirmation
+    /// that claims otherwise sends the operator looking for a routing bug that
+    /// does not exist.
+    async fn record_routing_restore_event(
+        &self,
+        instance: &ClusterInstanceResponse,
+        event_type: &str,
+        restored: &str,
+    ) {
+        let (severity, message) = match routing_pool_absence(
+            instance.status,
+            instance.routing_enabled,
+            instance.draining,
+            instance.ejected,
+        ) {
+            None => ("INFO", format!("instance {} {restored}", instance.name)),
+            Some(reason) => (
+                "WARNING",
+                format!(
+                    "instance {} routing restored, but it is still out of the routing pool: {reason}",
+                    instance.name
+                ),
+            ),
+        };
         self.record_cluster_event(
-            &updated.cluster_id,
-            Some(&updated.host_id),
-            Some(instance_id),
-            "INSTANCE_UNCORDONED",
-            "INFO",
-            &format!("instance {} restored to routing", updated.name),
+            &instance.cluster_id,
+            Some(&instance.host_id),
+            Some(&instance.id),
+            event_type,
+            severity,
+            &message,
         )
         .await;
-        Ok(updated)
     }
 
     /// Records one active-probe outcome for an instance (resolved by uuid)
@@ -675,8 +693,19 @@ impl WebService {
     // ------------------------------------------------------------------
 
     /// Registers (or re-registers) one webserver process instance and its host
-    /// machine. Idempotent per `(host machine code, process pid)`; the latest
-    /// registration wins and receives a fresh heartbeat token.
+    /// machine.
+    ///
+    /// Idempotent per **listening slot** — `(tenant 0, host machine, bind
+    /// host:bind port)` — so a restarted process rejoins its existing row
+    /// instead of minting a new instance. The row keeps its `id`/`uuid` for the
+    /// life of the slot; the pid, start instant, uptime and heartbeat token are
+    /// run-state observations that every registration refreshes. A process that
+    /// reports no bind port falls back to pid identity, the only identity it
+    /// offers.
+    ///
+    /// `INSTANCE_REGISTERED` is emitted only when the call created the row;
+    /// re-registrations update run state and bump the restart counter on the
+    /// existing instance instead of growing the inventory.
     pub async fn cluster_register(
         &self,
         remote_ip: Option<&str>,
@@ -904,7 +933,11 @@ impl WebService {
         let sync = self.cluster_sync_states(&credentials).await?;
         Ok(ClusterHeartbeatResponse {
             instance_id: credentials.instance_uuid,
-            status: request.status,
+            // The status the registry now holds, which differs from the
+            // reported one exactly while an operator maintenance mark outranks
+            // it: an acknowledgement that echoed the request would tell the
+            // node its claim was accepted when it was not.
+            status: transition.status,
             acknowledged_at: now,
             heartbeat_interval_seconds: credentials.heartbeat_interval_seconds,
             offline_threshold_seconds: credentials.offline_threshold_seconds,
@@ -1137,7 +1170,9 @@ impl WebService {
 
     /// Admin action: publishes one desired-state revision for a cluster
     /// (config or applications track). Every non-deleted instance of the
-    /// cluster flips to PENDING until it acknowledges the new revision.
+    /// cluster flips to PENDING until it acknowledges the new revision. The
+    /// returned manifest echoes the published payload, so the response is a
+    /// complete receipt of the revision that was stored.
     pub async fn cluster_publish_sync_revision(
         &self,
         cluster_uuid: &str,
@@ -1164,6 +1199,7 @@ impl WebService {
         let sha256 = sha256_hash(&canonical);
         let size_bytes = i64::try_from(canonical.len()).unwrap_or(i64::MAX);
         let now = now_rfc3339();
+        let receipt = payload.clone();
         self.repository
             .publish_cluster_sync_revision(ClusterSyncRevisionPublish {
                 tenant_id: 0,
@@ -1182,7 +1218,7 @@ impl WebService {
             kind: kind.to_owned(),
             revision,
             sha256,
-            payload: serde_json::Value::Null,
+            payload: receipt,
             created_at: now,
         })
     }
@@ -1386,7 +1422,12 @@ impl WebService {
         transition: &crate::repository::ClusterHeartbeatTransition,
         request: &ClusterHeartbeatRequest,
     ) {
-        let (event_type, severity) = match (transition.previous_status, request.status) {
+        // The recorded status, not `request.status`: while an operator
+        // maintenance mark stands the registry keeps `5`, and reporting the
+        // node's `online` claim here logged a phantom `INSTANCE_ONLINE` for an
+        // instance the operator had just taken out of service.
+        let current_status = transition.status;
+        let (event_type, severity) = match (transition.previous_status, current_status) {
             (previous, 1) if previous != 1 => ("INSTANCE_ONLINE", "INFO"),
             (1, current) if current != 1 => ("INSTANCE_OFFLINE", "WARNING"),
             _ => match (
@@ -1410,7 +1451,7 @@ impl WebService {
             severity,
             &format!(
                 "instance reported status {} health {}",
-                request.status, request.health_state
+                current_status, request.health_state
             ),
         )
         .await;
@@ -1477,12 +1518,30 @@ fn host_display_name(request: &ClusterRegistrationRequest) -> String {
         .unwrap_or_else(|| request.host.hostname.clone())
 }
 
+/// Stable default display name for a registered instance.
+///
+/// The name is the operator's primary handle on the inventory, so the default
+/// must be stable across restarts: it is the listening slot (`edge-1:8080`)
+/// whenever the node reports a bind port, and only falls back to the
+/// host-plus-pid form when the node reports no port at all. Embedding the pid
+/// unconditionally - what this used to do - makes every restart look like a
+/// brand-new member in the console.
+///
+/// The result is truncated to the `name` column width (`VARCHAR(100)`): the
+/// hostname field accepts up to 255 characters and a long hostname plus the
+/// port suffix would otherwise fail the insert at the database layer.
 fn instance_display_name(request: &ClusterRegistrationRequest) -> String {
-    request
-        .instance
-        .name
-        .clone()
-        .unwrap_or_else(|| format!("{}#{}", request.host.hostname, request.instance.process_pid))
+    if let Some(name) = &request.instance.name {
+        return name.clone();
+    }
+    let suffix = match request.instance.bind_port {
+        Some(port) => format!(":{port}"),
+        None => format!("#{}", request.instance.process_pid),
+    };
+    let budget = MAX_INSTANCE_NAME_CHARS.saturating_sub(suffix.chars().count());
+    let host: String = request.host.hostname.trim().chars().take(budget).collect();
+    let prefix = if host.is_empty() { "instance" } else { host.as_str() };
+    format!("{prefix}{suffix}")
 }
 
 fn validate_cluster_thresholds(
@@ -1629,9 +1688,82 @@ pub(crate) fn now_rfc3339() -> String {
     Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, true)
 }
 
+/// Whether a cluster update carries no updatable field at all.
+///
+/// A pure function rather than an inline guard because the guard has to
+/// enumerate **every** field the request can carry, and an omission is invisible
+/// in the handler body: it only shows up as `400 update request contains no
+/// fields` on a request that does carry a field. `lbStrategy` and
+/// `servedDomains` were exactly that - the repository COALESCEs both, but the
+/// guard refused a request that set only one of them. The pairing test
+/// (`every_update_field_survives_the_empty_request_guard`) walks the struct so
+/// the enumeration cannot silently fall behind again.
+fn cluster_update_is_empty(request: &UpdateClusterRequest) -> bool {
+    request.name.is_none()
+        && request.description.is_none()
+        && request.status.is_none()
+        && request.heartbeat_interval_seconds.is_none()
+        && request.offline_threshold_seconds.is_none()
+        && request.lb_strategy.is_none()
+        && request.served_domains.is_none()
+}
+
+/// Whether an instance update carries no updatable field at all. See
+/// [`cluster_update_is_empty`] for why this is not an inline guard.
+fn cluster_instance_update_is_empty(request: &UpdateClusterInstanceRequest) -> bool {
+    request.name.is_none()
+        && request.status.is_none()
+        && request.public_endpoint.is_none()
+        && request.routing_enabled.is_none()
+        && request.draining.is_none()
+        && request.probe_url.is_none()
+        && request.labels.is_none()
+        && request.routing_weight.is_none()
+        && request.maintenance_note.is_none()
+}
+
+/// Why an instance is not in the east-west routing pool, or `None` when it is.
+///
+/// Pool membership is a single predicate with four gates, and the repository's
+/// pool query (`discover_cluster_routing`) requires all four: online, routing
+/// switch on, not draining, not ejected. The operator operations only flip the
+/// switch, so the gates the operator cannot see in the action's own vocabulary
+/// have to be named in its result — otherwise "restored to routing" is the
+/// message, `EJECTED` is the table cell, and the operator files a routing bug.
+///
+/// A pure function over the four wire values so the whole gate matrix is
+/// assertable (see `routing_pool_absence_names_the_gate_that_keeps_the_out`).
+fn routing_pool_absence(
+    status: i32,
+    routing_enabled: Option<bool>,
+    draining: Option<bool>,
+    ejected: Option<bool>,
+) -> Option<&'static str> {
+    if routing_enabled == Some(false) {
+        return Some("its routing switch is still off");
+    }
+    if draining == Some(true) {
+        return Some("a drain is still in progress");
+    }
+    if ejected == Some(true) {
+        return Some("the active prober ejected it; run a probe to clear the ejection");
+    }
+    if status != CLUSTER_INSTANCE_STATUS_ONLINE {
+        return Some("it is not online");
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    // The status codes the routing-pool truth table names explicitly. Only the
+    // truth table uses these three, so they are imported here rather than at
+    // module scope, where they were dead weight in every production build.
+    use crate::repository::{
+        CLUSTER_INSTANCE_STATUS_ERROR, CLUSTER_INSTANCE_STATUS_MAINTENANCE,
+        CLUSTER_INSTANCE_STATUS_OFFLINE,
+    };
     use sdkwork_webserver_contract::web_platform_operator_tenant_id;
 
     #[test]
@@ -1640,6 +1772,52 @@ mod tests {
         assert!(validate_cluster_thresholds(60, 60).is_err());
         assert!(validate_cluster_thresholds(0, 60).is_err());
         assert!(validate_cluster_thresholds(15, 8).is_err());
+    }
+
+    /// The whole gate matrix, not a sampled pair: each of the four gates must
+    /// be reported on its own, and the all-clear case must be the only `None`.
+    /// A missing gate is invisible in the operation body — it just mislabels a
+    /// still-unrouted instance as restored.
+    #[test]
+    fn routing_pool_absence_names_the_gate_that_keeps_the_out() {
+        let online = CLUSTER_INSTANCE_STATUS_ONLINE;
+        assert_eq!(routing_pool_absence(online, Some(true), Some(false), Some(false)), None);
+
+        assert_eq!(
+            routing_pool_absence(online, Some(false), Some(false), Some(false)),
+            Some("its routing switch is still off")
+        );
+        assert_eq!(
+            routing_pool_absence(online, Some(true), Some(true), Some(false)),
+            Some("a drain is still in progress")
+        );
+        assert_eq!(
+            routing_pool_absence(online, Some(true), Some(false), Some(true)),
+            Some("the active prober ejected it; run a probe to clear the ejection")
+        );
+        assert_eq!(
+            routing_pool_absence(CLUSTER_INSTANCE_STATUS_MAINTENANCE, Some(true), Some(false), Some(false)),
+            Some("it is not online")
+        );
+        assert_eq!(
+            routing_pool_absence(CLUSTER_INSTANCE_STATUS_ERROR, Some(true), Some(false), Some(true)),
+            Some("the active prober ejected it; run a probe to clear the ejection")
+        );
+        assert_eq!(
+            routing_pool_absence(CLUSTER_INSTANCE_STATUS_OFFLINE, Some(true), Some(false), Some(false)),
+            Some("it is not online")
+        );
+        // Absent wire values are "not asserted by the caller", so they must not
+        // be read as a closed gate: an instance whose flags the API omitted is
+        // judged on its status alone.
+        assert_eq!(
+            routing_pool_absence(online, None, None, None),
+            None
+        );
+        assert_eq!(
+            routing_pool_absence(CLUSTER_INSTANCE_STATUS_OFFLINE, None, None, None),
+            Some("it is not online")
+        );
     }
 
     fn cluster_context(tenant_id: Option<i64>) -> WebBackendRequestContext {
@@ -1714,6 +1892,214 @@ mod tests {
         bad.instance.role = "GATEWAY".to_string();
         bad.instance.process_pid = 0;
         assert!(validate_registration(&bad).is_err());
+    }
+
+    fn registration_request(hostname: &str, process_pid: i32) -> ClusterRegistrationRequest {
+        let raw = format!(
+            r#"{{
+                "host": {{"hostname": "{hostname}", "machineCode": "mc-12345678"}},
+                "instance": {{
+                    "role": "GATEWAY",
+                    "environment": "production",
+                    "processPid": {process_pid},
+                    "processStartedAt": "2026-09-21T00:00:00Z",
+                    "bindHost": "0.0.0.0",
+                    "bindPort": 8080
+                }}
+            }}"#
+        );
+        serde_json::from_str(&raw).expect("registration fixture")
+    }
+
+    /// The derived instance name is the **slot**, not the process.
+    ///
+    /// A name built from the pid (`edge-1#4242`) renames the instance on every
+    /// restart, and the name is what an operator scans the inventory by — so the
+    /// defect that multiplied rows also made one instance look like a series of
+    /// unrelated ones. The slot is the stable handle; the pid is only a fallback
+    /// for a node that reports no listening address at all.
+    #[test]
+    fn instance_display_name_is_the_slot_not_the_process() {
+        let request = registration_request("edge-1", 4_242);
+        assert_eq!(instance_display_name(&request), "edge-1:8080");
+
+        let mut no_slot = request.clone();
+        no_slot.instance.bind_port = None;
+        assert_eq!(
+            instance_display_name(&no_slot),
+            "edge-1#4242",
+            "without a listening address the process is the only identity left"
+        );
+
+        let mut renamed = request.clone();
+        renamed.instance.name = Some("edge-primary".to_owned());
+        assert_eq!(
+            instance_display_name(&renamed),
+            "edge-primary",
+            "an explicit name always wins over the derived one"
+        );
+    }
+
+    /// A derived name is truncated to the `name` column width: a hostname may be
+    /// up to 255 characters, and `edge-…:8080` would otherwise fail the insert
+    /// with a value-too-long error at the database layer.
+    #[test]
+    fn instance_display_name_fits_the_name_column() {
+        let long_host = "h".repeat(255);
+        let request = registration_request(&long_host, 4_242);
+        let name = instance_display_name(&request);
+        assert_eq!(name.chars().count(), MAX_INSTANCE_NAME_CHARS);
+        assert!(name.ends_with(":8080"), "the port survives truncation: {name}");
+    }
+
+    /// Every updatable field survives the empty-request guard on its own.
+    ///
+    /// The guard enumerates the fields by hand, and an omission is invisible in
+    /// the handler body - it shows up much later as a `400 update request
+    /// contains no fields` on a request that does carry a field, which is how
+    /// `lbStrategy` and `servedDomains` were unreachable even though the
+    /// repository COALESCEs both. Walking the struct one field at a time turns
+    /// "did you remember to add it to the guard?" into a test failure.
+    #[test]
+    fn every_update_field_survives_the_empty_request_guard() {
+        assert!(
+            cluster_update_is_empty(&UpdateClusterRequest::default()),
+            "a request with no field at all is the one case the guard exists for"
+        );
+        let cluster_cases: [(&str, UpdateClusterRequest); 7] = [
+            (
+                "name",
+                UpdateClusterRequest {
+                    name: Some("edge".to_owned()),
+                    ..Default::default()
+                },
+            ),
+            (
+                "description",
+                UpdateClusterRequest {
+                    description: Some("edge cluster".to_owned()),
+                    ..Default::default()
+                },
+            ),
+            (
+                "status",
+                UpdateClusterRequest {
+                    status: Some(1),
+                    ..Default::default()
+                },
+            ),
+            (
+                "heartbeatIntervalSeconds",
+                UpdateClusterRequest {
+                    heartbeat_interval_seconds: Some(30),
+                    ..Default::default()
+                },
+            ),
+            (
+                "offlineThresholdSeconds",
+                UpdateClusterRequest {
+                    offline_threshold_seconds: Some(120),
+                    ..Default::default()
+                },
+            ),
+            (
+                "lbStrategy",
+                UpdateClusterRequest {
+                    lb_strategy: Some("least_connections".to_owned()),
+                    ..Default::default()
+                },
+            ),
+            (
+                "servedDomains",
+                UpdateClusterRequest {
+                    served_domains: Some(vec!["edge.example.test".to_owned()]),
+                    ..Default::default()
+                },
+            ),
+        ];
+        for (label, request) in cluster_cases {
+            assert!(
+                !cluster_update_is_empty(&request),
+                "a cluster update carrying only {label} must reach the repository"
+            );
+        }
+
+        assert!(
+            cluster_instance_update_is_empty(&UpdateClusterInstanceRequest::default()),
+            "a request with no field at all is the one case the guard exists for"
+        );
+        let labels = std::collections::BTreeMap::from([("tier".to_owned(), "edge".to_owned())]);
+        let instance_cases: [(&str, UpdateClusterInstanceRequest); 9] = [
+            (
+                "name",
+                UpdateClusterInstanceRequest {
+                    name: Some("gateway-1".to_owned()),
+                    ..Default::default()
+                },
+            ),
+            (
+                "status",
+                UpdateClusterInstanceRequest {
+                    status: Some(5),
+                    ..Default::default()
+                },
+            ),
+            (
+                "publicEndpoint",
+                UpdateClusterInstanceRequest {
+                    public_endpoint: Some("https://edge-1.example.test".to_owned()),
+                    ..Default::default()
+                },
+            ),
+            (
+                "routingEnabled",
+                UpdateClusterInstanceRequest {
+                    routing_enabled: Some(false),
+                    ..Default::default()
+                },
+            ),
+            (
+                "draining",
+                UpdateClusterInstanceRequest {
+                    draining: Some(true),
+                    ..Default::default()
+                },
+            ),
+            (
+                "probeUrl",
+                UpdateClusterInstanceRequest {
+                    probe_url: Some("https://edge-1.example.test/healthz".to_owned()),
+                    ..Default::default()
+                },
+            ),
+            (
+                "labels",
+                UpdateClusterInstanceRequest {
+                    labels: Some(labels),
+                    ..Default::default()
+                },
+            ),
+            (
+                "routingWeight",
+                UpdateClusterInstanceRequest {
+                    routing_weight: Some(200),
+                    ..Default::default()
+                },
+            ),
+            (
+                "maintenanceNote",
+                UpdateClusterInstanceRequest {
+                    maintenance_note: Some("kernel upgrade".to_owned()),
+                    ..Default::default()
+                },
+            ),
+        ];
+        for (label, request) in instance_cases {
+            assert!(
+                !cluster_instance_update_is_empty(&request),
+                "an instance update carrying only {label} must reach the repository"
+            );
+        }
     }
 
     #[test]

@@ -457,6 +457,12 @@ where
         initial.runtime_set().node_uuid(),
         environment,
     );
+    // 微信验证文件查询与 Deploy 控制面共享同一数据库（standalone 的进程内
+    // 形态）；装载一次，数据面的每个监听器经共享槽读取。共享库不可用时
+    // 保持未装载：验证文件是窄优先级附加能力，缺位只是没有这个能力，其余
+    // 服务不受影响。
+    #[cfg(feature = "management")]
+    install_wechat_verification_source();
     let data_plane = async move {
         match tls_runtime {
             Some(tls_runtime) => {
@@ -706,6 +712,32 @@ fn validate_bounded_config_text(
     Ok(())
 }
 
+/// 云源 runtime-set 的装载:≤64MiB 规范化解析 + 双 SHA-256 + 编译是纯 CPU
+/// 工作,放阻塞线程池执行(与文件源路径同款处理),避免阻塞 watcher 的异步
+/// 工作线程;身份校验只读 assignment 的几个字段,留在异步侧。
+async fn load_cloud_runtime_delivery_blocking(
+    delivery: &mut CloudRuntimeDelivery,
+) -> Result<LoadedWebsiteRuntimeSet, WebsiteDataPlaneBootstrapError> {
+    let bytes = delivery
+        .runtime_set_bytes
+        .take()
+        .ok_or(WebsiteDataPlaneBootstrapError::RuntimeSetSource)?;
+    let loaded = tokio::task::spawn_blocking(move || LoadedWebsiteRuntimeSet::compile(bytes))
+        .await
+        .map_err(|_| WebsiteDataPlaneBootstrapError::RuntimeSetSource)??;
+    let runtime_set = loaded.runtime_set();
+    if runtime_set.node_uuid() != delivery.assignment.node_uuid
+        || runtime_set.environment().as_str() != delivery.assignment.environment
+        || runtime_set.generation().to_string() != delivery.assignment.generation
+        || runtime_set.snapshot_uuid() != delivery.assignment.snapshot_uuid
+        || runtime_set.snapshot_sha256() != delivery.assignment.snapshot_sha256
+    {
+        return Err(CloudRuntimeAssignmentError::Response.into());
+    }
+    Ok(loaded)
+}
+
+#[allow(dead_code)]
 fn load_cloud_runtime_delivery(
     delivery: &mut CloudRuntimeDelivery,
 ) -> Result<LoadedWebsiteRuntimeSet, WebsiteDataPlaneBootstrapError> {
@@ -756,7 +788,7 @@ async fn select_initial_cloud_runtime_set(
     if delivery.latest_observation_state == Some(RuntimeObservationState::Rejected) {
         return Err(WebsiteDataPlaneBootstrapError::RuntimeAssignmentRejected);
     }
-    let initial = match load_cloud_runtime_delivery(&mut delivery) {
+    let initial = match load_cloud_runtime_delivery_blocking(&mut delivery).await {
         Ok(initial) => initial,
         Err(error) => {
             reject_cloud_assignment(
@@ -1676,7 +1708,7 @@ async fn watch_cloud_runtime_set(
                     }
                 }
 
-                let candidate = match load_cloud_runtime_delivery(&mut delivery) {
+                let candidate = match load_cloud_runtime_delivery_blocking(&mut delivery).await {
                     Ok(candidate) => candidate,
                     Err(error) => {
                         if let Err(observation_error) = reject_cloud_assignment(
@@ -2608,6 +2640,32 @@ fn build_deploy_fallback(
         None => resolver,
     };
     Some(std::sync::Arc::new(resolver))
+}
+
+/// 装载微信验证文件的进程级共享读取源。
+///
+/// 与 [`build_deploy_fallback`] 同一数据通道（共享 Deploy 数据库的进程内
+/// 查询），但不受 `appDomainFallback` 开关约束：验证文件是域名归属验证的
+/// 一部分，不是应用回退的一部分。共享库不可用时保持未装载并留下一条
+/// 说明，验证文件的请求随后落到宿主应用自己的 404 上。
+#[cfg(feature = "management")]
+fn install_wechat_verification_source() {
+    use sdkwork_database_sqlx::process_shared_database_pool;
+
+    let Some(pool) = process_shared_database_pool() else {
+        tracing::warn!(
+            "shared database pool is unavailable; WeChat verification files will not be served"
+        );
+        return;
+    };
+    let sdkwork_database_sqlx::DatabasePool::Postgres(pool, _) = pool;
+    let source =
+        crate::data_plane::wechat_verify::CachedWechatVerificationSource::new(std::sync::Arc::new(
+            crate::data_plane::wechat_verify::DeployWechatVerificationSource::new(
+                sdkwork_api_webserver_assembly::DeployRepository::new_lookup(pool),
+            ),
+        ));
+    crate::data_plane::wechat_verify::install_shared_source(source);
 }
 
 /// Non-management builds never construct the embedded Deploy lookup; the

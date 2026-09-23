@@ -25,6 +25,8 @@ namespace SDKWork.WebserverBackendSdk.Models
         public int Status { get; set; }
         public string? LastHeartbeatAt { get; set; }
         public string InstanceCount { get; set; }
+        public string? JoinMode { get; set; }
+        public string? TunnelRouteDomain { get; set; }
         public string CreatedAt { get; set; }
         public string UpdatedAt { get; set; }
     }

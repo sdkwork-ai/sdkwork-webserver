@@ -371,15 +371,7 @@ async fn register_routes(
         let Some((route_id, _config)) = routes.by_name.get(&template.name) else {
             continue;
         };
-        let request = ControlMessage::RegisterRoute(RegisterRoute {
-            route_id: route_id.to_string(),
-            name: template.name.clone(),
-            protocol: protocol_label(template.protocol).to_owned(),
-            domain: template.domain.clone(),
-            port: template.port,
-            target: template.target.clone(),
-            allow_public: template.policy_or_default().allow_public,
-        });
+        let request = ControlMessage::RegisterRoute(registration_request(template, route_id));
         write_msg(control, &request).await?;
         requests += 1;
     }
@@ -559,15 +551,7 @@ async fn handle_declaration(
         );
         return Ok(());
     }
-    let request = ControlMessage::RegisterRoute(RegisterRoute {
-        route_id: route_id.to_string(),
-        name: template.name.clone(),
-        protocol: protocol_label(template.protocol).to_owned(),
-        domain: template.domain.clone(),
-        port: template.port,
-        target: template.target.clone(),
-        allow_public: template.policy_or_default().allow_public,
-    });
+    let request = ControlMessage::RegisterRoute(registration_request(template, route_id));
     write_msg(control, &request).await?;
     // Await the registration outcome, ignoring interleaved acks.
     loop {
@@ -732,6 +716,16 @@ async fn handle_data_stream(
             return;
         }
     };
+    // Interactive protocols that ride a TCP route — SSH (the server speaks
+    // first with its banner), telnet, RDP — send many small writes and are
+    // latency-bound: with Nagle enabled a keystroke's packet waits for the
+    // previous one to be ACKed, adding a round trip per keystroke. The
+    // webserver's own upstream client disables Nagle for the same reason
+    // (`upstream_client.rs`), so the tunnel path follows the platform
+    // convention. Failing to set it costs latency, not correctness.
+    if let Err(error) = local.set_nodelay(true) {
+        tracing::debug!(route = %route_id, error = %error, "could not disable Nagle on the local target");
+    }
     match copy_bidirectional(&mut local, &mut stream).await {
         Ok((inbound, outbound)) => {
             tracing::trace!(route = %route_id, inbound, outbound, "tunnel data relay finished");
@@ -789,11 +783,10 @@ async fn udp_pump(
     let mut local_buffer = [0_u8; 2048];
     let mut last_activity = tokio::time::Instant::now();
     loop {
-        let tunnel_read =
-            sdkwork_webserver_tunnel_protocol::packet_frame::read_packet(
-                stream,
-                &mut tunnel_scratch,
-            );
+        let tunnel_read = sdkwork_webserver_tunnel_protocol::packet_frame::read_packet(
+            stream,
+            &mut tunnel_scratch,
+        );
         let local_read = local.recv(&mut local_buffer);
         tokio::select! {
             biased;
@@ -855,6 +848,27 @@ fn protocol_label(protocol: sdkwork_webserver_tunnel_core::TunnelProtocolKind) -
         sdkwork_webserver_tunnel_core::TunnelProtocolKind::Http => "http",
         sdkwork_webserver_tunnel_core::TunnelProtocolKind::Tcp => "tcp",
         sdkwork_webserver_tunnel_core::TunnelProtocolKind::Udp => "udp",
+    }
+}
+
+/// Builds the route-registration request for one agent route template.
+///
+/// Single builder so initial registration, hot re-registration and
+/// gateway-declared routes always transmit an identical policy — including
+/// the network allow-list, which is the only admission channel the raw TCP
+/// and UDP planes can use.
+fn registration_request(template: &TunnelRouteTemplate, route_id: &RouteId) -> RegisterRoute {
+    let policy = template.policy_or_default();
+    RegisterRoute {
+        route_id: route_id.to_string(),
+        name: template.name.clone(),
+        protocol: protocol_label(template.protocol).to_owned(),
+        domain: template.domain.clone(),
+        port: template.port,
+        target: template.target.clone(),
+        allow_public: policy.allow_public,
+        allowed_ips: (!policy.allowed_ips.is_empty())
+            .then(|| policy.allowed_ips.iter().map(ToString::to_string).collect()),
     }
 }
 

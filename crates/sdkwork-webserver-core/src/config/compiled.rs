@@ -7,6 +7,7 @@ use std::{
 use regex::Regex;
 
 use super::{
+    acme_webroot::{AcmeWebrootNotice, AcmeWebrootReport},
     validate::normalize_server_name, CertificateConfig, CertificateSource, ConfigDiagnostic,
     ListenerConfig, ResourceConfig, RouteConfig, RoutePathType, StreamServerConfig,
     TlsPolicyConfig, UpstreamConfig, VirtualHostConfig, WebServerAppConfig, WebServerConfigError,
@@ -84,7 +85,7 @@ impl CompiledWebServerApp {
         config: WebServerAppConfig,
         base_directory: &Path,
     ) -> Result<Self, WebServerConfigError> {
-        let base_directory = canonical_directory(base_directory, "/")?;
+        let base_directory = canonical_directory(base_directory_or_current(base_directory), "/")?;
         let listeners = index_by_id(config.listeners.iter().map(|item| item.id.as_str()));
         let resources = index_by_id(config.resources.iter().map(ResourceConfig::id));
         let upstreams = index_by_id(config.upstreams.iter().map(|item| item.id.as_str()));
@@ -229,16 +230,11 @@ impl CompiledWebServerApp {
             let Some(acme) = &listener.acme_http_01 else {
                 continue;
             };
-            let resolved = canonical_directory(
-                &base_directory.join(&acme.webroot),
+            let resolved = resolve_acme_webroot(
+                &base_directory,
+                &acme.webroot,
                 &format!("/listeners/{index}/acmeHttp01/webroot"),
             )?;
-            if !resolved.starts_with(&base_directory) {
-                return Err(validation_error(
-                    format!("/listeners/{index}/acmeHttp01/webroot"),
-                    "ACME webroot escapes the configuration directory",
-                ));
-            }
             acme_webroots.insert(listener.id.clone(), resolved);
         }
 
@@ -301,7 +297,7 @@ impl CompiledWebServerApp {
             );
         }
 
-        Ok(Self {
+        let app = Self {
             config,
             base_directory,
             listeners,
@@ -318,9 +314,45 @@ impl CompiledWebServerApp {
             client_auth_ca_paths,
             stream_client_auth_ca_paths,
             acme_webroots,
-        })
+        };
+        app.verify_acme_webroot_rendezvous()?;
+        Ok(app)
     }
 
+    /// Compare the directory this data plane serves ACME HTTP-01 challenges
+    /// from with the directory the certificate worker writes them into.
+    ///
+    /// The two halves are configured in different files by different tools and
+    /// were never compared, so a deployment could start healthy while every
+    /// order failed at the CA with a bare 404. See [`super::acme_webroot`].
+    ///
+    /// Only a *verified* disagreement is fatal, and only in production-like
+    /// environments: the unverifiable case (this process does not know the
+    /// worker's write target) is legitimate in Kubernetes, where the worker
+    /// carries that setting alone.
+    fn verify_acme_webroot_rendezvous(&self) -> Result<(), WebServerConfigError> {
+        let written = std::env::var(crate::runtime_env::ACME_WEBROOT_ENV)
+            .ok()
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from);
+        let report = AcmeWebrootReport::collect(self, written);
+        let production_like = crate::runtime_env::web_is_production_like_environment();
+        match report.enforce(production_like) {
+            Ok(None) => Ok(()),
+            // The two notices deserve different volume: a disagreement means
+            // HTTP-01 cannot work, while an unverifiable rendezvous is the
+            // normal shape of a split-process deployment.
+            Ok(Some(AcmeWebrootNotice::Disagreement(message))) => {
+                tracing::warn!("{message}");
+                Ok(())
+            }
+            Ok(Some(AcmeWebrootNotice::WriteTargetUnknown(message))) => {
+                tracing::debug!("{message}");
+                Ok(())
+            }
+            Err(message) => Err(validation_error("/listeners[].acmeHttp01/webroot", message)),
+        }
+    }
     pub fn config(&self) -> &WebServerAppConfig {
         &self.config
     }
@@ -601,6 +633,22 @@ fn index_by_id<'a>(ids: impl Iterator<Item = &'a str>) -> HashMap<String, usize>
         .collect()
 }
 
+/// The directory a configuration file's relative roots are anchored to.
+///
+/// `Path::new("config.json").parent()` is `Some("")`, not `None`, so a caller
+/// that passes `path.parent()` for a bare file name hands over an *empty* path.
+/// Canonicalizing it fails with "directory  is unavailable" — a diagnostic with
+/// no directory in it, produced by the most ordinary invocation there is
+/// (`validate config.json` from the directory holding the file). An empty base
+/// directory means the current directory, which is what the operator meant.
+fn base_directory_or_current(directory: &Path) -> &Path {
+    if directory.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        directory
+    }
+}
+
 fn canonical_directory(
     path: &Path,
     diagnostic_path: &str,
@@ -633,6 +681,42 @@ fn resolve_static_root(
         return Err(validation_error(
             diagnostic_path,
             "static root escapes the configuration directory",
+        ));
+    }
+    Ok(resolved)
+}
+
+/// Resolve one listener's `acmeHttp01.webroot`.
+///
+/// Same two rules as a static root — the directory must exist, and a relative
+/// value must stay inside the configuration directory — because the request
+/// path reads it through the same confined file opener. The one deliberate
+/// difference is the absolute case: the canonical deployment value lives
+/// *outside* the configuration directory, because the webroot is a rendezvous
+/// between two processes and two planes. The certificate worker writes
+/// challenge tokens into the directory named by
+/// `SDKWORK_WEBSERVER_ACME_WEBROOT`
+/// (`/var/lib/sdkwork/webserver/acme-webroot` on Linux and in the container,
+/// `%ProgramData%\sdkwork\webserver\acme-webroot` on Windows, or the shared PVC
+/// path in Kubernetes), and this listener serves them back to the CA. Confining
+/// the webroot to the configuration directory — as this code did until the
+/// absolute path was handled — makes the documented Linux and Kubernetes
+/// layouts impossible to configure, so the listener can never serve a
+/// challenge and issuance can never succeed.
+fn resolve_acme_webroot(
+    base_directory: &Path,
+    configured: &str,
+    diagnostic_path: &str,
+) -> Result<PathBuf, WebServerConfigError> {
+    let configured = Path::new(configured);
+    if configured.is_absolute() {
+        return canonical_directory(configured, diagnostic_path);
+    }
+    let resolved = canonical_directory(&base_directory.join(configured), diagnostic_path)?;
+    if !resolved.starts_with(base_directory) {
+        return Err(validation_error(
+            diagnostic_path,
+            "ACME webroot escapes the configuration directory",
         ));
     }
     Ok(resolved)
@@ -741,4 +825,21 @@ fn route_matches_method(route: &RouteConfig, method: &str) -> bool {
         .methods
         .as_ref()
         .is_none_or(|methods| methods.iter().any(|configured| configured == method))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_empty_base_directory_means_the_current_directory() {
+        // `Path::new("config.json").parent()` is `Some("")`, not `None`, so the
+        // empty case reaches `compile` from the most ordinary invocation there
+        // is. Canonicalizing an empty path fails, so it has to be read as `.`.
+        assert_eq!(base_directory_or_current(Path::new("")), Path::new("."));
+        assert_eq!(
+            base_directory_or_current(Path::new("etc/webserver")),
+            Path::new("etc/webserver")
+        );
+    }
 }

@@ -1,5 +1,6 @@
 package com.sdkwork.webserver.backend.sdk.model;
 
+import java.util.List;
 
 public class ClusterResponse {
     private String id;
@@ -12,6 +13,8 @@ public class ClusterResponse {
     private String hostCount;
     private String instanceCount;
     private String onlineInstanceCount;
+    private String lbStrategy;
+    private List<String> servedDomains;
     private String createdAt;
     private String updatedAt;
 
@@ -93,6 +96,22 @@ public class ClusterResponse {
 
     public void setOnlineInstanceCount(String onlineInstanceCount) {
         this.onlineInstanceCount = onlineInstanceCount;
+    }
+
+    public String getLbStrategy() {
+        return this.lbStrategy;
+    }
+
+    public void setLbStrategy(String lbStrategy) {
+        this.lbStrategy = lbStrategy;
+    }
+
+    public List<String> getServedDomains() {
+        return this.servedDomains;
+    }
+
+    public void setServedDomains(List<String> servedDomains) {
+        this.servedDomains = servedDomains;
     }
 
     public String getCreatedAt() {

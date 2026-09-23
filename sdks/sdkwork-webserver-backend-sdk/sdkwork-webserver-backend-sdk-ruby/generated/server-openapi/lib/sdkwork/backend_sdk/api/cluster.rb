@@ -4,17 +4,26 @@ require_relative '../models/clusters_events_list_response'
 require_relative '../models/clusters_hosts_list_response'
 require_relative '../models/clusters_hosts_retrieve_response'
 require_relative '../models/clusters_hosts_update_response'
+require_relative '../models/clusters_instances_cordon_response'
+require_relative '../models/clusters_instances_drain_response'
 require_relative '../models/clusters_instances_heartbeats_list_response'
 require_relative '../models/clusters_instances_list_response'
+require_relative '../models/clusters_instances_metrics_list_response'
+require_relative '../models/clusters_instances_probe_response'
 require_relative '../models/clusters_instances_retrieve_response'
+require_relative '../models/clusters_instances_uncordon_response'
+require_relative '../models/clusters_instances_undrain_response'
 require_relative '../models/clusters_instances_update_response'
 require_relative '../models/clusters_list_response'
 require_relative '../models/clusters_messages_create_response201'
 require_relative '../models/clusters_overview_retrieve_response'
 require_relative '../models/clusters_retrieve_response'
+require_relative '../models/clusters_sync_response'
 require_relative '../models/clusters_update_response'
 require_relative '../models/create_cluster_request'
 require_relative '../models/enqueue_cluster_peer_messages_request'
+require_relative '../models/probe_cluster_instance_request'
+require_relative '../models/publish_cluster_sync_request'
 require_relative '../models/update_cluster_host_request'
 require_relative '../models/update_cluster_instance_request'
 require_relative '../models/update_cluster_request'
@@ -93,6 +102,16 @@ module Sdkwork
             options[:headers] = request_headers unless request_headers.empty?
             @client.request('DELETE', path, **options)
             nil
+          end
+
+          # Publish a desired-state revision to every instance of the cluster
+          def clusters_sync(cluster_id, body: nil)
+            path = interpolate_path('/backend/v3/api/clusters/{clusterId}/sync', clusterId: serialize_path_parameter(cluster_id, PathParameterSpec.new('clusterId', 'simple', false)))
+            payload = body.respond_to?(:to_hash) ? body.to_hash : body
+            options = {}
+            options[:json] = payload unless payload.nil?
+            result = @client.request('POST', path, **options)
+            result.is_a?(Hash) ? Models::ClustersSyncResponse.from_hash(result) : nil
           end
 
           # List cluster hosts with system and network identity
@@ -248,6 +267,65 @@ module Sdkwork
 
             result = @client.request('GET', path, **options)
             result.is_a?(Hash) ? Models::ClustersInstancesHeartbeatsListResponse.from_hash(result) : nil
+          end
+
+          # List one instance's heartbeat metric samples for trend charts
+          def clusters_instances_metrics_list(instance_id, limit: nil)
+            path = interpolate_path('/backend/v3/api/clusters/instances/{instanceId}/metrics/history', instanceId: serialize_path_parameter(instance_id, PathParameterSpec.new('instanceId', 'simple', false)))
+            query = build_query_string([
+              QueryParameterSpec.new('limit', limit, 'form', true, false, nil),
+            ])
+            path = append_query_string(path, query)
+            options = {}
+
+            result = @client.request('GET', path, **options)
+            result.is_a?(Hash) ? Models::ClustersInstancesMetricsListResponse.from_hash(result) : nil
+          end
+
+          # Probe one instance's connectivity and record the outcome
+          def clusters_instances_probe(instance_id, body: nil)
+            path = interpolate_path('/backend/v3/api/clusters/instances/{instanceId}/probe', instanceId: serialize_path_parameter(instance_id, PathParameterSpec.new('instanceId', 'simple', false)))
+            payload = body.respond_to?(:to_hash) ? body.to_hash : body
+            options = {}
+            options[:json] = payload unless payload.nil?
+            result = @client.request('POST', path, **options)
+            result.is_a?(Hash) ? Models::ClustersInstancesProbeResponse.from_hash(result) : nil
+          end
+
+          # Gracefully drain one instance out of routing
+          def clusters_instances_drain(instance_id)
+            path = interpolate_path('/backend/v3/api/clusters/instances/{instanceId}/drain', instanceId: serialize_path_parameter(instance_id, PathParameterSpec.new('instanceId', 'simple', false)))
+            options = {}
+
+            result = @client.request('POST', path, **options)
+            result.is_a?(Hash) ? Models::ClustersInstancesDrainResponse.from_hash(result) : nil
+          end
+
+          # Clear the drain flag and restore routing participation
+          def clusters_instances_undrain(instance_id)
+            path = interpolate_path('/backend/v3/api/clusters/instances/{instanceId}/undrain', instanceId: serialize_path_parameter(instance_id, PathParameterSpec.new('instanceId', 'simple', false)))
+            options = {}
+
+            result = @client.request('POST', path, **options)
+            result.is_a?(Hash) ? Models::ClustersInstancesUndrainResponse.from_hash(result) : nil
+          end
+
+          # Cordon one instance out of routing without draining it
+          def clusters_instances_cordon(instance_id)
+            path = interpolate_path('/backend/v3/api/clusters/instances/{instanceId}/cordon', instanceId: serialize_path_parameter(instance_id, PathParameterSpec.new('instanceId', 'simple', false)))
+            options = {}
+
+            result = @client.request('POST', path, **options)
+            result.is_a?(Hash) ? Models::ClustersInstancesCordonResponse.from_hash(result) : nil
+          end
+
+          # Uncordon one instance back into routing
+          def clusters_instances_uncordon(instance_id)
+            path = interpolate_path('/backend/v3/api/clusters/instances/{instanceId}/uncordon', instanceId: serialize_path_parameter(instance_id, PathParameterSpec.new('instanceId', 'simple', false)))
+            options = {}
+
+            result = @client.request('POST', path, **options)
+            result.is_a?(Hash) ? Models::ClustersInstancesUncordonResponse.from_hash(result) : nil
           end
 
           # Enqueue a peer message to one instance or broadcast to online members

@@ -905,6 +905,14 @@ pub struct RevokeCertificateRequest {
     pub reason: String,
 }
 
+/// Ceiling for `CertificateOperationResponse::failure_detail`, in characters.
+///
+/// One number, three places: this constant, the `failure_detail` column width in
+/// the baseline DDL, and the `maxLength` the OpenAPI contract declares. They are
+/// character counts rather than byte counts so a Chinese provider's diagnostic is
+/// not truncated three times shorter than an English one.
+pub const CERTIFICATE_FAILURE_DETAIL_MAX_CHARS: usize = 512;
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CertificateOperationResponse {
@@ -917,6 +925,15 @@ pub struct CertificateOperationResponse {
     pub next_attempt_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub failure_code: Option<String>,
+    /// What the failure actually said, as the provider worded it.
+    ///
+    /// The code classifies the failure for retry, cooldown and localized console
+    /// copy; this is the part an operator acts on. Kept separate from the code
+    /// rather than concatenated into it because the console translates the code
+    /// and the scheduler branches on it, so widening the code into prose would
+    /// break both.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_detail: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -101,8 +101,14 @@ fn certificate_issuer_from_env(
     };
     let renew_before_days = parse_env_or("SDKWORK_WEBSERVER_CERT_RENEW_BEFORE_DAYS", 30_u32)?;
     let webroot = std::env::var("SDKWORK_WEBSERVER_ACME_WEBROOT").ok();
-    let cert_root = std::env::var("SDKWORK_WEBSERVER_CERT_LIVE_ROOT")
-        .unwrap_or_else(|_| "/etc/sdkwork/certs/letsencrypt".to_string());
+    // Cross-platform default: `/etc/sdkwork/certs/letsencrypt` on Linux,
+    // `%ProgramData%\sdkwork\certs\letsencrypt` on Windows. A hardcoded Linux
+    // literal here put issued material in a tree the rest of the application
+    // never looks at on Windows.
+    let cert_root = sdkwork_webserver_core::canonical_acme_live_root()
+        .map_err(|error| format!("ACME live root resolution failed: {error}"))?
+        .to_string_lossy()
+        .into_owned();
     let operation_timeout_ms = parse_env_or(
         "SDKWORK_WEBSERVER_ACME_OPERATION_TIMEOUT_MS",
         DEFAULT_ACME_OPERATION_TIMEOUT_MS,
@@ -154,13 +160,117 @@ fn certificate_issuer_from_env(
         use_production,
     )
     .map_err(|error| format!("ACME configuration failed: {error}"))?;
-    CertificateIssuer::new_with_account_store(
+    let mut issuer = CertificateIssuer::new_with_account_store(
         config,
         cert_root,
         operation_timeout_ms,
         account_store,
     )
-    .map_err(|error| format!("certificate issuer bootstrap failed: {error}"))
+    .map_err(|error| format!("certificate issuer bootstrap failed: {error}"))?;
+
+    // The declared challenge method. `AUTO` (the default, and the only sensible
+    // one for a deployment that has not thought about it) resolves to HTTP-01
+    // for single-domain certificates and to DNS-01 for wildcards.
+    let declared = match std::env::var(sdkwork_webserver_core::runtime_env::ACME_CHALLENGE_METHOD_ENV)
+    {
+        Ok(value) => {
+            sdkwork_webserver_acme_service::DeclaredChallengeMethod::parse(&value)
+                .map_err(|error| format!("ACME challenge method is invalid: {error}"))?
+        }
+        Err(_) => sdkwork_webserver_acme_service::DeclaredChallengeMethod::default(),
+    };
+    issuer.set_declared_challenge_method(declared);
+
+    // Attach the cloud DNS accounts. Without this the issuer has no way to
+    // publish _acme-challenge TXT records, DNS-01 is unreachable, and **every
+    // wildcard certificate fails** — the registry existed but nothing ever
+    // constructed one, so `dns_accounts_cover` was permanently false and every
+    // order silently took the HTTP-01 path.
+    match std::env::var(sdkwork_webserver_core::runtime_env::ACME_DNS_ACCOUNTS_FILE_ENV) {
+        Ok(path) if !path.trim().is_empty() => {
+            let configs = sdkwork_webserver_acme_service::load_dns_account_configs(
+                std::path::Path::new(path.trim()),
+            )
+            .map_err(|error| format!("ACME DNS accounts cannot be loaded: {error}"))?;
+            let registry = sdkwork_webserver_acme_service::DnsCloudAccountRegistry::from_configs(
+                &configs,
+            )
+            .map_err(|error| format!("ACME DNS accounts are invalid: {error}"))?;
+            tracing::info!(
+                accounts = registry.len(),
+                zones = %registry
+                    .zone_apices()
+                    .join(","),
+                "associated ACME cloud DNS accounts; wildcard certificates can be issued"
+            );
+            let registry = std::sync::Arc::new(registry);
+            issuer.attach_dns_accounts(std::sync::Arc::clone(&registry));
+            spawn_dns_account_verification(registry);
+        }
+        _ => {
+            // Not a silent no-op: say exactly what is unavailable and why it
+            // matters, and do it at startup rather than at the first wildcard.
+            tracing::warn!(
+                env = sdkwork_webserver_core::runtime_env::ACME_DNS_ACCOUNTS_FILE_ENV,
+                challenge_method = declared.as_str(),
+                "no ACME DNS accounts are configured; DNS-01 is unavailable and wildcard \
+                 certificates will fail closed until a DNS provider account is associated"
+            );
+        }
+    }
+    Ok(issuer)
+}
+
+/// Probes the associated DNS accounts, in the background, and reports what each
+/// provider said.
+///
+/// Two deliberate properties:
+///
+/// * **Spawning rather than awaiting.** A third-party API must not be able to
+///   delay the process's boot, and a provider that happens to be down when the
+///   server starts is not a reason to refuse to start. The DNS accounts file is
+///   still validated synchronously above, because a *malformed* file is a
+///   mistake this process can settle on its own; whether a credential is
+///   *accepted* is the provider's answer, and it arrives when it arrives.
+/// * **Warning, never failing.** A rejection is an operator's configuration
+///   mistake, and the log line carries the provider's own words ("Authentication
+///   error (10000)", "InvalidAccessKeyId.NotFound") so it names the fix. This is
+///   the earliest point that answer can reach anyone: without the probe the same
+///   fact only surfaces a renewal window later, as an expired certificate.
+fn spawn_dns_account_verification(
+    registry: std::sync::Arc<sdkwork_webserver_acme_service::DnsCloudAccountRegistry>,
+) {
+    let Ok(handle) = tokio::runtime::Handle::try_current() else {
+        tracing::debug!(
+            "no async runtime is available; the ACME DNS account probe was not scheduled"
+        );
+        return;
+    };
+    handle.spawn(async move {
+        let reports = registry.verify_accounts().await;
+        let rejected = reports.iter().filter(|report| report.is_rejected()).count();
+        for report in &reports {
+            if report.is_rejected() {
+                // The provider refused the account: `describe()` renders its own
+                // diagnostic, which is what makes this actionable.
+                tracing::warn!(account = %report.account_id, zone = %report.zone_apex,
+                    provider = %report.provider, "{}", report.describe());
+            } else {
+                tracing::info!(account = %report.account_id, zone = %report.zone_apex,
+                    provider = %report.provider, "{}", report.describe());
+            }
+        }
+        if rejected > 0 {
+            tracing::warn!(
+                accounts = reports.len(),
+                rejected,
+                "{} of {} ACME cloud DNS accounts were refused by their provider; certificates \
+                 for those zones will fail to issue until the credentials are corrected",
+                rejected,
+                reports.len()
+            );
+        }
+    });
 }
 
 fn parse_env_or<T>(key: &str, default: T) -> Result<T, String>

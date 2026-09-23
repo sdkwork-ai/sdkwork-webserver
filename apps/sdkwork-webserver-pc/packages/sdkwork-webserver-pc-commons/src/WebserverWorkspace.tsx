@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clipboard,
+  Columns3,
   Filter,
   Inbox,
   Link,
@@ -36,7 +37,7 @@ import {
   type ReactNode,
 } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { DataTable } from "@sdkwork/ui-pc-react";
+import { DataTable, type DataTableColumn } from "@sdkwork/ui-pc-react";
 import { uuid } from "@sdkwork/utils/id";
 
 import { translateWebserver, type WebserverLocale, type WebserverMessageKey } from "./i18n/index.ts";
@@ -261,6 +262,12 @@ function ResourcePage({
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selected, setSelected] = useState<Record<string, unknown>>();
+  /**
+   * Operator column choices for this resource, keyed by column id. Only the
+   * columns the operator actually toggled are present; everything else follows
+   * the column plan's default visibility.
+   */
+  const [columnOverrides, setColumnOverrides] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [action, setAction] = useState<WebserverResourceAction>();
@@ -374,16 +381,88 @@ function ResourcePage({
 
   useEffect(() => {
     void load();
-  }, [authorized, entry.resource, page, pageSize]);  useEffect(() => {
+  }, [authorized, entry.resource, page, pageSize]);
+
+  useEffect(() => {
     resetPagination();
     setSelected(undefined);
+    setColumnOverrides(readColumnPreferences(entry.resource));
   }, [entry.resource]);
 
   const columns = useMemo(
     () => resourceColumns(entry.resource, items),
     [entry.resource, items],
   );
+  /**
+   * Columns the collapsed row renders.
+   *
+   * A plan that moves fields into the record's detail row leaves them out of the
+   * row — and out of the column menu with it, since re-adding a detail field as
+   * a column is the very "widen the table until it curls" shape the detail row
+   * replaces.
+   */
+  const rowColumns = useMemo(() => columns.filter((column) => !column.detailOnly), [columns]);
+  /**
+   * Whether this resource shows a record's remaining fields in its own row.
+   *
+   * Derived from the plan rather than declared separately: a resource is
+   * expandable exactly when it has fields the row does not carry.
+   */
+  const expandable = rowColumns.length < columns.length;
+  /**
+   * Operations the expanded record can run on itself.
+   *
+   * Selection-scoped actions only: one that needs no row (create) belongs to the
+   * toolbar, and one whose `availableWhen` rejects this record's posture must
+   * not be offered next to that record — a "Restore routing" button on an
+   * instance already in rotation is an invitation to a failed request.
+   */
+  const rowScopedActions = (item: Record<string, unknown>) =>
+    visibleActions.filter(
+      (candidate) => candidate.requiresSelection && actionAvailable(candidate, item),
+    );
+  /**
+   * Effective column visibility. The persisted operator choice wins, so hiding a
+   * column is sticky; every column the operator never touched shows, because the
+   * plan is what says which fields a row carries and it already leaves out the
+   * ones a row cannot hold.
+   */
+  const columnVisibility = useMemo(() => {
+    const visibility: Record<string, boolean> = {};
+    for (const column of rowColumns) {
+      visibility[column.id] = columnOverrides[column.id] ?? true;
+    }
+    return visibility;
+  }, [rowColumns, columnOverrides]);
+  const tableColumns = useMemo<DataTableColumn<Record<string, unknown>>[]>(
+    () => rowColumns.map((column) => ({
+      id: column.id,
+      header: resourceFieldLabel(entry.resource, column.id, locale),
+      cell: (item: Record<string, unknown>) => displayValue(column.read(item), column.id, entry.resource, locale),
+    })),
+    [rowColumns, entry.resource, locale],
+  );
+  /**
+   * Scroll envelope: the sum of the planned column widths.
+   *
+   * `table-layout: auto` under `width: 100%` shrinks columns to whatever the
+   * viewport allows instead of overflowing it, which is how a twelve-column
+   * fleet table turns into twelve clipped columns. Giving the table a width
+   * floor is what makes the viewport scroll instead.
+   */
+  const tableMinWidth = useMemo(
+    () => rowColumns.reduce((total, column) => total + (column.width ?? 0), 0),
+    [rowColumns],
+  );
   const resourceLabel = resourceText(t, entry.resource, "label");
+
+  function toggleColumn(id: string, visible: boolean): void {
+    setColumnOverrides((current) => {
+      const next = { ...current, [id]: visible };
+      writeColumnPreferences(entry.resource, next);
+      return next;
+    });
+  }
 
   return (
     <section aria-label={resourceLabel} className="resource-page">
@@ -453,6 +532,38 @@ function ResourcePage({
               >
                 <RefreshCw aria-hidden="true" className={busy ? "is-spinning" : undefined} size={17} />
               </button>
+              {/*
+                Column menu. Fleet tables carry more columns than any viewport
+                shows at once, so the operator - not the page author - decides
+                which ones are on screen; the choice is persisted per resource.
+                A native `details` disclosure keeps it keyboard- and
+                screen-reader-navigable without a popover dependency.
+
+                It lists the row's columns only. A field the plan moved into the
+                record's detail row is not a candidate here: the detail row is
+                where it is read, at full length and without costing every other
+                row a column.
+              */}
+              {rowColumns.length > 0 ? (
+                <details className="column-menu">
+                  <summary className="secondary-button">
+                    <Columns3 aria-hidden="true" size={16} />
+                    {t("toolbar.columns")}
+                  </summary>
+                  <div aria-label={t("toolbar.columns")} className="column-menu-list" role="group">
+                    {rowColumns.map((column) => (
+                      <label key={column.id}>
+                        <input
+                          checked={columnVisibility[column.id] !== false}
+                          onChange={(event) => toggleColumn(column.id, event.target.checked)}
+                          type="checkbox"
+                        />
+                        <span>{resourceFieldLabel(entry.resource, column.id, locale)}</span>
+                      </label>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
             </div>
           </>
         ) : null}
@@ -547,11 +658,8 @@ function ResourcePage({
                 inventing a page count. Offset pages additionally pass `rowCount`
                 and get the numbered page list. */}
             <DataTable<Record<string, unknown>>
-              columns={columns.map((column) => ({
-                id: column,
-                header: fieldLabel(column, locale),
-                cell: (item: Record<string, unknown>) => displayValue(item[column], column, entry.resource, locale),
-              }))}
+              columnVisibility={columnVisibility}
+              columns={tableColumns}
               density="compact"
               emptyState={busy ? (
                 <div className="empty-state" role="status">
@@ -565,8 +673,15 @@ function ResourcePage({
                 </div>
               )}
               getRowId={(item, index) => recordKey(item, index)}
+              getRowExpandLabel={expandable
+                ? (item, index, expanded) => t(expanded ? "table.collapseRow" : "table.expandRow", {
+                  name: rowLabel(item, index),
+                })
+                : undefined}
               loading={busy && items.length === 0}
-              onRowClick={(item) => setSelected(item)}
+              // An expandable row's click is the disclosure, so it cannot also
+              // mean "select": the checkbox stays the selection control.
+              onRowClick={expandable ? undefined : (item) => setSelected(item)}
               onSelectedRowIdsChange={(ids) => {
                 const [nextId] = ids;
                 setSelected(nextId === undefined
@@ -584,10 +699,29 @@ function ResourcePage({
                 pageSizeOptions: RESOURCE_PAGE_SIZE_OPTIONS,
                 rowCount: pageInfo.total,
               }}
+              renderExpandedRow={expandable
+                ? (item) => (
+                  <ResourceDetail
+                    actions={rowScopedActions(item)}
+                    item={item}
+                    locale={locale}
+                    onAction={(candidate, row) => {
+                      setSelected(row);
+                      setAction(candidate);
+                    }}
+                    resource={entry.resource}
+                    t={t}
+                  />
+                )
+                : undefined}
               rowActionsLabel={t("table.actions")}
+              rowDetailLabel={t("table.rowDetail")}
               rows={items as Record<string, unknown>[]}
               selectable
               selectedRowIds={selected === undefined ? [] : [recordKey(selected, items.indexOf(selected))]}
+              slotProps={tableMinWidth > 0
+                ? { table: { style: { minWidth: `${tableMinWidth}px` } } }
+                : undefined}
               sortingMode="server"
               stickyHeader
             />
@@ -1394,10 +1528,22 @@ function recordKey(item: Record<string, unknown>, index: number): string {
   );
 }
 
+/**
+ * Cell renderer for registry-driven tables.
+ *
+ * Cluster surfaces get their own branch first: their wire values are machine
+ * codes (`1`, `HEALTHY`, `IN_SYNC`), raw counters (uptime seconds) and ISO
+ * instants, and rendering them verbatim is what made a fleet table read like a
+ * JSON dump instead of an operations console.
+ */
 function displayValue(value: unknown, column: string, resource: WebserverResourceKey, locale: WebserverLocale): ReactNode {
-  if (value === null || value === undefined) return "-";
+  if (value === null || value === undefined || value === "") return "-";
   if (resource === "servers" && column === "status") {
     return <span className={`status-badge server-status-${String(value).toLowerCase()}`}>{serverStatus(value, locale)}</span>;
+  }
+  if (resource.startsWith("cluster-")) {
+    const clusterCell = clusterCellValue(value, column, resource, locale);
+    if (clusterCell !== undefined) return clusterCell;
   }
   const codedLabel = codedValueLabel(column, value, locale);
   if (codedLabel) return codedLabel;
@@ -1409,8 +1555,192 @@ function displayValue(value: unknown, column: string, resource: WebserverResourc
   return String(value);
 }
 
+interface ClusterCellTone {
+  label: Record<WebserverLocale, string>;
+  tone: "ok" | "warn" | "danger" | "neutral";
+}
+
+const CLUSTER_POSITIVE: ClusterCellTone["tone"] = "ok";
+const CLUSTER_WARNING: ClusterCellTone["tone"] = "warn";
+const CLUSTER_DANGER: ClusterCellTone["tone"] = "danger";
+const CLUSTER_NEUTRAL: ClusterCellTone["tone"] = "neutral";
+
+/**
+ * Machine code to badge mapping for the cluster surfaces, keyed
+ * `resource:column`.
+ *
+ * The same column name carries different code spaces per resource (an instance
+ * `status` is 0..5, a host `status` is 0..4, a cluster `status` is 0..1), so the
+ * mapping is keyed by both rather than by the column alone — one shared table
+ * would label a maintenance instance as "Offline".
+ */
+const CLUSTER_CELL_TONES: Record<string, Record<string, ClusterCellTone>> = {
+  "cluster-instances:status": {
+    "0": { label: { "en-US": "Offline", "zh-CN": "离线" }, tone: CLUSTER_DANGER },
+    "1": { label: { "en-US": "Online", "zh-CN": "在线" }, tone: CLUSTER_POSITIVE },
+    "2": { label: { "en-US": "Starting", "zh-CN": "启动中" }, tone: CLUSTER_WARNING },
+    "3": { label: { "en-US": "Stopping", "zh-CN": "停止中" }, tone: CLUSTER_WARNING },
+    "4": { label: { "en-US": "Error", "zh-CN": "异常" }, tone: CLUSTER_DANGER },
+    "5": { label: { "en-US": "Maintenance", "zh-CN": "维护中" }, tone: CLUSTER_NEUTRAL },
+  },
+  "cluster-hosts:status": {
+    "0": { label: { "en-US": "Offline", "zh-CN": "离线" }, tone: CLUSTER_DANGER },
+    "1": { label: { "en-US": "Online", "zh-CN": "在线" }, tone: CLUSTER_POSITIVE },
+    "2": { label: { "en-US": "Deploying", "zh-CN": "部署中" }, tone: CLUSTER_WARNING },
+    "3": { label: { "en-US": "Error", "zh-CN": "异常" }, tone: CLUSTER_DANGER },
+    "4": { label: { "en-US": "Maintenance", "zh-CN": "维护中" }, tone: CLUSTER_NEUTRAL },
+  },
+  "cluster-clusters:status": {
+    "0": { label: { "en-US": "Inactive", "zh-CN": "未启用" }, tone: CLUSTER_NEUTRAL },
+    "1": { label: { "en-US": "Active", "zh-CN": "已启用" }, tone: CLUSTER_POSITIVE },
+  },
+  "cluster-instances:healthState": {
+    HEALTHY: { label: { "en-US": "Healthy", "zh-CN": "健康" }, tone: CLUSTER_POSITIVE },
+    DEGRADED: { label: { "en-US": "Degraded", "zh-CN": "降级" }, tone: CLUSTER_WARNING },
+    UNHEALTHY: { label: { "en-US": "Unhealthy", "zh-CN": "不健康" }, tone: CLUSTER_DANGER },
+    UNKNOWN: { label: { "en-US": "Unknown", "zh-CN": "未知" }, tone: CLUSTER_NEUTRAL },
+  },
+  "cluster-instances:routingState": {
+    ROUTING: { label: { "en-US": "In rotation", "zh-CN": "承载流量" }, tone: CLUSTER_POSITIVE },
+    CORDONED: { label: { "en-US": "Cordoned", "zh-CN": "已隔离" }, tone: CLUSTER_WARNING },
+    DRAINING: { label: { "en-US": "Draining", "zh-CN": "排水迁移中" }, tone: CLUSTER_WARNING },
+    EJECTED: { label: { "en-US": "Ejected", "zh-CN": "已摘除" }, tone: CLUSTER_DANGER },
+  },
+  "cluster-instances:syncStatus": {
+    UNKNOWN: { label: { "en-US": "Unknown", "zh-CN": "未知" }, tone: CLUSTER_NEUTRAL },
+    IN_SYNC: { label: { "en-US": "In sync", "zh-CN": "已同步" }, tone: CLUSTER_POSITIVE },
+    PENDING: { label: { "en-US": "Pending", "zh-CN": "待同步" }, tone: CLUSTER_WARNING },
+    FAILED: { label: { "en-US": "Failed", "zh-CN": "同步失败" }, tone: CLUSTER_DANGER },
+  },
+  "cluster-instances:joinMode": {
+    LAN: { label: { "en-US": "LAN", "zh-CN": "局域网" }, tone: CLUSTER_NEUTRAL },
+    TUNNEL: { label: { "en-US": "Tunnel", "zh-CN": "隧道" }, tone: CLUSTER_NEUTRAL },
+  },
+  "cluster-hosts:joinMode": {
+    LAN: { label: { "en-US": "LAN", "zh-CN": "局域网" }, tone: CLUSTER_NEUTRAL },
+    TUNNEL: { label: { "en-US": "Tunnel", "zh-CN": "隧道" }, tone: CLUSTER_NEUTRAL },
+  },
+  "cluster-instances:role": {
+    GATEWAY: { label: { "en-US": "Gateway", "zh-CN": "网关" }, tone: CLUSTER_NEUTRAL },
+    MANAGEMENT: { label: { "en-US": "Management", "zh-CN": "管理面" }, tone: CLUSTER_NEUTRAL },
+    DATA_PLANE: { label: { "en-US": "Data plane", "zh-CN": "数据面" }, tone: CLUSTER_NEUTRAL },
+    WORKER: { label: { "en-US": "Worker", "zh-CN": "工作节点" }, tone: CLUSTER_NEUTRAL },
+    OTHER: { label: { "en-US": "Other", "zh-CN": "其他" }, tone: CLUSTER_NEUTRAL },
+  },
+  "cluster-clusters:lbStrategy": {
+    round_robin: { label: { "en-US": "Round robin", "zh-CN": "轮询" }, tone: CLUSTER_NEUTRAL },
+    weighted_round_robin: { label: { "en-US": "Weighted round robin", "zh-CN": "加权轮询" }, tone: CLUSTER_NEUTRAL },
+    least_connections: { label: { "en-US": "Least connections", "zh-CN": "最小连接数" }, tone: CLUSTER_NEUTRAL },
+    random: { label: { "en-US": "Random", "zh-CN": "随机" }, tone: CLUSTER_NEUTRAL },
+    random_two_choices: { label: { "en-US": "Random two choices", "zh-CN": "随机二选一" }, tone: CLUSTER_NEUTRAL },
+    ip_hash: { label: { "en-US": "IP hash", "zh-CN": "IP 哈希" }, tone: CLUSTER_NEUTRAL },
+    consistent_hash: { label: { "en-US": "Consistent hash", "zh-CN": "一致性哈希" }, tone: CLUSTER_NEUTRAL },
+  },
+  "cluster-events:severity": {
+    INFO: { label: { "en-US": "Info", "zh-CN": "提示" }, tone: CLUSTER_NEUTRAL },
+    WARNING: { label: { "en-US": "Warning", "zh-CN": "警告" }, tone: CLUSTER_WARNING },
+    ERROR: { label: { "en-US": "Error", "zh-CN": "错误" }, tone: CLUSTER_DANGER },
+  },
+};
+
+/**
+ * Cluster-surface cell rendering, limited to the columns it owns; anything it
+ * does not recognise returns `undefined` so the generic renderer still runs.
+ */
+function clusterCellValue(
+  value: unknown,
+  column: string,
+  resource: WebserverResourceKey,
+  locale: WebserverLocale,
+): ReactNode | undefined {
+  const tone = CLUSTER_CELL_TONES[`${resource}:${column}`]?.[String(value)];
+  if (tone) {
+    return <span className={`status-badge cluster-tone-${tone.tone}`}>{tone.label[locale]}</span>;
+  }
+  if (column === "uptime") {
+    return formatUptime(value, locale);
+  }
+  if (clusterInstantColumns.has(column)) {
+    return formatInstantValue(value, locale);
+  }
+  return undefined;
+}
+
+/** Cluster columns whose wire value is an RFC 3339 instant. */
+const clusterInstantColumns = new Set([
+  "lastHeartbeatAt",
+  "lastOnlineAt",
+  "processStartedAt",
+  "occurredAt",
+  "createdAt",
+  "updatedAt",
+]);
+
+/**
+ * Uptime as a coarse duration (`12d 4h`, `45m`).
+ *
+ * Micro-precision is noise on a fleet page, and a raw second count is
+ * unreadable: what the operator asks of this column is "how long has this slot
+ * been up", not the exact second.
+ */
+function formatUptime(value: unknown, locale: WebserverLocale): string {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds < 0) return "-";
+  const days = Math.floor(seconds / 86_400);
+  const hours = Math.floor((seconds % 86_400) / 3_600);
+  const minutes = Math.floor((seconds % 3_600) / 60);
+  const units = locale === "zh-CN"
+    ? { day: "天", hour: "小时", minute: "分", second: "秒" }
+    : { day: "d", hour: "h", minute: "m", second: "s" };
+  if (days > 0) return `${days}${units.day} ${hours}${units.hour}`;
+  if (hours > 0) return `${hours}${units.hour} ${minutes}${units.minute}`;
+  if (minutes > 0) return `${minutes}${units.minute}`;
+  return `${Math.floor(seconds)}${units.second}`;
+}
+
+/** RFC 3339 instant in the operator's locale; unparseable values pass through unchanged. */
+function formatInstantValue(value: unknown, locale: WebserverLocale): string {
+  const parsed = new Date(String(value));
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return parsed.toLocaleString(locale === "zh-CN" ? "zh-CN" : "en-US", { hour12: false });
+}
+
 function humanize(value: string): string {
   return value.replace(/([a-z])([A-Z])/g, "$1 $2").replaceAll("_", " ");
+}
+
+/**
+ * Column labels that only hold on one resource.
+ *
+ * `fieldLabel` is keyed on the field name alone, so `name` is "Application
+ * name" - correct where it was first needed, wrong everywhere the same wire
+ * field means something else. A cluster instance called an application is a
+ * header that misdescribes the column, so the resource wins when it has its own
+ * wording.
+ */
+const RESOURCE_COLUMN_LABELS: Partial<
+  Record<WebserverResourceKey, Record<string, Record<WebserverLocale, string>>>
+> = {
+  "cluster-instances": {
+    name: { "en-US": "Instance", "zh-CN": "实例" },
+    hostName: { "en-US": "Host", "zh-CN": "宿主" },
+  },
+  "cluster-clusters": {
+    name: { "en-US": "Cluster", "zh-CN": "集群" },
+  },
+  // `detail` is generic enough that it means something different on every
+  // resource, so its wording belongs to the resource rather than the field.
+  "cluster-events": {
+    detail: { "en-US": "Event payload", "zh-CN": "事件载荷" },
+  },
+};
+
+function resourceFieldLabel(
+  resource: WebserverResourceKey,
+  column: string,
+  locale: WebserverLocale,
+): string {
+  return RESOURCE_COLUMN_LABELS[resource]?.[column]?.[locale] ?? fieldLabel(column, locale);
 }
 
 function fieldLabel(value: string, locale: WebserverLocale): string {
@@ -1487,6 +1817,62 @@ function fieldLabel(value: string, locale: WebserverLocale): string {
       appliedSyncVersion: "Applied version",
       ipAddress: "IP address",
       lastHeartbeatAt: "Last heartbeat",
+      // Cluster inventory columns (cluster-clusters / cluster-hosts /
+      // cluster-instances / cluster-events). Composite ids (`bindAddress`,
+      // `capacity`, `platform`, `routingState`) are resolved by the column plan
+      // rather than by a single wire field.
+      arch: "Architecture",
+      bindAddress: "Listen address",
+      bindHost: "Bind host",
+      bindPort: "Bind port",
+      buildVersion: "Build version",
+      capacity: "Capacity",
+      clusterId: "Cluster",
+      code: "Code",
+      cpuCores: "CPU cores",
+      cpuModel: "CPU model",
+      daemonVersion: "Agent version",
+      draining: "Draining",
+      ejected: "Ejected",
+      eventType: "Event type",
+      healthState: "Health",
+      heartbeatIntervalSeconds: "Heartbeat interval (s)",
+      hostCount: "Hosts",
+      hostId: "Host",
+      hostName: "Host",
+      hostname: "Hostname",
+      instanceCount: "Instances",
+      instanceId: "Instance",
+      joinMode: "Join mode",
+      kernelVersion: "Kernel",
+      lastOnlineAt: "Last online",
+      lbStrategy: "Load balancing",
+      localIps: "Local addresses",
+      macAddresses: "MAC addresses",
+      machineCode: "Machine code",
+      memoryTotalMb: "Memory",
+      message: "Message",
+      occurredAt: "Occurred at",
+      offlineThresholdSeconds: "Offline threshold (s)",
+      onlineInstanceCount: "Online instances",
+      osName: "Operating system",
+      osVersion: "OS version",
+      platform: "Platform",
+      processPid: "PID",
+      processStartedAt: "Process started",
+      publicEndpoint: "Public endpoint",
+      qualityScore: "Quality score",
+      remoteIp: "Remote address",
+      restartCount: "Restarts",
+      role: "Role",
+      routingEnabled: "Routing enabled",
+      routingState: "Routing",
+      routingWeight: "Routing weight",
+      servedDomains: "Served domains",
+      severity: "Severity",
+      syncStatus: "Config sync",
+      tunnelRouteDomain: "Tunnel domain",
+      uptime: "Uptime",
     },
     "zh-CN": {
       action: "操作动作",
@@ -1560,6 +1946,61 @@ function fieldLabel(value: string, locale: WebserverLocale): string {
       appliedSyncVersion: "应用版本",
       ipAddress: "IP 地址",
       lastHeartbeatAt: "最后心跳",
+      // 集群资产列（cluster-clusters / cluster-hosts / cluster-instances /
+      // cluster-events）。合成列（bindAddress / capacity / platform /
+      // routingState）由列计划计算，不对应单一接口字段。
+      arch: "架构",
+      bindAddress: "监听地址",
+      bindHost: "绑定地址",
+      bindPort: "绑定端口",
+      buildVersion: "构建版本",
+      capacity: "规格",
+      clusterId: "所属集群",
+      code: "集群编码",
+      cpuCores: "CPU 核数",
+      cpuModel: "CPU 型号",
+      daemonVersion: "Agent 版本",
+      draining: "排水迁移",
+      ejected: "已摘除",
+      eventType: "事件类型",
+      healthState: "健康状态",
+      heartbeatIntervalSeconds: "心跳间隔（秒）",
+      hostCount: "主机数",
+      hostId: "所在主机",
+      hostName: "主机",
+      hostname: "主机名",
+      instanceCount: "实例数",
+      instanceId: "实例",
+      joinMode: "接入方式",
+      kernelVersion: "内核版本",
+      lastOnlineAt: "最后在线",
+      lbStrategy: "负载均衡策略",
+      localIps: "内网地址",
+      macAddresses: "MAC 地址",
+      machineCode: "机器指纹",
+      memoryTotalMb: "内存",
+      message: "事件内容",
+      occurredAt: "发生时间",
+      offlineThresholdSeconds: "离线判定阈值（秒）",
+      onlineInstanceCount: "在线实例",
+      osName: "操作系统",
+      osVersion: "系统版本",
+      platform: "运行平台",
+      processPid: "进程 PID",
+      processStartedAt: "进程启动时间",
+      publicEndpoint: "对外端点",
+      qualityScore: "服务质量",
+      remoteIp: "远端地址",
+      restartCount: "重启次数",
+      role: "角色",
+      routingEnabled: "参与路由",
+      routingState: "路由状态",
+      routingWeight: "路由权重",
+      servedDomains: "承载域名",
+      severity: "级别",
+      syncStatus: "配置同步",
+      tunnelRouteDomain: "隧道域名",
+      uptime: "运行时长",
     },
   };
   return labels[locale][value] ?? humanize(value);
@@ -1601,6 +2042,13 @@ function codedValueLabel(name: string, value: unknown, locale: WebserverLocale):
       "configType:2": "Site",
       "configType:3": "Domain",
       "configType:4": "Custom",
+      "lbStrategy:consistent_hash": "Consistent hash",
+      "lbStrategy:ip_hash": "IP hash",
+      "lbStrategy:least_connections": "Least connections",
+      "lbStrategy:random": "Random",
+      "lbStrategy:random_two_choices": "Power of two choices",
+      "lbStrategy:round_robin": "Round robin",
+      "lbStrategy:weighted_round_robin": "Weighted round robin",
       "targetType:site": "Application",
       "targetType:domain": "Domain",
       "targetType:deployment": "Deployment",
@@ -1616,6 +2064,13 @@ function codedValueLabel(name: string, value: unknown, locale: WebserverLocale):
       "configType:2": "应用配置",
       "configType:3": "域名配置",
       "configType:4": "自定义配置",
+      "lbStrategy:consistent_hash": "一致性哈希",
+      "lbStrategy:ip_hash": "IP 哈希",
+      "lbStrategy:least_connections": "最少连接",
+      "lbStrategy:random": "随机",
+      "lbStrategy:random_two_choices": "两次随机择优",
+      "lbStrategy:round_robin": "轮询",
+      "lbStrategy:weighted_round_robin": "加权轮询",
       "targetType:site": "应用",
       "targetType:domain": "域名",
       "targetType:deployment": "发布",
@@ -1676,21 +2131,435 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * One column of a registry-driven resource table.
+ *
+ * `read` is a resolver rather than a field name because several columns an
+ * operator actually needs are composites of more than one wire field: an
+ * instance's listening address is `bindHost` + `bindPort`, its routing posture
+ * is `routingEnabled` + `draining` + `ejected` together, and its live-count
+ * summary is `cpuCores` + `memoryTotalMb`. A field-per-column model would
+ * either drop those facts or spend three near-empty columns stating one.
+ */
+interface WebserverResourceColumn {
+  /** Stable column id: the label i18n suffix, the visibility key, and the cell formatter selector. */
+  id: string;
+  /**
+   * The field belongs to the record's detail row, not to a table column.
+   *
+   * A resource planned this way is expandable: the collapsed row carries only
+   * the fields an operator compares across records, and everything else is
+   * rendered in the row's own detail — which is why a `detailOnly` field is not
+   * offered in the column menu either. Widening a fleet table until each column
+   * is clipped is the failure mode this exists to prevent.
+   *
+   * This replaced a `defaultVisible: false` flag, which kept a secondary column
+   * one click away in the column menu. That state is what the detail row now
+   * covers, for the fields a row cannot carry at any width.
+   */
+  detailOnly?: boolean;
+  read(item: Record<string, unknown>): unknown;
+  /**
+   * Wire keys this column's `read` consumes, when they are not the column `id`.
+   *
+   * A composite column turns several wire fields into one cell (`bindHost` +
+   * `bindPort` -> "0.0.0.0:3800"). The detail row appends payload keys the plan
+   * does not mention, so that a field the API started returning is never
+   * silently dropped - but that fallback cannot tell "the plan forgot this
+   * field" from "the plan already composed this field into a cell", and would
+   * render the same fact twice under a worse name. Declaring the sources is what
+   * separates the two.
+   */
+  sources?: readonly string[];
+  /**
+   * Preferred width in px. Not a hard constraint: it is summed into the table's
+   * scroll envelope (`min-width`), which is what keeps a wide table readable
+   * instead of letting `table-layout: auto` squeeze every column into the
+   * viewport and clip the values.
+   */
+  width?: number;
+}
+
+/**
+ * Hand-authored column plans for the cluster surfaces.
+ *
+ * These resources previously fell through to field-order inference, which put
+ * the first eight keys of the JSON payload on screen in payload order: the
+ * instance list rendered `id, clusterId, hostId, hostName, name, role,
+ * environment, processPid` and hid liveness, health, routing and sync - i.e.
+ * every column an operator opens the page for.
+ *
+ * A plan therefore states the columns explicitly, and splits them in two:
+ *
+ * - the **row** carries what an operator compares *across* records - identity,
+ *   placement, and the state they triage on. Every planned column is visible by
+ *   default; a column that would have to start hidden to keep the row readable
+ *   is not a row column at all.
+ * - `detailOnly` fields describe **one** record - versions, thresholds, PIDs,
+ *   addresses, timestamps. They render in that record's own detail row, which
+ *   opens on a click (`expandable` is derived from this split, see
+ *   `ResourcePage`), and they are deliberately not offered in the column menu:
+ *   re-adding one as a column is exactly the "widen the table until it curls"
+ *   shape the detail row replaces.
+ */
+const RESOURCE_COLUMN_PLANS: Partial<Record<WebserverResourceKey, readonly WebserverResourceColumn[]>> = {
+  "cluster-instances": [
+    // The row answers "which instance is where, and is it healthy": the slot an
+    // operator routes by, the host it runs on, and the four state codes they
+    // scan for an anomaly. Runtimes, versions, weights and timestamps describe
+    // this one instance, so they open with it.
+    { id: "name", read: (item) => item.name, width: 190 },
+    { id: "hostName", read: (item) => item.hostName ?? item.hostId, width: 150 },
+    { id: "bindAddress", read: (item) => bindAddress(item), sources: ["bindHost", "bindPort"], width: 150 },
+    { id: "role", read: (item) => item.role, width: 110 },
+    { id: "status", read: (item) => item.status, width: 100 },
+    { id: "healthState", read: (item) => item.healthState, width: 110 },
+    { id: "routingState", read: (item) => routingState(item), sources: ["routingEnabled", "draining", "ejected"], width: 120 },
+    { id: "syncStatus", read: (item) => item.syncStatus, width: 110 },
+    { id: "joinMode", read: (item) => item.joinMode, detailOnly: true },
+    { id: "buildVersion", read: (item) => item.buildVersion, detailOnly: true },
+    { id: "environment", read: (item) => item.environment, detailOnly: true },
+    { id: "uptime", read: (item) => item.uptimeSeconds, sources: ["uptimeSeconds"], detailOnly: true },
+    { id: "lastHeartbeatAt", read: (item) => item.lastHeartbeatAt, detailOnly: true },
+    { id: "processStartedAt", read: (item) => item.processStartedAt, detailOnly: true },
+    { id: "lastOnlineAt", read: (item) => item.lastOnlineAt, detailOnly: true },
+    { id: "qualityScore", read: (item) => item.qualityScore, detailOnly: true },
+    { id: "restartCount", read: (item) => item.restartCount, detailOnly: true },
+    { id: "routingWeight", read: (item) => item.routingWeight, detailOnly: true },
+    { id: "processPid", read: (item) => item.processPid, detailOnly: true },
+    { id: "publicEndpoint", read: (item) => item.publicEndpoint, detailOnly: true },
+    { id: "clusterId", read: (item) => item.clusterId, detailOnly: true },
+    { id: "hostId", read: (item) => item.hostId, detailOnly: true },
+    { id: "id", read: (item) => item.id, detailOnly: true },
+    { id: "createdAt", read: (item) => item.createdAt, detailOnly: true },
+    { id: "updatedAt", read: (item) => item.updatedAt, detailOnly: true },
+  ],
+  "cluster-hosts": [
+    // A host's row is its machine: what it is, what it runs, how much it has,
+    // and whether it is up. Addresses, agent version, hardware identifiers and
+    // timestamps are facts about one machine.
+    { id: "hostname", read: (item) => item.hostname, width: 180 },
+    { id: "clusterId", read: (item) => item.clusterId, width: 150 },
+    { id: "platform", read: (item) => platformLabel(item), sources: ["osName", "osVersion"], width: 200 },
+    { id: "arch", read: (item) => item.arch, width: 90 },
+    { id: "capacity", read: (item) => capacityLabel(item), sources: ["cpuCores", "memoryTotalMb"], width: 130 },
+    { id: "status", read: (item) => item.status, width: 110 },
+    { id: "instanceCount", read: (item) => item.instanceCount, width: 90 },
+    { id: "remoteIp", read: (item) => item.remoteIp, detailOnly: true },
+    { id: "localIps", read: (item) => addressList(item.localIps), detailOnly: true },
+    { id: "daemonVersion", read: (item) => item.daemonVersion, detailOnly: true },
+    { id: "joinMode", read: (item) => item.joinMode, detailOnly: true },
+    { id: "lastHeartbeatAt", read: (item) => item.lastHeartbeatAt, detailOnly: true },
+    { id: "machineCode", read: (item) => item.machineCode, detailOnly: true },
+    { id: "cpuModel", read: (item) => item.cpuModel, detailOnly: true },
+    { id: "macAddresses", read: (item) => addressList(item.macAddresses), detailOnly: true },
+    { id: "kernelVersion", read: (item) => item.kernelVersion, detailOnly: true },
+    { id: "tunnelRouteDomain", read: (item) => item.tunnelRouteDomain, detailOnly: true },
+    { id: "id", read: (item) => item.id, detailOnly: true },
+    { id: "createdAt", read: (item) => item.createdAt, detailOnly: true },
+    { id: "updatedAt", read: (item) => item.updatedAt, detailOnly: true },
+  ],
+  "cluster-clusters": [
+    // The row is the fleet summary: what identifies a cluster and the three
+    // counters an operator triages by. Thresholds, balancing strategy, served
+    // domains, description and timestamps describe one cluster rather than
+    // comparing many, so they live in that record's detail row.
+    { id: "name", read: (item) => item.name, width: 200 },
+    { id: "code", read: (item) => item.code, width: 160 },
+    { id: "status", read: (item) => item.status, width: 110 },
+    { id: "instanceCount", read: (item) => item.instanceCount, width: 100 },
+    { id: "onlineInstanceCount", read: (item) => item.onlineInstanceCount, width: 130 },
+    { id: "hostCount", read: (item) => item.hostCount, width: 100 },
+    { id: "lbStrategy", read: (item) => item.lbStrategy, detailOnly: true },
+    { id: "heartbeatIntervalSeconds", read: (item) => item.heartbeatIntervalSeconds, detailOnly: true },
+    { id: "offlineThresholdSeconds", read: (item) => item.offlineThresholdSeconds, detailOnly: true },
+    { id: "servedDomains", read: (item) => item.servedDomains, detailOnly: true },
+    { id: "description", read: (item) => item.description, detailOnly: true },
+    { id: "id", read: (item) => item.id, detailOnly: true },
+    { id: "createdAt", read: (item) => item.createdAt, detailOnly: true },
+    { id: "updatedAt", read: (item) => item.updatedAt, detailOnly: true },
+  ],
+  // An event log is read as a timeline: when it happened, how bad it is, what
+  // kind of thing it is, and what it says. The identifiers an event points at
+  // are what an operator copies into another page, not what they scan a log for
+  // - and an event scoped above the instance level carries two of them empty, so
+  // inline they are three columns of `-` between the reader and the message.
+  // The payload is the opposite case: it nests, so no cell can hold it.
+  "cluster-events": [
+    { id: "occurredAt", read: (item) => item.occurredAt, width: 170 },
+    { id: "severity", read: (item) => item.severity, width: 110 },
+    { id: "eventType", read: (item) => item.eventType, width: 200 },
+    { id: "message", read: (item) => item.message, width: 340 },
+    { id: "clusterId", read: (item) => item.clusterId, detailOnly: true },
+    { id: "hostId", read: (item) => item.hostId, detailOnly: true },
+    { id: "instanceId", read: (item) => item.instanceId, detailOnly: true },
+    { id: "detail", read: (item) => item.detail, detailOnly: true },
+    { id: "id", read: (item) => item.id, detailOnly: true },
+    { id: "createdAt", read: (item) => item.createdAt, detailOnly: true },
+  ],
+};
+
+/**
+ * Preferred field order for resources that have no explicit plan.
+ *
+ * Ordering only: the column set still follows the payload, because the
+ * workspace has no other description of a resource owned by another SDK.
+ */
+const PREFERRED_FIELD_ORDER: Partial<Record<WebserverResourceKey, readonly string[]>> = {
+  nginx: ["id", "configName", "configType", "isActive", "status", "versionNo", "deployedAt", "updatedAt"],
+  servers: ["id", "name", "host", "sshPort", "status", "lastHeartbeatAt", "createdAt"],
+  audit: ["operatorId", "operatorType", "action", "targetType", "targetUuid", "ipAddress", "createdAt"],
+};
+
+/**
+ * Column ceiling for inferred columns. An inferred table is a fallback, and a
+ * wide payload rendered as-is is unreadable; a resource that genuinely needs
+ * more earns an explicit plan above.
+ */
+const INFERRED_COLUMN_LIMIT = 8;
+
+/**
+ * Storage key prefix for per-resource column choices.
+ *
+ * Namespaced by resource so the choice survives navigation and reload, and so a
+ * change to one table's plan cannot silently rewrite another table's view.
+ */
+const COLUMN_PREFERENCE_PREFIX = "sdkwork.webserver.pc.table-columns.";
+
+/**
+ * Reads the operator's column choices for one resource.
+ *
+ * Best-effort by design: a blocked or full `localStorage` (private browsing,
+ * quota) must degrade to "no preference recorded" — the plan defaults then apply
+ * — rather than surface as a page failure.
+ */
+function readColumnPreferences(resource: WebserverResourceKey): Record<string, boolean> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(`${COLUMN_PREFERENCE_PREFIX}${resource}`);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed as Record<string, unknown>)
+        .filter((entry): entry is [string, boolean] => typeof entry[1] === "boolean"),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function writeColumnPreferences(resource: WebserverResourceKey, preferences: Record<string, boolean>): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(`${COLUMN_PREFERENCE_PREFIX}${resource}`, JSON.stringify(preferences));
+  } catch {
+    // A view preference that cannot be stored is not a page error.
+  }
+}
+
 function resourceColumns(
   resource: WebserverResourceKey,
   items: readonly Record<string, unknown>[],
-): string[] {
+): WebserverResourceColumn[] {
+  const planned = RESOURCE_COLUMN_PLANS[resource];
+  if (planned) return [...planned];
   const available = Array.from(new Set(items.flatMap((item) => Object.keys(item))));
-  const preferred: Partial<Record<WebserverResourceKey, readonly string[]>> = {
-    nginx: ["id", "configName", "configType", "isActive", "status", "versionNo", "deployedAt", "updatedAt"],
-    servers: ["id", "name", "host", "sshPort", "status", "lastHeartbeatAt", "createdAt"],
-    audit: ["operatorId", "operatorType", "action", "targetType", "targetUuid", "ipAddress", "createdAt"],
-  };
-  const ordered = [
-    ...(preferred[resource] ?? []).filter((column) => available.includes(column)),
-    ...available.filter((column) => !(preferred[resource] ?? []).includes(column)),
+  const preferred = PREFERRED_FIELD_ORDER[resource] ?? [];
+  return [
+    ...preferred.filter((column) => available.includes(column)),
+    ...available.filter((column) => !preferred.includes(column)),
+  ]
+    .slice(0, INFERRED_COLUMN_LIMIT)
+    .map((id) => ({ id, read: (item: Record<string, unknown>) => item[id] }));
+}
+
+/**
+ * Fields of a record that only its detail row shows.
+ *
+ * Empty for every resource whose plan has no `detailOnly` field, and an empty
+ * result is what tells the page the resource is not expandable: a table whose
+ * plan fits inline stays a plain table.
+ *
+ * The payload's own keys are appended after the planned fields. A plan can fall
+ * behind the API, and the detail row is the one surface that shows a whole
+ * record - silently dropping a field the API started returning would make the
+ * page lie about what it received. What is *not* appended is a key the plan
+ * already accounts for: either it has a column of its own, or a composite column
+ * consumes it (`sources`), in which case listing it again would print one fact
+ * twice.
+ */
+function resourceDetailColumns(
+  resource: WebserverResourceKey,
+  item: Record<string, unknown>,
+): WebserverResourceColumn[] {
+  const plan = RESOURCE_COLUMN_PLANS[resource];
+  if (!plan) return [];
+  const detail = plan.filter((column) => column.detailOnly);
+  if (detail.length === 0) return [];
+  const accounted = new Set<string>();
+  for (const column of plan) {
+    // A column whose id is the wire key consumes that key.
+    accounted.add(column.id);
+    for (const source of column.sources ?? []) accounted.add(source);
+  }
+  return [
+    ...detail,
+    ...Object.keys(item)
+      .filter((key) => !accounted.has(key))
+      .map((id) => ({ id, read: (row: Record<string, unknown>) => row[id] })),
   ];
-  return ordered.slice(0, 8);
+}
+
+/**
+ * Detail-row cell value: the table formatter, except that a list is spelled out.
+ *
+ * The table formatter bounds a list (`a, b, c +2`) because a row has no room for
+ * more, but the detail row exists precisely to read the whole record, so
+ * truncating there would defeat the reason the operator expanded it.
+ */
+function detailValue(
+  value: unknown,
+  column: string,
+  resource: WebserverResourceKey,
+  locale: WebserverLocale,
+): ReactNode {
+  if (Array.isArray(value)) {
+    const entries = value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+    return entries.length > 0 ? entries.join(", ") : "-";
+  }
+  if (column === "id" && typeof value === "string" && value.length > 0) return <code>{value}</code>;
+  // A structured payload nests, and `JSON.stringify` on one line turns it into a
+  // wall of delimiters. The detail row is the only surface that ever shows one,
+  // so it is worth line breaks and indentation.
+  if (isRecord(value)) {
+    return <pre className="resource-detail-json">{JSON.stringify(value, null, 2)}</pre>;
+  }
+  return displayValue(value, column, resource, locale);
+}
+
+/**
+ * Detail of one record, revealed by expanding its row.
+ *
+ * It carries the record's full field set plus the row-scoped operations, which
+ * is the whole point of expanding: the operator who opened one cluster can act
+ * on that cluster without first ticking a checkbox to tell the toolbar which row
+ * they meant.
+ */
+function ResourceDetail({
+  actions,
+  item,
+  locale,
+  onAction,
+  resource,
+  t,
+}: {
+  actions: readonly WebserverResourceAction[];
+  item: Record<string, unknown>;
+  locale: WebserverLocale;
+  onAction(action: WebserverResourceAction, item: Record<string, unknown>): void;
+  resource: WebserverResourceKey;
+  t: (key: WebserverMessageKey, values?: Record<string, string | number>) => string;
+}) {
+  const fields = resourceDetailColumns(resource, item);
+  return (
+    <div className="resource-detail" data-resource={resource}>
+      <dl className="resource-detail-grid">
+        {fields.map((field) => {
+          const value = field.read(item);
+          return (
+            <div className={isRecord(value) ? "resource-detail-block" : undefined} key={field.id}>
+              <dt>{resourceFieldLabel(resource, field.id, locale)}</dt>
+              <dd>{detailValue(value, field.id, resource, locale)}</dd>
+            </div>
+          );
+        })}
+      </dl>
+      {actions.length > 0 ? (
+        <div className="resource-detail-actions" role="group" aria-label={t("table.actions")}>
+          {actions.map((action) => (
+            <button
+              className={action.dangerous ? "danger-button" : "secondary-button"}
+              key={action.id}
+              onClick={() => onAction(action, item)}
+              type="button"
+            >
+              <ActionIcon action={action} />
+              {resolveActionLabel(t, resource, action, item)}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Human handle of a row, for the detail control's accessible name.
+ *
+ * A screen reader announcing "Expand row 3" names nothing an operator can check
+ * against the list, so the row's own label wins and the record key is only the
+ * last resort. `eventType` is in the list for the same reason: an event has no
+ * name, and "Expand evt-2" leaves the listener with an identifier they cannot
+ * match against anything they can hear.
+ */
+function rowLabel(item: Record<string, unknown>, index: number): string {
+  for (const key of ["name", "hostname", "title", "eventType"]) {
+    const value = item[key];
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return recordKey(item, index);
+}
+
+/** Listening address of an instance: the slot identity an operator routes by. */
+function bindAddress(item: Record<string, unknown>): string | undefined {
+  const port = item.bindPort;
+  if (port === null || port === undefined || port === "") return undefined;
+  const host = typeof item.bindHost === "string" && item.bindHost.trim() ? item.bindHost.trim() : "0.0.0.0";
+  return `${host}:${port}`;
+}
+
+/**
+ * Routing posture as one value.
+ *
+ * The three routing flags are one operational state, not three:
+ * drain supersedes cordon (a draining instance is also out of the pool), and an
+ * ejected instance was taken out by the prober rather than by a person. Showing
+ * them as separate boolean columns makes the operator read a truth table.
+ */
+function routingState(item: Record<string, unknown>): string {
+  if (item.draining === true) return "DRAINING";
+  if (item.ejected === true) return "EJECTED";
+  if (item.routingEnabled === false) return "CORDONED";
+  return "ROUTING";
+}
+
+/** `OS version · kernel` as one host platform cell. */
+function platformLabel(item: Record<string, unknown>): string | undefined {
+  const name = typeof item.osName === "string" ? item.osName : "";
+  const version = typeof item.osVersion === "string" ? item.osVersion : "";
+  const parts = [name, version].filter((part) => part.length > 0);
+  return parts.length > 0 ? parts.join(" ") : undefined;
+}
+
+/** Host capacity as `N cores · M GiB`, the shape fleet pages are read in. */
+function capacityLabel(item: Record<string, unknown>): string | undefined {
+  const parts: string[] = [];
+  if (typeof item.cpuCores === "number") parts.push(`${item.cpuCores} vCPU`);
+  if (typeof item.memoryTotalMb === "number" && item.memoryTotalMb > 0) {
+    const gib = item.memoryTotalMb / 1024;
+    parts.push(`${gib >= 10 ? Math.round(gib) : gib.toFixed(1)} GiB`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : undefined;
+}
+
+/** Renders an address/domain list as a single cell, bounded so one long list cannot dominate the row. */
+function addressList(value: unknown): string | undefined {
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+  const items = value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+  if (items.length === 0) return undefined;
+  const head = items.slice(0, 3).join(", ");
+  return items.length > 3 ? `${head} +${items.length - 3}` : head;
 }
 
 function serverStatus(value: unknown, locale: WebserverLocale): string {

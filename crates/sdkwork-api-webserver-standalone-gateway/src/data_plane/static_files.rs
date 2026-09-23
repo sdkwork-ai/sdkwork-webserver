@@ -9,7 +9,7 @@ use sdkwork_webserver_core::{RouteConfig, RoutePathType};
 use super::{
     credential_entry_injection::{inject_bootstrap_token, injection_token},
     proxy::text_response,
-    static_file_response::serve_opened_file,
+    static_file_response::serve_opened_file_with_cache_policy,
     static_path::{open_static_path, StaticPathError, StaticPathTarget},
 };
 
@@ -50,7 +50,13 @@ pub async fn serve_static(
             {
                 return with_adaptive_vary_if_spa(response, spa_fallback);
             }
-            let response = serve_opened_file(file, request.method(), request.headers()).await;
+            let response = serve_opened_file_with_cache_policy(
+                file,
+                request.method(),
+                request.headers(),
+                route.cache_policy.as_ref(),
+            )
+            .await;
             with_adaptive_vary_if_spa(response, spa_fallback)
         }
         StaticPathTarget::RedirectToDirectory => {

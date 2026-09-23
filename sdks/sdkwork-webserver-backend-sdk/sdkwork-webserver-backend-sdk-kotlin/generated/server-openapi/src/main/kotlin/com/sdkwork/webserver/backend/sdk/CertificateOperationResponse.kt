@@ -9,6 +9,7 @@ data class CertificateOperationResponse(
     val maxAttempts: Int? = null,
     val nextAttemptAt: String? = null,
     val failureCode: String? = null,
+    val failureDetail: String? = null,
     val createdAt: String? = null,
     val updatedAt: String? = null,
     val completedAt: String? = null

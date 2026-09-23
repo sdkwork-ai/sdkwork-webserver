@@ -16,6 +16,12 @@ final class UpdateClusterRequest
 
     public ?int $offlineThresholdSeconds = null;
 
+    /** Request routing strategy across the cluster's instances. */
+    public ?string $lbStrategy = null;
+
+    /** Service domains auto-routed to this cluster's instances; replaces the whole list when present. */
+    public array $servedDomains = [];
+
     public function __construct(array $data = [])
     {
         $this->name = array_key_exists('name', $data)
@@ -33,6 +39,14 @@ final class UpdateClusterRequest
         $this->offlineThresholdSeconds = array_key_exists('offlineThresholdSeconds', $data)
             ? $data['offlineThresholdSeconds']
             : null;
+        $this->lbStrategy = array_key_exists('lbStrategy', $data)
+            ? $data['lbStrategy']
+            : null;
+        $this->servedDomains = array_key_exists('servedDomains', $data)
+            ? is_array($data['servedDomains'])
+                ? array_values(array_map(static fn($item) => $item, $data['servedDomains']))
+                : []
+            : [];
     }
 
     public static function fromArray(?array $data): ?self
@@ -48,6 +62,8 @@ final class UpdateClusterRequest
             'status' => $this->status,
             'heartbeatIntervalSeconds' => $this->heartbeatIntervalSeconds,
             'offlineThresholdSeconds' => $this->offlineThresholdSeconds,
+            'lbStrategy' => $this->lbStrategy,
+            'servedDomains' => array_values(array_map(static fn($item) => $item, $this->servedDomains)),
         ];
     }
 }

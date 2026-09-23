@@ -16,4 +16,14 @@ pub struct CreateClusterRequest {
     #[serde(rename = "offlineThresholdSeconds")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub offline_threshold_seconds: Option<i64>,
+
+    /// Request routing strategy; defaults to `round_robin` when omitted.
+    #[serde(rename = "lbStrategy")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lb_strategy: Option<String>,
+
+    /// Service domains auto-routed to this cluster's instances.
+    #[serde(rename = "servedDomains")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub served_domains: Option<Vec<String>>,
 }

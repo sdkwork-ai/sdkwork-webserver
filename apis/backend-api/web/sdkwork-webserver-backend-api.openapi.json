@@ -5032,6 +5032,81 @@
         "x-sdkwork-route-auth": "dual-token"
       }
     },
+    "/backend/v3/api/clusters/{clusterId}/sync": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ClusterIdParam"
+        }
+      ],
+      "post": {
+        "operationId": "clusters.sync",
+        "summary": "Publish a desired-state revision to every instance of the cluster",
+        "description": "Publishes one desired-state revision for the `config` or `applications`\ntrack and flips every instance of the cluster to PENDING. Instances read\nthe revision through the machine-only internal API, apply it, and\nacknowledge IN_SYNC or FAILED; a drifting node is visible on the admin\nsurface through the aggregate sync status.",
+        "tags": [
+          "cluster"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.cluster.write",
+        "x-sdkwork-rate-limit-tier": "auth-critical",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishClusterSyncRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sync revision published.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/ClusterSyncManifest"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
+    },
     "/backend/v3/api/clusters/hosts": {
       "get": {
         "operationId": "clusters.hosts.list",
@@ -5803,6 +5878,424 @@
         "x-sdkwork-route-auth": "dual-token"
       }
     },
+    "/backend/v3/api/clusters/instances/{instanceId}/metrics/history": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ClusterInstanceIdParam"
+        }
+      ],
+      "get": {
+        "operationId": "clusters.instances.metrics.list",
+        "summary": "List one instance's heartbeat metric samples for trend charts",
+        "description": "Bounded heartbeat metric samples, newest first, for the instance detail\nsurface's trend charts and SLA evidence.",
+        "x-sdkwork-pagination-mode": "cursor",
+        "tags": [
+          "cluster"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.cluster.read",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of samples to return, newest first.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Metric sample history returned successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "items",
+                            "pageInfo"
+                          ],
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/ClusterHeartbeatSampleResponse"
+                              }
+                            },
+                            "pageInfo": {
+                              "$ref": "#/components/schemas/PageInfo"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
+    },
+    "/backend/v3/api/clusters/instances/{instanceId}/probe": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ClusterInstanceIdParam"
+        }
+      ],
+      "post": {
+        "operationId": "clusters.instances.probe",
+        "summary": "Probe one instance's connectivity and record the outcome",
+        "description": "Raw HTTP GET with a bounded timeout against the instance's probe URL\noverride, bind endpoint, or public endpoint (in that precedence).\nRecords the outcome through the auto-eject / auto-recover port: three\nconsecutive failures auto-eject the instance, any success recovers it.",
+        "tags": [
+          "cluster"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.cluster.write",
+        "x-sdkwork-rate-limit-tier": "auth-critical",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProbeClusterInstanceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Probe executed and recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/ClusterProbeRunResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
+    },
+    "/backend/v3/api/clusters/instances/{instanceId}/drain": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ClusterInstanceIdParam"
+        }
+      ],
+      "post": {
+        "operationId": "clusters.instances.drain",
+        "summary": "Gracefully drain one instance out of routing",
+        "description": "Excludes the instance from routing and lets in-flight work finish. The\nnode acknowledges completion through the internal drain-complete route,\nwhich clears the drain flags and marks the instance stopped.",
+        "tags": [
+          "cluster"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.cluster.write",
+        "x-sdkwork-rate-limit-tier": "auth-critical",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "responses": {
+          "200": {
+            "description": "Instance marked draining.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/ClusterInstanceResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
+    },
+    "/backend/v3/api/clusters/instances/{instanceId}/undrain": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ClusterInstanceIdParam"
+        }
+      ],
+      "post": {
+        "operationId": "clusters.instances.undrain",
+        "summary": "Clear the drain flag and restore routing participation",
+        "tags": [
+          "cluster"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.cluster.write",
+        "x-sdkwork-rate-limit-tier": "auth-critical",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "responses": {
+          "200": {
+            "description": "Instance rejoined the routing pool.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/ClusterInstanceResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
+    },
+    "/backend/v3/api/clusters/instances/{instanceId}/cordon": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ClusterInstanceIdParam"
+        }
+      ],
+      "post": {
+        "operationId": "clusters.instances.cordon",
+        "summary": "Cordon one instance out of routing without draining it",
+        "description": "The instance keeps serving in-flight work; new routed requests avoid it.",
+        "tags": [
+          "cluster"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.cluster.write",
+        "x-sdkwork-rate-limit-tier": "auth-critical",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "responses": {
+          "200": {
+            "description": "Instance cordoned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/ClusterInstanceResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
+    },
+    "/backend/v3/api/clusters/instances/{instanceId}/uncordon": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ClusterInstanceIdParam"
+        }
+      ],
+      "post": {
+        "operationId": "clusters.instances.uncordon",
+        "summary": "Uncordon one instance back into routing",
+        "tags": [
+          "cluster"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.cluster.write",
+        "x-sdkwork-rate-limit-tier": "auth-critical",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "responses": {
+          "200": {
+            "description": "Instance uncordoned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/ClusterInstanceResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
+    },
     "/backend/v3/api/clusters/messages": {
       "post": {
         "operationId": "clusters.messages.create",
@@ -6068,6 +6561,125 @@
           "reportedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "PublishClusterSyncRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "payload"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "config",
+              "applications"
+            ],
+            "description": "Desired-state track to publish."
+          },
+          "payload": {
+            "type": "object",
+            "description": "Track-specific desired-state payload; opaque to the transport."
+          }
+        }
+      },
+      "ClusterSyncManifest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "clusterId",
+          "kind",
+          "revision",
+          "sha256",
+          "payload",
+          "createdAt"
+        ],
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "config",
+              "applications"
+            ]
+          },
+          "revision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "Canonical payload digest the node verifies before applying."
+          },
+          "payload": {
+            "type": "object",
+            "description": "Track-specific desired-state payload; opaque to the transport."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ProbeClusterInstanceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 2048,
+            "default": "/",
+            "description": "Probe path; defaults to `/`."
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 10000,
+            "default": 3000,
+            "description": "Probe timeout, clamped to 100..=10000 ms."
+          }
+        }
+      },
+      "ClusterProbeRunResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "healthy",
+          "latencyMs",
+          "failures",
+          "ejected",
+          "recovered"
+        ],
+        "properties": {
+          "healthy": {
+            "type": "boolean",
+            "description": "Probe reached the instance and got a healthy answer."
+          },
+          "latencyMs": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Round-trip latency of the probe."
+          },
+          "failures": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Consecutive probe failures after this run; 0 when healthy."
+          },
+          "ejected": {
+            "type": "boolean",
+            "description": "Auto-eject transition happened on this run."
+          },
+          "recovered": {
+            "type": "boolean",
+            "description": "Auto-recovery transition happened on this run."
           }
         }
       },
@@ -7603,6 +8215,11 @@
           "failureCode": {
             "type": "string",
             "pattern": "^[A-Z0-9_]{1,64}$"
+          },
+          "failureDetail": {
+            "type": "string",
+            "maxLength": 512,
+            "description": "What the failure said, as the named provider worded it, redacted and bounded. The code classifies a failure; this is the part an operator acts on."
           },
           "createdAt": {
             "type": "string",
@@ -9157,6 +9774,27 @@
           "onlineInstanceCount": {
             "$ref": "#/components/schemas/Int64String"
           },
+          "lbStrategy": {
+            "type": "string",
+            "description": "Request routing strategy across the cluster's instances.",
+            "enum": [
+              "round_robin",
+              "weighted_round_robin",
+              "least_connections",
+              "random",
+              "random_two_choices",
+              "ip_hash",
+              "consistent_hash"
+            ]
+          },
+          "servedDomains": {
+            "type": "array",
+            "description": "Service domains auto-routed to this cluster's instances.",
+            "items": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -9199,6 +9837,28 @@
             "type": "integer",
             "minimum": 10,
             "maximum": 3600
+          },
+          "lbStrategy": {
+            "type": "string",
+            "description": "Request routing strategy; defaults to `round_robin` when omitted.",
+            "enum": [
+              "round_robin",
+              "weighted_round_robin",
+              "least_connections",
+              "random",
+              "random_two_choices",
+              "ip_hash",
+              "consistent_hash"
+            ]
+          },
+          "servedDomains": {
+            "type": "array",
+            "description": "Service domains auto-routed to this cluster's instances.",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
           }
         }
       },
@@ -9229,6 +9889,28 @@
             "type": "integer",
             "minimum": 10,
             "maximum": 3600
+          },
+          "lbStrategy": {
+            "type": "string",
+            "description": "Request routing strategy across the cluster's instances.",
+            "enum": [
+              "round_robin",
+              "weighted_round_robin",
+              "least_connections",
+              "random",
+              "random_two_choices",
+              "ip_hash",
+              "consistent_hash"
+            ]
+          },
+          "servedDomains": {
+            "type": "array",
+            "description": "Service domains auto-routed to this cluster's instances; replaces the whole list when present.",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
           }
         }
       },
@@ -9330,6 +10012,19 @@
           },
           "instanceCount": {
             "$ref": "#/components/schemas/Int64String"
+          },
+          "joinMode": {
+            "type": "string",
+            "description": "`LAN` = same-subnet host with shared-database or direct-API reachability; `TUNNEL` = API-only host reached through the reverse tunnel.",
+            "enum": [
+              "LAN",
+              "TUNNEL"
+            ]
+          },
+          "tunnelRouteDomain": {
+            "type": "string",
+            "description": "Tunnel route domain for `TUNNEL` hosts; absent on `LAN` hosts.",
+            "maxLength": 255
           },
           "createdAt": {
             "type": "string",
@@ -9468,6 +10163,95 @@
             "type": "object",
             "description": "Latest resource metrics snapshot (CPU/memory/connections)."
           },
+          "joinMode": {
+            "type": "string",
+            "description": "`LAN` = same-subnet member; `TUNNEL` = API-only member reached through the reverse tunnel.",
+            "enum": [
+              "LAN",
+              "TUNNEL"
+            ]
+          },
+          "qualityScore": {
+            "type": "integer",
+            "description": "Service quality 0-100 derived from the latest heartbeat sample.",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "desiredConfigRevision": {
+            "type": "string",
+            "description": "Desired configuration revision; absent until the cluster publishes one.",
+            "maxLength": 64
+          },
+          "appliedConfigRevision": {
+            "type": "string",
+            "description": "Configuration revision this instance last acknowledged as applied.",
+            "maxLength": 64
+          },
+          "desiredApplicationsRevision": {
+            "type": "string",
+            "description": "Desired applications-manifest revision; absent until the cluster publishes one.",
+            "maxLength": 64
+          },
+          "appliedApplicationsRevision": {
+            "type": "string",
+            "description": "Applications-manifest revision this instance last acknowledged as applied.",
+            "maxLength": 64
+          },
+          "syncStatus": {
+            "type": "string",
+            "description": "Aggregate desired-vs-applied sync status for this instance.",
+            "enum": [
+              "UNKNOWN",
+              "IN_SYNC",
+              "PENDING",
+              "FAILED"
+            ]
+          },
+          "routingEnabled": {
+            "type": "boolean",
+            "description": "Cordon switch: `false` keeps the instance serving but removes it from the routing pool."
+          },
+          "draining": {
+            "type": "boolean",
+            "description": "Graceful drain in progress."
+          },
+          "ejected": {
+            "type": "boolean",
+            "description": "Taken out of the routing pool by the active prober after consecutive failures."
+          },
+          "restartCount": {
+            "type": "integer",
+            "description": "Process restarts observed for this instance slot (auto-recovery evidence).",
+            "minimum": 0
+          },
+          "labels": {
+            "type": "object",
+            "description": "Operator labels.",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "routingWeight": {
+            "type": "integer",
+            "description": "Per-instance load balancing weight.",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "maintenanceNote": {
+            "type": "string",
+            "description": "Operator maintenance reason/context.",
+            "maxLength": 255
+          },
+          "probeFailures": {
+            "type": "integer",
+            "description": "Consecutive active-probe failures; reset on success.",
+            "minimum": 0
+          },
+          "probeUrl": {
+            "type": "string",
+            "description": "Active-probe target override.",
+            "maxLength": 255
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -9496,6 +10280,38 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 255
+          },
+          "routingEnabled": {
+            "type": "boolean",
+            "description": "Cordon switch: `false` removes the instance from the routing pool while it keeps serving."
+          },
+          "draining": {
+            "type": "boolean",
+            "description": "Graceful drain start/clear. Starting a drain also cordons routing."
+          },
+          "probeUrl": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Active-probe target override."
+          },
+          "labels": {
+            "type": "object",
+            "description": "Operator labels; replaces the whole map when present.",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "routingWeight": {
+            "type": "integer",
+            "description": "Per-instance load balancing weight override.",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "maintenanceNote": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "Operator maintenance reason/context."
           }
         }
       },

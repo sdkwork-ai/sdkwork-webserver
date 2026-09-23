@@ -410,4 +410,162 @@ mod tests {
         drop(first);
         assert!(table.try_acquire_stream(&id).is_ok());
     }
+
+    #[test]
+    fn reconnect_replacement_closes_the_superseded_connection() {
+        // Reconnect replacement must *close* the old transport, not merely
+        // forget it: a leaked connection would keep its QUIC resources and
+        // its agent-side loop alive until the idle sweep noticed.
+        let metrics = TunnelMetrics::new();
+        let table = SessionTable::new(4);
+        let first_connection = StubConnection::new();
+        let first = SessionId::parse("session_1").expect("valid id");
+        let second = SessionId::parse("session_2").expect("valid id");
+
+        assert!(
+            table
+                .insert(
+                    first.clone(),
+                    device("dev_a"),
+                    first_connection.clone(),
+                    &metrics
+                )
+                .is_none(),
+            "the first session replaces nothing"
+        );
+        let replaced = table.insert(
+            second.clone(),
+            device("dev_a"),
+            StubConnection::new(),
+            &metrics,
+        );
+        assert_eq!(replaced, Some(first.clone()));
+        assert!(
+            first_connection.closed.load(Ordering::Relaxed),
+            "the superseded connection must be closed"
+        );
+        assert!(table.connection(&first).is_none());
+        assert!(table.connection(&second).is_some());
+        assert_eq!(table.device_count(), 1, "one device, one session");
+    }
+
+    #[test]
+    fn idle_expiry_clears_the_device_index_and_the_stream_budget() {
+        let metrics = TunnelMetrics::new();
+        let table = SessionTable::new(4);
+        let id = SessionId::parse("session_1").expect("valid id");
+        let device_id = DeviceId::parse("dev_a").expect("valid id");
+        table.insert(id.clone(), device("dev_a"), StubConnection::new(), &metrics);
+
+        // A generous idle window keeps a fresh session alive.
+        assert!(table
+            .expire_idle(std::time::Duration::from_secs(3600), &metrics)
+            .is_empty());
+        assert_eq!(table.session_count(), 1);
+        assert!(table.is_connected(&device_id));
+        assert!(table.connection(&id).is_some());
+
+        // Once the heartbeat is stale the session, its device index entry,
+        // its connection and its stream budget must all go together —
+        // otherwise a reconnecting device inherits a stale stream budget or
+        // the device budget slowly leaks.
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        assert_eq!(
+            table.expire_idle(std::time::Duration::ZERO, &metrics),
+            vec![id.clone()]
+        );
+        assert_eq!(table.session_count(), 0);
+        assert_eq!(table.device_count(), 0);
+        assert!(!table.is_connected(&device_id));
+        assert!(table.connection(&id).is_none());
+        assert!(matches!(
+            table.try_acquire_stream(&id),
+            Err(TunnelError::SessionNotFound)
+        ));
+        // A second sweep is a no-op.
+        assert!(table
+            .expire_idle(std::time::Duration::ZERO, &metrics)
+            .is_empty());
+    }
+
+    #[test]
+    fn touch_rejects_an_unknown_session() {
+        let metrics = TunnelMetrics::new();
+        let table = SessionTable::new(4);
+        assert!(matches!(
+            table.touch(&SessionId::parse("session_ghost").expect("valid id")),
+            Err(TunnelError::SessionNotFound)
+        ));
+        assert_eq!(table.version(), 0, "a failed touch mutates nothing");
+    }
+
+    #[test]
+    fn snapshots_are_sorted_and_carry_their_route_ids() {
+        let metrics = TunnelMetrics::new();
+        let table = SessionTable::new(4);
+        for (session, device_id) in [("session_b", "dev_b"), ("session_a", "dev_a")] {
+            table.insert(
+                SessionId::parse(session).expect("valid id"),
+                device(device_id),
+                StubConnection::new(),
+                &metrics,
+            );
+        }
+        let mut routes: HashMap<SessionId, Vec<String>> = HashMap::new();
+        routes.insert(
+            SessionId::parse("session_a").expect("valid id"),
+            vec!["route_web".to_owned()],
+        );
+
+        let snapshots = table.snapshots(&routes);
+        let ids: Vec<String> = snapshots.iter().map(|s| s.id.to_string()).collect();
+        assert_eq!(ids, vec!["session_a", "session_b"], "stable API ordering");
+        assert_eq!(snapshots[0].route_ids, vec!["route_web".to_owned()]);
+        assert!(snapshots[1].route_ids.is_empty(), "no routes, no synthesis");
+        assert_eq!(snapshots[0].device_id.to_string(), "dev_a");
+        assert_eq!(snapshots[0].state, SessionState::Ready);
+    }
+
+    #[test]
+    fn device_budget_trips_at_the_limit() {
+        let metrics = TunnelMetrics::new();
+        let table = SessionTable::new(4);
+        assert!(!table.device_budget_exhausted(1));
+        table.insert(
+            SessionId::parse("session_a").expect("valid id"),
+            device("dev_a"),
+            StubConnection::new(),
+            &metrics,
+        );
+        assert!(
+            table.device_budget_exhausted(1),
+            "one device fills a budget of one"
+        );
+        assert!(!table.device_budget_exhausted(2));
+        assert_eq!(
+            table.device_ids(),
+            vec![DeviceId::parse("dev_a").expect("valid id")]
+        );
+        assert_eq!(
+            table.device_set(),
+            table.device_ids().into_iter().collect::<HashSet<_>>()
+        );
+    }
+
+    #[test]
+    fn remove_reports_the_entry_and_clears_the_device_index() {
+        let metrics = TunnelMetrics::new();
+        let table = SessionTable::new(4);
+        let id = SessionId::parse("session_1").expect("valid id");
+        let device_id = DeviceId::parse("dev_a").expect("valid id");
+        table.insert(id.clone(), device("dev_a"), StubConnection::new(), &metrics);
+        let entry = table.remove(&id, &metrics).expect("session present");
+        assert_eq!(entry.device.id, device_id);
+        assert!(
+            table.remove(&id, &metrics).is_none(),
+            "removal is idempotent"
+        );
+        assert!(!table.is_connected(&device_id));
+        assert_eq!(table.session_of_device(&device_id), None);
+    }
 }

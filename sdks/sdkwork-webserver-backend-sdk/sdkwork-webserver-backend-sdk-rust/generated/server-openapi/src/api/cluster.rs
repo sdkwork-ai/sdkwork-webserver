@@ -4,7 +4,7 @@ use crate::api::base::{RequestHeaders};
 use crate::api::paths::backend_path;
 use crate::api::paths::append_query_string;
 use crate::http::{SdkworkError, SdkworkHttpClient};
-use crate::models::{ClusterHostResponse, ClusterInstanceResponse, ClusterOverviewResponse, ClusterResponse, CreateClusterRequest, EnqueueClusterPeerMessagesRequest, EnqueueClusterPeerMessagesResponse, UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest};
+use crate::models::{ClusterHostResponse, ClusterInstanceResponse, ClusterOverviewResponse, ClusterProbeRunResponse, ClusterResponse, ClusterSyncManifest, CreateClusterRequest, EnqueueClusterPeerMessagesRequest, EnqueueClusterPeerMessagesResponse, ProbeClusterInstanceRequest, PublishClusterSyncRequest, UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest};
 
 #[derive(Clone)]
 pub struct ClusterApi {
@@ -66,6 +66,12 @@ impl ClusterApi {
             &[],
         );
         self.client.delete(&path, None, headers.as_ref()).await
+    }
+
+    /// Publish a desired-state revision to every instance of the cluster
+    pub async fn clusters_sync(&self, cluster_id: &str, body: &PublishClusterSyncRequest) -> Result<ClusterSyncManifest, SdkworkError> {
+        let path = backend_path(&format!("/clusters/{}/sync", serialize_path_parameter(cluster_id, PathParameterSpec::new("clusterId", "simple", false))));
+        self.client.post(&path, Some(body), None, None, Some("application/json")).await
     }
 
     /// List cluster hosts with system and network identity
@@ -180,6 +186,45 @@ impl ClusterApi {
         ]);
         let path = append_query_string(backend_path(&format!("/clusters/instances/{}/heartbeats", serialize_path_parameter(instance_id, PathParameterSpec::new("instanceId", "simple", false)))), &query);
         self.client.get(&path, None, None).await
+    }
+
+    /// List one instance's heartbeat metric samples for trend charts
+    pub async fn clusters_instances_metrics_list(&self, instance_id: &str, limit: Option<i64>) -> Result<serde_json::Value, SdkworkError> {
+        let query = build_query_string(&[
+            QueryParameterSpec::new("limit", limit, "form", true, false, None),
+        ]);
+        let path = append_query_string(backend_path(&format!("/clusters/instances/{}/metrics/history", serialize_path_parameter(instance_id, PathParameterSpec::new("instanceId", "simple", false)))), &query);
+        self.client.get(&path, None, None).await
+    }
+
+    /// Probe one instance's connectivity and record the outcome
+    pub async fn clusters_instances_probe(&self, instance_id: &str, body: &ProbeClusterInstanceRequest) -> Result<ClusterProbeRunResponse, SdkworkError> {
+        let path = backend_path(&format!("/clusters/instances/{}/probe", serialize_path_parameter(instance_id, PathParameterSpec::new("instanceId", "simple", false))));
+        self.client.post(&path, Some(body), None, None, Some("application/json")).await
+    }
+
+    /// Gracefully drain one instance out of routing
+    pub async fn clusters_instances_drain(&self, instance_id: &str) -> Result<ClusterInstanceResponse, SdkworkError> {
+        let path = backend_path(&format!("/clusters/instances/{}/drain", serialize_path_parameter(instance_id, PathParameterSpec::new("instanceId", "simple", false))));
+        self.client.post(&path, Option::<&serde_json::Value>::None, None, None, None).await
+    }
+
+    /// Clear the drain flag and restore routing participation
+    pub async fn clusters_instances_undrain(&self, instance_id: &str) -> Result<ClusterInstanceResponse, SdkworkError> {
+        let path = backend_path(&format!("/clusters/instances/{}/undrain", serialize_path_parameter(instance_id, PathParameterSpec::new("instanceId", "simple", false))));
+        self.client.post(&path, Option::<&serde_json::Value>::None, None, None, None).await
+    }
+
+    /// Cordon one instance out of routing without draining it
+    pub async fn clusters_instances_cordon(&self, instance_id: &str) -> Result<ClusterInstanceResponse, SdkworkError> {
+        let path = backend_path(&format!("/clusters/instances/{}/cordon", serialize_path_parameter(instance_id, PathParameterSpec::new("instanceId", "simple", false))));
+        self.client.post(&path, Option::<&serde_json::Value>::None, None, None, None).await
+    }
+
+    /// Uncordon one instance back into routing
+    pub async fn clusters_instances_uncordon(&self, instance_id: &str) -> Result<ClusterInstanceResponse, SdkworkError> {
+        let path = backend_path(&format!("/clusters/instances/{}/uncordon", serialize_path_parameter(instance_id, PathParameterSpec::new("instanceId", "simple", false))));
+        self.client.post(&path, Option::<&serde_json::Value>::None, None, None, None).await
     }
 
     /// Enqueue a peer message to one instance or broadcast to online members

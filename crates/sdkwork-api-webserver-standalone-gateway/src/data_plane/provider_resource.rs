@@ -425,6 +425,7 @@ mod tests {
             secure_link: None,
             compression: None,
             error_pages: Vec::new(),
+            cache_policy: None,
         }
     }
 

@@ -25,6 +25,22 @@ namespace SDKWork.WebserverBackendSdk.Models
         public string? LastOnlineAt { get; set; }
         public string UptimeSeconds { get; set; }
         public Dictionary<string, object> Metrics { get; set; }
+        public string? JoinMode { get; set; }
+        public int? QualityScore { get; set; }
+        public string? DesiredConfigRevision { get; set; }
+        public string? AppliedConfigRevision { get; set; }
+        public string? DesiredApplicationsRevision { get; set; }
+        public string? AppliedApplicationsRevision { get; set; }
+        public string? SyncStatus { get; set; }
+        public bool? RoutingEnabled { get; set; }
+        public bool? Draining { get; set; }
+        public bool? Ejected { get; set; }
+        public int? RestartCount { get; set; }
+        public Dictionary<string, string>? Labels { get; set; }
+        public int? RoutingWeight { get; set; }
+        public string? MaintenanceNote { get; set; }
+        public int? ProbeFailures { get; set; }
+        public string? ProbeUrl { get; set; }
         public string CreatedAt { get; set; }
         public string UpdatedAt { get; set; }
     }

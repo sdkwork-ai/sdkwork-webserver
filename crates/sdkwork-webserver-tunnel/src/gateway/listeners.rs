@@ -7,7 +7,7 @@
 //! [`GatewayShared`]: every critical section is map manipulation plus
 //! `tokio::spawn`, never an await.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use tokio::io::copy_bidirectional;
@@ -23,8 +23,14 @@ pub(crate) struct TcpListenerSet {
     route_ports: HashMap<RouteId, u16>,
 }
 
+/// One bound TCP port.
+///
+/// A gateway port is owned by exactly one route: the registry rejects a
+/// second route claiming the same port, and a TCP connection carries no
+/// routing key that could distinguish two routes sharing it (FRP
+/// `remote_port` semantics — one port, one target).
 struct PortState {
-    routes: HashSet<RouteId>,
+    route_id: RouteId,
     accept_task: tokio::task::JoinHandle<()>,
     /// Kept alive for as long as the port is served; dropping it stops
     /// accepting.
@@ -41,44 +47,53 @@ impl TcpListenerSet {
         route_id: RouteId,
         listener: TcpListener,
     ) {
-        self.route_ports.insert(route_id.clone(), port);
-        match self.ports.get_mut(&port) {
-            Some(state) => {
-                state.routes.insert(route_id);
-                // Should not happen (the registry admits one route per
-                // port); drop the spare listener.
-                drop(listener);
-            }
-            None => {
-                let listener = Arc::new(listener);
-                let accept_task = tokio::spawn(accept_loop(shared.clone(), port, listener.clone()));
-                self.ports.insert(
-                    port,
-                    PortState {
-                        routes: HashSet::from([route_id]),
-                        accept_task,
-                        _listener: listener,
-                    },
-                );
-                tracing::info!(port, "tunnel tcp listener bound");
-            }
+        if let Some(existing) = self.ports.get(&port) {
+            // The registry admits one route per port, so this only happens on
+            // a same-session hot update that never released the old claim.
+            tracing::warn!(
+                port,
+                owned_by = %existing.route_id,
+                requested_by = %route_id,
+                "tcp port is already served; dropping the duplicate listener"
+            );
+            drop(listener);
+            return;
         }
+        self.route_ports.insert(route_id.clone(), port);
+        let listener = Arc::new(listener);
+        let accept_task = tokio::spawn(accept_loop(shared.clone(), port, listener.clone()));
+        self.ports.insert(
+            port,
+            PortState {
+                route_id,
+                accept_task,
+                _listener: listener,
+            },
+        );
+        tracing::info!(port, "tunnel tcp listener bound");
     }
 
-    /// Releases one route's port claim, closing the listener when it was
-    /// the last route on the port.
+    /// Releases one route's port claim. A caller naming a route that does not
+    /// own the port is refused, so a stale teardown can never close a live
+    /// listener.
     pub(crate) fn release(&mut self, port: u16, route_id: &RouteId) {
         self.route_ports.remove(route_id);
-        let Some(state) = self.ports.get_mut(&port) else {
+        let Some(state) = self.ports.get(&port) else {
             return;
         };
-        state.routes.remove(route_id);
-        if state.routes.is_empty() {
-            if let Some(state) = self.ports.remove(&port) {
-                state.accept_task.abort();
-                drop(state._listener);
-                tracing::info!(port, "tunnel tcp listener released");
-            }
+        if &state.route_id != route_id {
+            tracing::debug!(
+                port,
+                owned_by = %state.route_id,
+                requested_by = %route_id,
+                "tcp port release refused: route does not own the port"
+            );
+            return;
+        }
+        if let Some(state) = self.ports.remove(&port) {
+            state.accept_task.abort();
+            drop(state._listener);
+            tracing::info!(port, "tunnel tcp listener released");
         }
     }
 
@@ -134,6 +149,14 @@ async fn relay(
     mut downstream: tokio::net::TcpStream,
     peer: std::net::SocketAddr,
 ) {
+    // Both hops of a TCP route are long-lived and often latency-bound (SSH is
+    // the canonical case, and its banner arrives before the visitor sends
+    // anything). Nagle would hold a small write until the previous one is
+    // acknowledged, so disable it on the visitor socket too; a failure costs
+    // latency, not correctness.
+    if let Err(error) = downstream.set_nodelay(true) {
+        tracing::debug!(%peer, port, error = %error, "could not disable Nagle on the visitor socket");
+    }
     match dispatch::connect_tcp_stream(&shared, port, peer.ip()).await {
         Ok(mut relayed) => {
             let outcome = copy_bidirectional(&mut downstream, &mut relayed).await;
@@ -172,5 +195,35 @@ mod tests {
         assert!(set.served_ports().is_empty());
         set.release_route(&route);
         assert!(set.route_ports.is_empty());
+    }
+
+    #[tokio::test]
+    async fn release_refuses_a_route_that_does_not_own_the_port() {
+        let mut set = TcpListenerSet::default();
+        let owner = RouteId::parse("route_owner").expect("valid id");
+        let intruder = RouteId::parse("route_intruder").expect("valid id");
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+        set.ports.insert(
+            port,
+            PortState {
+                route_id: owner.clone(),
+                accept_task: tokio::spawn(async {}),
+                _listener: Arc::new(listener),
+            },
+        );
+        set.route_ports.insert(owner.clone(), port);
+
+        set.release(port, &intruder);
+        assert!(
+            set.ports.contains_key(&port),
+            "a route that does not own the port must not close it"
+        );
+
+        set.release(port, &owner);
+        assert!(
+            !set.ports.contains_key(&port),
+            "the owning route releases the port"
+        );
     }
 }

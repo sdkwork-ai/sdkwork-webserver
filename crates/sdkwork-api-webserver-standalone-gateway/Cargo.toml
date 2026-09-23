@@ -13,6 +13,8 @@ management = [
   "dep:sdkwork-api-skills-assembly",
   "dep:sdkwork-api-mcp-assembly",
   "dep:sdkwork-database-sqlx",
+  "dep:sdkwork-database-id",
+  "dep:psl",
   "dep:sdkwork-web-axum",
   "dep:sdkwork-web-contract",
   "dep:sdkwork-web-store-sqlx",
@@ -87,6 +89,14 @@ zeroize.workspace = true
 sdkwork-database-sqlx = { workspace = true, optional = true }
 sdkwork-webserver-http-host = { workspace = true, optional = true }
 sdkwork-api-deployments-assembly = { workspace = true, optional = true }
+# Served-domain reconciliation writes `webserver_root_domain` /
+# `webserver_domain` directly (see `src/served_domains.rs`): it needs the same
+# identifier generator (`next_id` / `new_uuid`) every other writer of those
+# tables uses, so ids stay from one snowflake sequence.
+sdkwork-database-id = { workspace = true, optional = true }
+# Served hostnames fold to their registrable root the same way the Deployments
+# domain plane folds them.
+psl = { workspace = true, optional = true }
 sdkwork_deploy_contract = { workspace = true }
 sdkwork_deploy_core = { workspace = true }
 sdkwork-webserver-core.workspace = true

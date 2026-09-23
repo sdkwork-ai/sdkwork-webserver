@@ -48,6 +48,130 @@ class ClusterHeartbeatSampleResponse {
   }
 }
 
+class PublishClusterSyncRequest {
+  final String? kind;
+  final Map<String, dynamic>? payload;
+
+  PublishClusterSyncRequest({
+    this.kind,
+    this.payload
+  });
+
+  factory PublishClusterSyncRequest.fromJson(Map<String, dynamic> json) {
+    return PublishClusterSyncRequest(
+      kind: json['kind']?.toString(),
+      payload: _sdkworkAsMap(json['payload'])
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'kind': kind,
+      'payload': payload,
+    };
+  }
+}
+
+class ClusterSyncManifest {
+  final String? clusterId;
+  final String? kind;
+  final String? revision;
+  final String? sha256;
+  final Map<String, dynamic>? payload;
+  final String? createdAt;
+
+  ClusterSyncManifest({
+    this.clusterId,
+    this.kind,
+    this.revision,
+    this.sha256,
+    this.payload,
+    this.createdAt
+  });
+
+  factory ClusterSyncManifest.fromJson(Map<String, dynamic> json) {
+    return ClusterSyncManifest(
+      clusterId: json['clusterId']?.toString(),
+      kind: json['kind']?.toString(),
+      revision: json['revision']?.toString(),
+      sha256: json['sha256']?.toString(),
+      payload: _sdkworkAsMap(json['payload']),
+      createdAt: json['createdAt']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'clusterId': clusterId,
+      'kind': kind,
+      'revision': revision,
+      'sha256': sha256,
+      'payload': payload,
+      'createdAt': createdAt,
+    };
+  }
+}
+
+class ProbeClusterInstanceRequest {
+  final String? path;
+  final int? timeoutMs;
+
+  ProbeClusterInstanceRequest({
+    this.path,
+    this.timeoutMs
+  });
+
+  factory ProbeClusterInstanceRequest.fromJson(Map<String, dynamic> json) {
+    return ProbeClusterInstanceRequest(
+      path: json['path']?.toString(),
+      timeoutMs: json['timeoutMs'] is int ? json['timeoutMs'] : null
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'path': path,
+      'timeoutMs': timeoutMs,
+    };
+  }
+}
+
+class ClusterProbeRunResponse {
+  final bool? healthy;
+  final int? latencyMs;
+  final int? failures;
+  final bool? ejected;
+  final bool? recovered;
+
+  ClusterProbeRunResponse({
+    this.healthy,
+    this.latencyMs,
+    this.failures,
+    this.ejected,
+    this.recovered
+  });
+
+  factory ClusterProbeRunResponse.fromJson(Map<String, dynamic> json) {
+    return ClusterProbeRunResponse(
+      healthy: json['healthy'] is bool ? json['healthy'] : null,
+      latencyMs: json['latencyMs'] is int ? json['latencyMs'] : null,
+      failures: json['failures'] is int ? json['failures'] : null,
+      ejected: json['ejected'] is bool ? json['ejected'] : null,
+      recovered: json['recovered'] is bool ? json['recovered'] : null
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'healthy': healthy,
+      'latencyMs': latencyMs,
+      'failures': failures,
+      'ejected': ejected,
+      'recovered': recovered,
+    };
+  }
+}
+
 class EnqueueClusterPeerMessagesRequest {
   final String? clusterId;
   final String? toInstanceId;
@@ -1613,6 +1737,7 @@ class CertificateOperationResponse {
   final int? maxAttempts;
   final String? nextAttemptAt;
   final String? failureCode;
+  final String? failureDetail;
   final String? createdAt;
   final String? updatedAt;
   final String? completedAt;
@@ -1626,6 +1751,7 @@ class CertificateOperationResponse {
     this.maxAttempts,
     this.nextAttemptAt,
     this.failureCode,
+    this.failureDetail,
     this.createdAt,
     this.updatedAt,
     this.completedAt
@@ -1641,6 +1767,7 @@ class CertificateOperationResponse {
       maxAttempts: json['maxAttempts'] is int ? json['maxAttempts'] : null,
       nextAttemptAt: json['nextAttemptAt']?.toString(),
       failureCode: json['failureCode']?.toString(),
+      failureDetail: json['failureDetail']?.toString(),
       createdAt: json['createdAt']?.toString(),
       updatedAt: json['updatedAt']?.toString(),
       completedAt: json['completedAt']?.toString()
@@ -1657,6 +1784,7 @@ class CertificateOperationResponse {
       'maxAttempts': maxAttempts,
       'nextAttemptAt': nextAttemptAt,
       'failureCode': failureCode,
+      'failureDetail': failureDetail,
       'createdAt': createdAt,
       'updatedAt': updatedAt,
       'completedAt': completedAt,
@@ -3471,6 +3599,8 @@ class ClusterResponse {
   final String? hostCount;
   final String? instanceCount;
   final String? onlineInstanceCount;
+  final String? lbStrategy;
+  final List<String>? servedDomains;
   final String? createdAt;
   final String? updatedAt;
 
@@ -3485,6 +3615,8 @@ class ClusterResponse {
     this.hostCount,
     this.instanceCount,
     this.onlineInstanceCount,
+    this.lbStrategy,
+    this.servedDomains,
     this.createdAt,
     this.updatedAt
   });
@@ -3501,6 +3633,17 @@ class ClusterResponse {
       hostCount: json['hostCount']?.toString(),
       instanceCount: json['instanceCount']?.toString(),
       onlineInstanceCount: json['onlineInstanceCount']?.toString(),
+      lbStrategy: json['lbStrategy']?.toString(),
+      servedDomains: (() {
+        final list = _sdkworkAsList(json['servedDomains']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
       createdAt: json['createdAt']?.toString(),
       updatedAt: json['updatedAt']?.toString()
     );
@@ -3518,6 +3661,8 @@ class ClusterResponse {
       'hostCount': hostCount,
       'instanceCount': instanceCount,
       'onlineInstanceCount': onlineInstanceCount,
+      'lbStrategy': lbStrategy,
+      'servedDomains': servedDomains?.map((item) => item).toList(),
       'createdAt': createdAt,
       'updatedAt': updatedAt,
     };
@@ -3530,13 +3675,17 @@ class CreateClusterRequest {
   final String? description;
   final int? heartbeatIntervalSeconds;
   final int? offlineThresholdSeconds;
+  final String? lbStrategy;
+  final List<String>? servedDomains;
 
   CreateClusterRequest({
     this.name,
     this.code,
     this.description,
     this.heartbeatIntervalSeconds,
-    this.offlineThresholdSeconds
+    this.offlineThresholdSeconds,
+    this.lbStrategy,
+    this.servedDomains
   });
 
   factory CreateClusterRequest.fromJson(Map<String, dynamic> json) {
@@ -3545,7 +3694,18 @@ class CreateClusterRequest {
       code: json['code']?.toString(),
       description: json['description']?.toString(),
       heartbeatIntervalSeconds: json['heartbeatIntervalSeconds'] is int ? json['heartbeatIntervalSeconds'] : null,
-      offlineThresholdSeconds: json['offlineThresholdSeconds'] is int ? json['offlineThresholdSeconds'] : null
+      offlineThresholdSeconds: json['offlineThresholdSeconds'] is int ? json['offlineThresholdSeconds'] : null,
+      lbStrategy: json['lbStrategy']?.toString(),
+      servedDomains: (() {
+        final list = _sdkworkAsList(json['servedDomains']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })()
     );
   }
 
@@ -3556,6 +3716,8 @@ class CreateClusterRequest {
       'description': description,
       'heartbeatIntervalSeconds': heartbeatIntervalSeconds,
       'offlineThresholdSeconds': offlineThresholdSeconds,
+      'lbStrategy': lbStrategy,
+      'servedDomains': servedDomains?.map((item) => item).toList(),
     };
   }
 }
@@ -3566,13 +3728,17 @@ class UpdateClusterRequest {
   final int? status;
   final int? heartbeatIntervalSeconds;
   final int? offlineThresholdSeconds;
+  final String? lbStrategy;
+  final List<String>? servedDomains;
 
   UpdateClusterRequest({
     this.name,
     this.description,
     this.status,
     this.heartbeatIntervalSeconds,
-    this.offlineThresholdSeconds
+    this.offlineThresholdSeconds,
+    this.lbStrategy,
+    this.servedDomains
   });
 
   factory UpdateClusterRequest.fromJson(Map<String, dynamic> json) {
@@ -3581,7 +3747,18 @@ class UpdateClusterRequest {
       description: json['description']?.toString(),
       status: json['status'] is int ? json['status'] : null,
       heartbeatIntervalSeconds: json['heartbeatIntervalSeconds'] is int ? json['heartbeatIntervalSeconds'] : null,
-      offlineThresholdSeconds: json['offlineThresholdSeconds'] is int ? json['offlineThresholdSeconds'] : null
+      offlineThresholdSeconds: json['offlineThresholdSeconds'] is int ? json['offlineThresholdSeconds'] : null,
+      lbStrategy: json['lbStrategy']?.toString(),
+      servedDomains: (() {
+        final list = _sdkworkAsList(json['servedDomains']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })()
     );
   }
 
@@ -3592,6 +3769,8 @@ class UpdateClusterRequest {
       'status': status,
       'heartbeatIntervalSeconds': heartbeatIntervalSeconds,
       'offlineThresholdSeconds': offlineThresholdSeconds,
+      'lbStrategy': lbStrategy,
+      'servedDomains': servedDomains?.map((item) => item).toList(),
     };
   }
 }
@@ -3616,6 +3795,8 @@ class ClusterHostResponse {
   final int? status;
   final String? lastHeartbeatAt;
   final String? instanceCount;
+  final String? joinMode;
+  final String? tunnelRouteDomain;
   final String? createdAt;
   final String? updatedAt;
 
@@ -3639,6 +3820,8 @@ class ClusterHostResponse {
     this.status,
     this.lastHeartbeatAt,
     this.instanceCount,
+    this.joinMode,
+    this.tunnelRouteDomain,
     this.createdAt,
     this.updatedAt
   });
@@ -3682,6 +3865,8 @@ class ClusterHostResponse {
       status: json['status'] is int ? json['status'] : null,
       lastHeartbeatAt: json['lastHeartbeatAt']?.toString(),
       instanceCount: json['instanceCount']?.toString(),
+      joinMode: json['joinMode']?.toString(),
+      tunnelRouteDomain: json['tunnelRouteDomain']?.toString(),
       createdAt: json['createdAt']?.toString(),
       updatedAt: json['updatedAt']?.toString()
     );
@@ -3708,6 +3893,8 @@ class ClusterHostResponse {
       'status': status,
       'lastHeartbeatAt': lastHeartbeatAt,
       'instanceCount': instanceCount,
+      'joinMode': joinMode,
+      'tunnelRouteDomain': tunnelRouteDomain,
       'createdAt': createdAt,
       'updatedAt': updatedAt,
     };
@@ -3758,6 +3945,22 @@ class ClusterInstanceResponse {
   final String? lastOnlineAt;
   final String? uptimeSeconds;
   final Map<String, dynamic>? metrics;
+  final String? joinMode;
+  final int? qualityScore;
+  final String? desiredConfigRevision;
+  final String? appliedConfigRevision;
+  final String? desiredApplicationsRevision;
+  final String? appliedApplicationsRevision;
+  final String? syncStatus;
+  final bool? routingEnabled;
+  final bool? draining;
+  final bool? ejected;
+  final int? restartCount;
+  final Map<String, String>? labels;
+  final int? routingWeight;
+  final String? maintenanceNote;
+  final int? probeFailures;
+  final String? probeUrl;
   final String? createdAt;
   final String? updatedAt;
 
@@ -3781,6 +3984,22 @@ class ClusterInstanceResponse {
     this.lastOnlineAt,
     this.uptimeSeconds,
     this.metrics,
+    this.joinMode,
+    this.qualityScore,
+    this.desiredConfigRevision,
+    this.appliedConfigRevision,
+    this.desiredApplicationsRevision,
+    this.appliedApplicationsRevision,
+    this.syncStatus,
+    this.routingEnabled,
+    this.draining,
+    this.ejected,
+    this.restartCount,
+    this.labels,
+    this.routingWeight,
+    this.maintenanceNote,
+    this.probeFailures,
+    this.probeUrl,
     this.createdAt,
     this.updatedAt
   });
@@ -3806,6 +4025,35 @@ class ClusterInstanceResponse {
       lastOnlineAt: json['lastOnlineAt']?.toString(),
       uptimeSeconds: json['uptimeSeconds']?.toString(),
       metrics: _sdkworkAsMap(json['metrics']),
+      joinMode: json['joinMode']?.toString(),
+      qualityScore: json['qualityScore'] is int ? json['qualityScore'] : null,
+      desiredConfigRevision: json['desiredConfigRevision']?.toString(),
+      appliedConfigRevision: json['appliedConfigRevision']?.toString(),
+      desiredApplicationsRevision: json['desiredApplicationsRevision']?.toString(),
+      appliedApplicationsRevision: json['appliedApplicationsRevision']?.toString(),
+      syncStatus: json['syncStatus']?.toString(),
+      routingEnabled: json['routingEnabled'] is bool ? json['routingEnabled'] : null,
+      draining: json['draining'] is bool ? json['draining'] : null,
+      ejected: json['ejected'] is bool ? json['ejected'] : null,
+      restartCount: json['restartCount'] is int ? json['restartCount'] : null,
+      labels: (() {
+        final map = _sdkworkAsMap(json['labels']);
+        if (map == null) {
+          return null;
+        }
+        final result = <String, String>{};
+        map.forEach((key, item) {
+          final deserialized = item?.toString();
+          if (deserialized is String) {
+            result[key] = deserialized;
+          }
+        });
+        return result;
+      })(),
+      routingWeight: json['routingWeight'] is int ? json['routingWeight'] : null,
+      maintenanceNote: json['maintenanceNote']?.toString(),
+      probeFailures: json['probeFailures'] is int ? json['probeFailures'] : null,
+      probeUrl: json['probeUrl']?.toString(),
       createdAt: json['createdAt']?.toString(),
       updatedAt: json['updatedAt']?.toString()
     );
@@ -3832,6 +4080,22 @@ class ClusterInstanceResponse {
       'lastOnlineAt': lastOnlineAt,
       'uptimeSeconds': uptimeSeconds,
       'metrics': metrics,
+      'joinMode': joinMode,
+      'qualityScore': qualityScore,
+      'desiredConfigRevision': desiredConfigRevision,
+      'appliedConfigRevision': appliedConfigRevision,
+      'desiredApplicationsRevision': desiredApplicationsRevision,
+      'appliedApplicationsRevision': appliedApplicationsRevision,
+      'syncStatus': syncStatus,
+      'routingEnabled': routingEnabled,
+      'draining': draining,
+      'ejected': ejected,
+      'restartCount': restartCount,
+      'labels': labels?.map((key, item) => MapEntry(key, item)),
+      'routingWeight': routingWeight,
+      'maintenanceNote': maintenanceNote,
+      'probeFailures': probeFailures,
+      'probeUrl': probeUrl,
       'createdAt': createdAt,
       'updatedAt': updatedAt,
     };
@@ -3842,18 +4106,49 @@ class UpdateClusterInstanceRequest {
   final String? name;
   final int? status;
   final String? publicEndpoint;
+  final bool? routingEnabled;
+  final bool? draining;
+  final String? probeUrl;
+  final Map<String, String>? labels;
+  final int? routingWeight;
+  final String? maintenanceNote;
 
   UpdateClusterInstanceRequest({
     this.name,
     this.status,
-    this.publicEndpoint
+    this.publicEndpoint,
+    this.routingEnabled,
+    this.draining,
+    this.probeUrl,
+    this.labels,
+    this.routingWeight,
+    this.maintenanceNote
   });
 
   factory UpdateClusterInstanceRequest.fromJson(Map<String, dynamic> json) {
     return UpdateClusterInstanceRequest(
       name: json['name']?.toString(),
       status: json['status'] is int ? json['status'] : null,
-      publicEndpoint: json['publicEndpoint']?.toString()
+      publicEndpoint: json['publicEndpoint']?.toString(),
+      routingEnabled: json['routingEnabled'] is bool ? json['routingEnabled'] : null,
+      draining: json['draining'] is bool ? json['draining'] : null,
+      probeUrl: json['probeUrl']?.toString(),
+      labels: (() {
+        final map = _sdkworkAsMap(json['labels']);
+        if (map == null) {
+          return null;
+        }
+        final result = <String, String>{};
+        map.forEach((key, item) {
+          final deserialized = item?.toString();
+          if (deserialized is String) {
+            result[key] = deserialized;
+          }
+        });
+        return result;
+      })(),
+      routingWeight: json['routingWeight'] is int ? json['routingWeight'] : null,
+      maintenanceNote: json['maintenanceNote']?.toString()
     );
   }
 
@@ -3862,6 +4157,12 @@ class UpdateClusterInstanceRequest {
       'name': name,
       'status': status,
       'publicEndpoint': publicEndpoint,
+      'routingEnabled': routingEnabled,
+      'draining': draining,
+      'probeUrl': probeUrl,
+      'labels': labels?.map((key, item) => MapEntry(key, item)),
+      'routingWeight': routingWeight,
+      'maintenanceNote': maintenanceNote,
     };
   }
 }
@@ -5618,6 +5919,34 @@ class ClustersUpdateResponse {
   }
 }
 
+class ClustersSyncResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  ClustersSyncResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory ClustersSyncResponse.fromJson(Map<String, dynamic> json) {
+    return ClustersSyncResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
 class ClustersHostsListResponse {
   final int? code;
   final dynamic data;
@@ -5855,6 +6184,174 @@ class ClustersInstancesHeartbeatsListResponse {
 
   factory ClustersInstancesHeartbeatsListResponse.fromJson(Map<String, dynamic> json) {
     return ClustersInstancesHeartbeatsListResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ClustersInstancesMetricsListResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  ClustersInstancesMetricsListResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory ClustersInstancesMetricsListResponse.fromJson(Map<String, dynamic> json) {
+    return ClustersInstancesMetricsListResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ClustersInstancesProbeResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  ClustersInstancesProbeResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory ClustersInstancesProbeResponse.fromJson(Map<String, dynamic> json) {
+    return ClustersInstancesProbeResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ClustersInstancesDrainResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  ClustersInstancesDrainResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory ClustersInstancesDrainResponse.fromJson(Map<String, dynamic> json) {
+    return ClustersInstancesDrainResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ClustersInstancesUndrainResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  ClustersInstancesUndrainResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory ClustersInstancesUndrainResponse.fromJson(Map<String, dynamic> json) {
+    return ClustersInstancesUndrainResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ClustersInstancesCordonResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  ClustersInstancesCordonResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory ClustersInstancesCordonResponse.fromJson(Map<String, dynamic> json) {
+    return ClustersInstancesCordonResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ClustersInstancesUncordonResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  ClustersInstancesUncordonResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory ClustersInstancesUncordonResponse.fromJson(Map<String, dynamic> json) {
+    return ClustersInstancesUncordonResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()

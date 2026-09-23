@@ -1,5 +1,7 @@
 mod access;
+mod acme_webroot;
 mod auth_basic;
+pub mod cache_policy;
 mod compiled;
 mod discovery;
 mod error;
@@ -19,6 +21,7 @@ mod uri;
 mod validate;
 
 pub use access::{evaluate_access, AccessDecision};
+pub use acme_webroot::{AcmeWebrootReport, AcmeWebrootVerdict};
 pub use auth_basic::{
     apr1_hash, evaluate_auth_basic, parse_htpasswd, AuthBasicDecision, HtpasswdParseError,
 };
@@ -37,10 +40,13 @@ pub use loader::{
     CompiledWebServerRevision, WebServerConfigFileRevision, MAX_CONFIG_BYTES,
 };
 pub use model::{
-    AccessAction, AccessRuleConfig, AcmeHttp01Config, AppDomainFallbackConfig,
-    AppDomainFallbackLookup, AuthBasicConfig, AuthBasicUserConfig, CertificateConfig,
+    AccessAction, AccessRuleConfig, AcmeHttp01Config, ACME_HTTP_01_CHALLENGE_PREFIX,
+    AppDomainFallbackConfig,
+    AppDomainFallbackLookup, AuthBasicConfig, AuthBasicUserConfig, CachePolicyConfig,
+    CertificateConfig,
     CertificateSource, ClientAuthConfig, ClientAuthMode, ConfigProviderType, CustomHeaderConfig,
-    DeploymentConfig, ErrorPageConfig, GzipConfig, LimitConnConfig, LimitConnZoneConfig,
+    DeploymentConfig, ErrorPageConfig, ExpiresMode, GzipConfig, IfModifiedSinceMode,
+    LimitConnConfig, LimitConnZoneConfig,
     LimitReqConfig, LimitReqZoneConfig, ListenerConfig, ListenerProtocol, ListenerTlsRuntime,
     NginxConfig, ObservabilityConfig, ProviderCachePolicy, ProxyCacheConfig, ProxyProtocolConfig,
     ProxyProtocolCrc32cPolicy, ProxyProtocolVersion, ReloadConfig, ReloadMode, ResolverConfig,

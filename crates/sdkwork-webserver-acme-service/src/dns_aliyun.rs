@@ -16,7 +16,8 @@ use serde::Deserialize;
 use sha1::Sha1;
 
 use crate::dns::{
-    Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest, DnsProviderKind, ACME_CHALLENGE_LABEL,
+    Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest, DnsAccountVerification, DnsProviderKind,
+    ACME_CHALLENGE_LABEL,
 };
 use crate::dns_http::{json_request, DnsApiClient};
 use crate::{AcmeServiceError, AcmeServiceResult};
@@ -181,17 +182,67 @@ impl AliyunDns01Presenter {
         let response = self.client.send(request).await?;
         if !response.is_success() {
             // Aliyun reports failures as a JSON envelope with a stable code;
-            // that code is what makes a withdrawal idempotent.
+            // that code is what makes a withdrawal idempotent. The envelope is
+            // only used when it actually carries something: an empty
+            // `Code`/`Message` pair would otherwise replace a real diagnostic
+            // with `Aliyun rejected X: ()`, which reads like the provider said
+            // nothing and hides the HTTP status that did explain it.
             if let Ok(failure) = response.json::<AliyunErrorEnvelope>(DnsProviderKind::AliyunDns) {
-                return Err(AcmeServiceError::provider(format!(
-                    "Aliyun rejected {action}: {} ({})",
-                    failure.message, failure.code
-                )));
+                if !failure.code.trim().is_empty() || !failure.message.trim().is_empty() {
+                    return Err(AcmeServiceError::provider(format!(
+                        "Aliyun rejected {action}: {} ({})",
+                        failure.message.trim(),
+                        failure.code.trim()
+                    )));
+                }
             }
             response.ensure_success(DnsProviderKind::AliyunDns)?;
         }
         let body: AliyunResponse = response.json(DnsProviderKind::AliyunDns)?;
         Ok(body)
+    }
+
+    /// Reads the zone for one exact duplicate: same TXT owner, same value.
+    ///
+    /// `RRKeyWord` is a substring filter, so the match on the owner is re-checked
+    /// here in full — a substring hit with a longer owner (`_acme-challenge` vs
+    /// `_acme-challenge.sub`) must not be claimed as this record. Only owner and
+    /// value together prove the duplicate; a challenge for the same name with a
+    /// different value (the concurrent-order case the trait protects) is never
+    /// taken over.
+    async fn find_existing_record(
+        &self,
+        zone_apex: &str,
+        relative: &str,
+        value: &str,
+    ) -> AcmeServiceResult<Option<String>> {
+        let body = self
+            .call(
+                "DescribeDomainRecords",
+                &[
+                    ("DomainName", zone_apex),
+                    ("RRKeyWord", relative),
+                    ("TypeKeyWord", "TXT"),
+                    ("PageSize", "500"),
+                ],
+                &aliyun_timestamp(),
+                &aliyun_signature_nonce(),
+            )
+            .await?;
+        Ok(body
+            .domain_records
+            .unwrap_or_default()
+            .records
+            .into_iter()
+            .filter(|record| {
+                record
+                    .rr
+                    .as_deref()
+                    .map(|rr| rr.eq_ignore_ascii_case(relative))
+                    .unwrap_or(false)
+                    && record.value.as_deref() == Some(value)
+            })
+            .find_map(|record| record.record_id.filter(|id| !id.is_empty())))
     }
 }
 
@@ -201,10 +252,44 @@ impl Dns01Presenter for AliyunDns01Presenter {
         Some(DnsProviderKind::AliyunDns)
     }
 
+    /// Reads one page of the zone's records.
+    ///
+    /// A read rather than a write: the point is to find out whether the
+    /// credential works and the zone belongs to the account, and a probe that
+    /// published a record would leave debris behind every time an operator
+    /// checked their configuration. Aliyun answers a bad key with
+    /// `InvalidAccessKeyId.NotFound` and a zone outside the account with
+    /// `IncorrectDomainUser` / `InvalidDomainName.NotFound`, both of which name
+    /// the fix.
+    ///
+    /// Those refusals are re-reported as a configuration mistake, because a
+    /// caller that probes before it writes has to know whether this is the
+    /// operator's mistake or Aliyun's bad minute. Aliyun answers a rejected key
+    /// with `HTTP 400` plus a code rather than with a `401`, so the code is what
+    /// decides; `QuotaExceeded.*`, `Forbidden.RAM` and every code this module has
+    /// not been taught stay provider faults and can never block an order.
+    async fn verify_account(&self, zone_apex: &str) -> AcmeServiceResult<DnsAccountVerification> {
+        match self
+            .call(
+                "DescribeDomainRecords",
+                &[("DomainName", zone_apex), ("PageSize", "1")],
+                &aliyun_timestamp(),
+                &aliyun_signature_nonce(),
+            )
+            .await
+        {
+            Ok(_) => Ok(DnsAccountVerification::Verified),
+            Err(error) if aliyun_refusal_is_authority(&error.to_string()) => {
+                Err(AcmeServiceError::config(error.to_string()))
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     async fn publish(&self, request: &Dns01RecordRequest) -> AcmeServiceResult<Dns01RecordHandle> {
         let relative = request.relative_record_name()?;
         let ttl = CHALLENGE_TTL_SECONDS.to_string();
-        let body = self
+        let body = match self
             .call(
                 "AddDomainRecord",
                 &[
@@ -217,7 +302,39 @@ impl Dns01Presenter for AliyunDns01Presenter {
                 &aliyun_timestamp(),
                 &aliyun_signature_nonce(),
             )
-            .await?;
+            .await
+        {
+            Ok(body) => body,
+            // The trait requires that publishing a value the provider already
+            // holds must not fail: a lost create response — a timeout that lands
+            // after Aliyun accepted the write, a worker retrying after a crash —
+            // would otherwise stack a second TXT beside the first and walk the
+            // owner name toward Aliyun's per-name record ceiling. An exact read
+            // by owner *and* value resolves the duplicate into the record that
+            // is already there; anything the read cannot confirm re-raises the
+            // original refusal.
+            Err(error) => {
+                match self
+                    .find_existing_record(&request.zone_apex, &relative, &request.record_value)
+                    .await
+                {
+                    Ok(Some(record_ref)) => {
+                        tracing::debug!(
+                            record_name = %request.record_name,
+                            "the {ACME_CHALLENGE_LABEL} TXT record already exists at Aliyun; \
+                             reusing it instead of creating a second"
+                        );
+                        return Ok(Dns01RecordHandle {
+                            zone_apex: request.zone_apex.clone(),
+                            record_name: request.record_name.clone(),
+                            record_value: request.record_value.clone(),
+                            provider_record_ref: Some(record_ref),
+                        });
+                    }
+                    _ => return Err(error),
+                }
+            }
+        };
         let record_ref = body.record_id.filter(|id| !id.is_empty()).ok_or_else(|| {
             AcmeServiceError::provider("Aliyun accepted the presentation without a RecordId")
         })?;
@@ -260,6 +377,36 @@ fn is_missing_record(error: &AcmeServiceError) -> bool {
     message.contains(&format!("({ALIYUN_MISSING_RECORD_CODE})"))
 }
 
+/// Aliyun codes whose refusal proves the credential or the zone is wrong.
+///
+/// Taken from the DNS API reference's own error table:
+///
+/// * `InvalidAccessKeyId.NotFound` — the AccessKey does not exist.
+/// * `SignatureDoesNotMatch` — the secret is wrong (or the clock is outside the
+///   signing window, which is also a configuration mistake, not a transient one).
+/// * `IncorrectDomainUser` — "the domain name does not exist under this account".
+/// * `InvalidDomainName.NotFound` — the zone does not exist at all.
+///
+/// The last two are the *zone* half rather than the key half, and they belong
+/// here for the same reason: no retry will make a zone this account does not own
+/// become presentable.
+///
+/// Deliberately absent: `QuotaExceeded.Record` (Aliyun's 90-records-per-name
+/// ceiling) and `Forbidden.RAM` (a policy that may deny only this read). Both are
+/// real operator problems with a different fix, and neither proves the write
+/// would fail.
+const ALIYUN_AUTHORITY_CODES: [&str; 4] = [
+    "InvalidAccessKeyId.NotFound",
+    "SignatureDoesNotMatch",
+    "IncorrectDomainUser",
+    "InvalidDomainName.NotFound",
+];
+
+fn aliyun_refusal_is_authority(message: &str) -> bool {
+    crate::dns_http::refusal_is_auth_status(message)
+        || crate::dns_http::refusal_carries_code(message, &ALIYUN_AUTHORITY_CODES)
+}
+
 /// `base64(HMAC-SHA1(key = accessKeySecret + "&", message = stringToSign))`.
 pub(crate) fn sign_hmac_sha1(access_key_secret: &str, message: &[u8]) -> AcmeServiceResult<String> {
     let mut mac = Hmac::<Sha1>::new_from_slice(format!("{access_key_secret}&").as_bytes())
@@ -298,6 +445,25 @@ fn aliyun_signature_nonce() -> String {
 struct AliyunResponse {
     #[serde(rename = "RecordId", default)]
     record_id: Option<String>,
+    /// The page body of a `DescribeDomainRecords` call; absent on every write.
+    #[serde(rename = "DomainRecords", default)]
+    domain_records: Option<AliyunRecordsPage>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct AliyunRecordsPage {
+    #[serde(rename = "Record", default)]
+    records: Vec<AliyunRecord>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AliyunRecord {
+    #[serde(rename = "RecordId", default)]
+    record_id: Option<String>,
+    #[serde(rename = "RR", default)]
+    rr: Option<String>,
+    #[serde(rename = "Value", default)]
+    value: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -481,6 +647,56 @@ mod tests {
         assert_eq!(signature_nonce_from(1), "00000000000000000000000000000001");
     }
 
+    /// The probe is what tells an operator their AccessKey is wrong before a
+    /// certificate expires, so it must reach Aliyun's own message.
+    #[tokio::test]
+    async fn the_probe_reports_the_aliyun_error_for_a_bad_access_key() {
+        let state = Arc::new(StubState {
+            error_code: Some("InvalidAccessKeyId.NotFound"),
+            ..StubState::default()
+        });
+        let base_url = spawn_stub(state.clone()).await;
+        let presenter = presenter(base_url);
+
+        let message = presenter
+            .verify_account("example.com")
+            .await
+            .expect_err("must fail")
+            .to_string();
+        assert!(message.contains("InvalidAccessKeyId.NotFound"), "{message}");
+        assert!(message.contains("DescribeDomainRecords"), "{message}");
+
+        // Read-only: a probe must not leave a record behind.
+        let requests = state.requests.lock().expect("lock");
+        assert_eq!(
+            requests[0].get("Action").map(String::as_str),
+            Some("DescribeDomainRecords")
+        );
+        assert_eq!(
+            requests[0].get("DomainName").map(String::as_str),
+            Some("example.com")
+        );
+    }
+
+    #[tokio::test]
+    async fn an_acceptable_account_verifies_without_writing_a_record() {
+        let state = Arc::new(StubState::default());
+        let base_url = spawn_stub(state.clone()).await;
+        let presenter = presenter(base_url);
+
+        assert!(presenter
+            .verify_account("example.com")
+            .await
+            .expect("verified")
+            .is_verified());
+        let requests = state.requests.lock().expect("lock");
+        assert_eq!(requests.len(), 1);
+        assert!(
+            requests[0].get("Signature").is_some(),
+            "the probe is signed"
+        );
+    }
+
     #[tokio::test]
     async fn withdraw_tolerates_a_record_that_is_already_gone() {
         let state = Arc::new(StubState {
@@ -546,5 +762,129 @@ mod tests {
             &[("DomainName", "example.com")],
         );
         assert!(url.is_ok());
+    }
+
+    /// Aliyun answers a rejected key with `HTTP 400` plus a code rather than with
+    /// a `401`, so this is the case where reading the envelope is the only way to
+    /// tell a wrong AccessKey from a busy API.
+    #[tokio::test]
+    async fn a_refused_access_key_is_a_configuration_mistake() {
+        for code in ALIYUN_AUTHORITY_CODES {
+            let state = Arc::new(StubState {
+                error_code: Some(code),
+                ..StubState::default()
+            });
+            let base_url = spawn_stub(state).await;
+            let presenter = presenter(base_url);
+
+            let error = presenter
+                .verify_account("example.com")
+                .await
+                .expect_err("must fail");
+            assert!(
+                matches!(error, AcmeServiceError::Config(_)),
+                "{code} must be the operator's mistake, not a provider fault: {error:?}"
+            );
+            // The vendor's own code has to survive reclassification, or the
+            // operator cannot look it up in Aliyun's error table.
+            assert!(error.to_string().contains(code), "{code}: {error}");
+        }
+    }
+
+    /// The quarantine: the two codes that look like refusals but must never stop
+    /// an order. A quota is a real problem with a different fix, and a RAM policy
+    /// may deny only this read while allowing the write.
+    #[tokio::test]
+    async fn a_quota_or_policy_refusal_stays_a_provider_fault() {
+        for code in [
+            "QuotaExceeded.Record",
+            "Forbidden.RAM",
+            "RecordForbidden.BlackHole",
+        ] {
+            let state = Arc::new(StubState {
+                error_code: Some(code),
+                ..StubState::default()
+            });
+            let base_url = spawn_stub(state).await;
+            let presenter = presenter(base_url);
+
+            let error = presenter
+                .verify_account("example.com")
+                .await
+                .expect_err("must fail");
+            assert!(
+                matches!(error, AcmeServiceError::Provider(_)),
+                "{code} must not be reported as a configuration mistake: {error:?}"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod duplicate_publish_tests {
+    use super::*;
+    use axum::extract::Query;
+    use axum::response::{IntoResponse, Response};
+    use axum::{Json, Router};
+    use serde_json::{json, Value};
+    use std::collections::HashMap;
+
+    /// The vendor's own duplicate refusal followed by an exact read must come
+    /// back as success carrying the existing record's id — the trait's "publish
+    /// for a value that already exists must not fail". A record whose owner
+    /// matches only by substring, or whose value differs, is never claimed.
+    #[tokio::test]
+    async fn a_duplicate_publish_resolves_the_exact_existing_record() {
+        async fn handler(Query(params): Query<HashMap<String, String>>) -> Response {
+            match params.get("Action").map(String::as_str) {
+                Some("AddDomainRecord") => (
+                    http::StatusCode::BAD_REQUEST,
+                    Json(json!({
+                        "Code": "InvalidDomainRecord.Duplicate",
+                        "Message": "duplicate"
+                    })),
+                )
+                    .into_response(),
+                Some("DescribeDomainRecords") => Json(json!({
+                    "DomainRecords": { "Record": [
+                        { "RecordId": "aliyun-rec-sub", "RR": "_acme-challenge.sub",
+                          "Value": "digest-1" },
+                        { "RecordId": "aliyun-rec-stale", "RR": "_acme-challenge",
+                          "Value": "digest-0" },
+                        { "RecordId": "aliyun-rec-exact", "RR": "_acme-challenge",
+                          "Value": "digest-1" }
+                    ]}
+                }))
+                .into_response(),
+                _ => Json(json!({ "RecordId": "aliyun-rec-9" })).into_response(),
+            }
+        }
+        let app = Router::new().route("/", axum::routing::get(handler));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind stub");
+        let address = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        let presenter = AliyunDns01Presenter::with_base_url(
+            DnsApiClient::new_allowing_plaintext().expect("client"),
+            "testid",
+            "testsecret",
+            format!("http://{address}"),
+        )
+        .expect("presenter");
+        let request =
+            Dns01RecordRequest::new("example.com", "_acme-challenge.example.com", "digest-1")
+                .expect("request");
+
+        let handle = presenter
+            .publish(&request)
+            .await
+            .expect("a duplicate must not fail the publish");
+        assert_eq!(
+            handle.provider_record_ref.as_deref(),
+            Some("aliyun-rec-exact")
+        );
     }
 }

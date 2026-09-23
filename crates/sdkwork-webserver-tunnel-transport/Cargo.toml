@@ -16,6 +16,7 @@ rand.workspace = true
 rcgen = { workspace = true, features = ["crypto", "pem", "aws_lc_rs"] }
 rustls.workspace = true
 sdkwork-webserver-tunnel-core.workspace = true
+sdkwork-utils-rust.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true

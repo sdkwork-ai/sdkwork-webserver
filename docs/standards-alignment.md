@@ -178,6 +178,32 @@ approval. Normative requirements are owned by `../sdkwork-specs`.
   verification and A/B recovery slots. HTTP-01 challenges are served by the data plane listener
   that configures `acmeHttp01.webroot` (narrow exact-path endpoint only). External Nginx artifact
   activation remains a documented optional legacy path outside the certificate lifecycle.
+- Challenge selection is declared once and resolved in one place
+  (`SDKWORK_WEBSERVER_ACME_CHALLENGE_METHOD`: `AUTO` | `HTTP_01` | `DNS_01`). `AUTO` — the default —
+  issues single-domain certificates over HTTP-01 and requires DNS-01 for wildcards, because a
+  wildcard cannot be validated over HTTP-01 at all. An explicit method that its prerequisites
+  cannot satisfy fails with an actionable error instead of silently falling back.
+- DNS-01 is reachable: `SDKWORK_WEBSERVER_ACME_DNS_ACCOUNTS_FILE` (JSON, credentials in the file,
+  never in the runtime config) populates the cloud-account registry that the issuer is given at
+  bootstrap. Without it the registry stays empty, every order takes the HTTP-01 path, and every
+  wildcard fails — the registry is no longer constructed-but-unattached, and its absence is a
+  named startup warning rather than a certificate failure discovered in a renewal window.
+- The HTTP-01 rendezvous is enforced, not assumed: the certificate worker writes tokens to
+  `SDKWORK_WEBSERVER_ACME_WEBROOT` while the data plane serves `listeners[].acmeHttp01.webroot`,
+  and compilation compares the two. A proven disagreement fails startup in production-like
+  environments (warn-only elsewhere), naming both paths, the variable, and the 404 the CA would
+  otherwise report. The standalone container entrypoint declares the challenge location on both
+  its TLS and plaintext edges from that same variable, so the two cannot drift by construction.
+- Certificate material and its serving path derive from one resolver
+  (`SDKWORK_WEBSERVER_CERT_LIVE_ROOT`, with `SDKWORK_WEBSERVER_CERTS_LETS_ENCRYPT_DIR` kept as an
+  alias): the worker's material root and the edge's `ssl_certificate` path cannot be moved apart.
+  Platform-default roots are computed, never hardcoded — `/etc/sdkwork/certs/letsencrypt` on Linux,
+  `%ProgramData%\sdkwork\certs\letsencrypt` on Windows.
+- Generated configuration is safe to parse on both platforms: paths this entrypoint emits into
+  Nginx syntax or TOML basic strings are normalized to forward slashes, because both parsers treat
+  a backslash as an escape introducer and accept the result silently — a Windows path would
+  otherwise turn `\t` into a tab (`root D:\space\…\tmp\acme`) or fail the TOML load outright
+  (`Unescaped '\' in a string`).
 - Certificate listener convergence processes each candidate in its own short row-locked
   transaction with a status guard (idempotent under concurrent workers) instead of one long
   transaction spanning hundreds of statements; agent certificate observations are batch-bounded.

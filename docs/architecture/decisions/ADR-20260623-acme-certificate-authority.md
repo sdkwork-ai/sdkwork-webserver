@@ -4,7 +4,8 @@ Status: accepted
 Requirement: REQ-2026-0002
 Owner: SDKWork maintainers
 Date: 2026-06-23
-Updated: 2026-08-03 (self-hosted data plane semantics, durable accounts, revocation, ARI)
+Updated: 2026-08-03 (self-hosted data plane semantics, durable accounts, revocation, ARI);
+2026-09-22 (cross-platform certificate root, challenge-method policy, nginx plane declaration)
 Specs: ARCHITECTURE_DECISION_SPEC.md, SECURITY_SPEC.md, SUPPLY_CHAIN_SECURITY_SPEC.md
 
 ## Context
@@ -25,6 +26,10 @@ SDKWork Web Server 需要在控制面内嵌 **免费 TLS 证书自动签发与�
 3. **自签名（开发/内网）**：采用 **[rcgen](https://github.com/rustls/rcgen)** 生成 `certType=3` 证书，不触网。
 4. **TLS 信任链与存储格式**：链路与节点落地使用 PEM；所有签发路径在统一出口使用 **x509-parser** 重新解析叶证书，并验证请求 SAN/算法、当前有效期、PKCS#8 私钥与叶证书 SPKI 配对以及返回元数据一致性后才允许持久化。
 5. **V1 验证方式**：**HTTP-01**。挑战 token 由证书 worker 原子写入 webroot，自建数据面监听器通过 **窄优先级端点**（`acmeHttp01.webroot` 配置驱动）只服务精确的 `/.well-known/acme-challenge/<token>` 路径：不暴露目录、不接受任意 token、不覆盖其他路由、挑战结束后清理。DNS-01 与 wildcard 延后至 Phase 3。
+   两种配置面表达同一端点：JSON 面写 `listeners[].acmeHttp01.webroot`；nginx 面写
+   `location ^~ /.well-known/acme-challenge/ { root <webroot>; }`，由物化器识别为该监听器的
+   `acmeHttp01`（**不是**普通静态路由 —— 普通路由没有窄优先级、token 字符集校验与 fail-closed 语义）。
+   单域名默认 HTTP-01，泛域名默认 DNS-01；由 `challenge_method`（`AUTO`/`HTTP_01`/`DNS_01`）统一裁决。
 6. **不引入 Certbot/acme.sh 运行时依赖** 作为 V1 默认路径；若治理批准，可作为灾备运维工具，但不写入产品默认架构。
 7. **证书落地自建 TLS 运行时**：签发/续期成功后，worker 将节点 listener 绑定投影为版本化 TLS 材料（`material_root/<version-uuid>/fullchain.pem + privkey.pem`）与单调 `tls-runtime.json` 快照；数据面 `FileTlsRuntimeController` 轮询快照并热加载 Rustls 配置（A/B 恢复槽、指纹/有效期/SNI 校验）。外部 Nginx 边沿激活仅保留为文档标注的可选遗留路径，不参与证书生命周期。
 8. **持久化 ACME 账户**：账户凭证经主密钥派生密钥 AES-256-GCM 加密后按 CA directory 写入 `SDKWORK_WEBSERVER_ACME_ACCOUNT_ROOT`（0600、原子写），签发/续期/撤销/ARI 复用同一账户，避免 LE 账户创建限流并保留账户身份。
@@ -49,7 +54,16 @@ SDKWork Web Server 需要在控制面内嵌 **免费 TLS 证书自动签发与�
 
 - Cargo workspace 新增 `instant-acme`、`rcgen` 依赖；需在 `SUPPLY_CHAIN_SECURITY_SPEC.md` 流程中登记 license 与版本 pin。
 - `certificates.issue` 持久化异步 ACME 操作并返回 HTTP `202` 标准异步数据；完成后写入不可变证书版本、更新 `webserver_certificate` 聚合并触发节点 TLS 材料发布。
-- HTTP-01 要求自建数据面监听器配置 `acmeHttp01.webroot`，且 worker 的 `SDKWORK_WEBSERVER_ACME_WEBROOT` 指向同一目录；验证窗口内该监听器必须公网可达。
+- HTTP-01 要求自建数据面监听器配置 `acmeHttp01.webroot`，且 worker 的 `SDKWORK_WEBSERVER_ACME_WEBROOT` 指向同一目录；验证窗口内该监听器必须公网可达。两侧不一致时编译期即判定：生产类似环境**拒绝启动**，其他环境 WARN（`WebServerAppConfig` → `CompiledWebServerApp::compile` 的 rendezvous 校验）。
+- 容器形态的公网边沿由 `bin/container/entrypoint-standalone.sh` 生成
+  `imports.d/product-edge-nginx.conf`，其中每个 server 块都声明上述挑战 location，`root` 直接取
+  `SDKWORK_WEBSERVER_ACME_WEBROOT`（与 worker 写入目标同源）。缺失它会让挑战路径落进
+  `location /` 被反代到应用壳从而对 CA 返回 404。
+- ⚠️ 向 nginx 指令或 TOML basic string 写路径必须用 `/`：两个解析器都把 `\` 当转义引导符，且都**静默**接受结果。
+  运行时 nginx 词法器忠于 `ngx_conf_read_token`，`\t`/`\r`/`\n` 是转义序列，Windows 路径里的 `\tmp` 会被读成 TAB；
+  运行时 TOML 则在 `\s` 上直接报 `Unescaped '\' in a string`，使整个 `config.toml` 加载失败。入口统一经
+  `posix_path()` 归一化；手工编写的 conf/TOML 需自行用 `/` 或 TOML 的 `\\`。证书根同理：worker 的
+  `SDKWORK_WEBSERVER_CERT_LIVE_ROOT` 与边沿 `ssl_certificate` 共用 `lets_encrypt_certs_root()` 一个来源。
 - ACME 证书自动续期默认在到期前 30 天启动（ARI 窗口优先）；失败写入 `renewal_status=3` 并告警。自签名证书仅支持显式手动重签，不进入自动续期扫描。
 - Staging CA 签发证书不受浏览器信任，仅用于联调；生产 profile 必须显式指向 LE 生产目录。
 - 生产-like 环境必须配置 `SDKWORK_WEBSERVER_ACME_ACCOUNT_ROOT`（账户持久化）与 `SDKWORK_WEBSERVER_NODE_UUID`（TLS 材料分发），否则启动失败或跳过分发并告警。
@@ -57,7 +71,8 @@ SDKWork Web Server 需要在控制面内嵌 **免费 TLS 证书自动签发与�
 ## Verification
 
 - 单元测试：acme-service 自签/材料校验/账户存储/挑战存储/revoke 原因/ARI 标识派生。
-- 集成测试：`pebble_lifecycle.rs`（`#[ignore]`，需本地 pebble + pebble-challtestsrv）对本地 ACME CA 完成完整 HTTP-01 签发闭环、账户持久化复用断言；数据面 `data_plane_integration.rs` 验证 HTTP-01 窄优先级端点行为。
+- 集成测试：`pebble_lifecycle.rs`（`#[ignore]`，需本地 pebble + pebble-challtestsrv）对本地 ACME CA 完成完整 HTTP-01 签发闭环、账户持久化复用断言，以及泛域名 `*.host` + apex 的 DNS-01 闭环；数据面 `data_plane_integration.rs` 验证 HTTP-01 窄优先级端点行为，其中一条**从 nginx 产物驱动**（`spawn_data_plane_from_nginx`），覆盖容器部署形态而非仅 JSON 形态。
+- nginx 平面：`nginx_config_surface.rs` 断言挑战 location 物化/编译为监听器 `acmeHttp01` 且不产生静态路由；`nginx::mapping` 单测覆盖跨域名共享 webroot、同监听器冲突 webroot 失败、带 `proxy_pass` 时不重解释、缺 `root` 时 fail-closed。
 - 仓库 parity 测试：enqueue/claim/finalize/续期调度（ARI 窗口优先）/撤销/租约围栏。
 - `pnpm verify` 与 `cargo test --workspace` 通过。
 

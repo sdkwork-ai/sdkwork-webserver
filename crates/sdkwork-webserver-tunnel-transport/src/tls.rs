@@ -294,7 +294,7 @@ impl PinnedServerVerifier {
         end_entity: &rustls::pki_types::CertificateDer<'_>,
     ) -> std::result::Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
         let actual = certificate_sha256_hex(end_entity.as_ref());
-        if constant_time_eq(actual.as_bytes(), self.expected_sha256.as_bytes()) {
+        if sdkwork_utils_rust::crypto::secure_compare(&actual, &self.expected_sha256) {
             Ok(rustls::client::danger::ServerCertVerified::assertion())
         } else {
             tracing::warn!(
@@ -358,16 +358,6 @@ impl rustls::client::danger::ServerCertVerifier for PinnedServerVerifier {
     fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
         self.schemes()
     }
-}
-
-fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
-    if left.len() != right.len() {
-        return false;
-    }
-    left.iter()
-        .zip(right)
-        .fold(0_u8, |acc, (a, b)| acc | (a ^ b))
-        == 0
 }
 
 #[cfg(test)]

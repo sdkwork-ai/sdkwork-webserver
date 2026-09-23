@@ -2,7 +2,7 @@ module Sdkwork
   module BackendSdk
     module Models
       class ClusterResponse
-              attr_accessor :id, :name, :code, :description, :status, :heartbeat_interval_seconds, :offline_threshold_seconds, :host_count, :instance_count, :online_instance_count, :created_at, :updated_at
+              attr_accessor :id, :name, :code, :description, :status, :heartbeat_interval_seconds, :offline_threshold_seconds, :host_count, :instance_count, :online_instance_count, :lb_strategy, :served_domains, :created_at, :updated_at
 
               def initialize(attributes = {})
                 attributes = (attributes || {}).transform_keys(&:to_s)
@@ -16,6 +16,8 @@ module Sdkwork
                 @host_count = attributes['hostCount']
                 @instance_count = attributes['instanceCount']
                 @online_instance_count = attributes['onlineInstanceCount']
+                @lb_strategy = attributes['lbStrategy']
+                @served_domains = attributes['servedDomains'].is_a?(Array) ? attributes['servedDomains'].map { |item| item } : []
                 @created_at = attributes['createdAt']
                 @updated_at = attributes['updatedAt']
               end
@@ -38,6 +40,8 @@ module Sdkwork
                   'hostCount' => @host_count,
                   'instanceCount' => @instance_count,
                   'onlineInstanceCount' => @online_instance_count,
+                  'lbStrategy' => @lb_strategy,
+                  'servedDomains' => @served_domains.is_a?(Array) ? @served_domains.map { |item| item } : [],
                   'createdAt' => @created_at,
                   'updatedAt' => @updated_at,
                 }

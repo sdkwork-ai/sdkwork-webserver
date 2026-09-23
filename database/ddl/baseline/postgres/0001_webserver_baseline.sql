@@ -487,6 +487,7 @@ CREATE TABLE IF NOT EXISTS webserver_certificate_operation (
     lease_expires_at     TIMESTAMPTZ,
     fencing_token        BIGINT       NOT NULL DEFAULT 0,
     failure_code         VARCHAR(64),
+    failure_detail       VARCHAR(512),
     idempotency_key_hash VARCHAR(64),
     request_sha256       VARCHAR(64)  NOT NULL,
     created_at           TIMESTAMPTZ  NOT NULL,
@@ -512,6 +513,11 @@ CREATE TABLE IF NOT EXISTS webserver_certificate_operation (
         (status = 'RUNNING' AND lease_owner IS NOT NULL AND lease_expires_at IS NOT NULL)
         OR (status <> 'RUNNING' AND lease_owner IS NULL AND lease_expires_at IS NULL)
     ),
+    -- A diagnostic without a code would be a ghost failure: the console keys its
+    -- copy off the code, so the pair is only meaningful together.
+    CONSTRAINT chk_webserver_certificate_operation_failure_detail CHECK (
+        failure_detail IS NULL OR failure_code IS NOT NULL
+    ),
     CONSTRAINT chk_webserver_certificate_operation_completion CHECK (
         (status IN ('SUCCEEDED', 'FAILED') AND completed_at IS NOT NULL)
         OR (status IN ('PENDING', 'RUNNING') AND completed_at IS NULL)
@@ -521,6 +527,7 @@ CREATE TABLE IF NOT EXISTS webserver_certificate_operation (
 COMMENT ON TABLE webserver_certificate_operation IS 'Durable certificate issuance and renewal operation with lease fencing and bounded retry';
 COMMENT ON COLUMN webserver_certificate_operation.idempotency_key_hash IS 'SHA-256 of the tenant, actor, operation scope, and raw Idempotency-Key; raw keys are never stored';
 COMMENT ON COLUMN webserver_certificate_operation.request_sha256 IS 'Canonical request fingerprint used to reject conflicting idempotency-key replay';
+COMMENT ON COLUMN webserver_certificate_operation.failure_detail IS 'What the failure actually said: the provider's own diagnostic, redacted and bounded, so an operator can act on it without reading the server log';
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_webserver_certificate_operation_idempotency
     ON webserver_certificate_operation (tenant_id, idempotency_key_hash)
@@ -1283,6 +1290,7 @@ CREATE TABLE IF NOT EXISTS webserver_certificate_operation (
     lease_expires_at     TIMESTAMPTZ,
     fencing_token        BIGINT       NOT NULL DEFAULT 0,
     failure_code         VARCHAR(64),
+    failure_detail       VARCHAR(512),
     idempotency_key_hash VARCHAR(64),
     request_sha256       VARCHAR(64)  NOT NULL,
     created_at           TIMESTAMPTZ  NOT NULL,
@@ -1307,6 +1315,11 @@ CREATE TABLE IF NOT EXISTS webserver_certificate_operation (
     CONSTRAINT chk_webserver_certificate_operation_lease CHECK (
         (status = 'RUNNING' AND lease_owner IS NOT NULL AND lease_expires_at IS NOT NULL)
         OR (status <> 'RUNNING' AND lease_owner IS NULL AND lease_expires_at IS NULL)
+    ),
+    -- A diagnostic without a code would be a ghost failure: the console keys its
+    -- copy off the code, so the pair is only meaningful together.
+    CONSTRAINT chk_webserver_certificate_operation_failure_detail CHECK (
+        failure_detail IS NULL OR failure_code IS NOT NULL
     ),
     CONSTRAINT chk_webserver_certificate_operation_completion CHECK (
         (status IN ('SUCCEEDED', 'FAILED') AND completed_at IS NOT NULL)

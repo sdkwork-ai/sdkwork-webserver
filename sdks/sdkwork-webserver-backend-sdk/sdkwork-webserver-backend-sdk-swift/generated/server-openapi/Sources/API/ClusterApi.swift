@@ -54,6 +54,11 @@ public class ClusterApi {
         _ = try await client.delete(ApiPaths.backendPath("/clusters/\(serializePathParameter(clusterId, PathParameterSpec(name: "clusterId", style: "simple", explode: false)))"), params: nil, headers: requestHeaders)
     }
 
+    /// Publish a desired-state revision to every instance of the cluster
+    public func clustersSync(clusterId: String, body: PublishClusterSyncRequest) async throws -> ClustersSyncResponse? {
+        return try await client.post(ApiPaths.backendPath("/clusters/\(serializePathParameter(clusterId, PathParameterSpec(name: "clusterId", style: "simple", explode: false)))/sync"), body: body, params: nil, headers: nil, contentType: "application/json", responseType: ClustersSyncResponse.self)
+    }
+
     /// List cluster hosts with system and network identity
     public func clustersHostsList(pageSize: Int? = nil, cursor: String? = nil, clusterId: String? = nil, status: Int? = nil) async throws -> ClustersHostsListResponse? {
         let query = buildQueryString([
@@ -155,6 +160,39 @@ public class ClusterApi {
             QueryParameterSpec(name: "cursor", value: cursor, style: "form", explode: true, allowReserved: false, contentType: nil)
         ])
         return try await client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/clusters/instances/\(serializePathParameter(instanceId, PathParameterSpec(name: "instanceId", style: "simple", explode: false)))/heartbeats"), query), responseType: ClustersInstancesHeartbeatsListResponse.self)
+    }
+
+    /// List one instance's heartbeat metric samples for trend charts
+    public func clustersInstancesMetricsList(instanceId: String, limit: Int? = nil) async throws -> ClustersInstancesMetricsListResponse? {
+        let query = buildQueryString([
+            QueryParameterSpec(name: "limit", value: limit, style: "form", explode: true, allowReserved: false, contentType: nil)
+        ])
+        return try await client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/clusters/instances/\(serializePathParameter(instanceId, PathParameterSpec(name: "instanceId", style: "simple", explode: false)))/metrics/history"), query), responseType: ClustersInstancesMetricsListResponse.self)
+    }
+
+    /// Probe one instance's connectivity and record the outcome
+    public func clustersInstancesProbe(instanceId: String, body: ProbeClusterInstanceRequest? = nil) async throws -> ClustersInstancesProbeResponse? {
+        return try await client.post(ApiPaths.backendPath("/clusters/instances/\(serializePathParameter(instanceId, PathParameterSpec(name: "instanceId", style: "simple", explode: false)))/probe"), body: body, params: nil, headers: nil, contentType: "application/json", responseType: ClustersInstancesProbeResponse.self)
+    }
+
+    /// Gracefully drain one instance out of routing
+    public func clustersInstancesDrain(instanceId: String) async throws -> ClustersInstancesDrainResponse? {
+        return try await client.post(ApiPaths.backendPath("/clusters/instances/\(serializePathParameter(instanceId, PathParameterSpec(name: "instanceId", style: "simple", explode: false)))/drain"), body: nil, responseType: ClustersInstancesDrainResponse.self)
+    }
+
+    /// Clear the drain flag and restore routing participation
+    public func clustersInstancesUndrain(instanceId: String) async throws -> ClustersInstancesUndrainResponse? {
+        return try await client.post(ApiPaths.backendPath("/clusters/instances/\(serializePathParameter(instanceId, PathParameterSpec(name: "instanceId", style: "simple", explode: false)))/undrain"), body: nil, responseType: ClustersInstancesUndrainResponse.self)
+    }
+
+    /// Cordon one instance out of routing without draining it
+    public func clustersInstancesCordon(instanceId: String) async throws -> ClustersInstancesCordonResponse? {
+        return try await client.post(ApiPaths.backendPath("/clusters/instances/\(serializePathParameter(instanceId, PathParameterSpec(name: "instanceId", style: "simple", explode: false)))/cordon"), body: nil, responseType: ClustersInstancesCordonResponse.self)
+    }
+
+    /// Uncordon one instance back into routing
+    public func clustersInstancesUncordon(instanceId: String) async throws -> ClustersInstancesUncordonResponse? {
+        return try await client.post(ApiPaths.backendPath("/clusters/instances/\(serializePathParameter(instanceId, PathParameterSpec(name: "instanceId", style: "simple", explode: false)))/uncordon"), body: nil, responseType: ClustersInstancesUncordonResponse.self)
     }
 
     /// Enqueue a peer message to one instance or broadcast to online members

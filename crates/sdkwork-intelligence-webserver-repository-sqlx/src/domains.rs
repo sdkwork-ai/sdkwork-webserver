@@ -17,6 +17,13 @@ use super::support::{
     store_error,
 };
 
+/// Upper bound on one automatic domain-verification sweep.
+///
+/// A sweep performs one DNS lookup per challenge, so the batch is sized to keep
+/// a single pass well inside the worker's watchdog while still draining a
+/// backlog of newly registered domains within a few cycles.
+const MAX_DOMAIN_VERIFICATION_SWEEP_BATCH: i32 = 32;
+
 impl WebRepository {
     pub(super) async fn list_domains_repo(
         &self,
@@ -608,6 +615,7 @@ impl WebRepository {
             .await
             .map_err(|error| store_error("commit domain verification challenge", error))?;
         Ok(DomainVerificationChallenge {
+            tenant_id,
             challenge_id,
             hostname,
             method: "DNS_TXT".to_string(),
@@ -621,6 +629,64 @@ impl WebRepository {
             failure_code: None,
             ready_for_check: false,
         })
+    }
+
+    /// Due challenges across every tenant, oldest first, taken with
+    /// `FOR UPDATE SKIP LOCKED` so concurrent workers claim disjoint batches.
+    ///
+    /// The claim is deliberately *not* a lease: `next_attempt_at` is the retry
+    /// schedule, and a claim that pushed it forward would make
+    /// [`Self::record_domain_verification_observation_repo`] see
+    /// `ready_for_check = false` and defer its own write forever. Workers are
+    /// per-node and the state machine tolerates a rare duplicate check.
+    pub(super) async fn list_due_domain_verification_challenges_repo(
+        &self,
+        limit: i32,
+    ) -> WebServiceResult<Vec<DomainVerificationChallenge>> {
+        let limit = limit.clamp(1, MAX_DOMAIN_VERIFICATION_SWEEP_BATCH);
+        let now = now_rfc3339();
+        let now_expression = instant_write_expression("$2");
+        let sql = format!(
+            "SELECT v.tenant_id, v.uuid, d.hostname, v.method, v.record_name, v.proof_sha256,
+                    v.status, v.attempt_count, CAST(v.expires_at AS TEXT) AS expires_at,
+                    CAST(v.next_attempt_at AS TEXT) AS next_attempt_at,
+                    CAST(v.checked_at AS TEXT) AS checked_at, v.failure_code,
+                    (v.next_attempt_at IS NULL OR v.next_attempt_at <= {now_expression}) AS ready_for_check
+             FROM webserver_domain_verification v
+             INNER JOIN webserver_domain d
+               ON d.tenant_id = v.tenant_id AND d.id = v.domain_id AND d.deleted_at IS NULL
+             WHERE v.status IN ('PENDING', 'CHECKING')
+               AND v.next_attempt_at IS NOT NULL
+               AND v.next_attempt_at <= {now_expression}
+               AND v.expires_at > {now_expression}
+             ORDER BY v.next_attempt_at ASC, v.id ASC
+             LIMIT $1
+             FOR UPDATE OF v SKIP LOCKED"
+        );
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|error| store_error("begin domain verification sweep", error))?;
+        let rows = sqlx::query(audited_sql(&sql))
+            .bind(limit)
+            .bind(&now)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|error| store_error("select due domain verifications", error))?;
+        let challenges = rows
+            .iter()
+            .map(|row| {
+                let hostname: String = row
+                    .try_get("hostname")
+                    .map_err(|error| WebServiceError::Internal(error.to_string()))?;
+                map_domain_verification_challenge(row, hostname)
+            })
+            .collect::<WebServiceResult<Vec<_>>>()?;
+        tx.commit()
+            .await
+            .map_err(|error| store_error("commit domain verification sweep", error))?;
+        Ok(challenges)
     }
 
     pub(super) async fn record_domain_verification_observation_repo(
@@ -881,7 +947,7 @@ async fn fetch_domain_verification_challenge(
 ) -> WebServiceResult<Option<EngineRow>> {
     let now_expression = instant_write_expression("$4");
     let sql = format!(
-        "SELECT uuid, method, record_name, proof_sha256, status, attempt_count,
+        "SELECT tenant_id, uuid, method, record_name, proof_sha256, status, attempt_count,
                 CAST(expires_at AS TEXT) AS expires_at,
                 CAST(next_attempt_at AS TEXT) AS next_attempt_at,
                 CAST(checked_at AS TEXT) AS checked_at, failure_code,
@@ -910,7 +976,7 @@ async fn fetch_domain_verification_challenge_for_update(
 ) -> WebServiceResult<Option<EngineRow>> {
     let now_expression = instant_write_expression("$3");
     let sql = format!(
-        "SELECT v.domain_id, d.hostname, v.uuid, v.method, v.record_name, v.proof_sha256,
+        "SELECT v.tenant_id, v.domain_id, d.hostname, v.uuid, v.method, v.record_name, v.proof_sha256,
                 v.status, v.attempt_count, CAST(v.expires_at AS TEXT) AS expires_at,
                 CAST(v.next_attempt_at AS TEXT) AS next_attempt_at,
                 CAST(v.checked_at AS TEXT) AS checked_at, v.failure_code,
@@ -951,7 +1017,7 @@ async fn update_domain_verification_state(
              verified_at = CASE WHEN $3 = 'VERIFIED' THEN {checked} ELSE NULL END,
              failure_code = $7, updated_at = {checked}, version = version + 1
          WHERE tenant_id = $1 AND uuid = $2
-         RETURNING uuid, method, record_name, proof_sha256, status, attempt_count,
+         RETURNING tenant_id, uuid, method, record_name, proof_sha256, status, attempt_count,
                    CAST(expires_at AS TEXT) AS expires_at,
                    CAST(next_attempt_at AS TEXT) AS next_attempt_at,
                    CAST(checked_at AS TEXT) AS checked_at, failure_code,
@@ -1031,6 +1097,9 @@ fn map_domain_verification_challenge(
     hostname: String,
 ) -> WebServiceResult<DomainVerificationChallenge> {
     Ok(DomainVerificationChallenge {
+        tenant_id: row
+            .try_get("tenant_id")
+            .map_err(|error| WebServiceError::Internal(error.to_string()))?,
         challenge_id: row
             .try_get("uuid")
             .map_err(|error| WebServiceError::Internal(error.to_string()))?,

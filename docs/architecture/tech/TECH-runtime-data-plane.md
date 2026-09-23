@@ -65,6 +65,8 @@ The existing `sdkwork-webserver-edge-runtime` name predates the current naming s
 9. Backpressure and cancellation flow through the body stream while request permits remain attached to response ownership.
 10. Bounded structured telemetry records result, duration, bytes, and selected ids without secrets.
 
+**Host resolution order on one listener.** Two surfaces answer by `Host` before virtual-host selection: the app-publishing delivery surface (only on an entry point that mounts one) and the tunnel registry. A host the delivery surface declares is never handed to the tunnel: tunnel agent credentials are shared, so a tunnel route must not shadow a published host. The guard asks the surface's *route table* (`CompiledWebsiteRuntimeSet::declares_authority` — exact host or one-level wildcard suffix), never the status the surface would have returned, because the two overlap with opposite meanings: a host absent from the set and a served host whose page is missing both answer 404, and a node with no runtime set loaded and a served host whose provider is briefly down both answer 503. On an entry point with no delivery surface the guard is false and the registry is simply consulted before local routing; a registered-but-unreachable route answers 404/502 there rather than falling through, because the host was already claimed. Both entry-point families and the two surfaces are covered by `tests/tunnel_relay.rs`.
+
 Supported `http-core-v1` constructs (including `~`/`~*` locations and the rewrite subset) execute after semantic validation. Out-of-profile or invalid constructs fail closed; the runtime never silently approximates undeclared nginx behavior.
 
 ## 5. HTTP And TLS Stack

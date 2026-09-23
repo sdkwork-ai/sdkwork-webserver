@@ -1,4 +1,7 @@
-use std::{net::SocketAddr, time::Duration};
+use std::{
+    net::{IpAddr, SocketAddr},
+    time::Duration,
+};
 
 use axum::{
     body::Body,
@@ -132,6 +135,28 @@ pub async fn route_request(
     hold_request_permit(response, admitted, response_body_idle_timeout)
 }
 
+/// Whether a request for `host` must be forwarded to a sibling instance.
+///
+/// `serves_host` is true when the cluster overlay claims the host;
+/// `from_sibling` is true when the request carried the east-west hop marker
+/// ([`crate::tunnel_bridge::CLUSTER_HOP_HEADER`]).
+///
+/// A hop is taken **at most once**. A sibling that receives the hop also sees
+/// the host in its own overlay, so without the second condition two instances
+/// whose round-robin cursors point at each other would bounce the same request
+/// forever (and an instance that picked itself would relay to itself).
+///
+/// The provenance comes from the marker rather than from the peer address on
+/// purpose: an address-based rule misfires whenever a legitimate client shares
+/// an address with an instance — the edge and its instances on one host, a
+/// client behind the same NAT, a same-subnet visitor — and silently drops that
+/// traffic out of the balancing pool. The marker's own trust model is stated on
+/// the constant.
+#[must_use]
+const fn should_relay_to_sibling(serves_host: bool, from_sibling: bool) -> bool {
+    serves_host && !from_sibling
+}
+
 async fn route_admitted_request(
     peer: SocketAddr,
     transport_peer: SocketAddr,
@@ -139,6 +164,15 @@ async fn route_admitted_request(
     request: Request<Body>,
     admitted: &mut super::request_gate::RequestAdmissionPermit,
 ) -> Response<Body> {
+    // A request that arrives carrying the east-west hop marker was already
+    // relayed once by a sibling, so this process is the last hop and serves it
+    // locally (see `should_relay_to_sibling`). One listener accepts both
+    // visitor and sibling traffic, so a visitor can present the marker too;
+    // that is the same trust level as `x-cluster-lb-strategy`, and the effect
+    // is confined to the request presenting it.
+    let from_cluster_sibling = request
+        .headers()
+        .contains_key(crate::tunnel_bridge::CLUSTER_HOP_HEADER);
     if let Err((status, message)) = validate_request_framing(request.headers(), request.version()) {
         if let Some(response) = classify_request(&state, admitted, false, request.version()) {
             return response;
@@ -220,6 +254,45 @@ async fn route_admitted_request(
             super::acme_challenge::serve_acme_http01_challenge(&state, &path, &method).await
         {
             return response;
+        }
+    }
+    // 微信公众号域名验证文件：与 ACME 挑战同级的窄优先级命名空间。只在
+    // "单段 .txt 根路径 + 该主机名的 zone 上报了同名文件"时接管；其余请求
+    // 原样放行给宿主应用。共享源未装载（非 management 构建/无共享库）时
+    // 整段跳过。
+    if path.ends_with(".txt") {
+        if let Some(source) = super::wechat_verify::shared_source() {
+            let host = sdkwork_webserver_core::normalize_authority_host(&authority)
+                .unwrap_or_else(|| authority.to_ascii_lowercase());
+            if let Some(response) = super::wechat_verify::serve_wechat_verification_file(
+                source.as_ref(),
+                &host,
+                &path,
+                &method,
+            )
+            .await
+            {
+                if let Some(response) = classify_request(&state, admitted, false, request.version())
+                {
+                    return response;
+                }
+                return response;
+            }
+        }
+    }
+    // Tunnel routes: a Host with a registered tunnel route is relayed toward
+    // the owning agent (PRD §30) — but never a host the app-publishing surface
+    // serves. Tunnel agent credentials are shared (see
+    // `sdkwork_webserver_tunnel::security`), so a tunnel route must not shadow a
+    // published host. The surface's own route table settles that, not the status
+    // it would have returned: a tunnel host and a served host with a missing
+    // page both answer 404, and a host nobody serves and a served host whose
+    // provider is briefly down both answer 503. On an entry point with no
+    // delivery surface the probe is false, so this is the plain "check the
+    // registry before local routing" of the non-publishing shape.
+    if let Some(host) = registered_tunnel_host(&state, &authority) {
+        if !website_surface_declares_host(&state, &authority) {
+            return relay_registered_tunnel(&state, admitted, &host, client_ip, request).await;
         }
     }
     if let Some(executor) = state.website_delivery.clone() {
@@ -312,65 +385,17 @@ async fn route_admitted_request(
         }
         return response;
     }
-    // Tunnel routes: a Host matching a registered tunnel route is relayed
-    // toward the owning agent (PRD SS30). Configured virtual hosts and the
-    // website delivery surface take precedence by construction: the tunnel
-    // check runs only when local routing has a chance to miss anyway, and a
-    // tunnel domain that is also a configured vhost is an operator error
-    // that the virtual host wins.
-    if let Some(tunnel_shared) = state.runtime.tunnel.as_ref() {
-        let host = sdkwork_webserver_core::normalize_authority_host(&authority)
-            .unwrap_or_else(|| authority.to_ascii_lowercase());
-        if tunnel_shared.registry.match_domain(&host).is_some() {
-            if let Some(response) = classify_request(&state, admitted, false, request.version()) {
-                return response;
-            }
-            return match crate::tunnel_bridge::relay_tunnel_http(
-                tunnel_shared,
-                &tunnel_shared.metrics,
-                &host,
-                client_ip,
-                request,
-            )
-            .await
-            {
-                Ok(response) => {
-                    if generation.app.config().observability.access_log {
-                        tracing::info!(
-                            config_generation = generation.id,
-                            listener_id = %state.listener_id,
-                            host = %host,
-                            status = response.status().as_u16(),
-                            "tunnel request relayed"
-                        );
-                    }
-                    response
-                }
-                Err(crate::tunnel_bridge::TunnelRelayError::NoRoute) => text_response(
-                    StatusCode::NOT_FOUND,
-                    "tunnel route is not registered
-",
-                ),
-                Err(crate::tunnel_bridge::TunnelRelayError::Failure(error)) => {
-                    tracing::warn!(host = %host, error = %error, "tunnel relay failed");
-                    text_response(
-                        StatusCode::BAD_GATEWAY,
-                        "tunnel relay failed
-",
-                    )
-                }
-            };
-        }
-    }
     // Cluster auto-routing: a Host served by the cluster's discovered
     // instances (topology overlay, refreshed from the registry) is picked
     // by the configured load balancing strategy and relayed to the winning
-    // instance over the internal network.
+    // instance over the internal network — at most once per request.
     {
         let snapshot = state.runtime.cluster_overlay.load_full();
         let host = sdkwork_webserver_core::normalize_authority_host(&authority)
             .unwrap_or_else(|| authority.to_ascii_lowercase());
-        if snapshot.group_for_host(&host).is_some() {
+        let serves_host = snapshot.group_for_host(&host).is_some();
+        let relay = should_relay_to_sibling(serves_host, from_cluster_sibling);
+        if relay {
             if let Some(response) = classify_request(&state, admitted, false, request.version()) {
                 return response;
             }
@@ -397,8 +422,12 @@ async fn route_admitted_request(
                             "cluster request routed"
                         );
                     }
-                    let outcome =
-                        crate::tunnel_bridge::relay_cluster_http(lease.endpoint(), request).await;
+                    let outcome = crate::tunnel_bridge::relay_cluster_http(
+                        lease.endpoint(),
+                        client_ip,
+                        request,
+                    )
+                    .await;
                     drop(lease);
                     match outcome {
                         Ok(response) => response,
@@ -420,6 +449,12 @@ async fn route_admitted_request(
                     "no healthy cluster instance is available\n",
                 ),
             };
+        } else if serves_host {
+            tracing::debug!(
+                host = %host,
+                peer = %transport_peer,
+                "cluster hop received; serving locally"
+            );
         }
     }
     let mut rewrite_redirects = 0_u32;
@@ -965,6 +1000,22 @@ async fn route_admitted_request(
         selected.virtual_host.security_headers.as_ref(),
         scheme.as_str(),
     );
+    // nginx `expires` rewrites `Expires`/`Cache-Control` on the final response
+    // whatever produced it (`ngx_http_headers_filter` runs after every content
+    // handler), so it is applied here rather than inside the static layer.
+    // A route-level declaration replaces the host policy.
+    if let Some(policy) = selected
+        .route
+        .cache_policy
+        .as_ref()
+        .or(selected.virtual_host.cache_policy.as_ref())
+    {
+        super::cache_policy::apply_response_cache_policy(
+            &mut response,
+            policy,
+            std::time::SystemTime::now(),
+        );
+    }
     // Route-level `sub_filter` rides on the response so the substitution
     // layer can apply it without re-selecting the route.
     if let Some(sub_filter) = selected.route.sub_filter.clone() {
@@ -1246,6 +1297,83 @@ fn invalid_forwarded_scheme_response(version: Version) -> Response<Body> {
             .insert(CONNECTION, HeaderValue::from_static("close"));
     }
     response
+}
+
+/// True when the app-publishing surface mounted on this entry point declares
+/// routes for `authority` on this node.
+///
+/// `false` on an entry point with no delivery surface, and on a node with no
+/// runtime set loaded — in both shapes nothing here owns the host.
+fn website_surface_declares_host(state: &ListenerState, authority: &str) -> bool {
+    state
+        .website_delivery
+        .as_ref()
+        .and_then(|executor| executor.current_runtime_set())
+        .is_some_and(|runtime_set| runtime_set.declares_authority(authority))
+}
+
+/// Normalized host of a registered tunnel route for this request's authority,
+/// or `None` when no agent has registered the host on this gateway.
+///
+/// Borrows instead of taking the request so a caller can decide whether to
+/// hand the request over before giving up ownership of it.
+fn registered_tunnel_host(state: &ListenerState, authority: &str) -> Option<String> {
+    let tunnel_shared = state.runtime.tunnel.as_ref()?;
+    let host = sdkwork_webserver_core::normalize_authority_host(authority)
+        .unwrap_or_else(|| authority.to_ascii_lowercase());
+    tunnel_shared.registry.match_domain(&host).map(|_| host)
+}
+
+/// Relays a request whose Host matches a registered tunnel route to the owning
+/// agent (PRD §30).
+///
+/// Always answers. A route that was registered but cannot be reached fails here
+/// (404 "route is not registered" / 502 relay failure) rather than falling
+/// through: the host *was* claimed, so handing the caller back a second,
+/// misleading answer for a request the tunnel already owns would be wrong.
+async fn relay_registered_tunnel(
+    state: &ListenerState,
+    admitted: &mut super::request_gate::RequestAdmissionPermit,
+    host: &str,
+    client_ip: IpAddr,
+    request: Request<Body>,
+) -> Response<Body> {
+    let Some(tunnel_shared) = state.runtime.tunnel.as_ref() else {
+        return text_response(StatusCode::NOT_FOUND, "tunnel route is not registered\n");
+    };
+    if let Some(response) = classify_request(state, admitted, false, request.version()) {
+        return response;
+    }
+    let generation = state.runtime.current();
+    match crate::tunnel_bridge::relay_tunnel_http(
+        tunnel_shared,
+        &tunnel_shared.metrics,
+        host,
+        client_ip,
+        request,
+    )
+    .await
+    {
+        Ok(response) => {
+            if generation.app.config().observability.access_log {
+                tracing::info!(
+                    config_generation = generation.id,
+                    listener_id = %state.listener_id,
+                    host = %host,
+                    status = response.status().as_u16(),
+                    "tunnel request relayed"
+                );
+            }
+            response
+        }
+        Err(crate::tunnel_bridge::TunnelRelayError::NoRoute) => {
+            text_response(StatusCode::NOT_FOUND, "tunnel route is not registered\n")
+        }
+        Err(crate::tunnel_bridge::TunnelRelayError::Failure(error)) => {
+            tracing::warn!(host = %host, error = %error, "tunnel relay failed");
+            text_response(StatusCode::BAD_GATEWAY, "tunnel relay failed\n")
+        }
+    }
 }
 
 fn classify_request(
@@ -1719,6 +1847,31 @@ mod tests {
         config.x_content_type_options = false;
         let response = apply_security_headers(base_response(), Some(&config), "https");
         assert!(response.headers().get("x-content-type-options").is_none());
+    }
+
+    #[test]
+    fn a_cluster_hop_is_taken_exactly_once() {
+        // A request that carries the hop marker was relayed by a sibling, so
+        // this instance serves it. Dropping that rule lets two instances whose
+        // round-robin cursors point at each other (or an instance that picks
+        // itself) bounce the same request forever; the marker's trust model is
+        // stated on CLUSTER_HOP_HEADER.
+        assert!(
+            should_relay_to_sibling(true, false),
+            "the first hop to a sibling is taken"
+        );
+        assert!(
+            !should_relay_to_sibling(true, true),
+            "a hop already taken is never repeated"
+        );
+        assert!(
+            !should_relay_to_sibling(false, false),
+            "a host the cluster does not serve is never relayed"
+        );
+        assert!(
+            !should_relay_to_sibling(false, true),
+            "the marker never invents a relay for an unserved host"
+        );
     }
 }
 

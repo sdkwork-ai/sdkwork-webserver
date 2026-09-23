@@ -178,3 +178,17 @@ into the website data-plane StatefulSet (e.g. `certificate-state` mounted at
 `SDKWORK_WEBSERVER_TLS_RUNTIME_SNAPSHOT_FILE`/`SDKWORK_WEBSERVER_TLS_MATERIAL_ROOT`, and configure
 `acmeHttp01.webroot` in the Node's `sdkwork.webserver.config.json` to point at the shared
 `acme-webroot` directory. No nginx directive or external process is involved.
+
+Keep that `webroot` and the worker's `SDKWORK_WEBSERVER_ACME_WEBROOT` on the same directory: the
+configuration is compiled by comparing them, and a proven mismatch fails startup in production-like
+environments rather than letting every order 404 at the CA. The Kubernetes and container deployment
+shapes differ here on purpose — the worker runs in its own Pod, so a data plane that never sees the
+worker's environment variable is a *warning*, not a failure, and the check only reports a
+disagreement it can actually prove. The standalone container entrypoint writes the challenge
+location itself from that same variable and needs no manual declaration.
+
+Wildcards additionally need DNS provider accounts: point
+`SDKWORK_WEBSERVER_ACME_DNS_ACCOUNTS_FILE` at a JSON file of
+`[{accountId, provider, zoneApex, credentials}]` entries (reusing the `acme-accounts` PVC root),
+and leave `SDKWORK_WEBSERVER_ACME_CHALLENGE_METHOD` at its `AUTO` default so single-domain
+certificates use HTTP-01 and wildcards use DNS-01.

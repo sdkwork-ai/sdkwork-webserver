@@ -406,6 +406,12 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "clusters.delete",
     ).with_required_permission("web.cluster.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::AuthCritical),
     HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/backend/v3/api/clusters/{clusterId}/sync",
+        "cluster",
+        "clusters.sync",
+    ).with_required_permission("web.cluster.write").with_rate_limit_tier(RateLimitTier::AuthCritical),
+    HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/clusters/hosts",
         "cluster",
@@ -471,6 +477,42 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "cluster",
         "clusters.instances.heartbeats.list",
     ).with_required_permission("web.cluster.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/clusters/instances/{instanceId}/metrics/history",
+        "cluster",
+        "clusters.instances.metrics.list",
+    ).with_required_permission("web.cluster.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/backend/v3/api/clusters/instances/{instanceId}/probe",
+        "cluster",
+        "clusters.instances.probe",
+    ).with_required_permission("web.cluster.write").with_rate_limit_tier(RateLimitTier::AuthCritical),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/backend/v3/api/clusters/instances/{instanceId}/drain",
+        "cluster",
+        "clusters.instances.drain",
+    ).with_required_permission("web.cluster.write").with_rate_limit_tier(RateLimitTier::AuthCritical),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/backend/v3/api/clusters/instances/{instanceId}/undrain",
+        "cluster",
+        "clusters.instances.undrain",
+    ).with_required_permission("web.cluster.write").with_rate_limit_tier(RateLimitTier::AuthCritical),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/backend/v3/api/clusters/instances/{instanceId}/cordon",
+        "cluster",
+        "clusters.instances.cordon",
+    ).with_required_permission("web.cluster.write").with_rate_limit_tier(RateLimitTier::AuthCritical),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/backend/v3/api/clusters/instances/{instanceId}/uncordon",
+        "cluster",
+        "clusters.instances.uncordon",
+    ).with_required_permission("web.cluster.write").with_rate_limit_tier(RateLimitTier::AuthCritical),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/clusters/messages",

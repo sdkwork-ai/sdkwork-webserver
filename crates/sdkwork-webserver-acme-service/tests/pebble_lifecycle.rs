@@ -22,14 +22,21 @@ use axum::{routing::get, Router};
 use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair, SanType};
 use rustls_pki_types::pem::PemObject;
 use rustls_pki_types::CertificateDer;
+use sdkwork_webserver_acme_service::dns_zone::SingleZoneResolver;
 use sdkwork_webserver_acme_service::{
-    AcmeConfig, CertificateIssuer, EncryptedFileAcmeAccountStore, ExtraRootsClientFactory,
+    AcmeConfig, AcmeDns01Context, AcmeServiceError, AcmeServiceResult, CertificateIssuer,
+    Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest, EncryptedFileAcmeAccountStore,
+    ExtraRootsClientFactory,
 };
 use tempfile::TempDir;
 use tokio::net::TcpListener;
 
 const PEBBLE_DIRECTORY_URL: &str = "https://127.0.0.1:14000/dir";
 const PEBBLE_HTTP_CHALLENGE_PORT: u16 = 5002;
+/// The DNS server pebble resolves challenge names through.
+const PEBBLE_DNS_PORT: u16 = 8053;
+/// pebble-challtestsrv's record API, where DNS-01 presentations are published.
+const CHALLTESTSRV_MANAGEMENT_PORT: u16 = 8055;
 
 struct Subprocess(Option<Child>);
 
@@ -147,65 +154,203 @@ fn challenge_router(webroot: PathBuf) -> Router {
     )
 }
 
+/// A controlled CA plus the DNS server pebble validates through.
+///
+/// Booted per test rather than shared: both children die with the harness, so a
+/// half-finished run can never leave an old CA answering on these ports while a
+/// later run's readiness probe passes against it.
+struct ControlledCa {
+    temp: TempDir,
+    /// The CA's own TLS identity, which the ACME client must trust as a root.
+    ca_cert_path: PathBuf,
+    /// pebble-challtestsrv's record API (`/set-txt`, `/clear-txt`).
+    management_url: String,
+    _pebble: Subprocess,
+    _challtestsrv: Subprocess,
+}
+
+impl ControlledCa {
+    async fn boot() -> Self {
+        let pebble_path = resolve_binary("PEBBLE", "./pebble");
+        let challtestsrv_path = resolve_binary("CHALLTESTSRV", "./pebble-challtestsrv");
+        if !pebble_path.exists() || !challtestsrv_path.exists() {
+            panic!(
+                "pebble binaries are required: {} and {} (see https://github.com/letsencrypt/pebble/releases)",
+                pebble_path.display(),
+                challtestsrv_path.display()
+            );
+        }
+
+        let temp = TempDir::new().expect("temp dir");
+        let (certificate, private_key) = write_pebble_identity(temp.path());
+        let pebble_config = write_pebble_config(temp.path(), &certificate, &private_key);
+
+        // The challenge test server provides DNS resolution (all names ->
+        // loopback) and a TXT record API, but no challenge services: HTTP-01 has
+        // to come from the webroot server each suite runs itself, or the test
+        // would only be asserting that challtestsrv's canned answer works.
+        let challtestsrv = Subprocess::spawn(
+            Command::new(&challtestsrv_path)
+                .arg("-management")
+                .arg(format!(":{CHALLTESTSRV_MANAGEMENT_PORT}"))
+                .arg("-dnsserver")
+                .arg(format!(":{PEBBLE_DNS_PORT}"))
+                .arg("-http01")
+                .arg("")
+                .arg("-tlsalpn01")
+                .arg("")
+                .arg("-https01")
+                .arg("")
+                .arg("-doh")
+                .arg("")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null()),
+        )
+        .expect("spawn pebble-challtestsrv");
+
+        let pebble = Subprocess::spawn(
+            Command::new(&pebble_path)
+                .env("PEBBLE_AUTHZREUSE", "0")
+                .arg("-config")
+                .arg(&pebble_config)
+                .arg("-dnsserver")
+                .arg(format!("127.0.0.1:{PEBBLE_DNS_PORT}"))
+                .arg("-strict")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null()),
+        )
+        .expect("spawn pebble");
+
+        let client = reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()
+            .expect("reqwest client");
+        wait_for_directory(&client, PEBBLE_DIRECTORY_URL).await;
+
+        Self {
+            ca_cert_path: temp.path().join("pebble-cert.pem"),
+            management_url: format!("http://127.0.0.1:{CHALLTESTSRV_MANAGEMENT_PORT}"),
+            temp,
+            _pebble: pebble,
+            _challtestsrv: challtestsrv,
+        }
+    }
+
+    /// The CA root the ACME client has to trust. Read from disk rather than
+    /// checked in: the identity is generated per run, so a stale copy would
+    /// silently fail every issuance.
+    fn trust_anchor(&self) -> CertificateDer<'static> {
+        CertificateDer::from_pem_slice(
+            &std::fs::read(&self.ca_cert_path).expect("read pebble certificate"),
+        )
+        .expect("parse pebble certificate")
+    }
+
+    fn issuer(&self, webroot: Option<&Path>, account_root: &Path) -> CertificateIssuer {
+        let account_store = std::sync::Arc::new(EncryptedFileAcmeAccountStore::new(
+            account_root.to_path_buf(),
+            b"test-master-key-00000000000000000000000000",
+        ));
+        CertificateIssuer::new_with_client_factory(
+            AcmeConfig::new(
+                PEBBLE_DIRECTORY_URL.to_string(),
+                "admin@example.com".to_string(),
+                30,
+                webroot.map(|path| path.to_string_lossy().into_owned()),
+                false,
+            )
+            .expect("acme config"),
+            self.temp.path().join("live").to_string_lossy().into_owned(),
+            180_000,
+            account_store,
+            std::sync::Arc::new(ExtraRootsClientFactory::new(vec![self.trust_anchor()])),
+        )
+        .expect("issuer")
+    }
+}
+
+/// Presents DNS-01 TXT records through pebble-challtestsrv, so the CA really
+/// queries them over DNS instead of reading a test double's memory.
+struct ChalltestsrvDns01Presenter {
+    client: reqwest::Client,
+    management_url: String,
+}
+
+impl ChalltestsrvDns01Presenter {
+    fn new(management_url: impl Into<String>) -> Self {
+        Self {
+            client: reqwest::Client::new(),
+            management_url: management_url.into(),
+        }
+    }
+
+    async fn post(&self, route: &str, record_name: &str, value: &str) -> AcmeServiceResult<()> {
+        // challtestsrv matches records by the fully-qualified owner name, which
+        // is what the CA asks its resolver for.
+        let owner = format!("{}.", record_name.trim_end_matches('.'));
+        let response = self
+            .client
+            .post(format!("{}/{route}", self.management_url))
+            .json(&serde_json::json!({ "host": owner, "value": value }))
+            .send()
+            .await
+            .map_err(|error| {
+                AcmeServiceError::provider(format!("challtestsrv {route}: {error}"))
+            })?;
+        if !response.status().is_success() {
+            return Err(AcmeServiceError::provider(format!(
+                "challtestsrv {route} for {owner} answered {}",
+                response.status()
+            )));
+        }
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl Dns01Presenter for ChalltestsrvDns01Presenter {
+    async fn publish(&self, request: &Dns01RecordRequest) -> AcmeServiceResult<Dns01RecordHandle> {
+        self.post("set-txt", &request.record_name, &request.record_value)
+            .await?;
+        Ok(Dns01RecordHandle::from(request))
+    }
+
+    async fn withdraw(&self, handle: &Dns01RecordHandle) -> AcmeServiceResult<()> {
+        // Clear by owner: challtestsrv keeps the record's value list and the CA
+        // is finished with every value it published.
+        self.post("clear-txt", &handle.record_name, "").await
+    }
+}
+
 #[tokio::test]
 #[ignore = "requires pebble and pebble-challtestsrv binaries"]
 async fn full_issuance_lifecycle_against_pebble() {
-    let pebble_path = resolve_binary("PEBBLE", "./pebble");
-    let challtestsrv_path = resolve_binary("CHALLTESTSRV", "./pebble-challtestsrv");
-    if !pebble_path.exists() || !challtestsrv_path.exists() {
-        panic!(
-            "pebble binaries are required: {} and {} (see https://github.com/letsencrypt/pebble/releases)",
-            pebble_path.display(),
-            challtestsrv_path.display()
-        );
-    }
-
-    let temp = TempDir::new().expect("temp dir");
-    let (certificate, private_key) = write_pebble_identity(temp.path());
-    let pebble_config = write_pebble_config(temp.path(), &certificate, &private_key);
-
-    // The challenge test server provides DNS resolution (all names -> loopback)
-    // but no challenge services; the data-plane role HTTP server serves the
-    // webroot files on the pebble-configured HTTP challenge port.
-    let challtestsrv = Subprocess::spawn(
-        Command::new(&challtestsrv_path)
-            .arg("-management")
-            .arg(":8055")
-            .arg("-dnsserver")
-            .arg(":8053")
-            .arg("-http01")
-            .arg("")
-            .arg("-tlsalpn01")
-            .arg("")
-            .arg("-https01")
-            .arg("")
-            .arg("-doh")
-            .arg("")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null()),
-    )
-    .expect("spawn pebble-challtestsrv");
-
-    let pebble = Subprocess::spawn(
-        Command::new(&pebble_path)
-            .env("PEBBLE_AUTHZREUSE", "0")
-            .arg("-config")
-            .arg(&pebble_config)
-            .arg("-dnsserver")
-            .arg("127.0.0.1:8053")
-            .arg("-strict")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null()),
-    )
-    .expect("spawn pebble");
-
-    let webroot = temp.path().join("webroot");
+    let ca = ControlledCa::boot().await;
+    let webroot = ca.temp.path().join("webroot");
     std::fs::create_dir_all(webroot.join(".well-known").join("acme-challenge"))
         .expect("create webroot");
 
-    let listener = TcpListener::bind(("0.0.0.0", PEBBLE_HTTP_CHALLENGE_PORT))
-        .await
-        .expect("bind HTTP-01 challenge port");
+    // pebble resolves every challenge name through pebble-challtestsrv, which
+    // answers both `127.0.0.1` (A) and `::1` (AAAA), and pebble fetches the AAAA
+    // address first. An IPv4-only bind therefore refuses the CA's request —
+    // `dial tcp [::1]:5002: connectex: No connection could be made because the
+    // target machine actively refused it` — and the ACME error blames the
+    // challenge (urn:ietf:params:acme:error:connection) when the real cause is a
+    // listener that is not reachable on the family the CA chose. A wildcard IPv6
+    // bind accepts both families on Windows and Linux; the IPv4 bind is the
+    // fallback for a host without a usable IPv6 stack.
+    let listener = match TcpListener::bind(("::", PEBBLE_HTTP_CHALLENGE_PORT)).await {
+        Ok(listener) => listener,
+        Err(error) => {
+            eprintln!(
+                "IPv6 challenge bind on port {PEBBLE_HTTP_CHALLENGE_PORT} failed ({error}); \
+                 serving HTTP-01 challenges over IPv4 only"
+            );
+            TcpListener::bind(("0.0.0.0", PEBBLE_HTTP_CHALLENGE_PORT))
+                .await
+                .expect("bind HTTP-01 challenge port")
+        }
+    };
     let challenge_webroot = webroot.clone();
     let challenge_server = tokio::spawn(async move {
         axum::serve(listener, challenge_router(challenge_webroot))
@@ -213,39 +358,8 @@ async fn full_issuance_lifecycle_against_pebble() {
             .expect("serve HTTP-01 challenges");
     });
 
-    let client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
-        .build()
-        .expect("reqwest client");
-    wait_for_directory(&client, PEBBLE_DIRECTORY_URL).await;
-
-    // Trust the pebble identity as the CA root for the ACME client.
-    let pebble_der = CertificateDer::from_pem_slice(
-        &std::fs::read(temp.path().join("pebble-cert.pem")).expect("read pebble certificate"),
-    )
-    .expect("parse pebble certificate");
-    let client_factory =
-        std::sync::Arc::new(ExtraRootsClientFactory::new(vec![pebble_der.clone()]));
-    let account_root = temp.path().join("accounts");
-    let account_store = std::sync::Arc::new(EncryptedFileAcmeAccountStore::new(
-        account_root.clone(),
-        b"test-master-key-00000000000000000000000000",
-    ));
-    let issuer = CertificateIssuer::new_with_client_factory(
-        AcmeConfig::new(
-            PEBBLE_DIRECTORY_URL.to_string(),
-            "admin@example.com".to_string(),
-            30,
-            Some(webroot.to_string_lossy().into_owned()),
-            false,
-        )
-        .expect("acme config"),
-        temp.path().join("live").to_string_lossy().into_owned(),
-        180_000,
-        account_store.clone(),
-        client_factory,
-    )
-    .expect("issuer");
+    let account_root = ca.temp.path().join("accounts");
+    let issuer = ca.issuer(Some(&webroot), &account_root);
 
     let first = issuer
         .issue(
@@ -287,6 +401,55 @@ async fn full_issuance_lifecycle_against_pebble() {
         "second issuance must reuse the persisted ACME account"
     );
 
-    drop((pebble, challtestsrv));
+    drop(ca);
     challenge_server.abort();
+}
+
+/// A wildcard cannot be proven over HTTP-01 — no CA will fetch
+/// `/.well-known/acme-challenge/...` from `*.example.com` — so this suite is the
+/// only one that exercises the DNS-01 half of the challenge policy end to end:
+/// the engine derives `_acme-challenge.example.com`, the presenter publishes the
+/// TXT digest through a real DNS server, the CA queries it, and the issued leaf
+/// has to carry both the wildcard and the apex.
+///
+/// The apex is included deliberately: a wildcard order costs one authorization
+/// per identifier, and the two share one record name, so the second presentation
+/// must not overwrite the first.
+#[tokio::test]
+#[ignore = "requires pebble and pebble-challtestsrv binaries"]
+async fn wildcard_issuance_over_dns01_against_pebble() {
+    let ca = ControlledCa::boot().await;
+    let account_root = ca.temp.path().join("accounts");
+    let issuer = ca.issuer(None, &account_root);
+    let presenter = ChalltestsrvDns01Presenter::new(ca.management_url.clone());
+    let zones = SingleZoneResolver {
+        zone_apex: "example.com".to_string(),
+    };
+    let dns01 = AcmeDns01Context {
+        presenter: &presenter,
+        zones: &zones,
+    };
+
+    let material = issuer
+        .issue_with_challenge(
+            1,
+            &["*.example.com".to_string(), "example.com".to_string()],
+            "wildcard-example",
+            "ECDSA",
+            Some(dns01),
+        )
+        .await
+        .expect("wildcard issuance over DNS-01");
+
+    assert!(material.cert_pem.contains("BEGIN CERTIFICATE"));
+    assert!(material.private_key_pem.contains("PRIVATE KEY"));
+    // A wildcard order is issued as one certificate, not two: the same
+    // certificate has to cover the apex as well.
+    let evidence = material
+        .san_list
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    assert!(evidence.contains(&"*.example.com"), "{evidence:?}");
+    assert!(evidence.contains(&"example.com"), "{evidence:?}");
 }

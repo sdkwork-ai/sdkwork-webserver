@@ -502,8 +502,10 @@ fn parse_agent_arguments(arguments: &[String]) -> Result<ParsedAgentArguments, S
     })
 }
 
-/// Parses `name=http,domain,demo.example.com,127.0.0.1:3000` style route
-/// arguments: `name:<http|tcp|udp>:<domain|port>:<target>`.
+/// Parses one `--route` value: `<name>:<http|tcp|udp>:<domain-or-port>:<target>`
+/// — for example `web:http:demo.example.com:127.0.0.1:3000` (HTTP) or
+/// `ssh:tcp:2222:127.0.0.1:22` (TCP/UDP, where the third segment is the
+/// gateway port the agent asks for).
 fn parse_route(raw: &str) -> Result<TunnelRouteTemplate, String> {
     // Shape: <name>:<http|tcp|udp>:<domain-or-port>:<target>.
     let segments: Vec<&str> = raw.splitn(4, ':').collect();
@@ -517,7 +519,11 @@ fn parse_route(raw: &str) -> Result<TunnelRouteTemplate, String> {
         "http" => TunnelProtocolKind::Http,
         "tcp" => TunnelProtocolKind::Tcp,
         "udp" => TunnelProtocolKind::Udp,
-        other => return Err(format!("route protocol `{other}` must be http, tcp, or udp")),
+        other => {
+            return Err(format!(
+                "route protocol `{other}` must be http, tcp, or udp"
+            ))
+        }
     };
     let template = TunnelRouteTemplate {
         name: name.clone(),

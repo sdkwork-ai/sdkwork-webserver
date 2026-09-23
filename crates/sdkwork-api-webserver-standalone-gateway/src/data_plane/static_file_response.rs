@@ -7,6 +7,7 @@ use axum::{
 use bytes::Bytes;
 use futures_util::stream;
 use httpdate::HttpDate;
+use sdkwork_webserver_core::{CachePolicyConfig, IfModifiedSinceMode};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, SeekFrom};
 
 use super::static_path::OpenedStaticFile;
@@ -18,27 +19,81 @@ pub(crate) async fn serve_opened_file(
     method: &Method,
     headers: &HeaderMap,
 ) -> Response<Body> {
+    serve_opened_file_with_cache_policy(opened, method, headers, None).await
+}
+
+/// `serve_opened_file` with the route's nginx `etag` / `if_modified_since`
+/// policy applied.
+///
+/// `etag off` suppresses the entity tag *generation* (nginx never removes an
+/// upstream tag), and with no tag to compare, `If-None-Match` can no longer
+/// answer 304 — only the `*` form still matches — while every concrete
+/// `If-Match` candidate fails with 412, exactly as
+/// `ngx_http_not_modified_filter` behaves. `if_modified_since` selects the
+/// comparison `exact` (nginx's default) / `before` / `off`.
+///
+/// The precondition chain (`If-Unmodified-Since`, `If-Match`), the
+/// `If-Modified-Since`-before-`If-None-Match` precedence, the validators kept on
+/// a 304 and the `If-Range` gate on range handling all follow nginx's
+/// `ngx_http_not_modified_header_filter` / `ngx_http_range_header_filter`.
+pub(crate) async fn serve_opened_file_with_cache_policy(
+    opened: OpenedStaticFile,
+    method: &Method,
+    headers: &HeaderMap,
+    policy: Option<&CachePolicyConfig>,
+) -> Response<Body> {
     let modified = opened.metadata.modified().ok().map(HttpDate::from);
-    let etag = weak_etag(&opened.metadata);
-    if !if_unmodified_since_passes(headers, modified) {
+    let etag_enabled = policy.map(|policy| policy.etag).unwrap_or(true);
+    let etag = if etag_enabled {
+        entity_tag(&opened.metadata)
+    } else {
+        None
+    };
+    // `ngx_http_not_modified_header_filter` order and precedence, exactly:
+    // the two preconditions first, then If-Modified-Since, then If-None-Match.
+    if !if_unmodified_since_passes(headers, modified) || !if_match_passes(headers, etag.as_deref())
+    {
         return empty_response(StatusCode::PRECONDITION_FAILED);
     }
-    if !if_none_match_passes(headers, etag.as_deref()) {
-        return empty_response(StatusCode::NOT_MODIFIED);
-    }
-    if !if_modified_since_is_modified(headers, modified) {
-        return empty_response(StatusCode::NOT_MODIFIED);
+    let if_modified_since = policy
+        .map(|policy| policy.if_modified_since)
+        .unwrap_or_default();
+    let ims_present = headers.contains_key(header::IF_MODIFIED_SINCE);
+    let inm_present = headers.contains_key(header::IF_NONE_MATCH);
+    if ims_present || inm_present {
+        // nginx consults If-Modified-Since first: when that vote says the
+        // representation is modified it is served and If-None-Match is never
+        // examined, so a request carrying both can be answered 200 even though
+        // its entity tag matches. Only when the If-Modified-Since vote says
+        // "not modified" does a matching If-None-Match decide the 304.
+        let serves_on_ims =
+            ims_present && if_modified_since_is_modified(headers, modified, if_modified_since);
+        let serves_on_inm =
+            !serves_on_ims && inm_present && if_none_match_passes(headers, etag.as_deref());
+        if !serves_on_ims && !serves_on_inm {
+            return not_modified_response(&opened.path_hint, etag.as_deref(), modified);
+        }
     }
 
     let size = opened.metadata.len();
-    let ranges = parse_range(headers, size);
+    // `If-Range` gates the range handling: a mismatching validator makes the
+    // server ignore `Range` and answer the whole representation with 200.
+    let ranges = if if_range_allows_ranges(headers, etag.as_deref(), modified) {
+        parse_range(headers, size)
+    } else {
+        None
+    };
     let mime = mime_guess::from_path(&opened.path_hint)
         .first_raw()
         .and_then(|value| HeaderValue::from_str(value).ok())
         .unwrap_or_else(|| HeaderValue::from_static("application/octet-stream"));
+    // nginx attaches `Accept-Ranges` from the range filter's fall-through path
+    // only, which every non-partial outcome reaches; a 206 or 416 never carries
+    // it, so advertising it on the partial response would be a difference the
+    // differential battery can see.
+    let partial = ranges.is_some();
     let mut builder = Response::builder()
         .header(header::CONTENT_TYPE, mime)
-        .header(header::ACCEPT_RANGES, "bytes")
         // Deployment-level freshness policy (ENVIRONMENT_SPEC §13, SDKWORK_DEPLOY_SPEC
         // §8.1): fingerprinted immutable assets get long-lived caching, the public
         // runtime env document never caches, everything else revalidates through
@@ -47,6 +102,9 @@ pub(crate) async fn serve_opened_file(
             header::CACHE_CONTROL,
             cache_control_for_path(&opened.path_hint),
         );
+    if !partial {
+        builder = builder.header(header::ACCEPT_RANGES, "bytes");
+    }
     if let Some(modified) = modified {
         builder = builder.header(header::LAST_MODIFIED, modified.to_string());
     }
@@ -78,18 +136,10 @@ pub(crate) async fn serve_opened_file(
                 body,
             )
         }
-        Some(Ok(_)) => finish_response(
-            builder
-                .status(StatusCode::RANGE_NOT_SATISFIABLE)
-                .header(header::CONTENT_RANGE, format!("bytes */{size}")),
-            Body::from("Cannot serve multipart range requests"),
-        ),
-        Some(Err(())) => finish_response(
-            builder
-                .status(StatusCode::RANGE_NOT_SATISFIABLE)
-                .header(header::CONTENT_RANGE, format!("bytes */{size}")),
-            Body::empty(),
-        ),
+        Some(Ok(_)) => {
+            range_not_satisfiable(size, Body::from("Cannot serve multipart range requests"))
+        }
+        Some(Err(())) => range_not_satisfiable(size, Body::empty()),
         None => {
             let body = if method == Method::HEAD {
                 Body::empty()
@@ -160,15 +210,21 @@ fn if_unmodified_since_passes(headers: &HeaderMap, modified: Option<HttpDate>) -
     modified.is_some_and(|modified| condition >= modified)
 }
 
-/// Weak entity tag derived from modification time and size; safe for
-/// byte-range responses because the tag changes whenever the file changes.
-fn weak_etag(metadata: &std::fs::Metadata) -> Option<String> {
+/// Entity tag derived from modification time and size, in nginx's own format
+/// (`"<mtime hex>-<size hex>"`) and with nginx's own strength: a *strong* tag.
+///
+/// The tag is a faithful validator for a static file, and its strength is
+/// observable: `If-Range` requires the candidate to be byte-identical to the
+/// served tag, so a weak tag would make every range revalidation fall back to a
+/// full 200 (`ngx_http_range_header_filter`). `If-None-Match` stays RFC-correct
+/// because the runtime strips a `W/` prefix from both sides before comparing.
+fn entity_tag(metadata: &std::fs::Metadata) -> Option<String> {
     let modified = metadata.modified().ok()?;
     let seconds = modified
         .duration_since(std::time::UNIX_EPOCH)
         .ok()?
         .as_secs();
-    Some(format!("W/\"{seconds:x}-{:x}\"", metadata.len()))
+    Some(format!("\"{seconds:x}-{:x}\"", metadata.len()))
 }
 
 /// RFC 9110 `If-None-Match`: any matching entity tag means the representation
@@ -176,6 +232,9 @@ fn weak_etag(metadata: &std::fs::Metadata) -> Option<String> {
 /// 304). A `*` matches when the representation exists (it always does at this
 /// point). `true` here means "serve the representation"; `false` means
 /// "not modified".
+///
+/// With `etag` absent (`etag off`) there is no tag to compare against, so only
+/// `*` can still match — mirroring `ngx_http_not_modified_filter`.
 fn if_none_match_passes(headers: &HeaderMap, etag: Option<&str>) -> bool {
     let Some(condition) = headers.get(header::IF_NONE_MATCH) else {
         return true;
@@ -183,12 +242,12 @@ fn if_none_match_passes(headers: &HeaderMap, etag: Option<&str>) -> bool {
     let Ok(condition) = condition.to_str() else {
         return true;
     };
-    let Some(etag) = etag else {
-        return true;
-    };
     if condition.trim() == "*" {
         return false;
     }
+    let Some(etag) = etag else {
+        return true;
+    };
     // Tag list is comma-separated; RFC 9110 weak comparison strips an
     // optional W/ prefix from both sides before comparing opaque tags.
     !condition
@@ -202,11 +261,99 @@ fn weak_tag_value(tag: &str) -> &str {
     trimmed.strip_prefix("W/").unwrap_or(trimmed)
 }
 
-fn if_modified_since_is_modified(headers: &HeaderMap, modified: Option<HttpDate>) -> bool {
+/// nginx `If-Match`, applied *before* the not-modified vote: nothing matching
+/// means 412 (`ngx_http_not_modified_header_filter` ->
+/// `ngx_http_test_if_match(..., weak = 0)`). The comparison is a whole-value
+/// byte compare, so a `W/…` candidate never satisfies the strong tag a static
+/// file carries, and a response without an entity tag (`etag off`) fails every
+/// concrete candidate. `*` matches because the representation exists.
+fn if_match_passes(headers: &HeaderMap, etag: Option<&str>) -> bool {
+    let Some(condition) = headers.get(header::IF_MATCH) else {
+        return true;
+    };
+    let Ok(condition) = condition.to_str() else {
+        return true;
+    };
+    if condition.trim() == "*" {
+        return true;
+    }
+    let Some(etag) = etag else {
+        return false;
+    };
+    condition
+        .split(',')
+        .any(|candidate| candidate.trim() == etag)
+}
+
+/// nginx `If-Range`: a mismatch makes the server ignore the `Range` header and
+/// serve the whole representation (`ngx_http_range_header_filter` ->
+/// `goto next_filter`). The entity-tag form is recognised by its trailing `"`
+/// and must be byte-identical to the served tag; the date form must equal
+/// `Last-Modified` exactly. An unparsable value is a mismatch, as in nginx.
+fn if_range_allows_ranges(
+    headers: &HeaderMap,
+    etag: Option<&str>,
+    modified: Option<HttpDate>,
+) -> bool {
+    let Some(condition) = headers.get(header::IF_RANGE) else {
+        return true;
+    };
+    let Ok(condition) = condition.to_str() else {
+        return true;
+    };
+    if condition.len() >= 2 && condition.ends_with('"') {
+        return etag == Some(condition);
+    }
+    let Some(modified) = modified else {
+        return false;
+    };
+    httpdate::parse_http_date(condition)
+        .ok()
+        .map(HttpDate::from)
+        == Some(modified)
+}
+
+/// A 304 keeps every cache validator: `ngx_http_not_modified_header_filter`
+/// clears only `Content-Type`, `Content-Length` and `Accept-Ranges`, leaving
+/// `ETag`, `Last-Modified` and `Cache-Control` so a shared cache can refresh the
+/// stored metadata (RFC 9110 section 15.4.5). A bare 304 would leave the stored
+/// entry without a validator and force a full refetch.
+fn not_modified_response(
+    path_hint: &Path,
+    etag: Option<&str>,
+    modified: Option<HttpDate>,
+) -> Response<Body> {
+    let mut builder = Response::builder()
+        .status(StatusCode::NOT_MODIFIED)
+        .header(header::CACHE_CONTROL, cache_control_for_path(path_hint));
+    if let Some(modified) = modified {
+        builder = builder.header(header::LAST_MODIFIED, modified.to_string());
+    }
+    if let Some(etag) = etag {
+        builder = builder.header(header::ETAG, etag);
+    }
+    finish_response(builder, Body::empty())
+}
+
+/// nginx `if_modified_since`: `exact` (the default) requires the condition to
+/// equal `Last-Modified`; `before` accepts a `Last-Modified` that is not newer
+/// than the condition; `off` ignores the request header entirely.
+fn if_modified_since_is_modified(
+    headers: &HeaderMap,
+    modified: Option<HttpDate>,
+    mode: IfModifiedSinceMode,
+) -> bool {
+    if mode == IfModifiedSinceMode::Off {
+        return true;
+    }
     let Some(condition) = parse_http_date_header(headers, header::IF_MODIFIED_SINCE) else {
         return true;
     };
-    modified.is_none_or(|modified| condition < modified)
+    modified.is_none_or(|modified| match mode {
+        IfModifiedSinceMode::Exact => condition != modified,
+        // `before` and `off` are separated above; `off` already returned.
+        _ => condition < modified,
+    })
 }
 
 fn parse_http_date_header(headers: &HeaderMap, name: header::HeaderName) -> Option<HttpDate> {
@@ -239,6 +386,20 @@ fn file_body(file: tokio::fs::File, size: u64) -> Body {
         )))
     });
     Body::from_stream(chunks)
+}
+
+/// nginx answers an unsatisfiable range through its special-response handler:
+/// the 416 keeps `Content-Range: bytes */<size>` and drops the matrix of
+/// validators the content handler had prepared (`ngx_http_range_not_satisfiable`
+/// clears the entity headers), because a validator on an error response cannot
+/// be acted on. The body is the runtime's own rather than nginx's built-in page.
+fn range_not_satisfiable(size: u64, body: Body) -> Response<Body> {
+    finish_response(
+        Response::builder()
+            .status(StatusCode::RANGE_NOT_SATISFIABLE)
+            .header(header::CONTENT_RANGE, format!("bytes */{size}")),
+        body,
+    )
 }
 
 fn empty_response(status: StatusCode) -> Response<Body> {
@@ -281,6 +442,11 @@ mod tests {
         assert_eq!(response.headers()[header::CONTENT_LENGTH], "10");
         assert!(to_bytes(response.into_body(), 1).await.unwrap().is_empty());
 
+        // nginx `if_modified_since exact` (the default) answers 304 only when
+        // the condition equals `Last-Modified`: `ngx_http_test_if_modified`
+        // returns "modified" for every non-equal condition, so a *newer*
+        // condition still serves the representation. Verified against
+        // nginx 1.29.6 by the differential battery.
         let opened_file = opened(&temp);
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -291,8 +457,154 @@ mod tests {
             serve_opened_file(opened_file, &Method::GET, &headers)
                 .await
                 .status(),
+            StatusCode::OK
+        );
+
+        let last_modified =
+            HttpDate::from(temp.as_file().metadata().unwrap().modified().unwrap()).to_string();
+        let opened_file = opened(&temp);
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::IF_MODIFIED_SINCE,
+            HeaderValue::from_str(&last_modified).unwrap(),
+        );
+        assert_eq!(
+            serve_opened_file(opened_file, &Method::GET, &headers)
+                .await
+                .status(),
             StatusCode::NOT_MODIFIED
         );
+    }
+
+    #[tokio::test]
+    async fn if_match_is_a_precondition_with_412() {
+        let temp = NamedTempFile::new().unwrap();
+        temp.as_file().write_all(b"0123456789").unwrap();
+        let etag = entity_tag(&temp.as_file().metadata().unwrap()).unwrap();
+        let call = |value: &'static str| {
+            let opened_file = opened(&temp);
+            async move {
+                let mut headers = HeaderMap::new();
+                headers.insert(header::IF_MATCH, HeaderValue::from_static(value));
+                serve_opened_file(opened_file, &Method::GET, &headers).await
+            }
+        };
+        // A mismatching candidate is a failed precondition, not a served body.
+        let mismatching = call("\"nope\"").await;
+        assert_eq!(mismatching.status(), StatusCode::PRECONDITION_FAILED);
+        // `*` matches because the representation exists.
+        assert_eq!(call("*").await.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn if_modified_since_votes_before_if_none_match() {
+        let temp = NamedTempFile::new().unwrap();
+        temp.as_file().write_all(b"0123456789").unwrap();
+        let metadata = temp.as_file().metadata().unwrap();
+        let etag = entity_tag(&metadata).unwrap();
+        let last_modified = HttpDate::from(metadata.modified().unwrap()).to_string();
+        let older =
+            HttpDate::from(metadata.modified().unwrap() - std::time::Duration::from_secs(3_600))
+                .to_string();
+
+        let send = |etag: &str, ims: &str| {
+            let opened_file = opened(&temp);
+            let etag = etag.to_owned();
+            let ims = ims.to_owned();
+            async move {
+                let mut headers = HeaderMap::new();
+                headers.insert(header::IF_NONE_MATCH, HeaderValue::from_str(&etag).unwrap());
+                headers.insert(
+                    header::IF_MODIFIED_SINCE,
+                    HeaderValue::from_str(&ims).unwrap(),
+                );
+                serve_opened_file(opened_file, &Method::GET, &headers).await
+            }
+        };
+
+        // A matching If-None-Match combined with a non-equal If-Modified-Since
+        // is served: nginx never reaches the If-None-Match vote.
+        assert_eq!(send(&etag, &older).await.status(), StatusCode::OK);
+        // Equal conditions let the If-None-Match vote through, so the matching
+        // tag decides the 304.
+        assert_eq!(
+            send(&etag, &last_modified).await.status(),
+            StatusCode::NOT_MODIFIED
+        );
+        // With If-Modified-Since removed the tag alone still decides.
+        let opened_file = opened(&temp);
+        let mut headers = HeaderMap::new();
+        headers.insert(header::IF_NONE_MATCH, HeaderValue::from_str(&etag).unwrap());
+        assert_eq!(
+            serve_opened_file(opened_file, &Method::GET, &headers)
+                .await
+                .status(),
+            StatusCode::NOT_MODIFIED
+        );
+    }
+
+    #[tokio::test]
+    async fn not_modified_keeps_the_cache_validators() {
+        let temp = NamedTempFile::new().unwrap();
+        temp.as_file().write_all(b"0123456789").unwrap();
+        let metadata = temp.as_file().metadata().unwrap();
+        let etag = entity_tag(&metadata).unwrap();
+        let opened_file = opened(&temp);
+        let mut headers = HeaderMap::new();
+        headers.insert(header::IF_NONE_MATCH, HeaderValue::from_static("*"));
+        let response = serve_opened_file(opened_file, &Method::GET, &headers).await;
+        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+        // nginx clears Content-Type / Content-Length / Accept-Ranges on a 304
+        // but keeps every validator.
+        assert_eq!(response.headers()[header::ETAG], etag.as_str());
+        assert!(response.headers().contains_key(header::LAST_MODIFIED));
+        assert!(response.headers().contains_key(header::CACHE_CONTROL));
+        assert!(!response.headers().contains_key(header::CONTENT_TYPE));
+        assert!(!response.headers().contains_key(header::ACCEPT_RANGES));
+    }
+
+    #[tokio::test]
+    async fn if_range_ignores_the_range_when_the_validator_differs() {
+        let temp = NamedTempFile::new().unwrap();
+        temp.as_file().write_all(b"0123456789").unwrap();
+        let etag = entity_tag(&temp.as_file().metadata().unwrap()).unwrap();
+        let with = |if_range: String| {
+            let opened_file = opened(&temp);
+            async move {
+                let mut headers = HeaderMap::new();
+                headers.insert(header::RANGE, HeaderValue::from_static("bytes=0-3"));
+                headers.insert(header::IF_RANGE, HeaderValue::from_str(&if_range).unwrap());
+                serve_opened_file(opened_file, &Method::GET, &headers).await
+            }
+        };
+        // Matching validator: the range is honoured.
+        let matched = with(etag.clone()).await;
+        assert_eq!(matched.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(matched.headers()[header::CONTENT_RANGE], "bytes 0-3/10");
+        // Mismatching validator: nginx drops the range and serves the whole
+        // representation, so an unchanged file is never partly served.
+        let mismatched = with("\"nope\"".to_owned()).await;
+        assert_eq!(mismatched.status(), StatusCode::OK);
+        assert_eq!(mismatched.headers()[header::CONTENT_LENGTH], "10");
+    }
+
+    #[tokio::test]
+    async fn unsatisfiable_range_drops_the_validators() {
+        let temp = NamedTempFile::new().unwrap();
+        temp.as_file().write_all(b"0123456789").unwrap();
+        let opened_file = opened(&temp);
+        let mut headers = HeaderMap::new();
+        headers.insert(header::RANGE, HeaderValue::from_static("bytes=99-100"));
+        let response = serve_opened_file(opened_file, &Method::GET, &headers).await;
+        // nginx answers through `ngx_http_range_not_satisfiable`: the special
+        // response path keeps only `Content-Range: bytes */<size>` and drops the
+        // validators the content handler had already prepared.
+        assert_eq!(response.status(), StatusCode::RANGE_NOT_SATISFIABLE);
+        assert_eq!(response.headers()[header::CONTENT_RANGE], "bytes */10");
+        assert!(!response.headers().contains_key(header::ETAG));
+        assert!(!response.headers().contains_key(header::LAST_MODIFIED));
+        assert!(!response.headers().contains_key(header::CONTENT_TYPE));
+        assert!(!response.headers().contains_key(header::ACCEPT_RANGES));
     }
 
     #[test]
@@ -311,7 +623,7 @@ mod tests {
     async fn if_none_match_conditional_matrix() {
         let temp = NamedTempFile::new().unwrap();
         temp.as_file().write_all(b"0123456789").unwrap();
-        let etag = weak_etag(&temp.as_file().metadata().unwrap()).unwrap();
+        let etag = entity_tag(&temp.as_file().metadata().unwrap()).unwrap();
         let echo = |tag: String| {
             let opened_file = opened(&temp);
             let mut headers = HeaderMap::new();

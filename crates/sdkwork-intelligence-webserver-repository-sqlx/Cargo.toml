@@ -27,12 +27,20 @@ sdkwork-webserver-acme-service.workspace = true
 sdkwork-webserver-edge-runtime.workspace = true
 sdkwork-webserver-source-provider.workspace = true
 sdkwork-utils-rust.workspace = true
+# Promoted from a dev-dependency: the runtime bootstrap now resolves the ACME
+# live root and the challenge-method/DNS-account environment keys through this
+# crate's path and env authorities, so the same host OS produces the same
+# certificate paths for the worker and the edge runtime.
+sdkwork-webserver-core.workspace = true
+# Promoted from a dev-dependency for the same reason as the line above: the
+# runtime bootstrap now schedules the ACME DNS account probe on the host's
+# runtime instead of awaiting it, because a third-party provider must not be able
+# to delay this process's boot.
+tokio.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
-sdkwork-webserver-core.workspace = true
 tempfile.workspace = true
-tokio.workspace = true
 tracing-subscriber.workspace = true
 
 [lints]

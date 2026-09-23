@@ -1,6 +1,11 @@
 use chrono::{Duration, TimeZone, Utc};
 use rcgen::{
-    CertificateParams, DistinguishedName, DnType, KeyPair, PKCS_ECDSA_P256_SHA256, PKCS_RSA_SHA256,
+    CertificateParams, DistinguishedName, DnType, KeyPair, RsaKeySize, PKCS_ECDSA_P256_SHA256,
+    PKCS_RSA_SHA256,
+};
+use sdkwork_deploy_core::{
+    validate_certificate_key_algorithm, CERTIFICATE_KEY_ALGORITHM_ECDSA,
+    CERTIFICATE_KEY_ALGORITHM_RSA,
 };
 use sdkwork_utils_rust::crypto::sha256_hash;
 use time::OffsetDateTime;
@@ -67,17 +72,34 @@ pub fn issue_self_signed(
     })
 }
 
+/// Generates the private key a certificate is issued with.
+///
+/// The algorithm is checked against the shared vocabulary rather than against
+/// literals here: the control plane validates `preferredKeyAlgorithm` with the same
+/// function, so a value that reaches this point is one of the accepted set and the
+/// arm that reports otherwise is a guard against the vocabulary and this mapping
+/// drifting apart — a drift whose symptom would otherwise be "every ECDSA order
+/// fails" rather than a compile error.
+///
+/// RSA's modulus is **stated, not inherited**. `KeyPair::generate_for` decides it
+/// inside rcgen (2048 today), and a security parameter that changes with a
+/// dependency version is one nobody reviewed. `generate_rsa_for` makes it a value in
+/// this file, and makes 3072 or 4096 a one-word change if a compliance regime ever
+/// names them. ECDSA is P-256, the curve the recommended default resolves to.
 pub(crate) fn generate_key_pair(key_algorithm: &str) -> AcmeServiceResult<KeyPair> {
-    let algorithm = match key_algorithm {
-        "ECDSA" => &PKCS_ECDSA_P256_SHA256,
-        "RSA" => &PKCS_RSA_SHA256,
-        _ => {
-            return Err(AcmeServiceError::validation(
-                "keyAlgorithm must be ECDSA or RSA",
-            ));
+    validate_certificate_key_algorithm(key_algorithm).map_err(AcmeServiceError::validation)?;
+    let generated = match key_algorithm {
+        CERTIFICATE_KEY_ALGORITHM_ECDSA => KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256),
+        CERTIFICATE_KEY_ALGORITHM_RSA => {
+            KeyPair::generate_rsa_for(&PKCS_RSA_SHA256, RsaKeySize::_2048)
+        }
+        other => {
+            return Err(AcmeServiceError::validation(format!(
+                "keyAlgorithm {other} is accepted by the vocabulary but has no key generation rule"
+            )));
         }
     };
-    KeyPair::generate_for(algorithm)
+    generated
         .map_err(|error| AcmeServiceError::Internal(format!("generate certificate key: {error}")))
 }
 

@@ -31,6 +31,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
  * plugins/skills/mcp are the owning packages' own surfaces. Nothing on the
  * console surface is registry-driven any more, so a bridged page must beat a
  * registry source for the same resource key (asserted below).
+ *
+ * Domains and Certificates are console entries at the *per-user* level: the
+ * operator manages the domains and certificates they own, with ownership decided
+ * server-side by the Deployments module. The operations surface carries the same
+ * two menu labels over a different plane — the whole-tenant edge inventory the
+ * Web Server reconciles from its own configuration — which is why the console
+ * mounts the Deployments pages here rather than the admin ones.
  */
 const consoleModules = [deliveryModule, pluginsModule, skillsModule, mcpModule];
 const appUserPermissionScope = ["web.applications.*", "web.certificates.*"];
@@ -95,6 +102,18 @@ describe("console workspace access", () => {
     renderWorkspace(path, {}, appUserPermissionScope, vi.fn(), "en-US", bridgedRenderers());
 
     expect(screen.getByRole("link", { name: label })).toBeTruthy();
+    expect(screen.queryByText("This feature is not authorized")).toBeNull();
+  });
+
+  it("mounts the canonical deployments domain page for the domains and certificates entries", async () => {
+    stubEmptyListResponse();
+    renderWorkspace("/console/domains", {}, appUserPermissionScope, vi.fn(), "en-US", bridgedRenderers());
+
+    // The console pair is the per-user Deployments plane. The tenant-level
+    // inventory (the served root domains / subdomains this edge reconciles from
+    // its own configuration) is a separate module on the operations surface, so
+    // what must not appear here is that admin table, not the menu entry.
+    expect(await screen.findByRole("heading", { name: "Domains" })).toBeTruthy();
     expect(screen.queryByText("This feature is not authorized")).toBeNull();
   });
 

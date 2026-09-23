@@ -1,7 +1,7 @@
 import { backendApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { ClusterEventResponse, ClusterHeartbeatSampleResponse, ClusterHostResponse, ClusterInstanceResponse, ClusterOverviewResponse, ClusterResponse, CreateClusterRequest, EnqueueClusterPeerMessagesRequest, EnqueueClusterPeerMessagesResponse, PageInfo, UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest } from '../types';
+import type { ClusterEventResponse, ClusterHeartbeatSampleResponse, ClusterHostResponse, ClusterInstanceResponse, ClusterOverviewResponse, ClusterProbeRunResponse, ClusterResponse, ClusterSyncManifest, CreateClusterRequest, EnqueueClusterPeerMessagesRequest, EnqueueClusterPeerMessagesResponse, PageInfo, ProbeClusterInstanceRequest, PublishClusterSyncRequest, UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest } from '../types';
 
 
 export interface ClusterMessagesCreateParams {
@@ -69,6 +69,27 @@ export class ClusterEventsApi {
   }
 }
 
+export interface ClusterInstancesMetricsListParams {
+  limit?: number;
+}
+
+export class ClusterInstancesMetricsApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** List one instance's heartbeat metric samples for trend charts */
+  async list(instanceId: string, params?: ClusterInstancesMetricsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: ClusterHeartbeatSampleResponse[]; pageInfo: PageInfo; }> {
+    const query = buildQueryString([
+      { name: 'limit', value: params?.limit, style: 'form', explode: true, allowReserved: false },
+    ]);
+    return this.client.request<{ items: ClusterHeartbeatSampleResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/clusters/instances/${serializePathParameter(instanceId, { name: 'instanceId', style: 'simple', explode: false })}/metrics/history`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+  }
+}
+
 export interface ClusterInstancesHeartbeatsListParams {
   pageSize?: number;
   cursor?: string;
@@ -112,10 +133,12 @@ export interface ClusterInstancesDeleteParams {
 export class ClusterInstancesApi {
   private client: HttpClient;
   public readonly heartbeats: ClusterInstancesHeartbeatsApi;
+  public readonly metrics: ClusterInstancesMetricsApi;
 
   constructor(client: HttpClient) {
     this.client = client;
     this.heartbeats = new ClusterInstancesHeartbeatsApi(client);
+    this.metrics = new ClusterInstancesMetricsApi(client);
   }
 
 
@@ -157,6 +180,31 @@ export class ClusterInstancesApi {
       {}
     );
     return this.client.request<void>(backendApiPath(`/clusters/instances/${serializePathParameter(instanceId, { name: 'instanceId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}) });
+  }
+
+/** Probe one instance's connectivity and record the outcome */
+  async probe(instanceId: string, body?: ProbeClusterInstanceRequest, requestOptions?: ApiRequestOptions): Promise<ClusterProbeRunResponse> {
+    return this.client.request<ClusterProbeRunResponse>(backendApiPath(`/clusters/instances/${serializePathParameter(instanceId, { name: 'instanceId', style: 'simple', explode: false })}/probe`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, ...(body !== undefined ? { body, contentType: 'application/json' } : {}), sdkworkUnwrapKind: 'item' });
+  }
+
+/** Gracefully drain one instance out of routing */
+  async drain(instanceId: string, requestOptions?: ApiRequestOptions): Promise<ClusterInstanceResponse> {
+    return this.client.request<ClusterInstanceResponse>(backendApiPath(`/clusters/instances/${serializePathParameter(instanceId, { name: 'instanceId', style: 'simple', explode: false })}/drain`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, sdkworkUnwrapKind: 'item' });
+  }
+
+/** Clear the drain flag and restore routing participation */
+  async undrain(instanceId: string, requestOptions?: ApiRequestOptions): Promise<ClusterInstanceResponse> {
+    return this.client.request<ClusterInstanceResponse>(backendApiPath(`/clusters/instances/${serializePathParameter(instanceId, { name: 'instanceId', style: 'simple', explode: false })}/undrain`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, sdkworkUnwrapKind: 'item' });
+  }
+
+/** Cordon one instance out of routing without draining it */
+  async cordon(instanceId: string, requestOptions?: ApiRequestOptions): Promise<ClusterInstanceResponse> {
+    return this.client.request<ClusterInstanceResponse>(backendApiPath(`/clusters/instances/${serializePathParameter(instanceId, { name: 'instanceId', style: 'simple', explode: false })}/cordon`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, sdkworkUnwrapKind: 'item' });
+  }
+
+/** Uncordon one instance back into routing */
+  async uncordon(instanceId: string, requestOptions?: ApiRequestOptions): Promise<ClusterInstanceResponse> {
+    return this.client.request<ClusterInstanceResponse>(backendApiPath(`/clusters/instances/${serializePathParameter(instanceId, { name: 'instanceId', style: 'simple', explode: false })}/uncordon`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, sdkworkUnwrapKind: 'item' });
   }
 }
 
@@ -302,6 +350,11 @@ export class ClusterApi {
       {}
     );
     return this.client.request<void>(backendApiPath(`/clusters/${serializePathParameter(clusterId, { name: 'clusterId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}) });
+  }
+
+/** Publish a desired-state revision to every instance of the cluster */
+  async sync(clusterId: string, body: PublishClusterSyncRequest, requestOptions?: ApiRequestOptions): Promise<ClusterSyncManifest> {
+    return this.client.request<ClusterSyncManifest>(backendApiPath(`/clusters/${serializePathParameter(clusterId, { name: 'clusterId', style: 'simple', explode: false })}/sync`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
   }
 }
 

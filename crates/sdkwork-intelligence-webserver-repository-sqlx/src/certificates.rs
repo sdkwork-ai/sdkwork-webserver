@@ -598,8 +598,8 @@ impl WebRepository {
         let operation_result = sqlx::query(
             "UPDATE webserver_certificate_operation
              SET status = 'SUCCEEDED', next_attempt_at = NOW(), lease_owner = NULL,
-                 lease_expires_at = NULL, failure_code = NULL, completed_at = NOW(),
-                 updated_at = NOW()
+                 lease_expires_at = NULL, failure_code = NULL, failure_detail = NULL,
+                 completed_at = NOW(), updated_at = NOW()
              WHERE id = $1 AND tenant_id = $2 AND status = 'RUNNING'
                AND lease_owner = $3 AND fencing_token = $4",
         )

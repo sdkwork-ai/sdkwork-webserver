@@ -5,5 +5,7 @@ data class UpdateClusterRequest(
     val description: String? = null,
     val status: Int? = null,
     val heartbeatIntervalSeconds: Int? = null,
-    val offlineThresholdSeconds: Int? = null
+    val offlineThresholdSeconds: Int? = null,
+    val lbStrategy: String? = null,
+    val servedDomains: List<String>? = null
 )

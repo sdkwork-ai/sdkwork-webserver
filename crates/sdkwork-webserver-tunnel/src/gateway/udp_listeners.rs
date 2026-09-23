@@ -13,7 +13,7 @@
 //! - Sessions expire after [`UDP_SESSION_IDLE`] without activity (NAT entry
 //!   expiry parity); releasing the port aborts all sessions on it.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -41,8 +41,14 @@ pub(crate) struct UdpListenerSet {
     route_ports: HashMap<RouteId, u16>,
 }
 
+/// One bound UDP port.
+///
+/// A gateway port is owned by exactly one route: the registry already rejects
+/// a second route claiming the same port, and a datagram carries no routing
+/// key that could distinguish two routes sharing it (FRP `remote_port`
+/// semantics — one port, one target).
 struct PortState {
-    routes: HashSet<RouteId>,
+    route_id: RouteId,
     session_task: tokio::task::JoinHandle<()>,
     _listener: Arc<UdpSocket>,
 }
@@ -57,43 +63,53 @@ impl UdpListenerSet {
         route_id: RouteId,
         listener: UdpSocket,
     ) {
-        self.route_ports.insert(route_id.clone(), port);
-        match self.ports.get_mut(&port) {
-            Some(state) => {
-                state.routes.insert(route_id);
-                drop(listener);
-            }
-            None => {
-                let listener = Arc::new(listener);
-                let session_task =
-                    tokio::spawn(udp_port_loop(shared.clone(), port, Arc::clone(&listener)));
-                self.ports.insert(
-                    port,
-                    PortState {
-                        routes: HashSet::from([route_id]),
-                        session_task,
-                        _listener: listener,
-                    },
-                );
-                tracing::info!(port, "tunnel udp listener bound");
-            }
+        if let Some(existing) = self.ports.get(&port) {
+            // The registry admits one route per port, so this only happens on
+            // a same-session hot update that never released the old claim.
+            tracing::warn!(
+                port,
+                owned_by = %existing.route_id,
+                requested_by = %route_id,
+                "udp port is already served; dropping the duplicate listener"
+            );
+            drop(listener);
+            return;
         }
+        self.route_ports.insert(route_id.clone(), port);
+        let listener = Arc::new(listener);
+        let session_task = tokio::spawn(udp_port_loop(shared.clone(), port, Arc::clone(&listener)));
+        self.ports.insert(
+            port,
+            PortState {
+                route_id,
+                session_task,
+                _listener: listener,
+            },
+        );
+        tracing::info!(port, "tunnel udp listener bound");
     }
 
-    /// Releases one route's port claim, closing the listener when it was the
-    /// last route on the port.
+    /// Releases one route's port claim. A caller naming a route that does not
+    /// own the port is refused, so a stale teardown can never close a live
+    /// listener.
     pub(crate) fn release(&mut self, port: u16, route_id: &RouteId) {
         self.route_ports.remove(route_id);
-        let Some(state) = self.ports.get_mut(&port) else {
+        let Some(state) = self.ports.get(&port) else {
             return;
         };
-        state.routes.remove(route_id);
-        if state.routes.is_empty() {
-            if let Some(state) = self.ports.remove(&port) {
-                state.session_task.abort();
-                drop(state._listener);
-                tracing::info!(port, "tunnel udp listener released");
-            }
+        if &state.route_id != route_id {
+            tracing::debug!(
+                port,
+                owned_by = %state.route_id,
+                requested_by = %route_id,
+                "udp port release refused: route does not own the port"
+            );
+            return;
+        }
+        if let Some(state) = self.ports.remove(&port) {
+            state.session_task.abort();
+            drop(state._listener);
+            tracing::info!(port, "tunnel udp listener released");
         }
     }
 
@@ -140,6 +156,16 @@ enum SessionEvent {
     Ended(SocketAddr),
 }
 
+impl Drop for VisitorSession {
+    /// Aborting on drop covers every removal path — idle reap, forward
+    /// failure, port release, and cancellation of the whole port loop — so a
+    /// reader task can never outlive the session it belongs to and keep
+    /// writing datagrams for a visitor the port loop has already forgotten.
+    fn drop(&mut self) {
+        self.reader_task.abort();
+    }
+}
+
 async fn udp_port_loop(shared: Arc<GatewayShared>, port: u16, listener: Arc<UdpSocket>) {
     let mut sessions: HashMap<SocketAddr, VisitorSession> = HashMap::new();
     let (events_tx, mut events_rx) = mpsc::channel::<SessionEvent>(64);
@@ -163,7 +189,6 @@ async fn udp_port_loop(shared: Arc<GatewayShared>, port: u16, listener: Arc<UdpS
                 sessions.retain(|visitor, session| {
                     let alive = !idle_since(&session.last_activity);
                     if !alive {
-                        session.reader_task.abort();
                         shared.metrics.record_stream_close();
                         tracing::debug!(%visitor, "udp session expired");
                     }
@@ -217,9 +242,9 @@ async fn udp_port_loop(shared: Arc<GatewayShared>, port: u16, listener: Arc<UdpS
             }
         }
     }
-    for (_, session) in sessions.drain() {
-        session.reader_task.abort();
-    }
+    // Dropping the map drops every session; each session's Drop aborts its
+    // reader task, so no explicit per-session cleanup is required here.
+    drop(sessions);
 }
 
 async fn forward_to_session(
@@ -252,8 +277,10 @@ async fn open_session(
     first_payload: Bytes,
     events: &mpsc::Sender<SessionEvent>,
 ) -> Result<VisitorSession, TunnelError> {
-    let registered =
-        shared.registry.match_udp_port(port).ok_or(TunnelError::RouteNotFound)?;
+    let registered = shared
+        .registry
+        .match_udp_port(port)
+        .ok_or(TunnelError::RouteNotFound)?;
     // Same admission gate as the HTTP and TCP relay planes: network
     // allow-list first, then the route publicity policy. Raw datagram
     // visitors cannot present a bearer token, so bearer-protected routes
@@ -271,8 +298,10 @@ async fn open_session(
     let open_budget = shared.timeouts.stream_open_duration();
     let open = async {
         let mut stream = connection.open_stream().await?;
-        let header =
-            sdkwork_webserver_tunnel_protocol::DataStreamHeader::new(&registered.route.id, stream_id);
+        let header = sdkwork_webserver_tunnel_protocol::DataStreamHeader::new(
+            &registered.route.id,
+            stream_id,
+        );
         let frame = header.to_frame()?;
         stream
             .write_all(&frame)
@@ -285,12 +314,8 @@ async fn open_session(
         let (reader, writer) = tokio::io::split(stream);
         Ok::<
             (
-                tokio::io::ReadHalf<
-                    Box<dyn sdkwork_webserver_tunnel_transport::TunnelStream>,
-                >,
-                tokio::io::WriteHalf<
-                    Box<dyn sdkwork_webserver_tunnel_transport::TunnelStream>,
-                >,
+                tokio::io::ReadHalf<Box<dyn sdkwork_webserver_tunnel_transport::TunnelStream>>,
+                tokio::io::WriteHalf<Box<dyn sdkwork_webserver_tunnel_transport::TunnelStream>>,
             ),
             TunnelError,
         >((reader, writer))
@@ -308,8 +333,7 @@ async fn open_session(
     };
     // Forward the first visitor datagram into the fresh stream.
     let mut framed = BytesMut::with_capacity(
-        sdkwork_webserver_tunnel_protocol::packet_frame::PACKET_LENGTH_BYTES
-            + first_payload.len(),
+        sdkwork_webserver_tunnel_protocol::packet_frame::PACKET_LENGTH_BYTES + first_payload.len(),
     );
     sdkwork_webserver_tunnel_protocol::packet_frame::encode_packet(&first_payload, &mut framed)?;
     write_half
@@ -333,8 +357,7 @@ async fn open_session(
         tokio::spawn(async move {
             let outcome = async {
                 loop {
-                    let datagram =
-                        packet_frame::read_packet(&mut read_half, &mut scratch).await?;
+                    let datagram = packet_frame::read_packet(&mut read_half, &mut scratch).await?;
                     touch(&idle_marker);
                     metrics.add_bytes_out(u64::try_from(datagram.len()).unwrap_or(u64::MAX));
                     listener
@@ -350,9 +373,7 @@ async fn open_session(
                     tracing::debug!(%visitor, error = %error, "udp session reader ended");
                 }
             }
-            let _ = events
-                .send(SessionEvent::Ended(visitor))
-                .await;
+            let _ = events.send(SessionEvent::Ended(visitor)).await;
         })
     };
     tracing::debug!(%visitor, port, route = %registered.route.id, "udp session opened");
@@ -366,8 +387,7 @@ async fn open_session(
 
 fn idle_since(last_activity: &AtomicU64) -> bool {
     let now = now_millis();
-    now.saturating_sub(last_activity.load(Ordering::Relaxed))
-        > UDP_SESSION_IDLE.as_millis() as u64
+    now.saturating_sub(last_activity.load(Ordering::Relaxed)) > UDP_SESSION_IDLE.as_millis() as u64
 }
 
 fn touch(last_activity: &AtomicU64) {
@@ -379,4 +399,147 @@ fn now_millis() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|since| since.as_millis() as u64)
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::AtomicBool;
+
+    /// Minimal in-memory tunnel stream for lifecycle assertions.
+    struct DuplexStream(tokio::io::DuplexStream);
+
+    impl tokio::io::AsyncRead for DuplexStream {
+        fn poll_read(
+            mut self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+            buf: &mut tokio::io::ReadBuf<'_>,
+        ) -> std::task::Poll<std::io::Result<()>> {
+            std::pin::Pin::new(&mut self.0).poll_read(cx, buf)
+        }
+    }
+
+    impl tokio::io::AsyncWrite for DuplexStream {
+        fn poll_write(
+            mut self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+            buf: &[u8],
+        ) -> std::task::Poll<std::io::Result<usize>> {
+            std::pin::Pin::new(&mut self.0).poll_write(cx, buf)
+        }
+
+        fn poll_flush(
+            mut self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<std::io::Result<()>> {
+            std::pin::Pin::new(&mut self.0).poll_flush(cx)
+        }
+
+        fn poll_shutdown(
+            mut self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<std::io::Result<()>> {
+            std::pin::Pin::new(&mut self.0).poll_shutdown(cx)
+        }
+    }
+
+    impl sdkwork_webserver_tunnel_transport::TunnelStream for DuplexStream {}
+
+    /// Marks that the future holding it was dropped — i.e. the task was
+    /// cancelled rather than completing.
+    struct SignalOnDrop(Arc<AtomicBool>);
+
+    impl Drop for SignalOnDrop {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::SeqCst);
+        }
+    }
+
+    fn session_over_pending_read() -> (
+        VisitorSession,
+        Arc<AtomicBool>,
+        Arc<AtomicBool>,
+        tokio::io::DuplexStream,
+    ) {
+        let (peer, client) = tokio::io::duplex(64);
+        let stream: Box<dyn sdkwork_webserver_tunnel_transport::TunnelStream> =
+            Box::new(DuplexStream(client));
+        let (reader, writer) = tokio::io::split(stream);
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let completed = Arc::new(AtomicBool::new(false));
+        let cancelled_flag = Arc::clone(&cancelled);
+        let completed_flag = Arc::clone(&completed);
+        let reader_task = tokio::spawn(async move {
+            let _guard = SignalOnDrop(cancelled_flag);
+            let mut reader = reader;
+            let mut byte = [0_u8; 1];
+            let _ = tokio::io::AsyncReadExt::read(&mut reader, &mut byte).await;
+            completed_flag.store(true, Ordering::SeqCst);
+        });
+        let session = VisitorSession {
+            writer,
+            reader_task,
+            last_activity: Arc::new(AtomicU64::new(now_millis())),
+            _permit: Arc::new(tokio::sync::Semaphore::new(1))
+                .try_acquire_owned()
+                .expect("permit"),
+        };
+        (session, cancelled, completed, peer)
+    }
+
+    #[tokio::test]
+    async fn dropping_a_session_cancels_its_reader_task() {
+        let (session, cancelled, completed, _peer) = session_over_pending_read();
+        tokio::task::yield_now().await;
+        assert!(
+            !completed.load(Ordering::SeqCst),
+            "the reader must still be blocked on the tunnel stream"
+        );
+
+        drop(session);
+        for _ in 0..16 {
+            if cancelled.load(Ordering::SeqCst) {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert!(
+            cancelled.load(Ordering::SeqCst),
+            "dropping the session must cancel the reader task"
+        );
+        assert!(
+            !completed.load(Ordering::SeqCst),
+            "the reader must not have completed its read"
+        );
+    }
+
+    #[tokio::test]
+    async fn release_refuses_a_route_that_does_not_own_the_port() {
+        let mut set = UdpListenerSet::default();
+        let owner = RouteId::parse("route_owner").expect("valid id");
+        let intruder = RouteId::parse("route_intruder").expect("valid id");
+        let socket = UdpSocket::bind(("127.0.0.1", 0)).await.expect("bind");
+        let port = socket.local_addr().expect("addr").port();
+        set.ports.insert(
+            port,
+            PortState {
+                route_id: owner.clone(),
+                session_task: tokio::spawn(async {}),
+                _listener: Arc::new(socket),
+            },
+        );
+        set.route_ports.insert(owner.clone(), port);
+
+        set.release(port, &intruder);
+        assert!(
+            set.ports.contains_key(&port),
+            "a route that does not own the port must not close it"
+        );
+
+        set.release(port, &owner);
+        assert!(
+            !set.ports.contains_key(&port),
+            "the owning route releases the port"
+        );
+    }
 }

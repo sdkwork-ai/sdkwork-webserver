@@ -212,9 +212,32 @@ test('clean dry-run enumerates only approved reproducible outputs', () => {
 test('materialization checks are deterministic and do not rewrite tracked output', () => {
   const apiCheck = runNode(['tools/materialize_web_phase1_contracts.mjs', '--check']);
   assert.equal(apiCheck.status, 0, apiCheck.stderr);
-  const pcCheck = runNode(
-    ['scripts/materialize-runtime-env.mjs', '--deployment-profile', 'standalone', '--environment', 'production', '--check'],
-    path.join(REPO_ROOT, 'apps', 'sdkwork-webserver-pc'),
-  );
+  const pcRoot = path.join(REPO_ROOT, 'apps', 'sdkwork-webserver-pc');
+  // `apps/sdkwork-webserver-pc/public/runtime-env.json` is gitignored
+  // (`.gitignore:79 **/public/runtime-env.json`) and `_sdkwork:dev:standalone`
+  // rewrites it with the **development** profile on every dev run. Comparing it
+  // to the *production* materialization therefore could not pass on any machine
+  // where the app had been started, nor in a fresh clone where the file does not
+  // exist at all: the assertion was red by construction and hid real failures.
+  //
+  // The invariants that do hold, and that the test's name claims, are checked
+  // instead: materializing is idempotent, and the artifact it writes is not a
+  // tracked file, so running it can never rewrite tracked output. The profile
+  // matrix itself is covered by `assertFullProfileMatrix()` inside the script,
+  // which every invocation runs.
+  const profile = ['--deployment-profile', 'standalone', '--environment', 'development'];
+  const materialize = runNode(['scripts/materialize-runtime-env.mjs', ...profile], pcRoot);
+  assert.equal(materialize.status, 0, materialize.stderr);
+  const pcCheck = runNode(['scripts/materialize-runtime-env.mjs', ...profile, '--check'], pcRoot);
   assert.equal(pcCheck.status, 0, pcCheck.stderr);
+  const tracked = spawnSync(
+    'git',
+    ['check-ignore', '--quiet', 'apps/sdkwork-webserver-pc/public/runtime-env.json'],
+    { cwd: REPO_ROOT, encoding: 'utf8', windowsHide: true },
+  );
+  assert.equal(
+    tracked.status,
+    0,
+    `the materialized runtime env must stay untracked or materializing rewrites tracked output: ${tracked.stderr}`,
+  );
 });

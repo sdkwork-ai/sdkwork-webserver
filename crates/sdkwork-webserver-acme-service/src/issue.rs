@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use rcgen::KeyPair;
+use sdkwork_deploy_core::validate_certificate_key_algorithm;
 use sdkwork_utils_rust::crypto::sha256_hash;
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -7,6 +8,9 @@ use std::time::Duration;
 use tokio::sync::Semaphore;
 
 use crate::account_store::{AcmeAccountStore, MemoryAcmeAccountStore};
+use crate::challenge_policy::{
+    resolve_challenge_method, ChallengeAvailability, DeclaredChallengeMethod, ResolvedChallenge,
+};
 use crate::challenge_store::ChallengeStore;
 use crate::config::AcmeConfig;
 use crate::dns::Dns01Presenter;
@@ -23,11 +27,15 @@ const MAX_CONCURRENT_CERTIFICATE_ISSUANCE: usize = 8;
 
 /// Certificate identifier ceiling.
 ///
-/// Aligned with the deployment contract's `MAX_CERTIFICATE_IDENTIFIERS` and the
-/// CA's own per-certificate name limit. The previous value of 8 was a local
-/// choice, not a CA constraint, and it silently made a 20-name certificate
-/// unrepresentable in the control plane.
-const MAX_CERTIFICATE_IDENTIFIERS: usize = 100;
+/// The authoritative ceiling is the control plane's
+/// `MAX_CERTIFICATE_IDENTIFIERS` (8), restated by the DDL constraint
+/// `chk_webserver_certificate_identifier_position CHECK (position BETWEEN 0 AND 7)`.
+/// The engine repeats the bound instead of importing the deployment contract (the
+/// ACME engine must not know about the deployment domain), and it must be the
+/// *same* bound: a larger one here would let a request through that the control
+/// plane rejects with a 400 and the database rejects with a constraint violation,
+/// turning a validation error into an internal failure.
+pub const MAX_CERTIFICATE_IDENTIFIERS: usize = 8;
 
 pub struct CertificateIssuer {
     pub(crate) config: AcmeConfig,
@@ -38,9 +46,12 @@ pub struct CertificateIssuer {
     pub(crate) operation_timeout: Duration,
     pub(crate) admission: Semaphore,
     /// Associated cloud DNS accounts. When present (and covering every
-    /// identifier), issuance and renewal use DNS-01 — the only challenge
+    /// identifier), issuance and renewal can use DNS-01 — the only challenge
     /// that renews wildcard certificates unattended.
     pub(crate) dns_accounts: Option<Arc<crate::dns_account::DnsCloudAccountRegistry>>,
+    /// Operator-declared challenge method. `AUTO` (the default) resolves to
+    /// HTTP-01 for exact identifiers and DNS-01 for wildcards.
+    pub(crate) declared_challenge_method: DeclaredChallengeMethod,
 }
 
 impl CertificateIssuer {
@@ -117,6 +128,7 @@ impl CertificateIssuer {
             operation_timeout: Duration::from_millis(operation_timeout_ms),
             admission: Semaphore::new(MAX_CONCURRENT_CERTIFICATE_ISSUANCE),
             dns_accounts: None,
+            declared_challenge_method: DeclaredChallengeMethod::default(),
         })
     }
 
@@ -142,11 +154,70 @@ impl CertificateIssuer {
         self.dns_accounts = Some(accounts);
     }
 
+    /// Sets the operator-declared challenge method (from
+    /// `SDKWORK_WEBSERVER_ACME_CHALLENGE_METHOD` or the control plane's
+    /// `webserver_tls_policy.challenge_method`).
+    pub fn set_declared_challenge_method(&mut self, method: DeclaredChallengeMethod) {
+        self.declared_challenge_method = method;
+    }
+
+    pub fn declared_challenge_method(&self) -> DeclaredChallengeMethod {
+        self.declared_challenge_method
+    }
+
     /// True when the registry covers every identifier: DNS-01 is available.
     pub fn dns_accounts_cover(&self, hostnames: &[String]) -> bool {
         self.dns_accounts
             .as_ref()
             .is_some_and(|registry| registry.covers_all(hostnames.iter().map(String::as_str)))
+    }
+
+    /// What this deployment can actually do for `hostnames`.
+    ///
+    /// Both inputs are computed here rather than at the call site so a caller
+    /// cannot disagree with the policy about, for example, whether the webroot
+    /// is configured.
+    pub fn challenge_availability(&self, hostnames: &[String]) -> ChallengeAvailability {
+        ChallengeAvailability {
+            http01_webroot_configured: self.config.webroot.is_some(),
+            dns01_accounts_cover_all: self.dns_accounts_cover(hostnames),
+        }
+    }
+
+    /// Resolves the challenge method for one order without building anything.
+    ///
+    /// Used to record/explain the decision; [`Self::challenge_plan`] is the
+    /// variant that also supplies the presenter.
+    pub fn resolve_challenge(&self, hostnames: &[String]) -> AcmeServiceResult<ResolvedChallenge> {
+        resolve_challenge_method(
+            self.declared_challenge_method,
+            hostnames,
+            self.challenge_availability(hostnames),
+        )
+    }
+
+    /// The complete challenge decision for one order: the method **and**, for
+    /// DNS-01, the presenter and zone resolver.
+    ///
+    /// This is the single entry point callers must use. Choosing the method in
+    /// one place and the presenter in another is how the two drifted apart
+    /// before: the method was derived from `dns_accounts_cover` while the
+    /// presenter came from a registry that nothing ever attached, so wildcards
+    /// were routed to HTTP-01 and rejected by the engine.
+    pub fn challenge_plan(&self, hostnames: &[String]) -> AcmeServiceResult<ChallengePlan> {
+        match self.resolve_challenge(hostnames)? {
+            ResolvedChallenge::Http01 => Ok(ChallengePlan::Http01),
+            ResolvedChallenge::Dns01 => {
+                let context = self.dns01_context(hostnames).ok_or_else(|| {
+                    // Unreachable while the policy resolved DNS-01 from the same
+                    // registry, but fail closed rather than silently downgrade.
+                    AcmeServiceError::config(
+                        "DNS-01 was selected but no cloud account covers every identifier",
+                    )
+                })?;
+                Ok(ChallengePlan::Dns01(context))
+            }
+        }
     }
 
     /// Builds the DNS-01 challenge context from the associated cloud
@@ -201,10 +272,13 @@ impl CertificateIssuer {
                 ));
             }
         }
-        if !matches!(key_algorithm, "ECDSA" | "RSA") {
-            return Err(AcmeServiceError::validation(
-                "keyAlgorithm must be ECDSA or RSA",
-            ));
+        // Checked against the shared vocabulary, not a local list: the same set
+        // guards the DDL constraints and the control plane's own validation, and the
+        // key generation below is keyed by the same constants.
+        if let Err(reason) = validate_certificate_key_algorithm(key_algorithm) {
+            return Err(AcmeServiceError::validation(format!(
+                "keyAlgorithm {reason}"
+            )));
         }
         validate_certificate_name(cert_name)?;
         let _permit = self.admission.try_acquire().map_err(|_| {
@@ -264,6 +338,38 @@ impl IssuerDns01Context {
             presenter: self.presenter.as_ref(),
             zones: self.registry.as_ref(),
         }
+    }
+}
+
+/// The resolved challenge for one order, ready to hand to
+/// [`CertificateIssuer::issue_with_challenge`].
+pub enum ChallengePlan {
+    /// HTTP-01 through the edge webroot.
+    Http01,
+    /// DNS-01 through the issuer's cloud-account registry.
+    Dns01(IssuerDns01Context),
+}
+
+impl ChallengePlan {
+    /// The DDL/wire spelling of the selected method, for logging and for
+    /// asserting what was actually used.
+    pub fn method(&self) -> &'static str {
+        match self {
+            Self::Http01 => ResolvedChallenge::Http01.as_str(),
+            Self::Dns01(_) => ResolvedChallenge::Dns01.as_str(),
+        }
+    }
+}
+
+/// Manual `Debug`: the DNS-01 variant holds the presenter and registry, which
+/// carry credentials and are deliberately not `Debug`. Reporting the selected
+/// method is all a log or an assertion message needs.
+impl std::fmt::Debug for ChallengePlan {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_tuple("ChallengePlan")
+            .field(&self.method())
+            .finish()
     }
 }
 
@@ -432,6 +538,137 @@ mod tests {
             "ECDSA",
         )
         .expect("self-signed material")
+    }
+
+    fn issuer_with_webroot(webroot: Option<&str>) -> CertificateIssuer {
+        let config = AcmeConfig::new(
+            "https://acme-staging-v02.api.letsencrypt.org/directory".to_string(),
+            "admin@example.com".to_string(),
+            30,
+            webroot.map(str::to_string),
+            false,
+        )
+        .expect("config");
+        CertificateIssuer::new(config, "/tmp/certs/live").expect("issuer")
+    }
+
+    fn registry_covering(zone_apex: &str) -> Arc<crate::dns_account::DnsCloudAccountRegistry> {
+        let mut registry = crate::dns_account::DnsCloudAccountRegistry::empty();
+        registry
+            .register(crate::dns_account::DnsCloudAccount {
+                account_id: "test-account".to_string(),
+                zone_apex: zone_apex.to_string(),
+                provider: crate::dns::DnsProviderKind::Cloudflare,
+                presenter: Arc::new(crate::dns::InMemoryDns01Presenter::default()),
+            })
+            .expect("register account");
+        Arc::new(registry)
+    }
+
+    /// The product default on the real issuer, not only on the pure function:
+    /// an exact-only order goes HTTP-01 even when DNS accounts are attached.
+    #[test]
+    fn challenge_plan_prefers_http01_for_exact_identifiers() {
+        let mut issuer = issuer_with_webroot(Some("/var/www/acme"));
+        issuer.attach_dns_accounts(registry_covering("example.com"));
+        assert_eq!(
+            issuer.declared_challenge_method(),
+            DeclaredChallengeMethod::Auto
+        );
+        let plan = issuer
+            .challenge_plan(&["www.example.com".to_string()])
+            .expect("plan");
+        assert_eq!(plan.method(), "HTTP_01");
+    }
+
+    /// The other half of the default: a wildcard goes DNS-01 as soon as an
+    /// account covers its zone.
+    #[test]
+    fn challenge_plan_selects_dns01_for_wildcards() {
+        let mut issuer = issuer_with_webroot(Some("/var/www/acme"));
+        issuer.attach_dns_accounts(registry_covering("example.com"));
+        let plan = issuer
+            .challenge_plan(&["*.example.com".to_string(), "example.com".to_string()])
+            .expect("plan");
+        assert_eq!(plan.method(), "DNS_01");
+    }
+
+    /// Without a registry a wildcard is a *configuration* failure, reported at
+    /// the boundary instead of by the CA deep inside the order.
+    #[test]
+    fn challenge_plan_fails_closed_for_wildcards_without_dns_accounts() {
+        let issuer = issuer_with_webroot(Some("/var/www/acme"));
+        let error = issuer
+            .challenge_plan(&["*.example.com".to_string()])
+            .expect_err("wildcard without accounts must fail closed");
+        assert!(
+            matches!(error, AcmeServiceError::Config(_)),
+            "a missing DNS account is configuration, not a bad request: {error:?}"
+        );
+        assert!(error.to_string().contains("DNS-01"));
+    }
+
+    /// A registry that covers some identifiers but not all must not be treated
+    /// as "DNS-01 is available": a partially covered order would publish the
+    /// covered records and then fail the uncovered authorization.
+    #[test]
+    fn challenge_plan_requires_every_identifier_to_be_covered() {
+        let mut issuer = issuer_with_webroot(Some("/var/www/acme"));
+        issuer.attach_dns_accounts(registry_covering("example.com"));
+        assert!(issuer.dns_accounts_cover(&["www.example.com".to_string()]));
+        assert!(!issuer.dns_accounts_cover(&["www.other.org".to_string()]));
+        let error = issuer
+            .challenge_plan(&["*.example.com".to_string(), "*.other.org".to_string()])
+            .expect_err("a partially covered order must fail closed");
+        assert!(error.to_string().contains("DNS-01"));
+    }
+
+    #[test]
+    fn declared_challenge_method_overrides_the_auto_default() {
+        let mut issuer = issuer_with_webroot(Some("/var/www/acme"));
+        issuer.attach_dns_accounts(registry_covering("example.com"));
+        issuer.set_declared_challenge_method(DeclaredChallengeMethod::Dns01);
+        let plan = issuer
+            .challenge_plan(&["www.example.com".to_string()])
+            .expect("plan");
+        assert_eq!(plan.method(), "DNS_01");
+
+        issuer.set_declared_challenge_method(DeclaredChallengeMethod::Http01);
+        let error = issuer
+            .challenge_plan(&["*.example.com".to_string()])
+            .expect_err("HTTP-01 cannot prove a wildcard");
+        assert!(matches!(error, AcmeServiceError::Validation(_)));
+    }
+
+    /// Without a webroot and without DNS accounts there is no way to prove
+    /// control; the failure names both remedies.
+    #[test]
+    fn challenge_plan_reports_both_remedies_when_nothing_is_configured() {
+        let issuer = issuer_with_webroot(None);
+        let error = issuer
+            .challenge_plan(&["www.example.com".to_string()])
+            .expect_err("no challenge method is available");
+        let message = error.to_string();
+        assert!(
+            message.contains("SDKWORK_WEBSERVER_ACME_WEBROOT"),
+            "{message}"
+        );
+        assert!(message.contains("DNS provider account"), "{message}");
+    }
+
+    /// Engine-level invariant kept behind the policy: even if a caller
+    /// hand-builds the HTTP-01 mode, a wildcard cannot reach the CA.
+    #[tokio::test]
+    async fn wildcard_still_cannot_reach_the_ca_through_the_http01_path() {
+        let issuer = issuer_with_webroot(Some("/var/www/acme"));
+        let error = issuer
+            .issue(1, &["*.example.com".to_string()], "wildcard", "ECDSA")
+            .await
+            .expect_err("the engine must reject a wildcard on the HTTP-01 path");
+        assert!(
+            error.to_string().contains("wildcard identifiers require"),
+            "{error}"
+        );
     }
 
     #[tokio::test]

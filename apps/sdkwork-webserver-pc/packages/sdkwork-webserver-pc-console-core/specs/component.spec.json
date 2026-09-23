@@ -61,7 +61,9 @@
     "routeManifest": null,
     "sdkClients": [
       "SdkworkDeployAppClient",
-      "SdkworkDriveAppClient"
+      "SdkworkDriveAppClient",
+      "SdkworkAppClient",
+      "SdkworkBackendClient"
     ],
     "sdkDependencies": [
       {
@@ -73,6 +75,12 @@
       {
         "workspace": "sdkwork-drive-app-sdk",
         "permissionModuleId": "drive",
+        "surface": "app-api",
+        "credentialMode": "authenticated-app-api"
+      },
+      {
+        "workspace": "sdkwork-iam-app-sdk",
+        "permissionModuleId": "iam",
         "surface": "app-api",
         "credentialMode": "authenticated-app-api"
       }
@@ -95,6 +103,12 @@
         {
           "moduleId": "drive",
           "manifestRef": "../../../../../sdkwork-iam/iam/modules/drive/iam.module.manifest.json",
+          "inheritPermissions": true,
+          "inheritRoles": true
+        },
+        {
+          "moduleId": "iam-kernel",
+          "manifestRef": "../../../../../sdkwork-iam/iam/modules/iam-kernel/iam.module.manifest.json",
           "inheritPermissions": true,
           "inheritRoles": true
         }

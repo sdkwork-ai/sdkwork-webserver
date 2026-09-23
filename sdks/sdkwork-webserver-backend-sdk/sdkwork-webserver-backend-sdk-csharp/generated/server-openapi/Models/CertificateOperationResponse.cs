@@ -14,6 +14,7 @@ namespace SDKWork.WebserverBackendSdk.Models
         public int MaxAttempts { get; set; }
         public string NextAttemptAt { get; set; }
         public string? FailureCode { get; set; }
+        public string? FailureDetail { get; set; }
         public string CreatedAt { get; set; }
         public string UpdatedAt { get; set; }
         public string? CompletedAt { get; set; }

@@ -10,6 +10,7 @@ type CertificateOperationResponse struct {
 	MaxAttempts int `json:"maxAttempts"`
 	NextAttemptAt string `json:"nextAttemptAt"`
 	FailureCode string `json:"failureCode"`
+	FailureDetail string `json:"failureDetail"`
 	CreatedAt string `json:"createdAt"`
 	UpdatedAt string `json:"updatedAt"`
 	CompletedAt string `json:"completedAt"`

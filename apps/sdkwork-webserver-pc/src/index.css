@@ -2,6 +2,12 @@
 @source "../src";
 @source "../packages";
 @source "../../../../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-auth-pc-react/src";
+/* The cloud account console page itself lives in the IAM repo and is mounted
+   here through a thin adapter, so its utilities have to be declared explicitly
+   too — the adapter under `../packages` is scanned, the page is not. Without
+   this the page's own classes are emitted only when some scanned source happens
+   to use the same class, which is how a utility can go missing silently. */
+@source "../../../../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-console-cloud-account/src";
 @source "../../../../sdkwork-ui/sdkwork-ui-pc-react/src";
 @source "../../../../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-console-skills/src";
 @source "../../../../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-commons/src";
@@ -1656,6 +1662,22 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   padding: 0;
   background: transparent;
 }
+/* The IAM-owned cloud account page is the one host-bridged page that is a
+   *document* rather than a fixed console: the two-scroll-region framing above
+   is wrong for it (its content is a listing, and a detail dialog renders in a
+   portal), so it takes the same gutter and panel from this rule instead and
+   scrolls as a whole. Measured before the rule existed: the page's first framed
+   box sat at inset { top: 0, left: 0, right: 0 } inside `.workspace`, which put
+   the section rule against the sidebar and cut the table's right border off the
+   viewport edge. */
+.cloud-account-surface {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px clamp(16px, 2.2vw, 30px) 24px;
+  color: var(--sdk-color-text-primary);
+  background: var(--sdk-color-surface-panel);
+}
 .skills-admin-surface > nav,
 .mcp-admin-surface > nav {
   flex: 0 0 auto;
@@ -2822,4 +2844,145 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
 .status-badge.cluster-severity-error {
   background: var(--webserver-color-danger-surface);
   color: var(--webserver-color-danger-text);
+}
+/* Cluster inventory tones: one vocabulary shared by instance status, health,
+   routing posture, config sync and event severity, so a colour always means the
+   same operational state wherever it appears in the fleet pages. */
+.status-badge.cluster-tone-ok {
+  background: var(--webserver-color-success-surface);
+  color: var(--webserver-color-success-text);
+}
+.status-badge.cluster-tone-warn {
+  background: var(--webserver-color-warning-surface);
+  color: var(--webserver-color-warning-text);
+}
+.status-badge.cluster-tone-danger {
+  background: var(--webserver-color-danger-surface);
+  color: var(--webserver-color-danger-text);
+}
+.status-badge.cluster-tone-neutral {
+  background: var(--sdk-color-surface-panel-muted);
+  color: var(--sdk-color-text-secondary);
+}
+/* Fleet tables carry more columns than any viewport shows at once, so the
+   column menu lets the operator decide what is on screen. It is a native
+   `details` disclosure: keyboard- and screen-reader-navigable, and it needs no
+   popover dependency. */
+.column-menu {
+  position: relative;
+}
+.column-menu > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.column-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.column-menu > summary::marker {
+  content: "";
+}
+.column-menu[open] > summary {
+  border-color: var(--sdk-color-brand-primary);
+}
+.column-menu-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 230px;
+  max-height: min(60vh, 420px);
+  overflow: auto;
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid var(--sdk-color-border-default);
+  border-radius: 7px;
+  background: var(--sdk-color-surface-panel);
+  box-shadow: var(--sdk-shadow-lg);
+}
+.column-menu-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sdk-color-text-primary);
+  cursor: pointer;
+}
+.column-menu-list label:hover {
+  background: var(--sdk-color-surface-panel-muted);
+}
+.column-menu-list input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+}
+
+/* Expanded row detail.
+
+   The record's remaining fields, plus the operations scoped to that record.
+   It sits inside the framework table's own detail row, which spans the table
+   width; the grid is fluid so a wide viewport reads it as two or three columns
+   of label/value pairs rather than one long scroll of them. */
+.resource-detail {
+  display: grid;
+  gap: 12px;
+}
+.resource-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 10px 24px;
+  margin: 0;
+}
+.resource-detail-grid > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.resource-detail-grid dt {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sdk-color-text-secondary);
+}
+.resource-detail-grid dd {
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  color: var(--sdk-color-text-primary);
+  overflow-wrap: anywhere;
+}
+.resource-detail-grid dd code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+.resource-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* A nested payload is a block, not a value.
+
+   The grid's tracks are ~220px, which shreds a JSON object into unreadable
+   slivers, so a field whose value nests takes the whole row instead. The class
+   is applied from the value's own shape, so any resource that starts returning a
+   nested record gets it without the column having to ask. */
+.resource-detail-grid > .resource-detail-block {
+  grid-column: 1 / -1;
+}
+.resource-detail-json {
+  max-height: 320px;
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border: 1px solid var(--sdk-color-border-subtle);
+  border-radius: 6px;
+  background: var(--sdk-color-surface-panel-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }

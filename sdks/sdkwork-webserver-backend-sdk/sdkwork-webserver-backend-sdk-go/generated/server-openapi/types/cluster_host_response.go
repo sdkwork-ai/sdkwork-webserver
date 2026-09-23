@@ -21,6 +21,8 @@ type ClusterHostResponse struct {
 	Status int `json:"status"`
 	LastHeartbeatAt string `json:"lastHeartbeatAt"`
 	InstanceCount Int64String `json:"instanceCount"`
+	JoinMode string `json:"joinMode"`
+	TunnelRouteDomain string `json:"tunnelRouteDomain"`
 	CreatedAt string `json:"createdAt"`
 	UpdatedAt string `json:"updatedAt"`
 }

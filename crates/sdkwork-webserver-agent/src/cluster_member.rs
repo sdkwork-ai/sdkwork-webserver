@@ -71,9 +71,22 @@ pub struct ClusterMemberIdentity {
     /// Deployment environment label.
     pub environment: String,
     /// Process id of the joining webserver process.
+    ///
+    /// Run state, not identity: a restarted process reports a new pid, and the
+    /// registry treats the slot below as the instance.
     pub process_pid: i32,
     /// Process start instant (RFC 3339).
     pub process_started_at: String,
+    /// Ingress bind address this node serves on.
+    ///
+    /// Together with [`Self::bind_port`] this is the node's **slot** — the
+    /// instance identity the registry keys on. A node that reports its slot
+    /// keeps one instance row and one instance uuid across restarts; a node that
+    /// leaves it empty can only be identified by its pid, so every restart
+    /// registers as a new member. Hosts should always populate it.
+    pub bind_host: Option<String>,
+    /// Ingress bind port this node serves on (see [`Self::bind_host`]).
+    pub bind_port: Option<i32>,
     /// Build version reported to the registry.
     pub build_version: String,
     /// `LAN` (default) or `TUNNEL`.
@@ -89,6 +102,25 @@ pub struct ClusterMemberIdentity {
 #[async_trait::async_trait]
 pub trait SyncApplier: Send + Sync {
     async fn apply(&self, kind: &str, manifest: &ClusterSyncManifest) -> Result<(), String>;
+
+    /// Finishes in-flight work so this node can stop (graceful drain).
+    ///
+    /// The registry decides *that* an instance drains (the heartbeat answers
+    /// `ops.drainRequested`); only the host knows *when* the work this node
+    /// accepted has actually finished, so the membership loop asks here
+    /// before it acknowledges completion.
+    ///
+    /// Implementations stop accepting new work first, then resolve once the
+    /// work already accepted has finished. Returning `Err` leaves the drain
+    /// open — the registry keeps asking on every heartbeat — so a transient
+    /// failure is safe to surface and retry, but a host with genuinely
+    /// unfinished work must not report success.
+    ///
+    /// Default: the node owns no request-serving state of its own (it is a
+    /// pure control-plane client), so there is nothing to drain.
+    async fn drain(&self) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 /// Errors the membership loop surfaces to its supervisor.
@@ -151,6 +183,11 @@ async fn run_loop(
     mut stop: watch::Receiver<bool>,
 ) {
     let mut session: Option<RegisteredSession> = None;
+    let started_at = std::time::Instant::now();
+    // The quality sample carries the previous tick's round trip: a request's
+    // latency is only known once that request has completed, so each
+    // heartbeat reports the sample measured by the heartbeat before it.
+    let mut measured_rtt_millis: Option<f64> = None;
     loop {
         if *stop.borrow() {
             return;
@@ -189,7 +226,19 @@ async fn run_loop(
             continue;
         };
 
-        match membership_tick(&transport, &snapshot, &identity, &applier).await {
+        let (outcome, rtt_millis) = membership_tick(
+            &transport,
+            &snapshot,
+            &identity,
+            &applier,
+            started_at,
+            measured_rtt_millis,
+        )
+        .await;
+        if rtt_millis.is_some() {
+            measured_rtt_millis = rtt_millis;
+        }
+        match outcome {
             TickOutcome::Ok => {}
             TickOutcome::SessionLost(reason) => {
                 tracing::warn!(reason = %reason, "cluster session lost; re-registering");
@@ -197,6 +246,11 @@ async fn run_loop(
             }
             TickOutcome::Transient(reason) => {
                 tracing::debug!(reason = %reason, "cluster tick failed; backing off");
+            }
+            TickOutcome::Drained => {
+                // The instance is recorded as stopped; the host owns what
+                // happens next (its own shutdown, or a supervisor restart).
+                return;
             }
         }
         if backoff(&mut stop, snapshot.heartbeat_interval).await {
@@ -207,7 +261,6 @@ async fn run_loop(
 
 #[derive(Clone)]
 struct RegisteredSession {
-    #[allow(dead_code)]
     instance_id: String,
     instance_token: String,
     heartbeat_interval: Duration,
@@ -225,22 +278,36 @@ enum TickOutcome {
     Ok,
     SessionLost(String),
     Transient(String),
+    /// The registry asked this node to drain and the completion report was
+    /// accepted: the registration loop ends, because the instance is now
+    /// recorded as stopped and must not heartbeat itself back online.
+    Drained,
 }
 
 /// One membership tick: heartbeat with quality sample, then the sync
 /// engine (manifest fetch → apply → ack per drifting track).
+///
+/// Returns the tick outcome plus the round trip this heartbeat measured (the
+/// caller reports it on the next tick). `previous_rtt_millis` is the sample
+/// the previous tick measured, which is also the only signal available on
+/// every transport.
 async fn membership_tick(
     transport: &ClusterTransport,
     session: &RegisteredSession,
     identity: &ClusterMemberIdentity,
     applier: &Arc<dyn SyncApplier>,
-) -> TickOutcome {
+    started_at: std::time::Instant,
+    previous_rtt_millis: Option<f64>,
+) -> (TickOutcome, Option<f64>) {
     let heartbeat = ClusterHeartbeatRequest {
+        // `status` is the instance lifecycle state reported to the registry:
+        // 1 = online. A node only reaches this code while its membership loop
+        // is running, so the claim is grounded in the loop's own liveness.
         status: 1,
         health_state: "HEALTHY".to_owned(),
-        uptime_seconds: 0,
+        uptime_seconds: i64::try_from(started_at.elapsed().as_secs()).unwrap_or(i64::MAX),
         build_version: Some(identity.build_version.clone()),
-        metrics: serde_json::json!({}),
+        metrics: quality_metrics(previous_rtt_millis),
     };
     let started = std::time::Instant::now();
     let response: ClusterHeartbeatResponse = match send_json(
@@ -253,16 +320,97 @@ async fn membership_tick(
     .await
     {
         Ok(response) => response,
-        Err(error) => return TickOutcome::from(error),
+        Err(error) => return (TickOutcome::from(error), None),
     };
+    let rtt_millis = started.elapsed().as_secs_f64() * 1_000.0;
     tracing::debug!(
+        instance = %session.instance_id,
         rtt_ms = started.elapsed().as_millis() as u64,
         "cluster heartbeat accepted"
     );
+    // Registry-driven operations directives (TECH-cluster-management:183).
+    // `drainRequested` is the node's half of the graceful-drain loop: the
+    // operator marked the instance draining, the registry already took it out
+    // of routing, and the node must finish in-flight work, report completion,
+    // and stop heartbeating — a further heartbeat reports `status: 1` and
+    // would put a stopped instance back online.
+    if let Some(ops) = response.ops.as_ref() {
+        if !ops.routing_enabled {
+            tracing::debug!(
+                instance = %session.instance_id,
+                draining = ops.drain_requested,
+                "cluster routing is disabled for this instance (cordoned or draining)"
+            );
+        }
+        if ops.drain_requested {
+            return (drain_and_report(transport, session, applier).await, Some(rtt_millis));
+        }
+    }
     if let Some(states) = &response.sync {
         run_sync(transport, session, states, applier).await;
     }
-    TickOutcome::Ok
+    (TickOutcome::Ok, Some(rtt_millis))
+}
+
+/// Node half of the graceful-drain loop: finish in-flight work, then close the
+/// registry's drain flags.
+///
+/// Both halves can fail transiently and both are safe to retry on the next
+/// heartbeat: the registry keeps answering `drainRequested` until it sees the
+/// completion report, and `record_cluster_drain_complete` is idempotent.
+async fn drain_and_report(
+    transport: &ClusterTransport,
+    session: &RegisteredSession,
+    applier: &Arc<dyn SyncApplier>,
+) -> TickOutcome {
+    if let Err(error) = applier.drain().await {
+        tracing::warn!(
+            instance = %session.instance_id,
+            detail = %error,
+            "cluster drain requested but in-flight work has not finished; staying registered"
+        );
+        return TickOutcome::Ok;
+    }
+    match send_json::<sdkwork_webserver_contract::ClusterDrainCompleteResponse, _>(
+        transport,
+        Some(&session.instance_token),
+        "POST",
+        "/internal/v3/api/web/cluster/instances/drain_complete",
+        &serde_json::json!({}),
+    )
+    .await
+    {
+        Ok(_) => {
+            tracing::info!(
+                instance = %session.instance_id,
+                "cluster drain complete reported; leaving the registration loop"
+            );
+            TickOutcome::Drained
+        }
+        Err(error) => {
+            tracing::warn!(
+                instance = %session.instance_id,
+                detail = %error,
+                "cluster drain-complete report failed; retrying on the next heartbeat"
+            );
+            TickOutcome::Ok
+        }
+    }
+}
+
+/// Builds the heartbeat `metrics` envelope the cluster derives the node
+/// quality score from.
+///
+/// CPU, memory, connection count and error rate are left unreported rather
+/// than filled with placeholders: every field of the sample is optional, and
+/// a fabricated value would silently distort the score that drives instance
+/// selection.
+fn quality_metrics(rtt_millis: Option<f64>) -> serde_json::Value {
+    let sample = sdkwork_webserver_contract::ClusterQualityMetrics {
+        rtt_millis,
+        ..Default::default()
+    };
+    serde_json::json!({ "quality": sample })
 }
 
 impl From<MemberError> for TickOutcome {
@@ -311,8 +459,8 @@ async fn register(
             environment: identity.environment.clone(),
             process_pid: identity.process_pid,
             process_started_at: identity.process_started_at.clone(),
-            bind_host: None,
-            bind_port: None,
+            bind_host: identity.bind_host.clone(),
+            bind_port: identity.bind_port,
             public_endpoint: None,
             build_version: Some(identity.build_version.clone()),
             join_mode: Some(identity.join_mode.clone()),

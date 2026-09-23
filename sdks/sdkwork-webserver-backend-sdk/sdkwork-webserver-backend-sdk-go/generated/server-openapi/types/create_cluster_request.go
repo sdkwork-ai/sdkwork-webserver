@@ -7,4 +7,6 @@ type CreateClusterRequest struct {
 	Description string `json:"description"`
 	HeartbeatIntervalSeconds int `json:"heartbeatIntervalSeconds"`
 	OfflineThresholdSeconds int `json:"offlineThresholdSeconds"`
+	LbStrategy string `json:"lbStrategy"`
+	ServedDomains []string `json:"servedDomains"`
 }

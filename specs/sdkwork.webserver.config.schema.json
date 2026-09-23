@@ -1677,6 +1677,17 @@
           "description": "nginx recursive_error_pages on: an error produced while serving an error page may itself be mapped again (bounded hops).",
           "type": "boolean",
           "default": false
+        },
+        "cachePolicy": {
+          "description": "Server-level nginx expires / etag / if_modified_since resolved for this host; absent inherits the http-level (app-wide) policy.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/cachePolicy"
+            }
+          ]
         }
       }
     },
@@ -1830,8 +1841,64 @@
             "$ref": "#/$defs/errorPage"
           },
           "default": []
+        },
+        "cachePolicy": {
+          "description": "Location-level nginx expires / etag / if_modified_since resolved for this route; absent inherits the host/app policy.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/cachePolicy"
+            }
+          ]
         }
       }
+    },
+    "cachePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Response freshness policy from nginx expires / etag / if_modified_since.",
+      "properties": {
+        "expires": {
+          "type": "string",
+          "enum": [
+            "off",
+            "epoch",
+            "max",
+            "daily",
+            "access",
+            "modified"
+          ],
+          "default": "off"
+        },
+        "expiresSeconds": {
+          "description": "Signed expires time argument in seconds; for `daily` it is the time of day as seconds after midnight.",
+          "type": "integer",
+          "minimum": -315360000,
+          "maximum": 315360000,
+          "default": 0
+        },
+        "etag": {
+          "type": "boolean",
+          "default": true
+        },
+        "ifModifiedSince": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "before",
+            "off"
+          ],
+          "default": "exact"
+        }
+      },
+      "required": [
+        "expires",
+        "expiresSeconds",
+        "etag",
+        "ifModifiedSince"
+      ]
     },
     "authBasic": {
       "type": "object",

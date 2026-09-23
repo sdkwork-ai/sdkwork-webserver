@@ -45,21 +45,43 @@ export async function bootstrapWebserverPcRuntime() {
     clearSession: () => { void auth.runtime.clearSession(); },
   });
   const attachSdkClientBoundaries = sessionAuth.attachSdkClientBoundaries;
+  // Resolved once and never reset. `WebserverAuthorizedWorkspace` reads this
+  // promise through React's `use()`, which suspends on any thenable that has no
+  // settled status yet. Handing it a fresh pending promise on every render —
+  // which is what clearing this memo after a failure would do — suspends the
+  // workspace surface forever and shows a loading screen instead of the error.
   let consoleClientsPromise: Promise<WebserverConsoleSdkClients> | undefined;
   const loadConsoleClients = () => {
     if (!consoleClientsPromise) {
       consoleClientsPromise = import("@sdkwork/webserver-pc-console-core")
         .then(({ createWebserverConsoleSdkClients }) => {
           const clients = createWebserverConsoleSdkClients({
+            appbaseAppApiBaseUrl: config.appbaseAppApiBaseUrl,
+            backendApiBaseUrl: config.backendApiBaseUrl,
             deployAppApiBaseUrl: config.deployAppApiBaseUrl,
             driveAppApiBaseUrl: config.driveAppApiBaseUrl,
           }, tokenManager);
           attachSdkClientBoundaries([clients.deploy, clients.drive]);
+          // The cloud account center calls the same-origin IAM backend API, so a
+          // 401 from that plane has to clear the session exactly like one from the
+          // deployments or drive clients. Both IAM clients are registered: the
+          // service facade only ever reaches the backend one, but the app client is
+          // what hydrates the dual-token session the backend face depends on.
+          //
+          // Reading `clients.iam` composes that face on demand, and the
+          // composition throws whenever the generated IAM SDK lags IAM's own
+          // standard registry. Only the IAM-owned pages depend on it, so a
+          // failure is reported and the rest of the console still boots; leaving
+          // it unguarded lets one optional capability block every menu.
+          try {
+            attachSdkClientBoundaries([clients.iam.app, clients.iam.backend]);
+          } catch (cause) {
+            console.error(
+              "The IAM console clients are unavailable; IAM-owned console pages will fail to load.",
+              cause,
+            );
+          }
           return clients;
-        })
-        .catch((cause: unknown) => {
-          consoleClientsPromise = undefined;
-          throw cause;
         });
     }
     return consoleClientsPromise;

@@ -85,6 +85,10 @@ hashlink = "0.12"
 hickory-resolver = "0.26"
 mime_guess = "2"
 percent-encoding = "2"
+# Registrable-root-domain folding (`psl::domain_str`). The same crate
+# `sdkwork-deployments` standardizes on, so a served hostname folds to its apex
+# identically on both the Web Server and the Deployments domain plane.
+psl = "2.1.233"
 regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["http2", "rustls", "stream"] }
 rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs", "std", "tls12"] }

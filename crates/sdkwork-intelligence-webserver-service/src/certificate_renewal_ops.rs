@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use chrono::{Duration, Utc};
-use sdkwork_webserver_acme_service::{AcmeServiceError, CertificateIssuer};
+use sdkwork_webserver_acme_service::{AcmeServiceError, CertificateIssuer, ChallengePlan};
 use sdkwork_webserver_contract::{
     CertificateIssueUpdate, CertificateOperationCycleReport, CertificateOperationLease,
     WebServiceResult,
@@ -119,29 +119,44 @@ async fn execute_certificate_operation(
     // original claim lease; a heartbeat keeps the fencing token's lease current
     // so a slow operation is never reaped or re-claimed while still running.
     let heartbeat = spawn_certificate_lease_heartbeat(Arc::clone(&repository), lease.clone());
-    // Challenge strategy: when cloud DNS accounts are associated and cover
-    // every identifier, renew via DNS-01 — the only challenge that renews
-    // wildcard certificates unattended. Otherwise the historical HTTP-01
-    // path applies (wildcards fail fast with an explicit validation error).
-    let dns01 = if certificate_issuer.dns_accounts_cover(&lease.hostnames) {
-        certificate_issuer.dns01_context(&lease.hostnames)
-    } else {
-        None
-    };
-    let material = match certificate_issuer
-        .issue_with_challenge(
-            lease.cert_type,
-            &lease.hostnames,
-            &lease.cert_name,
-            &lease.key_algorithm,
-            dns01.as_ref().map(|context| context.into_context()),
-        )
-        .await
-    {
+    // Challenge strategy is resolved by the issuer, not here: it is the only
+    // component that knows the declared method, whether a webroot is
+    // configured, and whether a DNS account covers every identifier. Single
+    // identifiers default to HTTP-01; wildcards resolve to DNS-01 and fail
+    // closed with an actionable configuration error when no account covers
+    // their zone. Resolving it in one place is what keeps the method and the
+    // presenter from disagreeing (they did: the method came from the account
+    // registry while the presenter came from a registry nothing ever attached,
+    // so every wildcard was routed to HTTP-01 and rejected).
+    let outcome = async {
+        let plan = certificate_issuer.challenge_plan(&lease.hostnames)?;
+        tracing::debug!(
+            tenant_id = lease.tenant_id,
+            operation_id = %lease.operation_id,
+            challenge_method = plan.method(),
+            "resolved the certificate challenge method"
+        );
+        let dns01 = match &plan {
+            ChallengePlan::Http01 => None,
+            ChallengePlan::Dns01(context) => Some(context.into_context()),
+        };
+        certificate_issuer
+            .issue_with_challenge(
+                lease.cert_type,
+                &lease.hostnames,
+                &lease.cert_name,
+                &lease.key_algorithm,
+                dns01,
+            )
+            .await
+    }
+    .await;
+    let material = match outcome {
         Ok(material) => material,
         Err(error) => {
             heartbeat.abort();
             let failure_code = certificate_issuer_failure_code(&error);
+            let failure_detail = certificate_issuer_failure_detail(&error);
             tracing::warn!(
                 tenant_id = lease.tenant_id,
                 operation_id = %lease.operation_id,
@@ -154,6 +169,7 @@ async fn execute_certificate_operation(
                 repository.as_ref(),
                 &lease,
                 failure_code,
+                failure_detail.as_deref(),
             )
             .await;
         }
@@ -192,6 +208,7 @@ async fn execute_certificate_operation(
                 repository.as_ref(),
                 &lease,
                 "CERTIFICATE_FINALIZATION_FAILED",
+                None,
             )
             .await;
         }
@@ -284,11 +301,18 @@ async fn persist_certificate_operation_failure(
     repository: &dyn WebRepositoryPort,
     lease: &CertificateOperationLease,
     failure_code: &str,
+    failure_detail: Option<&str>,
 ) -> WebServiceResult<CertificateOperationOutcome> {
     let (retry_at, terminal_retry_at) =
         certificate_retry_deadlines(lease.attempt_count, &lease.operation_id);
     let operation = repository
-        .fail_certificate_operation(lease, failure_code, &retry_at, &terminal_retry_at)
+        .fail_certificate_operation(
+            lease,
+            failure_code,
+            failure_detail,
+            &retry_at,
+            &terminal_retry_at,
+        )
         .await?;
     Ok(if operation.status == "FAILED" {
         CertificateOperationOutcome::Failed
@@ -369,10 +393,30 @@ fn certificate_issuer_failure_code(error: &AcmeServiceError) -> &'static str {
     }
 }
 
+/// The part of a failure an operator can act on, or `None` when the code says
+/// everything the error contains.
+///
+/// The code is what retry, cooldown and localized console copy branch on, so it
+/// has to stay stable and short; that is exactly why it cannot also explain
+/// anything. Without this, a refused DNS credential and a revoked API token were
+/// the same string to everyone outside the server log.
+///
+/// `Internal` deliberately yields nothing: those messages are written for
+/// whoever maintains the issuer ("dns01 store lock poisoned") and reading them
+/// out of context misleads more than it helps. `Provider` is the opposite case —
+/// the text is the vendor's own sentence about the operator's own account.
+fn certificate_issuer_failure_detail(error: &AcmeServiceError) -> Option<String> {
+    match error {
+        AcmeServiceError::Provider(message) => Some(message.clone()),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        certificate_issuer_failure_code, certificate_retry_deadlines, CERTIFICATE_RETRY_MAX_SECS,
+        certificate_issuer_failure_code, certificate_issuer_failure_detail,
+        certificate_retry_deadlines, CERTIFICATE_RETRY_MAX_SECS,
     };
     use chrono::{DateTime, Utc};
     use sdkwork_webserver_acme_service::AcmeServiceError;
@@ -396,5 +440,39 @@ mod tests {
             )),
             "ACME_PROVIDER_FAILED"
         );
+    }
+
+    /// The reason the detail exists: every one of these failures is
+    /// `ACME_PROVIDER_FAILED` to the retry scheduler and to the console's
+    /// localized copy, and they need completely different fixes.
+    #[test]
+    fn a_provider_refusal_carries_its_own_text_while_the_code_stays_stable() {
+        let refusals = [
+            "CLOUDFLARE rejected the request with HTTP 401: Authentication error (10000)",
+            "Aliyun rejected AddDomainRecord: Specified access key is not found (InvalidAccessKeyId.NotFound)",
+            "DNSPod rejected Record.Create: Login failed (-1)",
+            "Aliyun rejected DescribeDomainRecords: 该域名不属于当前账号 (Forbidden)",
+        ];
+        for refusal in refusals {
+            let error = AcmeServiceError::Provider(refusal.to_string());
+            assert_eq!(certificate_issuer_failure_code(&error), "ACME_PROVIDER_FAILED");
+            assert_eq!(
+                certificate_issuer_failure_detail(&error).as_deref(),
+                Some(refusal)
+            );
+        }
+    }
+
+    /// A message written for whoever maintains the issuer reads as noise to an
+    /// operator, and an unclassified failure has no classification to explain.
+    #[test]
+    fn only_provider_failures_produce_an_operator_facing_detail() {
+        for error in [
+            AcmeServiceError::Config("config detail".to_string()),
+            AcmeServiceError::Validation("validation detail".to_string()),
+            AcmeServiceError::Internal("dns01 store lock poisoned".to_string()),
+        ] {
+            assert!(certificate_issuer_failure_detail(&error).is_none(), "{error}");
+        }
     }
 }

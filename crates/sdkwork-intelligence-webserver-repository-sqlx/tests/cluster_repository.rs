@@ -3,11 +3,15 @@
 //! Runs against a disposable, empty PostgreSQL database addressed through
 //! `SDKWORK_DATABASE_TEST_POSTGRES_URL` (same contract as
 //! `repository_parity.rs`): the harness migrates the schema from the baseline
-//! and exercises the full cluster repository surface — registration
-//! idempotency (one host, many processes; many hosts), token authentication,
+//! and exercises the full cluster repository surface — registration idempotency
+//! keyed on the listening slot (one row per slot, stable across process
+//! restarts; many slots per host; many hosts), token authentication,
 //! heartbeats, the peer directory, the mailbox handoff, the liveness sweep,
 //! events, and admin pagination — so every statement in `cluster.rs` executes
-//! against a real engine.
+//! against a real engine. It also pins the two instance-state ownership rules
+//! the repository enforces: an operator's maintenance mark outranks every
+//! machine writer (heartbeat, re-registration, prober), and the prober writes
+//! its ejection instant once per failure streak.
 
 use std::sync::Arc;
 
@@ -16,12 +20,13 @@ use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_database_sqlx::create_pool_from_config;
 use sdkwork_intelligence_webserver_service::{
     ClusterEventWrite, ClusterHeartbeatWrite, ClusterHostUpsert, ClusterInstanceUpsert,
-    ClusterPeerMessageEnqueue, WebRepositoryPort,
+    ClusterPeerMessageEnqueue, ClusterProbeOutcome, ClusterProbeWrite, WebRepositoryPort,
 };
 use sdkwork_utils_rust::crypto::sha256_hash;
-use sdkwork_webserver_contract::{UpdateClusterRequest, WebServiceError};
+use sdkwork_webserver_contract::{
+    UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest, WebServiceError,
+};
 use sdkwork_webserver_database_host::bootstrap_web_database;
-use sqlx::Row;
 
 const POSTGRES_TEST_URL_ENV: &str = "SDKWORK_DATABASE_TEST_POSTGRES_URL";
 
@@ -79,6 +84,9 @@ async fn postgres_cluster_registration_heartbeat_peers_mailbox_and_sweep_are_bou
 
     verify_registration_and_authentication(&context).await;
     verify_heartbeat_peers_and_mailbox(&context).await;
+    verify_operator_status_ownership_and_probe_latch(&context).await;
+    verify_operator_rename_survives_re_registration(&context).await;
+    verify_machine_absence_does_not_erase_operator_values(&context).await;
     verify_liveness_sweep_events_and_pagination(&context).await;
     context.pool.close().await;
 }
@@ -108,13 +116,15 @@ async fn prepare_database(config: DatabaseConfig) -> TestContext {
         .expect("initialize PostgreSQL Web database lifecycle");
 
     let id_generator = SnowflakeIdGenerator::new(911).expect("create test Snowflake generator");
-    let repository = Arc::new(
+    // Coerced through the binding rather than `as`: the workspace denies
+    // `trivial_casts`, and `Arc<T> as Arc<dyn Trait>` is exactly that.
+    let repository: Arc<dyn WebRepositoryPort> = Arc::new(
         sdkwork_intelligence_webserver_repository_sqlx::PostgresWebRepository::new(
             pool.clone(),
             id_generator,
             [0x5b; 32],
         ),
-    ) as Arc<dyn WebRepositoryPort>;
+    );
     TestContext { pool, repository }
 }
 
@@ -148,47 +158,118 @@ async fn verify_registration_and_authentication(context: &TestContext) {
     assert!(!host_again.created);
     assert_eq!(host_first.uuid, host_again.uuid);
 
-    // One host runs many instances: distinct PIDs are distinct instances.
+    // One host runs many instances, and an instance is its listening slot:
+    // `edge-a` serving 3800 and `edge-a` serving 3900 are two members.
     let token_one = "winst_instance-one-token";
+    // `process_started_at` is pinned instead of generated per call: it is what
+    // the registry reads as "this process restarted", so a fixture that
+    // re-stamps it on every write could not tell a re-registration apart from a
+    // restart.
+    const FIRST_START: &str = "2026-09-21T00:00:00Z";
+    const RESTART_START: &str = "2026-09-21T06:00:00Z";
+    let mut first_write = instance_write(
+        0,
+        host_first.id,
+        default_first.cluster_id,
+        3_800,
+        4_100,
+        hash(token_one),
+    );
+    first_write.process_started_at = FIRST_START.to_owned();
     let instance_one = repository
-        .upsert_cluster_instance(instance_write(
-            0,
-            host_first.id,
-            default_first.cluster_id,
-            4_100,
-            hash(token_one),
-        ))
+        .upsert_cluster_instance(first_write)
         .await
         .expect("instance insert");
     assert!(instance_one.created);
+
+    // The same process re-registering on the same slot (what the heartbeat loop
+    // does after a connection reset) updates the row, rotates the token, and is
+    // NOT a restart: the process start instant did not move.
     let token_two = "winst_instance-one-rotated";
+    // The token the slot carries after the restart. Every registration rotates
+    // the credential, so this - not `token_two` - is what must resolve once the
+    // restart has landed.
+    let restart_token = "winst_instance-one-restarted";
+    let mut same_process_write = instance_write(
+        0,
+        host_first.id,
+        default_first.cluster_id,
+        3_800,
+        4_100,
+        hash(token_two),
+    );
+    same_process_write.process_started_at = FIRST_START.to_owned();
     let instance_re_register = repository
-        .upsert_cluster_instance(instance_write(
-            0,
-            host_first.id,
-            default_first.cluster_id,
-            4_100,
-            hash(token_two),
-        ))
+        .upsert_cluster_instance(same_process_write)
         .await
         .expect("instance re-registration");
     assert!(!instance_re_register.created);
     assert_eq!(instance_one.uuid, instance_re_register.uuid);
+    assert_eq!(
+        restart_count(&context, instance_one.id).await,
+        0,
+        "a re-registration from the same process is not a restart"
+    );
 
     let instance_two = repository
         .upsert_cluster_instance(instance_write(
             0,
             host_first.id,
             default_first.cluster_id,
+            3_900,
             4_200,
             hash("winst_instance-two-token"),
         ))
         .await
-        .expect("second instance on the same host");
+        .expect("second slot on the same host");
     assert!(instance_two.created);
     assert_ne!(instance_one.uuid, instance_two.uuid);
 
-    // A second host with the same PID is a distinct member.
+    // A restart keeps the slot and takes a new pid. The registration has to
+    // land on the row that owns the slot: same instance uuid, one restart
+    // counted, and no additional row. Keyed on the pid - the conflict target
+    // this replaced - every restart of a long-lived edge appended a brand-new
+    // instance, which is how one dev host ended up owning twenty rows for two
+    // listening ports.
+    let restarted = repository
+        .upsert_cluster_instance({
+            let mut write = instance_write(
+                0,
+                host_first.id,
+                default_first.cluster_id,
+                3_800,
+                4_999,
+                hash(restart_token),
+            );
+            write.process_started_at = RESTART_START.to_owned();
+            write
+        })
+        .await
+        .expect("instance restart on the same slot");
+    assert!(!restarted.created, "a restart must reuse the slot's row");
+    assert_eq!(
+        instance_one.uuid, restarted.uuid,
+        "the instance uuid is stable for the life of the slot"
+    );
+    assert_eq!(
+        restart_count(&context, instance_one.id).await,
+        1,
+        "the restart is counted, not duplicated"
+    );
+    let live_on_host: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM webserver_cluster_instance \
+         WHERE host_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(host_first.id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("live instances on host a");
+    assert_eq!(
+        live_on_host, 2,
+        "host edge-a owns exactly its two listening slots, regardless of restarts"
+    );
+
+    // A second host on the same slot is a distinct member.
     let host_b = repository
         .upsert_cluster_host(host_write(
             0,
@@ -204,32 +285,37 @@ async fn verify_registration_and_authentication(context: &TestContext) {
             0,
             host_b.id,
             default_first.cluster_id,
+            3_800,
             4_100,
             hash("winst_instance-b-token"),
         ))
         .await
         .expect("instance on host b");
+    assert!(instance_b.created);
     assert_ne!(instance_one.uuid, instance_b.uuid);
 
     // The heartbeat token authenticates back to the instance identity; the
-    // port takes the RAW token (it hashes internally), the rotated token
-    // wins, and the stale one is gone.
+    // port takes the RAW token (it hashes internally). The slot keeps ONE
+    // credential and every registration - re-registration and restart alike -
+    // replaces it, so only the newest token resolves.
     let credentials = repository
-        .authenticate_cluster_instance_token(token_two)
+        .authenticate_cluster_instance_token(restart_token)
         .await
-        .expect("rotated token resolves");
+        .expect("the restart's token resolves");
     assert_eq!(credentials.instance_uuid, instance_one.uuid);
     assert_eq!(credentials.host_uuid, host_first.uuid);
     assert_eq!(credentials.cluster_uuid, default_first.cluster_uuid);
     // Unknown tokens fail closed with NotFound at the port; the service maps
     // that to a rejected machine credential.
-    let stale = repository
-        .authenticate_cluster_instance_token(token_one)
-        .await;
-    assert!(
-        matches!(stale, Err(WebServiceError::NotFound(_))),
-        "the previous registration token must stop resolving"
-    );
+    for superseded in [token_one, token_two] {
+        let stale = repository
+            .authenticate_cluster_instance_token(superseded)
+            .await;
+        assert!(
+            matches!(stale, Err(WebServiceError::NotFound(_))),
+            "a superseded registration token must stop resolving: {superseded}"
+        );
+    }
     let unknown = repository
         .authenticate_cluster_instance_token("winst_never-issued")
         .await;
@@ -257,6 +343,7 @@ async fn verify_heartbeat_peers_and_mailbox(context: &TestContext) {
             0,
             host.id,
             default_cluster.cluster_id,
+            3_800,
             5_100,
             hash("winst_hb-token"),
         ))
@@ -276,6 +363,7 @@ async fn verify_heartbeat_peers_and_mailbox(context: &TestContext) {
             0,
             peer_host.id,
             default_cluster.cluster_id,
+            3_800,
             5_100,
             hash("winst_peer-token"),
         ))
@@ -430,6 +518,488 @@ async fn verify_heartbeat_peers_and_mailbox(context: &TestContext) {
     assert_eq!(leftover, 0, "claimed instances must have no pending copies");
 }
 
+/// Operator maintenance is the one instance status a machine writer may not
+/// clear, and the prober's eject latch is written once per failure streak.
+///
+/// Both properties were false before: the node's reporter claims `online` on
+/// every heartbeat (`cluster_self_report` sends a fixed `status: 1`) and
+/// registration claims it again on every restart, so an operator's maintenance
+/// mark — the only thing that takes an instance out of the routing pool short
+/// of a cordon — survived at most one heartbeat interval; and `ejected_at` was
+/// re-stamped by every further failed probe, which made the ejection age
+/// unreadable and the column a duplicate of `updated_at`.
+///
+/// Assertions read the **table**, not a mapper projection: the question is what
+/// storage kept.
+async fn verify_operator_status_ownership_and_probe_latch(context: &TestContext) {
+    let repository = &context.repository;
+    let cluster = repository
+        .resolve_cluster_identity(0, None)
+        .await
+        .expect("default cluster");
+    let host = repository
+        .upsert_cluster_host(host_write(0, cluster.cluster_id, "owner-host", "mc-owner-host"))
+        .await
+        .expect("ownership host");
+    let instance = repository
+        .upsert_cluster_instance(instance_write(
+            0,
+            host.id,
+            cluster.cluster_id,
+            3_800,
+            5_300,
+            hash("winst_owner-token"),
+        ))
+        .await
+        .expect("ownership instance");
+    let reported_at = || chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, true);
+
+    // 1. The operator declares maintenance.
+    let marked = repository
+        .update_cluster_instance(
+            &instance.uuid,
+            &UpdateClusterInstanceRequest {
+                status: Some(5),
+                maintenance_note: Some("kernel upgrade".to_string()),
+                ..UpdateClusterInstanceRequest::default()
+            },
+        )
+        .await
+        .expect("mark maintenance");
+    assert_eq!(marked.status, 5);
+    let before = instance_state(context, instance.id).await;
+    assert_eq!(before.status, 5);
+
+    // 2. The node heartbeats `online` — the mark holds, and the transition the
+    //    service derives from is the recorded status, not the reported one.
+    let transition = repository
+        .record_cluster_heartbeat(heartbeat_write(instance.id, host.id, 1, &reported_at()))
+        .await
+        .expect("heartbeat while in maintenance");
+    assert_eq!(transition.previous_status, 5);
+    assert_eq!(
+        transition.status, 5,
+        "the heartbeat must acknowledge the recorded status, not the reported one"
+    );
+    let after_heartbeat = instance_state(context, instance.id).await;
+    assert_eq!(
+        after_heartbeat.status, 5,
+        "a heartbeat must not end an operator maintenance mark"
+    );
+    assert_eq!(
+        after_heartbeat.last_online_at, before.last_online_at,
+        "an instance held out of service is not confirmed online by its own heartbeat"
+    );
+    assert!(
+        after_heartbeat.last_heartbeat_at.is_some(),
+        "a heartbeat in maintenance still refreshes liveness"
+    );
+
+    // 3. A restart re-registers the same slot (new pid) — the mark still holds,
+    //    and the restart is still observed.
+    repository
+        .upsert_cluster_instance(instance_write(
+            0,
+            host.id,
+            cluster.cluster_id,
+            3_800,
+            5_301,
+            hash("winst_owner-token-2"),
+        ))
+        .await
+        .expect("re-register after restart");
+    let after_restart = instance_state(context, instance.id).await;
+    assert_eq!(
+        after_restart.status, 5,
+        "re-registration must not end an operator maintenance mark"
+    );
+    assert_eq!(
+        after_restart.restart_count, 1,
+        "the slot identity survives the restart and the restart is counted"
+    );
+
+    // 4. The operator's write is the only thing that ends the mark.
+    let resumed = repository
+        .update_cluster_instance(
+            &instance.uuid,
+            &UpdateClusterInstanceRequest {
+                status: Some(1),
+                ..UpdateClusterInstanceRequest::default()
+            },
+        )
+        .await
+        .expect("end maintenance");
+    assert_eq!(resumed.status, 1);
+    let after_resume = instance_state(context, instance.id).await;
+    assert_eq!(after_resume.status, 1);
+
+    // 5. The first two failed probes count, the third ejects exactly once.
+    for expected in 1..=3 {
+        let outcome = probe(context, instance.id, false).await;
+        assert_eq!(outcome.failures, expected);
+        assert_eq!(outcome.eject_transition, expected == 3);
+    }
+    let ejected = instance_state(context, instance.id).await;
+    assert_eq!(ejected.status, 4, "an ejected instance is reported as error");
+    assert_eq!(ejected.probe_failures, 3);
+    let ejected_at = ejected
+        .ejected_at
+        .clone()
+        .expect("the ejection instant is recorded");
+
+    // 6. A further failure keeps the failure streak but not a new instant: the
+    //    ejection age is how long the instance has been out, not how long ago
+    //    the prober last looked.
+    let further = probe(context, instance.id, false).await;
+    assert_eq!(further.failures, 4);
+    assert!(
+        !further.eject_transition,
+        "an already-ejected instance must not re-announce its ejection"
+    );
+    let still_ejected = instance_state(context, instance.id).await;
+    assert_eq!(
+        still_ejected.ejected_at.as_deref(),
+        Some(ejected_at.as_str()),
+        "the ejection instant is written once per failure streak"
+    );
+
+    // 7. One healthy probe clears the latch and restores the status.
+    let recovered = probe(context, instance.id, true).await;
+    assert!(recovered.recovered);
+    let healthy = instance_state(context, instance.id).await;
+    assert_eq!(healthy.status, 1);
+    assert_eq!(healthy.probe_failures, 0);
+    assert_eq!(healthy.ejected_at, None);
+
+    // 8. The prober yields to maintenance too: ejecting while the operator's
+    //    mark stands must not relabel the instance as an error, and recovering
+    //    must not relabel it as online.
+    repository
+        .update_cluster_instance(
+            &instance.uuid,
+            &UpdateClusterInstanceRequest {
+                status: Some(5),
+                ..UpdateClusterInstanceRequest::default()
+            },
+        )
+        .await
+        .expect("mark maintenance again");
+    for _ in 0..3 {
+        probe(context, instance.id, false).await;
+    }
+    let ejected_in_maintenance = instance_state(context, instance.id).await;
+    assert_eq!(
+        ejected_in_maintenance.status, 5,
+        "the prober must not overwrite an operator maintenance mark with `error`"
+    );
+    assert!(ejected_in_maintenance.ejected_at.is_some());
+    probe(context, instance.id, true).await;
+    let recovered_in_maintenance = instance_state(context, instance.id).await;
+    assert_eq!(
+        recovered_in_maintenance.ejected_at, None,
+        "a healthy probe clears the latch even in maintenance"
+    );
+    assert_eq!(
+        recovered_in_maintenance.status, 5,
+        "recovery must not put a maintained instance back online"
+    );
+}
+
+/// A name the operator typed belongs to the operator, on **both** resources.
+///
+/// `update_cluster_host` / `update_cluster_instance` exist so the console can
+/// rename a row, and both registration paths re-derive a default name from the
+/// node's own report (`host_display_name` / `instance_display_name`). So a
+/// registration that writes `name` back turns the console's rename into a value
+/// that silently reverts the next time the node restarts - which is exactly what
+/// maintenance work does. The instance table already treats `name` as
+/// operator-owned after the first registration; this asserts the host table
+/// agrees, because the same edit must not behave differently depending on which
+/// resource the operator happened to use.
+///
+/// The machine's own facts refreshed by the same statement are asserted too, so
+/// "stop overwriting" cannot be satisfied by refusing to refresh anything.
+async fn verify_operator_rename_survives_re_registration(context: &TestContext) {
+    let repository = &context.repository;
+    let cluster = repository
+        .resolve_cluster_identity(0, None)
+        .await
+        .expect("default cluster");
+
+    let host = repository
+        .upsert_cluster_host(host_write(0, cluster.cluster_id, "rename-host", "mc-rename-host"))
+        .await
+        .expect("rename host");
+    // First registration seeds the name from the machine's own report.
+    assert_eq!(
+        repository
+            .retrieve_cluster_host(&host.uuid)
+            .await
+            .expect("retrieve host")
+            .name,
+        "rename-host"
+    );
+
+    // 1. The operator renames the host.
+    let renamed = repository
+        .update_cluster_host(
+            &host.uuid,
+            &UpdateClusterHostRequest {
+                name: Some("rack-a-node-1".to_string()),
+                cluster_id: None,
+            },
+        )
+        .await
+        .expect("operator renames host");
+    assert_eq!(renamed.name, "rack-a-node-1");
+
+    // 2. The node re-registers: same machine code, and it reports its own
+    //    default name again.
+    repository
+        .upsert_cluster_host(host_write(0, cluster.cluster_id, "rename-host", "mc-rename-host"))
+        .await
+        .expect("re-register host");
+
+    // 3. The operator's name survives; the machine's own facts still refresh.
+    let after = repository
+        .retrieve_cluster_host(&host.uuid)
+        .await
+        .expect("retrieve host after restart");
+    assert_eq!(
+        after.name, "rack-a-node-1",
+        "re-registration must not take back an operator host rename"
+    );
+    assert_eq!(
+        after.hostname, "rename-host",
+        "the machine's own hostname is a fact and keeps refreshing on the same write"
+    );
+
+    // 4. The instance table holds the same rule.
+    let instance = repository
+        .upsert_cluster_instance(instance_write(
+            0,
+            host.id,
+            cluster.cluster_id,
+            3_800,
+            6_100,
+            hash("winst_rename"),
+        ))
+        .await
+        .expect("rename instance");
+    let renamed_instance = repository
+        .update_cluster_instance(
+            &instance.uuid,
+            &UpdateClusterInstanceRequest {
+                name: Some("edge-1:3800 (primary)".to_string()),
+                ..UpdateClusterInstanceRequest::default()
+            },
+        )
+        .await
+        .expect("operator renames instance");
+    assert_eq!(renamed_instance.name, "edge-1:3800 (primary)");
+    repository
+        .upsert_cluster_instance(instance_write(
+            0,
+            host.id,
+            cluster.cluster_id,
+            3_800,
+            6_101,
+            hash("winst_rename"),
+        ))
+        .await
+        .expect("re-register instance");
+    assert_eq!(
+        repository
+            .retrieve_cluster_instance(&instance.uuid)
+            .await
+            .expect("retrieve instance after restart")
+            .name,
+        "edge-1:3800 (primary)",
+        "re-registration must not take back an operator instance rename"
+    );
+}
+
+/// A machine that reports nothing must not erase what it never knew.
+///
+/// `public_endpoint` is operator-writable (`update_cluster_instance_repo` writes
+/// `public_endpoint = COALESCE($5, public_endpoint)`, i.e. last non-null wins and
+/// an operator cannot clear it either), but the registration path wrote
+/// `public_endpoint = EXCLUDED.public_endpoint` outright. A node without
+/// `SDKWORK_WEBSERVER_INSTANCE_PUBLIC_ENDPOINT` reports `None`, so every restart
+/// - which is exactly what maintenance work does - wiped an endpoint the
+/// operator had pinned for an instance behind NAT, and the operator had to
+/// re-enter it after each cycle.
+///
+/// "Absent" and "explicitly none" are different statements: the node that never
+/// had the value is not asserting the value is gone.
+async fn verify_machine_absence_does_not_erase_operator_values(context: &TestContext) {
+    let repository = &context.repository;
+    let cluster = repository
+        .resolve_cluster_identity(0, None)
+        .await
+        .expect("default cluster");
+    let host = repository
+        .upsert_cluster_host(host_write(0, cluster.cluster_id, "absence-host", "mc-absence-host"))
+        .await
+        .expect("absence host");
+    let instance = repository
+        .upsert_cluster_instance(instance_write(
+            0,
+            host.id,
+            cluster.cluster_id,
+            4_100,
+            7_100,
+            hash("winst_absence"),
+        ))
+        .await
+        .expect("absence instance");
+
+    // 1. The operator pins the address the instance is reachable at from
+    //    outside - an override the registry has no other way to learn.
+    let pinned = "https://edge-absence.nat.example.test";
+    repository
+        .update_cluster_instance(
+            &instance.uuid,
+            &UpdateClusterInstanceRequest {
+                public_endpoint: Some(pinned.to_string()),
+                ..UpdateClusterInstanceRequest::default()
+            },
+        )
+        .await
+        .expect("operator pins the public endpoint");
+    assert_eq!(
+        repository
+            .retrieve_cluster_instance(&instance.uuid)
+            .await
+            .expect("retrieve instance")
+            .public_endpoint
+            .as_deref(),
+        Some(pinned)
+    );
+
+    // 2. The node restarts without that env var set, so it reports nothing.
+    let mut silent = instance_write(
+        0,
+        host.id,
+        cluster.cluster_id,
+        4_100,
+        7_101,
+        hash("winst_absence"),
+    );
+    silent.public_endpoint = None;
+    repository
+        .upsert_cluster_instance(silent)
+        .await
+        .expect("re-register without a public endpoint");
+
+    // 3. The operator's pinned address is still there.
+    assert_eq!(
+        repository
+            .retrieve_cluster_instance(&instance.uuid)
+            .await
+            .expect("retrieve instance after restart")
+            .public_endpoint
+            .as_deref(),
+        Some(pinned),
+        "a node that reports no public endpoint must not clear the operator's"
+    );
+
+    // 4. A node that *does* report one still wins: the machine's fresh value is
+    //    the point of reporting it at all.
+    let mut reporting = instance_write(
+        0,
+        host.id,
+        cluster.cluster_id,
+        4_100,
+        7_102,
+        hash("winst_absence"),
+    );
+    reporting.public_endpoint = Some("https://edge-absence.tunnel.example.test".to_string());
+    repository
+        .upsert_cluster_instance(reporting)
+        .await
+        .expect("re-register reporting a new public endpoint");
+    assert_eq!(
+        repository
+            .retrieve_cluster_instance(&instance.uuid)
+            .await
+            .expect("retrieve instance after a reporting restart")
+            .public_endpoint
+            .as_deref(),
+        Some("https://edge-absence.tunnel.example.test"),
+        "a reported endpoint replaces the stored one"
+    );
+}
+
+/// Raw instance columns the ownership / latch assertions care about.
+struct InstanceState {
+    status: i32,
+    probe_failures: i32,
+    ejected_at: Option<String>,
+    last_online_at: Option<String>,
+    last_heartbeat_at: Option<String>,
+    restart_count: i32,
+}
+
+async fn instance_state(context: &TestContext, instance_id: i64) -> InstanceState {
+    let row = sqlx::query_as::<_, (
+        i32,
+        i32,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        i32,
+    )>(
+        "SELECT status, probe_failures, CAST(ejected_at AS TEXT), CAST(last_online_at AS TEXT),
+                CAST(last_heartbeat_at AS TEXT), restart_count
+         FROM webserver_cluster_instance WHERE id = $1",
+    )
+    .bind(instance_id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("read instance state");
+    InstanceState {
+        status: row.0,
+        probe_failures: row.1,
+        ejected_at: row.2,
+        last_online_at: row.3,
+        last_heartbeat_at: row.4,
+        restart_count: row.5,
+    }
+}
+
+fn heartbeat_write(
+    instance_id: i64,
+    host_id: i64,
+    status: i32,
+    reported_at: &str,
+) -> ClusterHeartbeatWrite {
+    ClusterHeartbeatWrite {
+        tenant_id: 0,
+        instance_id,
+        host_id,
+        status,
+        health_state: "HEALTHY".to_string(),
+        uptime_seconds: 60,
+        build_version: None,
+        metrics_json: "{}".to_string(),
+        reported_at: reported_at.to_string(),
+        quality_score: None,
+    }
+}
+
+async fn probe(context: &TestContext, instance_id: i64, healthy: bool) -> ClusterProbeOutcome {
+    context
+        .repository
+        .record_cluster_probe_outcome(ClusterProbeWrite {
+            tenant_id: 0,
+            instance_id,
+            healthy,
+        })
+        .await
+        .expect("record probe outcome")
+}
+
 async fn verify_liveness_sweep_events_and_pagination(context: &TestContext) {
     let repository = &context.repository;
 
@@ -451,6 +1021,7 @@ async fn verify_liveness_sweep_events_and_pagination(context: &TestContext) {
             0,
             host.id,
             default_cluster.cluster_id,
+            3_800,
             6_100,
             hash("winst_sweep-token"),
         ))
@@ -754,11 +1325,20 @@ fn host_write(
     }
 }
 
+/// One instance registration fixture.
+///
+/// `bind_port` (with the fixed `bind_host` below) is the instance's **slot** —
+/// the identity that has to survive a restart — while `process_pid` is a
+/// run-state observation that changes on every restart. The two are separate
+/// arguments on purpose: correlating them is what made the old
+/// `(tenant, host, pid)` conflict target look correct while never matching in
+/// production.
 #[allow(clippy::too_many_arguments)]
 fn instance_write(
     tenant_id: i64,
     host_id: i64,
     cluster_id: i64,
+    bind_port: i32,
     process_pid: i32,
     instance_token_hash: String,
 ) -> ClusterInstanceUpsert {
@@ -766,14 +1346,14 @@ fn instance_write(
         tenant_id,
         host_id,
         cluster_id,
-        name: format!("gateway#{process_pid}"),
+        name: format!("gateway:{bind_port}"),
         role: "GATEWAY".to_string(),
         environment: "test".to_string(),
         process_pid,
         process_started_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, true),
         bind_host: Some("0.0.0.0".to_string()),
-        bind_port: Some(3800),
-        public_endpoint: Some(format!("https://node-{process_pid}.example.test")),
+        bind_port: Some(bind_port),
+        public_endpoint: Some(format!("https://node-{bind_port}.example.test")),
         build_version: Some("1.1.0".to_string()),
         instance_token_hash,
         join_mode: 0,
@@ -781,8 +1361,14 @@ fn instance_write(
     }
 }
 
-fn rand_i64() -> i64 {
-    use std::sync::atomic::{AtomicI64, Ordering};
-    static COUNTER: AtomicI64 = AtomicI64::new(90_000);
-    COUNTER.fetch_add(1, Ordering::Relaxed)
+/// Restart counter the registry persisted for one instance row.
+///
+/// Read straight from the table rather than through the repository: the point
+/// of the assertion is what the **storage** kept, not what a mapper projected.
+async fn restart_count(context: &TestContext, instance_id: i64) -> i32 {
+    sqlx::query_scalar("SELECT restart_count FROM webserver_cluster_instance WHERE id = $1")
+        .bind(instance_id)
+        .fetch_one(&context.pool)
+        .await
+        .expect("restart count")
 }

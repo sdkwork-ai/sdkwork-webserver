@@ -657,10 +657,12 @@ async fn wildcard_http_route_matches_subdomains_only() {
         .await
         .expect("wildcard subdomain relays");
     relayed
-        .write_all(b"GET / HTTP/1.0
+        .write_all(
+            b"GET / HTTP/1.0
 Host: app.wild.test
 
-")
+",
+        )
         .await
         .expect("request written");
     let mut buffer = [0_u8; 256];
@@ -784,5 +786,190 @@ async fn private_udp_route_denies_anonymous_visitors() {
 
     agent.shutdown().await;
     echo_task.abort();
+    gateway.shutdown().await;
+}
+
+/// SSH over a TCP route, pinned at the properties SSH actually depends on.
+///
+/// The echo test above has the *visitor* speak first, which every relay gets
+/// right by accident. SSH does not: RFC 4253 §4.2 has the server send its
+/// identification string immediately on connect, before the client writes a
+/// single byte. A relay that only dials its local target once client data
+/// arrives deadlocks there — the client waits for a banner that waits for the
+/// client. So this test reads the banner first and sends nothing until it has
+/// it, then checks the three other properties a terminal session needs:
+/// byte transparency (SSH packets are binary, not UTF-8), full duplex at rate,
+/// and half-close propagation when the client ends its side.
+#[tokio::test]
+async fn tcp_route_relays_a_server_first_binary_protocol() {
+    crypto_provider();
+    init_logs();
+    let (cert_pem, key_pem, fingerprint) = tls_material();
+
+    const BANNER: &[u8] = b"SSH-2.0-SDKWorkTest_1.0\r\n";
+    const CLIENT_ID: &[u8] = b"SSH-2.0-ClientTest\r\n";
+    /// Every byte value, so a text-oriented hop is caught.
+    fn binary_frame() -> Vec<u8> {
+        (0..=255_u8).collect()
+    }
+    const BULK: usize = 128 * 1024;
+
+    // The local target, shaped like an SSH server: banner first, then a
+    // binary frame, then echo, then surface the client's EOF.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("target bind");
+    let target_port = listener.local_addr().expect("addr").port();
+    let saw_eof = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let saw_eof_task = Arc::clone(&saw_eof);
+    let target_task = tokio::spawn(async move {
+        loop {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return;
+            };
+            let saw_eof = Arc::clone(&saw_eof_task);
+            tokio::spawn(async move {
+                // Server-first: nothing has been read yet.
+                if socket.write_all(BANNER).await.is_err() {
+                    return;
+                }
+                // Read the client's own identification string.
+                let mut received = Vec::new();
+                let mut buffer = [0_u8; 512];
+                while !received.windows(2).any(|window| window == b"\r\n") {
+                    let Ok(read) = socket.read(&mut buffer).await else {
+                        return;
+                    };
+                    if read == 0 {
+                        return;
+                    }
+                    received.extend_from_slice(&buffer[..read]);
+                    if received.len() > 4096 {
+                        return;
+                    }
+                }
+                let frame = binary_frame();
+                if socket.write_all(&frame).await.is_err() {
+                    return;
+                }
+                // Then plain echo until the client half-closes.
+                loop {
+                    let read = socket.read(&mut buffer).await.unwrap_or(0);
+                    if read == 0 {
+                        saw_eof.store(true, std::sync::atomic::Ordering::SeqCst);
+                        let _ = socket.shutdown().await;
+                        return;
+                    }
+                    if socket.write_all(&buffer[..read]).await.is_err() {
+                        return;
+                    }
+                }
+            });
+        }
+    });
+
+    let mut gateway_options = TunnelGatewayOptions::from_config(
+        &TunnelConfig::disabled(),
+        "127.0.0.1:0".parse().expect("bind"),
+        cert_pem.clone(),
+        key_pem.clone(),
+    );
+    gateway_options.authenticator = TokenAuthenticator::new(vec![TOKEN.to_owned()]);
+    let gateway = TunnelGateway::spawn(gateway_options, None)
+        .await
+        .expect("gateway spawns");
+    let quic_port = gateway.quic_port();
+    let public_port = available_port();
+
+    let template = TunnelRouteTemplate {
+        name: "ssh".to_owned(),
+        protocol: TunnelProtocolKind::Tcp,
+        domain: None,
+        port: Some(public_port),
+        target: format!("127.0.0.1:{target_port}"),
+        policy: Some(sdkwork_webserver_tunnel_core::RoutePolicy {
+            allow_public: true,
+            ..sdkwork_webserver_tunnel_core::RoutePolicy::private()
+        }),
+    };
+    let device = Device::new(
+        DeviceId::parse("dev_ssh").expect("valid id"),
+        "ssh-runner",
+        DevicePlatform::Linux,
+    )
+    .expect("valid device");
+    let mut agent = AgentRuntime::spawn(AgentRuntimeOptions {
+        endpoint: RemoteEndpoint::new("127.0.0.1", quic_port),
+        tls: tls::ClientTlsOptions {
+            pinned_server_sha256: Some(fingerprint),
+            ..tls::ClientTlsOptions::default()
+        },
+        device,
+        token: TOKEN.to_owned(),
+        routes: vec![template],
+        network: Default::default(),
+        timeouts: Default::default(),
+        metrics: Arc::new(TunnelMetrics::new()),
+    });
+    let ready = wait_for_ready(&mut agent).await;
+    assert_eq!(ready.len(), 1);
+
+    let mut visitor = tokio::net::TcpStream::connect(("127.0.0.1", public_port))
+        .await
+        .expect("visitor connect");
+    // The whole point: read before writing anything.
+    let mut banner = vec![0_u8; BANNER.len()];
+    tokio::time::timeout(Duration::from_secs(5), visitor.read_exact(&mut banner))
+        .await
+        .expect("a server-first banner must arrive without the visitor writing first")
+        .expect("banner read");
+    assert_eq!(banner, BANNER);
+
+    visitor
+        .write_all(CLIENT_ID)
+        .await
+        .expect("client identification written");
+    let frame = binary_frame();
+    let mut received_frame = vec![0_u8; frame.len()];
+    tokio::time::timeout(
+        Duration::from_secs(5),
+        visitor.read_exact(&mut received_frame),
+    )
+    .await
+    .expect("binary frame within timeout")
+    .expect("binary frame read");
+    assert_eq!(received_frame, frame, "the relay is byte-transparent");
+
+    // Full duplex at rate: 128 KiB each way.
+    let bulk: Vec<u8> = (0..BULK).map(|index| (index % 251) as u8).collect();
+    visitor
+        .write_all(&bulk)
+        .await
+        .expect("bulk payload written");
+    let mut echoed = vec![0_u8; BULK];
+    tokio::time::timeout(Duration::from_secs(10), visitor.read_exact(&mut echoed))
+        .await
+        .expect("bulk echo within timeout")
+        .expect("bulk echo read");
+    assert_eq!(echoed, bulk);
+
+    // Half-close: an SSH client ends its side at logout, and the local target
+    // must see the EOF rather than a connection that lingers until timeout.
+    visitor.shutdown().await.expect("visitor half-close");
+    let mut trailing = [0_u8; 1];
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(5), visitor.read(&mut trailing))
+            .await
+            .expect("the local target's EOF reaches the visitor")
+            .expect("read propagated half-close"),
+        0
+    );
+    assert!(
+        saw_eof.load(std::sync::atomic::Ordering::SeqCst),
+        "the local target observed the client's end of stream"
+    );
+
+    agent.shutdown().await;
+    target_task.abort();
     gateway.shutdown().await;
 }

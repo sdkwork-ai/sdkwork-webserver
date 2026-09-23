@@ -59,6 +59,12 @@ class ClusterApi(private val client: HttpClient) {
         client.delete(ApiPaths.backendPath("/clusters/${serializePathParameter(clusterId, PathParameterSpec("clusterId", "simple", false))}"), null, requestHeaders)
     }
 
+    /** Publish a desired-state revision to every instance of the cluster */
+    suspend fun clustersSync(clusterId: String, body: PublishClusterSyncRequest): ClustersSyncResponse? {
+        val raw = client.post(ApiPaths.backendPath("/clusters/${serializePathParameter(clusterId, PathParameterSpec("clusterId", "simple", false))}/sync"), body, null, null, "application/json")
+        return client.convertValue(raw, object : TypeReference<ClustersSyncResponse>() {})
+    }
+
     /** List cluster hosts with system and network identity */
     suspend fun clustersHostsList(pageSize: Int? = null, cursor: String? = null, clusterId: String? = null, status: Int? = null): ClustersHostsListResponse? {
         val query = buildQueryString(listOf(
@@ -169,6 +175,45 @@ class ClusterApi(private val client: HttpClient) {
         ))
         val raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/clusters/instances/${serializePathParameter(instanceId, PathParameterSpec("instanceId", "simple", false))}/heartbeats"), query))
         return client.convertValue(raw, object : TypeReference<ClustersInstancesHeartbeatsListResponse>() {})
+    }
+
+    /** List one instance's heartbeat metric samples for trend charts */
+    suspend fun clustersInstancesMetricsList(instanceId: String, limit: Int? = null): ClustersInstancesMetricsListResponse? {
+        val query = buildQueryString(listOf(
+            QueryParameterSpec("limit", limit, "form", true, false, null)
+        ))
+        val raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/clusters/instances/${serializePathParameter(instanceId, PathParameterSpec("instanceId", "simple", false))}/metrics/history"), query))
+        return client.convertValue(raw, object : TypeReference<ClustersInstancesMetricsListResponse>() {})
+    }
+
+    /** Probe one instance's connectivity and record the outcome */
+    suspend fun clustersInstancesProbe(instanceId: String, body: ProbeClusterInstanceRequest? = null): ClustersInstancesProbeResponse? {
+        val raw = client.post(ApiPaths.backendPath("/clusters/instances/${serializePathParameter(instanceId, PathParameterSpec("instanceId", "simple", false))}/probe"), body, null, null, "application/json")
+        return client.convertValue(raw, object : TypeReference<ClustersInstancesProbeResponse>() {})
+    }
+
+    /** Gracefully drain one instance out of routing */
+    suspend fun clustersInstancesDrain(instanceId: String): ClustersInstancesDrainResponse? {
+        val raw = client.post(ApiPaths.backendPath("/clusters/instances/${serializePathParameter(instanceId, PathParameterSpec("instanceId", "simple", false))}/drain"), null)
+        return client.convertValue(raw, object : TypeReference<ClustersInstancesDrainResponse>() {})
+    }
+
+    /** Clear the drain flag and restore routing participation */
+    suspend fun clustersInstancesUndrain(instanceId: String): ClustersInstancesUndrainResponse? {
+        val raw = client.post(ApiPaths.backendPath("/clusters/instances/${serializePathParameter(instanceId, PathParameterSpec("instanceId", "simple", false))}/undrain"), null)
+        return client.convertValue(raw, object : TypeReference<ClustersInstancesUndrainResponse>() {})
+    }
+
+    /** Cordon one instance out of routing without draining it */
+    suspend fun clustersInstancesCordon(instanceId: String): ClustersInstancesCordonResponse? {
+        val raw = client.post(ApiPaths.backendPath("/clusters/instances/${serializePathParameter(instanceId, PathParameterSpec("instanceId", "simple", false))}/cordon"), null)
+        return client.convertValue(raw, object : TypeReference<ClustersInstancesCordonResponse>() {})
+    }
+
+    /** Uncordon one instance back into routing */
+    suspend fun clustersInstancesUncordon(instanceId: String): ClustersInstancesUncordonResponse? {
+        val raw = client.post(ApiPaths.backendPath("/clusters/instances/${serializePathParameter(instanceId, PathParameterSpec("instanceId", "simple", false))}/uncordon"), null)
+        return client.convertValue(raw, object : TypeReference<ClustersInstancesUncordonResponse>() {})
     }
 
     /** Enqueue a peer message to one instance or broadcast to online members */

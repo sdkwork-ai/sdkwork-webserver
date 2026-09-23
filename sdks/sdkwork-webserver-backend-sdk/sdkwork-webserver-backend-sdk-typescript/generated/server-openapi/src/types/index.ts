@@ -1,5 +1,9 @@
 export * from './common';
 export type { ClusterHeartbeatSampleResponse } from './cluster-heartbeat-sample-response';
+export type { PublishClusterSyncRequest } from './publish-cluster-sync-request';
+export type { ClusterSyncManifest } from './cluster-sync-manifest';
+export type { ProbeClusterInstanceRequest } from './probe-cluster-instance-request';
+export type { ClusterProbeRunResponse } from './cluster-probe-run-response';
 export type { EnqueueClusterPeerMessagesRequest } from './enqueue-cluster-peer-messages-request';
 export type { EnqueueClusterPeerMessagesResponse } from './enqueue-cluster-peer-messages-response';
 export type { Int64String } from './int64-string';
@@ -152,6 +156,7 @@ export type { ClustersListResponse } from './clusters-list-response';
 export type { ClustersCreateResponse201 } from './clusters-create-response201';
 export type { ClustersRetrieveResponse } from './clusters-retrieve-response';
 export type { ClustersUpdateResponse } from './clusters-update-response';
+export type { ClustersSyncResponse } from './clusters-sync-response';
 export type { ClustersHostsListResponse } from './clusters-hosts-list-response';
 export type { ClustersHostsRetrieveResponse } from './clusters-hosts-retrieve-response';
 export type { ClustersHostsUpdateResponse } from './clusters-hosts-update-response';
@@ -161,4 +166,10 @@ export type { ClustersInstancesUpdateResponse } from './clusters-instances-updat
 export type { ClustersEventsListResponse } from './clusters-events-list-response';
 export type { ClustersOverviewRetrieveResponse } from './clusters-overview-retrieve-response';
 export type { ClustersInstancesHeartbeatsListResponse } from './clusters-instances-heartbeats-list-response';
+export type { ClustersInstancesMetricsListResponse } from './clusters-instances-metrics-list-response';
+export type { ClustersInstancesProbeResponse } from './clusters-instances-probe-response';
+export type { ClustersInstancesDrainResponse } from './clusters-instances-drain-response';
+export type { ClustersInstancesUndrainResponse } from './clusters-instances-undrain-response';
+export type { ClustersInstancesCordonResponse } from './clusters-instances-cordon-response';
+export type { ClustersInstancesUncordonResponse } from './clusters-instances-uncordon-response';
 export type { ClustersMessagesCreateResponse201 } from './clusters-messages-create-response201';

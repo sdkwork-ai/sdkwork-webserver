@@ -25,6 +25,32 @@ ensure_directory() {
   install -d -o "${SERVICE_USER}" -g "${SERVICE_USER}" -m 0750 "$1"
 }
 
+# Normalize a filesystem path for emission into a generated configuration
+# artifact. Call this at every boundary where a path meets a parser with its own
+# escape rules — never on the filesystem-facing value itself.
+#
+# Two parsers read this entrypoint's output, and both treat a backslash as an
+# escape introducer. Both fail the same dangerous way: the artifact still parses,
+# so nothing reports an error, and the path silently stops naming the directory
+# the operator configured.
+#
+#  * nginx — the tokenizer is POSIX-faithful (`ngx_conf_read_token` semantics), so
+#    `\t`, `\r`, and `\n` in `root D:\space\...\tmp\acme` are read as escapes and
+#    the directive points somewhere that does not exist.
+#  * TOML — inside a basic string `\t` is a TAB and `\s` is a hard error, which is
+#    how a runtime `config.toml` generated on Windows fails to load at all.
+#
+# Forward slashes are accepted by every file API on both platforms and POSIX hosts
+# are unaffected, so one normalization serves both. The repository already relies
+# on this convention for the runtime TOML: `runtime_config.rs` writes Windows
+# paths as `to_string_lossy().replace('\\', "/")`.
+#
+# `\134` is the octal escape for a backslash: the plain two-character escape is
+# read differently than it looks by both shell and `tr`.
+posix_path() {
+  printf '%s' "$1" | tr '\134' '/'
+}
+
 ensure_writable_directory() {
   local dir="$1"
   if [ -d "${dir}" ]; then
@@ -80,7 +106,14 @@ ensure_secret_file() {
 # <domain>/fullchain.pem (W25), so every bootstrapped domain is mirrored into
 # that layout too — never overwriting operator-provisioned files there.
 lets_encrypt_certs_root() {
-  printf '%s' "${SDKWORK_WEBSERVER_CERTS_LETS_ENCRYPT_DIR:-/etc/sdkwork/certs/letsencrypt}"
+  # One directory, one knob. The certificate worker resolves its material root
+  # from `SDKWORK_WEBSERVER_CERT_LIVE_ROOT` (`sdkwork-webserver-core`
+  # canonical_acme_live_root), while `ssl_certificate` below reads whatever this
+  # function prints. Honouring the worker's variable first — and keeping the
+  # historical `..._CERTS_LETS_ENCRYPT_DIR` as an alias — means an operator
+  # cannot move issuance and serving apart and end up with an edge that loads
+  # certificates the worker never wrote.
+  printf '%s' "${SDKWORK_WEBSERVER_CERT_LIVE_ROOT:-${SDKWORK_WEBSERVER_CERTS_LETS_ENCRYPT_DIR:-/etc/sdkwork/certs/letsencrypt}}"
 }
 
 certificate_covers() {
@@ -792,17 +825,20 @@ write_module_app_roots_catalog() {
   local h5_dev h5_test h5_staging h5_prod
   environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
   dist_alias="$(environment_dist_alias "${environment}")"
-  pc_root="$(module_app_static_root "${module}" pc)"
-  h5_root="$(module_app_static_root "${module}" h5)"
-  static_fallback="${module_root}/deployments/webserver/static"
-  pc_dev="$(module_app_static_root_for_alias "${module}" pc dev)"
-  pc_test="$(module_app_static_root_for_alias "${module}" pc test)"
-  pc_staging="$(module_app_static_root_for_alias "${module}" pc staging)"
-  pc_prod="$(module_app_static_root_for_alias "${module}" pc prod)"
-  h5_dev="$(module_app_static_root_for_alias "${module}" h5 dev)"
-  h5_test="$(module_app_static_root_for_alias "${module}" h5 test)"
-  h5_staging="$(module_app_static_root_for_alias "${module}" h5 staging)"
-  h5_prod="$(module_app_static_root_for_alias "${module}" h5 prod)"
+  # `posix_path` at the assignment, not at each of the sixteen heredoc lines:
+  # these roots are consumed only by this TOML and the log line below, and the
+  # catalog is a TOML artifact, so the emission boundary is here.
+  pc_root="$(posix_path "$(module_app_static_root "${module}" pc)")"
+  h5_root="$(posix_path "$(module_app_static_root "${module}" h5)")"
+  static_fallback="$(posix_path "${module_root}/deployments/webserver/static")"
+  pc_dev="$(posix_path "$(module_app_static_root_for_alias "${module}" pc dev)")"
+  pc_test="$(posix_path "$(module_app_static_root_for_alias "${module}" pc test)")"
+  pc_staging="$(posix_path "$(module_app_static_root_for_alias "${module}" pc staging)")"
+  pc_prod="$(posix_path "$(module_app_static_root_for_alias "${module}" pc prod)")"
+  h5_dev="$(posix_path "$(module_app_static_root_for_alias "${module}" h5 dev)")"
+  h5_test="$(posix_path "$(module_app_static_root_for_alias "${module}" h5 test)")"
+  h5_staging="$(posix_path "$(module_app_static_root_for_alias "${module}" h5 staging)")"
+  h5_prod="$(posix_path "$(module_app_static_root_for_alias "${module}" h5 prod)")"
   # Adaptive Web table (SDKWORK_DEPLOY_SPEC.md §8): prefer discovered PC/H5
   # roots over static-fallback. Fall back to the active surface root before the
   # placeholder static directory so by_environment never collapses to
@@ -1330,6 +1366,27 @@ prepare_module_api_gateway() {
 # gateway` blocks. Production emits one TLS server block per registered brand
 # domain (443 ssl + 80, canonical ACME-layout certificates, W11/W25/W26); every
 # environment exposes =/healthz and =/readyz probe locations.
+#
+# The product edge also declares the reserved ACME HTTP-01 challenge namespace
+# (ADR-20260623): the data plane materializer turns that location into the
+# listener's `acmeHttp01.webroot`, the narrow-precedence endpoint the CA fetches
+# during issuance. Without it the challenge path falls into `location /` and is
+# proxied to the application shell, which answers 404 — the deployment then looks
+# healthy while every order fails at the CA. The webroot is deliberately read
+# from the same variable the certificate worker writes to
+# (`apply_certificate_issuer_defaults`), so the writer and the server cannot name
+# different directories, and the compile-time rendezvous check in
+# `sdkwork-webserver-core` can confirm it before the listener ever binds.
+product_edge_acme_challenge_location() {
+  local webroot
+  webroot="$(posix_path "$1")"
+  cat <<ACMEOF
+        location ^~ /.well-known/acme-challenge/ {
+            root ${webroot};
+        }
+ACMEOF
+}
+
 product_edge_proxy_locations() {
   cat <<'PROXYEOF'
         location = /healthz {
@@ -1368,11 +1425,19 @@ PROXYEOF
 materialize_product_edge_nginx_conf() {
   local imports_root="${CONFIG_ROOT}/imports.d"
   local environment product_root sidecar server_names mgmt_port dest
+  local acme_webroot
   environment="${SDKWORK_WEBSERVER_ENVIRONMENT:-development}"
   mgmt_port="$(webserver_container_gateway_port)"
   product_root="$(module_repo_root sdkwork-webserver)"
   sidecar="${product_root}/deployments/webserver/nginx.standalone.${environment}.conf"
   dest="${imports_root}/product-edge-nginx.conf"
+  # Same default as apply_certificate_issuer_defaults: the edge must serve from
+  # the directory the worker writes into even when this runs before that
+  # function has exported the variable (it is called from a reload path too).
+  # Normalized on the way in: this value is only ever emitted (into the
+  # challenge location and the log line an operator copies from), never opened,
+  # so the emission form is the right one to hold.
+  acme_webroot="$(posix_path "${SDKWORK_WEBSERVER_ACME_WEBROOT:-/var/lib/sdkwork/webserver/acme-webroot}")"
   ensure_directory "${imports_root}"
 
   server_names=""
@@ -1390,7 +1455,7 @@ materialize_product_edge_nginx_conf() {
 
   if [ "${environment}" = "production" ]; then
     local lets_root domains="" host hostdom domain_names
-    lets_root="$(lets_encrypt_certs_root)"
+    lets_root="$(posix_path "$(lets_encrypt_certs_root)")"
     for host in ${server_names}; do
       hostdom="${host#*.}"
       case " ${domains} " in
@@ -1444,12 +1509,13 @@ HEAD
         ssl_prefer_server_ciphers on;
         ssl_session_cache shared:SSL:10m;
 TLSBLOCK
+        product_edge_acme_challenge_location "${acme_webroot}"
         product_edge_proxy_locations
         printf '    }\n'
       done
       printf '}\n'
     } > "${dest}"
-    log "materialized product Adaptive Web edge -> ${dest} (production TLS over ${domains}, upstream 127.0.0.1:${mgmt_port})"
+    log "materialized product Adaptive Web edge -> ${dest} (production TLS over ${domains}, upstream 127.0.0.1:${mgmt_port}, acme webroot ${acme_webroot})"
   else
     cat > "${dest}" <<PLAINHEAD
 # Generated by sdkwork-webserver-entrypoint (SDKWORK_WEBSERVER_SPEC.md §11.3 / §13.6).
@@ -1477,9 +1543,10 @@ http {
         listen 80;
         server_name ${server_names};
 PLAINHEAD
+    product_edge_acme_challenge_location "${acme_webroot}" >> "${dest}"
     product_edge_proxy_locations >> "${dest}"
     printf '    }\n}\n' >> "${dest}"
-    log "materialized product Adaptive Web edge -> ${dest} (http, upstream 127.0.0.1:${mgmt_port})"
+    log "materialized product Adaptive Web edge -> ${dest} (http, upstream 127.0.0.1:${mgmt_port}, acme webroot ${acme_webroot})"
   fi
 
   chown "${SERVICE_USER}:${SERVICE_USER}" "${dest}" 2>/dev/null || true
@@ -1533,7 +1600,7 @@ EOF
     # Product edge first so server-dev.* matches AdaptiveAppShell before the
     # sibling default_server (otherwise unmatched hosts hit static-fallback).
     if [ -f "${product_edge}" ]; then
-      printf 'include %s;\n' "${product_edge}" >> "${import_conf}"
+      printf 'include %s;\n' "$(posix_path "${product_edge}")" >> "${import_conf}"
       include_count=$((include_count + 1))
       log "product edge nginx include -> ${product_edge}"
     fi
@@ -1561,7 +1628,7 @@ EOF
         for import_environment in ${import_environments}; do
           sidecar_path="$(module_nginx_sidecar_abs_path "${module_root}" "${import_environment}" "${import_profile}")"
           if [ -f "${sidecar_path}" ]; then
-            printf 'include %s;\n' "${sidecar_path}" >> "${import_conf}"
+            printf 'include %s;\n' "$(posix_path "${sidecar_path}")" >> "${import_conf}"
             include_count=$((include_count + 1))
             log "module nginx include -> ${sidecar_path}"
           else
@@ -1578,7 +1645,7 @@ EOF
 
 [[webserver.imports]]
 id = "${module}"
-path = "${modules_root}/${module}"
+path = "$(posix_path "${modules_root}/${module}")"
 enabled = true
 required = false
 probe_upstreams = false
@@ -1815,9 +1882,10 @@ module_env_web_static_root() {
 # Seed a readable SPA shell when module static/ (or Docker copy) has no
 # index.html. Operators replace this by building apps/*-{pc,h5}/dist/<alias>.
 app_roots_by_environment_toml() {
-  local pc_root="${SDKWORK_WEBSERVER_PC_STATIC_ROOT:-/app/share/sdkwork/webserver/web/pc}"
-  local h5_root="${SDKWORK_WEBSERVER_H5_STATIC_ROOT:-/app/share/sdkwork/webserver/web/h5}"
-  local static_root="${SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT:-/app/share/sdkwork/webserver/web/static}"
+  local pc_root h5_root static_root
+  pc_root="$(posix_path "${SDKWORK_WEBSERVER_PC_STATIC_ROOT:-/app/share/sdkwork/webserver/web/pc}")"
+  h5_root="$(posix_path "${SDKWORK_WEBSERVER_H5_STATIC_ROOT:-/app/share/sdkwork/webserver/web/h5}")"
+  static_root="$(posix_path "${SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT:-/app/share/sdkwork/webserver/web/static}")"
   cat <<EOF
 tablet_surface = "pc"
 pc_static_root = "${pc_root}"
@@ -1846,7 +1914,7 @@ render_runtime_config() {
   # always point TOML at password_file.
   local db_password_field='password_file = "/etc/sdkwork/webserver/secrets/database.secret"'
   if [ -n "${SDKWORK_DATABASE_PASSWORD_FILE:-}" ]; then
-    db_password_field="password_file = \"${SDKWORK_DATABASE_PASSWORD_FILE}\""
+    db_password_field="password_file = \"$(posix_path "${SDKWORK_DATABASE_PASSWORD_FILE}")\""
   fi
 
   # IAM_CREDENTIAL_ENTRY_SPEC.md §4/§5: only development renderers may receive
@@ -1856,7 +1924,7 @@ render_runtime_config() {
   # must never reach a staging/demo/production browser.
   local credential_entry_bootstrap_field=''
   if credential_entry_bootstrap_token_is_enabled; then
-    credential_entry_bootstrap_field="credential_entry_bootstrap_access_token_file = \"${SECRETS_ROOT}/credential-entry-bootstrap-access-token\""
+    credential_entry_bootstrap_field="credential_entry_bootstrap_access_token_file = \"$(posix_path "${SECRETS_ROOT}/credential-entry-bootstrap-access-token")\""
   fi
 
   # Build cors_allowed_origins TOML array from comma-separated env var.
@@ -1889,6 +1957,24 @@ render_runtime_config() {
     webserver_includes=""
   else
     webserver_includes="[${webserver_includes}]"
+  fi
+
+  # ACME knobs the operator can only reach through the runtime TOML. Each is
+  # emitted from the same resolver the data plane uses, or omitted entirely, so
+  # the TOML can never assert a value that contradicts the edge.
+  #
+  # `cert_live_root`: the worker's material root. Derived from the same
+  # `lets_encrypt_certs_root` the product edge interpolates into
+  # `ssl_certificate`, so issuance and serving cannot name different trees.
+  local acme_live_root
+  acme_live_root="$(posix_path "$(lets_encrypt_certs_root)")"
+  # `dns_accounts_file`: the DNS provider accounts that make DNS-01 — and
+  # therefore every wildcard certificate — reachable. Omitted when unset, because
+  # an empty value would read as "configured to an unreadable path" instead of
+  # "not configured", and the issuer's startup warning would be suppressed.
+  local acme_dns_accounts_field=''
+  if [ -n "${SDKWORK_WEBSERVER_ACME_DNS_ACCOUNTS_FILE:-}" ]; then
+    acme_dns_accounts_field="dns_accounts_file = \"$(posix_path "${SDKWORK_WEBSERVER_ACME_DNS_ACCOUNTS_FILE}")\""
   fi
 
   ensure_directory "${CONFIG_ROOT}"
@@ -1925,11 +2011,11 @@ use_memory_drive = false
 use_memory_content_provider = false
 drive_facade_url = "${internal_api_url}"
 drive_internal_api_url = "${internal_api_url}"
-drive_internal_api_ingress_token_file = "${SECRETS_ROOT}/drive-internal-api-ingress-token"
+drive_internal_api_ingress_token_file = "$(posix_path "${SECRETS_ROOT}/drive-internal-api-ingress-token")"
 knowledgebase_internal_api_url = "${internal_api_url}"
-knowledgebase_internal_api_ingress_token_file = "${SECRETS_ROOT}/knowledgebase-internal-api-ingress-token"
+knowledgebase_internal_api_ingress_token_file = "$(posix_path "${SECRETS_ROOT}/knowledgebase-internal-api-ingress-token")"
 web_internal_api_url = "${internal_api_url}"
-web_internal_api_ingress_token_file = "${SECRETS_ROOT}/web-internal-api-ingress-token"
+web_internal_api_ingress_token_file = "$(posix_path "${SECRETS_ROOT}/web-internal-api-ingress-token")"
 runtime_assignment_worker_id = "deploy-worker-0"
 
 [database]
@@ -1946,24 +2032,27 @@ max_connections = ${SDKWORK_DATABASE_MAX_CONNECTIONS:-10}
 auto_migrate = true
 
 [secrets]
-encryption_key_file = "${SECRETS_ROOT}/encryption-key"
-deploy_encryption_key_file = "${SECRETS_ROOT}/deploy-encryption-key"
+encryption_key_file = "$(posix_path "${SECRETS_ROOT}/encryption-key")"
+deploy_encryption_key_file = "$(posix_path "${SECRETS_ROOT}/deploy-encryption-key")"
 ${credential_entry_bootstrap_field}
 
 [acme]
 profile = "${SDKWORK_WEBSERVER_ACME_PROFILE:-staging}"
 directory_url = "${SDKWORK_WEBSERVER_ACME_DIRECTORY_URL:-https://acme-staging-v02.api.letsencrypt.org/directory}"
 contact_email = "${SDKWORK_WEBSERVER_ACME_CONTACT_EMAIL:-admin@localhost}"
-webroot = "${SDKWORK_WEBSERVER_ACME_WEBROOT:-/var/lib/sdkwork/webserver/acme-webroot}"
-account_root = "${SDKWORK_WEBSERVER_ACME_ACCOUNT_ROOT:-/var/lib/sdkwork/webserver/acme-accounts}"
+webroot = "$(posix_path "${SDKWORK_WEBSERVER_ACME_WEBROOT:-/var/lib/sdkwork/webserver/acme-webroot}")"
+account_root = "$(posix_path "${SDKWORK_WEBSERVER_ACME_ACCOUNT_ROOT:-/var/lib/sdkwork/webserver/acme-accounts}")"
+cert_live_root = "${acme_live_root}"
+challenge_method = "${SDKWORK_WEBSERVER_ACME_CHALLENGE_METHOD:-AUTO}"
+${acme_dns_accounts_field}
 renew_before_days = ${SDKWORK_WEBSERVER_CERT_RENEW_BEFORE_DAYS:-30}
 worker_id = "${SDKWORK_WEBSERVER_CERT_WORKER_ID:-certificate-worker-0}"
 operation_poll_interval_secs = ${SDKWORK_WEBSERVER_CERT_OPERATION_POLL_INTERVAL_SECS:-5}
 renew_scan_interval_secs = ${SDKWORK_WEBSERVER_CERT_RENEW_SCAN_INTERVAL_SECS:-3600}
 
 [tls]
-material_root = "${SDKWORK_WEBSERVER_TLS_MATERIAL_ROOT:-/var/lib/sdkwork/webserver/tls-materials}"
-runtime_snapshot_file = "${SDKWORK_WEBSERVER_TLS_RUNTIME_SNAPSHOT_FILE:-/var/lib/sdkwork/webserver/tls-materials/tls-runtime.json}"
+material_root = "$(posix_path "${SDKWORK_WEBSERVER_TLS_MATERIAL_ROOT:-/var/lib/sdkwork/webserver/tls-materials}")"
+runtime_snapshot_file = "$(posix_path "${SDKWORK_WEBSERVER_TLS_RUNTIME_SNAPSHOT_FILE:-/var/lib/sdkwork/webserver/tls-materials/tls-runtime.json}")"
 snapshot_alpn = "${SDKWORK_WEBSERVER_TLS_SNAPSHOT_ALPN:-h2,http/1.1}"
 
 [node]

@@ -1,7 +1,9 @@
 import { useSdkworkAuthControllerState } from "@sdkwork/auth-pc-react";
 import { DeployAppsAdminSurface, webserverModule as appsAdminModule } from "@sdkwork/webserver-pc-admin-apps";
 import { webserverModule as auditModule } from "@sdkwork/webserver-pc-admin-audit";
+import { CloudAccountAdminSurface, webserverModule as cloudAccountAdminModule } from "@sdkwork/webserver-pc-admin-cloud-account";
 import { ClusterOverviewSurface, webserverModule as clusterModule } from "@sdkwork/webserver-pc-admin-cluster";
+import { ServedCertificateAdminSurface, ServedDomainAdminSurface, webserverModule as deliveryAdminModule } from "@sdkwork/webserver-pc-admin-delivery";
 import { webserverModule as diagnosticsModule } from "@sdkwork/webserver-pc-admin-diagnostics";
 import { webserverModule as mcpAdminModule, McpAdminSurface, type McpAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-mcp";
 import { webserverModule as nginxModule } from "@sdkwork/webserver-pc-admin-nginx";
@@ -13,6 +15,7 @@ import { webserverModule as skillsAdminModule, SkillsAdminSurface, type SkillsAd
 import { StorageCenterSurface, webserverModule as storageModule, type StorageCenterResource } from "@sdkwork/webserver-pc-admin-storage";
 import { hasWebserverAdminAccess, type WebserverPcModuleDefinition } from "@sdkwork/webserver-pc-commons";
 import type { WebserverLocale } from "@sdkwork/webserver-pc-core";
+import { CloudAccountManagementSurface, webserverModule as cloudAccountModule } from "@sdkwork/webserver-pc-console-cloud-account";
 import { WebserverConsoleSdkProvider } from "@sdkwork/webserver-pc-console-core";
 import { DeployAppsManagementSurface, DeployDomainManagementSurface, webserverModule as deliveryModule } from "@sdkwork/webserver-pc-console-delivery";
 import { webserverModule as mcpModule, McpConsoleSurface, type McpConsoleSurfaceProps } from "@sdkwork/webserver-pc-console-mcp";
@@ -25,12 +28,21 @@ import type { BootstrappedWebserverPcRuntime } from "../bootstrap/runtime.ts";
 import { webserverApplicationCatalog } from "../i18n/index.ts";
 import { useSdkworkModuleMessages } from "@sdkwork/i18n-pc-react";
 
-// Applications / Domains / Certificates all render the canonical
+// Applications, domains, and certificates all render the canonical
 // sdkwork-deployments pages over `deploy_app`, `deploy_domain_zone`, and the
 // certificate entities. `delivery` therefore owns those three menu entries and
 // nothing else: the Web Server console keeps no local application lifecycle.
-const consoleModules = [deliveryModule, pluginsModule, skillsModule, mcpModule] satisfies readonly WebserverPcModuleDefinition[];
-const adminModules = [appsAdminModule, nginxModule, serversModule, serversExplorerModule, webserverConfigModule, clusterModule, diagnosticsModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule, storageModule] satisfies readonly WebserverPcModuleDefinition[];
+// These are the *per-user* halves of each story — an authenticated operator
+// manages the applications, domains, and certificates they own.
+const consoleModules = [deliveryModule, pluginsModule, skillsModule, mcpModule, cloudAccountModule] satisfies readonly WebserverPcModuleDefinition[];
+// Domains and Certificates reappear here at the *tenant* level: the served root
+// domains / subdomains this edge answers for (reconciled from its configuration
+// at startup) and the TLS certificates over them. That is a different plane from
+// the console pair above — the root table has no `user_id` at all and the
+// reconciled subdomains carry `user_id IS NULL` — so it is its own module on the
+// operations surface rather than folded into `appsAdminModule`, and only this
+// surface offers the whole-tenant edge inventory.
+const adminModules = [appsAdminModule, deliveryAdminModule, cloudAccountAdminModule, nginxModule, serversModule, serversExplorerModule, webserverConfigModule, clusterModule, diagnosticsModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule, storageModule] satisfies readonly WebserverPcModuleDefinition[];
 const LazyAdminSurface = lazy(() => import("./WebserverAdminSurface.tsx").then((module) => ({ default: module.WebserverAdminSurface })));
 
 export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: WebserverLocale; runtime: BootstrappedWebserverPcRuntime }) {
@@ -65,6 +77,13 @@ export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: Webs
     plugins: <PluginsConsoleSurface attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as PluginsConsoleSurfaceProps["attachSdkClientBoundaries"]} driveAppApiBaseUrl={driveBaseUrl} locale={locale} ownerKey={operatorId} resource="plugins" tokenManager={runtime.tokenManager} />,
     skills: <SkillsConsoleSurface appApiBaseUrl={runtime.config.appApiBaseUrl} attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as SkillsConsoleSurfaceProps["attachSdkClientBoundaries"]} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={driveBaseUrl} locale={locale} resource="skills" tokenManager={runtime.tokenManager} />,
     mcp: <McpConsoleSurface appApiBaseUrl={runtime.config.appApiBaseUrl} attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as McpConsoleSurfaceProps["attachSdkClientBoundaries"]} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={driveBaseUrl} locale={locale} resource="mcp" tokenManager={runtime.tokenManager} />,
+    // The cloud account center is an IAM-owned resource served by the IAM backend
+    // API, so the page comes from the IAM capability package and this host injects
+    // only the session scope. The IAM service facade driving it is composed by
+    // console-core and published through the SDK provider wrapping these routes,
+    // which is also what keeps the generated IAM clients out of a capability
+    // package (`verify-repo` forbids that import).
+    "cloud-accounts": <CloudAccountManagementSurface permissionScope={permissionScope} tenantId={tenantId} />,
   };
   // Storage Center mounts the drive-owned admin storage pages. The surface
   // picks the page from `resource`, so the host owns the menu entry and the
@@ -81,6 +100,18 @@ export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: Webs
   );
   const adminResourceRenderers = {
     apps: <DeployAppsAdminSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={driveBaseUrl} locale={locale} tokenManager={runtime.tokenManager} />,
+    // Domains and Certificates read the Web Server's own tenant-level planes, so
+    // their pages are authored in the delivery capability package. They take no
+    // client prop: both render inside `WebserverAdminSdkProvider` (mounted by
+    // `WebserverAdminSurface`), which is where the admin SDK client comes from.
+    domains: <ServedDomainAdminSurface locale={locale} resource="domains" />,
+    certificates: <ServedCertificateAdminSurface locale={locale} resource="certificates" />,
+    // Cloud accounts are one IAM-owned resource with one route set, so the admin
+    // tab renders the same page the console does and only marks itself `admin`.
+    // The ownership levels are not passed in: the shared adapter derives them from
+    // the session, which is what lets the platform tenant see `platform` here
+    // without the tenant console ever being able to.
+    "cloud-accounts": <CloudAccountAdminSurface permissionScope={permissionScope} tenantId={tenantId} />,
     plugins: <PluginsAdminSurface attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as PluginsAdminSurfaceProps["attachSdkClientBoundaries"]} driveAppApiBaseUrl={driveBaseUrl} locale={locale} ownerKey={operatorId} resource="plugins" tokenManager={runtime.tokenManager} />,
     "plugin-categories": <PluginsAdminSurface attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as PluginsAdminSurfaceProps["attachSdkClientBoundaries"]} driveAppApiBaseUrl={driveBaseUrl} locale={locale} ownerKey={operatorId} resource="plugin-categories" tokenManager={runtime.tokenManager} />,
     skills: <SkillsAdminSurface appApiBaseUrl={runtime.config.appApiBaseUrl} attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as SkillsAdminSurfaceProps["attachSdkClientBoundaries"]} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={driveBaseUrl} resource="skills" tokenManager={runtime.tokenManager} permissionScope={permissionScope} />,

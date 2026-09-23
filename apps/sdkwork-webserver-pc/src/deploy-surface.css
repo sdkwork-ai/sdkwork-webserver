@@ -14,7 +14,77 @@
    Consumed by src/main.tsx and applied by the bridge components in
    packages/sdkwork-webserver-pc-console-delivery and
    packages/sdkwork-webserver-pc-admin-apps. */
-.deploy-surface :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--sdk-color-text-primary);background:var(--sdk-color-surface-canvas);font-synthesis:none}.deploy-surface *{box-sizing:border-box}.deploy-surface body{margin:0;min-width:320px;min-height:100vh}.deploy-surface button, .deploy-surface input, .deploy-surface textarea, .deploy-surface select{font:inherit;letter-spacing:0}.deploy-surface button{cursor:pointer}.deploy-surface .bootstrap-state, .deploy-surface .fatal-state, .deploy-surface .empty-access{min-height:100vh;display:grid;place-content:center;text-align:center}.deploy-surface .fatal-state{color:var(--sdk-color-state-danger)}.deploy-surface .app-layout{min-height:100vh;display:grid;grid-template-columns:238px minmax(0,1fr)}.deploy-surface .sidebar{background:var(--sdk-color-surface-elevated);color:var(--sdk-color-text-primary);padding:18px 12px;display:flex;flex-direction:column}.deploy-surface .brand{display:flex;align-items:center;gap:10px;padding:4px 8px 22px}.deploy-surface .brand-mark{width:34px;height:34px;display:grid;place-content:center;background:var(--sdk-color-brand-primary);color:var(--sdk-color-text-inverse);border-radius:6px}.deploy-surface .brand div{display:grid;gap:2px}.deploy-surface .brand small{color:var(--sdk-color-text-muted)}.deploy-surface .sidebar nav{display:grid;gap:4px}.deploy-surface .sidebar nav a{color:var(--sdk-color-text-secondary);text-decoration:none;display:flex;align-items:center;gap:10px;min-height:40px;padding:0 10px;border-radius:5px}.deploy-surface .sidebar nav a:hover, .deploy-surface .sidebar nav a.active{color:var(--sdk-color-text-primary);background:var(--sdk-color-surface-panel-muted)}.deploy-surface .nav-icon{width:20px;display:inline-flex;align-items:center;justify-content:center;flex:0 0 20px}.deploy-surface .sidebar-footer{margin-top:auto;border-top:1px solid var(--sdk-color-border-default);padding:16px 8px 0;display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--sdk-color-text-secondary)}.deploy-surface .sidebar-footer span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.deploy-surface .workspace{min-width:0}.deploy-surface{height:100%;min-height:0;display:flex;flex-direction:column}.deploy-surface .resource-page{min-height:0;flex:1 1 auto;padding:28px clamp(18px,3vw,42px)}.deploy-surface .dialog h2{margin:4px 0 6px;font-size:24px;line-height:1.2;letter-spacing:0}.deploy-surface .resource-identity h1{max-width:none}.deploy-surface .search-box, .deploy-surface .scope-input{height:38px;min-width:210px;display:flex;align-items:center;gap:8px;background:var(--sdk-color-surface-panel);border:1px solid var(--sdk-color-border-default);padding:0 10px;border-radius:5px}.deploy-surface .search-box input, .deploy-surface .scope-input input{min-width:0;border:0;outline:none;background:transparent;width:100%}.deploy-surface .actions{margin-left:auto;display:flex;flex-wrap:wrap;gap:8px}.deploy-surface .icon-button, .deploy-surface .command-button, .deploy-surface .secondary-button, .deploy-surface .danger-button{border:1px solid transparent;border-radius:5px;min-height:36px;display:inline-flex;align-items:center;justify-content:center;gap:7px}.deploy-surface .icon-button{width:36px;padding:0;color:inherit;background:transparent}.deploy-surface .icon-button:hover{background:var(--sdk-color-surface-elevated)}.deploy-surface .command-button{color:var(--webserver-color-on-accent);background:var(--webserver-color-command-background);padding:0 13px}.deploy-surface .secondary-button{border-color:var(--sdk-color-border-default);background:var(--sdk-color-surface-panel);padding:0 13px}.deploy-surface .danger-button{color:var(--webserver-color-on-danger);background:var(--webserver-color-danger-text);padding:0 13px}.deploy-surface button:disabled{cursor:not-allowed;opacity:.48}.deploy-surface .empty-state{width:100%;height:100%;min-height:220px;display:grid;place-content:center;gap:10px;color:var(--sdk-color-text-muted)}.deploy-surface .error-banner, .deploy-surface .warning{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;margin:8px 0;border:1px solid var(--webserver-color-danger-border);background:var(--webserver-color-danger-surface);color:var(--webserver-color-danger-text);border-radius:5px}.deploy-surface .warning{background:var(--webserver-color-warning-surface);border-color:var(--webserver-color-warning-border);color:var(--webserver-color-warning-text)}.deploy-surface .dialog-backdrop{position:fixed;inset:0;background:color-mix(in srgb, var(--sdk-color-surface-overlay) 72%, rgba(0, 0, 0, .54));display:grid;place-items:center;padding:18px;z-index:50}.deploy-surface .dialog{width:min(620px,100%);max-height:calc(100vh - 36px);overflow:auto;background:var(--sdk-color-surface-panel);padding:20px;border-radius:7px;box-shadow:var(--sdk-shadow-lg)}.deploy-surface .dialog header, .deploy-surface .dialog footer{display:flex;justify-content:space-between;align-items:center;gap:10px}.deploy-surface .dialog label{display:grid;gap:7px;margin:16px 0;font-size:13px;font-weight:650}.deploy-surface .dialog footer{justify-content:flex-end}.deploy-surface .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 16px;align-items:start;margin:16px 0}.deploy-surface .form-grid label{display:grid;align-content:start;gap:7px;margin:0;min-width:0}.deploy-surface .form-grid input:not([type="checkbox"]), .deploy-surface .form-grid textarea, .deploy-surface .form-grid select, .deploy-surface .dialog>label input[type="file"]{width:100%;min-height:40px;border:1px solid var(--sdk-color-border-default);border-radius:5px;padding:9px 10px;background:var(--sdk-color-surface-panel)}.deploy-surface .form-grid textarea{min-height:104px;resize:vertical;font-family:inherit;font-size:13px;line-height:1.45}.deploy-surface .form-grid label:has(textarea){grid-column:1/-1}.deploy-surface .checkbox-field, .deploy-surface .confirm-check{display:flex!important;align-items:center;gap:9px!important}.deploy-surface .checkbox-field input, .deploy-surface .confirm-check input{width:16px;height:16px;margin:0}.deploy-surface .confirm-check{padding:11px 12px;border:1px solid var(--webserver-color-warning-border);background:var(--webserver-color-warning-surface);border-radius:5px}.deploy-surface .status-badge{display:inline-flex;align-items:center;min-height:24px;padding:2px 8px;border-radius:999px;background:var(--sdk-color-surface-elevated);color:var(--sdk-color-text-secondary);font-size:12px;font-weight:650}.deploy-surface .status-active, .deploy-surface .status-success, .deploy-surface .status-verified, .deploy-surface .status-1{background:var(--webserver-color-success-surface);color:var(--webserver-color-success-text)}.deploy-surface .status-failed, .deploy-surface .status-error, .deploy-surface .status-expired, .deploy-surface .status-revoked, .deploy-surface .status-3{background:var(--webserver-color-danger-surface);color:var(--webserver-color-danger-text)}.deploy-surface .status-pending, .deploy-surface .status-issuing, .deploy-surface .status-0{background:var(--webserver-color-warning-surface);color:var(--webserver-color-warning-text)}.deploy-surface .status-paused{background:var(--sdk-color-surface-elevated);color:var(--sdk-color-text-secondary)}.deploy-surface .auth-brand{display:flex;gap:8px;align-items:center;color:var(--sdk-color-brand-primary)}
+.deploy-surface :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--sdk-color-text-primary);background:var(--sdk-color-surface-canvas);font-synthesis:none}.deploy-surface *{box-sizing:border-box}.deploy-surface body{margin:0;min-width:320px;min-height:100vh}.deploy-surface button, .deploy-surface input, .deploy-surface textarea, .deploy-surface select{font:inherit;letter-spacing:0}.deploy-surface button{cursor:pointer}.deploy-surface .bootstrap-state, .deploy-surface .fatal-state, .deploy-surface .empty-access{min-height:100vh;display:grid;place-content:center;text-align:center}.deploy-surface .fatal-state{color:var(--sdk-color-state-danger)}.deploy-surface .app-layout{min-height:100vh;display:grid;grid-template-columns:238px minmax(0,1fr)}.deploy-surface .sidebar{background:var(--sdk-color-surface-elevated);color:var(--sdk-color-text-primary);padding:18px 12px;display:flex;flex-direction:column}.deploy-surface .brand{display:flex;align-items:center;gap:10px;padding:4px 8px 22px}.deploy-surface .brand-mark{width:34px;height:34px;display:grid;place-content:center;background:var(--sdk-color-brand-primary);color:var(--sdk-color-text-inverse);border-radius:6px}.deploy-surface .brand div{display:grid;gap:2px}.deploy-surface .brand small{color:var(--sdk-color-text-muted)}.deploy-surface .sidebar nav{display:grid;gap:4px}.deploy-surface .sidebar nav a{color:var(--sdk-color-text-secondary);text-decoration:none;display:flex;align-items:center;gap:10px;min-height:40px;padding:0 10px;border-radius:5px}.deploy-surface .sidebar nav a:hover, .deploy-surface .sidebar nav a.active{color:var(--sdk-color-text-primary);background:var(--sdk-color-surface-panel-muted)}.deploy-surface .nav-icon{width:20px;display:inline-flex;align-items:center;justify-content:center;flex:0 0 20px}.deploy-surface .sidebar-footer{margin-top:auto;border-top:1px solid var(--sdk-color-border-default);padding:16px 8px 0;display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--sdk-color-text-secondary)}.deploy-surface .sidebar-footer span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.deploy-surface .workspace{min-width:0}.deploy-surface{height:100%;min-height:0;display:flex;flex-direction:column}.deploy-surface .resource-page{min-height:0;flex:1 1 auto;padding:28px clamp(18px,3vw,42px)}.deploy-surface .dialog h2{margin:4px 0 6px;font-size:24px;line-height:1.2;letter-spacing:0}.deploy-surface .resource-identity h1{max-width:none}.deploy-surface .search-box, .deploy-surface .scope-input{height:38px;min-width:210px;display:flex;align-items:center;gap:8px;background:var(--sdk-color-surface-panel);border:1px solid var(--sdk-color-border-default);padding:0 10px;border-radius:5px}.deploy-surface .search-box input, .deploy-surface .scope-input input{min-width:0;border:0;outline:none;background:transparent;width:100%}.deploy-surface .actions{margin-left:auto;display:flex;flex-wrap:wrap;gap:8px}.deploy-surface .icon-button, .deploy-surface .command-button, .deploy-surface .secondary-button, .deploy-surface .danger-button{border:1px solid transparent;border-radius:5px;min-height:36px;display:inline-flex;align-items:center;justify-content:center;gap:7px}.deploy-surface .icon-button{width:36px;padding:0;color:inherit;background:transparent}.deploy-surface .icon-button:hover{background:var(--sdk-color-surface-elevated)}.deploy-surface .command-button{color:var(--webserver-color-on-accent);background:var(--webserver-color-command-background);padding:0 13px}.deploy-surface .secondary-button{border-color:var(--sdk-color-border-default);background:var(--sdk-color-surface-panel);padding:0 13px}.deploy-surface .danger-button{color:var(--webserver-color-on-danger);background:var(--webserver-color-danger-text);padding:0 13px}.deploy-surface button:disabled{cursor:not-allowed;opacity:.48}
+/* The ledger skeleton shared by every deployments surface bridged into this host.
+   `.table-frame` is the scrollport, and the bare `table` / `th, td` / `th` /
+   `tbody tr` rules are what give a ledger its cell padding, its row rule and its
+   header band. They are the `.deploy-surface`-scoped half of the same skeleton
+   `src/index.css` carries unscoped, and the publishing page needs this half
+   because the page renders inside `.deploy-surface`. Both halves were dropped by
+   256a65f6, which is why the Applications ledger came out with its columns
+   collapsed and its cells touching. Restored verbatim. */
+.deploy-surface .table-frame{background:var(--sdk-color-surface-panel);border:1px solid var(--sdk-color-border-default);overflow:auto;min-height:260px}
+.deploy-surface table{width:100%;border-collapse:collapse}
+.deploy-surface th, .deploy-surface td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--sdk-color-border-subtle);max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.deploy-surface th{color:var(--sdk-color-text-secondary);background:var(--sdk-color-surface-panel-muted);text-transform:capitalize}
+.deploy-surface tbody tr{cursor:pointer}
+.deploy-surface tbody tr:hover, .deploy-surface tbody tr.selected{background:color-mix(in srgb, var(--sdk-color-brand-primary) 10%, var(--sdk-color-surface-panel))}
+/* Distributing the Applications ledger's seven columns.
+   Both stylesheets leave `table-layout` at the host default `auto` (src/index.css),
+   and an `auto` table with seven undimensioned columns hands every column the same
+   share of the width. In the 1360px content area the console renders them at, that
+   is ~159px per column — measured off the rendered page as text starting at
+   x=218/377/536/694/854, i.e. an even 159px pitch. Four of the seven columns hold a
+   short value (a slug, an enum label, a status badge, a single integer) and the only
+   column that deserves the slack is the name, so an even split reads as a table with
+   its contents shaken loose rather than as a ledger.
+
+   The fix dimensions the six narrow columns and leaves the name column to absorb
+   whatever is left, which is the shape the data actually has. Widths are set as
+   `width` on `th` only: with `table-layout:auto` the browser treats them as minimum
+   hints and still grows a column whose value needs more room, so a long slug ellipsises
+   via the shared `max-width:360px` instead of forcing the table to overflow.
+
+   Scoped to `.publishing-apps-page` because `.deploy-surface` is shared with the
+   Domains and Certificates surfaces, whose tables (`min-width:980px` / `1200px`) have
+   a different column story and must not inherit these tracks. The class is the page
+   section's own, so no markup change was needed. Dropped together with the skeleton
+   above by 256a65f6; restored with it. */
+.deploy-surface .publishing-apps-page th:nth-child(2){width:180px}
+.deploy-surface .publishing-apps-page th:nth-child(3){width:110px}
+.deploy-surface .publishing-apps-page th:nth-child(4){width:130px}
+.deploy-surface .publishing-apps-page th:nth-child(5){width:110px}
+.deploy-surface .publishing-apps-page th:nth-child(6){width:150px}
+.deploy-surface .publishing-apps-page th:nth-child(7){width:200px}
+.deploy-surface .pagination{min-height:50px;display:flex;justify-content:flex-end;align-items:center;gap:8px;color:var(--sdk-color-text-secondary)}
+/* The Domains and Certificates ledgers, and the hostname picker inside them.
+   `DeliveryManagement.tsx` renders `table-frame domain-table-frame` /
+   `domain-table` / `operations-column` for the two ledgers and
+   `table-frame hostname-picker-frame` / `domain-table hostname-picker-table` for
+   the picker, so these rules are as load-bearing as the skeleton above — they
+   are the same deletion (256a65f6) and are restored with it. The picker's own
+   rules stay even though a newer picker structure is being prepared here: until
+   that markup lands in the source of truth, this is the one the page renders,
+   and the two class sets do not collide.
+   `.selector-pagination` is deliberately not restored: it belonged to an earlier
+   candidate list whose markup no longer exists in either repository. */
+.deploy-surface .domain-table-frame{flex:1 1 auto;min-height:0;margin-top:12px}
+.deploy-surface .domain-table{min-width:980px}
+.deploy-surface .domain-table th:first-child, .deploy-surface .domain-table td:first-child{width:auto;max-width:360px;padding:11px 12px}
+.deploy-surface .domain-table tbody tr{cursor:default}
+.deploy-surface .domain-table td{height:62px}
+.deploy-surface .operations-column{text-align:right;min-width:144px}
+.deploy-surface .certificate-table-frame .domain-table{min-width:1200px}
+.deploy-surface .hostname-picker-frame{min-height:180px;max-height:min(52vh,400px)}
+.deploy-surface .hostname-picker-table{min-width:660px}
+.deploy-surface .hostname-picker-table thead th{position:sticky;top:0;z-index:1;box-shadow:inset 0 -1px 0 var(--sdk-color-border-subtle)}
+.deploy-surface .hostname-picker-table th, .deploy-surface .hostname-picker-table td{height:auto;padding:8px 10px;max-width:280px}
+.deploy-surface .hostname-picker-table th.selection-column, .deploy-surface .hostname-picker-table td.selection-column{width:34px;max-width:34px;padding:8px 10px;text-align:center}
+.deploy-surface .hostname-picker-table .selection-column input{width:16px;height:16px;margin:0;cursor:pointer}
+.deploy-surface .hostname-picker-table tbody tr{cursor:pointer}
+.deploy-surface .hostname-picker-table .hostname-cell>span{display:grid;gap:2px;min-width:0}
+.deploy-surface .hostname-picker-table .operations-column{min-width:130px}
+.deploy-surface .empty-state{width:100%;height:100%;min-height:220px;display:grid;place-content:center;gap:10px;color:var(--sdk-color-text-muted)}.deploy-surface .error-banner, .deploy-surface .warning{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;margin:8px 0;border:1px solid var(--webserver-color-danger-border);background:var(--webserver-color-danger-surface);color:var(--webserver-color-danger-text);border-radius:5px}.deploy-surface .warning{background:var(--webserver-color-warning-surface);border-color:var(--webserver-color-warning-border);color:var(--webserver-color-warning-text)}.deploy-surface .dialog-backdrop{position:fixed;inset:0;background:color-mix(in srgb, var(--sdk-color-surface-overlay) 72%, rgba(0, 0, 0, .54));display:grid;place-items:center;padding:18px;z-index:50}.deploy-surface .dialog{width:min(620px,100%);max-height:calc(100vh - 36px);overflow:auto;background:var(--sdk-color-surface-panel);padding:20px;border-radius:7px;box-shadow:var(--sdk-shadow-lg)}.deploy-surface .dialog header, .deploy-surface .dialog footer{display:flex;justify-content:space-between;align-items:center;gap:10px}.deploy-surface .dialog label{display:grid;gap:7px;margin:16px 0;font-size:13px;font-weight:650}.deploy-surface .dialog footer{justify-content:flex-end}.deploy-surface .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 16px;align-items:start;margin:16px 0}.deploy-surface .form-grid label{display:grid;align-content:start;gap:7px;margin:0;min-width:0}.deploy-surface .form-grid input:not([type="checkbox"]), .deploy-surface .form-grid textarea, .deploy-surface .form-grid select, .deploy-surface .dialog>label input[type="file"]{width:100%;min-height:40px;border:1px solid var(--sdk-color-border-default);border-radius:5px;padding:9px 10px;background:var(--sdk-color-surface-panel)}.deploy-surface .form-grid textarea{min-height:104px;resize:vertical;font-family:inherit;font-size:13px;line-height:1.45}.deploy-surface .form-grid label:has(textarea){grid-column:1/-1}.deploy-surface .checkbox-field, .deploy-surface .confirm-check{display:flex!important;align-items:center;gap:9px!important}.deploy-surface .checkbox-field input, .deploy-surface .confirm-check input{width:16px;height:16px;margin:0}.deploy-surface .confirm-check{padding:11px 12px;border:1px solid var(--webserver-color-warning-border);background:var(--webserver-color-warning-surface);border-radius:5px}.deploy-surface .status-badge{display:inline-flex;align-items:center;min-height:24px;padding:2px 8px;border-radius:999px;background:var(--sdk-color-surface-elevated);color:var(--sdk-color-text-secondary);font-size:12px;font-weight:650}.deploy-surface .status-active, .deploy-surface .status-success, .deploy-surface .status-verified, .deploy-surface .status-1{background:var(--webserver-color-success-surface);color:var(--webserver-color-success-text)}.deploy-surface .status-failed, .deploy-surface .status-error, .deploy-surface .status-expired, .deploy-surface .status-revoked, .deploy-surface .status-3{background:var(--webserver-color-danger-surface);color:var(--webserver-color-danger-text)}.deploy-surface .status-pending, .deploy-surface .status-issuing, .deploy-surface .status-0{background:var(--webserver-color-warning-surface);color:var(--webserver-color-warning-text)}.deploy-surface .status-paused{background:var(--sdk-color-surface-elevated);color:var(--sdk-color-text-secondary)}.deploy-surface .auth-brand{display:flex;gap:8px;align-items:center;color:var(--sdk-color-brand-primary)}
 
 .deploy-surface .resource-loading{min-height:50vh;display:grid;place-content:center;color:var(--sdk-color-text-secondary)}.deploy-surface .resource-loading svg{animation:resource-spin 1s linear infinite}@keyframes resource-spin{to{transform:rotate(360deg)}}.deploy-surface .domain-page{width:100%}.deploy-surface .segmented-control{display:inline-flex;align-items:center;border:1px solid var(--sdk-color-border-default);border-radius:5px;background:var(--sdk-color-surface-panel);overflow:hidden}.deploy-surface .segmented-control button{min-height:36px;padding:0 13px;border:0;border-right:1px solid var(--sdk-color-border-subtle);background:var(--sdk-color-surface-panel);color:var(--sdk-color-text-secondary)}.deploy-surface .segmented-control button:last-child{border-right:0}.deploy-surface .segmented-control button[aria-pressed="true"]{background:var(--sdk-color-brand-primary);color:var(--webserver-color-on-accent)}.deploy-surface .primary-cell-link, .deploy-surface .hostname-cell, .deploy-surface .certificate-name{display:inline-flex;align-items:center;gap:9px;color:var(--sdk-color-text-primary);text-decoration:none}.deploy-surface .primary-cell-link:hover strong{text-decoration:underline}.deploy-surface .primary-cell-link span{display:grid;gap:3px}.deploy-surface .primary-cell-link small, .deploy-surface .cell-subtitle{display:block;color:var(--sdk-color-text-muted);font-size:11px;font-weight:400}.deploy-surface .row-actions{display:flex;justify-content:flex-end;gap:3px}.deploy-surface .table-action{width:32px;height:32px;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--sdk-color-text-secondary);display:inline-flex;align-items:center;justify-content:center;text-decoration:none;padding:0;flex:0 0 32px}.deploy-surface .table-action:hover{border-color:var(--sdk-color-border-default);background:var(--sdk-color-surface-elevated);color:var(--sdk-color-text-primary)}.deploy-surface .danger-action{color:var(--webserver-color-danger-text)}.deploy-surface .danger-action:hover{border-color:var(--webserver-color-danger-border);background:var(--webserver-color-danger-surface);color:var(--webserver-color-danger-text)}.deploy-surface .back-link{display:inline-flex;align-items:center;gap:7px;margin-bottom:17px;color:var(--sdk-color-text-secondary);text-decoration:none;font-size:13px}.deploy-surface .back-link:hover{color:var(--sdk-color-text-primary)}.deploy-surface .metric-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--sdk-color-border-default);background:var(--sdk-color-surface-panel);margin:18px 0 12px}.deploy-surface .domain-metric{min-height:76px;padding:14px 16px;border-right:1px solid var(--sdk-color-border-subtle);display:grid;align-content:center;gap:5px}.deploy-surface .domain-metric:last-child{border-right:0}.deploy-surface .domain-metric span{font-size:12px;color:var(--sdk-color-text-secondary)}.deploy-surface .domain-metric strong{font-size:17px;font-weight:680}.deploy-surface .delivery-dialog-wide{width:min(860px,100%)}.deploy-surface .delivery-dialog .single-column{grid-template-columns:1fr}.deploy-surface .dialog-footer{margin-top:18px}.deploy-surface .confirmation-message{margin:20px 0;color:var(--sdk-color-text-secondary);line-height:1.55}.deploy-surface .dangerous-confirmation{padding:12px;border:1px solid var(--webserver-color-danger-border);background:var(--webserver-color-danger-surface);color:var(--webserver-color-danger-text);border-radius:5px}.deploy-surface .verification-success, .deploy-surface .verification-pending{display:flex;align-items:center;gap:9px;padding:12px;margin:16px 0;border:1px solid color-mix(in srgb, var(--webserver-color-success-text) 45%, transparent);background:var(--webserver-color-success-surface);color:var(--webserver-color-success-text);border-radius:5px}.deploy-surface .verification-pending{border-color:var(--webserver-color-warning-border);background:var(--webserver-color-warning-surface);color:var(--webserver-color-warning-text)}.deploy-surface .copy-field{display:grid;grid-template-columns:minmax(120px,.35fr) minmax(0,1fr) 32px;align-items:center;gap:6px 10px;margin:10px 0}.deploy-surface .copy-field>span, .deploy-surface .verification-expiry span{font-size:12px;color:var(--sdk-color-text-secondary)}.deploy-surface .copy-field code{min-width:0;overflow:auto;padding:9px 10px;border:1px solid var(--sdk-color-border-default);background:var(--sdk-color-surface-panel-muted);border-radius:4px;font-size:12px}.deploy-surface .copy-field>.form-hint{display:block;grid-column:2/-1;font-size:12px;line-height:1.5}.deploy-surface .verification-expiry{display:grid;grid-template-columns:minmax(120px,.35fr) minmax(0,1fr);gap:10px;padding:9px 0}.deploy-surface .form-fieldset{border:1px solid var(--sdk-color-border-default);border-radius:5px;margin:14px 0;padding:14px}.deploy-surface .form-fieldset legend{padding:0 6px;color:var(--sdk-color-text-secondary);font-size:12px;font-weight:700}.deploy-surface .algorithm-control button{min-width:88px}.deploy-surface .selector-search{width:min(360px,100%);margin-bottom:12px}.deploy-surface .selector-search .table-action{margin-right:-7px}.deploy-surface .selector-zone{display:grid!important;grid-template-columns:120px minmax(0,1fr);align-items:center;gap:12px!important;margin:10px 0!important}.deploy-surface .selector-zone select{height:38px;border:1px solid var(--sdk-color-border-default);border-radius:5px;padding:0 9px;background:var(--sdk-color-surface-panel)}.deploy-surface .hostname-selector-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;min-height:116px;max-height:248px;overflow:auto;padding:8px 0}.deploy-surface .hostname-selector-list label{display:flex!important;align-items:center;gap:9px!important;margin:0!important;padding:9px 10px;border:1px solid var(--sdk-color-border-default);border-radius:4px;font-weight:400!important}.deploy-surface .hostname-selector-list label:has(input:checked){border-color:var(--sdk-color-brand-primary);background:color-mix(in srgb, var(--sdk-color-brand-primary) 10%, var(--sdk-color-surface-panel))}.deploy-surface .hostname-selector-list label.disabled{background:var(--sdk-color-surface-elevated)}.deploy-surface .hostname-selector-list label span{display:grid;gap:2px;min-width:0}.deploy-surface .hostname-selector-list label strong{overflow:hidden;text-overflow:ellipsis}.deploy-surface .hostname-selector-list label small{font-size:11px;color:var(--sdk-color-text-muted)}.deploy-surface .selector-empty{grid-column:1/-1;display:grid;place-content:center;color:var(--sdk-color-text-muted)}.deploy-surface .selected-hostnames{border-top:1px solid var(--sdk-color-border-subtle);margin-top:8px;padding-top:11px}.deploy-surface .selected-hostnames>span{font-size:12px;color:var(--sdk-color-text-secondary)}.deploy-surface .selected-hostnames>div{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.deploy-surface .selected-hostnames>div>span, .deploy-surface .identifier-list span{display:inline-flex;align-items:center;gap:4px;max-width:100%;padding:4px 7px;background:var(--sdk-color-surface-elevated);border-radius:4px;font-size:12px}.deploy-surface .selected-hostnames button{width:18px;height:18px;display:grid;place-content:center;border:0;background:transparent;padding:0}.deploy-surface .identifier-list{display:flex;flex-wrap:wrap;gap:4px;max-width:360px;white-space:normal}.deploy-surface .form-hint{display:block;margin:0;font-size:12px;line-height:1.5;color:var(--sdk-color-text-secondary);font-weight:400}
 
@@ -69,12 +139,19 @@
    still scrolls once it passes four rows. */
 .deploy-surface .delivery-dialog .hostname-selector-list{min-height:0;max-height:184px;padding:0}
 
-/* Certificate parameters in three columns over two rows instead of two columns
-   over four. The two children declared `form-field-wide` give up their span so
-   the grid can pair them — the certificate name is the widest field here and
-   still gets a full third. */
-.deploy-surface .certificate-form-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 14px;margin:8px 0}
-.deploy-surface .certificate-form-grid>.form-field-wide{grid-column:auto}
+/* One field per row, in the drawer.
+   The wizard's parameter grid and its settings pair were both built for a centred
+   dialog: at 860px the three controls that decide how the certificate is issued
+   could sit side by side, and the settings pair put the validation method beside
+   the account. In a drawer that arrangement reads as a scatter — the eye has to
+   find the next field's column before it can read its row — and the form is
+   answered top to bottom anyway, so every group is one column and the order of the
+   controls is the order of the questions that produce them.
+   `gap` is named in both axes because the shared `.form-grid` pairs its rows 14px
+   apart for a layout that had two or three fields per row; with one field per row
+   that is the field-to-field spacing, and the group spacing is stated in the drawer
+   block below. */
+.deploy-surface .certificate-form-grid{grid-template-columns:minmax(0,1fr);gap:14px;margin:8px 0}
 
 /* The covered-hostname block is a caption plus one row of chips; its 11px lead-in
    and 8px gap only pushed the retention line further down. */
@@ -85,13 +162,12 @@
    own margin. */
 .deploy-surface .delivery-dialog .dialog-footer{margin-top:8px;padding-top:8px}
 
-/* The scope and the root domain now share a row: they answer one question, and the
-   pair costs one line where two blocks cost two. The root domain's usual
-   caption-beside-control arrangement is dropped inside the pair, because half the
-   dialog cannot hold a 120px caption and a usable select side by side. */
-.deploy-surface .delivery-dialog .dialog-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 18px;align-items:start}
-.deploy-surface .delivery-dialog .dialog-pair .form-fieldset{margin:10px 0}
-.deploy-surface .delivery-dialog .dialog-pair .selector-zone{grid-template-columns:minmax(0,1fr);gap:7px!important}
+/* The settings pair is a pair no longer: one field per row means the validation
+   method and the account stack like every other field, and the two columns it used
+   to split into go with them. What it keeps is a rhythm — its own `gap` is the
+   field spacing, and its bottom margin is the group spacing, so the two fieldsets
+   that used to be columns still read as one group of two followed by a boundary. */
+.deploy-surface .delivery-dialog .dialog-pair{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start;margin:0 0 18px}
 
 /* The covered-hostname caption and its chips are one statement, so they share a
    line; only the retention note drops below them. */
@@ -99,12 +175,6 @@
 .deploy-surface .delivery-dialog .selected-hostnames>div{margin-top:0}
 .deploy-surface .delivery-dialog .selected-hostnames>small{flex:1 1 100%}
 
-@media(max-width:900px){.deploy-surface .delivery-dialog .dialog-pair{grid-template-columns:minmax(0,1fr)}}
-
-/* A settings pair is not an even split: the validation segmented control needs
-   room for three labels, and the account needs the rest for a summary line plus
-   its buttons. */
-.deploy-surface .delivery-dialog .dialog-pair-settings{grid-template-columns:minmax(0,300px) minmax(0,1fr)}
 /* The covered-hostname field is one trigger plus the result it produced. The set
    itself is edited in the picker, so this row only has to answer "what is covered,
    and how do I change it" — which is why the root domain is stated on the line
@@ -118,28 +188,91 @@
    right. Two columns rather than a select plus a grid, because the root domain and
    its hostnames are one decision, and the left column is what turns choosing among
    several root domains into a comparison instead of a sequence of dropdowns. */
-/* The left column is a fixed 208px rather than a range: it holds one short root
+/* The left column is a fixed 140px rather than a range: it holds one short root
    domain per row, and every pixel it does not claim is a pixel the right-hand
    table gets. At 232px the table below needed 987px and was handed 760px, so it
    scrolled sideways inside a dialog whose whole job is to let an operator compare
-   hostnames at a glance. */
-.deploy-surface .hostname-picker{display:grid;grid-template-columns:minmax(0,208px) minmax(0,1fr);gap:0 18px;align-items:start}
+   hostnames at a glance.
+
+   Two measurements, not one, and the rail is sized against the larger.
+
+   The first is the pane's scrollbar. The pane is the scrollport, so a vertical
+   scrollbar is paid for out of its *content* box — 15px on Windows Chrome — and a
+   root domain with enough hostnames to scroll was left handing the table 899px for
+   columns that declare 908px, which `table-layout:auto` answers by shaving every
+   declared column by ~2px: measured at 1440x900 on `?case=crowded` as
+   scrollbarGutter=15, pane 899, columns 138/278/128/108/108, against `?case=many`'s
+   gutter=0, pane 914 and columns at their declared 140/280/130/110/110.
+
+   The second is the row's own action count, and it is the larger of the two. The
+   table's requirement is not one number: a row whose name is not yet proven carries
+   a fourth action, which widens the actions column by 35px. Measured as
+   `width:max-content` with the constraint lifted — 908px when every row is proven,
+   943px as soon as one is not, which is the ordinary state while a certificate is
+   being assembled.
+
+   The rail width was not derived a third time from arithmetic, because the first two
+   derivations each missed a case. It was swept in place — the rail is one
+   declaration, so overriding it and re-reading the columns answers the question
+   directly: at 1440x700 on `?case=locks` (unproven *and* overflowing, the binding
+   pair) the widest rail that keeps every declared column is **144px**, and
+   188 / 176 / 168 / 160 / 152 / 148 each shave 1-9px off every fact column. 140 is
+   that width with 4px of slack, which is worth having when the widths being compared
+   are fractional and the font is the operator's. The rail can afford it: every root
+   domain name in the fixture still renders on one line at 140px, and a name that did
+   wrap would be one word read once where the table is read down. */
+.deploy-surface .hostname-picker{display:grid;grid-template-columns:minmax(0,140px) minmax(0,1fr);gap:0 18px;align-items:start}
 .deploy-surface .hostname-picker-caption{display:block;margin-bottom:7px;font-size:12px;font-weight:700;color:var(--sdk-color-text-secondary)}
 .deploy-surface .hostname-picker-zones{display:grid;gap:4px;align-content:start;max-height:min(58vh,460px);overflow:auto;padding:0 14px 0 0;border-right:1px solid var(--sdk-color-border-subtle)}
 .deploy-surface .hostname-picker-zone{display:grid;gap:3px;width:100%;padding:9px 10px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--sdk-color-text-primary);text-align:left}
 .deploy-surface .hostname-picker-zone:hover{border-color:var(--sdk-color-border-default);background:var(--sdk-color-surface-elevated)}
 .deploy-surface .hostname-picker-zone[aria-pressed="true"]{border-color:var(--sdk-color-brand-primary);background:color-mix(in srgb, var(--sdk-color-brand-primary) 10%, var(--sdk-color-surface-panel))}
 .deploy-surface .hostname-picker-zone strong{overflow-wrap:anywhere;font-size:13px;line-height:1.35}
-.deploy-surface .hostname-picker-zone small{font-size:11px;color:var(--sdk-color-text-muted)}
 .deploy-surface .hostname-picker-hostnames{min-width:0}
+/* A hostname row is the click target for taking its name: the checkbox column is
+   the control, but a hostname is one line of a table read down, and aiming at a
+   16px box to take it is how a set ends up holding the wrong names.
+   Both cursors are declared here rather than left to the table's own utilities
+   because a utility only exists in the product build: the harness renders this
+   dialog without Tailwind, so a row that relied on `cursor-pointer` would be a row
+   that behaved differently in the two. `not-allowed` on a refused row is the same
+   cursor every other disabled control in this app uses, and it is what stops a row
+   whose checkbox is disabled from inviting the click it will ignore.
+   The two are ordered so the refused row wins: same specificity class, later rule.
+   Mirrors the same rule pair in
+   sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css. */
+.deploy-surface .hostname-picker-hostnames tbody tr{cursor:pointer}
+.deploy-surface .hostname-picker-hostnames tbody tr[aria-disabled="true"]{cursor:not-allowed}
 .deploy-surface .hostname-picker-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 12px;margin-bottom:6px}
 .deploy-surface .hostname-picker-head .hostname-picker-caption{margin-bottom:0}
 .deploy-surface .hostname-picker-hostnames>.form-hint{display:block;margin:0 0 9px}
 /* The count leads the footer rather than trailing the buttons: it reports on the
    set the buttons will act on, so it belongs on the side the reading starts. */
 .deploy-surface .hostname-picker-count{margin-right:auto;align-self:center;font-size:12px;color:var(--sdk-color-text-secondary)}
+/* The tabs and the filter box share one row rather than taking a row each: the
+   picker dialog is a fixed frame whose scrolling lives inside the table, so every
+   line above the list is height taken from the thing the dialog was opened to
+   read. They wrap on their own — a two-control row costs one line when it wraps,
+   against the list's height if it could not.
+   Mirrors the same rules in
+   sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css. */
+.deploy-surface .hostname-picker-filters{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 10px;margin:0 0 10px}
+/* Narrower than the toolbar's search box so the tab beside it — "单域名" is the
+   longest label in either locale — is not the control that ellipsises. */
+.deploy-surface .hostname-picker-filters .selector-search{margin-bottom:0;width:min(300px,100%)}
+/* Tabs are the segmented control the certificate type already uses, at the size of
+   the list they filter rather than of the field they sit under. The tabs the type
+   refuses are `disabled`, which already dims them; the cursor is declared here
+   because refusing is the *point* of showing them. */
+.deploy-surface .hostname-picker-tabs button{min-height:32px;padding:0 11px;font-size:12px}
+.deploy-surface .hostname-picker-tabs button:disabled{cursor:not-allowed}
+/* The chosen name is marked on the row as well as on its radio: the circle is a
+   14px target in a column of names, and the row is what the click lands on. */
+.deploy-surface .hostname-picker-hostnames tbody tr[data-state="selected"]{background:color-mix(in srgb, var(--sdk-color-brand-primary) 10%, var(--sdk-color-surface-panel))}
+.deploy-surface .hostname-choice{display:inline-flex;align-items:center;justify-content:center;width:100%;cursor:inherit}
+.deploy-surface .hostname-choice input{margin:0;accent-color:var(--sdk-color-brand-primary)}
 /* 1280px, not 1040px. At 1040px the table was handed 760px and its columns declare
-   770px of facts plus a checkbox column and the row buttons: `table-layout` is
+   770px of facts plus a choice column and the row buttons: `table-layout` is
    auto, so the declared `width` on each `<th>` is a hint rather than a floor and
    the browser shrank every data column instead of scrolling. Measured at 1440x900
    against the old width: 主机记录 140->111, 完整域名 280->252, 所有权 130->98,
@@ -147,26 +280,162 @@
    ~29px and the two facts an operator reads down the middle (the name, and whether
    it is proven) lost the most, which is the cramped reading being complained
    about. A scrollbar is not the symptom, compression is.
-   1280px gives the table 1000px and the columns their declared widths. The ladder
-   stays in order: default 620 < history 1120 < picker 1280. */
-.deploy-surface .delivery-dialog-picker{width:min(1280px,100%)}
-/* Below 1200px the two columns stop being affordable, so the rail becomes a strip
-   above the table instead of a narrower column beside it. Measured: the table needs
-   908px once its columns are at their declared width (a 48px checkbox column, 770px
-   of facts, and 90px of row buttons at compact density), and at a 1024px viewport
-   the dialog is clamped to 988px, which leaves 956px of content and 754px of pane
-   once a 188px rail and the gap are taken out — a 154px shortfall that shows up as
-   the same column compression the wider dialog was widened to remove. Stacked, the
-   table gets the whole content box (956px at 1024) and fits.
+   The width is a share of the window rather than a fixed ceiling, because the
+   picker is a comparison surface and the room it can use grows with the window the
+   operator already has: 80% of it is 1152px at 1440x900 and 1536px at 1920x1080,
+   where the previous `min(1280px,100%)` handed the table the same 1000px however
+   wide the screen was. 990px is the floor below that, and it is arithmetic rather
+   than taste: the pane's columns need 943px as soon as one row is unproven (908px
+   while every row is proven — the fourth action is the 35px difference), the dialog
+   spends 32px on its own padding, and the pane's own vertical scrollbar takes another
+   15px out of the pane — 990px is the first width at which nothing has to compress,
+   scrollbar or not. The gutter is in the floor rather than left out because the pane
+   scrolls as soon as a root domain has more hostnames than fit, which is the ordinary
+   case for the list; a floor derived without it is a floor that only holds while
+   nothing scrolls.
+   Written as `min(100%, max(990px, 80vw))` rather than `clamp(990px, 80vw, 100%)`,
+   which is the same ladder in every case except the one that matters: `clamp` resolves
+   to its floor when the floor exceeds the ceiling, so a window narrow enough to make
+   `100%` smaller than 990px got a dialog *wider than the window*. The two-argument
+   form cannot: 100% is the ceiling and it always wins when the window is the smaller
+   of the two.
+   Under a 960px window even the floor does not fit and the dialog takes the window. The
+   ladder stays in order at every width: default 620 < history 1120 <= picker.
+   Mirrors the same rule set in
+   sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css. */
+.deploy-surface .delivery-dialog-picker{width:min(100%,max(990px,80vw));height:90vh;display:flex;flex-direction:column;overflow:hidden}
+/* The picker's height is fixed, so the dialog stops resizing itself to its own
+   contents. Measured before this rule: the same dialog came out 258px tall for a
+   root domain with one hostname and 726px for one with twelve — a 468px jump caused
+   by a change the operator did not make, in a panel they are reading down. 90vh
+   keeps the frame still and moves the difference into the list, which is where it
+   belongs.
+
+   `overflow:hidden` replaces `.dialog`'s `overflow:auto`. With the height fixed, the
+   old scroller would have scrolled the caption, the hint, the search box and the
+   confirm row off the panel instead of scrolling the rows. The footer's
+   `position:sticky` goes inert with it, which is the same outcome by construction —
+   a fixed-height flex column pins its last child anyway.
+
+   `max-height` is deliberately left to `.dialog`'s `calc(100vh - 36px)`. It only
+   binds below a 360px-tall window, where 90vh would run past the backdrop's own
+   padding, and there the shorter panel is the right answer.
+   Mirrors the same rule set in
+   sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css. */
+/* The height is spent down the middle of the panel. `min-height:0` at every step is
+   what lets a scrollport below actually end up smaller than its content: a flex or
+   grid item keeps `min-height:auto` by default and refuses to shrink, and the
+   overflow then escapes upward to the dialog, where `overflow:hidden` clips it. */
+.deploy-surface .delivery-dialog-picker>.hostname-picker{flex:1 1 auto;min-height:0}
+.deploy-surface .delivery-dialog-picker>.hostname-picker>.hostname-picker-hostnames{display:flex;flex-direction:column;min-height:0}
+/* The rows scroll; the caption, the hint, the search box and the add button stay put.
+   `data-table` is the scrollport rather than `[data-slot="table-viewport"]`, because
+   the viewport only carries `overflow:auto` through a Tailwind utility — present in
+   the product build and absent from every harness that renders this form, so a rule
+   leaning on it would be a rule that only worked in one of the two. */
+.deploy-surface .delivery-dialog-picker .hostname-picker-hostnames>[data-slot="data-table"]{flex:1 1 auto;min-height:0;overflow:auto}
+/* Side by side, the rail gives up its own `min(58vh,460px)` cap and scrolls the full
+   pane height instead; the pane takes the row that is left. Scoped to the two-column
+   band with a min-width query rather than declared unscoped, because the stacked band
+   below caps the rail at 180px on purpose and a more specific unscoped rule would
+   have silently outranked it. */
+@media(min-width:1440px){
+  .deploy-surface .delivery-dialog-picker>.hostname-picker{align-items:stretch;grid-template-rows:minmax(0,1fr)}
+  .deploy-surface .delivery-dialog-picker>.hostname-picker>.hostname-picker-zones{max-height:none;min-height:0}
+}
+@media(max-width:960px){.deploy-surface .delivery-dialog-picker{width:100%}}
+/* Two columns are affordable only where the pane still gets its declared width
+   beside the rail, scrollbar included — and included is the point, because the
+   number that governs is the pane's *client* width, not its offset width. At 80vw of
+   the window that crossing is a 1440px screen: 1152px of dialog, 1120px of content,
+   minus the 140px rail and the 18px gap leaves 962px of pane, which is 947px of
+   scrollport once the vertical scrollbar takes its 15px. 947 > 943, the width the
+   columns need the moment a row is unproven. Reading the pane's offset width here
+   said 950px and made a 943px table look satisfied while 15px of it were already
+   gone; every number in this file that concerns the pane is a client width.
+   Below 1440 the rail becomes a strip above the table instead of a column beside it.
+   Stacked, the table gets the whole content box (958px at the 990px floor, 992px at
+   1280, 1119px at 1439) and fits, scrollbar or not.
    The rail is the cheaper half to move: it holds one short name per root domain and
-   is read once, where the table is read down. */
-@media(max-width:1200px){.deploy-surface .hostname-picker{grid-template-columns:minmax(0,1fr)}.deploy-surface .hostname-picker-zones{max-height:180px;padding:0 0 10px;border-right:0;border-bottom:1px solid var(--sdk-color-border-subtle)}}
-/* Under 1024px the backdrop's 18px gutter is the last thing standing between the
-   table and its 908px: at a 960px viewport the dialog is clamped to 924px, and the
-   36px of backdrop plus 32px of dialog padding is the 16px shortfall that still
-   compressed the last column by 3px. The gutter exists to keep a wide dialog off
-   the window edge, which a dialog already narrower than the window does not need. */
+   is read once, where the table is read down.
+   Mirrors the same rule set in
+   sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css.
+
+   The rows are declared as well as the columns, because the dialog now has a fixed
+   90vh height: stacked, the rail keeps its 180px and the pane takes the rest, so the
+   rows have to say which of the two absorbs the leftover height. `align-items:stretch`
+   is what lets the pane fill its row rather than sit at its content height. */
+@media(max-width:1439px){.deploy-surface .hostname-picker{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);align-items:stretch}.deploy-surface .hostname-picker-zones{max-height:180px;padding:0 0 10px;border-right:0;border-bottom:1px solid var(--sdk-color-border-subtle)}}
+/* Under 1024px the backdrop's gutter is the last thing standing between the table and
+   its 943px: at that width the dialog is capped by the window rather than by the floor,
+   and at a 960px viewport the 10px of backdrop plus the dialog's own 32px of padding
+   leave 908px of content and 893px of scrollport — 50px short of an unproven row's
+   table. That is the narrow-desktop floor of this design rather than a rule that can be
+   written: the rail is already stacked above the table and the only remaining lever
+   would be a horizontal scrollbar, which is the thing this dialog exists to avoid.
+   The gutter exists to keep a wide dialog off the window edge, which a dialog already
+   narrower than the window does not need. */
 @media(max-width:1024px){.deploy-surface .dialog-backdrop{padding:10px}}
+
+/* The cloud-account picker's frame.
+   Wider and taller than the `wide` form panel: this is a reading surface rather
+   than a form. Each row carries a display name, an account code, a DNS family,
+   the default marker and whether a credential is actually behind it, so one wide
+   column is read down where two narrow ones would be read back and forth; and
+   the two groups (the caller's own accounts, then the tenant-global ones) are
+   compared against each other, which wants both on screen at once.
+
+   It shares the hostname picker's width ladder — `min(100%,max(990px,80vw))` —
+   rather than inventing a second one: a share of the window, with a floor under
+   it so the two columns never compress.
+
+   80vh is the point of this rule rather than a leftover. A panel that sized
+   itself to its contents would resize under the operator every time the
+   DNS-family filter changed how many accounts came back; fixing the height moves
+   that difference into the lists, which scroll — the same trade the hostname
+   picker makes at 90vh. `overflow:hidden` replaces `.dialog`'s `overflow:auto`,
+   and the footer's `position:sticky` goes inert with it, which is the same
+   outcome by construction: a fixed-height flex column pins its last child anyway.
+   `max-height` is left to `.dialog`'s `calc(100vh - 36px)`, which only binds on a
+   window shorter than 180px.
+
+   Mirrors the same rule set in
+   sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css, which is the
+   source of truth; these rules carry no colours, so the two copies are identical
+   apart from the `.deploy-surface` prefix. */
+.deploy-surface .delivery-dialog-accounts{width:min(100%,max(990px,80vw));height:80vh;display:flex;flex-direction:column;overflow:hidden}
+/* `min-height:0` at every step is what lets a scrollport below actually end up
+   smaller than its content: a flex item keeps `min-height:auto` by default,
+   refuses to shrink, and pushes the overflow up to the panel, where
+   `overflow:hidden` clips it. The groups are `flex:1 1 0` rather than `auto`, so
+   a centre holding three accounts in one group and none in the other still gives
+   the populated group the whole pane. */
+.deploy-surface .delivery-dialog-accounts>.form-fieldset{flex:1 1 0;min-height:0;display:flex;flex-direction:column;margin:0}
+.deploy-surface .delivery-dialog-accounts>.form-fieldset+.form-fieldset{margin-top:10px}
+/* The rows scroll; the legend, the filter above and the footer below stay put.
+   `max-height:none` undoes the `.delivery-dialog .hostname-selector-list` cap,
+   which exists for the pickers that open *over* a form rather than as the panel's
+   own subject.
+
+   `align-content:start` is load-bearing, not tidying. The list is a grid, and a
+   grid whose box is taller than its contents stretches its rows to fill it by
+   default — measured on a two-account tenant in an 80vh panel, each row came out
+   140px tall instead of 44px, so two accounts rendered as two large slabs with
+   their text floating in the middle. `flex:1 1 auto` above is what gives the list
+   a box taller than its contents; this is the declaration that keeps the rows
+   their own height anyway. */
+.deploy-surface .delivery-dialog-accounts>.form-fieldset>.hostname-selector-list{flex:1 1 auto;min-height:0;max-height:none;overflow:auto;align-content:start}
+/* The row's radio is a control, not a field.
+   `.form-grid input:not([type="checkbox"])` sets `width:100%` and
+   `min-height:40px` on every input under the grid, and this picker is opened
+   *from inside* the root-domain form's grid — so each radio came out as a 40px
+   disc stretched across its row, with the account's own name pushed to the far
+   edge by the space it had taken. Sized back to the 16px the checkbox rule
+   already uses, and told not to grow or shrink. */
+.deploy-surface .delivery-dialog-accounts .hostname-selector-list label>input{width:16px;height:16px;min-height:0;flex:0 0 auto;margin:0}
+.deploy-surface .delivery-dialog-accounts>.empty-state{flex:1 1 auto}
+.deploy-surface .delivery-dialog-accounts>.dialog-footer{flex:0 0 auto;margin-top:10px}
+@media(max-width:960px){.deploy-surface .delivery-dialog-accounts{width:100%}}
 
 /* Suggestion field (the root-domain form's DNS provider).
    The list is drawn by the page inside the field's own box instead of by a native
@@ -214,3 +483,139 @@
 .deploy-surface .page-header h1{margin:4px 0 6px;font-size:24px;line-height:1.2;letter-spacing:0}
 .deploy-surface .page-header p{margin:0;color:var(--sdk-color-text-secondary)}
 .deploy-surface .eyebrow{text-transform:uppercase;font-size:11px;font-weight:700;letter-spacing:0}
+
+/* The certificate request wizard's drawer.
+   That wizard is the one surface here that is filled in *against* the page behind
+   it: it asks what the certificate should cover, and the operator answers by
+   reading the hostname table and the certificate ledger they came from. A centred
+   dialog put itself on top of both — and then had to scroll anyway, because the
+   form is taller than the window — so the evidence and the form could not be read
+   at the same time. The drawer takes the full window height and leaves the page
+   legible beside it.
+
+   It carries `dialog` and `delivery-dialog` as well as `delivery-drawer`, on
+   purpose: those two markers are where the wizard's density pass hangs (borderless
+   fieldsets, the one-field-per-row parameter grid, the action row's right-aligned
+   flex row) and where its field-label voice comes from. A
+   drawer that re-declared them by hand would be the same form at a second, drifting
+   set of measurements. Only the box itself is overridden, and it is overridden at a
+   two-class specificity so the override cannot be lost to rule order.
+
+   `dialog` is also the only thing that gives the panel an opaque surface — see the
+   `.deploy-surface .dialog` rule above, `background:var(--sdk-color-surface-panel)`.
+   The drawer shipped without that class for one revision and the panel came out at
+   `background-color: rgba(0, 0, 0, 0)`: the ledger the drawer sits beside read
+   straight through the form, which is the one thing a drawer exists to prevent. The
+   rule below therefore never declares a background of its own; it stays a pure box
+   override, and the opaque surface keeps coming from `.dialog` — asserted at runtime
+   by the drawer gate rather than assumed.
+
+   The 720px is the form's own width rather than the window's: the wizard is one
+   field per row, so every control spans the panel and a wider panel would only
+   stretch a 28-character hostname field across the screen. It leaves the page the
+   drawer sits beside legible on all but the narrowest desktop windows, where the
+   94vw ceiling takes over.
+   Mirrors the same rule set in
+   sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css.
+
+   `position:relative` is declared here for the entry animation below, which moves
+   the panel with `right` rather than with `transform`. A transform on the panel
+   would make it the containing block for `position: fixed` descendants, and this
+   wizard opens three dialogs of its own — the hostname picker, the account picker
+   and the account form. Measured during the entry: the picker's backdrop resolved
+   `inset:0` against the panel's own 688px content box instead of the window, so its
+   80vw width fell to the clamp's floor and the dialog came out wider than the
+   form it was opened over. A relative offset paints the same slide and leaves no
+   containing block behind. */
+.deploy-surface .delivery-dialog.delivery-drawer{position:relative;width:min(720px,94vw);height:100%;max-height:100vh;padding:0;border-radius:0;display:flex;flex-direction:column;overflow:hidden;border-left:1px solid var(--sdk-color-border-default);box-shadow:var(--sdk-shadow-lg)}
+/* The panel is three bands, and only the middle one scrolls.
+   Header and action row are `flex:0 0 auto`; the body between them is the only
+   `flex:1 1 auto` child and the only one that scrolls, so a form taller than the
+   window spends its height in the middle: the title the operator reads first and the
+   button they press last both stay where they were put, and neither has to be
+   scrolled back to.
+
+   `min-height:0` on the body is load-bearing rather than tidying. A flex item's
+   automatic minimum size is its content, so without it the body refuses to shrink
+   below the form and grows the panel past the window instead of scrolling — the
+   action row ends up below the viewport, which is the defect this arrangement exists
+   to fix. */
+.deploy-surface .delivery-drawer>header{flex:0 0 auto;padding:16px;border-bottom:1px solid var(--sdk-color-border-subtle)}
+.deploy-surface .delivery-drawer-body{flex:1 1 auto;min-height:0;overflow:auto;padding:16px}
+/* The pinned action row, as the panel's last band.
+   The row arrived here from inside the form, where it was the last thing in the
+   scroller and was pinned with `position:sticky;bottom:-16px`. Nothing about that
+   survives the move and none of it is needed: a band that is a flex sibling of the
+   scroller is already pinned, and a sticky offset inside a non-scrolling box is an
+   offset that never applies. The shared `.dialog-footer` rule is therefore
+   neutralized *here* rather than deleted, because the account dialog still renders
+   its own row inside its own scroller and still needs it.
+
+   No background of its own either. Nothing scrolls under a band, so the panel's
+   opaque surface — `.deploy-surface .dialog`'s `--sdk-color-surface-panel` — shows
+   through, and a second declaration would be a second place for the surface colour to
+   drift from it. */
+.deploy-surface .delivery-drawer-footer{flex:0 0 auto;display:grid;gap:10px;padding:12px 16px;border-top:1px solid var(--sdk-color-border-subtle)}
+/* The band can hold two things — a refusal and the row — and they are spaced by the
+   band's own `gap` instead of by a margin each, which inside a grid would be added to
+   the gap rather than absorbed by it. */
+.deploy-surface .delivery-dialog .delivery-drawer-footer>*{margin:0}
+/* `position`/`z-index`/`bottom` as well as the box: the shared rule pins its row with
+   all four, and a band that reset only the margins would still paint a second top
+   border under its own. */
+.deploy-surface .delivery-dialog .delivery-drawer-footer .dialog-footer{position:static;bottom:auto;z-index:auto;margin:0;padding:0;border-top:0;background:none}
+/* The rhythm the single column needs.
+   Every spacing in this wizard was set for a form that had to fit an 864px
+   scrollport: the group margins, the field gaps and the label-to-control gap all
+   landed within a pixel of 8px, so nothing said where one field ended and the next
+   began. Stacked, that is what reads as a mess — the fields are one column of
+   equally-spaced blocks with no grouping in them. Three steps, in the order the eye
+   needs them: 18px between groups, 14px between the fields inside a group (the
+   `.certificate-form-grid` gap above), and the 7px the label already leaves its own
+   control. The drawer has the height to spend on this; the centred dialog did not. */
+.deploy-surface .delivery-dialog.delivery-drawer form>.form-fieldset{margin:0 0 18px}
+/* The fields inside a group are spaced by that group's own `gap`, not by a margin
+   each: a grid item's margin does not collapse, so a margin here would be added to
+   the gap instead of being absorbed by it. */
+.deploy-surface .delivery-dialog.delivery-drawer .dialog-pair>.form-fieldset,.deploy-surface .delivery-dialog.delivery-drawer .certificate-form-grid>.form-fieldset{margin:0}
+/* A full-height column with the panel on its right edge: the dialog backdrop's own
+   centring grid is the part that used to put the wizard in the middle of the page.
+   The dimming is the scoped copy's own token mix, so the drawer and the dialog read
+   as the same kind of interruption. */
+.deploy-surface .delivery-drawer-backdrop{position:fixed;inset:0;z-index:50;display:flex;justify-content:flex-end;background:color-mix(in srgb, var(--sdk-color-surface-overlay) 72%, rgba(0, 0, 0, .54))}
+/* The slide is motion and therefore optional; the dim is what carries the state
+   change for anyone who has asked for less of it. */
+@media(prefers-reduced-motion:no-preference){.deploy-surface .delivery-drawer-backdrop{animation:delivery-drawer-dim 160ms ease-out}.deploy-surface .delivery-dialog.delivery-drawer{animation:delivery-drawer-slide 200ms cubic-bezier(.22,.61,.36,1)}}
+@keyframes delivery-drawer-dim{from{opacity:0}to{opacity:1}}
+@keyframes delivery-drawer-slide{from{right:-28px;opacity:.55}to{right:0;opacity:1}}
+/* A window too narrow for a side panel gets the whole width rather than a 94% sliver
+   of it. */
+@media(max-width:760px){.deploy-surface .delivery-dialog.delivery-drawer{width:100%}}
+
+/* The cloud-account field: a summary line plus its actions, kept as one row so the
+   field reads as a single choice rather than three separate controls.
+   Mirrored late. The scoped copy had never carried this rule set, so in the Web
+   Server console the field fell back to `display:block` and its three buttons
+   stacked under the summary at full width, while the same field rendered as one row
+   in the deployments console — a mirror gap that reads as a form laid out wrong
+   rather than as a missing rule. Colours are the host tokens; the selectors, the
+   `>div:first-child` scoping and the two media queries are the source of truth's.
+   Mirrors the same rule set in
+   sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css. */
+.deploy-surface .cloud-account-field{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+/* Scoped to the summary block, not to "any div": `.cloud-account-field > div`
+   outranks `.cloud-account-actions` on specificity, so the loose form restyles the
+   actions cluster as a one-column grid — both buttons stretched to equal width and
+   stacked, with this grid's gap beating the cluster's. */
+.deploy-surface .cloud-account-field>div:first-child{display:grid;gap:5px;min-width:0}
+.deploy-surface .cloud-account-field>div:first-child strong{font-size:13px}
+.deploy-surface .cloud-account-actions{display:flex;flex-wrap:wrap;gap:7px}
+.deploy-surface .cloud-account-actions .secondary-button{min-height:34px}
+@media(max-width:760px){.deploy-surface .cloud-account-field{align-items:stretch}.deploy-surface .cloud-account-actions{width:100%}}
+/* Single-candidate shortcut: it shortens the choice above it, so it sits below the
+   row rather than inside the actions cluster (a third equally-weighted button there
+   would look like a peer of "choose" and "register"). The amber tint marks it as a
+   suggestion, not a warning. */
+.deploy-surface .cloud-account-suggestion{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;padding:8px 10px;border:1px solid var(--webserver-color-warning-border);background:var(--webserver-color-warning-surface);border-radius:5px}
+.deploy-surface .cloud-account-suggestion .secondary-button{min-height:30px;flex:0 0 auto}
+@media(max-width:760px){.deploy-surface .cloud-account-suggestion{align-items:stretch}.deploy-surface .cloud-account-suggestion .secondary-button{width:100%}}

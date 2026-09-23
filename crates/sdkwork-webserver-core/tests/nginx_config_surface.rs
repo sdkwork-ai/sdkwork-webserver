@@ -14,13 +14,14 @@
 use std::path::Path;
 
 use sdkwork_webserver_core::config::{
-    ListenerProtocol, ResourceConfig, RoutePathType, StreamTlsMode, UpstreamLoadBalancingStrategy,
-    WebServerAppConfig,
+    ConfigFormat, ConfigLoadOptions, ListenerProtocol, ResourceConfig, RoutePathType, StreamTlsMode,
+    UpstreamLoadBalancingStrategy, WebServerAppConfig, WebServerConfigLoader,
 };
 use sdkwork_webserver_core::nginx::{
     expand_includes, load_nginx_compat, materialize_nginx_app, merge_nginx_apps,
     parse_nginx_config, NginxConfigError,
 };
+use tempfile::TempDir;
 
 /// Parse + materialize + validate one configuration text.
 fn materialize(text: &str) -> Result<WebServerAppConfig, NginxConfigError> {
@@ -987,6 +988,51 @@ stream {
             assert_eq!(ports, vec![5120, 5121]);
         },
     },
+    SurfaceCase {
+        // The nginx plane and the JSON plane must describe the same endpoint:
+        // `location ^~ /.well-known/acme-challenge/ { root X; }` is the
+        // artifact-side spelling of `"acmeHttp01": {"webroot": "X"}`. It is a
+        // listener property (narrow precedence, exact token path), never an
+        // ordinary static route.
+        name: "acme http-01 challenge location declares the listener webroot",
+        nginx: r#"
+upstream shell {
+    server 127.0.0.1:3800;
+}
+server {
+    listen 443 ssl;
+    listen 80;
+    server_name server.sdkwork.com;
+    ssl_certificate /etc/sdkwork/certs/letsencrypt/sdkwork.com/fullchain.pem;
+    ssl_certificate_key /etc/sdkwork/certs/letsencrypt/sdkwork.com/privkey.pem;
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/lib/sdkwork/webserver/acme-webroot;
+    }
+    location / {
+        proxy_pass http://shell;
+        proxy_set_header Host $host;
+    }
+}
+"#,
+        check: |config| {
+            assert_eq!(config.listeners.len(), 2);
+            for listener in &config.listeners {
+                let acme = listener
+                    .acme_http_01
+                    .as_ref()
+                    .expect("both listeners of the edge serve the challenge namespace");
+                assert_eq!(acme.webroot, "/var/lib/sdkwork/webserver/acme-webroot");
+            }
+            assert!(
+                !config.resources.iter().any(|resource| matches!(
+                    resource,
+                    ResourceConfig::Static { root, .. }
+                        if root == "/var/lib/sdkwork/webserver/acme-webroot"
+                )),
+                "the challenge namespace must not also become a static route"
+            );
+        },
+    },
 ];
 
 /// Every fail-closed form with the diagnostic fragment it must produce.
@@ -1099,6 +1145,72 @@ fn every_supported_directive_family_materializes() {
         let config = materialize_ok(case.nginx);
         (case.check)(&config);
     }
+}
+
+/// The nginx plane must reach the same compiled listener endpoint the JSON
+/// plane reaches.
+///
+/// This is the assertion that the deployment artifact can actually issue a
+/// certificate: materializing the challenge location is only half of it — the
+/// compiled app has to expose the webroot for the listener, because that is
+/// what the data plane reads when the CA fetches
+/// `/.well-known/acme-challenge/<token>`. The listener is plaintext because
+/// HTTP-01 is served over plaintext HTTP, which is also the shape the container
+/// entrypoint generates.
+#[test]
+fn an_nginx_challenge_location_compiles_into_a_servable_listener_webroot() {
+    let directory = TempDir::new().expect("create temp directory");
+    let webroot = directory.path().join("acme-webroot");
+    std::fs::create_dir_all(&webroot).expect("create webroot");
+    let config = directory.path().join("product-edge-nginx.conf");
+    std::fs::write(
+        &config,
+        format!(
+            r#"
+upstream shell {{
+    server 127.0.0.1:3800;
+}}
+server {{
+    listen 8080;
+    server_name server.example.com;
+    location ^~ /.well-known/acme-challenge/ {{
+        root {webroot};
+    }}
+    location / {{
+        proxy_pass http://shell;
+        proxy_set_header Host $host;
+    }}
+}}
+"#,
+            webroot = webroot.display(),
+        ),
+    )
+    .expect("write config");
+
+    let compiled = WebServerConfigLoader::new()
+        .load_and_compile(&config, &ConfigLoadOptions::with_format(ConfigFormat::NginxConf))
+        .expect("compile nginx config");
+    let listener = compiled
+        .config()
+        .listeners
+        .iter()
+        .find(|listener| listener.port == 8080)
+        .expect("the plaintext listener the CA reaches");
+    assert_eq!(
+        listener
+            .acme_http_01
+            .as_ref()
+            .map(|acme| acme.webroot.as_str()),
+        Some(webroot.to_string_lossy().as_ref())
+    );
+    let served = compiled
+        .acme_webroot(&listener.id)
+        .expect("the compiled app exposes the challenge webroot for the listener");
+    assert_eq!(
+        std::fs::canonicalize(served).expect("canonical webroot"),
+        std::fs::canonicalize(&webroot).expect("canonical expected webroot"),
+        "the compiled webroot must be the directory the certificate worker writes into"
+    );
 }
 
 /// Fail-closed forms that live at the http level (upstream blocks).

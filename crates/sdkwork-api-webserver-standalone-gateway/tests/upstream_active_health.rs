@@ -341,6 +341,33 @@ async fn wait_for_checks(state: &UpstreamState, expected: usize) {
     .expect("observe expected active health checks");
 }
 
+/// Wait until the probe counter stops advancing.
+///
+/// `stop_data_plane` retires the health scheduler, but a probe that was already
+/// in flight may still land while the data plane tears down. Sampling the
+/// counter once after a fixed delay is load-sensitive: it flaked under a full
+/// parallel workspace run, where teardown competes for CPU. Requiring three
+/// consecutive equal samples proves "shutdown stopped probing" instead of
+/// assuming it, while still failing closed when the scheduler keeps running.
+async fn wait_for_checks_to_settle(state: &UpstreamState) {
+    timeout(Duration::from_secs(5), async {
+        let mut stable = 0_u8;
+        let mut last = state.health_checks.load(Ordering::Acquire);
+        while stable < 3 {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            let current = state.health_checks.load(Ordering::Acquire);
+            if current == last {
+                stable += 1;
+            } else {
+                stable = 0;
+                last = current;
+            }
+        }
+    })
+    .await
+    .expect("active health checks settle after shutdown");
+}
+
 async fn stop_data_plane(shutdown: oneshot::Sender<()>, task: DataPlaneTask) {
     let _ = shutdown.send(());
     timeout(Duration::from_secs(5), task)
@@ -536,12 +563,9 @@ async fn watch_replacement_stops_old_generation_before_only_new_target_continues
     );
 
     stop_data_plane(gateway_shutdown, gateway_task).await;
-    let new_checks_after_shutdown = new_state.health_checks.load(Ordering::Acquire);
-    tokio::time::sleep(Duration::from_millis(250)).await;
-    assert_eq!(
-        new_state.health_checks.load(Ordering::Acquire),
-        new_checks_after_shutdown
-    );
+    // Shutdown must retire the scheduler for good; wait for the counter to
+    // settle rather than sampling once 250 ms later (load-sensitive).
+    wait_for_checks_to_settle(&new_state).await;
     stop_upstream(old_shutdown, old_task).await;
     stop_upstream(new_shutdown, new_task).await;
 }

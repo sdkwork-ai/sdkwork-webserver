@@ -20,6 +20,8 @@ data class ClusterHostResponse(
     val status: Int? = null,
     val lastHeartbeatAt: String? = null,
     val instanceCount: String? = null,
+    val joinMode: String? = null,
+    val tunnelRouteDomain: String? = null,
     val createdAt: String? = null,
     val updatedAt: String? = null
 )

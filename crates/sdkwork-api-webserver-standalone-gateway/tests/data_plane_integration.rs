@@ -32,6 +32,7 @@ use rustls::{
 use sdkwork_api_webserver_standalone_gateway::{
     run_data_plane_from_config_until, run_data_plane_until,
 };
+use sdkwork_webserver_core::config::{ConfigFormat, ConfigLoadOptions, WebServerConfigLoader};
 use sdkwork_webserver_core::load_and_compile_webserver_config;
 use serde_json::{json, Value};
 use tempfile::TempDir;
@@ -793,6 +794,34 @@ fn spawn_data_plane(
 ) {
     let compiled =
         load_and_compile_webserver_config(config_path).expect("compile data-plane config");
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let task = tokio::spawn(async move {
+        run_data_plane_until(compiled, async move {
+            let _ = shutdown_rx.await;
+        })
+        .await
+    });
+    (shutdown_tx, task)
+}
+
+/// Compile a data plane from an nginx-compatible artifact.
+///
+/// The container deployment never writes the JSON app config for its public
+/// edge: the entrypoint generates a `product-edge-nginx.conf` and the runtime
+/// materializes it. Covering the challenge endpoint through that format is what
+/// proves the deployment shape serves ACME, not just the JSON shape.
+fn spawn_data_plane_from_nginx(
+    config_path: &Path,
+) -> (
+    oneshot::Sender<()>,
+    JoinHandle<Result<(), sdkwork_api_webserver_standalone_gateway::DataPlaneError>>,
+) {
+    let compiled = WebServerConfigLoader::new()
+        .load_and_compile(
+            config_path,
+            &ConfigLoadOptions::with_format(ConfigFormat::NginxConf),
+        )
+        .expect("compile nginx data-plane config");
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let task = tokio::spawn(async move {
         run_data_plane_until(compiled, async move {
@@ -2371,6 +2400,84 @@ async fn serves_https_with_rustls() {
     assert_eq!(response.status(), reqwest::StatusCode::OK);
     assert_eq!(response.version(), Version::HTTP_2);
     assert_eq!(response.text().await.expect("read TLS body"), "secure\n");
+
+    stop_data_plane(shutdown, task).await;
+}
+
+/// Attempt a TLS handshake offering exactly `versions`, returning the
+/// negotiated ALPN on success and the peer's refusal reason on failure.
+async fn try_tls_handshake(
+    port: u16,
+    certificate_der: &[u8],
+    versions: &[&'static rustls::SupportedProtocolVersion],
+) -> Result<Option<Vec<u8>>, String> {
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    let mut roots = RootCertStore::empty();
+    roots
+        .add(CertificateDer::from(certificate_der.to_vec()))
+        .expect("trust generated certificate");
+    let mut client = ClientConfig::builder_with_protocol_versions(versions)
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    client.alpn_protocols = vec![b"http/1.1".to_vec()];
+    let tcp = tokio::net::TcpStream::connect(("127.0.0.1", port))
+        .await
+        .map_err(|error| format!("tcp connect failed: {error}"))?;
+    match TlsConnector::from(Arc::new(client))
+        .connect(
+            ServerName::try_from("localhost".to_owned()).expect("valid DNS name"),
+            tcp,
+        )
+        .await
+    {
+        Ok(stream) => Ok(stream.get_ref().1.alpn_protocol().map(<[u8]>::to_vec)),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+/// A `minimumVersion`/`maximumVersion` declaration is a handshake control, not
+/// a rendered hint: a TLS 1.3-only policy must refuse a TLS 1.2 client.
+///
+/// `PRD-https-and-certificates.md` §2 grants an application "a stricter
+/// compatible policy", so the narrowed window has to reach the listener's
+/// accepted protocol set; before this was wired the declaration was accepted
+/// and dropped, which looked hardened while still negotiating TLS 1.2.
+#[tokio::test]
+async fn enforces_a_tls13_only_policy_at_the_handshake() {
+    let directory = TempDir::new().expect("create temp directory");
+    let certificate_der = write_self_signed_certificate(directory.path(), "cert", &["localhost"]);
+    let port = available_port();
+    let mut config = single_https_config(port, "localhost", "cert");
+    config["tlsPolicies"][0]["minimumVersion"] = json!("tls1.3");
+    config["tlsPolicies"][0]["maximumVersion"] = json!("tls1.3");
+    let path = write_config(directory.path(), &config);
+    let (shutdown, task) = spawn_data_plane(&path);
+
+    // Prove the listener is live before asserting a refusal.
+    let client = reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .expect("build TLS test client");
+    let ready = wait_for_http(&client, &format!("https://localhost:{port}/"), "localhost").await;
+    assert_eq!(ready.status(), reqwest::StatusCode::OK);
+
+    // A TLS 1.3-capable client negotiates and gets the declared ALPN.
+    let negotiated = try_tls_handshake(port, &certificate_der, &[&TLS13, &TLS12])
+        .await
+        .expect("a TLS 1.3-capable client must negotiate");
+    assert_eq!(negotiated.as_deref(), Some(b"http/1.1".as_slice()));
+
+    let tls13 = try_tls_handshake(port, &certificate_der, &[&TLS13])
+        .await
+        .expect("a TLS 1.3-only client must negotiate");
+    assert_eq!(tls13.as_deref(), Some(b"http/1.1".as_slice()));
+
+    // The refusal is the point: a TLS 1.2-only client must not complete.
+    let refused = try_tls_handshake(port, &certificate_der, &[&TLS12]).await;
+    assert!(
+        refused.is_err(),
+        "a TLS 1.3-only policy must refuse a TLS 1.2-only client, but the handshake succeeded with {refused:?}"
+    );
 
     stop_data_plane(shutdown, task).await;
 }
@@ -6099,6 +6206,98 @@ async fn acme_http01_challenge_is_served_with_narrow_precedence() {
         .await
         .expect("invalid token request");
     assert_eq!(invalid.status(), reqwest::StatusCode::NOT_FOUND);
+
+    let post = client
+        .post(format!("{base}/.well-known/acme-challenge/valid-token"))
+        .header("host", "test.localhost")
+        .send()
+        .await
+        .expect("challenge POST");
+    assert_eq!(post.status(), reqwest::StatusCode::METHOD_NOT_ALLOWED);
+
+    let ordinary = client
+        .get(format!("{base}/index.html"))
+        .header("host", "test.localhost")
+        .send()
+        .await
+        .expect("ordinary request");
+    assert_eq!(ordinary.status(), reqwest::StatusCode::OK);
+    assert_eq!(ordinary.text().await.expect("ordinary body"), "ordinary");
+
+    stop_data_plane(shutdown_tx, task).await;
+}
+
+/// The same endpoint, reached through the container deployment shape.
+///
+/// The product edge of a container deployment is a generated nginx conf whose
+/// challenge location is the only thing standing between the CA and a 404 from
+/// `location /`. This asserts the nginx-declared webroot serves exactly the
+/// token the certificate worker writes, and that the reserved namespace still
+/// fails closed instead of falling through to ordinary routes.
+#[tokio::test]
+async fn an_nginx_declared_acme_webroot_serves_challenges_with_narrow_precedence() {
+    let directory = TempDir::new().expect("create temp directory");
+    let webroot = directory.path().join("acme-webroot");
+    let challenge_dir = webroot.join(".well-known").join("acme-challenge");
+    fs::create_dir_all(&challenge_dir).expect("create challenge directory");
+    fs::write(challenge_dir.join("valid-token"), "valid-token.thumbprint")
+        .expect("write challenge token");
+
+    let port = available_port();
+    let config = directory.path().join("product-edge-nginx.conf");
+    fs::write(
+        &config,
+        format!(
+            r#"
+server {{
+    listen 127.0.0.1:{port};
+    server_name test.localhost;
+    location ^~ /.well-known/acme-challenge/ {{
+        root {webroot};
+    }}
+    location / {{
+        return 200 "ordinary";
+    }}
+}}
+"#,
+            webroot = webroot.display(),
+        ),
+    )
+    .expect("write nginx config");
+
+    let (shutdown_tx, task) = spawn_data_plane_from_nginx(&config);
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("client");
+    let base = format!("http://127.0.0.1:{port}");
+    wait_for_http(&client, &base, "test.localhost").await;
+
+    let response = client
+        .get(format!("{base}/.well-known/acme-challenge/valid-token"))
+        .header("host", "test.localhost")
+        .send()
+        .await
+        .expect("challenge request");
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    assert_eq!(
+        response.text().await.expect("challenge body"),
+        "valid-token.thumbprint"
+    );
+
+    // The reserved namespace must not fall through to `location /`.
+    let missing = client
+        .get(format!("{base}/.well-known/acme-challenge/unknown-token"))
+        .header("host", "test.localhost")
+        .send()
+        .await
+        .expect("missing challenge request");
+    assert_eq!(missing.status(), reqwest::StatusCode::NOT_FOUND);
+    assert_eq!(
+        missing.text().await.expect("missing challenge body"),
+        "challenge was not found\n",
+        "an unknown token must fail closed, not reach the catch-all route"
+    );
 
     let post = client
         .post(format!("{base}/.well-known/acme-challenge/valid-token"))

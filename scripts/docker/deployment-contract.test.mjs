@@ -307,6 +307,73 @@ test('product edge emits production TLS blocks with health probe locations', () 
   assert.match(entrypoint, /location = \/readyz \{/u);
 });
 
+test('product edge declares the ACME challenge webroot the certificate worker writes', () => {
+  const entrypoint = readFileSync(
+    path.join(appRoot, 'bin', 'container', 'entrypoint-standalone.sh'),
+    'utf8',
+  );
+  // `/.well-known/acme-challenge/` is a reserved namespace, not an ordinary
+  // route: the data plane turns it into `acmeHttp01.webroot` on the listener
+  // instead of serving a static root, so the CA's fetch is answered by the
+  // narrow path handler and no challenge directory becomes browsable.
+  assert.match(entrypoint, /location \^~ \/\.well-known\/acme-challenge\/ \{/u);
+  // The server and the certificate worker must name ONE directory. The location
+  // reads the very variable `apply_certificate_issuer_defaults` exports for
+  // `[acme] webroot`, so divergence is impossible by construction, and the
+  // compile-time rendezvous check in sdkwork-webserver-core can prove it before
+  // the listener binds rather than letting every order 404 at the CA.
+  assert.match(
+    entrypoint,
+    /acme_webroot="\$\(posix_path "\$\{SDKWORK_WEBSERVER_ACME_WEBROOT:-/u,
+  );
+  // Paths written into nginx syntax are normalized: the runtime tokenizer
+  // mirrors `ngx_conf_read_token`, where `\t` and `\n` are escapes, so an
+  // unnormalized Windows path parses cleanly while silently no longer naming
+  // the directory the operator configured.
+  assert.match(entrypoint, /webroot="\$\(posix_path "\$1"\)"/u);
+
+  // Similarly for the certificate root: the worker writes material under
+  // `SDKWORK_WEBSERVER_CERT_LIVE_ROOT`, the edge interpolates whatever
+  // `lets_encrypt_certs_root` prints into `ssl_certificate`. Honouring the
+  // worker's variable first — with the historical `..._CERTS_LETS_ENCRYPT_DIR`
+  // kept as an alias — is what stops an operator moving issuance and serving
+  // apart and getting an edge that loads certificates nobody wrote.
+  assert.match(
+    entrypoint,
+    /SDKWORK_WEBSERVER_CERT_LIVE_ROOT:-\$\{SDKWORK_WEBSERVER_CERTS_LETS_ENCRYPT_DIR:-\/etc\/sdkwork\/certs\/letsencrypt\}\}/u,
+  );
+
+  // The runtime TOML is the only documented config surface for these knobs, and
+  // `AcmeSection` is `deny_unknown_fields`: a key renamed here without the
+  // matching Rust field makes the whole config unloadable at startup. The
+  // challenge policy must default to AUTO (single-domain HTTP-01, wildcard
+  // DNS-01) and the DNS accounts file must be emitted only when set — an empty
+  // value would read as "configured to an unreadable path" and suppress the
+  // issuer's "DNS-01 is unavailable" warning.
+  assert.match(entrypoint, /challenge_method = "\$\{SDKWORK_WEBSERVER_ACME_CHALLENGE_METHOD:-AUTO\}"/u);
+  assert.match(entrypoint, /cert_live_root = "\$\{acme_live_root\}"/u);
+  assert.match(entrypoint, /acme_live_root="\$\(posix_path "\$\(lets_encrypt_certs_root\)"\)"/u);
+  assert.match(entrypoint, /if \[ -n "\$\{SDKWORK_WEBSERVER_ACME_DNS_ACCOUNTS_FILE:-\}" \]; then/u);
+  assert.match(entrypoint, /dns_accounts_file = /u);
+
+  // Both edge shapes must declare it. A development edge without TLS still has
+  // to answer the CA, so a branch losing its call is a silent issuance outage.
+  const start = entrypoint.indexOf('materialize_product_edge_nginx_conf() {');
+  assert.notEqual(start, -1, 'the product edge materializer must exist');
+  const body = entrypoint.slice(start);
+  const marker = 'if [ "${environment}" = "production" ]; then';
+  const call = 'product_edge_acme_challenge_location "${acme_webroot}"';
+  const markerIndex = body.indexOf(marker);
+  const first = body.indexOf(call);
+  const last = body.lastIndexOf(call);
+  assert.notEqual(markerIndex, -1, 'the production branch must stay explicit');
+  assert.notEqual(first, -1, 'the product edge must declare the challenge location');
+  assert.ok(
+    markerIndex < first && first < last,
+    'both the TLS and the plaintext branches must declare the challenge location',
+  );
+});
+
 test('standalone image and compose publish public data plane on 80/443', () => {
   const dockerfile = readFileSync(
     path.join(appRoot, 'deployments', 'docker', 'Dockerfile.standalone'),

@@ -14,9 +14,9 @@ use std::{
 use serde_json::{json, Map, Value};
 
 use super::{
-    error::WebServerConfigError, model::WebServerAppConfig,
-    network::hostname_upstream_allowed_cidrs, proxy_headers::merge_proxy_set_headers,
-    validate_webserver_config,
+    error::WebServerConfigError, model::CachePolicyConfig, model::TlsVersion,
+    model::WebServerAppConfig, network::hostname_upstream_allowed_cidrs,
+    proxy_headers::merge_proxy_set_headers, validate_webserver_config,
 };
 use crate::nginx::{parse_nginx_config, NginxDirective};
 
@@ -297,8 +297,6 @@ const ACCEPTED_IGNORED: &[&str] = &[
     "resolve",
     // static file details
     "autoindex",
-    "expires",
-    "etag",
     "disableSymlinks",
     "logNotFound",
     "sendfileMaxChunk",
@@ -342,6 +340,70 @@ const SERVER_TLS_KEYS: &[&str] = &[
     "ecdhCurve",
     "raw",
 ];
+
+/// Resolve `[http.server.tls] protocols` (or `[http.defaults.tls] protocols`)
+/// into the TLS policy's inclusive version window.
+///
+/// `SDKWORK_WEBSERVER_SPEC.md` §10 maps the key onto nginx `ssl_protocols`
+/// with the default `["TLSv1.2", "TLSv1.3"]`; the config schema restricts the
+/// tokens to exactly those two. `PRD-https-and-certificates.md` §2 lets an
+/// application pick "a stricter compatible policy", so a singleton list is
+/// legal (`["TLSv1.3"]` = TLS 1.3 only). The platform floor is not
+/// negotiable: no token below TLS 1.2 exists, so a declaration can never
+/// lower it. An absent key keeps the platform default window.
+fn tls_window_from_protocols(
+    tls: Option<&Map<String, Value>>,
+    path: &str,
+) -> Result<(TlsVersion, TlsVersion), WebServerConfigError> {
+    let Some(protocols) = tls.and_then(|tls| tls.get("protocols")) else {
+        return Ok(TlsVersion::PLATFORM_DEFAULT_WINDOW);
+    };
+    let Some(entries) = protocols.as_array() else {
+        return Err(materialize_error(
+            path,
+            "`protocols` must be an array of `TLSv1.2` / `TLSv1.3`",
+        ));
+    };
+    let mut minimum: Option<TlsVersion> = None;
+    let mut maximum: Option<TlsVersion> = None;
+    for entry in entries {
+        let Some(token) = entry.as_str() else {
+            return Err(materialize_error(
+                path,
+                "`protocols` entries must be `TLSv1.2` or `TLSv1.3` strings",
+            ));
+        };
+        let version = match token {
+            "TLSv1.2" => TlsVersion::Tls12,
+            "TLSv1.3" => TlsVersion::Tls13,
+            other => {
+                return Err(materialize_error(
+                    path,
+                    format!("`protocols` accepts TLSv1.2|TLSv1.3, found `{other}`"),
+                ))
+            }
+        };
+        minimum = Some(minimum.map_or(version, |current| current.min(version)));
+        maximum = Some(maximum.map_or(version, |current| current.max(version)));
+    }
+    let (Some(minimum), Some(maximum)) = (minimum, maximum) else {
+        return Err(materialize_error(
+            path,
+            "`protocols` must list at least one of TLSv1.2|TLSv1.3",
+        ));
+    };
+    Ok((minimum, maximum))
+}
+
+/// Human-readable rendering of a resolved window for conflict diagnostics.
+fn describe_tls_window(window: (TlsVersion, TlsVersion)) -> String {
+    let (minimum, maximum) = window;
+    if minimum == maximum {
+        minimum.wire().to_owned()
+    } else {
+        format!("{}..{}", minimum.wire(), maximum.wire())
+    }
+}
 
 fn check_supported_keys(
     table: &Map<String, Value>,
@@ -845,6 +907,62 @@ fn materialize_secure_link(
 /// Materialize the location `subFilter` family into the model shape
 /// (`subFilter` rule entries `"from to"`, `subFilterOnce`, `subFilterTypes`,
 /// `subFilterLastModified` — the TOML mirror of nginx `sub_filter*`).
+/// Typed-TOML counterpart of the nginx `expires` / `etag` directives.
+///
+/// `expires = "1d"` uses the same grammar as the nginx plane (the parser is
+/// shared, so the two surfaces cannot drift); `etag = false` suppresses the
+/// static-file entity tag. Both are location-scope keys per
+/// SDKWORK_WEBSERVER_SPEC.md §11.1/§11.2.
+fn materialize_cache_policy(
+    location: &Map<String, Value>,
+    path: &str,
+) -> Result<Option<CachePolicyConfig>, WebServerConfigError> {
+    let expires = location.get("expires");
+    let etag = location.get("etag");
+    if expires.is_none() && etag.is_none() {
+        return Ok(None);
+    }
+    let mut policy = CachePolicyConfig::default();
+    if let Some(value) = expires {
+        let Some(text) = value.as_str() else {
+            return Err(materialize_error(
+                &format!("{path}.expires"),
+                "`expires` must be a string such as \"1d\", \"max\", \"off\" or \"modified 1h\"",
+            ));
+        };
+        // The TOML value is one string, so a `modified <time>` declaration
+        // arrives space-separated; split it back into the nginx argument list.
+        let arguments: Vec<String> = text.split_whitespace().map(str::to_owned).collect();
+        let (mode, seconds) = crate::config::cache_policy::parse_expires_arguments(&arguments)
+            .map_err(|detail| {
+                materialize_error(&format!("{path}.expires"), format!("invalid `expires`: {detail}"))
+            })?;
+        policy.expires = mode;
+        policy.expires_seconds = seconds;
+    }
+    if let Some(value) = etag {
+        let Some(enabled) = value.as_bool() else {
+            return Err(materialize_error(
+                &format!("{path}.etag"),
+                "`etag` must be a boolean",
+            ));
+        };
+        policy.etag = enabled;
+    }
+    Ok(Some(policy))
+}
+
+/// `CachePolicyConfig` as it appears in the materialized JSON plane; kept in
+/// step with the model's serde names by the nginx-plane round-trip test.
+fn cache_policy_json(policy: &CachePolicyConfig) -> Value {
+    json!({
+        "expires": policy.expires.wire(),
+        "expiresSeconds": policy.expires_seconds,
+        "etag": policy.etag,
+        "ifModifiedSince": policy.if_modified_since.wire(),
+    })
+}
+
 fn materialize_sub_filter(
     location: &Map<String, Value>,
     path: &str,
@@ -984,6 +1102,14 @@ struct Materializer<'a> {
     certificates: Vec<Value>,
     certificate_names: Vec<String>,
     tls_policies: Vec<Value>,
+    /// Version window each certificate's TLS policy was explicitly narrowed to
+    /// by a server declaration. Certificates declared up front in
+    /// `[http.certificates]` start on the platform default and are refined by
+    /// the first server that names them; two servers that narrow the same
+    /// certificate differently is a configuration error, not a silent
+    /// last-wins (`SDKWORK_WEBSERVER_SPEC.md` §10, one policy per listener
+    /// port).
+    certificate_tls_windows: BTreeMap<String, (TlsVersion, TlsVersion)>,
     resources: Vec<Value>,
     upstreams: Vec<Value>,
     upstream_names: Vec<String>,
@@ -1004,6 +1130,7 @@ impl<'a> Materializer<'a> {
             certificates: Vec::new(),
             certificate_names: Vec::new(),
             tls_policies: Vec::new(),
+            certificate_tls_windows: BTreeMap::new(),
             resources: Vec::new(),
             upstreams: Vec::new(),
             upstream_names: Vec::new(),
@@ -1194,12 +1321,42 @@ impl<'a> Materializer<'a> {
         server_names: &[String],
         path: &str,
         client_auth: Option<&Value>,
+        tls_window: (TlsVersion, TlsVersion),
     ) -> Result<(), WebServerConfigError> {
         if let Some(index) = self
             .certificate_names
             .iter()
             .position(|existing| existing == name)
         {
+            // The policy is per certificate, so every server naming the same
+            // certificate must agree on the version window. A second server
+            // that narrows it differently would make the listener's accepted
+            // protocol set depend on which server block happened to match, so
+            // that is refused rather than resolved last-wins.
+            match self.certificate_tls_windows.get(name) {
+                Some(existing) if *existing != tls_window => {
+                    return Err(materialize_error(
+                        path,
+                        format!(
+                            "certificate `{name}` is shared by servers with different TLS version policies ({} vs {}); use one `protocols` declaration per certificate",
+                            describe_tls_window(*existing),
+                            describe_tls_window(tls_window)
+                        ),
+                    ));
+                }
+                Some(_) => {}
+                None => {
+                    self.certificate_tls_windows
+                        .insert(name.to_owned(), tls_window);
+                    let policy_id = format!("tls-{name}");
+                    if let Some(policy) = self.tls_policies.iter_mut().find(|policy| {
+                        policy.get("id").and_then(Value::as_str) == Some(policy_id.as_str())
+                    }) {
+                        policy["minimumVersion"] = Value::String(tls_window.0.wire().to_owned());
+                        policy["maximumVersion"] = Value::String(tls_window.1.wire().to_owned());
+                    }
+                }
+            }
             if let Some(entry) = self.certificates.get_mut(index) {
                 if let Some(names) = entry.get_mut("serverNames").and_then(Value::as_array_mut) {
                     for server_name in server_names {
@@ -1234,10 +1391,20 @@ impl<'a> Materializer<'a> {
         let cert_file = cert.get("certFile").and_then(Value::as_str);
         let cert_key_file = cert.get("certKeyFile").and_then(Value::as_str);
         let (certificate_file, private_key_file) = match (acme, cert_file, cert_key_file) {
-            (Some(acme_name), _, _) => (
-                format!("/etc/sdkwork/certs/letsencrypt/{acme_name}/fullchain.pem"),
-                format!("/etc/sdkwork/certs/letsencrypt/{acme_name}/privkey.pem"),
-            ),
+            (Some(acme_name), _, _) => {
+                // `acme <name>` resolves against the ACME live root, which is
+                // platform-specific (`/etc/sdkwork/certs/letsencrypt` on Linux,
+                // `%ProgramData%\sdkwork\certs\letsencrypt` on Windows). Deriving
+                // it from a literal here pointed the compiled config at a tree
+                // the certificate worker never writes to on Windows.
+                let live_root = crate::config_paths::canonical_acme_live_root()
+                    .map_err(|error| materialize_error(path, error))?;
+                let directory = live_root.join(acme_name);
+                (
+                    directory.join("fullchain.pem").to_string_lossy().into_owned(),
+                    directory.join("privkey.pem").to_string_lossy().into_owned(),
+                )
+            }
             (_, Some(cert_file), Some(cert_key_file)) => {
                 (cert_file.to_owned(), cert_key_file.to_owned())
             }
@@ -1260,8 +1427,8 @@ impl<'a> Materializer<'a> {
         let mut policy = json!({
             "id": format!("tls-{name}"),
             "certificateRefs": [name],
-            "minimumVersion": "tls1.2",
-            "maximumVersion": "tls1.3",
+            "minimumVersion": tls_window.0.wire(),
+            "maximumVersion": tls_window.1.wire(),
             "alpn": ["h2", "http/1.1"],
         });
         if let Some(client_auth) = client_auth {
@@ -1269,6 +1436,8 @@ impl<'a> Materializer<'a> {
         }
         self.tls_policies.push(policy);
         self.certificate_names.push(name.to_owned());
+        self.certificate_tls_windows
+            .insert(name.to_owned(), tls_window);
         Ok(())
     }
 
@@ -1504,6 +1673,8 @@ impl<'a> Materializer<'a> {
                 "secureLink",
                 "secureLinkMd5",
                 "secureLinkExpires",
+                "expires",
+                "etag",
             ],
         )?;
         let match_value = as_str(location, &path, "match")?;
@@ -1854,6 +2025,7 @@ impl<'a> Materializer<'a> {
             .and_then(Value::as_bool)
             .unwrap_or(false);
         let tls_table = server.get("tls").and_then(Value::as_object);
+        let tls_window = tls_window_from_protocols(tls_table, &format!("{path}.tls"))?;
         let client_auth = if let Some(tls) = tls_table {
             check_supported_keys(tls, &format!("{path}.tls"), SERVER_TLS_KEYS)?;
             parse_client_auth(tls, &format!("{path}.tls"))?
@@ -1880,8 +2052,8 @@ impl<'a> Materializer<'a> {
                 let mut policy = json!({
                     "id": format!("tls-{inline_name}"),
                     "certificateRefs": [inline_name],
-                    "minimumVersion": "tls1.2",
-                    "maximumVersion": "tls1.3",
+                    "minimumVersion": tls_window.0.wire(),
+                    "maximumVersion": tls_window.1.wire(),
                     "alpn": ["h2", "http/1.1"],
                 });
                 if let Some(client_auth) = &client_auth {
@@ -1889,6 +2061,8 @@ impl<'a> Materializer<'a> {
                 }
                 self.tls_policies.push(policy);
                 self.certificate_names.push(inline_name.clone());
+                self.certificate_tls_windows
+                    .insert(inline_name.clone(), tls_window);
                 Some(inline_name)
             } else {
                 None
@@ -1917,6 +2091,7 @@ impl<'a> Materializer<'a> {
                     &server_name_list,
                     &path,
                     client_auth.as_ref(),
+                    tls_window,
                 )?;
             }
             let tls_policy_ref =
@@ -2038,6 +2213,9 @@ impl<'a> Materializer<'a> {
             if let Some(secure_link) = materialize_secure_link(location, &path)? {
                 route["secureLink"] = secure_link;
             }
+            if let Some(cache_policy) = materialize_cache_policy(location, &path)? {
+                route["cachePolicy"] = cache_policy_json(&cache_policy);
+            }
             route_entries.push(route);
         }
         virtual_host["routes"] = Value::Array(route_entries);
@@ -2069,12 +2247,17 @@ impl<'a> Materializer<'a> {
                 let cert = cert.as_object().ok_or_else(|| {
                     materialize_error("http.certificates", "certificate entries must be tables")
                 })?;
+                // A certificate declared up front carries no server TLS table,
+                // so its policy starts on the platform default window. The
+                // first server that names it refines the window from
+                // `[http.server.tls] protocols` (see `ensure_certificate`).
                 self.ensure_certificate(
                     name,
                     cert,
                     &[],
                     &format!("http.certificates.{name}"),
                     None,
+                    TlsVersion::PLATFORM_DEFAULT_WINDOW,
                 )?;
             }
         }
@@ -3265,6 +3448,7 @@ pub fn materialize_app(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{ExpiresMode, IfModifiedSinceMode};
     use std::path::PathBuf;
 
     fn examples_dir() -> PathBuf {
@@ -3415,6 +3599,215 @@ allow_public = true
         assert_eq!(routes.len(), 1);
         assert_eq!(routes[0].domain.as_deref(), Some("demo.sdkwork.link"));
         assert!(routes[0].policy_or_default().allow_public);
+    }
+
+    /// Minimal single-server typed-TOML document with an inline certificate,
+    /// used by the `protocols` version-window tests.
+    fn tls_protocols_document(tls_block: &str) -> Value {
+        let toml_text = format!(
+            r#"
+[http]
+
+[[http.server]]
+listen = ["443 ssl"]
+serverName = ["tls.example.com"]
+
+[http.server.tls]
+certFile = "/etc/sdkwork/certs/tls.example.com/fullchain.pem"
+certKeyFile = "/etc/sdkwork/certs/tls.example.com/privkey.pem"
+{tls_block}
+
+[[http.server.location]]
+match = "/"
+proxyPass = "http://127.0.0.1:9001"
+"#
+        );
+        let value: toml::Value = toml::from_str(&toml_text).expect("toml parses");
+        serde_json::to_value(&value).expect("converts")
+    }
+
+    #[test]
+    fn toml_protocols_select_the_tls_window() {
+        // `PRD-https-and-certificates.md` §2 grants "a stricter compatible
+        // policy", so a singleton window must reach the policy instead of being
+        // accepted and dropped.
+        let tls13 = materialize_app(
+            &tls_protocols_document(r#"protocols = ["TLSv1.3"]"#),
+            "test",
+        )
+        .expect("TLS 1.3 only must materialize");
+        assert_eq!(tls13.tls_policies.len(), 1);
+        assert_eq!(tls13.tls_policies[0].minimum_version, TlsVersion::Tls13);
+        assert_eq!(tls13.tls_policies[0].maximum_version, TlsVersion::Tls13);
+
+        // An absent `protocols` keeps the documented platform default.
+        let default = materialize_app(&tls_protocols_document(""), "test")
+            .expect("absent protocols keeps the platform default");
+        assert_eq!(default.tls_policies[0].minimum_version, TlsVersion::Tls12);
+        assert_eq!(default.tls_policies[0].maximum_version, TlsVersion::Tls13);
+    }
+
+    #[test]
+    fn toml_defaults_tls_protocols_apply_to_every_server() {
+        let toml_text = r#"
+[http]
+
+[http.defaults.tls]
+protocols = ["TLSv1.3"]
+
+[[http.server]]
+listen = ["443 ssl"]
+serverName = ["defaults.example.com"]
+
+[http.server.tls]
+certFile = "/etc/sdkwork/certs/a/fullchain.pem"
+certKeyFile = "/etc/sdkwork/certs/a/privkey.pem"
+
+[[http.server.location]]
+match = "/"
+proxyPass = "http://127.0.0.1:9001"
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let config = materialize_app(&effective, "test").expect("materialize");
+        assert_eq!(config.tls_policies[0].minimum_version, TlsVersion::Tls13);
+        assert_eq!(config.tls_policies[0].maximum_version, TlsVersion::Tls13);
+    }
+
+    #[test]
+    fn toml_protocols_reject_unsupported_tokens() {
+        let error = materialize_app(
+            &tls_protocols_document(r#"protocols = ["TLSv1.1"]"#),
+            "test",
+        )
+        .expect_err("TLS 1.1 must never be accepted");
+        assert!(
+            format!("{error}").contains("TLSv1.2|TLSv1.3"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn toml_shared_certificate_requires_one_tls_window() {
+        let toml_text = r#"
+[http]
+
+[http.certificates."shared"]
+certFile = "/etc/sdkwork/certs/shared/fullchain.pem"
+certKeyFile = "/etc/sdkwork/certs/shared/privkey.pem"
+
+[[http.server]]
+listen = ["443 ssl"]
+serverName = ["a.example.com"]
+
+[http.server.tls]
+cert = "shared"
+protocols = ["TLSv1.2", "TLSv1.3"]
+
+[[http.server.location]]
+match = "/"
+proxyPass = "http://127.0.0.1:9001"
+
+[[http.server]]
+listen = ["8443 ssl"]
+serverName = ["b.example.com"]
+
+[http.server.tls]
+cert = "shared"
+protocols = ["TLSv1.3"]
+
+[[http.server.location]]
+match = "/"
+proxyPass = "http://127.0.0.1:9001"
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let error = materialize_app(&effective, "test")
+            .expect_err("two windows on one shared certificate must fail closed");
+        assert!(
+            format!("{error}").contains("different TLS version policies"),
+            "unexpected error: {error}"
+        );
+    }
+
+    /// Minimal typed-TOML document with one proxied location, used by the
+    /// `expires` / `etag` location-key tests.
+    fn cache_policy_document(location_block: &str) -> Value {
+        let toml_text = format!(
+            r#"
+[http]
+
+[[http.server]]
+listen = ["80"]
+serverName = ["cache.example.com"]
+
+[[http.server.location]]
+match = "/assets/"
+proxyPass = "http://127.0.0.1:9001"
+{location_block}
+"#
+        );
+        let value: toml::Value = toml::from_str(&toml_text).expect("toml parses");
+        serde_json::to_value(&value).expect("converts")
+    }
+
+    #[test]
+    fn toml_expires_and_etag_reach_the_route() {
+        // The typed plane must map the same nginx grammar the conf plane maps;
+        // `expires`/`etag` used to be accepted-and-ignored here, so the
+        // declaration had no effect on the served response.
+        let config = materialize_app(
+            &cache_policy_document("expires = \"7d\"
+etag = false"),
+            "test",
+        )
+        .expect("materializes");
+        let policy = config.virtual_hosts[0].routes[0]
+            .cache_policy
+            .as_ref()
+            .expect("route cache policy");
+        assert_eq!(policy.expires, ExpiresMode::Access);
+        assert_eq!(policy.expires_seconds, 604_800);
+        assert_eq!(policy.etag, false);
+        // The nginx default, since the typed plane declares no equivalent key.
+        assert_eq!(policy.if_modified_since, IfModifiedSinceMode::Exact);
+
+        // `modified <time>` is one string in TOML and an argument list in nginx.
+        let config = materialize_app(
+            &cache_policy_document("expires = \"modified 30m\""),
+            "test",
+        )
+        .expect("materializes");
+        let policy = config.virtual_hosts[0].routes[0]
+            .cache_policy
+            .as_ref()
+            .expect("route cache policy");
+        assert_eq!(policy.expires, ExpiresMode::Modified);
+        assert_eq!(policy.expires_seconds, 1_800);
+
+        // An undeclared location keeps no policy of its own.
+        let config = materialize_app(&cache_policy_document(""), "test").expect("materializes");
+        assert!(config.virtual_hosts[0].routes[0].cache_policy.is_none());
+    }
+
+    #[test]
+    fn toml_expires_rejects_malformed_values() {
+        for (declaration, expected) in [
+            ("expires = \"1x\"", "invalid `expires`"),
+            ("expires = \"@25h\"", "less than 24 hours"),
+            ("expires = 60", "must be a string"),
+            ("expires = \"1d\"
+etag = \"off\"", "must be a boolean"),
+        ] {
+            let error = materialize_app(&cache_policy_document(declaration), "test")
+                .err()
+                .unwrap_or_else(|| panic!("`{declaration}` must fail closed"));
+            let message = format!("{error}");
+            assert!(
+                message.contains(expected),
+                "`{declaration}`: expected `{expected}` in `{message}`"
+            );
+        }
     }
 
     #[test]

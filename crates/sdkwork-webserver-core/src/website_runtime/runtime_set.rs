@@ -308,6 +308,28 @@ impl CompiledWebsiteRuntimeSet {
         self.provider_types.contains(&provider_type)
     }
 
+    /// True when this set declares routes for `authority` — either as an exact
+    /// host or through the one-label wildcard form of it.
+    ///
+    /// Answers "does the app-publishing surface serve this host on this node"
+    /// *without* running route selection, so a caller that has a later surface
+    /// to consult (the tunnel relay, keyed on its own registry) can tell whether
+    /// the host is already spoken for. Deliberately host-only: a set that
+    /// declares the host owns it even when the path under it is missing, which
+    /// is precisely the distinction route *outcomes* cannot make — a missing
+    /// resource on a served host and a host absent from the set both surface as
+    /// `WebsiteDeliveryOutcome::NotFound`.
+    pub fn declares_authority(&self, authority: &str) -> bool {
+        let Some(normalized_host) = normalize_request_hostname(authority) else {
+            return false;
+        };
+        self.exact_hosts.contains_key(&normalized_host)
+            || normalized_host
+                .split_once('.')
+                .and_then(|(label, suffix)| (!label.is_empty()).then_some(suffix))
+                .is_some_and(|suffix| self.wildcard_hosts.contains_key(suffix))
+    }
+
     pub fn select_route<'a>(
         &'a self,
         host: &str,

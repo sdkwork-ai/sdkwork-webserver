@@ -52,6 +52,20 @@ pub const SECRETS_SUBDIR: &str = "secrets";
 /// `certs://<domain>/` URI form.
 pub const CERTIFICATES_SUBDIR: &str = "certs";
 
+/// Subdirectory of the certificate inventory that holds ACME-issued material.
+///
+/// ACME material is a *different* layout from an operator-supplied
+/// `certs://<domain>/` bundle, so it lives in its own namespace:
+/// `<certificates-root>/letsencrypt/<cert-name>/{fullchain,privkey}.pem`, the
+/// conventional live-directory shape. Kept here so the issuing side (the
+/// certificate worker) and the consuming side (the edge runtime that activates
+/// the bundle) cannot pick different roots — they previously each hardcoded
+/// `/etc/sdkwork/certs/letsencrypt`, which is not a valid location on Windows.
+pub const ACME_LIVE_SUBDIR: &str = "letsencrypt";
+
+/// Environment override for the ACME live root.
+pub const ACME_CERT_LIVE_ROOT_ENV: &str = "SDKWORK_WEBSERVER_CERT_LIVE_ROOT";
+
 /// Leaf certificate file inside a domain certificate directory.
 pub const CERTIFICATE_FILE_NAME: &str = "cert.pem";
 
@@ -127,6 +141,29 @@ pub fn canonical_certificate_file(domain: &str) -> Result<PathBuf, String> {
 /// Canonical private key path for a domain.
 pub fn canonical_certificate_key_file(domain: &str) -> Result<PathBuf, String> {
     Ok(canonical_certificate_domain_directory(domain)?.join(PRIVATE_KEY_FILE_NAME))
+}
+
+/// Canonical ACME live root for the current host OS.
+///
+/// Linux/container: `/etc/sdkwork/certs/letsencrypt`. Windows:
+/// `%ProgramData%\sdkwork\certs\letsencrypt`. `SDKWORK_WEBSERVER_CERT_LIVE_ROOT`
+/// overrides it (installed deployments set it from `acme.cert_live_root`).
+///
+/// **This is the single definition of "where ACME-issued material lives".** The
+/// certificate worker writes `<root>/<cert-name>/fullchain.pem` and the edge
+/// runtime activates the bundle from that same `<root>`; when both derived the
+/// path independently from a hardcoded Linux literal, a Windows deployment
+/// wrote to `C:\etc\...` while the rest of the application (which resolves
+/// `certs://` through [`canonical_certificates_directory`]) looked under
+/// `%ProgramData%`, and the handshake could never find its material.
+pub fn canonical_acme_live_root() -> Result<PathBuf, String> {
+    if let Ok(override_dir) = std::env::var(ACME_CERT_LIVE_ROOT_ENV) {
+        let override_dir = override_dir.trim();
+        if !override_dir.is_empty() {
+            return Ok(PathBuf::from(override_dir));
+        }
+    }
+    Ok(canonical_certificates_directory()?.join(ACME_LIVE_SUBDIR))
 }
 
 /// Canonical OS system-scope config directory for application code `webserver`.
@@ -210,5 +247,44 @@ mod tests {
             path.file_name().and_then(|n| n.to_str()),
             Some(DATA_PLANE_CONFIG_FILE_NAME)
         );
+    }
+
+    /// The ACME live root must be platform-correct on its own, without the
+    /// operator supplying an override: deriving it from a hardcoded
+    /// `/etc/sdkwork/...` literal is what broke Windows.
+    #[test]
+    fn acme_live_root_defaults_under_the_platform_certificate_root() {
+        let _guard = crate::runtime_env::env_test_lock();
+        let previous = std::env::var(ACME_CERT_LIVE_ROOT_ENV).ok();
+        std::env::remove_var(ACME_CERT_LIVE_ROOT_ENV);
+        let root = canonical_acme_live_root().expect("acme live root");
+        let certificates = canonical_certificates_directory().expect("certificates root");
+        assert_eq!(root, certificates.join(ACME_LIVE_SUBDIR));
+        assert_eq!(root.file_name().and_then(|n| n.to_str()), Some(ACME_LIVE_SUBDIR));
+        if cfg!(target_os = "linux") {
+            assert_eq!(root, PathBuf::from("/etc/sdkwork/certs/letsencrypt"));
+        }
+        // The default must be absolute on every platform: a relative root would
+        // silently scatter material into the process working directory.
+        assert!(root.is_absolute(), "{} is not absolute", root.display());
+        match previous {
+            Some(value) => std::env::set_var(ACME_CERT_LIVE_ROOT_ENV, value),
+            None => std::env::remove_var(ACME_CERT_LIVE_ROOT_ENV),
+        }
+    }
+
+    #[test]
+    fn acme_live_root_honours_the_operator_override() {
+        let _guard = crate::runtime_env::env_test_lock();
+        let previous = std::env::var(ACME_CERT_LIVE_ROOT_ENV).ok();
+        std::env::set_var(ACME_CERT_LIVE_ROOT_ENV, "/srv/sdkwork/acme-live");
+        assert_eq!(
+            canonical_acme_live_root().expect("override"),
+            PathBuf::from("/srv/sdkwork/acme-live")
+        );
+        match previous {
+            Some(value) => std::env::set_var(ACME_CERT_LIVE_ROOT_ENV, value),
+            None => std::env::remove_var(ACME_CERT_LIVE_ROOT_ENV),
+        }
     }
 }

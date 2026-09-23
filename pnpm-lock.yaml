@@ -15,15 +15,9 @@ catalogs:
     '@tailwindcss/vite':
       specifier: ^4.3.3
       version: 4.3.3
-    '@testing-library/jest-dom':
-      specifier: ^7.0.1
-      version: 7.0.1
     '@testing-library/react':
       specifier: 16.3.2
       version: 16.3.2
-    '@types/qrcode':
-      specifier: ^1.5.6
-      version: 1.5.6
     '@types/react':
       specifier: ^19.2.14
       version: 19.2.14
@@ -45,9 +39,6 @@ catalogs:
     monaco-editor:
       specifier: ^0.52.2
       version: 0.52.2
-    qrcode:
-      specifier: ^1.5.4
-      version: 1.5.4
     react:
       specifier: ^19.2.8
       version: 19.2.8
@@ -66,9 +57,6 @@ catalogs:
     vite:
       specifier: ^8.0.3
       version: 8.1.5
-    vite-plugin-dts:
-      specifier: ^5.0.3
-      version: 5.1.0
     vitest:
       specifier: ^4.1.10
       version: 4.1.10
@@ -304,6 +292,9 @@ importers:
       react:
         specifier: 'catalog:'
         version: 19.2.8
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.8(react@19.2.8)
     devDependencies:
       '@types/react':
         specifier: 'catalog:'
@@ -692,6 +683,93 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@types/node@25.9.5)(jsdom@29.1.1)(vite@8.1.5(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
+
+  ../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-core:
+    dependencies:
+      '@sdkwork/iam-contracts':
+        specifier: workspace:*
+        version: link:../../../sdkwork-iam-common/packages/sdkwork-iam-contracts
+      '@sdkwork/iam-sdk-adapter':
+        specifier: workspace:*
+        version: link:../../../sdkwork-iam-common/packages/sdkwork-iam-sdk-adapter
+      '@sdkwork/iam-sdk-ports':
+        specifier: workspace:*
+        version: link:../../../sdkwork-iam-common/packages/sdkwork-iam-sdk-ports
+      '@sdkwork/iam-service':
+        specifier: workspace:*
+        version: link:../../../sdkwork-iam-common/packages/sdkwork-iam-service
+      '@sdkwork/ui-pc-react':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-ui/sdkwork-ui-pc-react
+      react:
+        specifier: '>=18.2.0 <20.0.0'
+        version: 19.2.4
+      react-dom:
+        specifier: '>=18.2.0 <20.0.0'
+        version: 19.2.4(react@19.2.4)
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.2.3(@types/react@19.2.14)
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  ../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-console-cloud-account:
+    dependencies:
+      '@sdkwork/i18n-pc-react':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-appbase/packages/pc-react/foundation/sdkwork-i18n-pc-react
+      '@sdkwork/iam-contracts':
+        specifier: workspace:*
+        version: link:../../../sdkwork-iam-common/packages/sdkwork-iam-contracts
+      '@sdkwork/iam-pc-admin-core':
+        specifier: workspace:*
+        version: link:../sdkwork-iam-pc-admin-core
+      '@sdkwork/iam-pc-console-core':
+        specifier: workspace:*
+        version: link:../sdkwork-iam-pc-console-core
+      '@sdkwork/iam-service':
+        specifier: workspace:*
+        version: link:../../../sdkwork-iam-common/packages/sdkwork-iam-service
+      '@sdkwork/ui-pc-react':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-ui/sdkwork-ui-pc-react
+      lucide-react:
+        specifier: 'catalog:'
+        version: 1.39.0(react@19.2.4)
+      react:
+        specifier: '>=18.2.0 <20.0.0'
+        version: 19.2.4
+      react-dom:
+        specifier: '>=18.2.0 <20.0.0'
+        version: 19.2.4(react@19.2.4)
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  ../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-console-core:
+    dependencies:
+      '@sdkwork/iam-contracts':
+        specifier: workspace:*
+        version: link:../../../sdkwork-iam-common/packages/sdkwork-iam-contracts
+      '@sdkwork/iam-sdk-adapter':
+        specifier: workspace:*
+        version: link:../../../sdkwork-iam-common/packages/sdkwork-iam-sdk-adapter
+      '@sdkwork/iam-sdk-ports':
+        specifier: workspace:*
+        version: link:../../../sdkwork-iam-common/packages/sdkwork-iam-sdk-ports
+      '@sdkwork/iam-service':
+        specifier: workspace:*
+        version: link:../../../sdkwork-iam-common/packages/sdkwork-iam-service
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
 
   ../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-react:
     dependencies:
@@ -1421,12 +1499,18 @@ importers:
       '@sdkwork/webserver-pc-admin-audit':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-admin-audit
+      '@sdkwork/webserver-pc-admin-cloud-account':
+        specifier: workspace:*
+        version: link:packages/sdkwork-webserver-pc-admin-cloud-account
       '@sdkwork/webserver-pc-admin-cluster':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-admin-cluster
       '@sdkwork/webserver-pc-admin-core':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-admin-core
+      '@sdkwork/webserver-pc-admin-delivery':
+        specifier: workspace:*
+        version: link:packages/sdkwork-webserver-pc-admin-delivery
       '@sdkwork/webserver-pc-admin-diagnostics':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-admin-diagnostics
@@ -1460,6 +1544,9 @@ importers:
       '@sdkwork/webserver-pc-commons':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-commons
+      '@sdkwork/webserver-pc-console-cloud-account':
+        specifier: workspace:*
+        version: link:packages/sdkwork-webserver-pc-console-cloud-account
       '@sdkwork/webserver-pc-console-core':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-console-core
@@ -1552,6 +1639,18 @@ importers:
         specifier: workspace:*
         version: link:../sdkwork-webserver-pc-commons
 
+  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-cloud-account:
+    dependencies:
+      '@sdkwork/webserver-pc-commons':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-commons
+      '@sdkwork/webserver-pc-console-cloud-account':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-console-cloud-account
+      react:
+        specifier: 'catalog:'
+        version: 19.2.8
+
   apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-cluster:
     dependencies:
       '@sdkwork/sdk-common':
@@ -1593,6 +1692,30 @@ importers:
       react:
         specifier: 'catalog:'
         version: 19.2.8
+
+  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-delivery:
+    dependencies:
+      '@sdkwork/sdk-common':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      '@sdkwork/ui-pc-react':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-ui/sdkwork-ui-pc-react
+      '@sdkwork/webserver-pc-admin-core':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-admin-core
+      '@sdkwork/webserver-pc-commons':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-commons
+      lucide-react:
+        specifier: 'catalog:'
+        version: 1.39.0(react@19.2.8)
+      react:
+        specifier: 'catalog:'
+        version: 19.2.8
+      react-router-dom:
+        specifier: ^7.15.0
+        version: 7.18.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
 
   apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-diagnostics:
     dependencies:
@@ -1780,6 +1903,24 @@ importers:
         specifier: ^7.15.0
         version: 7.18.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
 
+  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-console-cloud-account:
+    dependencies:
+      '@sdkwork/iam-contracts':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-contracts
+      '@sdkwork/iam-pc-console-cloud-account':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-console-cloud-account
+      '@sdkwork/iam-service':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-service
+      '@sdkwork/webserver-pc-console-core':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-console-core
+      react:
+        specifier: 'catalog:'
+        version: 19.2.8
+
   apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-console-core:
     dependencies:
       '@sdkwork/deployments-app-sdk':
@@ -1788,6 +1929,18 @@ importers:
       '@sdkwork/drive-app-sdk':
         specifier: workspace:*
         version: link:../../../../../sdkwork-drive/sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-typescript
+      '@sdkwork/iam-app-sdk':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-iam/sdks/sdkwork-iam-app-sdk/sdkwork-iam-app-sdk-typescript
+      '@sdkwork/iam-backend-sdk':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-iam/sdks/sdkwork-iam-backend-sdk/sdkwork-iam-backend-sdk-typescript
+      '@sdkwork/iam-sdk-adapter':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-sdk-adapter
+      '@sdkwork/iam-service':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-service
       '@sdkwork/sdk-common':
         specifier: workspace:*
         version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript

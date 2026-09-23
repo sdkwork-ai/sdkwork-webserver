@@ -227,7 +227,14 @@ pub struct TunnelTimeoutConfig {
     pub handshake: u64,
     /// Data-stream open timeout.
     pub stream_open: u64,
-    /// Idle session timeout (no heartbeat and no streams).
+    /// Idle session timeout, measured on **heartbeat freshness only**.
+    ///
+    /// The sweep expires a session whose last heartbeat is older than
+    /// `min(idle, heartbeat × 3)`, which is why an idle *data stream* does not
+    /// extend a session's life: the heartbeat rides the same QUIC connection
+    /// as the data streams, so a live stream implies live heartbeats and a
+    /// stale heartbeat means the whole connection is gone. It also bounds how
+    /// long a dead agent keeps its routes and gateway ports reserved.
     pub idle: u64,
 }
 
@@ -299,11 +306,11 @@ impl Default for TunnelLimitsConfig {
 pub struct TunnelRouteTemplate {
     /// Operator-facing name.
     pub name: String,
-    /// `http` or `tcp`.
+    /// `http`, `tcp`, or `udp`.
     pub protocol: TunnelProtocolKind,
     /// Public domain (HTTP routes).
     pub domain: Option<String>,
-    /// Public gateway port (TCP routes).
+    /// Public gateway port (TCP and UDP routes).
     pub port: Option<u16>,
     /// Agent-local `ip:port` target.
     pub target: String,
@@ -314,10 +321,12 @@ pub struct TunnelRouteTemplate {
 
 impl TunnelRouteTemplate {
     /// Validates the template shape.
+    ///
+    /// Delegates to [`Self::to_route`] so a template can never validate into
+    /// a route that [`TunnelRoute::new`] would then reject.
     pub fn validate(&self) -> Result<()> {
-        self.to_route_id_and_matcher()?;
-        TunnelTarget::parse_tcp(&self.target)?;
-        Ok(())
+        let (route_id, _) = self.to_route_id_and_matcher()?;
+        self.to_route(route_id).map(|_| ())
     }
 
     /// Resolves the matcher declared by this template.
@@ -328,12 +337,7 @@ impl TunnelRouteTemplate {
     /// Parses the target declared by this template; the protocol decides the
     /// target kind so UDP routes resolve to [`TunnelTarget::Udp`].
     pub fn target(&self) -> Result<TunnelTarget> {
-        match self.protocol {
-            TunnelProtocolKind::Udp => TunnelTarget::parse_udp(&self.target),
-            TunnelProtocolKind::Http | TunnelProtocolKind::Tcp => {
-                TunnelTarget::parse_tcp(&self.target)
-            }
-        }
+        TunnelTarget::parse_for_protocol(self.protocol, &self.target)
     }
 
     /// Policy with defaults applied.
@@ -477,5 +481,170 @@ mod tests {
             .to_route(RouteId::parse("route_web").expect("valid id"))
             .expect("route builds");
         assert_eq!(route.matcher.as_domain(), Some("demo.sdkwork.link"));
+    }
+
+    #[test]
+    fn limits_defaults_match_prd_ceilings() {
+        let limits = TunnelLimitsConfig::default();
+        assert_eq!(limits.max_devices, 10_000);
+        assert_eq!(limits.max_sessions, 10_000);
+        assert_eq!(limits.max_streams_per_session, 256);
+        assert_eq!(limits.max_routes, 10_000);
+        assert_eq!(limits.max_control_message_bytes, 64 * 1024);
+    }
+
+    #[test]
+    fn agent_defaults_hold_env_var_names_never_secrets() {
+        // PRD §40: the configuration file carries the *name* of the variable
+        // holding the credential; the credential itself is resolved at
+        // runtime and never reaches a file or git.
+        let agent = TunnelAgentConfig::default();
+        assert_eq!(agent.token_env, "SDKWORK_TUNNEL_TOKEN");
+        assert_eq!(agent.device_id_env, "SDKWORK_TUNNEL_DEVICE_ID");
+        assert!(agent.endpoint.is_empty(), "no endpoint is baked in");
+        assert!(agent.device_name.is_empty(), "empty means: use the hostname");
+        assert!(agent.tls.is_none(), "TLS policy is opt-in");
+
+        let tls = TunnelAgentTlsConfig::default();
+        assert!(tls.ca_pem_path.is_none());
+        assert!(tls.pinned_server_sha256.is_none());
+        assert!(!tls.insecure_skip_verify, "skip-verify is never the default");
+    }
+
+    #[test]
+    fn gateway_defaults_fail_closed_and_never_carry_a_token() {
+        let gateway = TunnelGatewayConfig::default();
+        assert!(
+            gateway.domain_suffixes.is_empty(),
+            "an empty suffix list disables the suffix policy"
+        );
+        assert_eq!(gateway.agent_token_env, vec!["SDKWORK_TUNNEL_GATEWAY_TOKEN"]);
+        // The default names a *variable*; a literal token here would be the
+        // bug this assertion exists to catch.
+        assert!(gateway
+            .agent_token_env
+            .iter()
+            .all(|name| name.chars().all(|c| c.is_ascii_uppercase() || c == '_')));
+        assert!(gateway.tls_cert_pem_env.is_none());
+        assert!(gateway.tls_key_pem_env.is_none());
+    }
+
+    #[test]
+    fn udp_template_resolves_a_datagram_target_and_requires_a_port() {
+        let template = TunnelRouteTemplate {
+            name: "dns".to_owned(),
+            protocol: TunnelProtocolKind::Udp,
+            domain: None,
+            port: Some(7053),
+            target: "127.0.0.1:53".to_owned(),
+            policy: None,
+        };
+        template.validate().expect("valid udp template");
+        assert_eq!(
+            template.target().expect("target"),
+            TunnelTarget::Udp("127.0.0.1:53".parse().expect("parses"))
+        );
+        let route = template
+            .to_route(RouteId::parse("route_dns").expect("valid id"))
+            .expect("route builds");
+        assert_eq!(route.matcher, RouteMatcher::Port(7053));
+        assert_eq!(route.protocol, TunnelProtocolKind::Udp);
+
+        let portless = TunnelRouteTemplate { port: None, ..template };
+        assert!(
+            portless.validate().is_err(),
+            "a udp template without a port can never be reached"
+        );
+    }
+
+    #[test]
+    fn a_template_name_must_be_usable_as_a_route_id() {
+        // `to_route_id_and_matcher` derives `route_{name}` from the template,
+        // so a name that cannot form a valid `RouteId` would produce a route
+        // the registry then refuses. Validating the id here is what keeps
+        // `validate()` and `to_route()` from disagreeing.
+        let build = |name: &str| TunnelRouteTemplate {
+            name: name.to_owned(),
+            protocol: TunnelProtocolKind::Http,
+            domain: Some("demo.sdkwork.link".to_owned()),
+            port: None,
+            target: "127.0.0.1:3000".to_owned(),
+            policy: None,
+        };
+        let valid = build("home-web_2");
+        valid.validate().expect("a DNS-label-shaped name is fine");
+        assert_eq!(
+            valid
+                .to_route(RouteId::parse("route_home-web_2").expect("valid id"))
+                .expect("route builds")
+                .id
+                .to_string(),
+            "route_home-web_2"
+        );
+
+        for name in ["with space", "中文名", ""] {
+            assert!(
+                build(name).validate().is_err(),
+                "name `{name}` cannot form a route id"
+            );
+        }
+    }
+
+    #[test]
+    fn route_templates_are_only_validated_when_the_feature_is_enabled() {
+        // PRD §77: `enabled = false` must leave the webserver byte-for-byte
+        // unchanged, so a disabled section never inspects its templates. The
+        // same (invalid) template must fail the moment the feature is on.
+        let routes = vec![TunnelRouteTemplate {
+            name: String::new(),
+            protocol: TunnelProtocolKind::Http,
+            domain: None,
+            port: None,
+            target: "not-a-socket-address".to_owned(),
+            policy: None,
+        }];
+        let disabled = TunnelConfig {
+            enabled: false,
+            routes: Some(routes.clone()),
+            ..TunnelConfig::disabled()
+        };
+        disabled
+            .validate()
+            .expect("a disabled section never validates its templates");
+
+        let enabled = TunnelConfig {
+            enabled: true,
+            ..disabled
+        };
+        assert!(enabled.validate().is_err());
+    }
+
+    #[test]
+    fn gateway_and_agent_sections_serialize_camel_case_wire_names() {
+        // The CLI, server.toml and the standalone gateway all deserialize the
+        // same JSON/TOML section, so the key spelling is a cross-component
+        // contract and not an implementation detail.
+        let config = TunnelConfig {
+            enabled: true,
+            gateway: Some(TunnelGatewayConfig::default()),
+            agent: Some(TunnelAgentConfig::default()),
+            ..TunnelConfig::disabled()
+        };
+        let json = serde_json::to_string(&config).expect("serialize");
+        for key in [
+            "\"domainSuffixes\"",
+            "\"agentTokenEnv\"",
+            "\"tlsCertPemEnv\"",
+            "\"tlsKeyPemEnv\"",
+            "\"tokenEnv\"",
+            "\"deviceIdEnv\"",
+            "\"deviceName\"",
+            "\"domainSuffix\"",
+        ] {
+            assert!(json.contains(key), "missing {key} in {json}");
+        }
+        // snake_case spellings must never appear on the wire.
+        assert!(!json.contains("domain_suffixes"), "{json}");
+        assert!(!json.contains("token_env"), "{json}");
     }
 }

@@ -9,17 +9,26 @@ use SDKWork\Webserver\BackendSdk\Models\ClustersEventsListResponse;
 use SDKWork\Webserver\BackendSdk\Models\ClustersHostsListResponse;
 use SDKWork\Webserver\BackendSdk\Models\ClustersHostsRetrieveResponse;
 use SDKWork\Webserver\BackendSdk\Models\ClustersHostsUpdateResponse;
+use SDKWork\Webserver\BackendSdk\Models\ClustersInstancesCordonResponse;
+use SDKWork\Webserver\BackendSdk\Models\ClustersInstancesDrainResponse;
 use SDKWork\Webserver\BackendSdk\Models\ClustersInstancesHeartbeatsListResponse;
 use SDKWork\Webserver\BackendSdk\Models\ClustersInstancesListResponse;
+use SDKWork\Webserver\BackendSdk\Models\ClustersInstancesMetricsListResponse;
+use SDKWork\Webserver\BackendSdk\Models\ClustersInstancesProbeResponse;
 use SDKWork\Webserver\BackendSdk\Models\ClustersInstancesRetrieveResponse;
+use SDKWork\Webserver\BackendSdk\Models\ClustersInstancesUncordonResponse;
+use SDKWork\Webserver\BackendSdk\Models\ClustersInstancesUndrainResponse;
 use SDKWork\Webserver\BackendSdk\Models\ClustersInstancesUpdateResponse;
 use SDKWork\Webserver\BackendSdk\Models\ClustersListResponse;
 use SDKWork\Webserver\BackendSdk\Models\ClustersMessagesCreateResponse201;
 use SDKWork\Webserver\BackendSdk\Models\ClustersOverviewRetrieveResponse;
 use SDKWork\Webserver\BackendSdk\Models\ClustersRetrieveResponse;
+use SDKWork\Webserver\BackendSdk\Models\ClustersSyncResponse;
 use SDKWork\Webserver\BackendSdk\Models\ClustersUpdateResponse;
 use SDKWork\Webserver\BackendSdk\Models\CreateClusterRequest;
 use SDKWork\Webserver\BackendSdk\Models\EnqueueClusterPeerMessagesRequest;
+use SDKWork\Webserver\BackendSdk\Models\ProbeClusterInstanceRequest;
+use SDKWork\Webserver\BackendSdk\Models\PublishClusterSyncRequest;
 use SDKWork\Webserver\BackendSdk\Models\UpdateClusterHostRequest;
 use SDKWork\Webserver\BackendSdk\Models\UpdateClusterInstanceRequest;
 use SDKWork\Webserver\BackendSdk\Models\UpdateClusterRequest;
@@ -97,6 +106,17 @@ final class ClusterApi extends BaseApi
             'headers' => $requestHeaders,
         ]);
         return;
+    }
+
+    /** Publish a desired-state revision to every instance of the cluster */
+    public function clustersSync(string $clusterId, array|PublishClusterSyncRequest $body): ?ClustersSyncResponse
+    {
+        $path = $this->interpolatePath('/backend/v3/api/clusters/{clusterId}/sync', ['clusterId' => $this->serializePathParameter($clusterId, new PathParameterSpec('clusterId', 'simple', false))]);
+        $payload = $body instanceof PublishClusterSyncRequest ? $body->toArray() : $body;
+        $result = $this->client->request('POST', $path, [
+            'json' => $payload,
+        ]);
+        return is_array($result) ? ClustersSyncResponse::fromArray($result) : null;
     }
 
     /** List cluster hosts with system and network identity */
@@ -249,6 +269,61 @@ final class ClusterApi extends BaseApi
         $path = $this->appendQueryString($path, $query);
         $result = $this->client->request('GET', $path, []);
         return is_array($result) ? ClustersInstancesHeartbeatsListResponse::fromArray($result) : null;
+    }
+
+    /** List one instance's heartbeat metric samples for trend charts */
+    public function clustersInstancesMetricsList(string $instanceId, ?int $limit = null): ?ClustersInstancesMetricsListResponse
+    {
+        $path = $this->interpolatePath('/backend/v3/api/clusters/instances/{instanceId}/metrics/history', ['instanceId' => $this->serializePathParameter($instanceId, new PathParameterSpec('instanceId', 'simple', false))]);
+        $query = $this->buildQueryString([
+            new QueryParameterSpec('limit', $limit, 'form', true, false, null),
+        ]);
+        $path = $this->appendQueryString($path, $query);
+        $result = $this->client->request('GET', $path, []);
+        return is_array($result) ? ClustersInstancesMetricsListResponse::fromArray($result) : null;
+    }
+
+    /** Probe one instance's connectivity and record the outcome */
+    public function clustersInstancesProbe(string $instanceId, array|ProbeClusterInstanceRequest|null $body = null): ?ClustersInstancesProbeResponse
+    {
+        $path = $this->interpolatePath('/backend/v3/api/clusters/instances/{instanceId}/probe', ['instanceId' => $this->serializePathParameter($instanceId, new PathParameterSpec('instanceId', 'simple', false))]);
+        $payload = $body instanceof ProbeClusterInstanceRequest ? $body->toArray() : $body;
+        $result = $this->client->request('POST', $path, [
+            'json' => $payload,
+        ]);
+        return is_array($result) ? ClustersInstancesProbeResponse::fromArray($result) : null;
+    }
+
+    /** Gracefully drain one instance out of routing */
+    public function clustersInstancesDrain(string $instanceId): ?ClustersInstancesDrainResponse
+    {
+        $path = $this->interpolatePath('/backend/v3/api/clusters/instances/{instanceId}/drain', ['instanceId' => $this->serializePathParameter($instanceId, new PathParameterSpec('instanceId', 'simple', false))]);
+        $result = $this->client->request('POST', $path, []);
+        return is_array($result) ? ClustersInstancesDrainResponse::fromArray($result) : null;
+    }
+
+    /** Clear the drain flag and restore routing participation */
+    public function clustersInstancesUndrain(string $instanceId): ?ClustersInstancesUndrainResponse
+    {
+        $path = $this->interpolatePath('/backend/v3/api/clusters/instances/{instanceId}/undrain', ['instanceId' => $this->serializePathParameter($instanceId, new PathParameterSpec('instanceId', 'simple', false))]);
+        $result = $this->client->request('POST', $path, []);
+        return is_array($result) ? ClustersInstancesUndrainResponse::fromArray($result) : null;
+    }
+
+    /** Cordon one instance out of routing without draining it */
+    public function clustersInstancesCordon(string $instanceId): ?ClustersInstancesCordonResponse
+    {
+        $path = $this->interpolatePath('/backend/v3/api/clusters/instances/{instanceId}/cordon', ['instanceId' => $this->serializePathParameter($instanceId, new PathParameterSpec('instanceId', 'simple', false))]);
+        $result = $this->client->request('POST', $path, []);
+        return is_array($result) ? ClustersInstancesCordonResponse::fromArray($result) : null;
+    }
+
+    /** Uncordon one instance back into routing */
+    public function clustersInstancesUncordon(string $instanceId): ?ClustersInstancesUncordonResponse
+    {
+        $path = $this->interpolatePath('/backend/v3/api/clusters/instances/{instanceId}/uncordon', ['instanceId' => $this->serializePathParameter($instanceId, new PathParameterSpec('instanceId', 'simple', false))]);
+        $result = $this->client->request('POST', $path, []);
+        return is_array($result) ? ClustersInstancesUncordonResponse::fromArray($result) : null;
     }
 
     /** Enqueue a peer message to one instance or broadcast to online members */

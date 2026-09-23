@@ -60,6 +60,35 @@ files in this directory:
   agreement is already provided by the manifest, and editing them would invalidate the
   recorded checksums of five migrations.
 
+## Missing header metadata: use the sidecar, never the SQL file
+
+The `-- rollback` / `-- transactional` / `-- lock` / `-- lock_timeout` /
+`-- statement_timeout` keys are required for PostgreSQL migrations (§7.2), but several
+migrations in this directory were authored without them (`0014`–`0017`). Because every
+file here is already recorded by checksum, **the fix is never to edit the `.up.sql`** —
+that is exactly the edit the section above forbids.
+
+The canonical escape hatch is the checksum-external sidecar
+`database/migrations/postgres/metadata.json` (`sourcePolicy: historical-immutable`).
+The layout validator merges it over the header (`{...header, ...sidecar}`), so the
+missing keys are satisfied while the SQL bytes — and therefore every recorded checksum —
+stay untouched. Generate it with the canonical tool rather than by hand:
+
+```powershell
+node ../sdkwork-specs/tools/align-database-migration-metadata-workspace.mjs --workspace ..\ --write
+```
+
+The tool only rewrites `.up.sql` for **untracked** migrations; tracked ones are routed to
+the sidecar. Verify with `pnpm db:validate`, which must pass without touching the SQL.
+
+The aligner is workspace-scoped: `--workspace <dir>` walks every `sdkwork-*` sibling under
+`<dir>`, so point it at the workspace root (`D:\sdkwork-space`), not at a single repository.
+It is idempotent and only adds sidecar entries for migrations whose headers are genuinely
+missing keys, so running it fleet-wide is the normal way to close this class of debt — but
+expect it to touch other repositories too, and review `git status` across them before
+committing. To touch only this repository, import `alignMigrationDirectory()` from the tool
+and call it with `databaseDir` set here, as the incident on 2026-09-21 did.
+
 ## Changing the module identity (`web` → `webserver`, 2026-09-18)
 
 `ADR-20260917-web-framework-table-prefix.md` Amendment 2 renamed the module's tables

@@ -45,6 +45,12 @@ final class ClusterHostResponse
 
     public ?string $instanceCount = null;
 
+    /** `LAN` = same-subnet host with shared-database or direct-API reachability; `TUNNEL` = API-only host reached through the reverse tunnel. */
+    public ?string $joinMode = null;
+
+    /** Tunnel route domain for `TUNNEL` hosts; absent on `LAN` hosts. */
+    public ?string $tunnelRouteDomain = null;
+
     public ?string $createdAt = null;
 
     public ?string $updatedAt = null;
@@ -112,6 +118,12 @@ final class ClusterHostResponse
         $this->instanceCount = array_key_exists('instanceCount', $data)
             ? $data['instanceCount']
             : null;
+        $this->joinMode = array_key_exists('joinMode', $data)
+            ? $data['joinMode']
+            : null;
+        $this->tunnelRouteDomain = array_key_exists('tunnelRouteDomain', $data)
+            ? $data['tunnelRouteDomain']
+            : null;
         $this->createdAt = array_key_exists('createdAt', $data)
             ? $data['createdAt']
             : null;
@@ -147,6 +159,8 @@ final class ClusterHostResponse
             'status' => $this->status,
             'lastHeartbeatAt' => $this->lastHeartbeatAt,
             'instanceCount' => $this->instanceCount,
+            'joinMode' => $this->joinMode,
+            'tunnelRouteDomain' => $this->tunnelRouteDomain,
             'createdAt' => $this->createdAt,
             'updatedAt' => $this->updatedAt,
         ];

@@ -39,6 +39,10 @@
   "dependencies": {
     "@sdkwork/deployments-app-sdk": "workspace:*",
     "@sdkwork/drive-app-sdk": "workspace:*",
+    "@sdkwork/iam-app-sdk": "workspace:*",
+    "@sdkwork/iam-backend-sdk": "workspace:*",
+    "@sdkwork/iam-sdk-adapter": "workspace:*",
+    "@sdkwork/iam-service": "workspace:*",
     "@sdkwork/sdk-common": "workspace:*",
     "react": "catalog:"
   },

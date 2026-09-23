@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import datetime
 import hashlib
 import json
 import os
@@ -872,6 +873,208 @@ def case_static_mime_types(ctx: Context) -> None:
     expect("markdown" in (markdown.header("Content-Type") or ""), f"md Content-Type {markdown.header('Content-Type')!r}")
 
 
+def _http_date(value: str) -> datetime.datetime:
+    """Parse an HTTP-date response header into an aware UTC datetime."""
+    return datetime.datetime.strptime(value, "%a, %d %b %Y %H:%M:%S GMT").replace(
+        tzinfo=datetime.timezone.utc
+    )
+
+
+def _utc_now() -> datetime.datetime:
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
+def case_expires_relative(ctx: Context) -> None:
+    response = http(ctx.main, "/fresh/big.txt")
+    expect(response.status == 200, f"status {response.status}")
+    expect(
+        response.header("Cache-Control") == "max-age=3600",
+        f"Cache-Control {response.header('Cache-Control')!r}",
+    )
+    expires = response.header("Expires")
+    expect(expires is not None, "`expires 1h` must emit an Expires header")
+    delta = (_http_date(expires) - _utc_now()).total_seconds()
+    expect(3595 <= delta <= 3600, f"Expires is {delta}s ahead, expected ~3600")
+
+
+def case_expires_absolute_modes(ctx: Context) -> None:
+    epoch = http(ctx.main, "/epoch/big.txt")
+    expect(
+        epoch.header("Expires") == "Thu, 01 Jan 1970 00:00:01 GMT",
+        f"epoch Expires {epoch.header('Expires')!r}",
+    )
+    expect(
+        epoch.header("Cache-Control") == "no-cache",
+        f"epoch Cache-Control {epoch.header('Cache-Control')!r}",
+    )
+    maxed = http(ctx.main, "/max/big.txt")
+    expect(
+        maxed.header("Expires") == "Thu, 31 Dec 2037 23:55:55 GMT",
+        f"max Expires {maxed.header('Expires')!r}",
+    )
+    expect(
+        maxed.header("Cache-Control") == "max-age=315360000",
+        f"max Cache-Control {maxed.header('Cache-Control')!r}",
+    )
+
+
+def case_expires_negative(ctx: Context) -> None:
+    response = http(ctx.main, "/stale/big.txt")
+    expect(response.status == 200, f"status {response.status}")
+    expect(
+        response.header("Cache-Control") == "no-cache",
+        f"negative expires must be no-cache, got {response.header('Cache-Control')!r}",
+    )
+    expires = response.header("Expires")
+    expect(expires is not None, "a negative expires still writes Expires in the past")
+    delta = (_http_date(expires) - _utc_now()).total_seconds()
+    expect(-3605 <= delta <= -3590, f"Expires is {delta}s ahead, expected ~-3600")
+
+
+def case_expires_daily(ctx: Context) -> None:
+    response = http(ctx.main, "/daily/big.txt")
+    cache_control = response.header("Cache-Control") or ""
+    expect(cache_control.startswith("max-age="), f"Cache-Control {cache_control!r}")
+    max_age = int(cache_control.split("=", 1)[1])
+    expect(0 < max_age <= 86400, f"daily max-age {max_age} must be inside one day")
+    expires = _http_date(response.header("Expires"))
+    expect(
+        (expires.hour, expires.minute, expires.second) == (0, 0, 0),
+        f"`expires @0` must land on midnight, got {expires.isoformat()}",
+    )
+    expect(
+        abs((expires - _utc_now()).total_seconds() - max_age) <= 1,
+        f"max-age {max_age} disagrees with Expires {expires.isoformat()}",
+    )
+
+
+def case_expires_modified(ctx: Context) -> None:
+    # `expires modified` anchors on the document's Last-Modified, not on the
+    # response time. The fixture document is checked in, so its mtime is
+    # permanently in the past and `Last-Modified + 1h` is already stale. nginx
+    # still publishes the computed `Expires` and only downgrades
+    # `Cache-Control` to `no-cache` (ngx_http_set_expires formats the header
+    # before testing `conf->expires_time < 0 || max_age < 0`), which is also
+    # what distinguishes `modified` from `access` here: an `access` policy would
+    # have published `now + 1h` instead of the document's own timestamp.
+    # The fresh branch (positive remaining max-age) is pinned by the
+    # `modified_expires_uses_last_modified_and_can_go_stale` unit test.
+    response = http(ctx.main, "/fromlm/big.txt")
+    expect(response.status == 200, f"status {response.status}")
+    last_modified = response.header("Last-Modified")
+    expect(last_modified is not None, "static response must carry Last-Modified")
+    raw_expires = response.header("Expires")
+    expect(raw_expires is not None, "a `modified` policy must still publish Expires")
+    expected = _http_date(last_modified) + datetime.timedelta(hours=1)
+    expires = _http_date(raw_expires)
+    expect(
+        expires == expected,
+        f"Expires {expires.isoformat()} != Last-Modified + 1h {expected.isoformat()}",
+    )
+    cache_control = response.header("Cache-Control") or ""
+    expect(
+        cache_control == "no-cache",
+        f"a stale `modified` policy must answer no-cache, got {cache_control!r}",
+    )
+    # Cross-check the anchoring: an `access` policy would expire a full hour
+    # after the response, so a now-relative Expires means the mode was lost.
+    now = _utc_now()
+    expect(
+        abs((expires - now).total_seconds()) > 60,
+        f"a `modified` policy must not be relative to the response time ({expires.isoformat()})",
+    )
+
+
+def case_expires_zero_shortcut(ctx: Context) -> None:
+    # nginx returns early when the parsed value is zero (and the mode is not
+    # `daily`): `Expires` is the response time itself and `Cache-Control` is
+    # `max-age=0`, never the ACCESS arithmetic. `expires -0` lands here too,
+    # because the sign is applied after the zero test.
+    before = _utc_now()
+    response = http(ctx.main, "/zero/big.txt")
+    after = _utc_now()
+    expect(response.status == 200, f"status {response.status}")
+    raw_expires = response.header("Expires")
+    expect(raw_expires is not None, "the zero shortcut must publish Expires")
+    expires = _http_date(raw_expires)
+    expect(
+        before - datetime.timedelta(seconds=2)
+        <= expires
+        <= after + datetime.timedelta(seconds=2),
+        f"the zero shortcut must publish the response time, got {expires.isoformat()}",
+    )
+    cache_control = response.header("Cache-Control") or ""
+    expect(cache_control == "max-age=0", f"Cache-Control {cache_control!r}")
+
+
+def case_etag_off_suppresses_generation(ctx: Context) -> None:
+    response = http(ctx.main, "/noetag/big.txt")
+    expect(response.status == 200, f"status {response.status}")
+    expect(
+        not response.has_header("ETag"),
+        f"`etag off` must suppress the entity tag, got {response.header('ETag')!r}",
+    )
+    expect(response.has_header("Last-Modified"), "Last-Modified is independent of etag")
+    # With no tag to compare, a concrete If-None-Match cannot match.
+    tagged = http(
+        ctx.main, "/noetag/big.txt", headers=[("If-None-Match", 'W/"deadbeef-1"')]
+    )
+    expect(tagged.status == 200, f"an unmatched tag must serve the body, got {tagged.status}")
+    # `*` still matches because the representation exists.
+    star = http(ctx.main, "/noetag/big.txt", headers=[("If-None-Match", "*")])
+    expect(star.status == 304, f"`If-None-Match: *` must still answer 304, got {star.status}")
+    # The default is nginx's `etag on`.
+    default = http(ctx.main, "/fresh/big.txt")
+    expect(default.has_header("ETag"), "an undeclared location keeps etag on")
+
+
+def case_if_modified_since_off_ignores_the_condition(ctx: Context) -> None:
+    future = "Fri, 31 Dec 9999 23:59:59 GMT"
+    ignored = http(ctx.main, "/ims-off/big.txt", headers=[("If-Modified-Since", future)])
+    expect(
+        ignored.status == 200,
+        f"`if_modified_since off` must ignore the condition, got {ignored.status}",
+    )
+    # The same header under the default policy (nginx `exact`) must not produce
+    # a 304 either, because the condition differs from Last-Modified.
+    exact = http(ctx.main, "/ims-exact/big.txt", headers=[("If-Modified-Since", future)])
+    expect(
+        exact.status == 200,
+        f"`exact` must not treat a different date as unchanged, got {exact.status}",
+    )
+
+
+def case_if_modified_since_exact_default(ctx: Context) -> None:
+    first = http(ctx.main, "/ims-exact/big.txt")
+    last_modified = first.header("Last-Modified")
+    expect(last_modified is not None, "static response must carry Last-Modified")
+    same = http(
+        ctx.main, "/ims-exact/big.txt", headers=[("If-Modified-Since", last_modified)]
+    )
+    expect(same.status == 304, f"the exact date must answer 304, got {same.status}")
+    older = _http_date(last_modified) - datetime.timedelta(seconds=1)
+    stale = http(
+        ctx.main,
+        "/ims-exact/big.txt",
+        headers=[("If-Modified-Since", older.strftime("%a, %d %b %Y %H:%M:%S GMT"))],
+    )
+    expect(
+        stale.status == 200,
+        f"an older condition must serve the body under `exact`, got {stale.status}",
+    )
+
+
+def case_proxy_response_carries_expires(ctx: Context) -> None:
+    response = http(ctx.main, "/expires-proxy/echo/any", host="proxy.example.com")
+    expect(response.status == 200, f"status {response.status}")
+    expect(
+        response.header("Cache-Control") == "max-age=7200",
+        f"proxied Cache-Control {response.header('Cache-Control')!r}",
+    )
+    delta = (_http_date(response.header("Expires")) - _utc_now()).total_seconds()
+    expect(7195 <= delta <= 7200, f"proxied Expires is {delta}s ahead, expected ~7200")
+
+
 def case_add_header_present(ctx: Context) -> None:
     response = http(ctx.main, "/exact")
     expect(response.header("X-Served-By") == "full-surface", f"X-Served-By {response.header('X-Served-By')!r}")
@@ -1441,6 +1644,16 @@ CASES: list[tuple[str, object]] = [
     ("static.mime-types", case_static_mime_types),
     ("static.add-header", case_add_header_present),
     ("static.secure-link-secret", case_secure_link_secret),
+    ("static.expires-relative", case_expires_relative),
+    ("static.expires-absolute-modes", case_expires_absolute_modes),
+    ("static.expires-negative", case_expires_negative),
+    ("static.expires-daily", case_expires_daily),
+    ("static.expires-modified", case_expires_modified),
+    ("static.expires-zero-shortcut", case_expires_zero_shortcut),
+    ("static.etag-off", case_etag_off_suppresses_generation),
+    ("static.if-modified-since-off", case_if_modified_since_off_ignores_the_condition),
+    ("static.if-modified-since-exact-default", case_if_modified_since_exact_default),
+    ("proxy.expires-applied", case_proxy_response_carries_expires),
     ("proxy.path-query-preserved", case_proxy_path_and_query_preserved),
     ("proxy.encoded-slash-preserved", case_proxy_encoded_slash_preserved),
     ("proxy.pass-uri-replacement", case_proxy_pass_uri_replacement),

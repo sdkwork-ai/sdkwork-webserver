@@ -59,6 +59,12 @@ public class ClusterApi {
         return null;
     }
 
+    /** Publish a desired-state revision to every instance of the cluster */
+    public ClustersSyncResponse clustersSync(String clusterId, PublishClusterSyncRequest body) throws Exception {
+        Object raw = client.post(ApiPaths.backendPath("/clusters/" + serializePathParameter(clusterId, new PathParameterSpec("clusterId", "simple", false)) + "/sync"), body, null, null, "application/json");
+        return client.convertValue(raw, new TypeReference<ClustersSyncResponse>() {});
+    }
+
     /** List cluster hosts with system and network identity */
     public ClustersHostsListResponse clustersHostsList(Integer pageSize, String cursor, String clusterId, Integer status) throws Exception {
         String query = buildQueryString(List.of(
@@ -163,6 +169,45 @@ public class ClusterApi {
         ));
         Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/clusters/instances/" + serializePathParameter(instanceId, new PathParameterSpec("instanceId", "simple", false)) + "/heartbeats"), query));
         return client.convertValue(raw, new TypeReference<ClustersInstancesHeartbeatsListResponse>() {});
+    }
+
+    /** List one instance's heartbeat metric samples for trend charts */
+    public ClustersInstancesMetricsListResponse clustersInstancesMetricsList(String instanceId, Integer limit) throws Exception {
+        String query = buildQueryString(List.of(
+            new QueryParameterSpec("limit", limit, "form", true, false, null)
+        ));
+        Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/clusters/instances/" + serializePathParameter(instanceId, new PathParameterSpec("instanceId", "simple", false)) + "/metrics/history"), query));
+        return client.convertValue(raw, new TypeReference<ClustersInstancesMetricsListResponse>() {});
+    }
+
+    /** Probe one instance's connectivity and record the outcome */
+    public ClustersInstancesProbeResponse clustersInstancesProbe(String instanceId, ProbeClusterInstanceRequest body) throws Exception {
+        Object raw = client.post(ApiPaths.backendPath("/clusters/instances/" + serializePathParameter(instanceId, new PathParameterSpec("instanceId", "simple", false)) + "/probe"), body, null, null, "application/json");
+        return client.convertValue(raw, new TypeReference<ClustersInstancesProbeResponse>() {});
+    }
+
+    /** Gracefully drain one instance out of routing */
+    public ClustersInstancesDrainResponse clustersInstancesDrain(String instanceId) throws Exception {
+        Object raw = client.post(ApiPaths.backendPath("/clusters/instances/" + serializePathParameter(instanceId, new PathParameterSpec("instanceId", "simple", false)) + "/drain"), null);
+        return client.convertValue(raw, new TypeReference<ClustersInstancesDrainResponse>() {});
+    }
+
+    /** Clear the drain flag and restore routing participation */
+    public ClustersInstancesUndrainResponse clustersInstancesUndrain(String instanceId) throws Exception {
+        Object raw = client.post(ApiPaths.backendPath("/clusters/instances/" + serializePathParameter(instanceId, new PathParameterSpec("instanceId", "simple", false)) + "/undrain"), null);
+        return client.convertValue(raw, new TypeReference<ClustersInstancesUndrainResponse>() {});
+    }
+
+    /** Cordon one instance out of routing without draining it */
+    public ClustersInstancesCordonResponse clustersInstancesCordon(String instanceId) throws Exception {
+        Object raw = client.post(ApiPaths.backendPath("/clusters/instances/" + serializePathParameter(instanceId, new PathParameterSpec("instanceId", "simple", false)) + "/cordon"), null);
+        return client.convertValue(raw, new TypeReference<ClustersInstancesCordonResponse>() {});
+    }
+
+    /** Uncordon one instance back into routing */
+    public ClustersInstancesUncordonResponse clustersInstancesUncordon(String instanceId) throws Exception {
+        Object raw = client.post(ApiPaths.backendPath("/clusters/instances/" + serializePathParameter(instanceId, new PathParameterSpec("instanceId", "simple", false)) + "/uncordon"), null);
+        return client.convertValue(raw, new TypeReference<ClustersInstancesUncordonResponse>() {});
     }
 
     /** Enqueue a peer message to one instance or broadcast to online members */

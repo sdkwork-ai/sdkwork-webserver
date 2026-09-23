@@ -9,7 +9,8 @@ key.pem
 !**/logs/.gitkeep
 **/temp/**/*
 !**/temp/**/.gitkeep
-full-surface/nginx.rendered.conf
+# rendered per run by the differential + full-surface runners
+**/nginx.rendered.conf
 full-surface/htpasswd
 full-surface/*.pem
 full-surface/cache/

@@ -10,6 +10,7 @@ public class CertificateOperationResponse {
     private Integer maxAttempts;
     private String nextAttemptAt;
     private String failureCode;
+    private String failureDetail;
     private String createdAt;
     private String updatedAt;
     private String completedAt;
@@ -76,6 +77,14 @@ public class CertificateOperationResponse {
 
     public void setFailureCode(String failureCode) {
         this.failureCode = failureCode;
+    }
+
+    public String getFailureDetail() {
+        return this.failureDetail;
+    }
+
+    public void setFailureDetail(String failureDetail) {
+        this.failureDetail = failureDetail;
     }
 
     public String getCreatedAt() {

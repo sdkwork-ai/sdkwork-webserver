@@ -27,6 +27,12 @@ final class ClusterResponse
 
     public ?string $onlineInstanceCount = null;
 
+    /** Request routing strategy across the cluster's instances. */
+    public ?string $lbStrategy = null;
+
+    /** Service domains auto-routed to this cluster's instances. */
+    public array $servedDomains = [];
+
     public ?string $createdAt = null;
 
     public ?string $updatedAt = null;
@@ -63,6 +69,14 @@ final class ClusterResponse
         $this->onlineInstanceCount = array_key_exists('onlineInstanceCount', $data)
             ? $data['onlineInstanceCount']
             : null;
+        $this->lbStrategy = array_key_exists('lbStrategy', $data)
+            ? $data['lbStrategy']
+            : null;
+        $this->servedDomains = array_key_exists('servedDomains', $data)
+            ? is_array($data['servedDomains'])
+                ? array_values(array_map(static fn($item) => $item, $data['servedDomains']))
+                : []
+            : [];
         $this->createdAt = array_key_exists('createdAt', $data)
             ? $data['createdAt']
             : null;
@@ -89,6 +103,8 @@ final class ClusterResponse
             'hostCount' => $this->hostCount,
             'instanceCount' => $this->instanceCount,
             'onlineInstanceCount' => $this->onlineInstanceCount,
+            'lbStrategy' => $this->lbStrategy,
+            'servedDomains' => array_values(array_map(static fn($item) => $item, $this->servedDomains)),
             'createdAt' => $this->createdAt,
             'updatedAt' => $this->updatedAt,
         ];

@@ -103,6 +103,14 @@ impl WebsiteDeliveryExecutor {
         self.resolution_cache.snapshot().await
     }
 
+    /// The runtime set currently loaded on this node, if any.
+    ///
+    /// For callers that must ask a host-level question before dispatch — e.g.
+    /// whether the surface already serves a host another surface could claim.
+    pub fn current_runtime_set(&self) -> Option<Arc<CompiledWebsiteRuntimeSet>> {
+        self.runtime_registry.current()
+    }
+
     pub async fn execute(
         &self,
         request: WebsiteDeliveryRequest,

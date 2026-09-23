@@ -19,11 +19,13 @@ use crate::{AcmeConfig, AcmeServiceError, AcmeServiceResult};
 
 /// Ceiling on authorizations walked in one order.
 ///
-/// This mirrors the deployment contract's `MAX_CERTIFICATE_IDENTIFIERS`, and is
-/// deliberately a literal rather than a dependency on that contract: the ACME
-/// engine must not know about the deployment domain. A wildcard order spends
-/// one authorization per identifier, so a wildcard plus its apex costs two.
-const MAX_AUTHORIZATIONS_PER_ORDER: usize = 100;
+/// One authorization per identifier, so this is exactly the identifier ceiling
+/// ([`crate::MAX_CERTIFICATE_IDENTIFIERS`]) rather than a second, independently
+/// chosen number. The value is restated as a literal so the ACME engine keeps no
+/// dependency on the deployment contract; a test pins the two together.
+/// A wildcard order spends one authorization per identifier, so a wildcard plus
+/// its apex costs two.
+const MAX_AUTHORIZATIONS_PER_ORDER: usize = crate::MAX_CERTIFICATE_IDENTIFIERS;
 
 /// How an order proves control of its identifiers.
 #[derive(Clone, Copy)]
@@ -330,10 +332,7 @@ async fn withdraw_dns01_presentations(
 }
 
 fn is_wildcard_identifier(hostname: &str) -> bool {
-    hostname
-        .trim_start_matches('.')
-        .to_ascii_lowercase()
-        .starts_with("*.")
+    crate::challenge_policy::is_wildcard_identifier(hostname)
 }
 
 fn challenge_type_label(mode: AcmeChallengeMode<'_>) -> &'static str {
@@ -377,9 +376,36 @@ mod tests {
     }
 
     #[test]
-    fn the_authorization_ceiling_matches_the_deployment_contract() {
-        // Kept as a literal to avoid coupling the engine to the deployment
-        // domain; this test is the reminder that the two must not drift.
-        assert_eq!(MAX_AUTHORIZATIONS_PER_ORDER, 100);
+    fn the_authorization_ceiling_matches_the_identifier_ceiling() {
+        // The engine walks at most one authorization per requested identifier,
+        // so the two bounds must be the same number. Restating it (instead of
+        // importing the deployment contract) is what makes this assertion worth
+        // having: it is the reminder that they cannot drift.
+        assert_eq!(
+            MAX_AUTHORIZATIONS_PER_ORDER,
+            crate::MAX_CERTIFICATE_IDENTIFIERS
+        );
+        assert_eq!(MAX_AUTHORIZATIONS_PER_ORDER, 8);
+    }
+
+    #[test]
+    fn wildcard_detection_is_shared_with_the_challenge_policy() {
+        // One predicate, two consumers: if these ever disagree, a wildcard order
+        // can be routed to HTTP-01 and rejected by the CA instead of by policy.
+        use crate::challenge_policy::is_wildcard_identifier as policy_wildcard;
+        for hostname in [
+            "*.example.com",
+            "*.EXAMPLE.COM",
+            ".*.example.com",
+            "a.*.example.com",
+            "*",
+            "example.com",
+        ] {
+            assert_eq!(
+                is_wildcard_identifier(hostname),
+                policy_wildcard(hostname),
+                "wildcard predicate disagreed for `{hostname}`"
+            );
+        }
     }
 }

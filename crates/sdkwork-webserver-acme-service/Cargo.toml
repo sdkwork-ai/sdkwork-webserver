@@ -27,6 +27,7 @@ rustls-pki-types.workspace = true
 rustls.workspace = true
 rand = "0.8"
 sha1.workspace = true
+sdkwork_deploy_core = { workspace = true }
 sdkwork-utils-rust.workspace = true
 serde.workspace = true
 serde_json.workspace = true

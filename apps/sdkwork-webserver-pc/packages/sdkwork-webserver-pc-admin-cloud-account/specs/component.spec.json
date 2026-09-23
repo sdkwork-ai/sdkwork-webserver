@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "@sdkwork/webserver-pc-admin-cloud-account",
+    "displayName": "SDKWork Webserver PC cloud-account",
+    "version": "0.1.0",
+    "type": "node-package",
+    "root": "sdkwork-webserver/apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-cloud-account",
+    "domain": "infrastructure",
+    "capability": "cloud-account",
+    "surface": "backend-admin",
+    "languages": [
+      "typescript"
+    ],
+    "generated": false,
+    "private": true,
+    "status": "active",
+    "manifests": [
+      "package.json",
+      "specs/component.spec.json"
+    ]
+  },
+  "canonicalSpecs": [
+    {
+      "file": "COMPONENT_SPEC.md",
+      "path": "../../../../../sdkwork-specs/COMPONENT_SPEC.md",
+      "purpose": "Component contract."
+    },
+    {
+      "file": "APP_PC_ARCHITECTURE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_PC_ARCHITECTURE_SPEC.md",
+      "purpose": "PC package and surface boundaries."
+    },
+    {
+      "file": "APP_PC_REACT_UI_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_PC_REACT_UI_SPEC.md",
+      "purpose": "React PC implementation."
+    },
+    {
+      "file": "SDK_SPEC.md",
+      "path": "../../../../../sdkwork-specs/SDK_SPEC.md",
+      "purpose": "Generated SDK consumption."
+    },
+    {
+      "file": "TEST_SPEC.md",
+      "path": "../../../../../sdkwork-specs/TEST_SPEC.md",
+      "purpose": "Verification."
+    }
+  ],
+  "contracts": {
+    "publicExports": [
+      "src/index.ts"
+    ],
+    "runtimeEntrypoints": [],
+    "routeManifest": null,
+    "sdkClients": [],
+    "sdkDependencies": [],
+    "permissionComposition": {
+      "inheritanceMode": "openapi-with-explicit-ui-hints",
+      "routePermissionHints": {
+        "inheritFromOpenApi": true,
+        "overrides": []
+      },
+      "consumerPolicy": {
+        "forbidLocalPermissionCatalogForDependencyDomains": true,
+        "allowFrontendHintsWithoutServerDuplication": true
+      }
+    },
+    "events": [],
+    "configKeys": []
+  },
+  "integration": {
+    "authority": "Root SDKWork specs remain authoritative.",
+    "dependencyPolicy": "Alias only. The page, controller, scope vocabulary, i18n, and the level projection are consumed from @sdkwork/webserver-pc-console-cloud-account, which in turn consumes them from the IAM-owned @sdkwork/iam-pc-console-cloud-account; nothing is re-implemented here.",
+    "sdkPolicy": "This package owns no SDK client and imports no generated SDK. The IAM service facade arrives through the console SDK provider that already wraps the admin route tree."
+  },
+  "verification": {
+    "commands": [
+      "pnpm --dir apps/sdkwork-webserver-pc typecheck",
+      "pnpm --dir apps/sdkwork-webserver-pc test"
+    ]
+  },
+  "metadata": {
+    "managedBy": "tools/materialize_webserver_pc.mjs",
+    "standardVersion": "2026-07-24"
+  }
+}

@@ -11,6 +11,7 @@ name = "sdkwork_webserver_tunnel_core"
 [dependencies]
 chrono = { workspace = true, features = ["serde"] }
 ipnet = { workspace = true, features = ["serde"] }
+sdkwork-utils-rust.workspace = true
 serde = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
 

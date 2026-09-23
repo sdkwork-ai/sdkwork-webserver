@@ -4,6 +4,7 @@
 //! runtime, the operations REST endpoints, and the CLI all call this trait
 //! instead of reaching into gateway or agent internals.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -14,6 +15,36 @@ use sdkwork_webserver_tunnel_core::{
 };
 
 use crate::gateway::GatewayShared;
+
+/// 离线设备的待声明队列上限:每台设备最多排队多少条声明。
+const MAXIMUM_PENDING_DECLARATIONS_PER_DEVICE: usize = 64;
+/// 同时排队的离线设备台数上限。
+///
+/// 队列按设备键入且只在设备连接时排空,从未连接的设备会永久占位——没有
+/// 上限就是认证后可触达的增长向量。已连接设备的声明直接下发,不经过这里。
+const MAXIMUM_PENDING_DECLARATION_DEVICES: usize = 1024;
+
+/// 把一条声明排入离线设备的待声明队列,返回是否被接受。
+///
+/// 双重上限:每设备队列封顶(防单设备刷爆)、设备数封顶(防大量离线设备
+/// 各占一席)。拒绝即返回 `false`,调用方以资源上限错误回给操作者——
+/// 与 PRD §106 的资源限额语义一致。
+async fn queue_pending_declaration(
+    pending: &tokio::sync::Mutex<HashMap<DeviceId, Vec<TunnelRouteTemplate>>>,
+    device_id: &DeviceId,
+    template: &TunnelRouteTemplate,
+) -> bool {
+    let mut pending = pending.lock().await;
+    if !pending.contains_key(device_id) && pending.len() >= MAXIMUM_PENDING_DECLARATION_DEVICES {
+        return false;
+    }
+    let queue = pending.entry(device_id.clone()).or_default();
+    if queue.len() >= MAXIMUM_PENDING_DECLARATIONS_PER_DEVICE {
+        return false;
+    }
+    queue.push(template.clone());
+    true
+}
 use crate::metrics::TunnelMetricsSnapshot;
 
 /// Role a service instance governs.
@@ -101,11 +132,14 @@ impl TunnelService for GatewayTunnelService {
     ) -> Result<RouteRegistration> {
         template.validate()?;
         if !self.shared.sessions.is_connected(device_id) {
-            let mut pending = self.shared.pending_declarations.lock().await;
-            pending
-                .entry(device_id.clone())
-                .or_default()
-                .push(template.clone());
+            let queued =
+                queue_pending_declaration(&self.shared.pending_declarations, device_id, template)
+                    .await;
+            if !queued {
+                return Err(TunnelError::ResourceLimit(
+                    "pending declaration queue is full for this device",
+                ));
+            }
             return Ok(RouteRegistration {
                 route_id: format!("route_{}", template.name),
                 active: false,
@@ -121,11 +155,13 @@ impl TunnelService for GatewayTunnelService {
         // receive them on their next control-plane interaction. The agent
         // activates only templates it recognizes, so a missed match simply
         // expires.
-        let mut pending = self.shared.pending_declarations.lock().await;
-        pending
-            .entry(device_id.clone())
-            .or_default()
-            .push(template.clone());
+        let queued =
+            queue_pending_declaration(&self.shared.pending_declarations, device_id, template).await;
+        if !queued {
+            return Err(TunnelError::ResourceLimit(
+                "pending declaration queue is full for this device",
+            ));
+        }
         Ok(RouteRegistration {
             route_id: format!("route_{}", template.name),
             active: false,

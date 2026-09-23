@@ -22,6 +22,8 @@ public class ClusterHostResponse {
     private Integer status;
     private String lastHeartbeatAt;
     private String instanceCount;
+    private String joinMode;
+    private String tunnelRouteDomain;
     private String createdAt;
     private String updatedAt;
 
@@ -175,6 +177,22 @@ public class ClusterHostResponse {
 
     public void setInstanceCount(String instanceCount) {
         this.instanceCount = instanceCount;
+    }
+
+    public String getJoinMode() {
+        return this.joinMode;
+    }
+
+    public void setJoinMode(String joinMode) {
+        this.joinMode = joinMode;
+    }
+
+    public String getTunnelRouteDomain() {
+        return this.tunnelRouteDomain;
+    }
+
+    public void setTunnelRouteDomain(String tunnelRouteDomain) {
+        this.tunnelRouteDomain = tunnelRouteDomain;
     }
 
     public String getCreatedAt() {

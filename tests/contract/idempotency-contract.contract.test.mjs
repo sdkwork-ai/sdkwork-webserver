@@ -19,9 +19,14 @@ const surfaces = [
     authority: 'apis/backend-api/web/sdkwork-webserver-backend-api.openapi.json',
     manifest: 'sdks/_route-manifests/backend-api/sdkwork-routes-webserver-backend-api.route-manifest.json',
     typescriptApi: 'sdks/sdkwork-webserver-backend-sdk/sdkwork-webserver-backend-sdk-typescript/generated/server-openapi/src/api',
-    // 33 marked operations after the webserver_configs update (PUT) idempotency
-    // marking was added to apis/backend-api/web/openapi.yaml and materialized.
-    expectedIdempotentOperations: 33,
+    // Reviewed count, not an incidental one: it moves only when a command
+    // operation is marked idempotent on purpose. Every marked operation is then
+    // required to carry a required, bounded `Idempotency-Key` in both the source
+    // and the authority, and to be marked in the route manifest, so raising this
+    // number cannot be done without the marking being complete.
+    // 41 after the cluster ops routes (sync/probe/metrics-history/drain/undrain/
+    // cordon/uncordon) were added and marked.
+    expectedIdempotentOperations: 41,
   },
   {
     name: 'internal-api',
@@ -29,7 +34,9 @@ const surfaces = [
     authority: 'apis/internal-api/web/sdkwork-webserver-internal-api.openapi.json',
     manifest: 'sdks/_route-manifests/internal-api/sdkwork-routes-webserver-internal-api.route-manifest.json',
     typescriptApi: 'sdks/sdkwork-webserver-internal-sdk/sdkwork-webserver-internal-sdk-typescript/generated/server-openapi/src/api',
-    expectedIdempotentOperations: 2,
+    // 5: register, heartbeat, sync/ack, runtime-assignment observations, and the
+    // per-node runtime-assignment write.
+    expectedIdempotentOperations: 5,
   },
 ];
 

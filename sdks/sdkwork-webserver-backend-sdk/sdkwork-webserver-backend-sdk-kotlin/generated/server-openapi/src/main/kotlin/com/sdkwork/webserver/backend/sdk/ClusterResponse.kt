@@ -11,6 +11,8 @@ data class ClusterResponse(
     val hostCount: String? = null,
     val instanceCount: String? = null,
     val onlineInstanceCount: String? = null,
+    val lbStrategy: String? = null,
+    val servedDomains: List<String>? = null,
     val createdAt: String? = null,
     val updatedAt: String? = null
 )

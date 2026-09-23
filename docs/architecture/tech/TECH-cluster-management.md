@@ -133,6 +133,26 @@ and exposes it on the admin surface for availability monitoring; the liveness sw
 marks silent members offline and instances re-joining after recovery are re-registered
 idempotently by `(machine code, pid)`.
 
+### Node-side wiring status (open item, v2)
+
+The registry half of the join/sync plane is complete and the node-side
+membership client (`cluster_member.rs`) is complete and covered end to end on
+**both** transports, but **no host binary spawns it yet** — every
+`ClusterMember::spawn` call site is a test. Recording the exact gap so nobody
+reads "join modes + API-only sync plane v2" above as "a node can be joined
+today":
+
+| Missing piece | Evidence |
+| --- | --- |
+| A production caller | `grep -rn "ClusterMember::spawn" crates/ \| grep -v target` → only `tests/cluster_member_e2e.rs`. |
+| The node's transport address face | No authored env anywhere supplies the admin internal API authority (`LAN`) or the gateway endpoint + route domain (`TUNNEL`), and no env selects the join mode. `ClusterMemberIdentity` carries `join_mode` / `tunnel_route_domain` / `tunnel_endpoint` with no environment behind them. |
+| The credential's presenter half | `SDKWORK_WEBSERVER_CLUSTER_REGISTRATION_TOKEN` (`wreg_…`) is **validated** server-side (`cluster_ops.rs::try_authenticate_cluster_registration_token`, constant-time) but no node-side reader passes it into `ClusterMember::spawn(registration_token, …)`. The variable is documented in `etc/topology/standalone.*.env` as the remote-host join credential; only the verifier exists today. |
+| The `SyncApplier` payload contract | `webserver_cluster_sync_revision.payload` is an arbitrary JSON blob an operator publishes through `POST /backend/v3/api/clusters/{clusterId}/sync`. The intended shape of `config` vs `applications` is specified nowhere, so a node applier has nothing to interpret. A node must not acknowledge `IN_SYNC` for a payload it did not apply — the honest outcome for an undefined payload is a refusal, not a silent pass. Note this plane is *not* the deployment sync plane: `AgentSyncResponse` carries nginx configs + certificates only, so reusing the node daemon's existing ingestion would be the only fork-free answer for `config`, and there is still no counterpart for `applications`. |
+
+Until these are decided, the node daemon runs the deployment sync plane only and
+never joins a cluster; the in-process self-report path (§2) is what populates
+the registry in practice.
+
 ## 8. Auto-discovery and auto-routing (cluster routing runtime)
 
 New crate `sdkwork-webserver-cluster`: the discovery/routing runtime, kept
@@ -180,7 +200,7 @@ migration `0016_webserver_cluster_instance_ops`):
 | Labels | `labels` JSONB, `PATCH .../instances/{id}` | Free-form operator metadata |
 | Restart tracking | `restart_count` / `last_restarted_at` | Auto-incremented when registration observes a `process_started_at` change (auto-recovery evidence, flapping detection input) |
 | Active probes + auto-eject/recover | `probe_failures` / `ejected_at` / `probe_url`, `ClusterProbeWrite` port | 3 consecutive probe failures auto-eject (status error, `INSTANCE_AUTO_EJECTED` event); any success auto-recovers (`INSTANCE_AUTO_RECOVERED`) |
-| Ops directives | heartbeat response `ops { routingEnabled, drainRequested }` | Registry-driven commands the node obeys on every heartbeat |
+| Ops directives | heartbeat response `ops { routingEnabled, drainRequested }` | Registry-driven commands the node obeys on every heartbeat. Cordon only changes what the registry routes here; a drain request makes the node finish in-flight work, report `drain_complete`, and stop reporting |
 
 All admin actions are permission-gated (`web.cluster.write`) and emit
 lifecycle events; the routing overlay (`sdkwork-webserver-cluster`) honors
@@ -226,7 +246,16 @@ Detail-page endpoints:
   `{ healthy, latencyMs, failures, ejected, recovered }`;
 - `POST /internal/v3/api/web/cluster/instances/drain_complete` — node-side
   drain completion acknowledgment (closes the drain loop: flags cleared,
-  instance marked stopped, `INSTANCE_DRAIN_COMPLETED` event).
+  instance marked stopped, `INSTANCE_DRAIN_COMPLETED` event). Both node paths
+  send it. The remote `cluster_member.rs` loop waits for `SyncApplier::drain`
+  to report in-flight work finished, then posts the report before it leaves the
+  membership loop. The in-process self-report loop posts it and then stops.
+  Either way the node stops heartbeating afterwards: every heartbeat carries
+  `status: 1`, so one more tick would put a stopped instance back online and
+  leave the operator's drain open. The in-process gateway stops through the
+  same shutdown path an operator signal uses (`runtime_shutdown` →
+  `ShutdownReason::ClusterDrain`), so the data plane retires in-flight work
+  within `drainTimeoutMs` instead of cutting it.
 
 ## 10. Cloud-account DNS association (complete unattended renewal)
 

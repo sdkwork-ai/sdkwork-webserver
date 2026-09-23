@@ -14,8 +14,8 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::watch;
 
 use sdkwork_webserver_tunnel_core::{
-    Device, DeviceId, DevicePlatform, Result, RouteId, RouteMatcher, RoutePolicy, SessionId,
-    TunnelError, TunnelProtocolKind, TunnelRoute, TunnelTarget,
+    parse_allowed_ips, Device, DeviceId, DevicePlatform, Result, RouteId, RouteMatcher,
+    RoutePolicy, SessionId, TunnelError, TunnelProtocolKind, TunnelRoute, TunnelTarget,
 };
 use sdkwork_webserver_tunnel_protocol::{
     frame, AuthResult, Authenticate, ControlMessage, ErrorCode, Hello, ProtocolVersion,
@@ -355,25 +355,25 @@ async fn handle_register(
     // back to the agent synchronously.
     match (route_protocol, port) {
         (TunnelProtocolKind::Tcp, Some(port)) => {
-        match tokio::net::TcpListener::bind(("0.0.0.0", port)).await {
-            Ok(listener) => {
-                shared
-                    .tcp
-                    .lock()
-                    .expect("tcp listener set lock is never held across awaits")
-                    .serve(shared, port, route_id.clone(), listener);
+            match tokio::net::TcpListener::bind(("0.0.0.0", port)).await {
+                Ok(listener) => {
+                    shared
+                        .tcp
+                        .lock()
+                        .expect("tcp listener set lock is never held across awaits")
+                        .serve(shared, port, route_id.clone(), listener);
+                }
+                Err(error) => {
+                    shared.registry.unregister(&route_id);
+                    shared.metrics.record_route_change(-1);
+                    return ControlMessage::RegisterRouteResult(RegisterRouteResult {
+                        route_id: route_id.to_string(),
+                        ok: false,
+                        public_url: None,
+                        error: Some(format!("gateway port {port} bind failed: {error}")),
+                    });
+                }
             }
-            Err(error) => {
-                shared.registry.unregister(&route_id);
-                shared.metrics.record_route_change(-1);
-                return ControlMessage::RegisterRouteResult(RegisterRouteResult {
-                    route_id: route_id.to_string(),
-                    ok: false,
-                    public_url: None,
-                    error: Some(format!("gateway port {port} bind failed: {error}")),
-                });
-            }
-        }
         }
         (TunnelProtocolKind::Udp, Some(port)) => {
             match tokio::net::UdpSocket::bind(("0.0.0.0", port)).await {
@@ -437,7 +437,8 @@ fn handle_unregister(
         return reply(false);
     };
     if let Some(port) = removed.route.matcher.as_port() {
-        let datagram = removed.route.protocol == sdkwork_webserver_tunnel_core::TunnelProtocolKind::Udp;
+        let datagram =
+            removed.route.protocol == sdkwork_webserver_tunnel_core::TunnelProtocolKind::Udp;
         if datagram {
             shared
                 .udp
@@ -482,6 +483,11 @@ async fn flush_pending_declarations(
                 domain: declaration.domain.clone(),
                 port: declaration.port,
                 allow_public: declaration.policy_or_default().allow_public,
+                allowed_ips: {
+                    let policy = declaration.policy_or_default();
+                    (!policy.allowed_ips.is_empty())
+                        .then(|| policy.allowed_ips.iter().map(ToString::to_string).collect())
+                },
             });
         if write_message(control, &message).await.is_err() {
             return;
@@ -536,8 +542,9 @@ fn validate_registration(
     };
     let matcher = match (protocol, request.domain.as_deref(), request.port) {
         (TunnelProtocolKind::Http, Some(domain), _) => RouteMatcher::domain(domain)?,
-        (TunnelProtocolKind::Tcp, _, Some(port))
-        | (TunnelProtocolKind::Udp, _, Some(port)) => RouteMatcher::Port(port),
+        (TunnelProtocolKind::Tcp, _, Some(port)) | (TunnelProtocolKind::Udp, _, Some(port)) => {
+            RouteMatcher::Port(port)
+        }
         _ => {
             return Err(TunnelError::InvalidRoute(
                 "route matcher does not match its protocol".to_owned(),
@@ -547,9 +554,16 @@ fn validate_registration(
     if let Some(domain) = matcher.as_domain() {
         validate_domain_suffixes(shared, domain)?;
     }
-    let target = TunnelTarget::parse_tcp(&request.target)?;
+    let target = TunnelTarget::parse_for_protocol(protocol, &request.target)?;
+    let allowed_ips = request
+        .allowed_ips
+        .as_deref()
+        .map(parse_allowed_ips)
+        .transpose()?
+        .unwrap_or_default();
     let policy = RoutePolicy {
         allow_public: request.allow_public,
+        allowed_ips,
         ..RoutePolicy::private()
     };
     let route = TunnelRoute::new(

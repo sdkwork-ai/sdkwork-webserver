@@ -7,4 +7,6 @@ type UpdateClusterRequest struct {
 	Status int `json:"status"`
 	HeartbeatIntervalSeconds int `json:"heartbeatIntervalSeconds"`
 	OfflineThresholdSeconds int `json:"offlineThresholdSeconds"`
+	LbStrategy string `json:"lbStrategy"`
+	ServedDomains []string `json:"servedDomains"`
 }

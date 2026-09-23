@@ -787,6 +787,16 @@ pub struct ListenerConfig {
     pub allow_plaintext_http: bool,
 }
 
+/// The reserved ACME HTTP-01 challenge namespace (RFC 8555 §8.3).
+///
+/// This is a protocol constant, not a routing preference: the certificate
+/// worker writes `<webroot>/.well-known/acme-challenge/<token>` and the data
+/// plane serves exactly that path with narrow precedence. It is defined once
+/// here so the nginx-compatible materializer, the compiled model, and the data
+/// plane cannot drift apart on a string that silently breaks issuance when it
+/// changes.
+pub const ACME_HTTP_01_CHALLENGE_PREFIX: &str = "/.well-known/acme-challenge/";
+
 /// Narrow-precedence ACME HTTP-01 challenge serving for a listener.
 ///
 /// When configured, the listener serves only the exact
@@ -987,6 +997,33 @@ pub enum TlsVersion {
     Tls12,
     #[serde(rename = "tls1.3")]
     Tls13,
+}
+
+impl TlsVersion {
+    /// Serialized spelling used by `TlsPolicyConfig` (`minimumVersion` /
+    /// `maximumVersion`) and by the nginx `ssl_protocols` materializer.
+    ///
+    /// Derived from the serde rename so a future variant cannot be added
+    /// without this arm failing to compile.
+    pub fn wire(self) -> &'static str {
+        match self {
+            TlsVersion::Tls12 => "tls1.2",
+            TlsVersion::Tls13 => "tls1.3",
+        }
+    }
+
+    /// The platform TLS floor (`PRD-https-and-certificates.md` §2: TLS 1.0/1.1
+    /// are forbidden, TLS 1.2 is required).
+    pub const PLATFORM_FLOOR: TlsVersion = TlsVersion::Tls12;
+
+    /// The platform TLS ceiling: the newest version the rustls core speaks.
+    pub const PLATFORM_CEILING: TlsVersion = TlsVersion::Tls13;
+
+    /// The platform default window: TLS 1.2 through 1.3, matching
+    /// `SDKWORK_WEBSERVER_SPEC.md` §10 (`protocols` default) and
+    /// `NGINX_SPEC.md` §3 (generated configs enable TLSv1.2 and TLSv1.3).
+    pub const PLATFORM_DEFAULT_WINDOW: (TlsVersion, TlsVersion) =
+        (TlsVersion::Tls12, TlsVersion::Tls13);
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1507,6 +1544,10 @@ pub struct VirtualHostConfig {
     /// error page may itself be mapped again (bounded hops).
     #[serde(default)]
     pub recursive_error_pages: bool,
+    /// Server-level nginx `expires` / `etag` / `if_modified_since` resolved
+    /// for this host; `None` inherits the http-level (app-wide) policy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_policy: Option<CachePolicyConfig>,
 }
 
 /// One nginx `error_page <codes…> [=response] uri;` mapping.
@@ -1574,6 +1615,108 @@ fn default_hsts_max_age_seconds() -> u32 {
     31_536_000
 }
 
+/// nginx response freshness policy: `expires`, `etag`, `if_modified_since`.
+///
+/// Each directive carries its own nginx inheritance chain (http → server →
+/// location, replace-on-declare), so materialization resolves the three
+/// directives *separately* and stores the complete effective triple. A
+/// `None` on the route/virtual host therefore means "nothing declared at this
+/// level or above", not "expires off".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CachePolicyConfig {
+    /// `expires` mode (`ngx_http_parse_expires`).
+    #[serde(default)]
+    pub expires: ExpiresMode,
+    /// Signed `expires` time argument in seconds. For [`ExpiresMode::Daily`]
+    /// this is the time of day as seconds after midnight (`0..=86400`).
+    #[serde(default)]
+    pub expires_seconds: i64,
+    /// nginx `etag on|off`; `true` (the nginx default) emits an entity tag
+    /// for static files, `false` suppresses it.
+    #[serde(default = "default_true")]
+    pub etag: bool,
+    /// nginx `if_modified_since exact|before|off`.
+    #[serde(default)]
+    pub if_modified_since: IfModifiedSinceMode,
+}
+
+impl Default for CachePolicyConfig {
+    fn default() -> Self {
+        Self {
+            expires: ExpiresMode::Off,
+            expires_seconds: 0,
+            etag: true,
+            if_modified_since: IfModifiedSinceMode::Exact,
+        }
+    }
+}
+
+/// nginx `expires` modes as parsed by `ngx_http_parse_expires`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ExpiresMode {
+    /// `expires off` (nginx default): leave `Expires`/`Cache-Control` alone.
+    #[default]
+    Off,
+    /// `expires epoch`: `Expires: Thu, 01 Jan 1970 00:00:01 GMT` + `no-cache`.
+    Epoch,
+    /// `expires max`: `Expires: Thu, 31 Dec 2037 23:55:55 GMT` + 10-year max-age.
+    Max,
+    /// `expires @<time>`: the next occurrence of a wall-clock time of day.
+    Daily,
+    /// `expires <time>`: relative to the time the response is produced.
+    Access,
+    /// `expires modified <time>`: relative to the response `Last-Modified`.
+    Modified,
+}
+
+/// nginx `if_modified_since` modes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum IfModifiedSinceMode {
+    /// `exact` (nginx default): `If-Modified-Since` must equal `Last-Modified`.
+    #[default]
+    Exact,
+    /// `before`: a `Last-Modified` not newer than the condition is unchanged.
+    Before,
+    /// `off`: ignore the request `If-Modified-Since` entirely.
+    Off,
+}
+
+impl ExpiresMode {
+    /// Stable wire name, shared by every configuration surface and by the
+    /// serialized `CachePolicyConfig`. Single-sourcing the spelling means a
+    /// new mode cannot be added without a compile error here.
+    pub fn wire(self) -> &'static str {
+        match self {
+            ExpiresMode::Off => "off",
+            ExpiresMode::Epoch => "epoch",
+            ExpiresMode::Max => "max",
+            ExpiresMode::Daily => "daily",
+            ExpiresMode::Access => "access",
+            ExpiresMode::Modified => "modified",
+        }
+    }
+
+    /// Whether the mode rewrites `Expires`/`Cache-Control` at all. `off` is
+    /// nginx's default and leaves the deployment-level headers untouched.
+    pub fn is_declared(self) -> bool {
+        !matches!(self, ExpiresMode::Off)
+    }
+}
+
+impl IfModifiedSinceMode {
+    /// Stable wire name, shared by every configuration surface.
+    pub fn wire(self) -> &'static str {
+        match self {
+            IfModifiedSinceMode::Exact => "exact",
+            IfModifiedSinceMode::Before => "before",
+            IfModifiedSinceMode::Off => "off",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RouteConfig {
@@ -1611,6 +1754,10 @@ pub struct RouteConfig {
     /// replace the host-level set for this route (nginx inheritance).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub error_pages: Vec<ErrorPageConfig>,
+    /// Location-level nginx `expires` / `etag` / `if_modified_since`
+    /// resolved for this route; `None` inherits the host/app policy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_policy: Option<CachePolicyConfig>,
 }
 
 /// nginx `secure_link` module modes (ngx_http_secure_link_module).

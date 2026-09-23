@@ -439,6 +439,7 @@ tables:
       lease_expires_at: { type: instant, required: false }
       fencing_token: { type: int64, required: true }
       failure_code: { type: string, required: false }
+      failure_detail: { type: string, required: false }
       idempotency_key_hash: { type: string, required: false }
       request_sha256: { type: string, required: true }
       created_at: { type: instant, required: true }
@@ -459,6 +460,7 @@ tables:
       - { name: chk_webserver_certificate_operation_fencing, type: check }
       - { name: chk_webserver_certificate_operation_hashes, type: check }
       - { name: chk_webserver_certificate_operation_lease, type: check }
+      - { name: chk_webserver_certificate_operation_failure_detail, type: check }
       - { name: chk_webserver_certificate_operation_completion, type: check }
     indexes:
       - { name: uk_webserver_certificate_operation_uuid, columns: [uuid], unique: true }

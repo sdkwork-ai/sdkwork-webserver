@@ -2,10 +2,10 @@ use std::{error::Error, io, path::PathBuf};
 
 use sdkwork_api_webserver_standalone_gateway::{
     build_router, configure_packaged_runtime_roots_from_env,
-    issue_credential_entry_bootstrap_token_to_file, reset_admin_account_from_env,
-    run_data_plane_from_config_with_operations_until, run_data_plane_with_operations_until,
-    run_database_migrate_only, validate_adaptive_app_shell_from_env, AdminResetOptions,
-    DataPlaneOperationsConfig,
+    issue_credential_entry_bootstrap_token_to_file, reconcile_served_domains_at_startup,
+    reset_admin_account_from_env, run_data_plane_from_config_with_operations_until,
+    run_data_plane_with_operations_until, run_database_migrate_only,
+    validate_adaptive_app_shell_from_env, AdminResetOptions, DataPlaneOperationsConfig,
 };
 use sdkwork_webserver_core::{
     compile_merged_imports_app, imported_certificate_names, resolve_nginx_sidecar_path,
@@ -391,6 +391,13 @@ async fn run_management_plane() -> MainResult<()> {
     let app = build_router()
         .await
         .map_err(|error| io::Error::other(format!("management bootstrap failed: {error}")))?;
+    // The edge is the only component that knows which hostnames it serves, so
+    // the domain inventory is reconciled here, from the effective sidecar and
+    // module-import configuration, once the database is up. It runs before the
+    // listener binds so the first `/backend/v3/api/root_domains` read already
+    // sees the inventory, and it never fails the boot: a domain row is
+    // bookkeeping, and refusing to serve over it would be an outage.
+    reconcile_served_domains_at_startup().await;
     let listener = tokio::net::TcpListener::bind(&bind_address).await?;
     tracing::info!(address = %bind_address, "management listener started");
     axum::serve(listener, app)
@@ -590,9 +597,20 @@ async fn shutdown_signal() {
     #[cfg(not(unix))]
     let terminate = std::future::pending::<()>();
 
+    // The cluster registry can end this process too: an operator draining the
+    // instance makes the heartbeat answer `ops.drainRequested`, and the
+    // self-report loop raises this trigger. Routing it here means a drain
+    // retires in-flight work through the very same data-plane drain an
+    // operator signal uses, instead of racing a second shutdown path.
+    let cluster_drain = async {
+        let reason = sdkwork_api_webserver_assembly::wait_for_shutdown().await;
+        tracing::info!(?reason, "cluster registry requested this instance to drain");
+    };
+
     tokio::select! {
         () = ctrl_c => {},
         () = terminate => {},
+        () = cluster_drain => {},
     }
 
     tracing::info!("shutdown signal received");

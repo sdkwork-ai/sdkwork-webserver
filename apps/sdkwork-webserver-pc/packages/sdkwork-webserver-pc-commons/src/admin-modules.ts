@@ -21,10 +21,26 @@ export interface WebserverMenuSectionDefinition {
   resources: readonly WebserverResourceKey[];
 }
 
-export type WebserverMenuSectionId = "aiEcosystem";
+export type WebserverMenuSectionId = "delivery" | "aiEcosystem";
 
 /** Sidebar section order is the declaration order of this array. */
 export const MENU_SECTIONS: readonly WebserverMenuSectionDefinition[] = [
+  {
+    id: "delivery",
+    labelKey: "menuSection.delivery",
+    // Applications (bridged from sdkwork-deployments) plus the two domain menus
+    // are one group rather than five scattered entries: the per-user pair the
+    // tenant console bridges from the Deployments plane, and the tenant-level
+    // pair the operations surface reads off the Web Server's own planes. Both
+    // surfaces supply all three keys — what differs is the ownership level the
+    // pages behind them cover — and the section is what keeps them adjacent: a
+    // module's `order` only ranks it against the other entries of its surface,
+    // so `certificates` (the second entry of its module) would otherwise sort
+    // below every first entry on the operations surface and land after Audit.
+    // Declared before `aiEcosystem` because the AI assets are the bottom group
+    // and this one leads the list.
+    resources: ["apps", "domains", "certificates"],
+  },
   {
     id: "aiEcosystem",
     labelKey: "menuSection.aiEcosystem",

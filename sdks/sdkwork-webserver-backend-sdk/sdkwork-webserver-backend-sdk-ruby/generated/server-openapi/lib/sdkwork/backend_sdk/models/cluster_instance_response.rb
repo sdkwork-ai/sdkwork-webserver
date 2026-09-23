@@ -2,7 +2,7 @@ module Sdkwork
   module BackendSdk
     module Models
       class ClusterInstanceResponse
-              attr_accessor :id, :cluster_id, :host_id, :host_name, :name, :role, :environment, :process_pid, :process_started_at, :bind_host, :bind_port, :public_endpoint, :build_version, :status, :health_state, :last_heartbeat_at, :last_online_at, :uptime_seconds, :metrics, :created_at, :updated_at
+              attr_accessor :id, :cluster_id, :host_id, :host_name, :name, :role, :environment, :process_pid, :process_started_at, :bind_host, :bind_port, :public_endpoint, :build_version, :status, :health_state, :last_heartbeat_at, :last_online_at, :uptime_seconds, :metrics, :join_mode, :quality_score, :desired_config_revision, :applied_config_revision, :desired_applications_revision, :applied_applications_revision, :sync_status, :routing_enabled, :draining, :ejected, :restart_count, :labels, :routing_weight, :maintenance_note, :probe_failures, :probe_url, :created_at, :updated_at
 
               def initialize(attributes = {})
                 attributes = (attributes || {}).transform_keys(&:to_s)
@@ -25,6 +25,22 @@ module Sdkwork
                 @last_online_at = attributes['lastOnlineAt']
                 @uptime_seconds = attributes['uptimeSeconds']
                 @metrics = attributes['metrics'].is_a?(Hash) ? attributes['metrics'] : {}
+                @join_mode = attributes['joinMode']
+                @quality_score = attributes['qualityScore']
+                @desired_config_revision = attributes['desiredConfigRevision']
+                @applied_config_revision = attributes['appliedConfigRevision']
+                @desired_applications_revision = attributes['desiredApplicationsRevision']
+                @applied_applications_revision = attributes['appliedApplicationsRevision']
+                @sync_status = attributes['syncStatus']
+                @routing_enabled = attributes['routingEnabled']
+                @draining = attributes['draining']
+                @ejected = attributes['ejected']
+                @restart_count = attributes['restartCount']
+                @labels = attributes['labels'].is_a?(Hash) ? attributes['labels'].transform_values { |item| item } : {}
+                @routing_weight = attributes['routingWeight']
+                @maintenance_note = attributes['maintenanceNote']
+                @probe_failures = attributes['probeFailures']
+                @probe_url = attributes['probeUrl']
                 @created_at = attributes['createdAt']
                 @updated_at = attributes['updatedAt']
               end
@@ -56,6 +72,22 @@ module Sdkwork
                   'lastOnlineAt' => @last_online_at,
                   'uptimeSeconds' => @uptime_seconds,
                   'metrics' => @metrics,
+                  'joinMode' => @join_mode,
+                  'qualityScore' => @quality_score,
+                  'desiredConfigRevision' => @desired_config_revision,
+                  'appliedConfigRevision' => @applied_config_revision,
+                  'desiredApplicationsRevision' => @desired_applications_revision,
+                  'appliedApplicationsRevision' => @applied_applications_revision,
+                  'syncStatus' => @sync_status,
+                  'routingEnabled' => @routing_enabled,
+                  'draining' => @draining,
+                  'ejected' => @ejected,
+                  'restartCount' => @restart_count,
+                  'labels' => @labels.is_a?(Hash) ? @labels.transform_values { |item| item } : {},
+                  'routingWeight' => @routing_weight,
+                  'maintenanceNote' => @maintenance_note,
+                  'probeFailures' => @probe_failures,
+                  'probeUrl' => @probe_url,
                   'createdAt' => @created_at,
                   'updatedAt' => @updated_at,
                 }

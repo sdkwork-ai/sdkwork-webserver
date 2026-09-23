@@ -21,7 +21,8 @@ use chrono::Utc;
 use sdkwork_intelligence_webserver_service::WebService;
 use sdkwork_utils_rust::crypto::sha256_hash;
 use sdkwork_webserver_contract::{
-    ClusterHeartbeatRequest, ClusterRegistrationRequest, CLUSTER_ENVIRONMENTS,
+    ClusterHeartbeatRequest, ClusterInstanceOpsDirectives, ClusterRegistrationRequest,
+    CLUSTER_ENVIRONMENTS,
 };
 use tokio::task::JoinHandle;
 
@@ -291,6 +292,77 @@ fn resident_memory_mb() -> Option<i64> {
     None
 }
 
+/// What an `ops` directive asks this node to do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OpsAction {
+    /// Keep reporting; the directive only describes how the registry treats
+    /// this instance.
+    Continue,
+    /// Report drain completion, then stop.
+    Drain,
+}
+
+/// The node's reading of an `ops` directive.
+///
+/// Cordon (`routingEnabled = false`) changes what the *registry* routes here,
+/// never what the node does: a cordoned instance keeps serving and keeps
+/// reporting. Only an explicit drain request ends this instance's service —
+/// treating cordon as a stop would take an instance the operator only wanted
+/// out of the balancing pool offline.
+const fn ops_action(ops: &ClusterInstanceOpsDirectives) -> OpsAction {
+    if ops.drain_requested {
+        OpsAction::Drain
+    } else {
+        OpsAction::Continue
+    }
+}
+
+/// Obeys the registry's per-instance operations directives
+/// (`docs/architecture/tech/TECH-cluster-management.md`:183) and reports
+/// whether they end this instance's service.
+///
+/// `drainRequested` is the node half of the graceful-drain loop: the operator
+/// marked the instance draining, the registry already stopped routing new work
+/// to it, and the node must close the loop. The completion report is written
+/// **before** the stop is requested, so a process tearing down mid-drain can
+/// never leave the operator's drain open. Unreported completion is safe:
+/// the registry keeps answering `drainRequested` on every heartbeat until it
+/// sees the report, and `record_cluster_drain_complete` is idempotent.
+async fn obey_ops_directives(
+    service: &Arc<WebService>,
+    instance_uuid: &str,
+    ops: ClusterInstanceOpsDirectives,
+) -> bool {
+    if !ops.routing_enabled {
+        tracing::info!(
+            instance = %instance_uuid,
+            draining = ops.drain_requested,
+            "cluster routing is disabled for this instance (cordoned or draining)"
+        );
+    }
+    if ops_action(&ops) == OpsAction::Continue {
+        return false;
+    }
+    if let Err(error) = service.cluster_drain_complete(instance_uuid).await {
+        tracing::warn!(
+            instance = %instance_uuid,
+            error = ?error,
+            "cluster drain-complete report failed; staying registered to retry"
+        );
+        return false;
+    }
+    tracing::info!(
+        instance = %instance_uuid,
+        "cluster drain complete reported; stopping this instance"
+    );
+    // Stop through the same trigger an operator signal uses, so the data plane
+    // retires in-flight work within `drainTimeoutMs` instead of cutting it.
+    crate::runtime_shutdown::request_shutdown(
+        crate::runtime_shutdown::ShutdownReason::ClusterDrain,
+    );
+    true
+}
+
 /// Long-running self-report task handle. Detached by design: the owner is the
 /// gateway process, and the loop retries with bounded backoff.
 pub fn spawn_cluster_self_report_task(
@@ -408,6 +480,19 @@ async fn run_self_report_loop(service: Arc<WebService>, config: ClusterSelfRepor
                             "delivered cluster peer messages"
                         );
                     }
+                    if let Some(ops) = response.ops {
+                        if obey_ops_directives(&service, uuid, ops).await {
+                            // The instance is recorded as stopped, so the loop
+                            // must not heartbeat again: every heartbeat carries
+                            // `status: 1`, which would put a stopped instance
+                            // back online and leave the operator's drain open
+                            // forever. The process itself leaves through the
+                            // shutdown path requested above, where the data
+                            // plane retires in-flight work within
+                            // `drainTimeoutMs`.
+                            return;
+                        }
+                    }
                 }
                 Err(sdkwork_webserver_contract::WebServiceError::NotFound(_)) => {
                     // The registry row disappeared (operator removal or drift
@@ -445,5 +530,43 @@ async fn run_self_report_loop(service: Arc<WebService>, config: ClusterSelfRepor
         }
         let sleep = heartbeat_interval * backoff_multiplier;
         tokio::time::sleep(sleep).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn directives(routing_enabled: bool, drain_requested: bool) -> ClusterInstanceOpsDirectives {
+        ClusterInstanceOpsDirectives {
+            routing_enabled,
+            drain_requested,
+        }
+    }
+
+    /// The full directive truth table. The node's only stopping condition is an
+    /// explicit drain request; the routing flag is the registry's business.
+    #[test]
+    fn only_a_drain_request_ends_the_instance() {
+        assert_eq!(
+            ops_action(&directives(true, false)),
+            OpsAction::Continue,
+            "a routing instance keeps serving"
+        );
+        assert_eq!(
+            ops_action(&directives(false, false)),
+            OpsAction::Continue,
+            "cordon takes the instance out of the balancing pool, not out of service"
+        );
+        assert_eq!(
+            ops_action(&directives(true, true)),
+            OpsAction::Drain,
+            "a drain is obeyed even while routing is still on"
+        );
+        assert_eq!(
+            ops_action(&directives(false, true)),
+            OpsAction::Drain,
+            "the registry's own drain posture is obeyed"
+        );
     }
 }

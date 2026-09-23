@@ -22,6 +22,8 @@ mod packaged_runtime;
 #[cfg(feature = "management")]
 mod profile;
 mod provider_event_ingress;
+#[cfg(feature = "management")]
+mod served_domains;
 mod tunnel_bridge;
 mod usage_metering;
 mod website;
@@ -57,6 +59,12 @@ pub use deploy_fallback::{
 pub use deploy_nginx_sink::EdgeNginxSiteSink;
 #[cfg(feature = "management")]
 pub use packaged_runtime::configure_packaged_runtime_roots_from_env;
+#[cfg(feature = "management")]
+pub use served_domains::{
+    collect_served_server_names, derive_served_domains, reconcile_served_domains,
+    reconcile_served_domains_at_startup, ServedDomainsSummary, ServedHostname,
+    ServedNameSources, ServedRootDomain, SERVED_DOMAIN_RECONCILE_ENV,
+};
 #[cfg(feature = "management")]
 pub use usage_metering::EmbeddedUsageIngestChannel;
 pub use usage_metering::{

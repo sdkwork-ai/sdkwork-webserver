@@ -12,6 +12,8 @@ type ClusterResponse struct {
 	HostCount Int64String `json:"hostCount"`
 	InstanceCount Int64String `json:"instanceCount"`
 	OnlineInstanceCount Int64String `json:"onlineInstanceCount"`
+	LbStrategy string `json:"lbStrategy"`
+	ServedDomains []string `json:"servedDomains"`
 	CreatedAt string `json:"createdAt"`
 	UpdatedAt string `json:"updatedAt"`
 }

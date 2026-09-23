@@ -18,6 +18,10 @@ tracing.workspace = true
 rustls.workspace = true
 
 sdkwork-utils-rust.workspace = true
+# Certificate-inventory path authority. The edge runtime activates the bundle the
+# certificate worker wrote, so both must derive the ACME live root from the same
+# cross-platform helper rather than from a Linux-only literal.
+sdkwork-webserver-core.workspace = true
 
 [dev-dependencies]
 rcgen.workspace = true

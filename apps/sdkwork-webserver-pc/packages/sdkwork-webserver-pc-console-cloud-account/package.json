@@ -1,0 +1,28 @@
+{
+  "name": "@sdkwork/webserver-pc-console-cloud-account",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@sdkwork/iam-contracts": "workspace:*",
+    "@sdkwork/iam-pc-console-cloud-account": "workspace:*",
+    "@sdkwork/iam-service": "workspace:*",
+    "@sdkwork/webserver-pc-console-core": "workspace:*",
+    "react": "catalog:"
+  },
+  "sdkwork": {
+    "applicationCode": "webserver",
+    "architecture": "pc-react",
+    "capability": "cloud-account",
+    "surface": "app-console",
+    "managedBy": "tools/materialize_webserver_pc.mjs"
+  }
+}

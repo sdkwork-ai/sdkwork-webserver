@@ -22,6 +22,22 @@ public class ClusterInstanceResponse {
     private String lastOnlineAt;
     private String uptimeSeconds;
     private Map<String, Object> metrics;
+    private String joinMode;
+    private Integer qualityScore;
+    private String desiredConfigRevision;
+    private String appliedConfigRevision;
+    private String desiredApplicationsRevision;
+    private String appliedApplicationsRevision;
+    private String syncStatus;
+    private Boolean routingEnabled;
+    private Boolean draining;
+    private Boolean ejected;
+    private Integer restartCount;
+    private Map<String, String> labels;
+    private Integer routingWeight;
+    private String maintenanceNote;
+    private Integer probeFailures;
+    private String probeUrl;
     private String createdAt;
     private String updatedAt;
 
@@ -175,6 +191,134 @@ public class ClusterInstanceResponse {
 
     public void setMetrics(Map<String, Object> metrics) {
         this.metrics = metrics;
+    }
+
+    public String getJoinMode() {
+        return this.joinMode;
+    }
+
+    public void setJoinMode(String joinMode) {
+        this.joinMode = joinMode;
+    }
+
+    public Integer getQualityScore() {
+        return this.qualityScore;
+    }
+
+    public void setQualityScore(Integer qualityScore) {
+        this.qualityScore = qualityScore;
+    }
+
+    public String getDesiredConfigRevision() {
+        return this.desiredConfigRevision;
+    }
+
+    public void setDesiredConfigRevision(String desiredConfigRevision) {
+        this.desiredConfigRevision = desiredConfigRevision;
+    }
+
+    public String getAppliedConfigRevision() {
+        return this.appliedConfigRevision;
+    }
+
+    public void setAppliedConfigRevision(String appliedConfigRevision) {
+        this.appliedConfigRevision = appliedConfigRevision;
+    }
+
+    public String getDesiredApplicationsRevision() {
+        return this.desiredApplicationsRevision;
+    }
+
+    public void setDesiredApplicationsRevision(String desiredApplicationsRevision) {
+        this.desiredApplicationsRevision = desiredApplicationsRevision;
+    }
+
+    public String getAppliedApplicationsRevision() {
+        return this.appliedApplicationsRevision;
+    }
+
+    public void setAppliedApplicationsRevision(String appliedApplicationsRevision) {
+        this.appliedApplicationsRevision = appliedApplicationsRevision;
+    }
+
+    public String getSyncStatus() {
+        return this.syncStatus;
+    }
+
+    public void setSyncStatus(String syncStatus) {
+        this.syncStatus = syncStatus;
+    }
+
+    public Boolean getRoutingEnabled() {
+        return this.routingEnabled;
+    }
+
+    public void setRoutingEnabled(Boolean routingEnabled) {
+        this.routingEnabled = routingEnabled;
+    }
+
+    public Boolean getDraining() {
+        return this.draining;
+    }
+
+    public void setDraining(Boolean draining) {
+        this.draining = draining;
+    }
+
+    public Boolean getEjected() {
+        return this.ejected;
+    }
+
+    public void setEjected(Boolean ejected) {
+        this.ejected = ejected;
+    }
+
+    public Integer getRestartCount() {
+        return this.restartCount;
+    }
+
+    public void setRestartCount(Integer restartCount) {
+        this.restartCount = restartCount;
+    }
+
+    public Map<String, String> getLabels() {
+        return this.labels;
+    }
+
+    public void setLabels(Map<String, String> labels) {
+        this.labels = labels;
+    }
+
+    public Integer getRoutingWeight() {
+        return this.routingWeight;
+    }
+
+    public void setRoutingWeight(Integer routingWeight) {
+        this.routingWeight = routingWeight;
+    }
+
+    public String getMaintenanceNote() {
+        return this.maintenanceNote;
+    }
+
+    public void setMaintenanceNote(String maintenanceNote) {
+        this.maintenanceNote = maintenanceNote;
+    }
+
+    public Integer getProbeFailures() {
+        return this.probeFailures;
+    }
+
+    public void setProbeFailures(Integer probeFailures) {
+        this.probeFailures = probeFailures;
+    }
+
+    public String getProbeUrl() {
+        return this.probeUrl;
+    }
+
+    public void setProbeUrl(String probeUrl) {
+        this.probeUrl = probeUrl;
     }
 
     public String getCreatedAt() {

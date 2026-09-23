@@ -15,4 +15,5 @@ class CertificateOperationResponse:
     created_at: str
     updated_at: str
     failure_code: Optional[str] = None
+    failure_detail: Optional[str] = None
     completed_at: Optional[str] = None

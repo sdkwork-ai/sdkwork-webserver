@@ -129,18 +129,24 @@ pub struct RegisterRoute {
     pub route_id: String,
     /// Operator-facing route name.
     pub name: String,
-    /// `http` or `tcp`.
+    /// `http`, `tcp`, or `udp`.
     pub protocol: String,
     /// Public domain (HTTP routes).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub domain: Option<String>,
-    /// Public gateway port (TCP routes).
+    /// Public gateway port (TCP and UDP routes).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
     /// Agent-local `ip:port` target.
     pub target: String,
     /// `allow_public` from the route policy.
     pub allow_public: bool,
+    /// `allowed_ips` from the route policy as CIDR entries. The raw TCP and
+    /// UDP planes cannot carry a bearer token, so this is their only usable
+    /// admission channel; an empty or absent list leaves the network
+    /// unrestricted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allowed_ips: Option<Vec<String>>,
 }
 
 /// Gateway → agent registration outcome, including the public URL for HTTP
@@ -191,16 +197,20 @@ pub struct DeclareRoute {
     pub route_id: String,
     /// Template name the agent must match.
     pub name: String,
-    /// `http` or `tcp`.
+    /// `http`, `tcp`, or `udp`.
     pub protocol: String,
     /// Public domain (HTTP routes).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub domain: Option<String>,
-    /// Public gateway port (TCP routes).
+    /// Public gateway port (TCP and UDP routes).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
     /// Requested `allow_public` value.
     pub allow_public: bool,
+    /// Requested `allowed_ips` as CIDR entries, forwarded to the agent so a
+    /// declared route keeps the network restriction the operator asked for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allowed_ips: Option<Vec<String>>,
 }
 
 /// Gateway → agent control error.
@@ -358,7 +368,8 @@ mod tests {
                 domain: Some("demo.sdkwork.link".to_owned()),
                 port: None,
                 target: "127.0.0.1:3000".to_owned(),
-                allow_public: true,
+                allow_public: false,
+                allowed_ips: Some(vec!["203.0.113.0/24".to_owned()]),
             }),
             ControlMessage::RegisterRouteResult(RegisterRouteResult {
                 route_id: "route_web".to_owned(),
@@ -379,7 +390,8 @@ mod tests {
                 protocol: "http".to_owned(),
                 domain: Some("demo.sdkwork.link".to_owned()),
                 port: None,
-                allow_public: true,
+                allow_public: false,
+                allowed_ips: Some(vec!["198.51.100.0/24".to_owned()]),
             }),
             ControlMessage::Heartbeat,
             ControlMessage::HeartbeatAck,
@@ -399,6 +411,37 @@ mod tests {
         let payload = message.encode().expect("encode");
         let text = String::from_utf8(payload).expect("utf8");
         assert!(text.contains(r#""type":"heartbeat""#), "{text}");
+    }
+
+    #[test]
+    fn route_allow_list_round_trips_and_stays_absent_when_unset() {
+        let with_list = ControlMessage::RegisterRoute(RegisterRoute {
+            route_id: "route_ssh".to_owned(),
+            name: "ssh".to_owned(),
+            protocol: "tcp".to_owned(),
+            domain: None,
+            port: Some(7022),
+            target: "127.0.0.1:22".to_owned(),
+            allow_public: false,
+            allowed_ips: Some(vec!["10.0.0.0/8".to_owned(), "203.0.113.7/32".to_owned()]),
+        });
+        let text = String::from_utf8(with_list.encode().expect("encode")).expect("utf8");
+        assert!(text.contains("10.0.0.0/8"), "{text}");
+        assert_eq!(round_trip(with_list.clone()), with_list);
+
+        let without_list = ControlMessage::RegisterRoute(RegisterRoute {
+            route_id: "route_ssh".to_owned(),
+            name: "ssh".to_owned(),
+            protocol: "tcp".to_owned(),
+            domain: None,
+            port: Some(7022),
+            target: "127.0.0.1:22".to_owned(),
+            allow_public: false,
+            allowed_ips: None,
+        });
+        let text = String::from_utf8(without_list.encode().expect("encode")).expect("utf8");
+        assert!(!text.contains("allowedIps"), "{text}");
+        assert_eq!(round_trip(without_list.clone()), without_list);
     }
 
     #[test]
@@ -453,5 +496,126 @@ mod tests {
         let wire = session_to_wire(&session);
         assert_eq!(session_from_wire(&wire).expect("valid"), session);
         assert!(session_from_wire("bogus").is_err());
+    }
+
+    #[test]
+    fn a_known_type_with_a_missing_field_is_a_hard_protocol_error() {
+        // Only *unknown variants* are allowed to degrade into an `Error`
+        // message. A truncated message of a type we do understand is a real
+        // protocol violation and must fail the read instead of being
+        // silently reinterpreted.
+        for payload in [
+            br#"{"type":"hello"}"#.as_slice(),
+            br#"{"type":"register_route","routeId":"route_web"}"#.as_slice(),
+        ] {
+            match ControlMessage::decode(payload) {
+                Err(TunnelError::Protocol(_)) => {}
+                other => panic!(
+                    "expected a hard protocol error for {}: {other:?}",
+                    String::from_utf8_lossy(payload)
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn unknown_fields_inside_a_known_message_are_tolerated() {
+        // Forward compatibility: a newer agent may add fields to a message an
+        // older gateway already understands. Dropping those fields must not
+        // tear the session down.
+        let payload = br#"{
+            "type": "register_route",
+            "routeId": "route_web",
+            "name": "web",
+            "protocol": "http",
+            "domain": "demo.sdkwork.link",
+            "target": "127.0.0.1:3000",
+            "allowPublic": true,
+            "futureSelector": {"v": 2}
+        }"#;
+        let decoded = ControlMessage::decode(payload).expect("forward-compatible decode");
+        match decoded {
+            ControlMessage::RegisterRoute(route) => {
+                assert_eq!(route.route_id, "route_web");
+                assert!(route.allow_public);
+                assert_eq!(route.allowed_ips, None);
+            }
+            other => panic!("expected RegisterRoute, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn every_domain_error_maps_to_a_wire_category() {
+        // The mapping is the agent-visible remediation contract: `Internal`
+        // is the catch-all, everything else must stay specific.
+        let cases: Vec<(TunnelError, ErrorCode)> = vec![
+            (
+                TunnelError::AuthenticationFailed,
+                ErrorCode::AuthenticationFailed,
+            ),
+            (TunnelError::AuthorizationDenied, ErrorCode::AuthorizationDenied),
+            (
+                TunnelError::InvalidRoute("x".to_owned()),
+                ErrorCode::InvalidRoute,
+            ),
+            (
+                TunnelError::RouteConflict("x".to_owned()),
+                ErrorCode::RouteConflict,
+            ),
+            (TunnelError::RouteNotFound, ErrorCode::RouteNotFound),
+            (
+                TunnelError::ResourceLimit("maxRoutes"),
+                ErrorCode::ResourceLimit,
+            ),
+            (
+                TunnelError::Protocol("x".to_owned()),
+                ErrorCode::UnsupportedProtocol,
+            ),
+            (
+                TunnelError::Validation {
+                    field: sdkwork_webserver_tunnel_core::ValidationField::Config,
+                    reason: "x".to_owned(),
+                },
+                ErrorCode::Internal,
+            ),
+            (
+                TunnelError::ConnectionFailed("x".to_owned()),
+                ErrorCode::Internal,
+            ),
+            (TunnelError::ConnectionClosed, ErrorCode::Internal),
+            (TunnelError::DeviceNotFound, ErrorCode::Internal),
+            (TunnelError::SessionNotFound, ErrorCode::Internal),
+            (
+                TunnelError::TargetUnreachable("x".to_owned()),
+                ErrorCode::Internal,
+            ),
+            (TunnelError::Timeout("stream open"), ErrorCode::Internal),
+        ];
+        for (error, expected) in cases {
+            assert_eq!(ErrorCode::from_error(&error), expected, "{error:?}");
+        }
+    }
+
+    #[test]
+    fn authenticate_token_is_present_only_on_the_authenticate_message() {
+        // The token must travel exactly once, on `Authenticate`, and must not
+        // leak into the outcome message the gateway sends back.
+        let auth = ControlMessage::Authenticate(Authenticate {
+            token: "super-secret-token".to_owned(),
+        });
+        let text = String::from_utf8(auth.encode().expect("encode")).expect("utf8");
+        assert!(text.contains("super-secret-token"), "the wire carries it");
+
+        let failure = ControlMessage::AuthResult(AuthResult {
+            ok: false,
+            session_id: None,
+            protocol: None,
+            error: Some("authentication failed".to_owned()),
+        });
+        let text = String::from_utf8(failure.encode().expect("encode")).expect("utf8");
+        assert!(
+            !text.contains("super-secret-token"),
+            "the outcome must not echo the credential: {text}"
+        );
     }
 }

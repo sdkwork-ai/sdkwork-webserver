@@ -82,6 +82,14 @@ namespace SDKWork.WebserverBackendSdk.Api
         }
 
         /// <summary>
+        /// Publish a desired-state revision to every instance of the cluster
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.ClustersSyncResponse?> ClustersSyncAsync(string clusterId, SDKWork.WebserverBackendSdk.Models.PublishClusterSyncRequest body)
+        {
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ClustersSyncResponse>(ApiPaths.BackendPath($"/clusters/{SerializePathParameter(clusterId, new PathParameterSpec("clusterId", "simple", false))}/sync"), body, null, null, "application/json");
+        }
+
+        /// <summary>
         /// List cluster hosts with system and network identity
         /// </summary>
         public async Task<SDKWork.WebserverBackendSdk.Models.ClustersHostsListResponse?> ClustersHostsListAsync(int? pageSize = null, string? cursor = null, string? clusterId = null, int? status = null)
@@ -223,6 +231,58 @@ namespace SDKWork.WebserverBackendSdk.Api
                 new QueryParameterSpec("cursor", cursor, "form", true, false, null),
             });
             return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ClustersInstancesHeartbeatsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath($"/clusters/instances/{SerializePathParameter(instanceId, new PathParameterSpec("instanceId", "simple", false))}/heartbeats"), queryString));
+        }
+
+        /// <summary>
+        /// List one instance's heartbeat metric samples for trend charts
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.ClustersInstancesMetricsListResponse?> ClustersInstancesMetricsListAsync(string instanceId, int? limit = null)
+        {
+            var queryString = BuildQueryString(new[]
+            {
+                new QueryParameterSpec("limit", limit, "form", true, false, null),
+            });
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ClustersInstancesMetricsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath($"/clusters/instances/{SerializePathParameter(instanceId, new PathParameterSpec("instanceId", "simple", false))}/metrics/history"), queryString));
+        }
+
+        /// <summary>
+        /// Probe one instance's connectivity and record the outcome
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.ClustersInstancesProbeResponse?> ClustersInstancesProbeAsync(string instanceId, SDKWork.WebserverBackendSdk.Models.ProbeClusterInstanceRequest? body = null)
+        {
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ClustersInstancesProbeResponse>(ApiPaths.BackendPath($"/clusters/instances/{SerializePathParameter(instanceId, new PathParameterSpec("instanceId", "simple", false))}/probe"), body, null, null, "application/json");
+        }
+
+        /// <summary>
+        /// Gracefully drain one instance out of routing
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.ClustersInstancesDrainResponse?> ClustersInstancesDrainAsync(string instanceId)
+        {
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ClustersInstancesDrainResponse>(ApiPaths.BackendPath($"/clusters/instances/{SerializePathParameter(instanceId, new PathParameterSpec("instanceId", "simple", false))}/drain"), null);
+        }
+
+        /// <summary>
+        /// Clear the drain flag and restore routing participation
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.ClustersInstancesUndrainResponse?> ClustersInstancesUndrainAsync(string instanceId)
+        {
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ClustersInstancesUndrainResponse>(ApiPaths.BackendPath($"/clusters/instances/{SerializePathParameter(instanceId, new PathParameterSpec("instanceId", "simple", false))}/undrain"), null);
+        }
+
+        /// <summary>
+        /// Cordon one instance out of routing without draining it
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.ClustersInstancesCordonResponse?> ClustersInstancesCordonAsync(string instanceId)
+        {
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ClustersInstancesCordonResponse>(ApiPaths.BackendPath($"/clusters/instances/{SerializePathParameter(instanceId, new PathParameterSpec("instanceId", "simple", false))}/cordon"), null);
+        }
+
+        /// <summary>
+        /// Uncordon one instance back into routing
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.ClustersInstancesUncordonResponse?> ClustersInstancesUncordonAsync(string instanceId)
+        {
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ClustersInstancesUncordonResponse>(ApiPaths.BackendPath($"/clusters/instances/{SerializePathParameter(instanceId, new PathParameterSpec("instanceId", "simple", false))}/uncordon"), null);
         }
 
         /// <summary>

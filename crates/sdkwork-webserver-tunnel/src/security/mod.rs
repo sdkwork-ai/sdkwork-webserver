@@ -61,7 +61,7 @@ impl TokenAuthenticator {
     pub fn verify(&self, presented: &str) -> bool {
         self.tokens
             .iter()
-            .any(|candidate| constant_time_eq(candidate.as_bytes(), presented.as_bytes()))
+            .any(|candidate| sdkwork_utils_rust::crypto::secure_compare(candidate, presented))
     }
 
     /// Verifies a token and ties it to the device identity claim. V1 tokens
@@ -156,16 +156,6 @@ pub fn require_route_owner(
     }
 }
 
-fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
-    if left.len() != right.len() {
-        return false;
-    }
-    left.iter()
-        .zip(right)
-        .fold(0_u8, |acc, (a, b)| acc | (a ^ b))
-        == 0
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,9 +204,11 @@ mod tests {
     }
 
     #[test]
-    fn constant_time_eq_matches_only_equal_lengths_and_bytes() {
-        assert!(constant_time_eq(b"abc", b"abc"));
-        assert!(!constant_time_eq(b"abc", b"abd"));
-        assert!(!constant_time_eq(b"abc", b"abcd"));
+    fn token_verification_compares_full_lengths() {
+        let authenticator = TokenAuthenticator::new(vec!["abc".to_owned()]);
+        assert!(authenticator.verify("abc"));
+        assert!(!authenticator.verify("abd"));
+        assert!(!authenticator.verify("abcd"));
+        assert!(!authenticator.verify(""));
     }
 }

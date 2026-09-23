@@ -1,6 +1,7 @@
 use sdkwork_webserver_contract::{
     CertificateOperationAcceptedResponse, CertificateOperationLease, CertificateOperationResponse,
     IssueCertificateRequest, WebServiceError, WebServiceResult,
+    CERTIFICATE_FAILURE_DETAIL_MAX_CHARS,
 };
 use serde_json::json;
 use sqlx::Row;
@@ -297,7 +298,8 @@ impl WebRepository {
             "SELECT operation.uuid, certificate.uuid AS certificate_uuid,
                     operation.operation_type, operation.status, operation.attempt_count,
                     operation.max_attempts, CAST(operation.next_attempt_at AS TEXT) AS next_attempt_at,
-                    operation.failure_code, CAST(operation.created_at AS TEXT) AS created_at,
+                    operation.failure_code, operation.failure_detail,
+                    CAST(operation.created_at AS TEXT) AS created_at,
                     CAST(operation.updated_at AS TEXT) AS updated_at,
                     CAST(operation.completed_at AS TEXT) AS completed_at
              FROM webserver_certificate_operation operation
@@ -458,6 +460,7 @@ impl WebRepository {
              SET status = 'RUNNING', attempt_count = operation.attempt_count + 1,
                  lease_owner = $2, lease_expires_at = NOW() + ($3 * INTERVAL '1 second'),
                  fencing_token = operation.fencing_token + 1, failure_code = NULL,
+                 failure_detail = NULL,
                  updated_at = NOW()
              FROM candidates
              WHERE operation.id = candidates.id
@@ -537,10 +540,12 @@ impl WebRepository {
         &self,
         lease: &CertificateOperationLease,
         failure_code: &str,
+        failure_detail: Option<&str>,
         retry_at: &str,
         terminal_retry_at: &str,
     ) -> WebServiceResult<CertificateOperationResponse> {
         validate_failure_code(failure_code)?;
+        let failure_detail = validate_failure_detail(failure_detail)?;
         let mut tx = self
             .pool
             .begin()
@@ -585,6 +590,7 @@ impl WebRepository {
              SET status = CASE WHEN $3 THEN 'FAILED' ELSE 'PENDING' END,
                  next_attempt_at = CAST(CASE WHEN $3 THEN $5 ELSE $4 END AS TIMESTAMPTZ),
                  lease_owner = NULL, lease_expires_at = NULL, failure_code = $6,
+                 failure_detail = $7,
                  completed_at = CASE WHEN $3 THEN NOW() ELSE NULL END, updated_at = NOW()
              WHERE tenant_id = $1 AND uuid = $2",
         )
@@ -594,13 +600,22 @@ impl WebRepository {
         .bind(retry_at)
         .bind(terminal_retry_at)
         .bind(failure_code)
+        .bind(failure_detail.as_deref())
         .execute(&mut *tx)
         .await
         .map_err(|error| store_error("persist certificate operation failure", error))?;
-        // Atomic JSONB merge: the failure code is added to the existing
-        // document so sibling keys (ARI renewal window, listing metadata)
-        // are never clobbered by a whole-document replacement.
-        let metadata = json!({ "certificateOperationFailureCode": failure_code });
+        // Atomic JSONB merge: the failure is added to the existing document so
+        // sibling keys (ARI renewal window, listing metadata) are never clobbered
+        // by a whole-document replacement. The detail travels with the code here
+        // too, so an operator inspecting the certificate aggregate sees the same
+        // pairing the operation row carries.
+        let metadata = match failure_detail.as_deref() {
+            Some(detail) => json!({
+                "certificateOperationFailureCode": failure_code,
+                "certificateOperationFailureDetail": detail,
+            }),
+            None => json!({ "certificateOperationFailureCode": failure_code }),
+        };
         sqlx::query(
             "UPDATE webserver_certificate
              SET renewal_status = CASE WHEN $3 THEN 3 ELSE 2 END,
@@ -764,7 +779,8 @@ async fn reap_exhausted_certificate_operations_in_tx(
             SET status = 'FAILED',
                 next_attempt_at = NOW() + ($2 * INTERVAL '1 second'),
                 lease_owner = NULL, lease_expires_at = NULL,
-                failure_code = $3, completed_at = NOW(), updated_at = NOW()
+                failure_code = $3, failure_detail = NULL,
+                completed_at = NOW(), updated_at = NOW()
             FROM candidates
             WHERE operation.id = candidates.id
             RETURNING operation.tenant_id, operation.certificate_id, operation.operation_type
@@ -983,6 +999,36 @@ fn validate_failure_code(failure_code: &str) -> WebServiceResult<()> {
     Ok(())
 }
 
+/// Normalizes the operator-facing failure diagnostic, or `None` when there is
+/// nothing worth storing.
+///
+/// The text is provider-authored and reaches a console and a database column, so
+/// it is normalized rather than trusted:
+///
+/// * control characters are collapsed to spaces, because the text originates in
+///   an HTTP response body and a raw newline would forge log and console lines;
+/// * the length is bounded to what the column and the contract declare, counted
+///   in characters rather than bytes, so a Chinese provider's message is not cut
+///   three times shorter than an English one;
+/// * a blank result becomes `None` rather than an empty string, so "the provider
+///   said nothing" is stored as an absence instead of as a present-but-empty
+///   field the console would try to render.
+fn validate_failure_detail(failure_detail: Option<&str>) -> WebServiceResult<Option<String>> {
+    let Some(detail) = failure_detail else {
+        return Ok(None);
+    };
+    let normalized: String = detail
+        .chars()
+        .map(|character| if character.is_control() { ' ' } else { character })
+        .take(CERTIFICATE_FAILURE_DETAIL_MAX_CHARS)
+        .collect();
+    let normalized = normalized.trim().to_string();
+    if normalized.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(normalized))
+}
+
 pub(super) fn validate_operation_lease(
     row: &EngineRow,
     lease: &CertificateOperationLease,
@@ -1025,6 +1071,7 @@ fn map_certificate_operation(row: &EngineRow) -> Result<CertificateOperationResp
         max_attempts: row.try_get("max_attempts")?,
         next_attempt_at: instant_from_row(row, "next_attempt_at")?,
         failure_code: row.try_get("failure_code")?,
+        failure_detail: row.try_get("failure_detail")?,
         created_at: instant_from_row(row, "created_at")?,
         updated_at: instant_from_row(row, "updated_at")?,
         completed_at: optional_instant_from_row(row, "completed_at")?,
@@ -1065,9 +1112,47 @@ mod tests {
     use super::{
         certificate_issue_request_sha256, certificate_operation_idempotency_key_hash,
         certificate_renewal_request_sha256, validate_certificate_issue_request,
-        validate_failure_code, validate_lease_owner,
+        validate_failure_code, validate_failure_detail, validate_lease_owner,
     };
     use sdkwork_webserver_contract::IssueCertificateRequest;
+
+    /// The detail reaches a console and a database column, so it is normalized
+    /// rather than trusted: the text originates in a third-party HTTP response
+    /// body, and a raw newline in it would forge a console line.
+    #[test]
+    fn failure_detail_is_normalized_before_it_is_stored() {
+        assert_eq!(validate_failure_detail(None).expect("absent"), None);
+        assert_eq!(
+            validate_failure_detail(Some("   ")).expect("blank"),
+            None,
+            "a blank detail is an absence, not a present-but-empty string"
+        );
+
+        let folded = validate_failure_detail(Some("line\none\r\ntwo\ttab"))
+            .expect("normalize")
+            .expect("present");
+        assert!(!folded.contains('\n'), "{folded}");
+        assert!(!folded.contains('\t'), "{folded}");
+        assert!(folded.contains("line"), "{folded}");
+
+        // Provider text is not ASCII: the bound counts characters, so a Chinese
+        // message is not cut three times shorter than an English one.
+        let chinese = "域名".repeat(300);
+        let bounded = validate_failure_detail(Some(&chinese))
+            .expect("normalize")
+            .expect("present");
+        assert_eq!(bounded.chars().count(), 512);
+        assert!(bounded.starts_with("域名"), "{}", &bounded[..12]);
+    }
+
+    #[test]
+    fn a_real_provider_refusal_survives_normalization_verbatim() {
+        let detail = "CLOUDFLARE rejected the request with HTTP 401: Authentication error (10000)";
+        assert_eq!(
+            validate_failure_detail(Some(detail)).expect("normalize").as_deref(),
+            Some(detail)
+        );
+    }
 
     #[test]
     fn request_fingerprint_is_stable_and_order_sensitive() {

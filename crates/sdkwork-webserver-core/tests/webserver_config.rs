@@ -2180,6 +2180,66 @@ fn acme_http01_webroot_escape_is_rejected() {
 }
 
 #[test]
+fn acme_http01_webroot_may_be_an_absolute_rendezvous_directory() {
+    // The certificate worker writes challenge tokens into a directory named by
+    // its own setting, and this listener serves them back to the CA. In every
+    // deployed layout that directory is absolute and outside the configuration
+    // directory (`/var/lib/sdkwork/webserver/acme-webroot` in the container,
+    // the shared PVC path in Kubernetes, `%ProgramData%\sdkwork\...` on
+    // Windows) — so an absolute webroot must compile. Only *relative* values
+    // are confined to the configuration directory.
+    let directory = TempDir::new().expect("create temp directory");
+    let unique = format!(
+        "rendezvous-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos()
+    );
+    let webroot = directory.path().parent().expect("temp parent").join(unique);
+    fs::create_dir(&webroot).expect("create webroot");
+    let mut config = base_config();
+    config["listeners"][0]["acmeHttp01"] = json!({
+        "webroot": webroot.to_string_lossy()
+    });
+    let path = write_config(directory.path(), &config);
+
+    let compiled =
+        load_and_compile_webserver_config(path).expect("absolute ACME webroot compiles");
+    let resolved = compiled.acme_webroot("http").expect("resolved webroot");
+    assert_eq!(resolved, webroot.canonicalize().expect("canonical"));
+    assert!(
+        !resolved.starts_with(compiled.base_directory()),
+        "the absolute webroot is a rendezvous directory, not config-relative"
+    );
+    fs::remove_dir_all(&webroot).ok();
+}
+
+#[test]
+fn acme_http01_absolute_webroot_must_exist() {
+    // A typo in an absolute webroot is otherwise invisible until the CA reports
+    // a challenge failure, hours later and far from the cause. Fail at compile
+    // with the path in the diagnostic.
+    let directory = TempDir::new().expect("create temp directory");
+    let missing = directory
+        .path()
+        .join("definitely-not-created")
+        .join("acme-webroot");
+    let mut config = base_config();
+    config["listeners"][0]["acmeHttp01"] = json!({
+        "webroot": missing.to_string_lossy()
+    });
+    let path = write_config(directory.path(), &config);
+
+    let error =
+        load_and_compile_webserver_config(path).expect_err("missing absolute webroot must fail");
+    assert!(error.diagnostics().iter().any(|diagnostic| {
+        diagnostic.path.ends_with("/acmeHttp01/webroot")
+            && diagnostic.message.contains("is unavailable")
+    }));
+}
+
+#[test]
 fn acme_http01_webroot_unsafe_bytes_are_rejected() {
     let directory = TempDir::new().expect("create temp directory");
     let mut config = base_config();

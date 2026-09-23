@@ -22,6 +22,7 @@ use sdkwork_webserver_contract::{
     WebServiceErrorKind, WebsiteRuntimeSetSnapshot,
 };
 use sdkwork_webserver_core::website_runtime::website_runtime_set_snapshot_sha256;
+use sdkwork_webserver_core::web_platform_operator_tenant_id;
 use sdkwork_webserver_database_host::bootstrap_web_database;
 use sqlx::{PgPool, Row};
 
@@ -599,6 +600,7 @@ async fn verify_certificate_activation_compensation(context: &TestContext) {
         .fail_certificate_operation(
             &lease,
             "CERTIFICATE_FINALIZATION_FAILED",
+            None,
             "2099-01-01T00:00:00Z",
             "2099-01-02T00:00:00Z",
         )
@@ -1942,6 +1944,7 @@ async fn verify_public_repository_surface(
         .fail_certificate_operation(
             &first_renewal_lease,
             "STALE_WORKER_FAILURE",
+            None,
             "2099-01-01T00:00:00Z",
             "2099-01-02T00:00:00Z",
         )
@@ -1986,6 +1989,7 @@ async fn verify_public_repository_surface(
             .fail_certificate_operation(
                 &exhausted_lease,
                 "SYNTHETIC_RETRYABLE_FAILURE",
+                None,
                 "2000-01-01T00:00:00Z",
                 "2099-01-02T00:00:00Z",
             )
@@ -2059,6 +2063,7 @@ async fn verify_public_repository_surface(
         .fail_certificate_operation(
             &failed_issue_lease,
             "SYNTHETIC_ISSUANCE_FAILURE",
+            None,
             "2099-01-01T00:00:00Z",
             "2099-01-02T00:00:00Z",
         )
@@ -2341,13 +2346,40 @@ async fn verify_runtime_assignment_contract(
         .expect("resolve tenant-owned runtime target");
     assert_eq!(target.node_uuid, node_uuid);
     assert_eq!(target.tenant_scope_hash, "a".repeat(64));
+    // The cross-tenant branch belongs to the platform operator, and the platform
+    // operator tenant is **not** tenant `0`: `requester_may_cross_tenant` gates on
+    // `web_is_platform_operator_tenant`, which compares against
+    // `web_platform_operator_tenant_id()` (default `100001`, aligned with the IAM
+    // bootstrap tenant). This assertion used to pass `(0, true)` and demand the
+    // target tenant; the predicate was later tightened and the assertion was left
+    // behind, pinning the exact opposite of `runtime_assignments.rs`'s own unit
+    // test (`assert!(!requester_may_cross_tenant(0, true))`). Nothing noticed,
+    // because this suite is `#[ignore]`d. The tenant is now read from the code
+    // rather than hardcoded, so the two cannot drift apart again.
+    let platform_operator_tenant: i64 = web_platform_operator_tenant_id()
+        .parse()
+        .expect("the platform operator tenant id is numeric");
+    assert_ne!(
+        platform_operator_tenant, TENANT_A,
+        "this fixture is only meaningful while the operator is another tenant"
+    );
+    assert_eq!(
+        repository
+            .resolve_runtime_assignment_target(platform_operator_tenant, true, node_uuid)
+            .await
+            .expect("the platform operator resolves another tenant's target")
+            .tenant_id,
+        TENANT_A
+    );
+    // The flag alone is not authority: holding the permission while presenting an
+    // ordinary tenant must still be scoped to that tenant.
     assert_eq!(
         repository
             .resolve_runtime_assignment_target(0, true, node_uuid)
             .await
-            .expect("authorized service resolves target tenant")
-            .tenant_id,
-        TENANT_A
+            .expect_err("tenant 0 is not the platform operator")
+            .kind(),
+        WebServiceErrorKind::NotFound
     );
     assert_eq!(
         repository
@@ -2498,10 +2530,24 @@ async fn verify_runtime_assignment_contract(
     );
     assert_eq!(
         repository
-            .retrieve_latest_runtime_observation(0, true, &production_two.snapshot_uuid)
+            .retrieve_latest_runtime_observation(
+                platform_operator_tenant,
+                true,
+                &production_two.snapshot_uuid,
+            )
             .await
             .expect("authorized control plane retrieves a tenant observation"),
         received
+    );
+    // Same rule as the assignment target above: the cross-tenant read is the
+    // platform operator's, not tenant `0`'s.
+    assert_eq!(
+        repository
+            .retrieve_latest_runtime_observation(0, true, &production_two.snapshot_uuid)
+            .await
+            .expect_err("tenant 0 is not the platform operator")
+            .kind(),
+        WebServiceErrorKind::NotFound
     );
     let mut changed_received = received_write;
     changed_received.node_version = Some("1.0.1".to_owned());

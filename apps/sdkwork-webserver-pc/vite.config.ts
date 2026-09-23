@@ -144,8 +144,28 @@ export default defineConfig(({ command, mode }) => {
           find: /^@sdkwork\/utils$/,
           replacement: path.resolve(APP_ROOT, "node_modules/@sdkwork/utils"),
         },
+        {
+          // `@sdkwork/sdk-common` also resolves to a nested npm-installed copy
+          // inside `sdkwork-iam-backend-sdk/generated/server-openapi/node_modules`
+          // whenever the importer lives under that generated tree, because
+          // `generated/**` installs its own dependencies and is therefore not
+          // hoisted by pnpm. That copy predates the current export surface, and
+          // optimizeDeps emits one shared chunk per bare specifier, so every
+          // importer — including cross-repository ones such as the core package —
+          // loses the newer exports. Pin it to this application's workspace-linked
+          // copy, exactly like `@sdkwork/utils` above.
+          find: /^@sdkwork\/sdk-common$/,
+          replacement: path.resolve(APP_ROOT, "node_modules/@sdkwork/sdk-common"),
+        },
       ],
-      dedupe: ["react", "react-dom", "react-router", "react-router-dom", "@sdkwork/utils"],
+      dedupe: [
+        "react",
+        "react-dom",
+        "react-router",
+        "react-router-dom",
+        "@sdkwork/utils",
+        "@sdkwork/sdk-common",
+      ],
     },
     server: developmentServer ? {
       host: developmentServer.host,

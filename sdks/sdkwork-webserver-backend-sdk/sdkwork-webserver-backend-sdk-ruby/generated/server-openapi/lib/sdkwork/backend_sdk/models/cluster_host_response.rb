@@ -2,7 +2,7 @@ module Sdkwork
   module BackendSdk
     module Models
       class ClusterHostResponse
-              attr_accessor :id, :cluster_id, :name, :hostname, :machine_code, :os_name, :os_version, :kernel_version, :arch, :cpu_model, :cpu_cores, :memory_total_mb, :remote_ip, :local_ips, :mac_addresses, :daemon_version, :status, :last_heartbeat_at, :instance_count, :created_at, :updated_at
+              attr_accessor :id, :cluster_id, :name, :hostname, :machine_code, :os_name, :os_version, :kernel_version, :arch, :cpu_model, :cpu_cores, :memory_total_mb, :remote_ip, :local_ips, :mac_addresses, :daemon_version, :status, :last_heartbeat_at, :instance_count, :join_mode, :tunnel_route_domain, :created_at, :updated_at
 
               def initialize(attributes = {})
                 attributes = (attributes || {}).transform_keys(&:to_s)
@@ -25,6 +25,8 @@ module Sdkwork
                 @status = attributes['status']
                 @last_heartbeat_at = attributes['lastHeartbeatAt']
                 @instance_count = attributes['instanceCount']
+                @join_mode = attributes['joinMode']
+                @tunnel_route_domain = attributes['tunnelRouteDomain']
                 @created_at = attributes['createdAt']
                 @updated_at = attributes['updatedAt']
               end
@@ -56,6 +58,8 @@ module Sdkwork
                   'status' => @status,
                   'lastHeartbeatAt' => @last_heartbeat_at,
                   'instanceCount' => @instance_count,
+                  'joinMode' => @join_mode,
+                  'tunnelRouteDomain' => @tunnel_route_domain,
                   'createdAt' => @created_at,
                   'updatedAt' => @updated_at,
                 }

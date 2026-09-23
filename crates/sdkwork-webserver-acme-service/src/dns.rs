@@ -30,24 +30,45 @@ const DNS01_VALUE_ENGINE: base64::engine::general_purpose::GeneralPurpose =
 
 /// Supported DNS provider families.
 ///
-/// The wire values match the `deploy_dns_provider_credential.provider_kind`
+/// The first three wire values match the `deploy_dns_provider_credential.provider_kind`
 /// baseline CHECK, so a row read from the control plane maps without a lookup
-/// table of its own.
+/// table of its own. That CHECK is history rather than contract — the table is
+/// declared DEPRECATED and no code path reads it — so [`Self::HttpRequest`] is
+/// deliberately *not* in it.
+///
+/// [`Self::HttpRequest`] is the family that closes the set. Every other variant
+/// here is one vendor's HTTP API written out as Rust; this one carries the
+/// request templates as *data*, so a vendor with an HTTP API is configured
+/// rather than coded. Without it, "is provider X supported?" has one answer per
+/// release; with it, the answer for any HTTPS-API provider is yes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DnsProviderKind {
     AliyunDns,
     Dnspod,
     Cloudflare,
+    HttpRequest,
 }
 
 impl DnsProviderKind {
-    pub const ALL: [Self; 3] = [Self::AliyunDns, Self::Dnspod, Self::Cloudflare];
+    /// Every family, in the order the console offers them.
+    pub const ALL: [Self; 4] = [
+        Self::AliyunDns,
+        Self::Dnspod,
+        Self::Cloudflare,
+        Self::HttpRequest,
+    ];
+
+    /// Families with a dedicated adapter, which is what the deprecated
+    /// `provider_kind` CHECK enumerates. Kept separate so the frozen DDL list
+    /// and the live vocabulary can be compared instead of confused.
+    pub const DEDICATED: [Self; 3] = [Self::AliyunDns, Self::Dnspod, Self::Cloudflare];
 
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::AliyunDns => "ALIYUN_DNS",
             Self::Dnspod => "DNSPOD",
             Self::Cloudflare => "CLOUDFLARE",
+            Self::HttpRequest => "HTTP_REQUEST",
         }
     }
 
@@ -56,8 +77,20 @@ impl DnsProviderKind {
             "ALIYUN_DNS" => Some(Self::AliyunDns),
             "DNSPOD" => Some(Self::Dnspod),
             "CLOUDFLARE" => Some(Self::Cloudflare),
+            "HTTP_REQUEST" => Some(Self::HttpRequest),
             _ => None,
         }
+    }
+
+    /// The complete `supported:` list for operator-facing errors, derived from
+    /// [`Self::ALL`] so a new family cannot be missing from the message that
+    /// tells an operator what to use instead.
+    pub fn supported_list() -> String {
+        Self::ALL
+            .iter()
+            .map(|kind| kind.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 }
 
@@ -219,6 +252,37 @@ impl From<&Dns01RecordRequest> for Dns01RecordHandle {
     }
 }
 
+/// What a credential probe established about one provider account.
+///
+/// Three states rather than two, because "we could not check" and "the provider
+/// refused" are different facts and only one of them is the operator's problem.
+/// Reporting an unverifiable family as verified would be worse than saying
+/// nothing: a green line reads as a confirmed account.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DnsAccountVerification {
+    /// The provider answered a read-only call for the zone, which proves the
+    /// credential parses, authenticates, and sees that zone.
+    Verified,
+    /// No read-only call can establish this, with the reason to show an
+    /// operator.
+    Unsupported(&'static str),
+}
+
+impl DnsAccountVerification {
+    /// Whether the provider actually answered.
+    pub fn is_verified(self) -> bool {
+        matches!(self, Self::Verified)
+    }
+
+    /// The operator-facing explanation for a non-verified outcome.
+    pub fn describe(self) -> &'static str {
+        match self {
+            Self::Verified => "the provider accepted a read-only call for this zone",
+            Self::Unsupported(reason) => reason,
+        }
+    }
+}
+
 /// Presents and withdraws DNS-01 TXT records.
 ///
 /// Implementations must be idempotent: [`Dns01Presenter::withdraw`] may be
@@ -238,6 +302,48 @@ pub trait Dns01Presenter: Send + Sync {
 
     /// Removes exactly the presentation described by `handle`.
     async fn withdraw(&self, handle: &Dns01RecordHandle) -> AcmeServiceResult<()>;
+
+    /// Proves the account's credential and zone are usable without issuing a
+    /// certificate.
+    ///
+    /// This exists because a wrong credential is a *configuration* mistake, and
+    /// the cost of discovering it at the certificate's renewal window is a
+    /// certificate that expires. A family that implements this calls its
+    /// provider once, read-only, for `zone_apex`; a failure is the provider's own
+    /// refusal, verbatim, so the operator is told which part of the account is
+    /// wrong rather than that "DNS failed".
+    ///
+    /// # How a refusal is classified
+    ///
+    /// The variant is part of the contract, not an implementation detail,
+    /// because a caller that probes before doing work has to tell two very
+    /// different things apart:
+    ///
+    /// * [`AcmeServiceError::Config`] — the provider refused in a way that
+    ///   **proves this account cannot present for this zone**: a credential it
+    ///   does not recognise, a signature it rejects, or a zone outside the
+    ///   account. Retrying cannot change any of them; only a configuration
+    ///   change can. A fail-fast caller may stop on this.
+    /// * [`AcmeServiceError::Provider`] — everything else: a rate limit, a
+    ///   transient fault, a permission that only this read needs, or a code the
+    ///   family has not learned to read. A fail-fast caller must **not** stop on
+    ///   this, because the write it was about to attempt does not depend on the
+    ///   probe succeeding.
+    ///
+    /// The default for an unrecognised refusal is [`AcmeServiceError::Provider`].
+    /// That direction is deliberate: a family whose codes nobody has taught the
+    /// classifier stays advisory, so a new provider can never block an order on
+    /// a message it does not understand.
+    ///
+    /// The default is [`DnsAccountVerification::Unsupported`] rather than a
+    /// silent `Ok(())`: a presenter that cannot check must not be reported as
+    /// checked.
+    async fn verify_account(&self, _zone_apex: &str) -> AcmeServiceResult<DnsAccountVerification> {
+        Ok(DnsAccountVerification::Unsupported(
+            "this provider family has no read-only call that proves an account; \
+             the first certificate order is the first real test",
+        ))
+    }
 }
 
 /// Operator-facing presenter: it publishes nothing and relies on a human to

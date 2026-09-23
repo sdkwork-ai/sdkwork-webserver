@@ -247,13 +247,35 @@ fn strip_hop_by_hop_headers(headers: &mut axum::http::HeaderMap, keep_upgrade: b
     }
 }
 
+/// Marks a request this gateway already relayed to a sibling instance, so the
+/// receiving instance knows it is the last hop: relay once, never again. Two
+/// instances whose round-robin cursors point at each other — or an instance
+/// whose overlay makes it pick itself — would otherwise bounce the same
+/// request forever.
+///
+/// Trust model: one listener accepts both visitor and sibling traffic, so a
+/// visitor *can* present this header. It carries the same trust as
+/// `x-cluster-lb-strategy` (a documented, client-settable routing hint) and the
+/// effect is confined to the request that presents it: that request is served
+/// by the instance it reached instead of being balanced onward. It never grants
+/// access to content the receiving instance would not already serve, and it
+/// never escalates privilege. Hardening this into a non-forgeable signal needs
+/// a dedicated east-west listener with its own trust declaration, which the
+/// listener configuration model does not express today.
+pub(crate) const CLUSTER_HOP_HEADER: &str = "x-served-by-cluster-hop";
+
 /// Relays one request to a cluster instance over the internal network
 /// (auto-routing east-west hop): opens a TCP stream to the picked
 /// instance's bind endpoint and speaks HTTP/1.1 through it. WebSocket
 /// upgrades pump raw bytes after the 101, exactly like the tunnel relay.
+///
+/// `visitor_ip` is the resolved client address of the original request; it
+/// travels to the sibling in `X-Forwarded-For`/`X-Real-IP` so services behind
+/// the hop observe the real client instead of this gateway.
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn relay_cluster_http(
     endpoint: &str,
+    visitor_ip: IpAddr,
     mut request: axum::http::Request<Body>,
 ) -> Result<axum::response::Response<Body>, TunnelRelayError> {
     use std::str::FromStr;
@@ -269,10 +291,10 @@ pub(crate) async fn relay_cluster_http(
     // hop-by-hop headers, keep everything else verbatim.
     let (mut parts, body) = request.into_parts();
     strip_hop_by_hop_headers(&mut parts.headers, is_websocket);
-    parts.headers.insert(
-        "x-served-by-cluster-hop",
-        "1".parse().expect("valid header"),
-    );
+    inject_forwarded_headers(&mut parts.headers, visitor_ip);
+    parts
+        .headers
+        .insert(CLUSTER_HOP_HEADER, "1".parse().expect("valid header"));
     let upstream_request = axum::http::Request::from_parts(parts, body);
 
     // Endpoint form: `host:port` (bind address reported by the instance).
@@ -386,11 +408,15 @@ mod tests {
         let ip: IpAddr = "203.0.113.7".parse().expect("ip");
         inject_forwarded_headers(&mut headers, ip);
         assert_eq!(
-            headers.get("x-forwarded-for").and_then(|value| value.to_str().ok()),
+            headers
+                .get("x-forwarded-for")
+                .and_then(|value| value.to_str().ok()),
             Some("203.0.113.7")
         );
         assert_eq!(
-            headers.get("x-real-ip").and_then(|value| value.to_str().ok()),
+            headers
+                .get("x-real-ip")
+                .and_then(|value| value.to_str().ok()),
             Some("203.0.113.7")
         );
 
@@ -399,11 +425,15 @@ mod tests {
         let upstream: IpAddr = "198.51.100.4".parse().expect("ip");
         inject_forwarded_headers(&mut headers, upstream);
         assert_eq!(
-            headers.get("x-forwarded-for").and_then(|value| value.to_str().ok()),
+            headers
+                .get("x-forwarded-for")
+                .and_then(|value| value.to_str().ok()),
             Some("203.0.113.7, 198.51.100.4")
         );
         assert_eq!(
-            headers.get("x-real-ip").and_then(|value| value.to_str().ok()),
+            headers
+                .get("x-real-ip")
+                .and_then(|value| value.to_str().ok()),
             Some("203.0.113.7")
         );
     }

@@ -2,6 +2,7 @@ mod accept;
 mod acme_challenge;
 mod active_health;
 pub(crate) mod cache;
+mod cache_policy;
 mod connection_limit;
 pub(crate) mod credential_entry_injection;
 mod dns;
@@ -48,6 +49,7 @@ mod upstream_client;
 mod upstream_tls;
 mod watch;
 mod website_delivery;
+pub(crate) mod wechat_verify;
 
 pub use error::DataPlaneError;
 pub use operations::{probe_data_plane_operations_from_env, DataPlaneOperationsConfig};
