@@ -29,8 +29,6 @@ pub const APPLICATION_SOURCE_VERSION: &str =
     "/backend/v3/api/applications/{applicationId}/source_versions/{sourceVersionId}";
 pub const APPLICATION_DEPLOYMENTS: &str =
     "/backend/v3/api/applications/{applicationId}/deployments";
-pub const APPLICATION_DEPLOYMENT_ROLLBACK: &str =
-    "/backend/v3/api/applications/{applicationId}/deployments/{deploymentId}/rollback";
 pub const CERTIFICATES: &str = "/backend/v3/api/certificates";
 pub const CERTIFICATES_ISSUE: &str = "/backend/v3/api/certificates/issue";
 pub const CERTIFICATE_OPERATION: &str = "/backend/v3/api/certificates/operations/{operationId}";

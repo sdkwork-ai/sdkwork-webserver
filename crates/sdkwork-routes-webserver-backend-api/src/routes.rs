@@ -5,14 +5,13 @@ use axum::{
     Extension, Json, Router,
 };
 use sdkwork_webserver_contract::{
-    CreateApplicationRequest, CreateDeploymentRequest, CreateDomainRequest,
-    CreateListenerCertificateBindingRequest, CreateManagedDomainRequest, CreateNginxConfigRequest,
-    CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
-    CreateSourceVersionRequest, ImportGitSourceVersionRequest, IssueCertificateRequest,
-    ListApplicationsQuery, ListAuditLogsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
-    RevokeCertificateRequest, UpdateApplicationRequest, UpdateCertificateRequest,
-    UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest, UpdateRootDomainRequest,
-    WebBackendApi, WebBackendRequestContext,
+    CreateApplicationRequest, CreateDomainRequest, CreateListenerCertificateBindingRequest,
+    CreateManagedDomainRequest, CreateNginxConfigRequest, CreateRootDomainHostnameRequest,
+    CreateRootDomainRequest, CreateServerRequest, CreateSourceVersionRequest,
+    ImportGitSourceVersionRequest, IssueCertificateRequest, ListApplicationsQuery,
+    ListAuditLogsQuery, ListNginxConfigsQuery, ListRootDomainsQuery, RevokeCertificateRequest,
+    UpdateApplicationRequest, UpdateCertificateRequest, UpdateDomainApplicationBindingRequest,
+    UpdateNginxConfigRequest, UpdateRootDomainRequest, WebBackendApi, WebBackendRequestContext,
 };
 use serde::Deserialize;
 use std::sync::Arc;
@@ -120,11 +119,7 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn WebBackendApi>) -> Rout
         )
         .route(
             paths::APPLICATION_DEPLOYMENTS,
-            get(list_application_deployments).post(create_application_deployment),
-        )
-        .route(
-            paths::APPLICATION_DEPLOYMENT_ROLLBACK,
-            post(rollback_application_deployment),
+            get(list_application_deployments),
         )
         .route(paths::CERTIFICATES, get(list_managed_certificates))
         .route(paths::CERTIFICATES_ISSUE, post(issue_managed_certificate))
@@ -696,35 +691,6 @@ async fn list_application_deployments(
                 query.status,
                 query.cursor.as_deref(),
             )
-            .await,
-    )
-}
-
-async fn create_application_deployment(
-    State(state): State<BackendState>,
-    context: Option<Extension<WebBackendRequestContext>>,
-    Path(application_id): Path<String>,
-    Json(request): Json<CreateDeploymentRequest>,
-) -> Result<Response, WebApiError> {
-    let context = require_backend_context(context)?;
-    created_resource(
-        state
-            .api
-            .create_application_deployment(&context, &application_id, &request)
-            .await,
-    )
-}
-
-async fn rollback_application_deployment(
-    State(state): State<BackendState>,
-    context: Option<Extension<WebBackendRequestContext>>,
-    Path((application_id, deployment_id)): Path<(String, String)>,
-) -> Result<Response, WebApiError> {
-    let context = require_backend_context(context)?;
-    ok_resource(
-        state
-            .api
-            .rollback_application_deployment(&context, &application_id, &deployment_id)
             .await,
     )
 }

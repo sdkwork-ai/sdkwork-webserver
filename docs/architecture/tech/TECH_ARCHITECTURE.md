@@ -312,12 +312,18 @@ parameters are `lower_snake_case`; and env/health collections are capped at 100 
 (PAGINATION_SPEC, SECURITY_SPEC, PRD-FR-011).
 
 Web and Deploy deployment records are command intents: the deployment worker that advances
-`status` beyond `PENDING` remains a separate authority (REQ-2026-0061/0062 gate). Until that
-authority exists, `applications.activate` (which requires a successful deployment) and
-`deployments.rollback` (which requires a successful source) honestly return `409`; the system
-never invents a success state. (The pause/activate commands are
-`applications.pause` / `applications.activate` on the app-api surface; PRD-FR-022
-names the workflow "site pause", the route names are application-scoped.)
+`status` beyond `PENDING` remains a separate authority (REQ-2026-0061/0062 gate). Because no
+shipped executor can advance a `webserver_deployment` past `PENDING`, the webserver backend
+surface deliberately does not publish `applications.deployments.create` or
+`applications.deployments.rollback` — accepting work it can never execute would be a fake
+success (PRD §12). `applications.deployments.list` remains available as read-only
+observability of recorded intents, the storage/service contract stays in place as the
+extension point the external deployment authority binds against, and
+`applications.activate` (which requires successful-deployment evidence) honestly returns
+`409` until that authority produces it; the system never invents a success state. (The
+pause/activate commands are `applications.pause` / `applications.activate` on the backend
+surface; PRD-FR-022 names the workflow "site pause", the route names are
+application-scoped.)
 
 ## 6. Security, Privacy, And Resource Boundaries
 

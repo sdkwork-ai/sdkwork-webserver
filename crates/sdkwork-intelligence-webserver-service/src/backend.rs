@@ -6,22 +6,22 @@ use sdkwork_webserver_contract::{
     web_is_platform_operator_tenant, ClusterEventPage, ClusterHeartbeatSamplePage, ClusterHostPage,
     ClusterHostResponse, ClusterInstancePage, ClusterInstanceResponse, ClusterOverviewResponse,
     ClusterPage, ClusterResponse, ClusterSyncManifest, CreateApplicationRequest,
-    CreateClusterRequest, CreateDeploymentRequest, CreateDomainRequest,
-    CreateListenerCertificateBindingRequest, CreateManagedDomainRequest, CreateNginxConfigRequest,
-    CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
-    CreateSourceVersionRequest, EnqueueClusterPeerMessagesRequest,
-    EnqueueClusterPeerMessagesResponse, ImportGitSourceVersionRequest, IssueCertificateRequest,
-    ListApplicationsQuery, ListNginxConfigsQuery, ListRootDomainsQuery, MetricsSeriesWindow,
-    MetricsSummaryQuery, MetricsSummaryResponse, MetricsWindowBounds, MetricsWindowRequest,
-    TrafficUsageStatisticsQuery, TrafficUsageStatisticsResponse, TrafficUsageWindow,
-    UpdateApplicationRequest, UpdateCertificateRequest, UpdateClusterHostRequest,
-    UpdateClusterInstanceRequest, UpdateClusterRequest, UpdateDomainApplicationBindingRequest,
-    UpdateNginxConfigRequest, UpdateRootDomainRequest, WebAppApi, WebAppRequestContext,
-    WebAppResourceScope, WebBackendApi, WebBackendRequestContext, WebServiceError,
-    WebServiceResult, DEFAULT_TRAFFIC_USAGE_TOP_APPS, DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS,
-    MAX_TRAFFIC_USAGE_TOP_APPS, MAX_TRAFFIC_USAGE_WINDOW_DAYS, METRICS_ENTITY_TENANTS,
-    METRICS_LAST_SEVEN_DAYS_SPAN, METRICS_WINDOWS, METRICS_WINDOW_CURRENT_MONTH,
-    METRICS_WINDOW_LAST_7_DAYS, METRICS_WINDOW_LIFETIME, METRICS_WINDOW_TODAY,
+    CreateClusterRequest, CreateDomainRequest, CreateListenerCertificateBindingRequest,
+    CreateManagedDomainRequest, CreateNginxConfigRequest, CreateRootDomainHostnameRequest,
+    CreateRootDomainRequest, CreateServerRequest, CreateSourceVersionRequest,
+    EnqueueClusterPeerMessagesRequest, EnqueueClusterPeerMessagesResponse,
+    ImportGitSourceVersionRequest, IssueCertificateRequest, ListApplicationsQuery,
+    ListNginxConfigsQuery, ListRootDomainsQuery, MetricsSeriesWindow, MetricsSummaryQuery,
+    MetricsSummaryResponse, MetricsWindowBounds, MetricsWindowRequest, TrafficUsageStatisticsQuery,
+    TrafficUsageStatisticsResponse, TrafficUsageWindow, UpdateApplicationRequest,
+    UpdateCertificateRequest, UpdateClusterHostRequest, UpdateClusterInstanceRequest,
+    UpdateClusterRequest, UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest,
+    UpdateRootDomainRequest, WebAppApi, WebAppRequestContext, WebAppResourceScope, WebBackendApi,
+    WebBackendRequestContext, WebServiceError, WebServiceResult, DEFAULT_TRAFFIC_USAGE_TOP_APPS,
+    DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS, MAX_TRAFFIC_USAGE_TOP_APPS, MAX_TRAFFIC_USAGE_WINDOW_DAYS,
+    METRICS_ENTITY_TENANTS, METRICS_LAST_SEVEN_DAYS_SPAN, METRICS_WINDOWS,
+    METRICS_WINDOW_CURRENT_MONTH, METRICS_WINDOW_LAST_7_DAYS, METRICS_WINDOW_LIFETIME,
+    METRICS_WINDOW_TODAY,
 };
 
 use crate::{AuditLogWrite, WebService};
@@ -627,26 +627,6 @@ impl WebBackendApi for WebService {
             cursor,
         )
         .await
-    }
-
-    async fn create_application_deployment(
-        &self,
-        context: &WebBackendRequestContext,
-        application_id: &str,
-        request: &CreateDeploymentRequest,
-    ) -> WebServiceResult<sdkwork_webserver_contract::DeploymentResponse> {
-        let app_context = Self::backend_app_context(context)?;
-        WebAppApi::create_deployment(self, &app_context, application_id, request).await
-    }
-
-    async fn rollback_application_deployment(
-        &self,
-        context: &WebBackendRequestContext,
-        application_id: &str,
-        deployment_id: &str,
-    ) -> WebServiceResult<sdkwork_webserver_contract::DeploymentResponse> {
-        let app_context = Self::backend_app_context(context)?;
-        WebAppApi::rollback_deployment(self, &app_context, application_id, deployment_id).await
     }
 
     async fn list_managed_certificates(

@@ -5567,62 +5567,6 @@ class ApplicationsDeploymentsListResponse {
   }
 }
 
-class ApplicationsDeploymentsCreateResponse201 {
-  final int? code;
-  final dynamic data;
-  final String? traceId;
-
-  ApplicationsDeploymentsCreateResponse201({
-    this.code,
-    this.data,
-    this.traceId
-  });
-
-  factory ApplicationsDeploymentsCreateResponse201.fromJson(Map<String, dynamic> json) {
-    return ApplicationsDeploymentsCreateResponse201(
-      code: json['code'] is int ? json['code'] : null,
-      data: _sdkworkAsMap(json['data']),
-      traceId: json['traceId']?.toString()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'code': code,
-      'data': data,
-      'traceId': traceId,
-    };
-  }
-}
-
-class ApplicationsDeploymentsRollbackResponse {
-  final int? code;
-  final dynamic data;
-  final String? traceId;
-
-  ApplicationsDeploymentsRollbackResponse({
-    this.code,
-    this.data,
-    this.traceId
-  });
-
-  factory ApplicationsDeploymentsRollbackResponse.fromJson(Map<String, dynamic> json) {
-    return ApplicationsDeploymentsRollbackResponse(
-      code: json['code'] is int ? json['code'] : null,
-      data: _sdkworkAsMap(json['data']),
-      traceId: json['traceId']?.toString()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'code': code,
-      'data': data,
-      'traceId': traceId,
-    };
-  }
-}
-
 class CertificatesListResponse {
   final int? code;
   final dynamic data;

@@ -2406,32 +2406,6 @@ public struct ApplicationsDeploymentsListResponse: Codable {
     }
 }
 
-public struct ApplicationsDeploymentsCreateResponse201: Codable {
-    public let code: Int?
-    public let data: Any?
-    public let traceId: String?
-
-
-    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
-        self.code = code
-        self.data = data
-        self.traceId = traceId
-    }
-}
-
-public struct ApplicationsDeploymentsRollbackResponse: Codable {
-    public let code: Int?
-    public let data: Any?
-    public let traceId: String?
-
-
-    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
-        self.code = code
-        self.data = data
-        self.traceId = traceId
-    }
-}
-
 public struct CertificatesListResponse: Codable {
     public let code: Int?
     public let data: Any?

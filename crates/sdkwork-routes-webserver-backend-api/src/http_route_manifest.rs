@@ -196,18 +196,6 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "applications.deployments.list",
     ).with_required_permission("web.sites.read"),
     HttpRoute::dual_token(
-        HttpMethod::Post,
-        "/backend/v3/api/applications/{applicationId}/deployments",
-        "applicationDeployment",
-        "applications.deployments.create",
-    ).with_required_permission("web.sites.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::AuthCritical),
-    HttpRoute::dual_token(
-        HttpMethod::Post,
-        "/backend/v3/api/applications/{applicationId}/deployments/{deploymentId}/rollback",
-        "applicationDeployment",
-        "applications.deployments.rollback",
-    ).with_required_permission("web.sites.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::AuthCritical),
-    HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/certificates",
         "certificate",

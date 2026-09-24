@@ -46,13 +46,9 @@ fn application_control_plane_routes_keep_authorization_contracts() {
             true,
             Some(RateLimitTier::AuthCritical),
         ),
-        (
-            HttpMethod::Post,
-            "applications.deployments.rollback",
-            "web.sites.write",
-            true,
-            Some(RateLimitTier::AuthCritical),
-        ),
+        // applications.deployments.create/.rollback were retired: the
+        // deployment executor is owned by sdkwork-deployments, so this
+        // surface must not accept work it can never advance.
     ];
     let manifest = backend_route_manifest();
 

@@ -132,8 +132,6 @@ require_relative 'sdkwork/backend_sdk/models/applications_source_versions_create
 require_relative 'sdkwork/backend_sdk/models/applications_source_versions_git_import_create_response201'
 require_relative 'sdkwork/backend_sdk/models/applications_source_versions_retrieve_response'
 require_relative 'sdkwork/backend_sdk/models/applications_deployments_list_response'
-require_relative 'sdkwork/backend_sdk/models/applications_deployments_create_response201'
-require_relative 'sdkwork/backend_sdk/models/applications_deployments_rollback_response'
 require_relative 'sdkwork/backend_sdk/models/certificates_list_response'
 require_relative 'sdkwork/backend_sdk/models/certificates_issue_response202'
 require_relative 'sdkwork/backend_sdk/models/certificates_operations_retrieve_response'

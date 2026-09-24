@@ -607,20 +607,6 @@ pub trait WebBackendApi: Send + Sync {
         cursor: Option<&str>,
     ) -> WebServiceResult<DeploymentPage>;
 
-    async fn create_application_deployment(
-        &self,
-        context: &WebBackendRequestContext,
-        application_id: &str,
-        request: &CreateDeploymentRequest,
-    ) -> WebServiceResult<DeploymentResponse>;
-
-    async fn rollback_application_deployment(
-        &self,
-        context: &WebBackendRequestContext,
-        application_id: &str,
-        deployment_id: &str,
-    ) -> WebServiceResult<DeploymentResponse>;
-
     async fn list_managed_certificates(
         &self,
         context: &WebBackendRequestContext,

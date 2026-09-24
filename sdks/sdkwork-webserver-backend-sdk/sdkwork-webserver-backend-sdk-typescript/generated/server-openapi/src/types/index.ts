@@ -136,8 +136,6 @@ export type { ApplicationsSourceVersionsCreateResponse201 } from './applications
 export type { ApplicationsSourceVersionsGitImportCreateResponse201 } from './applications-source-versions-git-import-create-response201';
 export type { ApplicationsSourceVersionsRetrieveResponse } from './applications-source-versions-retrieve-response';
 export type { ApplicationsDeploymentsListResponse } from './applications-deployments-list-response';
-export type { ApplicationsDeploymentsCreateResponse201 } from './applications-deployments-create-response201';
-export type { ApplicationsDeploymentsRollbackResponse } from './applications-deployments-rollback-response';
 export type { CertificatesListResponse } from './certificates-list-response';
 export type { CertificatesIssueResponse202 } from './certificates-issue-response202';
 export type { CertificatesOperationsRetrieveResponse } from './certificates-operations-retrieve-response';

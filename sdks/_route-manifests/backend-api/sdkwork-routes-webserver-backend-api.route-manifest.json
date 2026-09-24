@@ -848,58 +848,6 @@
       "rateLimitTier": null
     },
     {
-      "method": "POST",
-      "path": "/backend/v3/api/applications/{applicationId}/deployments",
-      "operationId": "applications.deployments.create",
-      "tags": [
-        "applicationDeployment"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "routeAuth": "dual-token",
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-webserver",
-        "apiAuthority": "sdkwork-webserver-backend-api"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "backend-api",
-      "permission": "web.sites.write",
-      "idempotent": true,
-      "rateLimitTier": "auth-critical"
-    },
-    {
-      "method": "POST",
-      "path": "/backend/v3/api/applications/{applicationId}/deployments/{deploymentId}/rollback",
-      "operationId": "applications.deployments.rollback",
-      "tags": [
-        "applicationDeployment"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "routeAuth": "dual-token",
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-webserver",
-        "apiAuthority": "sdkwork-webserver-backend-api"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "backend-api",
-      "permission": "web.sites.write",
-      "idempotent": true,
-      "rateLimitTier": "auth-critical"
-    },
-    {
       "method": "GET",
       "path": "/backend/v3/api/certificates",
       "operationId": "certificates.list",
