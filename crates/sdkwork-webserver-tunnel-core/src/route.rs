@@ -140,12 +140,14 @@ impl RouteMatcher {
 
     /// True when this matcher is a wildcard domain (`*.suffix`).
     pub fn is_wildcard_domain(&self) -> bool {
-        self.as_domain().is_some_and(|domain| domain.starts_with("*."))
+        self.as_domain()
+            .is_some_and(|domain| domain.starts_with("*."))
     }
 
     /// The suffix covered by a wildcard domain matcher (without `*.`).
     pub fn wildcard_suffix(&self) -> Option<&str> {
-        self.as_domain().and_then(|domain| domain.strip_prefix("*."))
+        self.as_domain()
+            .and_then(|domain| domain.strip_prefix("*."))
     }
 
     /// The matched gateway port, when this is a port matcher.

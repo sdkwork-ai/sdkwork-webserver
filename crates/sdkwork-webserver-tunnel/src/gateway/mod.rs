@@ -60,6 +60,11 @@ pub struct GatewayShared {
     /// Route declarations queued for devices that are currently offline
     /// (PRD §35 create-route API; memory-only in V1).
     pub pending_declarations: AsyncMutex<HashMap<DeviceId, Vec<TunnelRouteTemplate>>>,
+    /// Global visitor/control connection admission. Every accepted QUIC
+    /// control connection and every visitor TCP/UDP session holds one
+    /// permit for its lifetime, so the concurrent task count is bounded by
+    /// `limits.max_connections` instead of the arrival rate.
+    pub connection_admission: Arc<tokio::sync::Semaphore>,
     /// Public TCP listeners for `tcp` routes (PRD §31).
     pub(crate) tcp: Mutex<listeners::TcpListenerSet>,
     /// Public UDP listeners for `udp` routes (datagram relay).
@@ -83,6 +88,9 @@ impl GatewayShared {
                 options.auth_max_failures,
                 Duration::from_secs(options.auth_window_secs.max(1)),
             ),
+            connection_admission: Arc::new(tokio::sync::Semaphore::new(
+                options.limits.max_connections.max(1) as usize,
+            )),
             domain_suffixes: options.domain_suffixes.clone(),
             pending_declarations: AsyncMutex::new(HashMap::new()),
             tcp: Mutex::new(listeners::TcpListenerSet::default()),
@@ -339,6 +347,14 @@ async fn accept_loop(
             accepted = transport.accept() => {
                 match accepted {
                     Ok(connection) => {
+                        // Bounded admission: a saturated gateway closes the
+                        // new control connection instead of queueing tasks.
+                        let Ok(permit) = shared.connection_admission.clone().try_acquire_owned() else {
+                            shared.metrics.record_error();
+                            tracing::warn!("tunnel gateway at connection capacity; control connection closed");
+                            drop(connection);
+                            continue;
+                        };
                         let shared = shared.clone();
                         let events = events.clone();
                         let stop = stop.clone();
@@ -347,6 +363,7 @@ async fn accept_loop(
                             .unwrap_or_else(|_| unspecified_peer());
                         let connection: Arc<dyn TunnelConnection> = Arc::from(connection);
                         tokio::spawn(async move {
+                            let _permit = permit;
                             control::run_connection(shared, connection, peer, stop).await;
                             let _ = events;
                         });

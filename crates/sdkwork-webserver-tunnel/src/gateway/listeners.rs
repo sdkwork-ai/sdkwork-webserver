@@ -128,8 +128,20 @@ async fn accept_loop(shared: Arc<GatewayShared>, port: u16, listener: Arc<TcpLis
     loop {
         match listener.accept().await {
             Ok((downstream, peer)) => {
+                // Bounded admission: a saturated gateway closes the visitor
+                // socket immediately; the client reconnects.
+                let Ok(permit) = shared.connection_admission.clone().try_acquire_owned() else {
+                    shared.metrics.record_error();
+                    tracing::debug!(
+                        port,
+                        "tunnel gateway at connection capacity; visitor closed"
+                    );
+                    drop(downstream);
+                    continue;
+                };
                 let shared = shared.clone();
                 tokio::spawn(async move {
+                    let _permit = permit;
                     relay(shared, port, downstream, peer).await;
                 });
             }

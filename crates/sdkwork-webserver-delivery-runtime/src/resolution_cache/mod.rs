@@ -5,7 +5,7 @@ use std::{
     panic::AssertUnwindSafe,
     sync::{
         atomic::{AtomicU64, Ordering},
-        Arc,
+        Arc, Mutex,
     },
     time::Duration,
 };
@@ -18,7 +18,7 @@ use sdkwork_webserver_contract::provider::{
     WebsiteStaticContentProvider, WebsiteWikiProvider, WebsiteWikiRouteResolution,
 };
 use tokio::{
-    sync::{watch, Mutex},
+    sync::watch,
     time::{timeout, Instant},
 };
 
@@ -151,11 +151,11 @@ impl WebsiteProviderResolutionCache {
         if deadline_ms == 0 {
             return Err(deadline_exceeded());
         }
-        let lookup =
-            self.state
-                .lock()
-                .await
-                .lookup_or_start(&key, self.maximum_entries, Instant::now());
+        let lookup = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .lookup_or_start(&key, self.maximum_entries, Instant::now());
         match lookup {
             CacheLookup::Fresh(value) => {
                 if matches!(value, CachedResolution::Negative) {
@@ -216,7 +216,10 @@ impl WebsiteProviderResolutionCache {
         flight: FlightStart,
         result: FlightResult,
     ) {
-        let mut state = self.state.lock().await;
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let result = if state.provider_epoch_matches(&key, flight.provider_epoch) {
             result
         } else {
@@ -251,7 +254,10 @@ impl WebsiteProviderResolutionCache {
     }
 
     pub(crate) async fn snapshot(&self) -> WebsiteProviderResolutionCacheSnapshot {
-        let state = self.state.lock().await;
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         WebsiteProviderResolutionCacheSnapshot {
             maximum_entries: self.maximum_entries,
             entries: state.entry_count(),
@@ -273,7 +279,11 @@ impl WebsiteProviderResolutionCache {
 #[async_trait]
 impl WebsiteProviderEventInvalidator for WebsiteProviderResolutionCache {
     async fn mark_uncertain(&self, scope: &WebsiteProviderEventScope) -> Result<(), String> {
-        let removed = self.state.lock().await.mark_uncertain(scope.source);
+        let removed = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .mark_uncertain(scope.source);
         self.metrics
             .invalidations
             .fetch_add(removed.max(1) as u64, Ordering::Relaxed);
@@ -287,7 +297,11 @@ impl WebsiteProviderEventInvalidator for WebsiteProviderResolutionCache {
         if invalidations.is_empty() {
             return Ok(());
         }
-        let removed = self.state.lock().await.invalidate(invalidations);
+        let removed = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .invalidate(invalidations);
         self.metrics
             .invalidations
             .fetch_add(removed.max(1) as u64, Ordering::Relaxed);

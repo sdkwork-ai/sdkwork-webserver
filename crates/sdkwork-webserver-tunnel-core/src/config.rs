@@ -285,6 +285,10 @@ pub struct TunnelLimitsConfig {
     pub max_routes: u32,
     /// Maximum STP control-message size in bytes (PRD §108).
     pub max_control_message_bytes: u32,
+    /// Maximum concurrent visitor/control connections across every listener.
+    /// This is the gateway-side global admission ceiling; saturation closes
+    /// new connections immediately instead of queueing unbounded tasks.
+    pub max_connections: u32,
 }
 
 impl Default for TunnelLimitsConfig {
@@ -295,6 +299,7 @@ impl Default for TunnelLimitsConfig {
             max_streams_per_session: 256,
             max_routes: 10_000,
             max_control_message_bytes: 64 * 1024,
+            max_connections: 8_192,
         }
     }
 }
@@ -502,13 +507,19 @@ mod tests {
         assert_eq!(agent.token_env, "SDKWORK_TUNNEL_TOKEN");
         assert_eq!(agent.device_id_env, "SDKWORK_TUNNEL_DEVICE_ID");
         assert!(agent.endpoint.is_empty(), "no endpoint is baked in");
-        assert!(agent.device_name.is_empty(), "empty means: use the hostname");
+        assert!(
+            agent.device_name.is_empty(),
+            "empty means: use the hostname"
+        );
         assert!(agent.tls.is_none(), "TLS policy is opt-in");
 
         let tls = TunnelAgentTlsConfig::default();
         assert!(tls.ca_pem_path.is_none());
         assert!(tls.pinned_server_sha256.is_none());
-        assert!(!tls.insecure_skip_verify, "skip-verify is never the default");
+        assert!(
+            !tls.insecure_skip_verify,
+            "skip-verify is never the default"
+        );
     }
 
     #[test]
@@ -518,7 +529,10 @@ mod tests {
             gateway.domain_suffixes.is_empty(),
             "an empty suffix list disables the suffix policy"
         );
-        assert_eq!(gateway.agent_token_env, vec!["SDKWORK_TUNNEL_GATEWAY_TOKEN"]);
+        assert_eq!(
+            gateway.agent_token_env,
+            vec!["SDKWORK_TUNNEL_GATEWAY_TOKEN"]
+        );
         // The default names a *variable*; a literal token here would be the
         // bug this assertion exists to catch.
         assert!(gateway
@@ -550,7 +564,10 @@ mod tests {
         assert_eq!(route.matcher, RouteMatcher::Port(7053));
         assert_eq!(route.protocol, TunnelProtocolKind::Udp);
 
-        let portless = TunnelRouteTemplate { port: None, ..template };
+        let portless = TunnelRouteTemplate {
+            port: None,
+            ..template
+        };
         assert!(
             portless.validate().is_err(),
             "a udp template without a port can never be reached"

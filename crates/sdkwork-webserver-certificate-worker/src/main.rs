@@ -142,23 +142,52 @@ async fn main() -> anyhow::Result<()> {
         // gate in front of issuance — a hostname that is not VERIFIED cannot be
         // a certificate identifier — so it must not depend on an operator
         // re-submitting the verify request. Failure here is logged and retried
-        // next cycle; it must not stop certificate operations.
-        match runtime
-            .service
-            .run_domain_verification_cycle(DOMAIN_VERIFICATION_SWEEP_BATCH)
-            .await
-        {
-            Ok(report) if !report.is_idle() => {
-                info!(
-                    due = report.due,
-                    verified = report.verified,
-                    pending = report.pending,
-                    failed = report.failed,
-                    deferred = report.deferred,
-                    "automatic domain verification sweep completed"
-                );
+        // next cycle; it must not stop certificate operations. The sweep sits
+        // in the same shutdown/watchdog select as the operation cycle so a
+        // stalled sweep can delay neither graceful shutdown nor the loop
+        // cadence.
+        enum SweepOutcome {
+            Completed,
+            TimedOut,
+        }
+        let verification = tokio::select! {
+            result = runtime
+                .service
+                .run_domain_verification_cycle(DOMAIN_VERIFICATION_SWEEP_BATCH) =>
+            {
+                result.map(|report| match report.is_idle() {
+                    true => SweepOutcome::Completed,
+                    false => {
+                        info!(
+                            due = report.due,
+                            verified = report.verified,
+                            pending = report.pending,
+                            failed = report.failed,
+                            deferred = report.deferred,
+                            "automatic domain verification sweep completed"
+                        );
+                        SweepOutcome::Completed
+                    }
+                })
             }
-            Ok(_) => {}
+            result = &mut shutdown_task => {
+                result
+                    .map_err(|error| anyhow::anyhow!("certificate worker shutdown task failed: {error}"))?
+                    .map_err(|error| anyhow::anyhow!("certificate worker shutdown listener failed: {error}"))?;
+                info!("certificate worker stopped after completing the active sweep");
+                break;
+            }
+            () = tokio::time::sleep(Duration::from_secs(cycle_timeout_secs)) => {
+                warn!(
+                    cycle_timeout_secs,
+                    "domain verification sweep exceeded its watchdog timeout"
+                );
+                Ok(SweepOutcome::TimedOut)
+            }
+        };
+        match verification {
+            Ok(SweepOutcome::Completed) => {}
+            Ok(SweepOutcome::TimedOut) => {}
             Err(error) => {
                 warn!(error = %error, "automatic domain verification sweep failed");
             }
