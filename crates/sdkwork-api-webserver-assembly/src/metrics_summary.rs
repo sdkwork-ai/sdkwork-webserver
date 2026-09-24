@@ -462,7 +462,11 @@ impl SharedDatabaseMetricsSummaryReadPort {
                         ),
                         (
                             METRICS_WINDOW_LIFETIME,
-                            quantity_column(&row, "lifetime_objects", METRICS_STORAGE_OBJECT_COUNT)?,
+                            quantity_column(
+                                &row,
+                                "lifetime_objects",
+                                METRICS_STORAGE_OBJECT_COUNT,
+                            )?,
                         ),
                     ],
                     METRICS_UNIT_COUNT,
@@ -1133,9 +1137,15 @@ mod tests {
         );
 
         let order: Vec<&str> = values.iter().map(|value| value.window.as_str()).collect();
-        assert_eq!(order, METRICS_WINDOWS, "the caller's literal order must not decide the response");
         assert_eq!(
-            values.iter().map(|value| value.quantity).collect::<Vec<i64>>(),
+            order, METRICS_WINDOWS,
+            "the caller's literal order must not decide the response"
+        );
+        assert_eq!(
+            values
+                .iter()
+                .map(|value| value.quantity)
+                .collect::<Vec<i64>>(),
             vec![1, 10, 30, 40],
             "each window must keep its own figure through the reordering"
         );
@@ -1164,7 +1174,10 @@ mod tests {
             !values.iter().any(|value| value.window == "last_30_days"),
             "a window absent from the vocabulary must not reach the response"
         );
-        assert_eq!(values[0].quantity, 7, "the surviving windows keep their own figures");
+        assert_eq!(
+            values[0].quantity, 7,
+            "the surviving windows keep their own figures"
+        );
     }
 
     /// The placeholder each `created_at >=` comparison refers to, in textual
@@ -1211,7 +1224,10 @@ mod tests {
                  bound in that order: {sql}"
             );
             assert!(sql.contains("$4"), "$4 must be the tenant filter: {sql}");
-            assert!(!sql.contains("$5"), "no entity query may take a fifth bind: {sql}");
+            assert!(
+                !sql.contains("$5"),
+                "no entity query may take a fifth bind: {sql}"
+            );
         }
     }
 
@@ -1251,8 +1267,16 @@ mod tests {
             );
         }
         for sql in [ENTITY_APPLICATIONS_DAILY_SQL, ENTITY_AGENTS_DAILY_SQL] {
-            assert_eq!(sql.matches("created_at >= ($").count(), 1, "one inclusive bound: {sql}");
-            assert_eq!(sql.matches("created_at < ($").count(), 1, "one exclusive bound: {sql}");
+            assert_eq!(
+                sql.matches("created_at >= ($").count(),
+                1,
+                "one inclusive bound: {sql}"
+            );
+            assert_eq!(
+                sql.matches("created_at < ($").count(),
+                1,
+                "one exclusive bound: {sql}"
+            );
             assert_eq!(
                 sql.matches("AT TIME ZONE 'UTC'").count(),
                 3,
@@ -1269,7 +1293,10 @@ mod tests {
                 sql.contains("created_at >= $"),
                 "a TEXT `created_at` compares lexically against the bare bound: {sql}"
             );
-            assert!(!sql.contains("AT TIME ZONE"), "and needs no time zone anchor: {sql}");
+            assert!(
+                !sql.contains("AT TIME ZONE"),
+                "and needs no time zone anchor: {sql}"
+            );
         }
     }
 
@@ -1419,9 +1446,12 @@ mod tests {
         // `lifetime` is the tempting one to leave unbounded; doing so would let
         // a future-dated fact make the widest window disagree with all three
         // narrower ones, and the dashboard would read as if the clock moved.
-        assert!(TRAFFIC_WINDOW_TOTALS_SQL.contains("period_start < ($4::date)::timestamp AT TIME ZONE 'UTC'"));
+        assert!(TRAFFIC_WINDOW_TOTALS_SQL
+            .contains("period_start < ($4::date)::timestamp AT TIME ZONE 'UTC'"));
         assert!(!TRAFFIC_WINDOW_TOTALS_SQL.contains("period_start >= ($4::date)"));
-        assert!(TRAFFIC_SINCE_SQL.contains("period_start < ($1::date)::timestamp AT TIME ZONE 'UTC'"));
+        assert!(
+            TRAFFIC_SINCE_SQL.contains("period_start < ($1::date)::timestamp AT TIME ZONE 'UTC'")
+        );
         assert_eq!(
             TRAFFIC_WINDOW_TOTALS_SQL.matches("FILTER").count(),
             3,
@@ -1446,7 +1476,9 @@ mod tests {
             );
         }
         assert_eq!(
-            TRAFFIC_WINDOW_TOTALS_SQL.matches("AT TIME ZONE 'UTC'").count(),
+            TRAFFIC_WINDOW_TOTALS_SQL
+                .matches("AT TIME ZONE 'UTC'")
+                .count(),
             4,
             "all four window bounds must carry the anchor: {TRAFFIC_WINDOW_TOTALS_SQL}"
         );
@@ -1465,7 +1497,9 @@ mod tests {
         // statement's only `WHERE`: a second copy inside a window filter is how
         // one dimension comes to count rows the other does not.
         assert_eq!(
-            STORAGE_WINDOW_TOTALS_SQL.matches("lifecycle_status = 'active'").count(),
+            STORAGE_WINDOW_TOTALS_SQL
+                .matches("lifecycle_status = 'active'")
+                .count(),
             1,
             "the occupancy predicate must appear exactly once: {STORAGE_WINDOW_TOTALS_SQL}"
         );
@@ -1490,7 +1524,9 @@ mod tests {
             "a bare date cast to timestamptz is resolved in the session TimeZone"
         );
         assert_eq!(
-            STORAGE_WINDOW_TOTALS_SQL.matches("AT TIME ZONE 'UTC'").count(),
+            STORAGE_WINDOW_TOTALS_SQL
+                .matches("AT TIME ZONE 'UTC'")
+                .count(),
             6,
             "all six window comparisons must carry the anchor: {STORAGE_WINDOW_TOTALS_SQL}"
         );
@@ -1537,7 +1573,9 @@ mod tests {
         // carry a `FILTER` between `SUM(content_length)` and the `, 0)`, so the
         // whole coalesced form appears only on the unfiltered line.
         assert_eq!(
-            STORAGE_WINDOW_TOTALS_SQL.matches("SUM(content_length)").count(),
+            STORAGE_WINDOW_TOTALS_SQL
+                .matches("SUM(content_length)")
+                .count(),
             4,
             "there are four byte figures and each is a sum of `content_length`"
         );

@@ -31,8 +31,8 @@ mod traffic_usage;
 
 pub use bootstrap::{
     assemble_api_router, assemble_business_routes, ensure_database_lifecycle_from_env,
-    migrate_database_from_env, seed_space_repository, web_module, web_module_with_context, ApiAssembly,
-    ApiAssemblyContext,
+    migrate_database_from_env, seed_space_repository, web_module, web_module_with_context,
+    ApiAssembly, ApiAssemblyContext,
 };
 
 // SDKWORK-ASSEMBLY-LIB-CUSTOM: the process-wide graceful-shutdown trigger. The

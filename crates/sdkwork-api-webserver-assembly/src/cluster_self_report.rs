@@ -32,6 +32,17 @@ const MIN_HEARTBEAT_INTERVAL_SECS: u64 = 5;
 const MAX_BACKOFF_MULTIPLIER: u32 = 8;
 const MACHINE_CODE_MIN_CHARS: usize = 8;
 
+/// Health is measured, not asserted: the reported state is derived from the
+/// process RSS against the deployment's configured memory budget
+/// (`SDKWORK_WEBSERVER_MEMORY_LIMIT`, the same governance limit compose and
+/// Kubernetes apply). At 75% of budget the instance reports `DEGRADED`, at
+/// 90% `UNHEALTHY`; without both a reading and a budget the instance reports
+/// `HEALTHY` because liveness is owned by the heartbeat itself and silence is
+/// judged by the registry sweep — an unmeasurable process must not invent a
+/// reading it does not have.
+const MEMORY_DEGRADED_RATIO_PERCENT: i64 = 75;
+const MEMORY_UNHEALTHY_RATIO_PERCENT: i64 = 90;
+
 /// Immutable self-report configuration resolved from the environment.
 #[derive(Clone, Debug)]
 pub struct ClusterSelfReportConfig {
@@ -292,6 +303,63 @@ fn resident_memory_mb() -> Option<i64> {
     None
 }
 
+/// Parses a byte-size budget (`4g`, `512m`, `1073741824`) into MiB. Accepts
+/// the same values the compose/Kubernetes resource limits take so the
+/// self-report reads the deployment's actual governance limit.
+fn memory_limit_mib() -> Option<i64> {
+    parse_memory_limit_mib(
+        std::env::var("SDKWORK_WEBSERVER_MEMORY_LIMIT")
+            .ok()
+            .as_deref(),
+    )
+}
+
+fn parse_memory_limit_mib(raw: Option<&str>) -> Option<i64> {
+    let raw = raw?.trim().to_ascii_lowercase();
+    let (digits, multiplier_mib): (String, i64) = if let Some(value) = raw.strip_suffix("g") {
+        (value.trim().to_owned(), 1024)
+    } else if let Some(value) = raw.strip_suffix("m") {
+        (value.trim().to_owned(), 1)
+    } else if let Some(value) = raw.strip_suffix("k") {
+        // A kiB-granular budget is below the MiB resolution of the reading;
+        // treat it as 0 MiB rather than rounding it up to a false success.
+        (value.trim().to_owned(), 0)
+    } else if raw.chars().all(|c| c.is_ascii_digit()) && !raw.is_empty() {
+        (raw, 0)
+    } else {
+        return None;
+    };
+    let value: i64 = digits.parse().ok()?;
+    Some(value.checked_mul(multiplier_mib)?)
+}
+
+/// One heartbeat's measured health: the state string the contract expects
+/// (`HEALTHY`/`DEGRADED`/`UNHEALTHY`) plus the memory utilization percent
+/// when both a reading and a budget exist.
+fn measured_health_state(
+    rss_mb: Option<i64>,
+    limit_mb: Option<i64>,
+) -> (&'static str, Option<i64>) {
+    let Some(rss) = rss_mb else {
+        return ("HEALTHY", None);
+    };
+    let Some(limit) = limit_mb else {
+        return ("HEALTHY", None);
+    };
+    if limit <= 0 {
+        return ("HEALTHY", None);
+    }
+    let percent = rss.saturating_mul(100) / limit;
+    let state = if percent >= MEMORY_UNHEALTHY_RATIO_PERCENT {
+        "UNHEALTHY"
+    } else if percent >= MEMORY_DEGRADED_RATIO_PERCENT {
+        "DEGRADED"
+    } else {
+        "HEALTHY"
+    };
+    (state, Some(percent))
+}
+
 /// What an `ops` directive asks this node to do.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum OpsAction {
@@ -458,12 +526,27 @@ async fn run_self_report_loop(service: Arc<WebService>, config: ClusterSelfRepor
         if let Some(uuid) = &instance_uuid {
             let mut metrics = serde_json::Map::new();
             metrics.insert("pid".to_string(), serde_json::json!(process_pid));
-            if let Some(rss_mb) = resident_memory_mb() {
+            let rss_mb = resident_memory_mb();
+            let limit_mb = memory_limit_mib();
+            if let Some(rss_mb) = rss_mb {
                 metrics.insert("rssMb".to_string(), serde_json::json!(rss_mb));
             }
+            if let Some(limit_mb) = limit_mb {
+                metrics.insert("memoryLimitMb".to_string(), serde_json::json!(limit_mb));
+            }
+            let (health_state, memory_used_percent) = measured_health_state(rss_mb, limit_mb);
+            if let Some(memory_used_percent) = memory_used_percent {
+                metrics.insert(
+                    "memoryUsedPercent".to_string(),
+                    serde_json::json!(memory_used_percent),
+                );
+            }
+            // `status` reports the instance is online: the beat itself proves
+            // the process is running. `health_state` is the measured reading,
+            // never a constant claim.
             let request = ClusterHeartbeatRequest {
                 status: 1,
-                health_state: "HEALTHY".to_string(),
+                health_state: health_state.to_string(),
                 uptime_seconds: started.elapsed().as_secs() as i64,
                 build_version: Some(build_version.clone()),
                 metrics: serde_json::Value::Object(metrics),
@@ -567,6 +650,38 @@ mod tests {
             ops_action(&directives(false, true)),
             OpsAction::Drain,
             "the registry's own drain posture is obeyed"
+        );
+    }
+
+    #[test]
+    fn memory_budget_parses_deployment_limit_values() {
+        assert_eq!(parse_memory_limit_mib(Some("4g")), Some(4 * 1024));
+        assert_eq!(parse_memory_limit_mib(Some("512m")), Some(512));
+        assert_eq!(parse_memory_limit_mib(Some(" 1G ")), Some(1024));
+        assert_eq!(parse_memory_limit_mib(Some("512k")), Some(0));
+        assert_eq!(parse_memory_limit_mib(None), None);
+        assert_eq!(parse_memory_limit_mib(Some("bogus")), None);
+    }
+
+    #[test]
+    fn health_state_is_measured_against_the_configured_budget() {
+        // No reading or no budget: the instance must not invent a claim, but
+        // liveness is owned by the beat itself, so the state stays HEALTHY.
+        assert_eq!(measured_health_state(None, Some(4096)), ("HEALTHY", None));
+        assert_eq!(measured_health_state(Some(1024), None), ("HEALTHY", None));
+        // 50% of budget.
+        assert_eq!(
+            measured_health_state(Some(2048), Some(4096)),
+            ("HEALTHY", Some(50))
+        );
+        // 75% is the DEGRADED threshold, 90% UNHEALTHY.
+        assert_eq!(
+            measured_health_state(Some(3072), Some(4096)),
+            ("DEGRADED", Some(75))
+        );
+        assert_eq!(
+            measured_health_state(Some(3700), Some(4096)),
+            ("UNHEALTHY", Some(90))
         );
     }
 }

@@ -16,8 +16,8 @@ use async_trait::async_trait;
 use sdkwork_deploy_contract as deploy;
 use sdkwork_webserver_contract::{
     TrafficUsageAppTotal, TrafficUsageDailyPoint, TrafficUsageReadPort,
-    TrafficUsageStatisticsResponse, TrafficUsageTenantTotal, TrafficUsageTotal,
-    TrafficUsageWindow, WebServiceError, WebServiceResult,
+    TrafficUsageStatisticsResponse, TrafficUsageTenantTotal, TrafficUsageTotal, TrafficUsageWindow,
+    WebServiceError, WebServiceResult,
 };
 use sqlx::PgPool;
 
@@ -134,7 +134,11 @@ fn project_statistics(source: deploy::TrafficUsageStatistics) -> TrafficUsageSta
         totals: source.totals.into_iter().map(project_total).collect(),
         daily: source.daily.into_iter().map(project_daily_point).collect(),
         apps: source.apps.into_iter().map(project_app_total).collect(),
-        tenants: source.tenants.into_iter().map(project_tenant_total).collect(),
+        tenants: source
+            .tenants
+            .into_iter()
+            .map(project_tenant_total)
+            .collect(),
     }
 }
 

@@ -293,7 +293,9 @@ pub async fn ensure_database_lifecycle_from_env() -> Result<(), ApiAssemblyError
         .map_err(|detail| ApiAssemblyError::DatabaseMigration { detail })?;
     sdkwork_api_sandbox_assembly::bootstrap_database_from_env()
         .await
-        .map_err(|detail| ApiAssemblyError::DatabaseMigration { detail })?;
+        .map_err(|detail| ApiAssemblyError::DatabaseMigration {
+            detail: detail.to_string(),
+        })?;
     Ok(())
 }
 
