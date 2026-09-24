@@ -485,8 +485,12 @@ impl WebService {
                 },
             )
             .await?;
-        self.record_routing_restore_event(&updated, "INSTANCE_UNDRAINED", "rejoined the routing pool")
-            .await;
+        self.record_routing_restore_event(
+            &updated,
+            "INSTANCE_UNDRAINED",
+            "rejoined the routing pool",
+        )
+        .await;
         Ok(updated)
     }
 
@@ -1109,22 +1113,20 @@ impl WebService {
         })
     }
 
-    /// Per-instance heartbeat metric history for the detail page (bounded,
-    /// newest first). Also used by availability/SLA views.
+    /// Per-instance heartbeat metric history for the detail page. Growing
+    /// time-series collection: cursor/keyset pagination (PAGINATION_SPEC),
+    /// newest first, same contract as `cluster_heartbeat_list`. Also used by
+    /// availability/SLA views.
     pub async fn cluster_instance_metrics_history(
         &self,
         context: &WebBackendRequestContext,
         instance_id: &str,
-        limit: i32,
+        page_size: i32,
+        cursor: Option<&str>,
     ) -> WebServiceResult<ClusterHeartbeatSamplePage> {
         require_cluster_platform_operator(context)?;
-        if !(1..=500).contains(&limit) {
-            return Err(WebServiceError::validation(
-                "limit must be between 1 and 500",
-            ));
-        }
         self.repository
-            .list_cluster_heartbeats(instance_id, limit, None)
+            .list_cluster_heartbeats(instance_id, page_size, cursor)
             .await
     }
 
@@ -1540,7 +1542,11 @@ fn instance_display_name(request: &ClusterRegistrationRequest) -> String {
     };
     let budget = MAX_INSTANCE_NAME_CHARS.saturating_sub(suffix.chars().count());
     let host: String = request.host.hostname.trim().chars().take(budget).collect();
-    let prefix = if host.is_empty() { "instance" } else { host.as_str() };
+    let prefix = if host.is_empty() {
+        "instance"
+    } else {
+        host.as_str()
+    };
     format!("{prefix}{suffix}")
 }
 
@@ -1781,7 +1787,10 @@ mod tests {
     #[test]
     fn routing_pool_absence_names_the_gate_that_keeps_the_out() {
         let online = CLUSTER_INSTANCE_STATUS_ONLINE;
-        assert_eq!(routing_pool_absence(online, Some(true), Some(false), Some(false)), None);
+        assert_eq!(
+            routing_pool_absence(online, Some(true), Some(false), Some(false)),
+            None
+        );
 
         assert_eq!(
             routing_pool_absence(online, Some(false), Some(false), Some(false)),
@@ -1796,24 +1805,36 @@ mod tests {
             Some("the active prober ejected it; run a probe to clear the ejection")
         );
         assert_eq!(
-            routing_pool_absence(CLUSTER_INSTANCE_STATUS_MAINTENANCE, Some(true), Some(false), Some(false)),
+            routing_pool_absence(
+                CLUSTER_INSTANCE_STATUS_MAINTENANCE,
+                Some(true),
+                Some(false),
+                Some(false)
+            ),
             Some("it is not online")
         );
         assert_eq!(
-            routing_pool_absence(CLUSTER_INSTANCE_STATUS_ERROR, Some(true), Some(false), Some(true)),
+            routing_pool_absence(
+                CLUSTER_INSTANCE_STATUS_ERROR,
+                Some(true),
+                Some(false),
+                Some(true)
+            ),
             Some("the active prober ejected it; run a probe to clear the ejection")
         );
         assert_eq!(
-            routing_pool_absence(CLUSTER_INSTANCE_STATUS_OFFLINE, Some(true), Some(false), Some(false)),
+            routing_pool_absence(
+                CLUSTER_INSTANCE_STATUS_OFFLINE,
+                Some(true),
+                Some(false),
+                Some(false)
+            ),
             Some("it is not online")
         );
         // Absent wire values are "not asserted by the caller", so they must not
         // be read as a closed gate: an instance whose flags the API omitted is
         // judged on its status alone.
-        assert_eq!(
-            routing_pool_absence(online, None, None, None),
-            None
-        );
+        assert_eq!(routing_pool_absence(online, None, None, None), None);
         assert_eq!(
             routing_pool_absence(CLUSTER_INSTANCE_STATUS_OFFLINE, None, None, None),
             Some("it is not online")
@@ -1949,7 +1970,10 @@ mod tests {
         let request = registration_request(&long_host, 4_242);
         let name = instance_display_name(&request);
         assert_eq!(name.chars().count(), MAX_INSTANCE_NAME_CHARS);
-        assert!(name.ends_with(":8080"), "the port survives truncation: {name}");
+        assert!(
+            name.ends_with(":8080"),
+            "the port survives truncation: {name}"
+        );
     }
 
     /// Every updatable field survives the empty-request guard on its own.

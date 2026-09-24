@@ -3383,8 +3383,10 @@ paths:
       operationId: clusters.instances.metrics.list
       summary: List one instance's heartbeat metric samples for trend charts
       description: |-
-        Bounded heartbeat metric samples, newest first, for the instance detail
-        surface's trend charts and SLA evidence.
+        Heartbeat metric samples, newest first, for the instance detail
+        surface's trend charts and SLA evidence. Growing time-series
+        collection: cursor/keyset pagination (PAGINATION_SPEC), identical to
+        the heartbeat list.
       x-sdkwork-pagination-mode: cursor
       tags:
       - cluster
@@ -3398,14 +3400,8 @@ paths:
       x-sdkwork-permission: web.cluster.read
       x-sdkwork-owner: sdkwork-webserver
       parameters:
-      - name: limit
-        in: query
-        description: Maximum number of samples to return, newest first.
-        schema:
-          type: integer
-          minimum: 1
-          maximum: 500
-          default: 100
+      - $ref: '#/components/parameters/PageSizeParam'
+      - $ref: '#/components/parameters/CursorParam'
       responses:
         '200':
           description: Metric sample history returned successfully.

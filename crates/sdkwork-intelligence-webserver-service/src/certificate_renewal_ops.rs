@@ -455,7 +455,10 @@ mod tests {
         ];
         for refusal in refusals {
             let error = AcmeServiceError::Provider(refusal.to_string());
-            assert_eq!(certificate_issuer_failure_code(&error), "ACME_PROVIDER_FAILED");
+            assert_eq!(
+                certificate_issuer_failure_code(&error),
+                "ACME_PROVIDER_FAILED"
+            );
             assert_eq!(
                 certificate_issuer_failure_detail(&error).as_deref(),
                 Some(refusal)
@@ -472,7 +475,10 @@ mod tests {
             AcmeServiceError::Validation("validation detail".to_string()),
             AcmeServiceError::Internal("dns01 store lock poisoned".to_string()),
         ] {
-            assert!(certificate_issuer_failure_detail(&error).is_none(), "{error}");
+            assert!(
+                certificate_issuer_failure_detail(&error).is_none(),
+                "{error}"
+            );
         }
     }
 }

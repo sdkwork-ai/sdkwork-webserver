@@ -70,7 +70,8 @@ export class ClusterEventsApi {
 }
 
 export interface ClusterInstancesMetricsListParams {
-  limit?: number;
+  pageSize?: number;
+  cursor?: string;
 }
 
 export class ClusterInstancesMetricsApi {
@@ -84,7 +85,8 @@ export class ClusterInstancesMetricsApi {
 /** List one instance's heartbeat metric samples for trend charts */
   async list(instanceId: string, params?: ClusterInstancesMetricsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: ClusterHeartbeatSampleResponse[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'limit', value: params?.limit, style: 'form', explode: true, allowReserved: false },
+      { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+      { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: ClusterHeartbeatSampleResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/clusters/instances/${serializePathParameter(instanceId, { name: 'instanceId', style: 'simple', explode: false })}/metrics/history`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }

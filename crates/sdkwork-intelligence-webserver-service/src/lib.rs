@@ -21,14 +21,14 @@ pub use domain_verification::{
 pub use repository::{
     cluster_operator_owned_status, AuditLogWrite, CertificateRevocationMaterial, ClusterEventWrite,
     ClusterHeartbeatTransition, ClusterHeartbeatWrite, ClusterHostUpsert, ClusterIdentity,
-    ClusterInstanceCredentials, ClusterInstanceUpsert,
-    CLUSTER_INSTANCE_STATUS_ERROR, CLUSTER_INSTANCE_STATUS_MAINTENANCE,
-    CLUSTER_INSTANCE_STATUS_OFFLINE, CLUSTER_INSTANCE_STATUS_ONLINE,
-    ClusterPeerMessageEnqueue, ClusterProbeOutcome, ClusterProbeWrite,
-    ClusterRoutingDiscovery, ClusterRoutingInstance, ClusterSyncAckWrite, ClusterSyncDesired, ClusterSyncRevisionPayload,
+    ClusterInstanceCredentials, ClusterInstanceUpsert, ClusterPeerMessageEnqueue,
+    ClusterProbeOutcome, ClusterProbeWrite, ClusterRoutingDiscovery, ClusterRoutingInstance,
+    ClusterSyncAckWrite, ClusterSyncDesired, ClusterSyncRevisionPayload,
     ClusterSyncRevisionPublish, ClusterUpsert, DomainVerificationChallenge,
     DomainVerificationObservation, ExpiredClusterHost, ExpiredClusterInstance,
     RuntimeAssignmentTarget, RuntimeAssignmentWrite, RuntimeObservationWrite, WebRepositoryPort,
+    CLUSTER_INSTANCE_STATUS_ERROR, CLUSTER_INSTANCE_STATUS_MAINTENANCE,
+    CLUSTER_INSTANCE_STATUS_OFFLINE, CLUSTER_INSTANCE_STATUS_ONLINE,
 };
 pub use source_import::{
     ApplicationSourceImporter, GitSourceImportRequest, ImportedApplicationSource,
@@ -124,10 +124,7 @@ impl WebService {
     /// depends on a module this service deliberately does not depend on, so
     /// every existing construction site keeps working and only a host that can
     /// actually supply the adapter has to know about it.
-    pub fn with_traffic_usage_reader(
-        mut self,
-        port: Arc<dyn TrafficUsageReadPort>,
-    ) -> Self {
+    pub fn with_traffic_usage_reader(mut self, port: Arc<dyn TrafficUsageReadPort>) -> Self {
         self.traffic_usage = Some(port);
         self
     }
@@ -138,10 +135,7 @@ impl WebService {
     /// assembled from different sources and a host may legitimately have one
     /// without the other (a deployment with usage facts but no IAM tables in
     /// this database, or the reverse), and each must report its own absence.
-    pub fn with_metrics_summary_reader(
-        mut self,
-        port: Arc<dyn MetricsSummaryReadPort>,
-    ) -> Self {
+    pub fn with_metrics_summary_reader(mut self, port: Arc<dyn MetricsSummaryReadPort>) -> Self {
         self.metrics_summary = Some(port);
         self
     }

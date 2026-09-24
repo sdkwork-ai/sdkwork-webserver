@@ -120,6 +120,49 @@ services:
       - ../../../sdkwork-mcp/database:/app/share/sdkwork/mcp/database:ro
       - ../../../sdkwork-deployments/database:/app/share/sdkwork/deploy/database:ro
 
+  # The certificate worker is the only executor of webserver_certificate_operation
+  # (issue/renew/revoke); without it accepted operations stay queued forever.
+  # It shares the gateway's secrets volume (encryption keys) and data volume
+  # (ACME accounts, TLS material) and starts after the gateway is healthy.
+  certificate-worker:
+    image: registry.sdkwork.com/apps/sdkwork-webserver-standalone:${SDKWORK_WEBSERVER_IMAGE_TAG:-0.1.0}
+    container_name: sdkwork-webserver-certificate-worker-demo
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["certificate-worker"]
+    env_file:
+      - path: env/demo.env
+        required: false
+    depends_on:
+      webserver:
+        condition: service_healthy
+    environment:
+      SDKWORK_WEBSERVER_ENVIRONMENT: demo
+      SDKWORK_WEBSERVER_PROFILE_ID: standalone.demo
+      SDKWORK_DATABASE_ENGINE: postgresql
+      SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-host.docker.internal}
+      SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
+      SDKWORK_DATABASE_NAME: ${WEBSERVER_POSTGRES_DEMO_DB:-sdkwork_ai_demo}
+      SDKWORK_DATABASE_SCHEMA: ${WEBSERVER_POSTGRES_DEMO_DB:-sdkwork_ai_demo}
+      SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC: "false"
+      SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_DEMO_USER:-sdkwork_ai_demo}
+      SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_DEMO_PASSWORD:-}
+      SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-disable}
+      SDKWORK_DATABASE_MAX_CONNECTIONS: "4"
+      SDKWORK_WEBSERVER_REDIS_ENABLED: "true"
+      SDKWORK_WEBSERVER_REDIS_HOST: ${WEBSERVER_REDIS_HOST:-host.docker.internal}
+      SDKWORK_WEBSERVER_REDIS_PORT: ${WEBSERVER_REDIS_PORT:-6379}
+      SDKWORK_WEBSERVER_REDIS_DATABASE: "4"
+      SDKWORK_WEBSERVER_REDIS_TLS: ${WEBSERVER_REDIS_TLS:-false}
+      SDKWORK_WEBSERVER_REDIS_PASSWORD: ${WEBSERVER_REDIS_PASSWORD:-}
+      SDKWORK_WEBSERVER_CERT_WORKER_ID: ${SDKWORK_WEBSERVER_CERT_WORKER_ID:-certificate-worker-demo-0}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - webserver-secrets-demo:/etc/sdkwork/webserver/secrets
+      - webserver-data-demo:/var/lib/sdkwork/webserver
+      - ../../bin/container/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
+
 volumes:
   webserver-secrets-demo:
   webserver-data-demo:

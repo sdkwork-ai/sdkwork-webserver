@@ -225,7 +225,11 @@ pub struct MetricsSummaryResponse {
     /// `None` when this deployment has none. This is the basis of the lifetime
     /// traffic figures; without it, "累计流量" would imply the life of the
     /// product rather than the life of the fact table.
-    #[serde(rename = "trafficSince", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "trafficSince",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub traffic_since: Option<String>,
     pub windows: Vec<MetricsWindowBounds>,
     /// The entity metrics. The platform reading reports users, tenants, and
@@ -389,7 +393,11 @@ pub struct MetricsSummaryReadings {
     /// inferred from them: `agents` absent from [`Self::entities`] means one
     /// of two opposite things, and only the probe knows which.
     pub unassembled_metrics: Vec<String>,
-    #[serde(rename = "trafficSince", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "trafficSince",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub traffic_since: Option<String>,
 }
 

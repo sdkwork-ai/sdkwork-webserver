@@ -179,6 +179,7 @@ pub(crate) async fn list_cluster_hosts(
                 query.cursor.as_deref(),
             )
             .await,
+        query.page_size,
     )
 }
 
@@ -237,6 +238,7 @@ pub(crate) async fn list_cluster_instances(
                 query.cursor.as_deref(),
             )
             .await,
+        query.page_size,
     )
 }
 
@@ -296,6 +298,7 @@ pub(crate) async fn list_instance_heartbeats(
                 query.cursor.as_deref(),
             )
             .await,
+        query.page_size,
     )
 }
 
@@ -325,6 +328,7 @@ pub(crate) async fn list_cluster_events(
                 query.cursor.as_deref(),
             )
             .await,
+        query.page_size,
     )
 }
 
@@ -378,16 +382,15 @@ instance_action_route!(cordon_cluster_instance, cordon_cluster_instance);
 instance_action_route!(uncordon_cluster_instance, uncordon_cluster_instance);
 
 /// `GET /backend/v3/api/clusters/instances/{instanceId}/metrics/history` —
-/// per-instance heartbeat metric samples for the detail page (bounded).
+/// per-instance heartbeat metric samples for the detail page. Growing
+/// time-series collection: cursor/keyset pagination (PAGINATION_SPEC),
+/// newest first, same contract as the heartbeat list.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct InstanceMetricsHistoryQuery {
-    #[serde(default = "default_history_limit")]
-    limit: i32,
-}
-
-fn default_history_limit() -> i32 {
-    100
+    #[serde(default = "default_page_size")]
+    page_size: i32,
+    cursor: Option<String>,
 }
 
 pub(crate) async fn list_instance_metrics_history(
@@ -399,8 +402,14 @@ pub(crate) async fn list_instance_metrics_history(
     let context = require_cluster_context(context)?;
     ok_cluster_heartbeat_page(
         service
-            .cluster_instance_metrics_history(&context, &instance_id, query.limit)
+            .cluster_instance_metrics_history(
+                &context,
+                &instance_id,
+                query.page_size,
+                query.cursor.as_deref(),
+            )
             .await,
+        query.page_size,
     )
 }
 

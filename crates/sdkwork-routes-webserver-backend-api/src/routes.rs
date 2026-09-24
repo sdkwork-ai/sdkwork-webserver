@@ -17,7 +17,10 @@ use sdkwork_webserver_contract::{
 use serde::Deserialize;
 use std::sync::Arc;
 
-use crate::{agent_routes, auth::require_backend_context, cluster_routes, metrics_summary_routes, paths, traffic_usage_routes};
+use crate::{
+    agent_routes, auth::require_backend_context, cluster_routes, metrics_summary_routes, paths,
+    traffic_usage_routes,
+};
 use sdkwork_routes_webserver_common::{
     accepted_async, created_resource, no_content, ok_application_page, ok_audit_log_page,
     ok_certificate_distribution_page, ok_certificate_page, ok_deployment_page, ok_domain_page,

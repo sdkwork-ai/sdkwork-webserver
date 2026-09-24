@@ -10,6 +10,7 @@ pub struct IssueCertificateRequest {
     #[serde(rename = "certType")]
     pub cert_type: i64,
 
+    /// Key algorithm of the issued leaf. Defaults to RSA: a managed certificate is renewed unattended and RSA-2048 is the leaf key every TLS client accepts, so a certificate requested without an opinion on this stays reachable from old stacks as well. Ask for ECDSA explicitly where every client is known to support P-256.
     #[serde(rename = "keyAlgorithm")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key_algorithm: Option<String>,

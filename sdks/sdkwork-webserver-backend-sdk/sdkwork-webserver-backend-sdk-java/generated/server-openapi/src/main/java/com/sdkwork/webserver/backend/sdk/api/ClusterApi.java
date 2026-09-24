@@ -172,9 +172,10 @@ public class ClusterApi {
     }
 
     /** List one instance's heartbeat metric samples for trend charts */
-    public ClustersInstancesMetricsListResponse clustersInstancesMetricsList(String instanceId, Integer limit) throws Exception {
+    public ClustersInstancesMetricsListResponse clustersInstancesMetricsList(String instanceId, Integer pageSize, String cursor) throws Exception {
         String query = buildQueryString(List.of(
-            new QueryParameterSpec("limit", limit, "form", true, false, null)
+            new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
+            new QueryParameterSpec("cursor", cursor, "form", true, false, null)
         ));
         Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/clusters/instances/" + serializePathParameter(instanceId, new PathParameterSpec("instanceId", "simple", false)) + "/metrics/history"), query));
         return client.convertValue(raw, new TypeReference<ClustersInstancesMetricsListResponse>() {});

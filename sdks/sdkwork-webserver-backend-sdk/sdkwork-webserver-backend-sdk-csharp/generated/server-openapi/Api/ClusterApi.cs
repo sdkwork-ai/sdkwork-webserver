@@ -236,11 +236,12 @@ namespace SDKWork.WebserverBackendSdk.Api
         /// <summary>
         /// List one instance's heartbeat metric samples for trend charts
         /// </summary>
-        public async Task<SDKWork.WebserverBackendSdk.Models.ClustersInstancesMetricsListResponse?> ClustersInstancesMetricsListAsync(string instanceId, int? limit = null)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ClustersInstancesMetricsListResponse?> ClustersInstancesMetricsListAsync(string instanceId, int? pageSize = null, string? cursor = null)
         {
             var queryString = BuildQueryString(new[]
             {
-                new QueryParameterSpec("limit", limit, "form", true, false, null),
+                new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
+                new QueryParameterSpec("cursor", cursor, "form", true, false, null),
             });
             return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ClustersInstancesMetricsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath($"/clusters/instances/{SerializePathParameter(instanceId, new PathParameterSpec("instanceId", "simple", false))}/metrics/history"), queryString));
         }

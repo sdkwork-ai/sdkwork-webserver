@@ -423,10 +423,11 @@ class ClusterInstancesMetricsApi:
         self._client = client
 
 
-    def list_history(self, instance_id: str, limit: Optional[int] = None) -> ClustersInstancesMetricsListResponse:
+    def list_history(self, instance_id: str, page_size: Optional[int] = None, cursor: Optional[str] = None) -> ClustersInstancesMetricsListResponse:
         """List one instance's heartbeat metric samples for trend charts"""
         query = build_query_string([
-            {'name': 'limit', 'value': limit, 'style': 'form', 'explode': True, 'allow_reserved': False},
+            {'name': 'page_size', 'value': page_size, 'style': 'form', 'explode': True, 'allow_reserved': False},
+            {'name': 'cursor', 'value': cursor, 'style': 'form', 'explode': True, 'allow_reserved': False},
         ])
         return self._client.get(_append_query_string(f"/backend/v3/api/clusters/instances/{serialize_path_parameter(instance_id, {'name': 'instanceId', 'style': 'simple', 'explode': False})}/metrics/history", query))
 

@@ -13,17 +13,15 @@ use sdkwork_webserver_contract::{
     EnqueueClusterPeerMessagesResponse, ImportGitSourceVersionRequest, IssueCertificateRequest,
     ListApplicationsQuery, ListNginxConfigsQuery, ListRootDomainsQuery, MetricsSeriesWindow,
     MetricsSummaryQuery, MetricsSummaryResponse, MetricsWindowBounds, MetricsWindowRequest,
-    TrafficUsageStatisticsQuery,
-    TrafficUsageStatisticsResponse, TrafficUsageWindow, UpdateApplicationRequest,
-    UpdateCertificateRequest, UpdateClusterHostRequest, UpdateClusterInstanceRequest,
-    UpdateClusterRequest, UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest,
-    UpdateRootDomainRequest,
-    WebAppApi, WebAppRequestContext, WebAppResourceScope, WebBackendApi, WebBackendRequestContext,
-    WebServiceError, WebServiceResult, DEFAULT_TRAFFIC_USAGE_TOP_APPS,
-    DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS, MAX_TRAFFIC_USAGE_TOP_APPS, MAX_TRAFFIC_USAGE_WINDOW_DAYS,
-    METRICS_ENTITY_TENANTS, METRICS_LAST_SEVEN_DAYS_SPAN, METRICS_WINDOWS,
-    METRICS_WINDOW_CURRENT_MONTH, METRICS_WINDOW_LAST_7_DAYS, METRICS_WINDOW_LIFETIME,
-    METRICS_WINDOW_TODAY,
+    TrafficUsageStatisticsQuery, TrafficUsageStatisticsResponse, TrafficUsageWindow,
+    UpdateApplicationRequest, UpdateCertificateRequest, UpdateClusterHostRequest,
+    UpdateClusterInstanceRequest, UpdateClusterRequest, UpdateDomainApplicationBindingRequest,
+    UpdateNginxConfigRequest, UpdateRootDomainRequest, WebAppApi, WebAppRequestContext,
+    WebAppResourceScope, WebBackendApi, WebBackendRequestContext, WebServiceError,
+    WebServiceResult, DEFAULT_TRAFFIC_USAGE_TOP_APPS, DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS,
+    MAX_TRAFFIC_USAGE_TOP_APPS, MAX_TRAFFIC_USAGE_WINDOW_DAYS, METRICS_ENTITY_TENANTS,
+    METRICS_LAST_SEVEN_DAYS_SPAN, METRICS_WINDOWS, METRICS_WINDOW_CURRENT_MONTH,
+    METRICS_WINDOW_LAST_7_DAYS, METRICS_WINDOW_LIFETIME, METRICS_WINDOW_TODAY,
 };
 
 use crate::{AuditLogWrite, WebService};
@@ -127,7 +125,11 @@ impl WebService {
     fn normalize_root_domain_update_request(
         request: &UpdateRootDomainRequest,
     ) -> WebServiceResult<UpdateRootDomainRequest> {
-        fn optional_text(value: Option<&String>, max_len: usize, field: &str) -> WebServiceResult<Option<String>> {
+        fn optional_text(
+            value: Option<&String>,
+            max_len: usize,
+            field: &str,
+        ) -> WebServiceResult<Option<String>> {
             let Some(value) = value else {
                 return Ok(None);
             };
@@ -1258,9 +1260,10 @@ impl WebBackendApi for WebService {
         &self,
         context: &WebBackendRequestContext,
         instance_id: &str,
-        limit: i32,
+        page_size: i32,
+        cursor: Option<&str>,
     ) -> WebServiceResult<ClusterHeartbeatSamplePage> {
-        self.cluster_heartbeat_list(context, instance_id, limit, None)
+        self.cluster_heartbeat_list(context, instance_id, page_size, cursor)
             .await
     }
 
@@ -1375,7 +1378,8 @@ impl WebBackendApi for WebService {
         let tenant_id = Some(Self::require_backend_tenant(context)?);
         let windows = resolve_metrics_windows();
         let series = resolve_metrics_series_window(query)?;
-        self.read_metrics_summary(tenant_id, &windows, &series).await
+        self.read_metrics_summary(tenant_id, &windows, &series)
+            .await
     }
 
     async fn retrieve_platform_metrics_summary(
@@ -1635,7 +1639,8 @@ fn require_traffic_usage_platform_operator(
 fn resolve_traffic_usage_window(
     query: &TrafficUsageStatisticsQuery,
 ) -> WebServiceResult<TrafficUsageWindow> {
-    let (date_from, date_to) = resolve_date_bounds(query.date_from.as_deref(), query.date_to.as_deref())?;
+    let (date_from, date_to) =
+        resolve_date_bounds(query.date_from.as_deref(), query.date_to.as_deref())?;
     let dimension = match query.dimension.as_deref() {
         Some(value) => {
             let trimmed = value.trim();
@@ -1712,7 +1717,8 @@ fn resolve_date_bounds(
 fn resolve_metrics_series_window(
     query: &MetricsSummaryQuery,
 ) -> WebServiceResult<MetricsSeriesWindow> {
-    let (date_from, date_to) = resolve_date_bounds(query.date_from.as_deref(), query.date_to.as_deref())?;
+    let (date_from, date_to) =
+        resolve_date_bounds(query.date_from.as_deref(), query.date_to.as_deref())?;
     Ok(MetricsSeriesWindow {
         date_from: date_from.format("%Y-%m-%d").to_string(),
         date_to: date_to.format("%Y-%m-%d").to_string(),
@@ -1742,7 +1748,11 @@ fn resolve_metrics_series_window(
 /// midnight and label one response's figures with two different days.
 fn resolve_metrics_windows() -> MetricsWindowRequest {
     let today = Utc::now().date_naive();
-    let day = |offset_days: i64| (today + Duration::days(offset_days)).format("%Y-%m-%d").to_string();
+    let day = |offset_days: i64| {
+        (today + Duration::days(offset_days))
+            .format("%Y-%m-%d")
+            .to_string()
+    };
     MetricsWindowRequest {
         as_of: day(0),
         last_seven_days_from: day(-(METRICS_LAST_SEVEN_DAYS_SPAN - 1)),
@@ -1815,7 +1825,7 @@ fn parse_traffic_usage_date(field: &str, value: &str) -> WebServiceResult<NaiveD
 #[cfg(test)]
 mod tests {
     use super::{
-        resolve_traffic_usage_window, require_traffic_usage_platform_operator,
+        require_traffic_usage_platform_operator, resolve_traffic_usage_window,
         validate_create_nginx_config_request, validate_create_server_request,
         validate_tenant_scope_hash, validate_update_nginx_config_request, WebService,
         MAX_NGINX_CONFIG_BYTES,
@@ -1824,8 +1834,9 @@ mod tests {
     use sdkwork_webserver_contract::{
         web_platform_operator_tenant_id, CreateNginxConfigRequest, CreateServerRequest,
         TrafficUsageStatisticsQuery, UpdateNginxConfigRequest, WebAppResourceScope,
-        WebBackendRequestContext, DEFAULT_TRAFFIC_USAGE_TOP_APPS, DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS,
-        MAX_TRAFFIC_USAGE_TOP_APPS, MAX_TRAFFIC_USAGE_WINDOW_DAYS,
+        WebBackendRequestContext, DEFAULT_TRAFFIC_USAGE_TOP_APPS,
+        DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS, MAX_TRAFFIC_USAGE_TOP_APPS,
+        MAX_TRAFFIC_USAGE_WINDOW_DAYS,
     };
 
     fn traffic_usage_query(
@@ -1910,15 +1921,13 @@ mod tests {
             MAX_TRAFFIC_USAGE_WINDOW_DAYS
         );
 
-        assert!(
-            resolve_traffic_usage_window(&traffic_usage_query(
-                Some("2026-01-01"),
-                Some("2027-01-03"),
-                None,
-                None,
-            ))
-            .is_err()
-        );
+        assert!(resolve_traffic_usage_window(&traffic_usage_query(
+            Some("2026-01-01"),
+            Some("2027-01-03"),
+            None,
+            None,
+        ))
+        .is_err());
     }
 
     #[test]

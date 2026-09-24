@@ -244,9 +244,10 @@ func (a *ClusterApi) ClustersInstancesHeartbeatsList(instanceId string, pageSize
 }
 
 // List one instance's heartbeat metric samples for trend charts
-func (a *ClusterApi) ClustersInstancesMetricsList(instanceId string, limit *int) (sdktypes.ClustersInstancesMetricsListResponse, error) {
+func (a *ClusterApi) ClustersInstancesMetricsList(instanceId string, pageSize *int, cursor *string) (sdktypes.ClustersInstancesMetricsListResponse, error) {
     query := BuildQueryString([]QueryParameterSpec{
-        {Name: "limit", Value: func() interface{} { if limit == nil { return nil }; return *limit }(), Style: "form", Explode: true, AllowReserved: false},
+        {Name: "page_size", Value: func() interface{} { if pageSize == nil { return nil }; return *pageSize }(), Style: "form", Explode: true, AllowReserved: false},
+        {Name: "cursor", Value: func() interface{} { if cursor == nil { return nil }; return *cursor }(), Style: "form", Explode: true, AllowReserved: false},
     })
     raw, err := a.client.Get(AppendQueryString(BackendApiPath(fmt.Sprintf("/clusters/instances/%s/metrics/history", SerializePathParameter(instanceId, PathParameterSpec{Name: "instanceId", Style: "simple", Explode: false}))), query), nil, nil)
     if err != nil {

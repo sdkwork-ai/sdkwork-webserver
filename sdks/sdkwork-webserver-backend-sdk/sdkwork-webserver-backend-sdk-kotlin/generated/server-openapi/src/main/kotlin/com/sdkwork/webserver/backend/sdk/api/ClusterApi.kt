@@ -178,9 +178,10 @@ class ClusterApi(private val client: HttpClient) {
     }
 
     /** List one instance's heartbeat metric samples for trend charts */
-    suspend fun clustersInstancesMetricsList(instanceId: String, limit: Int? = null): ClustersInstancesMetricsListResponse? {
+    suspend fun clustersInstancesMetricsList(instanceId: String, pageSize: Int? = null, cursor: String? = null): ClustersInstancesMetricsListResponse? {
         val query = buildQueryString(listOf(
-            QueryParameterSpec("limit", limit, "form", true, false, null)
+            QueryParameterSpec("page_size", pageSize, "form", true, false, null),
+            QueryParameterSpec("cursor", cursor, "form", true, false, null)
         ))
         val raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/clusters/instances/${serializePathParameter(instanceId, PathParameterSpec("instanceId", "simple", false))}/metrics/history"), query))
         return client.convertValue(raw, object : TypeReference<ClustersInstancesMetricsListResponse>() {})

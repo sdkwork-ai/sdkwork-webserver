@@ -270,10 +270,11 @@ module Sdkwork
           end
 
           # List one instance's heartbeat metric samples for trend charts
-          def clusters_instances_metrics_list(instance_id, limit: nil)
+          def clusters_instances_metrics_list(instance_id, page_size: nil, cursor: nil)
             path = interpolate_path('/backend/v3/api/clusters/instances/{instanceId}/metrics/history', instanceId: serialize_path_parameter(instance_id, PathParameterSpec.new('instanceId', 'simple', false)))
             query = build_query_string([
-              QueryParameterSpec.new('limit', limit, 'form', true, false, nil),
+              QueryParameterSpec.new('page_size', page_size, 'form', true, false, nil),
+              QueryParameterSpec.new('cursor', cursor, 'form', true, false, nil),
             ])
             path = append_query_string(path, query)
             options = {}

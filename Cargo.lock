@@ -4833,6 +4833,7 @@ dependencies = [
  "sdkwork-sandbox-provider-spi",
  "thiserror 2.0.20",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

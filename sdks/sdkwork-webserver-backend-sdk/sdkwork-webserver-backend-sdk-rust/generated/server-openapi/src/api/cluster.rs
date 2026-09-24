@@ -189,9 +189,10 @@ impl ClusterApi {
     }
 
     /// List one instance's heartbeat metric samples for trend charts
-    pub async fn clusters_instances_metrics_list(&self, instance_id: &str, limit: Option<i64>) -> Result<serde_json::Value, SdkworkError> {
+    pub async fn clusters_instances_metrics_list(&self, instance_id: &str, page_size: Option<i64>, cursor: Option<&str>) -> Result<serde_json::Value, SdkworkError> {
         let query = build_query_string(&[
-            QueryParameterSpec::new("limit", limit, "form", true, false, None),
+            QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
+            QueryParameterSpec::new("cursor", cursor, "form", true, false, None),
         ]);
         let path = append_query_string(backend_path(&format!("/clusters/instances/{}/metrics/history", serialize_path_parameter(instance_id, PathParameterSpec::new("instanceId", "simple", false)))), &query);
         self.client.get(&path, None, None).await

@@ -272,11 +272,12 @@ final class ClusterApi extends BaseApi
     }
 
     /** List one instance's heartbeat metric samples for trend charts */
-    public function clustersInstancesMetricsList(string $instanceId, ?int $limit = null): ?ClustersInstancesMetricsListResponse
+    public function clustersInstancesMetricsList(string $instanceId, ?int $pageSize = null, ?string $cursor = null): ?ClustersInstancesMetricsListResponse
     {
         $path = $this->interpolatePath('/backend/v3/api/clusters/instances/{instanceId}/metrics/history', ['instanceId' => $this->serializePathParameter($instanceId, new PathParameterSpec('instanceId', 'simple', false))]);
         $query = $this->buildQueryString([
-            new QueryParameterSpec('limit', $limit, 'form', true, false, null),
+            new QueryParameterSpec('page_size', $pageSize, 'form', true, false, null),
+            new QueryParameterSpec('cursor', $cursor, 'form', true, false, null),
         ]);
         $path = $this->appendQueryString($path, $query);
         $result = $this->client->request('GET', $path, []);

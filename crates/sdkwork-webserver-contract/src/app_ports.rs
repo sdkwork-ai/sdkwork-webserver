@@ -842,12 +842,14 @@ pub trait WebBackendApi: Send + Sync {
         cursor: Option<&str>,
     ) -> WebServiceResult<ClusterInstancePage>;
 
-    /// Per-instance heartbeat metric history (bounded, newest first).
+    /// Per-instance heartbeat metric history: cursor/keyset pagination
+    /// (PAGINATION_SPEC), newest first, same contract as the heartbeat list.
     async fn cluster_instance_metrics_history(
         &self,
         context: &WebBackendRequestContext,
         instance_id: &str,
-        limit: i32,
+        page_size: i32,
+        cursor: Option<&str>,
     ) -> WebServiceResult<ClusterHeartbeatSamplePage>;
 
     /// Publishes one desired-state revision (config or applications track)

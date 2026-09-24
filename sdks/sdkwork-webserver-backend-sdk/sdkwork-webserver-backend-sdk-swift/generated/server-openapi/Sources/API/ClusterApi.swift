@@ -163,9 +163,10 @@ public class ClusterApi {
     }
 
     /// List one instance's heartbeat metric samples for trend charts
-    public func clustersInstancesMetricsList(instanceId: String, limit: Int? = nil) async throws -> ClustersInstancesMetricsListResponse? {
+    public func clustersInstancesMetricsList(instanceId: String, pageSize: Int? = nil, cursor: String? = nil) async throws -> ClustersInstancesMetricsListResponse? {
         let query = buildQueryString([
-            QueryParameterSpec(name: "limit", value: limit, style: "form", explode: true, allowReserved: false, contentType: nil)
+            QueryParameterSpec(name: "page_size", value: pageSize, style: "form", explode: true, allowReserved: false, contentType: nil),
+            QueryParameterSpec(name: "cursor", value: cursor, style: "form", explode: true, allowReserved: false, contentType: nil)
         ])
         return try await client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/clusters/instances/\(serializePathParameter(instanceId, PathParameterSpec(name: "instanceId", style: "simple", explode: false)))/metrics/history"), query), responseType: ClustersInstancesMetricsListResponse.self)
     }

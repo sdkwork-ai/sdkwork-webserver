@@ -235,8 +235,9 @@ Flexible per-instance configuration (PATCH):
 - `labels` — free-form organization metadata.
 
 Detail-page endpoints:
-- `GET .../instances/{id}/metrics/history?limit=` — bounded heartbeat metric
-  samples, newest first (trend charts, SLA evidence);
+- `GET .../instances/{id}/metrics/history?page_size=&cursor=` — heartbeat
+  metric samples, newest first, cursor/keyset pagination (trend charts, SLA
+  evidence);
 - `GET /backend/v3/api/clusters/events?instanceId=` — recent lifecycle events
   for one instance (drain/eject/recover/registration audit trail);
 - `POST .../instances/{id}/probe` — on-demand connectivity probe ("Test

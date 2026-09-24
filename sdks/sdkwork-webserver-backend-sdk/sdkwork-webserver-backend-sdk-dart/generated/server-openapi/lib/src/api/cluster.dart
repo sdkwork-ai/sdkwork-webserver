@@ -228,9 +228,10 @@ class ClusterApi {
   }
 
   /// List one instance's heartbeat metric samples for trend charts
-  Future<ClustersInstancesMetricsListResponse?> clustersInstancesMetricsList(String instanceId, [int? limit]) async {
+  Future<ClustersInstancesMetricsListResponse?> clustersInstancesMetricsList(String instanceId, [int? pageSize, String? cursor]) async {
     final query = buildQueryString([
-      QueryParameterSpec('limit', limit, 'form', true, false, null)
+      QueryParameterSpec('page_size', pageSize, 'form', true, false, null),
+      QueryParameterSpec('cursor', cursor, 'form', true, false, null)
     ]);
     final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.backendPath('/clusters/instances/${serializePathParameter(instanceId, const PathParameterSpec('instanceId', 'simple', false))}/metrics/history'), query));
     return (() {

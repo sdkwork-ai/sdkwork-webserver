@@ -7,9 +7,8 @@ use sdkwork_utils_rust::{
 };
 use sdkwork_webserver_contract::{
     ApplicationPage, AuditLogPage, CertificateDistributionPage, CertificatePage, ClusterEventPage,
-    ClusterHeartbeatSamplePage, ClusterHostPage, ClusterInstancePage, ClusterPage,
-    DeploymentPage, DomainPage,
-    EnvVariablePage, HealthCheckPage, ListenerCertificateBindingPage, NginxConfigPage,
+    ClusterHeartbeatSamplePage, ClusterHostPage, ClusterInstancePage, ClusterPage, DeploymentPage,
+    DomainPage, EnvVariablePage, HealthCheckPage, ListenerCertificateBindingPage, NginxConfigPage,
     PlatformTargetPage, RootDomainPage, ServerPage, SourceVersionPage, WebServiceResult,
 };
 use serde::Serialize;
@@ -350,7 +349,6 @@ pub fn ok_server_page(
     }
 }
 
-
 /// Offset-mode page for the bounded cluster registry listing.
 pub fn ok_cluster_page(
     result: WebServiceResult<ClusterPage>,
@@ -367,7 +365,10 @@ pub fn ok_cluster_page(
 }
 
 /// Cursor-mode page over the growing cluster host inventory.
-pub fn ok_cluster_host_page(result: WebServiceResult<ClusterHostPage>) -> Result<Response, WebApiError> {
+pub fn ok_cluster_host_page(
+    result: WebServiceResult<ClusterHostPage>,
+    page_size: i32,
+) -> Result<Response, WebApiError> {
     match result {
         Ok(page_data) => Ok(envelope(
             StatusCode::OK,
@@ -376,7 +377,7 @@ pub fn ok_cluster_host_page(result: WebServiceResult<ClusterHostPage>) -> Result
                 page_info: PageInfo {
                     mode: PageMode::Cursor,
                     page: None,
-                    page_size: None,
+                    page_size: Some(page_size),
                     total_items: None,
                     total_pages: None,
                     next_cursor: page_data.next_cursor,
@@ -391,6 +392,7 @@ pub fn ok_cluster_host_page(result: WebServiceResult<ClusterHostPage>) -> Result
 /// Cursor-mode page over the growing cluster instance inventory.
 pub fn ok_cluster_instance_page(
     result: WebServiceResult<ClusterInstancePage>,
+    page_size: i32,
 ) -> Result<Response, WebApiError> {
     match result {
         Ok(page_data) => Ok(envelope(
@@ -400,7 +402,7 @@ pub fn ok_cluster_instance_page(
                 page_info: PageInfo {
                     mode: PageMode::Cursor,
                     page: None,
-                    page_size: None,
+                    page_size: Some(page_size),
                     total_items: None,
                     total_pages: None,
                     next_cursor: page_data.next_cursor,
@@ -415,6 +417,7 @@ pub fn ok_cluster_instance_page(
 /// Cursor-mode page over one instance's stored heartbeat samples.
 pub fn ok_cluster_heartbeat_page(
     result: WebServiceResult<ClusterHeartbeatSamplePage>,
+    page_size: i32,
 ) -> Result<Response, WebApiError> {
     match result {
         Ok(page_data) => Ok(envelope(
@@ -424,7 +427,7 @@ pub fn ok_cluster_heartbeat_page(
                 page_info: PageInfo {
                     mode: PageMode::Cursor,
                     page: None,
-                    page_size: None,
+                    page_size: Some(page_size),
                     total_items: None,
                     total_pages: None,
                     next_cursor: page_data.next_cursor,
@@ -437,7 +440,10 @@ pub fn ok_cluster_heartbeat_page(
 }
 
 /// Cursor-mode page over the append-only cluster event log.
-pub fn ok_cluster_event_page(result: WebServiceResult<ClusterEventPage>) -> Result<Response, WebApiError> {
+pub fn ok_cluster_event_page(
+    result: WebServiceResult<ClusterEventPage>,
+    page_size: i32,
+) -> Result<Response, WebApiError> {
     match result {
         Ok(page_data) => Ok(envelope(
             StatusCode::OK,
@@ -446,7 +452,7 @@ pub fn ok_cluster_event_page(result: WebServiceResult<ClusterEventPage>) -> Resu
                 page_info: PageInfo {
                     mode: PageMode::Cursor,
                     page: None,
-                    page_size: None,
+                    page_size: Some(page_size),
                     total_items: None,
                     total_pages: None,
                     next_cursor: page_data.next_cursor,

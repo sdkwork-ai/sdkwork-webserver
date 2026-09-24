@@ -16,7 +16,7 @@ const MAXIMUM_CURSOR_BYTES: usize = 512;
 /// (`apis/*openapi.yaml` `x-sdkwork-pagination-mode: cursor`); the unit tests
 /// below pin the exact route constants from the app-api/backend-api path
 /// modules to fail fast on route renames.
-const CURSOR_PAGINATED_PATH_PATTERNS: [&str; 10] = [
+const CURSOR_PAGINATED_PATH_PATTERNS: [&str; 11] = [
     "/backend/v3/api/audit_logs",
     "/backend/v3/api/applications/{applicationId}/deployments",
     "/backend/v3/api/applications/{applicationId}/source_versions",
@@ -25,6 +25,7 @@ const CURSOR_PAGINATED_PATH_PATTERNS: [&str; 10] = [
     "/backend/v3/api/clusters/instances",
     "/backend/v3/api/clusters/events",
     "/backend/v3/api/clusters/instances/{instanceId}/heartbeats",
+    "/backend/v3/api/clusters/instances/{instanceId}/metrics/history",
     "/app/v3/api/applications/{applicationId}/deployments",
     "/app/v3/api/applications/{applicationId}/source_versions",
 ];
@@ -173,5 +174,18 @@ mod tests {
         )
         .is_ok());
         assert!(validate_query(Some("cursor=opaque-token"), "/backend/v3/api/sites").is_err());
+        // The per-instance metric history is a cursor-paginated growing
+        // time-series: `limit` stays a forbidden alias, `page_size`/`cursor`
+        // are the only accepted shape, exactly like the heartbeat list.
+        assert!(validate_query(
+            Some("limit=100"),
+            "/backend/v3/api/clusters/instances/i-1/metrics/history"
+        )
+        .is_err());
+        assert!(validate_query(
+            Some("page_size=20&cursor=opaque-token"),
+            "/backend/v3/api/clusters/instances/i-1/metrics/history"
+        )
+        .is_ok());
     }
 }

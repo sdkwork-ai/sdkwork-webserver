@@ -21,9 +21,7 @@ use axum::{
     Extension,
 };
 use sdkwork_routes_webserver_common::{ok_resource, WebApiError};
-use sdkwork_webserver_contract::{
-    TrafficUsageStatisticsQuery, WebBackendRequestContext,
-};
+use sdkwork_webserver_contract::{TrafficUsageStatisticsQuery, WebBackendRequestContext};
 
 use crate::auth::{require_backend_context, require_platform_operator};
 use crate::routes::BackendState;
