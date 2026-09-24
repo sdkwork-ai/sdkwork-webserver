@@ -29,37 +29,15 @@ impl WebRepository {
         page_size: i32,
     ) -> WebServiceResult<CertificatePage> {
         let (_page, page_size, offset) = pagination(page, page_size)?;
-        let total: i64 = sqlx::query_scalar(
-             "SELECT COUNT(*) FROM webserver_certificate c
-              WHERE c.tenant_id = $1 AND c.deleted_at IS NULL
-                AND ($2 IS NULL OR c.user_id = $2)
-               AND ($3 IS NULL OR EXISTS (
-                   SELECT 1 FROM webserver_certificate_identifier ci
-                   INNER JOIN webserver_site_binding b ON b.tenant_id = ci.tenant_id
-                       AND b.domain_id = ci.domain_id AND b.deleted_at IS NULL
-                       AND b.status <> 'ARCHIVED'
-                   INNER JOIN webserver_site s ON s.tenant_id = b.tenant_id AND s.id = b.site_id
-                   WHERE ci.tenant_id = c.tenant_id AND ci.certificate_id = c.id
-                     AND s.uuid = $3 AND s.deleted_at IS NULL
-               ))
-               AND ($4 IS NULL OR EXISTS (
-                   SELECT 1 FROM webserver_certificate_identifier domain_ci
-                   INNER JOIN webserver_domain domain_d ON domain_d.tenant_id = domain_ci.tenant_id
-                       AND domain_d.id = domain_ci.domain_id
-                       AND ($2 IS NULL OR domain_d.user_id = $2)
-                   WHERE domain_ci.tenant_id = c.tenant_id
-                     AND domain_ci.certificate_id = c.id
-                     AND domain_d.uuid = $4 AND domain_d.deleted_at IS NULL
-               ))",
-        )
-        .bind(tenant_id)
-        .bind(owner_id)
-        .bind(site_uuid)
-        .bind(domain_uuid)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|error| store_error("count webserver_certificate", error))?;
-
+        // The filtered total is computed in the page query itself
+        // (`COUNT(*) OVER ()`), so the expensive dual-EXISTS predicate runs
+        // once per page instead of twice. An empty page (offset beyond the
+        // end) yields no window value and falls back to the standalone
+        // COUNT below.
+        let windowed_total = |rows: &[EngineRow]| -> Option<i64> {
+            rows.first()
+                .and_then(|row| row.try_get::<i64, _>("page_total").ok())
+        };
         let rows = sqlx::query(audited_sql(&certificate_select(
             "c.tenant_id = $1 AND c.deleted_at IS NULL
              AND ($2 IS NULL OR c.user_id = $2)
@@ -94,6 +72,42 @@ impl WebRepository {
         .fetch_all(&self.pool)
         .await
         .map_err(|error| store_error("list webserver_certificate", error))?;
+        let total = match windowed_total(&rows) {
+            Some(total) => total,
+            None => {
+                let total: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM webserver_certificate c
+              WHERE c.tenant_id = $1 AND c.deleted_at IS NULL
+                AND ($2 IS NULL OR c.user_id = $2)
+               AND ($3 IS NULL OR EXISTS (
+                   SELECT 1 FROM webserver_certificate_identifier ci
+                   INNER JOIN webserver_site_binding b ON b.tenant_id = ci.tenant_id
+                       AND b.domain_id = ci.domain_id AND b.deleted_at IS NULL
+                       AND b.status <> 'ARCHIVED'
+                   INNER JOIN webserver_site s ON s.tenant_id = b.tenant_id AND s.id = b.site_id
+                   WHERE ci.tenant_id = c.tenant_id AND ci.certificate_id = c.id
+                     AND s.uuid = $3 AND s.deleted_at IS NULL
+               ))
+               AND ($4 IS NULL OR EXISTS (
+                   SELECT 1 FROM webserver_certificate_identifier domain_ci
+                   INNER JOIN webserver_domain domain_d ON domain_d.tenant_id = domain_ci.tenant_id
+                       AND domain_d.id = domain_ci.domain_id
+                       AND ($2 IS NULL OR domain_d.user_id = $2)
+                   WHERE domain_ci.tenant_id = c.tenant_id
+                     AND domain_ci.certificate_id = c.id
+                     AND domain_d.uuid = $4 AND domain_d.deleted_at IS NULL
+               ))",
+        )
+        .bind(tenant_id)
+        .bind(owner_id)
+        .bind(site_uuid)
+        .bind(domain_uuid)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|error| store_error("count webserver_certificate", error))?;
+                total
+            }
+        };
         let items = rows
             .iter()
             .map(map_certificate_row)
@@ -645,6 +659,7 @@ impl WebRepository {
 fn certificate_select(predicate: &str) -> String {
     format!(
         "SELECT c.uuid, c.cert_name, c.cert_type, v.issuer,
+                COUNT(*) OVER () AS page_total,
                 v.fingerprint_sha256 AS fingerprint,
                 COALESCE(v.key_algorithm, c.preferred_key_algorithm) AS key_algorithm,
                 CAST(v.not_before AS TEXT) AS not_before,

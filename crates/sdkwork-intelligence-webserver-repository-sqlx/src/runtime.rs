@@ -63,6 +63,23 @@ fn secret_key_from_env() -> Result<SecretEncryptionKey, String> {
     ))
 }
 
+/// Fail-closed bootstrap guard: in production-like environments a keyset
+/// cursor secret derived from the database URL (or from nothing) is a
+/// forgery primitive for anyone who obtains that widely-shared material,
+/// so the dedicated key is required before the runtime accepts traffic.
+fn require_cursor_hmac_key_in_production() -> Result<(), String> {
+    const CURSOR_HMAC_KEY_ENV: &str = "SDKWORK_WEBSERVER_CURSOR_HMAC_KEY";
+    if !web_is_production_like_environment() {
+        return Ok(());
+    }
+    match std::env::var(CURSOR_HMAC_KEY_ENV) {
+        Ok(value) if !value.trim().is_empty() => Ok(()),
+        _ => Err(format!(
+            "{CURSOR_HMAC_KEY_ENV} is required in production-like environments"
+        )),
+    }
+}
+
 fn certificate_issuer_from_env(
     secret_key: &SecretEncryptionKey,
 ) -> Result<CertificateIssuer, String> {
@@ -290,6 +307,7 @@ pub async fn bootstrap_web_runtime_from_env() -> Result<WebRuntime, String> {
     let lifecycle_host = bootstrap_web_database_from_env().await?;
     let id_generator = snowflake_from_env()?;
     let secret_key = secret_key_from_env()?;
+    require_cursor_hmac_key_in_production()?;
     let pool = lifecycle_host
         .pool()
         .as_postgres()

@@ -51,8 +51,10 @@ pub(crate) fn pagination(page: i32, page_size: i32) -> Result<(i32, i32, i64), W
 /// HMAC secret for keyset cursor integrity. A cursor issued by one gateway
 /// node must validate on every sibling node, so the secret is
 /// deployment-stable: `SDKWORK_WEBSERVER_CURSOR_HMAC_KEY` when the operator
-/// provides one (rotation), otherwise the authoritative database URL, which
-/// every node of a deployment shares by definition.
+/// provides one, otherwise the authoritative database URL, which every node
+/// of a deployment shares by definition. Production-like environments must
+/// set the dedicated key (enforced by [`require_cursor_hmac_key_in_production`]
+/// at bootstrap), and the fallback chain never produces an empty secret.
 fn cursor_hmac_secret() -> &'static str {
     use std::sync::OnceLock;
     static SECRET: OnceLock<String> = OnceLock::new();
@@ -63,20 +65,33 @@ fn cursor_hmac_secret() -> &'static str {
                 // Deployment-stable fallback so sibling nodes still agree,
                 // but the operator must know the key material now overlaps
                 // with the database URL: any leak of the URL would also
-                // enable cursor forgery.
+                // enable cursor forgery. Blocked at bootstrap in production.
                 tracing::warn!(
-                    "SDKWORK_WEBSERVER_CURSOR_HMAC_KEY is not set; keyset cursors are signed                      with the database URL. Set a dedicated secret before exposing                      list APIs to untrusted clients."
+                    "SDKWORK_WEBSERVER_CURSOR_HMAC_KEY is not set; keyset cursors are signed with the database URL. Set a dedicated secret before exposing list APIs to untrusted clients."
                 );
-                std::env::var("SDKWORK_DATABASE_URL").unwrap_or_default()
+                match std::env::var("SDKWORK_DATABASE_URL") {
+                    Ok(url) if !url.is_empty() => url,
+                    // Never an empty secret: a per-process unpredictable
+                    // value beats a forgeable constant when nothing is
+                    // configured (cursors then reset across restarts).
+                    // `RandomState` seeds from OS randomness per process.
+                    _ => {
+                        use std::hash::{BuildHasher, Hasher};
+                        let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+                        hasher.write_u128(
+                            std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map(|d| d.as_nanos())
+                                .unwrap_or_default(),
+                        );
+                        format!("cursor-secret-{}", hasher.finish())
+                    }
+                }
             }
         })
         .as_str()
 }
 
-/// Encodes an opaque, HMAC-signed keyset cursor for `(sort_instant, id)`
-/// ordered lists. The token is base64 of `v1|<created_at>|<id>|<hmac>`; the
-/// signature makes the tuple tamper-evident and prevents clients from
-/// forging cursors for arbitrary offsets. Clients must never parse it.
 pub(crate) fn encode_keyset_cursor(created_at: &str, id: i64) -> String {
     use base64::Engine as _;
     let payload = format!("v1|{created_at}|{id}");
