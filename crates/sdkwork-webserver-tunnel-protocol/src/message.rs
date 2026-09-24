@@ -553,7 +553,10 @@ mod tests {
                 TunnelError::AuthenticationFailed,
                 ErrorCode::AuthenticationFailed,
             ),
-            (TunnelError::AuthorizationDenied, ErrorCode::AuthorizationDenied),
+            (
+                TunnelError::AuthorizationDenied,
+                ErrorCode::AuthorizationDenied,
+            ),
             (
                 TunnelError::InvalidRoute("x".to_owned()),
                 ErrorCode::InvalidRoute,

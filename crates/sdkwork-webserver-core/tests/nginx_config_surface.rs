@@ -14,8 +14,8 @@
 use std::path::Path;
 
 use sdkwork_webserver_core::config::{
-    ConfigFormat, ConfigLoadOptions, ListenerProtocol, ResourceConfig, RoutePathType, StreamTlsMode,
-    UpstreamLoadBalancingStrategy, WebServerAppConfig, WebServerConfigLoader,
+    ConfigFormat, ConfigLoadOptions, ListenerProtocol, ResourceConfig, RoutePathType,
+    StreamTlsMode, UpstreamLoadBalancingStrategy, WebServerAppConfig, WebServerConfigLoader,
 };
 use sdkwork_webserver_core::nginx::{
     expand_includes, load_nginx_compat, materialize_nginx_app, merge_nginx_apps,
@@ -1199,7 +1199,10 @@ server {{
     .expect("write config");
 
     let compiled = WebServerConfigLoader::new()
-        .load_and_compile(&config, &ConfigLoadOptions::with_format(ConfigFormat::NginxConf))
+        .load_and_compile(
+            &config,
+            &ConfigLoadOptions::with_format(ConfigFormat::NginxConf),
+        )
         .expect("compile nginx config");
     let listener = compiled
         .config()

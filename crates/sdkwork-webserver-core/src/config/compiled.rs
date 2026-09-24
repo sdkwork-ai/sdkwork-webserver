@@ -8,9 +8,10 @@ use regex::Regex;
 
 use super::{
     acme_webroot::{AcmeWebrootNotice, AcmeWebrootReport},
-    validate::normalize_server_name, CertificateConfig, CertificateSource, ConfigDiagnostic,
-    ListenerConfig, ResourceConfig, RouteConfig, RoutePathType, StreamServerConfig,
-    TlsPolicyConfig, UpstreamConfig, VirtualHostConfig, WebServerAppConfig, WebServerConfigError,
+    validate::normalize_server_name,
+    CertificateConfig, CertificateSource, ConfigDiagnostic, ListenerConfig, ResourceConfig,
+    RouteConfig, RoutePathType, StreamServerConfig, TlsPolicyConfig, UpstreamConfig,
+    VirtualHostConfig, WebServerAppConfig, WebServerConfigError,
 };
 
 #[derive(Debug)]

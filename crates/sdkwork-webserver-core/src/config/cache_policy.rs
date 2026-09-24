@@ -228,10 +228,8 @@ mod tests {
                 .is_err_and(|detail| detail.contains("daily time cannot be used with \"modified\""))
         );
         // The daily time must stay inside one day, and cannot carry a sign.
-        assert!(
-            parse_expires_arguments(&["@25h".to_owned()])
-                .is_err_and(|detail| detail.contains("less than 24 hours"))
-        );
+        assert!(parse_expires_arguments(&["@25h".to_owned()])
+            .is_err_and(|detail| detail.contains("less than 24 hours")));
         assert!(parse_expires_arguments(&["@-1h".to_owned()]).is_err());
         // Unknown second-argument selectors are refused, not guessed.
         assert!(parse_expires_arguments(&["before".to_owned(), "1h".to_owned()]).is_err());

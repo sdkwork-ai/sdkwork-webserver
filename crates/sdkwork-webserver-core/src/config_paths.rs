@@ -260,7 +260,10 @@ mod tests {
         let root = canonical_acme_live_root().expect("acme live root");
         let certificates = canonical_certificates_directory().expect("certificates root");
         assert_eq!(root, certificates.join(ACME_LIVE_SUBDIR));
-        assert_eq!(root.file_name().and_then(|n| n.to_str()), Some(ACME_LIVE_SUBDIR));
+        assert_eq!(
+            root.file_name().and_then(|n| n.to_str()),
+            Some(ACME_LIVE_SUBDIR)
+        );
         if cfg!(target_os = "linux") {
             assert_eq!(root, PathBuf::from("/etc/sdkwork/certs/letsencrypt"));
         }

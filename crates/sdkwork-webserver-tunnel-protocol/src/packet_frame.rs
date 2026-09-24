@@ -86,9 +86,7 @@ mod tests {
     fn packet_round_trips() {
         let mut buffer = BytesMut::new();
         encode_packet(b"datagram", &mut buffer).expect("encode");
-        let (payload, consumed) = decode_packet(&buffer)
-            .expect("parse")
-            .expect("complete");
+        let (payload, consumed) = decode_packet(&buffer).expect("parse").expect("complete");
         assert_eq!(consumed, buffer.len());
         assert_eq!(payload.as_ref(), b"datagram");
     }

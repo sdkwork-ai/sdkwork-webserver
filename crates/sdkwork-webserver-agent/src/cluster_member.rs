@@ -343,7 +343,10 @@ async fn membership_tick(
             );
         }
         if ops.drain_requested {
-            return (drain_and_report(transport, session, applier).await, Some(rtt_millis));
+            return (
+                drain_and_report(transport, session, applier).await,
+                Some(rtt_millis),
+            );
         }
     }
     if let Some(states) = &response.sync {

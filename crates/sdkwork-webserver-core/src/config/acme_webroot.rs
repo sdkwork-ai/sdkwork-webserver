@@ -211,10 +211,7 @@ fn normalize_text(text: &str) -> String {
         .or_else(|| text.strip_prefix("//?/unc/"))
     {
         Some(rest) => format!("//{rest}"),
-        None => text
-            .strip_prefix("//?/")
-            .map(str::to_owned)
-            .unwrap_or(text),
+        None => text.strip_prefix("//?/").map(str::to_owned).unwrap_or(text),
     };
     let text = if text.len() > 1 {
         text.trim_end_matches('/').to_owned()
@@ -342,8 +339,14 @@ mod tests {
                 matches!(notice, AcmeWebrootNotice::WriteTargetUnknown(_)),
                 "{notice:?}"
             );
-            assert!(notice.message().contains("http=/var/lib/acme"), "{notice:?}");
-            assert!(notice.message().contains(ACME_WEBROOT_ENV_NAME), "{notice:?}");
+            assert!(
+                notice.message().contains("http=/var/lib/acme"),
+                "{notice:?}"
+            );
+            assert!(
+                notice.message().contains(ACME_WEBROOT_ENV_NAME),
+                "{notice:?}"
+            );
         }
     }
 

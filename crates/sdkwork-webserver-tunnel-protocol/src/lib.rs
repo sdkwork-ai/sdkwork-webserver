@@ -13,19 +13,20 @@
 //!   Business data is never base64- or JSON-encoded (PRD §20).
 
 pub mod frame;
-pub mod packet_frame;
 pub mod message;
+pub mod packet_frame;
 pub mod stream_header;
 
 pub use frame::{
     decode_frame, encode_frame, read_exact_frame, read_frame, write_frame, FRAME_LENGTH_BYTES,
     MAX_FRAME_LENGTH,
 };
-pub use packet_frame::{decode_packet, encode_packet, read_packet, MAX_PACKET_PAYLOAD,
-    PACKET_LENGTH_BYTES};
 pub use message::{
     route_from_wire, session_from_wire, session_to_wire, AuthResult, Authenticate, ControlMessage,
     DeclareRoute, ErrorCode, ErrorMessage, Hello, ProtocolVersion, RegisterRoute,
     RegisterRouteResult, UnregisterRoute, UnregisterRouteResult,
+};
+pub use packet_frame::{
+    decode_packet, encode_packet, read_packet, MAX_PACKET_PAYLOAD, PACKET_LENGTH_BYTES,
 };
 pub use stream_header::DataStreamHeader;

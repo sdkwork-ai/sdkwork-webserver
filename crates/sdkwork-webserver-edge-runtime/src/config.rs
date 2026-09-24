@@ -49,9 +49,12 @@ impl EdgeRuntimeConfig {
                 .unwrap_or_else(|_| format!("/etc/nginx/sites-enabled/{site_family}")),
         );
 
-        let cert_live_root = sdkwork_webserver_core::canonical_acme_live_root().map_err(|error| {
-            crate::EdgeRuntimeError::Config(format!("ACME live root resolution failed: {error}"))
-        })?;
+        let cert_live_root =
+            sdkwork_webserver_core::canonical_acme_live_root().map_err(|error| {
+                crate::EdgeRuntimeError::Config(format!(
+                    "ACME live root resolution failed: {error}"
+                ))
+            })?;
 
         let nginx_command_timeout_ms = std::env::var("SDKWORK_WEBSERVER_NGINX_COMMAND_TIMEOUT_MS")
             .ok()

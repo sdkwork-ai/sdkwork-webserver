@@ -99,12 +99,12 @@ fn admin_router(state: Arc<AdminState>) -> Router {
             offline_threshold_seconds: 30,
             peers: Vec::new(),
             messages: Vec::new(),
-            ops: state
-                .drain_requested
-                .then(|| sdkwork_webserver_contract::ClusterInstanceOpsDirectives {
+            ops: state.drain_requested.then(|| {
+                sdkwork_webserver_contract::ClusterInstanceOpsDirectives {
                     routing_enabled: false,
                     drain_requested: true,
-                }),
+                }
+            }),
             sync: Some(vec![ClusterSyncState {
                 kind: "config".to_owned(),
                 desired_revision: Some("rev-1".to_owned()),
@@ -440,7 +440,10 @@ async fn wait_for_route_ready(agent: &mut AgentRuntime) -> Vec<RouteReadiness> {
         };
         match tokio::time::timeout(remaining, agent.next_event()).await {
             Ok(Some(AgentEvent::Ready { routes, rejected })) => {
-                assert!(rejected.is_empty(), "unexpected route rejections: {rejected:?}");
+                assert!(
+                    rejected.is_empty(),
+                    "unexpected route rejections: {rejected:?}"
+                );
                 return routes;
             }
             Ok(Some(_)) => {}

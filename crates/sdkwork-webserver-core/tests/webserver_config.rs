@@ -2204,8 +2204,7 @@ fn acme_http01_webroot_may_be_an_absolute_rendezvous_directory() {
     });
     let path = write_config(directory.path(), &config);
 
-    let compiled =
-        load_and_compile_webserver_config(path).expect("absolute ACME webroot compiles");
+    let compiled = load_and_compile_webserver_config(path).expect("absolute ACME webroot compiles");
     let resolved = compiled.acme_webroot("http").expect("resolved webroot");
     assert_eq!(resolved, webroot.canonicalize().expect("canonical"));
     assert!(

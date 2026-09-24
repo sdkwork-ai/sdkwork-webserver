@@ -935,7 +935,10 @@ fn materialize_cache_policy(
         let arguments: Vec<String> = text.split_whitespace().map(str::to_owned).collect();
         let (mode, seconds) = crate::config::cache_policy::parse_expires_arguments(&arguments)
             .map_err(|detail| {
-                materialize_error(&format!("{path}.expires"), format!("invalid `expires`: {detail}"))
+                materialize_error(
+                    &format!("{path}.expires"),
+                    format!("invalid `expires`: {detail}"),
+                )
             })?;
         policy.expires = mode;
         policy.expires_seconds = seconds;
@@ -1401,7 +1404,10 @@ impl<'a> Materializer<'a> {
                     .map_err(|error| materialize_error(path, error))?;
                 let directory = live_root.join(acme_name);
                 (
-                    directory.join("fullchain.pem").to_string_lossy().into_owned(),
+                    directory
+                        .join("fullchain.pem")
+                        .to_string_lossy()
+                        .into_owned(),
                     directory.join("privkey.pem").to_string_lossy().into_owned(),
                 )
             }
@@ -3757,8 +3763,10 @@ proxyPass = "http://127.0.0.1:9001"
         // `expires`/`etag` used to be accepted-and-ignored here, so the
         // declaration had no effect on the served response.
         let config = materialize_app(
-            &cache_policy_document("expires = \"7d\"
-etag = false"),
+            &cache_policy_document(
+                "expires = \"7d\"
+etag = false",
+            ),
             "test",
         )
         .expect("materializes");
@@ -3773,11 +3781,8 @@ etag = false"),
         assert_eq!(policy.if_modified_since, IfModifiedSinceMode::Exact);
 
         // `modified <time>` is one string in TOML and an argument list in nginx.
-        let config = materialize_app(
-            &cache_policy_document("expires = \"modified 30m\""),
-            "test",
-        )
-        .expect("materializes");
+        let config = materialize_app(&cache_policy_document("expires = \"modified 30m\""), "test")
+            .expect("materializes");
         let policy = config.virtual_hosts[0].routes[0]
             .cache_policy
             .as_ref()
@@ -3796,8 +3801,11 @@ etag = false"),
             ("expires = \"1x\"", "invalid `expires`"),
             ("expires = \"@25h\"", "less than 24 hours"),
             ("expires = 60", "must be a string"),
-            ("expires = \"1d\"
-etag = \"off\"", "must be a boolean"),
+            (
+                "expires = \"1d\"
+etag = \"off\"",
+                "must be a boolean",
+            ),
         ] {
             let error = materialize_app(&cache_policy_document(declaration), "test")
                 .err()

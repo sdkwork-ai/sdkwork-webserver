@@ -334,8 +334,7 @@ pub fn materialize_nginx_app(
                 mapper.http_cache.etag = Some(parse_on_off(directive, "etag")?);
             }
             "if_modified_since" => {
-                mapper.http_cache.if_modified_since =
-                    Some(parse_if_modified_since(directive)?);
+                mapper.http_cache.if_modified_since = Some(parse_if_modified_since(directive)?);
             }
             "set_real_ip_from" | "real_ip_header" | "real_ip_recursive" => {
                 parse_real_ip_directive(&mut mapper.http_real_ip, directive)?;
@@ -486,9 +485,7 @@ const NGINX_TLS_PROTOCOLS: &[(&str, Option<TlsVersion>)] = &[
     ("TLSv1.3", Some(TlsVersion::Tls13)),
 ];
 
-fn parse_ssl_protocols(
-    directive: &NginxDirective,
-) -> Result<SslProtocolRange, NginxConfigError> {
+fn parse_ssl_protocols(directive: &NginxDirective) -> Result<SslProtocolRange, NginxConfigError> {
     if directive.args.is_empty() {
         return Err(NginxConfigError::unsupported(
             directive,
@@ -504,9 +501,7 @@ fn parse_ssl_protocols(
         else {
             return Err(NginxConfigError::unsupported(
                 directive,
-                format!(
-                    "ssl_protocols accepts TLSv1|TLSv1.1|TLSv1.2|TLSv1.3, found `{token}`"
-                ),
+                format!("ssl_protocols accepts TLSv1|TLSv1.1|TLSv1.2|TLSv1.3, found `{token}`"),
             ));
         };
         if let Some(version) = supported {
@@ -570,9 +565,7 @@ impl CacheDirectives {
             expires,
             expires_seconds,
             etag: self.etag.unwrap_or(true),
-            if_modified_since: self
-                .if_modified_since
-                .unwrap_or(IfModifiedSinceMode::Exact),
+            if_modified_since: self.if_modified_since.unwrap_or(IfModifiedSinceMode::Exact),
         })
     }
 }
@@ -618,8 +611,6 @@ fn parse_if_modified_since(
         )),
     }
 }
-
-
 
 struct Mapper<'a> {
     app_key: &'a str,
@@ -4807,7 +4798,8 @@ server {
             std::path::Path::new("site.conf"),
         )
         .expect("parse");
-        let config = materialize_nginx_app(&parsed, directory.path(), "cache").expect("materialize");
+        let config =
+            materialize_nginx_app(&parsed, directory.path(), "cache").expect("materialize");
         let policy = config.virtual_hosts[0]
             .cache_policy
             .as_ref()
@@ -4832,7 +4824,8 @@ server {
             std::path::Path::new("site.conf"),
         )
         .expect("parse");
-        let config = materialize_nginx_app(&parsed, directory.path(), "cache").expect("materialize");
+        let config =
+            materialize_nginx_app(&parsed, directory.path(), "cache").expect("materialize");
         let routes = &config.virtual_hosts[0].routes;
         let policy = |index: usize| {
             routes[index]
@@ -4877,7 +4870,8 @@ http {
             std::path::Path::new("site.conf"),
         )
         .expect("parse");
-        let config = materialize_nginx_app(&parsed, directory.path(), "cache").expect("materialize");
+        let config =
+            materialize_nginx_app(&parsed, directory.path(), "cache").expect("materialize");
         let host = config.virtual_hosts[0]
             .cache_policy
             .as_ref()
@@ -4894,7 +4888,10 @@ http {
         assert_eq!(override_policy.expires, ExpiresMode::Modified);
         assert_eq!(override_policy.expires_seconds, 1_800);
         assert_eq!(override_policy.etag, false);
-        assert_eq!(override_policy.if_modified_since, IfModifiedSinceMode::Before);
+        assert_eq!(
+            override_policy.if_modified_since,
+            IfModifiedSinceMode::Before
+        );
         // A location with no declaration emits nothing and inherits the host.
         assert!(routes[1].cache_policy.is_none());
         // `etag on` at the location re-enables what the http context disabled.
@@ -4912,7 +4909,8 @@ http {
             std::path::Path::new("site.conf"),
         )
         .expect("parse");
-        let config = materialize_nginx_app(&parsed, directory.path(), "cache").expect("materialize");
+        let config =
+            materialize_nginx_app(&parsed, directory.path(), "cache").expect("materialize");
         let host = config.virtual_hosts[0]
             .cache_policy
             .as_ref()
@@ -5840,7 +5838,11 @@ server {
         )
         .expect("materialize");
         assert!(config.listeners[0].acme_http_01.is_none());
-        assert_eq!(config.resources.len(), 2, "both locations stay proxy routes");
+        assert_eq!(
+            config.resources.len(),
+            2,
+            "both locations stay proxy routes"
+        );
     }
 
     #[test]

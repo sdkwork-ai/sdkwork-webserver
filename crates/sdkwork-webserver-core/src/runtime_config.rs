@@ -1769,7 +1769,10 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
         assert!(!glob_match("a*b", "ac"));
     }
 
-    fn certificate_fixture(id: &str, server_names: Vec<String>) -> crate::config::CertificateConfig {
+    fn certificate_fixture(
+        id: &str,
+        server_names: Vec<String>,
+    ) -> crate::config::CertificateConfig {
         crate::config::CertificateConfig {
             id: id.to_owned(),
             server_names,
