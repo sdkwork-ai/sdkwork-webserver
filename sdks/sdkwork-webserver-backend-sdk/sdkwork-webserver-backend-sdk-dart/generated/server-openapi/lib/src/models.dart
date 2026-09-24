@@ -926,6 +926,38 @@ class CreateRootDomainRequest {
   }
 }
 
+class UpdateRootDomainRequest {
+  final String? displayName;
+  final String? dnsProvider;
+  final String? providerZoneRef;
+  final int? status;
+
+  UpdateRootDomainRequest({
+    this.displayName,
+    this.dnsProvider,
+    this.providerZoneRef,
+    this.status
+  });
+
+  factory UpdateRootDomainRequest.fromJson(Map<String, dynamic> json) {
+    return UpdateRootDomainRequest(
+      displayName: json['displayName']?.toString(),
+      dnsProvider: json['dnsProvider']?.toString(),
+      providerZoneRef: json['providerZoneRef']?.toString(),
+      status: json['status'] is int ? json['status'] : null
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'displayName': displayName,
+      'dnsProvider': dnsProvider,
+      'providerZoneRef': providerZoneRef,
+      'status': status,
+    };
+  }
+}
+
 class CreateRootDomainHostnameRequest {
   final String? recordName;
   final String? applicationId;
@@ -965,6 +997,9 @@ class CreateRootDomainHostnameRequest {
 class RootDomainResponse {
   final String? id;
   final String? hostname;
+  final String? displayName;
+  final String? dnsProvider;
+  final String? providerZoneRef;
   final int? status;
   final String? subdomainCount;
   final String? boundSubdomainCount;
@@ -977,6 +1012,9 @@ class RootDomainResponse {
   RootDomainResponse({
     this.id,
     this.hostname,
+    this.displayName,
+    this.dnsProvider,
+    this.providerZoneRef,
     this.status,
     this.subdomainCount,
     this.boundSubdomainCount,
@@ -991,6 +1029,9 @@ class RootDomainResponse {
     return RootDomainResponse(
       id: json['id']?.toString(),
       hostname: json['hostname']?.toString(),
+      displayName: json['displayName']?.toString(),
+      dnsProvider: json['dnsProvider']?.toString(),
+      providerZoneRef: json['providerZoneRef']?.toString(),
       status: json['status'] is int ? json['status'] : null,
       subdomainCount: json['subdomainCount']?.toString(),
       boundSubdomainCount: json['boundSubdomainCount']?.toString(),
@@ -1006,6 +1047,9 @@ class RootDomainResponse {
     return <String, dynamic>{
       'id': id,
       'hostname': hostname,
+      'displayName': displayName,
+      'dnsProvider': dnsProvider,
+      'providerZoneRef': providerZoneRef,
       'status': status,
       'subdomainCount': subdomainCount,
       'boundSubdomainCount': boundSubdomainCount,
@@ -4483,6 +4527,318 @@ class TrafficUsageTenantTotal {
   }
 }
 
+class MetricsSummaryResponse {
+  final String? asOf;
+  final bool? platformScope;
+  final String? trafficSince;
+  final List<MetricsWindowBounds>? windows;
+  final List<MetricsMetricTotals>? entities;
+  final List<MetricsMetricTotals>? traffic;
+  final List<MetricsMetricTotals>? storage;
+  final List<MetricsSeries>? series;
+  final MetricsSeriesWindow? seriesWindow;
+  final List<String>? unassembledMetrics;
+
+  MetricsSummaryResponse({
+    this.asOf,
+    this.platformScope,
+    this.trafficSince,
+    this.windows,
+    this.entities,
+    this.traffic,
+    this.storage,
+    this.series,
+    this.seriesWindow,
+    this.unassembledMetrics
+  });
+
+  factory MetricsSummaryResponse.fromJson(Map<String, dynamic> json) {
+    return MetricsSummaryResponse(
+      asOf: json['asOf']?.toString(),
+      platformScope: json['platformScope'] is bool ? json['platformScope'] : null,
+      trafficSince: json['trafficSince']?.toString(),
+      windows: (() {
+        final list = _sdkworkAsList(json['windows']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : MetricsWindowBounds.fromJson(map);
+      })())
+            .whereType<MetricsWindowBounds>()
+            .toList();
+      })(),
+      entities: (() {
+        final list = _sdkworkAsList(json['entities']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : MetricsMetricTotals.fromJson(map);
+      })())
+            .whereType<MetricsMetricTotals>()
+            .toList();
+      })(),
+      traffic: (() {
+        final list = _sdkworkAsList(json['traffic']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : MetricsMetricTotals.fromJson(map);
+      })())
+            .whereType<MetricsMetricTotals>()
+            .toList();
+      })(),
+      storage: (() {
+        final list = _sdkworkAsList(json['storage']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : MetricsMetricTotals.fromJson(map);
+      })())
+            .whereType<MetricsMetricTotals>()
+            .toList();
+      })(),
+      series: (() {
+        final list = _sdkworkAsList(json['series']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : MetricsSeries.fromJson(map);
+      })())
+            .whereType<MetricsSeries>()
+            .toList();
+      })(),
+      seriesWindow: (() {
+        final map = _sdkworkAsMap(json['seriesWindow']);
+        return map == null ? null : MetricsSeriesWindow.fromJson(map);
+      })(),
+      unassembledMetrics: (() {
+        final list = _sdkworkAsList(json['unassembledMetrics']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'asOf': asOf,
+      'platformScope': platformScope,
+      'trafficSince': trafficSince,
+      'windows': windows?.map((item) => item.toJson()).toList(),
+      'entities': entities?.map((item) => item.toJson()).toList(),
+      'traffic': traffic?.map((item) => item.toJson()).toList(),
+      'storage': storage?.map((item) => item.toJson()).toList(),
+      'series': series?.map((item) => item.toJson()).toList(),
+      'seriesWindow': seriesWindow?.toJson(),
+      'unassembledMetrics': unassembledMetrics?.map((item) => item).toList(),
+    };
+  }
+}
+
+class MetricsWindowBounds {
+  final String? window;
+  final String? dateFrom;
+  final String? dateTo;
+
+  MetricsWindowBounds({
+    this.window,
+    this.dateFrom,
+    this.dateTo
+  });
+
+  factory MetricsWindowBounds.fromJson(Map<String, dynamic> json) {
+    return MetricsWindowBounds(
+      window: json['window']?.toString(),
+      dateFrom: json['dateFrom']?.toString(),
+      dateTo: json['dateTo']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'window': window,
+      'dateFrom': dateFrom,
+      'dateTo': dateTo,
+    };
+  }
+}
+
+class MetricsMetricTotals {
+  final String? metric;
+  final String? unit;
+  final List<MetricsWindowValue>? values;
+
+  MetricsMetricTotals({
+    this.metric,
+    this.unit,
+    this.values
+  });
+
+  factory MetricsMetricTotals.fromJson(Map<String, dynamic> json) {
+    return MetricsMetricTotals(
+      metric: json['metric']?.toString(),
+      unit: json['unit']?.toString(),
+      values: (() {
+        final list = _sdkworkAsList(json['values']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : MetricsWindowValue.fromJson(map);
+      })())
+            .whereType<MetricsWindowValue>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'metric': metric,
+      'unit': unit,
+      'values': values?.map((item) => item.toJson()).toList(),
+    };
+  }
+}
+
+class MetricsWindowValue {
+  final String? window;
+  final String? quantity;
+  final String? unit;
+
+  MetricsWindowValue({
+    this.window,
+    this.quantity,
+    this.unit
+  });
+
+  factory MetricsWindowValue.fromJson(Map<String, dynamic> json) {
+    return MetricsWindowValue(
+      window: json['window']?.toString(),
+      quantity: json['quantity']?.toString(),
+      unit: json['unit']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'window': window,
+      'quantity': quantity,
+      'unit': unit,
+    };
+  }
+}
+
+class MetricsSeriesWindow {
+  final String? dateFrom;
+  final String? dateTo;
+
+  MetricsSeriesWindow({
+    this.dateFrom,
+    this.dateTo
+  });
+
+  factory MetricsSeriesWindow.fromJson(Map<String, dynamic> json) {
+    return MetricsSeriesWindow(
+      dateFrom: json['dateFrom']?.toString(),
+      dateTo: json['dateTo']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'dateFrom': dateFrom,
+      'dateTo': dateTo,
+    };
+  }
+}
+
+class MetricsSeries {
+  final String? metric;
+  final String? unit;
+  final List<MetricsSeriesPoint>? points;
+
+  MetricsSeries({
+    this.metric,
+    this.unit,
+    this.points
+  });
+
+  factory MetricsSeries.fromJson(Map<String, dynamic> json) {
+    return MetricsSeries(
+      metric: json['metric']?.toString(),
+      unit: json['unit']?.toString(),
+      points: (() {
+        final list = _sdkworkAsList(json['points']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : MetricsSeriesPoint.fromJson(map);
+      })())
+            .whereType<MetricsSeriesPoint>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'metric': metric,
+      'unit': unit,
+      'points': points?.map((item) => item.toJson()).toList(),
+    };
+  }
+}
+
+class MetricsSeriesPoint {
+  final String? date;
+  final String? quantity;
+
+  MetricsSeriesPoint({
+    this.date,
+    this.quantity
+  });
+
+  factory MetricsSeriesPoint.fromJson(Map<String, dynamic> json) {
+    return MetricsSeriesPoint(
+      date: json['date']?.toString(),
+      quantity: json['quantity']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'date': date,
+      'quantity': quantity,
+    };
+  }
+}
+
 class ApplicationsListResponse {
   final int? code;
   final dynamic data;
@@ -4860,6 +5216,34 @@ class RootDomainsRetrieveResponse {
 
   factory RootDomainsRetrieveResponse.fromJson(Map<String, dynamic> json) {
     return RootDomainsRetrieveResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class RootDomainsUpdateResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  RootDomainsUpdateResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory RootDomainsUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return RootDomainsUpdateResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -6652,6 +7036,62 @@ class PlatformTrafficUsagesRetrieveResponse {
 
   factory PlatformTrafficUsagesRetrieveResponse.fromJson(Map<String, dynamic> json) {
     return PlatformTrafficUsagesRetrieveResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class MetricsSummariesRetrieveResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  MetricsSummariesRetrieveResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory MetricsSummariesRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return MetricsSummariesRetrieveResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class PlatformMetricsSummariesRetrieveResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  PlatformMetricsSummariesRetrieveResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory PlatformMetricsSummariesRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return PlatformMetricsSummariesRetrieveResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()

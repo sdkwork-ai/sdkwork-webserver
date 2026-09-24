@@ -6,6 +6,21 @@ pub struct RootDomainResponse {
 
     pub hostname: String,
 
+    /// Operator-facing label; the apex hostname remains the identity.
+    #[serde(rename = "displayName")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+
+    /// DNS provider declaration, or the literal manual when records are published by hand.
+    #[serde(rename = "dnsProvider")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dns_provider: Option<String>,
+
+    /// Provider-side zone identifier.
+    #[serde(rename = "providerZoneRef")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_zone_ref: Option<String>,
+
     pub status: i64,
 
     #[serde(rename = "subdomainCount")]

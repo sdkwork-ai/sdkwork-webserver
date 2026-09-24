@@ -20,6 +20,7 @@ use SDKWork\Webserver\BackendSdk\Api\AgentApi;
 use SDKWork\Webserver\BackendSdk\Api\AuditApi;
 use SDKWork\Webserver\BackendSdk\Api\ClusterApi;
 use SDKWork\Webserver\BackendSdk\Api\TrafficUsageApi;
+use SDKWork\Webserver\BackendSdk\Api\MetricsSummaryApi;
 
 final class SdkworkBackendClient
 {
@@ -39,6 +40,7 @@ final class SdkworkBackendClient
     public AuditApi $audit;
     public ClusterApi $cluster;
     public TrafficUsageApi $trafficUsage;
+    public MetricsSummaryApi $metricsSummary;
 
     public function __construct(SdkConfig $config)
     {
@@ -58,6 +60,7 @@ final class SdkworkBackendClient
         $this->audit = new AuditApi($this->http);
         $this->cluster = new ClusterApi($this->http);
         $this->trafficUsage = new TrafficUsageApi($this->http);
+        $this->metricsSummary = new MetricsSummaryApi($this->http);
     }
 
     public function setApiKey(string $apiKey): self

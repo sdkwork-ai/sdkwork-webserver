@@ -57,6 +57,20 @@ func (a *DomainApi) RootDomainsRetrieve(rootDomainId string) (sdktypes.RootDomai
     return decodeResult[sdktypes.RootDomainsRetrieveResponse](raw)
 }
 
+// Edit a tenant root-domain Zone
+func (a *DomainApi) RootDomainsUpdate(rootDomainId string, body sdktypes.UpdateRootDomainRequest, idempotencyKey string) (sdktypes.RootDomainsUpdateResponse, error) {
+    headers := BuildRequestHeaders(
+        map[string]ParameterSpec{"Idempotency-Key": ParameterSpec{Value: idempotencyKey, Style: "simple", Explode: false},},
+        map[string]ParameterSpec{},
+    )
+    raw, err := a.client.Patch(BackendApiPath(fmt.Sprintf("/root_domains/%s", SerializePathParameter(rootDomainId, PathParameterSpec{Name: "rootDomainId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
+    if err != nil {
+        var zero sdktypes.RootDomainsUpdateResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.RootDomainsUpdateResponse](raw)
+}
+
 // Delete an empty tenant root-domain Zone
 func (a *DomainApi) RootDomainsDelete(rootDomainId string, idempotencyKey string) (struct{}, error) {
     headers := BuildRequestHeaders(

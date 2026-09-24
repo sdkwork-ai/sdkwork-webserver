@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::cluster::*;
 use crate::dto::*;
+use crate::metrics::*;
 use crate::problem::WebServiceResult;
 use crate::usage::*;
 
@@ -503,6 +504,16 @@ pub trait WebBackendApi: Send + Sync {
         root_domain_id: &str,
     ) -> WebServiceResult<()>;
 
+    /// Edit a tenant root-domain Zone: its descriptive fields, its lifecycle
+    /// status, or both. The operations surface reaches the same three
+    /// descriptive fields the tenant console's zone form edits.
+    async fn update_root_domain(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+        request: &UpdateRootDomainRequest,
+    ) -> WebServiceResult<RootDomainResponse>;
+
     async fn list_root_domain_hostnames(
         &self,
         context: &WebBackendRequestContext,
@@ -954,6 +965,35 @@ pub trait WebBackendApi: Send + Sync {
         context: &WebBackendRequestContext,
         query: &TrafficUsageStatisticsQuery,
     ) -> WebServiceResult<TrafficUsageStatisticsResponse>;
+
+    /// The dashboard metric summary of **the caller's own tenant** — the
+    /// console reading.
+    ///
+    /// Reports the caller's own users, applications, and agents across every
+    /// window, and deliberately no tenant count: a tenant counting itself is
+    /// always one. Same reach rule as
+    /// [`Self::retrieve_traffic_usage_statistics`] — the operation decides the
+    /// scope, no parameter can widen it.
+    ///
+    /// `query` bounds the **series** only. The four card windows are resolved
+    /// server-side from the clock and ignore it; see [`MetricsSummaryQuery`].
+    async fn retrieve_metrics_summary(
+        &self,
+        context: &WebBackendRequestContext,
+        query: &MetricsSummaryQuery,
+    ) -> WebServiceResult<MetricsSummaryResponse>;
+
+    /// The dashboard metric summary of **every tenant this edge serves** — the
+    /// operations reading, and the only one that reports a tenant count.
+    ///
+    /// Restricted to the platform operator tenant; a tenant-bound context is
+    /// rejected rather than narrowed, so a misrouted admin page fails loudly
+    /// instead of presenting one tenant's estate as the platform's.
+    async fn retrieve_platform_metrics_summary(
+        &self,
+        context: &WebBackendRequestContext,
+        query: &MetricsSummaryQuery,
+    ) -> WebServiceResult<MetricsSummaryResponse>;
 }
 
 #[cfg(test)]

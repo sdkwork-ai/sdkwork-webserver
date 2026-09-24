@@ -3994,6 +3994,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "sdkwork-api-sandbox-assembly"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "sdkwork-database-sqlx",
+ "sdkwork-intelligence-sandbox-repository-sqlx",
+ "sdkwork-intelligence-sandbox-service",
+ "sdkwork-routes-sandbox-internal-api",
+ "sdkwork-sandbox-database-host",
+ "sdkwork-web-bootstrap",
+ "sdkwork-web-core",
+ "sqlx",
+ "thiserror 2.0.20",
+ "tokio",
+]
+
+[[package]]
 name = "sdkwork-api-skills-assembly"
 version = "0.1.0"
 dependencies = [
@@ -4020,6 +4037,7 @@ dependencies = [
  "chrono",
  "sdkwork-api-deployments-assembly",
  "sdkwork-api-mcp-assembly",
+ "sdkwork-api-sandbox-assembly",
  "sdkwork-api-skills-assembly",
  "sdkwork-database-sqlx",
  "sdkwork-deploy-contract",
@@ -4081,6 +4099,7 @@ dependencies = [
  "sdkwork-api-drive-assembly",
  "sdkwork-api-iam-assembly",
  "sdkwork-api-mcp-assembly",
+ "sdkwork-api-sandbox-assembly",
  "sdkwork-api-skills-assembly",
  "sdkwork-api-webserver-assembly",
  "sdkwork-database-id",
@@ -4793,6 +4812,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "sdkwork-intelligence-sandbox-repository-sqlx"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "sdkwork-database-sqlx",
+ "sdkwork-intelligence-sandbox-service",
+ "sdkwork-sandbox-provider-spi",
+ "sdkwork-utils-rust",
+ "serde_json",
+ "sqlx",
+ "zeroize",
+]
+
+[[package]]
+name = "sdkwork-intelligence-sandbox-service"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "sdkwork-sandbox-provider-spi",
+ "thiserror 2.0.20",
+ "tokio",
+]
+
+[[package]]
 name = "sdkwork-intelligence-skills-repository-sqlx"
 version = "0.1.0"
 dependencies = [
@@ -5177,6 +5220,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "sdkwork-routes-sandbox-internal-api"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "base64 0.22.1",
+ "sdkwork-iam-web-adapter",
+ "sdkwork-intelligence-sandbox-service",
+ "sdkwork-sandbox-provider-spi",
+ "sdkwork-utils-rust",
+ "sdkwork-web-axum",
+ "sdkwork-web-bootstrap",
+ "sdkwork-web-core",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "sdkwork-routes-skills-app-api"
 version = "0.1.0"
 dependencies = [
@@ -5297,6 +5359,31 @@ dependencies = [
  "serde_json",
  "tokio",
  "tower",
+]
+
+[[package]]
+name = "sdkwork-sandbox-database-host"
+version = "0.1.0"
+dependencies = [
+ "dotenvy",
+ "sdkwork-database-config",
+ "sdkwork-database-drift",
+ "sdkwork-database-lifecycle",
+ "sdkwork-database-spi",
+ "sdkwork-database-sqlx",
+ "sqlx",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "sdkwork-sandbox-provider-spi"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+ "uuid",
+ "zeroize",
 ]
 
 [[package]]
@@ -5562,6 +5649,7 @@ name = "sdkwork-webserver-contract"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "sdkwork-deploy-core",
  "sdkwork-utils-rust",
  "sdkwork-webserver-core",
  "serde",

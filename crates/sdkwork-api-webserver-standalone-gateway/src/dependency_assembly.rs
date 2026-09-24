@@ -26,6 +26,7 @@ const IAM_OWNER: &str = "sdkwork-iam";
 const DRIVE_OWNER: &str = "sdkwork-drive";
 const SKILLS_OWNER: &str = "sdkwork-skills";
 const MCP_OWNER: &str = "sdkwork-mcp";
+const SANDBOX_OWNER: &str = "sdkwork-sandbox";
 const DEPLOYMENTS_OWNER: &str = "sdkwork-deployments";
 
 /// Every same-origin dependency module this edge serves — one module per owner.
@@ -41,6 +42,7 @@ pub(crate) async fn same_origin_dependency_modules(
         drive_module().await?,
         skills_module().await?,
         mcp_module().await?,
+        sandbox_module().await?,
         deployments_module().await?,
     ])
 }
@@ -119,6 +121,22 @@ async fn mcp_module() -> Result<WebModule, StandaloneProfileError> {
         .map_err(|detail| unavailable(MCP_OWNER, detail))
 }
 
+/// Sandbox App API (`/app/v3/api/sandbox/*`) — the per-user Sandbox Instance
+/// registry the console's "Sandbox Instances" page reads and writes.
+///
+/// One surface, one owner, handed over as a host-neutral contribution, so this
+/// edge's single Web Framework layer authenticates it like every composed
+/// surface. The Sandbox repository is standalone-only
+/// (`SDKWORK_WEBSERVER_SPEC.md` section 17.4), and the Web Server edge is the
+/// only public reverse-proxy in front of it, which is why the console reaches
+/// these routes on the same origin as every other capability.
+async fn sandbox_module() -> Result<WebModule, StandaloneProfileError> {
+    let pool = shared_pool(SANDBOX_OWNER)?;
+    sdkwork_api_sandbox_assembly::web_module_with_pool(pool)
+        .await
+        .map_err(|detail| unavailable(SANDBOX_OWNER, detail))
+}
+
 /// Deployments domain and certificate management, the standalone control plane.
 ///
 /// This uses the assembly's same-origin entrypoint rather than
@@ -170,6 +188,7 @@ mod tests {
             DRIVE_OWNER,
             SKILLS_OWNER,
             MCP_OWNER,
+            SANDBOX_OWNER,
             DEPLOYMENTS_OWNER,
         ] {
             match shared_pool(owner) {

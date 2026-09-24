@@ -87,8 +87,10 @@ test('Vite proxies every canonical infrastructure path and keeps one React insta
 
   const vite = read('apps/sdkwork-webserver-pc/vite.config.ts');
   // react/react-dom must be deduped; the configuration may list additional
-  // framework packages after them.
-  assert.match(vite, /dedupe:\s*\["react",\s*"react-dom"[^\]]*\]/u);
+  // framework packages after them. Whitespace is not part of the contract: the
+  // list is written one package per line, so the assertion must not require the
+  // first two to share the opening bracket's line.
+  assert.match(vite, /dedupe:\s*\[\s*"react",\s*"react-dom"[^\]]*\]/u);
   assert.match(vite, /createCanonicalApiProxyConfig/u);
 });
 

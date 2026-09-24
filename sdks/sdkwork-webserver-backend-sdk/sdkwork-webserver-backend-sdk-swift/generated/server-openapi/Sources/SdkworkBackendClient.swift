@@ -18,6 +18,7 @@ public class SdkworkBackendClient {
     public let audit: AuditApi
     public let cluster: ClusterApi
     public let trafficUsage: TrafficUsageApi
+    public let metricsSummary: MetricsSummaryApi
 
     public init(baseURL: String) {
         self.httpClient = HttpClient(baseURL: baseURL)
@@ -36,6 +37,7 @@ public class SdkworkBackendClient {
         self.audit = AuditApi(client: httpClient)
         self.cluster = ClusterApi(client: httpClient)
         self.trafficUsage = TrafficUsageApi(client: httpClient)
+        self.metricsSummary = MetricsSummaryApi(client: httpClient)
     }
 
     public init(config: SdkConfig) {
@@ -55,6 +57,7 @@ public class SdkworkBackendClient {
         self.audit = AuditApi(client: httpClient)
         self.cluster = ClusterApi(client: httpClient)
         self.trafficUsage = TrafficUsageApi(client: httpClient)
+        self.metricsSummary = MetricsSummaryApi(client: httpClient)
     }
     public func setAuthToken(_ token: String) -> SdkworkBackendClient {
         httpClient.setAuthToken(token)

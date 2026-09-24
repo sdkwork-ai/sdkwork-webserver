@@ -4,6 +4,7 @@ pub mod app_ports;
 pub mod cluster;
 pub mod dto;
 pub mod internal_ports;
+pub mod metrics;
 pub mod problem;
 pub mod provider;
 pub mod usage;
@@ -15,6 +16,7 @@ pub use app_ports::{
 pub use cluster::*;
 pub use dto::*;
 pub use internal_ports::*;
+pub use metrics::*;
 pub use problem::{WebServiceError, WebServiceErrorKind, WebServiceResult};
 pub use provider::*;
 pub use usage::*;

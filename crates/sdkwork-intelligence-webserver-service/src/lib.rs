@@ -40,7 +40,7 @@ use std::sync::Arc;
 
 use sdkwork_webserver_acme_service::CertificateIssuer;
 use sdkwork_webserver_contract::{
-    TrafficUsageReadPort, WebServiceError, WebServiceResult,
+    MetricsSummaryReadPort, TrafficUsageReadPort, WebServiceError, WebServiceResult,
 };
 use sdkwork_webserver_edge_runtime::EdgeRuntime;
 
@@ -58,6 +58,13 @@ pub struct WebService {
     /// of an empty chart, which would read as "no traffic" rather than
     /// "not wired".
     pub(crate) traffic_usage: Option<Arc<dyn TrafficUsageReadPort>>,
+    /// Read model for the dashboard metric summary. Same shape and same reason
+    /// as `traffic_usage`: part of the reading belongs to another module (the
+    /// IAM subjects and the metered facts), so the host injects the adapter
+    /// after construction. Absent means the operation reports an unavailable
+    /// capability rather than a row of zeros, which would read as "this
+    /// installation has no users" rather than "not wired".
+    pub(crate) metrics_summary: Option<Arc<dyn MetricsSummaryReadPort>>,
     /// Count of audit log persistence failures so the audit gap stays
     /// observable through health/readiness surfaces instead of being silent.
     audit_persistence_failures: AtomicU64,
@@ -106,6 +113,7 @@ impl WebService {
             source_importer,
             domain_ownership_verifier,
             traffic_usage: None,
+            metrics_summary: None,
             audit_persistence_failures: AtomicU64::new(0),
         }
     }
@@ -121,6 +129,20 @@ impl WebService {
         port: Arc<dyn TrafficUsageReadPort>,
     ) -> Self {
         self.traffic_usage = Some(port);
+        self
+    }
+
+    /// Injects the dashboard metric summary read model.
+    ///
+    /// A second consumed builder rather than a shared one: the two readings are
+    /// assembled from different sources and a host may legitimately have one
+    /// without the other (a deployment with usage facts but no IAM tables in
+    /// this database, or the reverse), and each must report its own absence.
+    pub fn with_metrics_summary_reader(
+        mut self,
+        port: Arc<dyn MetricsSummaryReadPort>,
+    ) -> Self {
+        self.metrics_summary = Some(port);
         self
     }
 

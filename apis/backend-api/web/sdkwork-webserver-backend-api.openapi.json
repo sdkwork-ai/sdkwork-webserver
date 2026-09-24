@@ -1297,6 +1297,94 @@
         "parameters": [],
         "x-sdkwork-route-auth": "dual-token"
       },
+      "patch": {
+        "operationId": "rootDomains.update",
+        "summary": "Edit a tenant root-domain Zone",
+        "tags": [
+          "domain"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.sites.write",
+        "x-sdkwork-idempotent": true,
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRootDomainRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tenant root-domain Zone updated successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/RootDomainResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      },
       "delete": {
         "operationId": "rootDomains.delete",
         "summary": "Delete an empty tenant root-domain Zone",
@@ -6570,6 +6658,166 @@
         },
         "x-sdkwork-route-auth": "dual-token"
       }
+    },
+    "/backend/v3/api/metrics_summaries": {
+      "get": {
+        "operationId": "metricsSummaries.retrieve",
+        "summary": "Retrieve the dashboard metric summary of the caller's own tenant",
+        "description": "The dashboard's cardinal metrics — how many users and applications the caller's tenant has, and how much traffic this edge metered for it — each reported across four windows: `today`, `last_7_days`, `current_month`, and `lifetime`.\nThe reach is fixed by this operation: the counts and the traffic cover the caller's own tenant, taken from the authenticated context, so no query parameter can widen it. The platform-wide reading lives at `/backend/v3/api/platform_metrics_summaries` and is restricted to the platform operator tenant.\nEvery figure is an aggregate. No user, tenant, or application is returned, so the reading reports the size of an estate without becoming a second, quieter way to enumerate its subjects.\nThe tenant count is absent here rather than reported at `1`: a tenant counting itself is a constant, and a surface handed one would draw it.\n`date_from` and `date_to` bound the **series** — the per-day trend — and never the four card windows, which stay resolved server-side from the clock. The series window is the caller's because the same window control drives the traffic trend drawn beside it on one chart; the two readings must resolve the same period or their lines would be plotted against a domain their days were not cut against.",
+        "tags": [
+          "metricsSummary"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.traffic.read",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "parameters": [
+          {
+            "name": "date_from",
+            "in": "query",
+            "description": "Inclusive UTC calendar day (`YYYY-MM-DD`) the per-day series starts on. Defaults to the trailing 30 days. The card windows ignore it.",
+            "schema": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 10
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "description": "Exclusive UTC calendar day (`YYYY-MM-DD`) the per-day series ends before. Defaults to tomorrow (UTC). The card windows ignore it.",
+            "schema": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dashboard metric summary returned successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/MetricsSummaryResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
+    },
+    "/backend/v3/api/platform_metrics_summaries": {
+      "get": {
+        "operationId": "platformMetricsSummaries.retrieve",
+        "summary": "Retrieve the dashboard metric summary of every tenant",
+        "description": "The dashboard's cardinal metrics over every tenant this edge serves, and the only reading that reports a **tenant count**: on the own-tenant operation that figure is structurally one.\nRestricted to the platform operator tenant: a tenant-bound context is rejected with 40301 rather than narrowed to its own slice, so a misrouted admin page fails loudly instead of presenting one tenant's estate as the platform's.\nReads across three owners — the IAM subjects, the metered usage facts, and the Web Server's own application table — and reports the capability as unavailable (`503`) when this deployment does not assemble all of them, because a count of zero and an inability to count are opposite claims that draw the same picture.\nA fourth owner is **optional**: the agents catalog is not declared by any topology profile, so a deployment that does not run the agents module still answers — with the agents metric named in `unassembledMetrics` rather than reported at `0`.\n`date_from` and `date_to` bound the **series** only; see the own-tenant operation for why that window is the caller's while the cards' are not.",
+        "tags": [
+          "metricsSummary"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.traffic.read",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "parameters": [
+          {
+            "name": "date_from",
+            "in": "query",
+            "description": "Inclusive UTC calendar day (`YYYY-MM-DD`) the per-day series starts on. Defaults to the trailing 30 days. The card windows ignore it.",
+            "schema": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 10
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "description": "Exclusive UTC calendar day (`YYYY-MM-DD`) the per-day series ends before. Defaults to tomorrow (UTC). The card windows ignore it.",
+            "schema": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dashboard metric summary returned successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/MetricsSummaryResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
     }
   },
   "components": {
@@ -7556,6 +7804,34 @@
           }
         }
       },
+      "UpdateRootDomainRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Partial edit; an omitted member leaves the stored value unchanged. The apex hostname is not editable.",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "dnsProvider": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "providerZoneRef": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2,
+            "description": "0=pending, 1=active, 2=disabled."
+          }
+        }
+      },
       "CreateRootDomainHostnameRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -7613,6 +7889,24 @@
           },
           "hostname": {
             "type": "string"
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Operator-facing label; the apex hostname remains the identity."
+          },
+          "dnsProvider": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "DNS provider declaration, or the literal manual when records are published by hand."
+          },
+          "providerZoneRef": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Provider-side zone identifier."
           },
           "status": {
             "type": "integer",
@@ -8207,7 +8501,8 @@
               "ECDSA",
               "RSA"
             ],
-            "default": "ECDSA"
+            "default": "RSA",
+            "description": "Key algorithm of the issued leaf. Defaults to RSA: a managed certificate is renewed unattended and RSA-2048 is the leaf key every TLS client accepts, so a certificate requested without an opinion on this stays reachable from old stacks as well. Ask for ECDSA explicitly where every client is known to support P-256."
           },
           "autoRenew": {
             "type": "boolean",
@@ -10769,6 +11064,227 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 32
+          }
+        }
+      },
+      "MetricsSummaryResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The dashboard's cardinal metrics, each reported across the same four **half-open** windows (`today`, `last_7_days`, `current_month`, `lifetime`). Three groups share the window vocabulary but not its meaning: for the entity counts a window names when the subjects arrived, and `lifetime` is therefore the live population rather than an arrival count; for the metered traffic every window is a volume accumulated inside it, and `lifetime` is everything the facts cover — which is why `trafficSince` reports the day they start on; for the storage figures a narrow window is the part of the current holding added inside it, and `lifetime` is what is held *now* — a held figure rather than a running total, since an object removed from storage stops counting in every window including the one it was born in.\n`series` reports the same entity metrics at **per-day** granularity, over the window named by `seriesWindow` rather than over the four above: the four card windows belong to the product and are resolved server-side from the clock, while the series window belongs to the caller and comes from the query string, because the plot it feeds also draws the traffic reading's per-day series and that plot has one x domain. A caller that draws both must pass one pair of bounds to both operations rather than omitting them: each operation resolves an omitted bound from the clock on its own, and two defaults are two windows. The two are reported separately so a surface cannot label a day's figure with a period it was not cut against.",
+        "required": [
+          "asOf",
+          "platformScope",
+          "windows",
+          "entities",
+          "traffic",
+          "storage",
+          "series",
+          "seriesWindow",
+          "unassembledMetrics"
+        ],
+        "properties": {
+          "asOf": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "The UTC day the windows were resolved against. Reported because the windows are relative to a clock, and a surface labelling \"today\" from its own date while the figures were cut against this one would name a window the numbers do not cover."
+          },
+          "platformScope": {
+            "type": "boolean",
+            "description": "Whether the figures cover every tenant rather than the caller's own. Reported so a surface cannot render a platform-wide count as if it were the caller's own, or the reverse."
+          },
+          "trafficSince": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Earliest UTC day the metered traffic facts cover. The basis of the lifetime traffic figures: without it, \"lifetime\" would read as the life of the product rather than the life of the fact table."
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricsWindowBounds"
+            }
+          },
+          "entities": {
+            "type": "array",
+            "description": "The entity counts. The platform reading reports users, tenants, applications, and agents; the own-tenant reading reports users, applications, and agents, because a tenant counting itself is always one. A metric this deployment cannot read at all is **absent** here and named in `unassembledMetrics` instead of being reported as `0`.",
+            "items": {
+              "$ref": "#/components/schemas/MetricsMetricTotals"
+            }
+          },
+          "traffic": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricsMetricTotals"
+            }
+          },
+          "storage": {
+            "type": "array",
+            "description": "The occupied storage, as `storage.used_bytes` (`BYTE`) and `storage.object_count` (`COUNT`). Sourced from sdkwork-drive's own occupancy predicate, so the figure here and the figure Drive refuses an upload against are the same number. Reported by both reaches: unlike the tenant count, a tenant's own consumption is answerable for that tenant.",
+            "items": {
+              "$ref": "#/components/schemas/MetricsMetricTotals"
+            }
+          },
+          "series": {
+            "type": "array",
+            "description": "The per-day entity arrivals over `seriesWindow`, one entry per metric, each with its days ascending. Separate from `entities` rather than a fifth window on them: the cards' windows are the server's, this one's is the caller's, and folding them together would give one row two meanings for \"the window\".\nOnly the entities are reported here. The metered volumes have their own per-day shape in the traffic readings, and storage has none because a day's occupancy is not reconstructable: a deleted object leaves the catalog, and its absence is indistinguishable from never having existed.",
+            "items": {
+              "$ref": "#/components/schemas/MetricsSeries"
+            }
+          },
+          "seriesWindow": {
+            "$ref": "#/components/schemas/MetricsSeriesWindow"
+          },
+          "unassembledMetrics": {
+            "type": "array",
+            "description": "Metric ids this deployment could not read, because the source behind them is not assembled here. Not metrics that came back empty: a metric answered `0` is reported as the figure `0`, and this list is the other case, where no figure exists and none was invented. The agents figure is the one that can land here — no topology profile declares the agents module, so a deployment that does not run it cannot count agents, and saying so is the only true answer.\nA surface must draw these as a missing capability rather than as a zero, which is the same distinction the whole reading draws with a `503`.",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          }
+        }
+      },
+      "MetricsWindowBounds": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "window",
+          "dateTo"
+        ],
+        "properties": {
+          "window": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "dateFrom": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Inclusive UTC day. Absent for the lifetime window, whose lower bound is wherever the figures begin rather than a day this contract could invent."
+          },
+          "dateTo": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          }
+        }
+      },
+      "MetricsMetricTotals": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "One metric across every window. `metric` is one of the entity ids (`users`, `tenants`, `applications`, `agents`), one of the storage ids (`storage.used_bytes`, `storage.object_count`), or a metered dimension (`traffic.requests`, …), which is left open on the same terms as the traffic readings: a dimension this contract has not heard of reaches the surface instead of failing the response.",
+        "required": [
+          "metric",
+          "unit",
+          "values"
+        ],
+        "properties": {
+          "metric": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "values": {
+            "type": "array",
+            "description": "One entry per window, in the contract's window order. Reported in full rather than sparsely: a window that summed nothing is a real `0`, and a missing entry would leave a surface guessing between \"zero\" and \"not measured\".",
+            "items": {
+              "$ref": "#/components/schemas/MetricsWindowValue"
+            }
+          }
+        }
+      },
+      "MetricsWindowValue": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "window",
+          "quantity",
+          "unit"
+        ],
+        "properties": {
+          "window": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "quantity": {
+            "$ref": "#/components/schemas/Int64String"
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          }
+        }
+      },
+      "MetricsSeriesWindow": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The window the per-day series was cut against, as the server resolved it. Reported because the request's bounds are optional: a surface that labelled the series from its own guess at the default would name a period the points do not cover. Deliberately separate from the card windows, which answer a different question and may not coincide with this one.",
+        "required": [
+          "dateFrom",
+          "dateTo"
+        ],
+        "properties": {
+          "dateFrom": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Inclusive UTC day."
+          },
+          "dateTo": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "**Exclusive** UTC day."
+          }
+        }
+      },
+      "MetricsSeries": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "One entity metric's per-day arrivals over `MetricsSeriesWindow`, days ascending. Points are **sparse**: a day the metric gained nothing may carry no point at all, because a `GROUP BY` cannot report a day it never saw. A day inside the window with no point is a real `0`; emitting an explicit zero for every day would make the response's size a function of the window rather than of the data.",
+        "required": [
+          "metric",
+          "unit",
+          "points"
+        ],
+        "properties": {
+          "metric": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricsSeriesPoint"
+            }
+          }
+        }
+      },
+      "MetricsSeriesPoint": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "date",
+          "quantity"
+        ],
+        "properties": {
+          "date": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Calendar day in UTC."
+          },
+          "quantity": {
+            "$ref": "#/components/schemas/Int64String"
           }
         }
       }

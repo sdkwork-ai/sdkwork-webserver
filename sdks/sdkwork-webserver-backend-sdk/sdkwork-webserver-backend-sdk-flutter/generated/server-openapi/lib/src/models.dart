@@ -1208,6 +1208,38 @@ class CreateRootDomainRequest {
   }
 }
 
+class UpdateRootDomainRequest {
+  final String? displayName;
+  final String? dnsProvider;
+  final String? providerZoneRef;
+  final int? status;
+
+  UpdateRootDomainRequest({
+    this.displayName,
+    this.dnsProvider,
+    this.providerZoneRef,
+    this.status
+  });
+
+  factory UpdateRootDomainRequest.fromJson(Map<String, dynamic> json) {
+    return UpdateRootDomainRequest(
+      displayName: json['displayName']?.toString(),
+      dnsProvider: json['dnsProvider']?.toString(),
+      providerZoneRef: json['providerZoneRef']?.toString(),
+      status: json['status'] is int ? json['status'] : null
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'displayName': displayName,
+      'dnsProvider': dnsProvider,
+      'providerZoneRef': providerZoneRef,
+      'status': status,
+    };
+  }
+}
+
 class CreateRootDomainHostnameRequest {
   final String recordName;
   final String? applicationId;
@@ -1253,6 +1285,9 @@ class CreateRootDomainHostnameRequest {
 class RootDomainResponse {
   final String id;
   final String hostname;
+  final String? displayName;
+  final String? dnsProvider;
+  final String? providerZoneRef;
   final int status;
   final String subdomainCount;
   final String boundSubdomainCount;
@@ -1265,6 +1300,9 @@ class RootDomainResponse {
   RootDomainResponse({
     required this.id,
     required this.hostname,
+    this.displayName,
+    this.dnsProvider,
+    this.providerZoneRef,
     required this.status,
     required this.subdomainCount,
     required this.boundSubdomainCount,
@@ -1291,6 +1329,9 @@ class RootDomainResponse {
         }
         return value;
       })(),
+      displayName: json['displayName']?.toString(),
+      dnsProvider: json['dnsProvider']?.toString(),
+      providerZoneRef: json['providerZoneRef']?.toString(),
       status: (() {
         final value = json['status'];
         if (value is! int) {
@@ -1354,6 +1395,9 @@ class RootDomainResponse {
     return <String, dynamic>{
       'id': id,
       'hostname': hostname,
+      'displayName': displayName,
+      'dnsProvider': dnsProvider,
+      'providerZoneRef': providerZoneRef,
       'status': status,
       'subdomainCount': subdomainCount,
       'boundSubdomainCount': boundSubdomainCount,
@@ -6385,6 +6429,411 @@ class TrafficUsageTenantTotal {
   }
 }
 
+class MetricsSummaryResponse {
+  final String asOf;
+  final bool platformScope;
+  final String? trafficSince;
+  final List<MetricsWindowBounds> windows;
+  final List<MetricsMetricTotals> entities;
+  final List<MetricsMetricTotals> traffic;
+  final List<MetricsMetricTotals> storage;
+  final List<MetricsSeries> series;
+  final MetricsSeriesWindow seriesWindow;
+  final List<String> unassembledMetrics;
+
+  MetricsSummaryResponse({
+    required this.asOf,
+    required this.platformScope,
+    this.trafficSince,
+    required this.windows,
+    required this.entities,
+    required this.traffic,
+    required this.storage,
+    required this.series,
+    required this.seriesWindow,
+    required this.unassembledMetrics
+  });
+
+  factory MetricsSummaryResponse.fromJson(Map<String, dynamic> json) {
+    return MetricsSummaryResponse(
+      asOf: (() {
+        final value = json['asOf']?.toString();
+        if (value == null) {
+          throw FormatException('MetricsSummaryResponse.asOf is required');
+        }
+        return value;
+      })(),
+      platformScope: (() {
+        final value = json['platformScope'];
+        if (value is! bool) {
+          throw FormatException('MetricsSummaryResponse.platformScope is required');
+        }
+        return value;
+      })(),
+      trafficSince: json['trafficSince']?.toString(),
+      windows: (() {
+        final list = _sdkworkAsList(json['windows']);
+        if (list == null) {
+          throw FormatException('MetricsSummaryResponse.windows is required');
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : MetricsWindowBounds.fromJson(map);
+      })())
+            .whereType<MetricsWindowBounds>()
+            .toList();
+      })(),
+      entities: (() {
+        final list = _sdkworkAsList(json['entities']);
+        if (list == null) {
+          throw FormatException('MetricsSummaryResponse.entities is required');
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : MetricsMetricTotals.fromJson(map);
+      })())
+            .whereType<MetricsMetricTotals>()
+            .toList();
+      })(),
+      traffic: (() {
+        final list = _sdkworkAsList(json['traffic']);
+        if (list == null) {
+          throw FormatException('MetricsSummaryResponse.traffic is required');
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : MetricsMetricTotals.fromJson(map);
+      })())
+            .whereType<MetricsMetricTotals>()
+            .toList();
+      })(),
+      storage: (() {
+        final list = _sdkworkAsList(json['storage']);
+        if (list == null) {
+          throw FormatException('MetricsSummaryResponse.storage is required');
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : MetricsMetricTotals.fromJson(map);
+      })())
+            .whereType<MetricsMetricTotals>()
+            .toList();
+      })(),
+      series: (() {
+        final list = _sdkworkAsList(json['series']);
+        if (list == null) {
+          throw FormatException('MetricsSummaryResponse.series is required');
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : MetricsSeries.fromJson(map);
+      })())
+            .whereType<MetricsSeries>()
+            .toList();
+      })(),
+      seriesWindow: (() {
+        final map = _sdkworkAsMap(json['seriesWindow']);
+        if (map == null) {
+          throw FormatException('MetricsSummaryResponse.seriesWindow is required');
+        }
+        return MetricsSeriesWindow.fromJson(map);
+      })(),
+      unassembledMetrics: (() {
+        final list = _sdkworkAsList(json['unassembledMetrics']);
+        if (list == null) {
+          throw FormatException('MetricsSummaryResponse.unassembledMetrics is required');
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'asOf': asOf,
+      'platformScope': platformScope,
+      'trafficSince': trafficSince,
+      'windows': windows.map((item) => item.toJson()).toList(),
+      'entities': entities.map((item) => item.toJson()).toList(),
+      'traffic': traffic.map((item) => item.toJson()).toList(),
+      'storage': storage.map((item) => item.toJson()).toList(),
+      'series': series.map((item) => item.toJson()).toList(),
+      'seriesWindow': seriesWindow.toJson(),
+      'unassembledMetrics': unassembledMetrics.map((item) => item).toList(),
+    };
+  }
+}
+
+class MetricsWindowBounds {
+  final String window;
+  final String? dateFrom;
+  final String dateTo;
+
+  MetricsWindowBounds({
+    required this.window,
+    this.dateFrom,
+    required this.dateTo
+  });
+
+  factory MetricsWindowBounds.fromJson(Map<String, dynamic> json) {
+    return MetricsWindowBounds(
+      window: (() {
+        final value = json['window']?.toString();
+        if (value == null) {
+          throw FormatException('MetricsWindowBounds.window is required');
+        }
+        return value;
+      })(),
+      dateFrom: json['dateFrom']?.toString(),
+      dateTo: (() {
+        final value = json['dateTo']?.toString();
+        if (value == null) {
+          throw FormatException('MetricsWindowBounds.dateTo is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'window': window,
+      'dateFrom': dateFrom,
+      'dateTo': dateTo,
+    };
+  }
+}
+
+class MetricsMetricTotals {
+  final String metric;
+  final String unit;
+  final List<MetricsWindowValue> values;
+
+  MetricsMetricTotals({
+    required this.metric,
+    required this.unit,
+    required this.values
+  });
+
+  factory MetricsMetricTotals.fromJson(Map<String, dynamic> json) {
+    return MetricsMetricTotals(
+      metric: (() {
+        final value = json['metric']?.toString();
+        if (value == null) {
+          throw FormatException('MetricsMetricTotals.metric is required');
+        }
+        return value;
+      })(),
+      unit: (() {
+        final value = json['unit']?.toString();
+        if (value == null) {
+          throw FormatException('MetricsMetricTotals.unit is required');
+        }
+        return value;
+      })(),
+      values: (() {
+        final list = _sdkworkAsList(json['values']);
+        if (list == null) {
+          throw FormatException('MetricsMetricTotals.values is required');
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : MetricsWindowValue.fromJson(map);
+      })())
+            .whereType<MetricsWindowValue>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'metric': metric,
+      'unit': unit,
+      'values': values.map((item) => item.toJson()).toList(),
+    };
+  }
+}
+
+class MetricsWindowValue {
+  final String window;
+  final String quantity;
+  final String unit;
+
+  MetricsWindowValue({
+    required this.window,
+    required this.quantity,
+    required this.unit
+  });
+
+  factory MetricsWindowValue.fromJson(Map<String, dynamic> json) {
+    return MetricsWindowValue(
+      window: (() {
+        final value = json['window']?.toString();
+        if (value == null) {
+          throw FormatException('MetricsWindowValue.window is required');
+        }
+        return value;
+      })(),
+      quantity: (() {
+        final value = json['quantity']?.toString();
+        if (value == null) {
+          throw FormatException('MetricsWindowValue.quantity is required');
+        }
+        return value;
+      })(),
+      unit: (() {
+        final value = json['unit']?.toString();
+        if (value == null) {
+          throw FormatException('MetricsWindowValue.unit is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'window': window,
+      'quantity': quantity,
+      'unit': unit,
+    };
+  }
+}
+
+class MetricsSeriesWindow {
+  final String dateFrom;
+  final String dateTo;
+
+  MetricsSeriesWindow({
+    required this.dateFrom,
+    required this.dateTo
+  });
+
+  factory MetricsSeriesWindow.fromJson(Map<String, dynamic> json) {
+    return MetricsSeriesWindow(
+      dateFrom: (() {
+        final value = json['dateFrom']?.toString();
+        if (value == null) {
+          throw FormatException('MetricsSeriesWindow.dateFrom is required');
+        }
+        return value;
+      })(),
+      dateTo: (() {
+        final value = json['dateTo']?.toString();
+        if (value == null) {
+          throw FormatException('MetricsSeriesWindow.dateTo is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'dateFrom': dateFrom,
+      'dateTo': dateTo,
+    };
+  }
+}
+
+class MetricsSeries {
+  final String metric;
+  final String unit;
+  final List<MetricsSeriesPoint> points;
+
+  MetricsSeries({
+    required this.metric,
+    required this.unit,
+    required this.points
+  });
+
+  factory MetricsSeries.fromJson(Map<String, dynamic> json) {
+    return MetricsSeries(
+      metric: (() {
+        final value = json['metric']?.toString();
+        if (value == null) {
+          throw FormatException('MetricsSeries.metric is required');
+        }
+        return value;
+      })(),
+      unit: (() {
+        final value = json['unit']?.toString();
+        if (value == null) {
+          throw FormatException('MetricsSeries.unit is required');
+        }
+        return value;
+      })(),
+      points: (() {
+        final list = _sdkworkAsList(json['points']);
+        if (list == null) {
+          throw FormatException('MetricsSeries.points is required');
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : MetricsSeriesPoint.fromJson(map);
+      })())
+            .whereType<MetricsSeriesPoint>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'metric': metric,
+      'unit': unit,
+      'points': points.map((item) => item.toJson()).toList(),
+    };
+  }
+}
+
+class MetricsSeriesPoint {
+  final String date;
+  final String quantity;
+
+  MetricsSeriesPoint({
+    required this.date,
+    required this.quantity
+  });
+
+  factory MetricsSeriesPoint.fromJson(Map<String, dynamic> json) {
+    return MetricsSeriesPoint(
+      date: (() {
+        final value = json['date']?.toString();
+        if (value == null) {
+          throw FormatException('MetricsSeriesPoint.date is required');
+        }
+        return value;
+      })(),
+      quantity: (() {
+        final value = json['quantity']?.toString();
+        if (value == null) {
+          throw FormatException('MetricsSeriesPoint.quantity is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'date': date,
+      'quantity': quantity,
+    };
+  }
+}
+
 class ApplicationsListResponse {
   final int code;
   final dynamic data;
@@ -7014,6 +7463,52 @@ class RootDomainsRetrieveResponse {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('RootDomainsRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class RootDomainsUpdateResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  RootDomainsUpdateResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory RootDomainsUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return RootDomainsUpdateResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('RootDomainsUpdateResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('RootDomainsUpdateResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('RootDomainsUpdateResponse.traceId is required');
         }
         return value;
       })()
@@ -9898,6 +10393,98 @@ class PlatformTrafficUsagesRetrieveResponse {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('PlatformTrafficUsagesRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class MetricsSummariesRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  MetricsSummariesRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory MetricsSummariesRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return MetricsSummariesRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('MetricsSummariesRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('MetricsSummariesRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('MetricsSummariesRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class PlatformMetricsSummariesRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  PlatformMetricsSummariesRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory PlatformMetricsSummariesRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return PlatformMetricsSummariesRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('PlatformMetricsSummariesRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('PlatformMetricsSummariesRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('PlatformMetricsSummariesRetrieveResponse.traceId is required');
         }
         return value;
       })()

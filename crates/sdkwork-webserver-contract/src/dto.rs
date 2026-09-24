@@ -429,6 +429,18 @@ pub struct DomainPage {
 pub struct RootDomainResponse {
     pub id: String,
     pub hostname: String,
+    /// Operator-facing label. The apex hostname is the identity and never
+    /// changes, so this is the only free-text name a root domain carries.
+    #[serde(rename = "displayName", skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    /// DNS provider declaration (`alidns`, `dnspod`, …) or the literal `manual`
+    /// when records are published by hand. The tenant console's zone form edits
+    /// the same three fields on the Deployments plane.
+    #[serde(rename = "dnsProvider", skip_serializing_if = "Option::is_none")]
+    pub dns_provider: Option<String>,
+    /// Provider-side zone identifier, up to 512 characters.
+    #[serde(rename = "providerZoneRef", skip_serializing_if = "Option::is_none")]
+    pub provider_zone_ref: Option<String>,
     pub status: i32,
     #[serde(rename = "subdomainCount", with = "sdkwork_utils_rust::serde_int64")]
     pub subdomain_count: i64,
@@ -469,6 +481,31 @@ pub struct RootDomainPage {
 #[serde(deny_unknown_fields)]
 pub struct CreateRootDomainRequest {
     pub hostname: String,
+}
+
+/// Partial edit of a tenant root-domain Zone.
+///
+/// Every member is optional because the three callers send disjoint subsets:
+/// the edit form sends the descriptive fields, and the pause/resume action sends
+/// `status` alone. An absent member means "leave it as it is" — there is no
+/// meaning of "clear this" on the wire for the descriptive fields, because the
+/// form that would express it is the same form that omits untouched fields.
+///
+/// The apex `hostname` is deliberately absent: a root domain's apex is its
+/// identity, the tenant-level uniqueness index is built on it, and every
+/// registered subdomain resolves against it. Renaming is a delete-and-recreate,
+/// not an edit.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateRootDomainRequest {
+    #[serde(rename = "displayName", default)]
+    pub display_name: Option<String>,
+    #[serde(rename = "dnsProvider", default)]
+    pub dns_provider: Option<String>,
+    #[serde(rename = "providerZoneRef", default)]
+    pub provider_zone_ref: Option<String>,
+    #[serde(default)]
+    pub status: Option<i32>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -961,7 +998,10 @@ pub struct IssueCertificateRequest {
 }
 
 fn default_certificate_key_algorithm() -> String {
-    "ECDSA".to_string()
+    // Not a literal: which algorithm an operator with no opinion gets is one
+    // decision, and it has to be the same one the ACME engine maps and the
+    // deployment control plane writes, so it is read from the shared vocabulary.
+    sdkwork_deploy_core::CERTIFICATE_DEFAULT_KEY_ALGORITHM.to_owned()
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

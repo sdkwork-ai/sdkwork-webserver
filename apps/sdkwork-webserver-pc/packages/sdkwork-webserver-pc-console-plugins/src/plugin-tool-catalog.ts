@@ -1,7 +1,7 @@
 /**
  * Canonical host-tool and contribution identifiers aligned with WorkBuddy,
- * CodeBuddy, ZCode, Codex, Claude Code, Cursor, DeepSeek Harness, Hermes,
- * and ModelKit bundle manifests.
+ * CodeBuddy, ZCode, Codex, Claude Code, Cursor, DeepSeek Harness, BirdCoder,
+ * Hermes, and ModelKit bundle manifests.
  */
 
 export const PLUGIN_HOST_TOOL_IDS = [
@@ -23,6 +23,8 @@ export const PLUGIN_HOST_TOOL_IDS = [
   // CLI / harness agents.
   "gemini",
   "deepseek_harness",
+  // BirdCoder is the SDKWork fork of DeepSeek Harness — keep the lineage adjacent.
+  "birdcoder",
   "hermes",
   "openclaw",
   "opencode",
@@ -54,7 +56,7 @@ export const PLUGIN_HOST_TOOL_GROUPS: readonly PluginHostToolGroup[] = [
   },
   {
     id: "agent",
-    ids: ["gemini", "deepseek_harness", "hermes", "openclaw", "opencode", "amp", "sdkwork"],
+    ids: ["gemini", "deepseek_harness", "birdcoder", "hermes", "openclaw", "opencode", "amp", "sdkwork"],
   },
 ];
 
@@ -75,6 +77,7 @@ export const PLUGIN_HOST_TOOL_MONOGRAMS: Record<PluginHostToolId, string> = {
   aider: "Ai",
   gemini: "Ge",
   deepseek_harness: "Dh",
+  birdcoder: "Bc",
   hermes: "He",
   openclaw: "Oc",
   opencode: "Oe",

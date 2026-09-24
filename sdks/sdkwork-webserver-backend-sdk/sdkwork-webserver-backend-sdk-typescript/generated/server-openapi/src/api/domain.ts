@@ -1,7 +1,7 @@
 import { backendApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { ApplicationDomainResponse, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainVerifyResponse, PageInfo, RootDomainResponse, UpdateDomainApplicationBindingRequest } from '../types';
+import type { ApplicationDomainResponse, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainVerifyResponse, PageInfo, RootDomainResponse, UpdateDomainApplicationBindingRequest, UpdateRootDomainRequest } from '../types';
 
 
 export interface DomainApplicationBindingUpdateParams {
@@ -92,6 +92,10 @@ export interface DomainRootDomainsCreateParams {
   idempotencyKey: string;
 }
 
+export interface DomainRootDomainsUpdateParams {
+  idempotencyKey: string;
+}
+
 export interface DomainRootDomainsDeleteParams {
   idempotencyKey: string;
 }
@@ -131,6 +135,17 @@ export class DomainRootDomainsApi {
 /** Retrieve a tenant root-domain Zone */
   async retrieve(rootDomainId: string, requestOptions?: ApiRequestOptions): Promise<RootDomainResponse> {
     return this.client.request<RootDomainResponse>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  }
+
+/** Edit a tenant root-domain Zone */
+  async update(rootDomainId: string, body: UpdateRootDomainRequest, params: DomainRootDomainsUpdateParams, requestOptions?: ApiRequestOptions): Promise<RootDomainResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<RootDomainResponse>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PATCH' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
 /** Delete an empty tenant root-domain Zone */

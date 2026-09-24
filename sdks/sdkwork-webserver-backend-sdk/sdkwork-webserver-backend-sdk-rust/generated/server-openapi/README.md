@@ -58,6 +58,7 @@ client.set_header("X-Custom-Header", "value");
 - `client.audit()` - audit API
 - `client.cluster()` - cluster API
 - `client.traffic_usage()` - traffic_usage API
+- `client.metrics_summary()` - metrics_summary API
 
 ## Usage Examples
 
@@ -237,6 +238,18 @@ query.insert("date_to".to_string(), serde_json::json!("date-to"));
 query.insert("dimension".to_string(), serde_json::json!("dimension"));
 query.insert("top_apps".to_string(), serde_json::json!(4));
 let result = client.traffic_usage().traffic_usages_retrieve(Some(&query)).await?;
+println!("{result:?}");
+```
+
+### metrics_summary
+
+```rust
+use std::collections::HashMap;
+// Retrieve the dashboard metric summary of the caller's own tenant
+let mut query = HashMap::new();
+query.insert("date_from".to_string(), serde_json::json!("date-from"));
+query.insert("date_to".to_string(), serde_json::json!("date-to"));
+let result = client.metrics_summary().metrics_summaries_retrieve(Some(&query)).await?;
 println!("{result:?}");
 ```
 

@@ -12,6 +12,7 @@ management = [
   "dep:sdkwork-api-drive-assembly",
   "dep:sdkwork-api-skills-assembly",
   "dep:sdkwork-api-mcp-assembly",
+  "dep:sdkwork-api-sandbox-assembly",
   "dep:sdkwork-database-sqlx",
   "dep:sdkwork-database-id",
   "dep:psl",
@@ -43,6 +44,7 @@ sdkwork-api-iam-assembly = { workspace = true, optional = true }
 sdkwork-api-drive-assembly = { workspace = true, optional = true }
 sdkwork-api-skills-assembly = { workspace = true, optional = true }
 sdkwork-api-mcp-assembly = { workspace = true, optional = true }
+sdkwork-api-sandbox-assembly = { workspace = true, optional = true }
 async-trait.workspace = true
 atomic-waker.workspace = true
 arc-swap.workspace = true

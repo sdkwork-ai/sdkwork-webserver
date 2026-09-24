@@ -38,6 +38,18 @@ class DomainApi(private val client: HttpClient) {
         return client.convertValue(raw, object : TypeReference<RootDomainsRetrieveResponse>() {})
     }
 
+    /** Edit a tenant root-domain Zone */
+    suspend fun rootDomainsUpdate(rootDomainId: String, body: UpdateRootDomainRequest, idempotencyKey: String): RootDomainsUpdateResponse? {
+        val requestHeaders = buildRequestHeaders(
+            mapOf(
+                "Idempotency-Key" to HeaderParameterSpec(idempotencyKey, "simple", false, null),
+            ),
+            emptyMap()
+        )
+        val raw = client.patch(ApiPaths.backendPath("/root_domains/${serializePathParameter(rootDomainId, PathParameterSpec("rootDomainId", "simple", false))}"), body, null, requestHeaders, "application/json")
+        return client.convertValue(raw, object : TypeReference<RootDomainsUpdateResponse>() {})
+    }
+
     /** Delete an empty tenant root-domain Zone */
     suspend fun rootDomainsDelete(rootDomainId: String, idempotencyKey: String): Unit {
         val requestHeaders = buildRequestHeaders(

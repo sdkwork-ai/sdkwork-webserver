@@ -203,10 +203,23 @@ export function MyPluginsPage({
           {error}
         </p>
       ) : null}
+      {/* The filter bar is a *sibling* of the table's frame, not a child of it.
+          It is a panel of its own (border, 10px radius, panel background) and
+          `.data-surface` carries no padding, so as the frame's first child its
+          border landed 1px inside the frame's own — the same doubled outline the
+          table surface used to paint (measured in a real browser: bar
+          985.69x573 at (265.16, 187.84) against the frame's 987.69x689.16 at
+          (264.16, 186.84), identical border colour, inset exactly 1px). It also
+          spent its whole chip matrix out of the table's height: 573px of a
+          689px pane, which left a twenty-row table 102px.
+
+          The registry page and the VM Instances page both keep their controls
+          above the frame; this page was the only one that had put them inside
+          it, which is why it was the only one that showed it. */}
+      {scopedItems.length > 0 ? (
+        <PluginListFilterBar filters={filters} categories={categories} onChange={setFilters} />
+      ) : null}
       <div className="data-surface">
-        {scopedItems.length > 0 ? (
-          <PluginListFilterBar filters={filters} categories={categories} onChange={setFilters} />
-        ) : null}
         <DataTable<PluginRecord>
           columns={columns}
           density="compact"

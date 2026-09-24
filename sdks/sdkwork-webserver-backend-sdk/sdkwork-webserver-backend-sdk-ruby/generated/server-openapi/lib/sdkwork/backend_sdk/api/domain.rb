@@ -11,7 +11,9 @@ require_relative '../models/root_domains_list_response'
 require_relative '../models/root_domains_retrieve_response'
 require_relative '../models/root_domains_subdomains_create_response201'
 require_relative '../models/root_domains_subdomains_list_response'
+require_relative '../models/root_domains_update_response'
 require_relative '../models/update_domain_application_binding_request'
+require_relative '../models/update_root_domain_request'
 
 module Sdkwork
   module BackendSdk
@@ -57,6 +59,23 @@ module Sdkwork
 
             result = @client.request('GET', path, **options)
             result.is_a?(Hash) ? Models::RootDomainsRetrieveResponse.from_hash(result) : nil
+          end
+
+          # Edit a tenant root-domain Zone
+          def root_domains_update(root_domain_id, idempotency_key, body: nil)
+            path = interpolate_path('/backend/v3/api/root_domains/{rootDomainId}', rootDomainId: serialize_path_parameter(root_domain_id, PathParameterSpec.new('rootDomainId', 'simple', false)))
+            payload = body.respond_to?(:to_hash) ? body.to_hash : body
+            request_headers = build_request_headers(
+              {
+                'Idempotency-Key' => HeaderParameterSpec.new(idempotency_key, 'simple', false, nil),
+              },
+              {}
+            )
+            options = {}
+            options[:headers] = request_headers unless request_headers.empty?
+            options[:json] = payload unless payload.nil?
+            result = @client.request('PATCH', path, **options)
+            result.is_a?(Hash) ? Models::RootDomainsUpdateResponse.from_hash(result) : nil
           end
 
           # Delete an empty tenant root-domain Zone

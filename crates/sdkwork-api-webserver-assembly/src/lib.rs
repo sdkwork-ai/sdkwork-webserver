@@ -17,6 +17,12 @@ mod bootstrap;
 mod cluster_self_report;
 mod framework_observability;
 mod generated;
+// The dashboard metric summary reads three owners at once — the IAM subjects,
+// the metered usage facts, and this repository's own application table — so it
+// is built here for the same reason the traffic usage read model is: the
+// assembly is the crate allowed to hold a pool and mount dependencies, and the
+// service port it satisfies is injected by `bootstrap.rs`.
+mod metrics_summary;
 mod runtime_shutdown;
 // The traffic usage read model is built here because the facts belong to a
 // sibling module: the assembly is the crate allowed to construct a repository,

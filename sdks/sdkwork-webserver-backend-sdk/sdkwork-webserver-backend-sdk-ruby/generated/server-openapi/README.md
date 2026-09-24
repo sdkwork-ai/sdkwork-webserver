@@ -56,6 +56,7 @@ client.set_header('X-Custom-Header', 'value')
 - `client.audit` - audit API
 - `client.cluster` - cluster API
 - `client.traffic_usage` - traffic_usage API
+- `client.metrics_summary` - metrics_summary API
 
 ## Usage Examples
 
@@ -190,6 +191,15 @@ puts result.inspect
 # Retrieve aggregated traffic usage of the caller's own tenant
 params = { 'date_from' => 'date-from', 'date_to' => 'date-to', 'dimension' => 'dimension', 'top_apps' => 4 }
 result = client.traffic_usage.traffic_usages_retrieve(params: params)
+puts result.inspect
+```
+
+### metrics_summary
+
+```ruby
+# Retrieve the dashboard metric summary of the caller's own tenant
+params = { 'date_from' => 'date-from', 'date_to' => 'date-to' }
+result = client.metrics_summary.metrics_summaries_retrieve(params: params)
 puts result.inspect
 ```
 

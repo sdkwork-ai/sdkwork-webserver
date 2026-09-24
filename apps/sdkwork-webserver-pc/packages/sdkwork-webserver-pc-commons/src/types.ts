@@ -20,6 +20,14 @@ export type WebserverPcSurface = "app-console" | "backend-admin";
  * `resourceRenderers` entry, no admin-registry source, no column plan or
  * preferred field order, no icon branch, and no i18n label remains for them — a
  * re-added entry with no page behind it is the failure this shape prevents.
+ *
+ * `diagnostics` is **declared but not mounted** too, for a different reason: it
+ * was never a page of its own but a view the admin registry built from the
+ * nginx status call, and the operations surface stopped mounting it, so its
+ * registry source, its `ResourceIcon` branch, and its `resource.diagnostics.*`
+ * and `action.diagnostics.reload` i18n all went with it. Only the key stays, so
+ * the capability package that still declares it keeps type-checking; nothing
+ * routes to it. Retiring that package is what would let the key go.
  */
 export type WebserverResourceKey =
   | "apps"
@@ -30,12 +38,18 @@ export type WebserverResourceKey =
   | "servers"
   | "servers-explorer"
   | "webserver-config"
+  // Declared but not mounted — see the note on this type. Kept only so the
+  // capability package that still declares the key keeps type-checking.
   | "diagnostics"
   | "audit"
   | "skills"
   | "mcp"
   | "plugins"
   | "plugin-categories"
+  // The virtual machine (VM) instances this account provisioned. A per-user
+  // resource owned by sdkwork-sandbox and read over its own app-api face; the
+  // tenant-wide inventory is a different plane and is not this key.
+  | "sandbox-instances"
   | "storage-providers"
   | "storage-kinds"
   | "storage-buckets"

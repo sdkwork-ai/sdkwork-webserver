@@ -68,6 +68,7 @@ val client = SdkworkBackendClient(config)
 - `client.audit` - audit API
 - `client.cluster` - cluster API
 - `client.trafficUsage` - traffic_usage API
+- `client.metricsSummary` - metrics_summary API
 
 ## Usage Examples
 
@@ -247,6 +248,18 @@ val params = linkedMapOf<String, Any>(
     "top_apps" to 4
 )
 val result = client.trafficUsage.trafficUsagesRetrieve(params)
+println(result)
+```
+
+### metrics_summary
+
+```kotlin
+// Retrieve the dashboard metric summary of the caller's own tenant
+val params = linkedMapOf<String, Any>(
+    "date_from" to "date-from",
+    "date_to" to "date-to"
+)
+val result = client.metricsSummary.metricsSummariesRetrieve(params)
 println(result)
 ```
 

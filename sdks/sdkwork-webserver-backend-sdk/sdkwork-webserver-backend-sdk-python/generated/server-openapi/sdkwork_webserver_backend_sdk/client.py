@@ -14,6 +14,7 @@ from .api.agent import AgentApi
 from .api.audit import AuditApi
 from .api.cluster import ClusterApi
 from .api.traffic_usage import TrafficUsageApi
+from .api.metrics_summary import MetricsSummaryApi
 
 
 class SdkworkBackendClient:
@@ -36,6 +37,7 @@ class SdkworkBackendClient:
         self.audit: AuditApi
         self.cluster: ClusterApi
         self.traffic_usage: TrafficUsageApi
+        self.metrics_summary: MetricsSummaryApi
 
         # Initialize API modules
         self.application = ApplicationApi(self._client)
@@ -53,6 +55,7 @@ class SdkworkBackendClient:
         self.audit = AuditApi(self._client)
         self.cluster = ClusterApi(self._client)
         self.traffic_usage = TrafficUsageApi(self._client)
+        self.metrics_summary = MetricsSummaryApi(self._client)
     def set_auth_token(self, token: str) -> 'SdkworkBackendClient':
         """Set auth token for authentication."""
         self._client.set_auth_token(token)

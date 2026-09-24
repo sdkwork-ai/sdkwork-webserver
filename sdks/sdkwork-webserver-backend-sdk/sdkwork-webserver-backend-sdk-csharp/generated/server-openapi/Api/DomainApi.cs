@@ -54,6 +54,21 @@ namespace SDKWork.WebserverBackendSdk.Api
         }
 
         /// <summary>
+        /// Edit a tenant root-domain Zone
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.RootDomainsUpdateResponse?> RootDomainsUpdateAsync(string rootDomainId, SDKWork.WebserverBackendSdk.Models.UpdateRootDomainRequest body, string idempotencyKey)
+        {
+            var requestHeaders = BuildRequestHeaders(
+                new Dictionary<string, HeaderParameterSpec>
+                {
+                    ["Idempotency-Key"] = new HeaderParameterSpec(idempotencyKey, "simple", false, null),
+                },
+                new Dictionary<string, HeaderParameterSpec>()
+            );
+            return await _client.PatchAsync<SDKWork.WebserverBackendSdk.Models.RootDomainsUpdateResponse>(ApiPaths.BackendPath($"/root_domains/{SerializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false))}"), body, null, requestHeaders, "application/json");
+        }
+
+        /// <summary>
         /// Delete an empty tenant root-domain Zone
         /// </summary>
         public async Task RootDomainsDeleteAsync(string rootDomainId, string idempotencyKey)

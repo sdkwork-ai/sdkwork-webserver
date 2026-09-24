@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 from ..http_client import HttpClient
-from ..models import CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainsApplicationBindingUpdateResponse, DomainsCreateResponse201, DomainsListResponse, DomainsVerifyResponse, RootDomainsCreateResponse201, RootDomainsListResponse, RootDomainsRetrieveResponse, RootDomainsSubdomainsCreateResponse201, RootDomainsSubdomainsListResponse, UpdateDomainApplicationBindingRequest
+from ..models import CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainsApplicationBindingUpdateResponse, DomainsCreateResponse201, DomainsListResponse, DomainsVerifyResponse, RootDomainsCreateResponse201, RootDomainsListResponse, RootDomainsRetrieveResponse, RootDomainsSubdomainsCreateResponse201, RootDomainsSubdomainsListResponse, RootDomainsUpdateResponse, UpdateDomainApplicationBindingRequest, UpdateRootDomainRequest
 
 def _append_query_string(path: str, raw_query_string: str) -> str:
     query = raw_query_string.lstrip('?')
@@ -315,6 +315,16 @@ class DomainRootDomainsApi:
     def retrieve(self, root_domain_id: str) -> RootDomainsRetrieveResponse:
         """Retrieve a tenant root-domain Zone"""
         return self._client.get(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}")
+
+    def update(self, root_domain_id: str, body: UpdateRootDomainRequest, idempotency_key: str) -> RootDomainsUpdateResponse:
+        """Edit a tenant root-domain Zone"""
+        request_headers = build_request_headers(
+            {
+                'Idempotency-Key': {'value': idempotency_key, 'style': 'simple', 'explode': False},
+            },
+            {}
+        )
+        return self._client.patch(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}", json=body, headers=request_headers)
 
     def delete(self, root_domain_id: str, idempotency_key: str) -> None:
         """Delete an empty tenant root-domain Zone"""

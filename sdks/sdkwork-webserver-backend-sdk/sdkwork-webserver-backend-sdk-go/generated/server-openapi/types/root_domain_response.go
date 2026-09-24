@@ -4,6 +4,9 @@ package types
 type RootDomainResponse struct {
 	Id string `json:"id"`
 	Hostname string `json:"hostname"`
+	DisplayName string `json:"displayName"`
+	DnsProvider string `json:"dnsProvider"`
+	ProviderZoneRef string `json:"providerZoneRef"`
 	Status int `json:"status"`
 	SubdomainCount Int64String `json:"subdomainCount"`
 	BoundSubdomainCount Int64String `json:"boundSubdomainCount"`

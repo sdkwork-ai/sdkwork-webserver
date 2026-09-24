@@ -11,13 +11,13 @@ use sdkwork_webserver_contract::{
     CreateSourceVersionRequest, ImportGitSourceVersionRequest, IssueCertificateRequest,
     ListApplicationsQuery, ListAuditLogsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
     RevokeCertificateRequest, UpdateApplicationRequest, UpdateCertificateRequest,
-    UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest, WebBackendApi,
-    WebBackendRequestContext,
+    UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest, UpdateRootDomainRequest,
+    WebBackendApi, WebBackendRequestContext,
 };
 use serde::Deserialize;
 use std::sync::Arc;
 
-use crate::{agent_routes, auth::require_backend_context, cluster_routes, paths, traffic_usage_routes};
+use crate::{agent_routes, auth::require_backend_context, cluster_routes, metrics_summary_routes, paths, traffic_usage_routes};
 use sdkwork_routes_webserver_common::{
     accepted_async, created_resource, no_content, ok_application_page, ok_audit_log_page,
     ok_certificate_distribution_page, ok_certificate_page, ok_deployment_page, ok_domain_page,
@@ -84,7 +84,9 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn WebBackendApi>) -> Rout
         )
         .route(
             paths::ROOT_DOMAIN,
-            get(retrieve_root_domain).delete(delete_root_domain),
+            get(retrieve_root_domain)
+                .patch(update_root_domain)
+                .delete(delete_root_domain),
         )
         .route(
             paths::ROOT_DOMAIN_SUBDOMAINS,
@@ -232,6 +234,14 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn WebBackendApi>) -> Rout
         .route(
             paths::PLATFORM_TRAFFIC_USAGE,
             get(traffic_usage_routes::retrieve_platform_traffic_usage),
+        )
+        .route(
+            paths::METRICS_SUMMARY,
+            get(metrics_summary_routes::retrieve_metrics_summary),
+        )
+        .route(
+            paths::PLATFORM_METRICS_SUMMARY,
+            get(metrics_summary_routes::retrieve_platform_metrics_summary),
         )
         .layer(axum::middleware::from_fn(validate_pagination_query))
         .with_state(BackendState { api })
@@ -477,6 +487,21 @@ async fn delete_root_domain(
         state
             .api
             .delete_root_domain(&context, &root_domain_id)
+            .await,
+    )
+}
+
+async fn update_root_domain(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Path(root_domain_id): Path<String>,
+    Json(request): Json<UpdateRootDomainRequest>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    ok_resource(
+        state
+            .api
+            .update_root_domain(&context, &root_domain_id, &request)
             .await,
     )
 }

@@ -35,5 +35,6 @@ sdkwork-web-contract.workspace = true
 sdkwork-api-deployments-assembly.workspace = true
 sdkwork-api-skills-assembly.workspace = true
 sdkwork-api-mcp-assembly.workspace = true
+sdkwork-api-sandbox-assembly.workspace = true
 sdkwork-routes-webserver-backend-api.workspace = true
 sdkwork-routes-webserver-internal-api.workspace = true

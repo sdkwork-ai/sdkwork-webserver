@@ -4,6 +4,9 @@ package com.sdkwork.webserver.backend.sdk.model;
 public class RootDomainResponse {
     private String id;
     private String hostname;
+    private String displayName;
+    private String dnsProvider;
+    private String providerZoneRef;
     private Integer status;
     private String subdomainCount;
     private String boundSubdomainCount;
@@ -27,6 +30,30 @@ public class RootDomainResponse {
 
     public void setHostname(String hostname) {
         this.hostname = hostname;
+    }
+
+    public String getDisplayName() {
+        return this.displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
+
+    public String getDnsProvider() {
+        return this.dnsProvider;
+    }
+
+    public void setDnsProvider(String dnsProvider) {
+        this.dnsProvider = dnsProvider;
+    }
+
+    public String getProviderZoneRef() {
+        return this.providerZoneRef;
+    }
+
+    public void setProviderZoneRef(String providerZoneRef) {
+        this.providerZoneRef = providerZoneRef;
     }
 
     public Integer getStatus() {

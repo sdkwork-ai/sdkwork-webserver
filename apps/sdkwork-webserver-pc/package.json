@@ -67,6 +67,7 @@
     "@sdkwork/webserver-pc-console-delivery": "workspace:*",
     "@sdkwork/webserver-pc-console-mcp": "workspace:*",
     "@sdkwork/webserver-pc-console-plugins": "workspace:*",
+    "@sdkwork/webserver-pc-console-sandbox": "workspace:*",
     "@sdkwork/webserver-pc-console-shell": "workspace:*",
     "@sdkwork/webserver-pc-console-skills": "workspace:*",
     "@sdkwork/webserver-pc-core": "workspace:*",

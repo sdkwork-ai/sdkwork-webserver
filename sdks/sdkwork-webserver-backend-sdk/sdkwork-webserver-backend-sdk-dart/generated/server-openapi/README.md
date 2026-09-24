@@ -58,6 +58,7 @@ client.setHeader('X-Custom-Header', 'value');
 - `client.audit` - audit API
 - `client.cluster` - cluster API
 - `client.trafficUsage` - traffic_usage API
+- `client.metricsSummary` - metrics_summary API
 
 ## Usage Examples
 
@@ -237,6 +238,18 @@ final params = <String, dynamic>{
   'top_apps': 4,
 };
 final result = await client.trafficUsage.trafficUsagesRetrieve(params);
+print(result);
+```
+
+### metrics_summary
+
+```dart
+// Retrieve the dashboard metric summary of the caller's own tenant
+final params = <String, dynamic>{
+  'date_from': 'date-from',
+  'date_to': 'date-to',
+};
+final result = await client.metricsSummary.metricsSummariesRetrieve(params);
 print(result);
 ```
 

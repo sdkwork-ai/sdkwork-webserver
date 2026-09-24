@@ -4,7 +4,7 @@ use crate::api::base::{RequestHeaders};
 use crate::api::paths::backend_path;
 use crate::api::paths::append_query_string;
 use crate::http::{SdkworkError, SdkworkHttpClient};
-use crate::models::{ApplicationDomainResponse, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainVerifyResponse, RootDomainResponse, UpdateDomainApplicationBindingRequest};
+use crate::models::{ApplicationDomainResponse, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainVerifyResponse, RootDomainResponse, UpdateDomainApplicationBindingRequest, UpdateRootDomainRequest};
 
 #[derive(Clone)]
 pub struct DomainApi {
@@ -44,6 +44,18 @@ impl DomainApi {
     pub async fn root_domains_retrieve(&self, root_domain_id: &str) -> Result<RootDomainResponse, SdkworkError> {
         let path = backend_path(&format!("/root_domains/{}", serialize_path_parameter(root_domain_id, PathParameterSpec::new("rootDomainId", "simple", false))));
         self.client.get(&path, None, None).await
+    }
+
+    /// Edit a tenant root-domain Zone
+    pub async fn root_domains_update(&self, root_domain_id: &str, body: &UpdateRootDomainRequest, idempotency_key: &str) -> Result<RootDomainResponse, SdkworkError> {
+        let path = backend_path(&format!("/root_domains/{}", serialize_path_parameter(root_domain_id, PathParameterSpec::new("rootDomainId", "simple", false))));
+        let headers = build_request_headers(
+            &[
+                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
+            ],
+            &[],
+        );
+        self.client.patch(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
     }
 
     /// Delete an empty tenant root-domain Zone

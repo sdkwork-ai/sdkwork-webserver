@@ -17,6 +17,7 @@ import { AgentApi, createAgentApi } from './api/agent';
 import { AuditApi, createAuditApi } from './api/audit';
 import { ClusterApi, createClusterApi } from './api/cluster';
 import { TrafficUsageApi, createTrafficUsageApi } from './api/traffic-usage';
+import { MetricsSummaryApi, createMetricsSummaryApi } from './api/metrics-summary';
 
 export class SdkworkBackendClient {
   private httpClient: HttpClient;
@@ -36,6 +37,7 @@ export class SdkworkBackendClient {
   public readonly audit: AuditApi;
   public readonly cluster: ClusterApi;
   public readonly trafficUsage: TrafficUsageApi;
+  public readonly metricsSummary: MetricsSummaryApi;
 
   constructor(config: SdkworkBackendConfig) {
     this.httpClient = createHttpClient(config);
@@ -68,6 +70,8 @@ export class SdkworkBackendClient {
     this.cluster = createClusterApi(this.httpClient);
 
     this.trafficUsage = createTrafficUsageApi(this.httpClient);
+
+    this.metricsSummary = createMetricsSummaryApi(this.httpClient);
   }
   setAuthToken(token: string): this {
     this.httpClient.setAuthToken(token);

@@ -170,6 +170,7 @@ sdkwork-api-iam-assembly = { path = "../sdkwork-iam/crates/sdkwork-api-iam-assem
 sdkwork-api-drive-assembly = { path = "../sdkwork-drive/crates/sdkwork-api-drive-assembly" }
 sdkwork-api-skills-assembly = { path = "../sdkwork-skills/crates/sdkwork-api-skills-assembly" }
 sdkwork-api-mcp-assembly = { path = "../sdkwork-mcp/crates/sdkwork-api-mcp-assembly" }
+sdkwork-api-sandbox-assembly = { path = "../sdkwork-sandbox/crates/sdkwork-api-sandbox-assembly" }
 sdkwork-skills-database-host = { path = "../sdkwork-skills/crates/sdkwork-skills-database-host" }
 sdkwork-mcp-database-host = { path = "../sdkwork-mcp/crates/sdkwork-mcp-database-host" }
 sdkwork-iam-bootstrap = { path = "../sdkwork-iam/crates/sdkwork-iam-bootstrap" }

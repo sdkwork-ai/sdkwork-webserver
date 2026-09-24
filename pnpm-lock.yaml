@@ -1577,6 +1577,9 @@ importers:
       '@sdkwork/webserver-pc-console-plugins':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-console-plugins
+      '@sdkwork/webserver-pc-console-sandbox':
+        specifier: workspace:*
+        version: link:packages/sdkwork-webserver-pc-console-sandbox
       '@sdkwork/webserver-pc-console-shell':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-console-shell
@@ -2061,6 +2064,24 @@ importers:
       react-router-dom:
         specifier: ^7.15.0
         version: 7.18.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+
+  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-console-sandbox:
+    dependencies:
+      '@sdkwork/sdk-common':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      '@sdkwork/ui-pc-react':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-ui/sdkwork-ui-pc-react
+      '@sdkwork/webserver-pc-commons':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-commons
+      '@sdkwork/webserver-pc-console-core':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-console-core
+      react:
+        specifier: 'catalog:'
+        version: 19.2.8
 
   apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-console-shell:
     dependencies:

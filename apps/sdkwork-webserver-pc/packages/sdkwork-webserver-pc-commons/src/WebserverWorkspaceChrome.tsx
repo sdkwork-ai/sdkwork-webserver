@@ -219,8 +219,6 @@ function ResourceIcon({ resource }: { resource: WebserverResourceKey }): ReactNo
       return <Plug {...iconProps} />;
     case "audit":
       return <ScrollText {...iconProps} />;
-    case "diagnostics":
-      return <Activity {...iconProps} />;
     case "storage-providers":
       return <HardDrive {...iconProps} />;
     case "storage-kinds":

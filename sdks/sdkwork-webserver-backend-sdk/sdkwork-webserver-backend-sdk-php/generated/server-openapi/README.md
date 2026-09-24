@@ -65,6 +65,7 @@ $client->setHeader('X-Custom-Header', 'value');
 - `$client->audit` - audit API
 - `$client->cluster` - cluster API
 - `$client->trafficUsage` - traffic_usage API
+- `$client->metricsSummary` - metrics_summary API
 
 ## Usage Examples
 
@@ -229,6 +230,17 @@ var_dump($result);
 // Retrieve aggregated traffic usage of the caller's own tenant
 $params = ['date_from' => 'date-from', 'date_to' => 'date-to', 'dimension' => 'dimension', 'top_apps' => 4];
 $result = $client->trafficUsage->trafficUsagesRetrieve($params);
+var_dump($result);
+```
+
+### metrics_summary
+
+```php
+<?php
+
+// Retrieve the dashboard metric summary of the caller's own tenant
+$params = ['date_from' => 'date-from', 'date_to' => 'date-to'];
+$result = $client->metricsSummary->metricsSummariesRetrieve($params);
 var_dump($result);
 ```
 

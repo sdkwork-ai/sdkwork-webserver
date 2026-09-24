@@ -25,6 +25,10 @@ export type {
   ClusterInstanceResponse,
   ClusterOverviewResponse,
   ClusterResponse,
+  MetricsMetricTotals,
+  MetricsSummaryResponse,
+  MetricsWindowBounds,
+  MetricsWindowValue,
   RootDomainResponse,
   ServerDirectoryListing,
   ServerEntry,
@@ -131,7 +135,6 @@ export function createWebserverAdminRegistry(client: WebserverAdminSdkClient): W
         { id: "severity", type: "select", fieldOptions: ["INFO", "WARNING", "ERROR"] },
       ],
     },
-    diagnostics: source(async () => client.nginx.status.retrieve(), [action("reload", "Reload runtime", {}, (context) => client.nginx.reload.create(idempotencyParams(context)), { dangerous: true, permission: "web.nginx.write" })]),
     audit: {
       ...source((query) => client.audit.auditLogs.list({
         cursor: query.cursor,

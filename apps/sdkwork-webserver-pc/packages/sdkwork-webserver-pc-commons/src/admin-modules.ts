@@ -21,7 +21,12 @@ export interface WebserverMenuSectionDefinition {
   resources: readonly WebserverResourceKey[];
 }
 
-export type WebserverMenuSectionId = "delivery" | "aiEcosystem" | "dataStatistics";
+export type WebserverMenuSectionId =
+  | "delivery"
+  | "aiEcosystem"
+  | "cloudAccess"
+  | "dataStatistics"
+  | "audit";
 
 /** Sidebar section order is the declaration order of this array. */
 export const MENU_SECTIONS: readonly WebserverMenuSectionDefinition[] = [
@@ -37,27 +42,71 @@ export const MENU_SECTIONS: readonly WebserverMenuSectionDefinition[] = [
     // module's `order` only ranks it against the other entries of its surface,
     // so `certificates` (the second entry of its module) would otherwise sort
     // below every first entry on the operations surface and land after Audit.
-    // Declared before `aiEcosystem` because the AI assets are the bottom group
-    // and this one leads the list.
+    // Declared before `aiEcosystem` because this one leads the list and every
+    // other section is an asset group that renders below it.
     resources: ["apps", "domains", "certificates"],
   },
   {
     id: "aiEcosystem",
     labelKey: "menuSection.aiEcosystem",
-    // The user-owned AI assets: Skills, MCP servers, plugins, and the platform
-    // plugin-category catalog those plugins file under. Grouped at the bottom
-    // of the sidebar, after the delivery group.
-    resources: ["plugins", "plugin-categories", "skills", "mcp"],
+    // The user-owned AI assets: Skills, MCP servers, plugins, the platform
+    // plugin-category catalog those plugins file under, and the virtual
+    // machine (VM) instances the account runs them in. The first of the two
+    // asset groups, so it renders above the cloud-access group.
+    //
+    // VM instances belong here rather than in a group of their own or in
+    // the leading ungrouped block: an Agent VM is the runtime an agent executes
+    // in — an asset the user owns, like the skills and MCP servers it hosts — and
+    // an ungrouped key would park it above the Dashboard.
+    resources: ["plugins", "plugin-categories", "skills", "mcp", "sandbox-instances"],
+  },
+  {
+    id: "cloudAccess",
+    labelKey: "menuSection.cloudAccess",
+    // The provider accounts this workspace is wired to, federated from SDKWork
+    // IAM. A group of its own rather than a member of another section: an
+    // account inventory is neither a delivery target nor an AI asset, and
+    // leaving the key ungrouped parked a tenant-level inventory **above the
+    // Dashboard** in the leading group. Declared after `aiEcosystem` so it
+    // renders below the AI assets.
+    //
+    // A one-resource section is only safe while its heading differs from the
+    // label of the entry it holds — the sidebar draws the heading *and* the
+    // link, so a section named 云账号 / "Cloud Accounts" would print the same
+    // two words twice. Hence 云接入 / "Cloud Access" for the heading and 云账号
+    // for the entry.
+    resources: ["cloud-accounts"],
   },
   {
     id: "dataStatistics",
     labelKey: "menuSection.dataStatistics",
     // The measurements this edge derives from the traffic it served. Declared
-    // last so the measurement group sits below the delivery and AI-asset groups
-    // rather than between them, and it claims only the readings: the Dashboard
-    // entry is intentionally absent here, because a section is a grouping of
-    // readings and the overview leads the sidebar rather than belonging to it.
+    // last so the measurement group sits below every asset group rather than
+    // between them, and it claims only the readings: the Dashboard entry is
+    // intentionally absent here, because a section is a grouping of readings
+    // and the overview leads the sidebar rather than belonging to it.
     resources: ["traffic-usage"],
+  },
+  {
+    id: "audit",
+    labelKey: "menuSection.audit",
+    // The operator-action evidence. It is the record the entries *above* it are
+    // read back through, not an asset group of its own, so it is declared last
+    // and closes the sidebar.
+    //
+    // It has a section at all because leaving the key ungrouped parked it in
+    // the leading, unlabelled group — **above the Dashboard** — which is both a
+    // misleading position (an audit trail is not an overview) and the position
+    // the operator asked to move it out of. Only the operations surface
+    // supplies `audit`; on the tenant console the section claims nothing and is
+    // dropped, exactly like an empty section.
+    //
+    // The heading must differ from the label of the single entry it holds: the
+    // sidebar draws the heading *and* the link, so a section named 审计 /
+    // "Audit" would print the same word twice on two adjacent lines. Hence
+    // 审计追踪 / "Audit Trail" for the heading and 审计 / "Audit" for the entry
+    // — the same rule that made 云接入 the heading over 云账号.
+    resources: ["audit"],
   },
 ];
 

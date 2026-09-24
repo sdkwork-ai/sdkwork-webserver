@@ -18,7 +18,7 @@ export interface WebserverAdminSurfaceProps {
 
 /**
  * Backend-admin host surface. It owns the admin registry for the resources that
- * still render themselves from it (nginx, servers, diagnostics, audit); every
+ * still render themselves from it (nginx, servers, audit); every
  * capability bridged from another module — Applications from sdkwork-deployments,
  * Plugins / Skills / MCP / Storage Center from their owning packages — arrives
  * pre-built through `resourceRenderers`. No application lifecycle is

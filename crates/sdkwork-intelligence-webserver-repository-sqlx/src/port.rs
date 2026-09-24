@@ -28,7 +28,7 @@ use sdkwork_webserver_contract::{
     CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
     CreateServerResponse, CreateApplicationRequest, CreateSourceVersionRequest, DeploymentPage,
     DeploymentResponse, DomainPage, DomainResponse, EnvVariablePage, EnvVariableResponse,
-    UpdateEnvVariableRequest,
+    UpdateEnvVariableRequest, UpdateRootDomainRequest,
     HealthCheckPage, HealthCheckResponse, ListNginxConfigsQuery,
     ListRootDomainsQuery, ListApplicationsQuery, NginxConfigPage, NginxConfigResponse,
     NginxStatusResponse, RootDomainPage,
@@ -255,6 +255,16 @@ impl WebRepositoryPort for WebRepository {
         root_domain_id: &str,
     ) -> WebServiceResult<()> {
         self.delete_root_domain_repo(tenant_id, root_domain_id)
+            .await
+    }
+
+    async fn update_root_domain(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        request: &UpdateRootDomainRequest,
+    ) -> WebServiceResult<RootDomainResponse> {
+        self.update_root_domain_repo(tenant_id, root_domain_id, request)
             .await
     }
 

@@ -10,6 +10,15 @@ final class RootDomainResponse
 
     public ?string $hostname = null;
 
+    /** Operator-facing label; the apex hostname remains the identity. */
+    public ?string $displayName = null;
+
+    /** DNS provider declaration, or the literal manual when records are published by hand. */
+    public ?string $dnsProvider = null;
+
+    /** Provider-side zone identifier. */
+    public ?string $providerZoneRef = null;
+
     public ?int $status = null;
 
     public ?string $subdomainCount = null;
@@ -33,6 +42,15 @@ final class RootDomainResponse
             : null;
         $this->hostname = array_key_exists('hostname', $data)
             ? $data['hostname']
+            : null;
+        $this->displayName = array_key_exists('displayName', $data)
+            ? $data['displayName']
+            : null;
+        $this->dnsProvider = array_key_exists('dnsProvider', $data)
+            ? $data['dnsProvider']
+            : null;
+        $this->providerZoneRef = array_key_exists('providerZoneRef', $data)
+            ? $data['providerZoneRef']
             : null;
         $this->status = array_key_exists('status', $data)
             ? $data['status']
@@ -70,6 +88,9 @@ final class RootDomainResponse
         return [
             'id' => $this->id,
             'hostname' => $this->hostname,
+            'displayName' => $this->displayName,
+            'dnsProvider' => $this->dnsProvider,
+            'providerZoneRef' => $this->providerZoneRef,
             'status' => $this->status,
             'subdomainCount' => $this->subdomainCount,
             'boundSubdomainCount' => $this->boundSubdomainCount,

@@ -23,7 +23,7 @@ use sdkwork_webserver_contract::{
     RuntimeObservationState, ServerPage, SourceVersionPage, SourceVersionResponse,
     TlsCertificateAssignmentMaterial, UpdateApplicationRequest, UpdateClusterHostRequest,
     UpdateClusterInstanceRequest, UpdateClusterRequest, UpdateDomainApplicationBindingRequest,
-    UpdateEnvVariableRequest, UpdateNginxConfigRequest,
+    UpdateEnvVariableRequest, UpdateNginxConfigRequest, UpdateRootDomainRequest,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -607,6 +607,13 @@ pub trait WebRepositoryPort: Send + Sync {
         tenant_id: i64,
         root_domain_id: &str,
     ) -> WebServiceResult<()>;
+
+    async fn update_root_domain(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        request: &UpdateRootDomainRequest,
+    ) -> WebServiceResult<RootDomainResponse>;
 
     async fn list_root_domain_hostnames(
         &self,

@@ -65,6 +65,7 @@ client.SetHeader("X-Custom-Header", "value");
 - `client.Audit` - audit API
 - `client.Cluster` - cluster API
 - `client.TrafficUsage` - traffic_usage API
+- `client.MetricsSummary` - metrics_summary API
 
 ## Usage Examples
 
@@ -255,6 +256,19 @@ var query = new Dictionary<string, object>
     ["top_apps"] = 4,
 };
 var result = await client.TrafficUsage.TrafficUsagesRetrieveAsync(query);
+Console.WriteLine(result);
+```
+
+### metrics_summary
+
+```csharp
+// Retrieve the dashboard metric summary of the caller's own tenant
+var query = new Dictionary<string, object>
+{
+    ["date_from"] = "date-from",
+    ["date_to"] = "date-to",
+};
+var result = await client.MetricsSummary.MetricsSummariesRetrieveAsync(query);
 Console.WriteLine(result);
 ```
 

@@ -24,6 +24,7 @@ namespace SDKWork.WebserverBackendSdk
         public AuditApi Audit { get; }
         public ClusterApi Cluster { get; }
         public TrafficUsageApi TrafficUsage { get; }
+        public MetricsSummaryApi MetricsSummary { get; }
 
         public SdkworkBackendClient(string baseUrl)
         {
@@ -43,6 +44,7 @@ namespace SDKWork.WebserverBackendSdk
             Audit = new AuditApi(_httpClient);
             Cluster = new ClusterApi(_httpClient);
             TrafficUsage = new TrafficUsageApi(_httpClient);
+            MetricsSummary = new MetricsSummaryApi(_httpClient);
         }
 
         public SdkworkBackendClient(SdkConfig config)
@@ -63,6 +65,7 @@ namespace SDKWork.WebserverBackendSdk
             Audit = new AuditApi(_httpClient);
             Cluster = new ClusterApi(_httpClient);
             TrafficUsage = new TrafficUsageApi(_httpClient);
+            MetricsSummary = new MetricsSummaryApi(_httpClient);
         }
         public SdkworkBackendClient SetAuthToken(string token)
         {

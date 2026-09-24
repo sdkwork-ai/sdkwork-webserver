@@ -38,6 +38,34 @@ import { createContext, useContext, type ReactNode } from "react";
 
 export type { SdkworkDeployAppClient, SdkworkDriveAppClient };
 export { createDeployAppClient, createDriveAppClient };
+// The Sandbox app-api face. sdkwork-sandbox declares its SDK family inactive for
+// Phase 0, so this client is hand-written against the module's documented
+// payloads instead of composed from a generated SDK — see `sandbox-client.ts`.
+// It is exported from core, not the capability package, so the console keeps
+// exactly one place that owns transports.
+export {
+  createSandboxAppClient,
+  SandboxAppClient,
+  SANDBOX_INSTANCES_PATH,
+  SANDBOX_INSTANCE_PROFILES,
+  SANDBOX_INSTANCE_STATES,
+  SANDBOX_ISOLATION_ASSURANCES,
+  SANDBOX_RUNTIME_CAPABILITIES,
+  SANDBOX_TERMINAL_STATES,
+} from "./sandbox-client.ts";
+export type {
+  CreateSandboxInstanceInput,
+  DeletedSandboxInstance,
+  SandboxInstance,
+  SandboxInstanceListQuery,
+  SandboxInstancePage,
+  SandboxInstancePageInfo,
+  SandboxInstanceProfile,
+  SandboxInstanceState,
+  SandboxIsolationAssurance,
+  SandboxRuntimeCapability,
+  UpdateSandboxInstanceInput,
+} from "./sandbox-client.ts";
 export {
   WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD,
   WEBSERVER_PC_UPLOAD_DECLARATIONS,

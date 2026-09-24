@@ -397,6 +397,21 @@ public struct CreateRootDomainRequest: Codable {
     }
 }
 
+public struct UpdateRootDomainRequest: Codable {
+    public let displayName: String?
+    public let dnsProvider: String?
+    public let providerZoneRef: String?
+    public let status: Int?
+
+
+    public init(displayName: String? = nil, dnsProvider: String? = nil, providerZoneRef: String? = nil, status: Int? = nil) {
+        self.displayName = displayName
+        self.dnsProvider = dnsProvider
+        self.providerZoneRef = providerZoneRef
+        self.status = status
+    }
+}
+
 public struct CreateRootDomainHostnameRequest: Codable {
     public let recordName: String?
     public let applicationId: String?
@@ -417,6 +432,9 @@ public struct CreateRootDomainHostnameRequest: Codable {
 public struct RootDomainResponse: Codable {
     public let id: String?
     public let hostname: String?
+    public let displayName: String?
+    public let dnsProvider: String?
+    public let providerZoneRef: String?
     public let status: Int?
     public let subdomainCount: String?
     public let boundSubdomainCount: String?
@@ -427,9 +445,12 @@ public struct RootDomainResponse: Codable {
     public let updatedAt: String?
 
 
-    public init(id: String? = nil, hostname: String? = nil, status: Int? = nil, subdomainCount: String? = nil, boundSubdomainCount: String? = nil, verifiedSubdomainCount: String? = nil, httpsSubdomainCount: String? = nil, activeDeploymentCount: String? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
+    public init(id: String? = nil, hostname: String? = nil, displayName: String? = nil, dnsProvider: String? = nil, providerZoneRef: String? = nil, status: Int? = nil, subdomainCount: String? = nil, boundSubdomainCount: String? = nil, verifiedSubdomainCount: String? = nil, httpsSubdomainCount: String? = nil, activeDeploymentCount: String? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
         self.id = id
         self.hostname = hostname
+        self.displayName = displayName
+        self.dnsProvider = dnsProvider
+        self.providerZoneRef = providerZoneRef
         self.status = status
         self.subdomainCount = subdomainCount
         self.boundSubdomainCount = boundSubdomainCount
@@ -1946,6 +1967,107 @@ public struct TrafficUsageTenantTotal: Codable {
     }
 }
 
+public struct MetricsSummaryResponse: Codable {
+    public let asOf: String?
+    public let platformScope: Bool?
+    public let trafficSince: String?
+    public let windows: [MetricsWindowBounds]?
+    public let entities: [MetricsMetricTotals]?
+    public let traffic: [MetricsMetricTotals]?
+    public let storage: [MetricsMetricTotals]?
+    public let series: [MetricsSeries]?
+    public let seriesWindow: MetricsSeriesWindow?
+    public let unassembledMetrics: [String]?
+
+
+    public init(asOf: String? = nil, platformScope: Bool? = nil, trafficSince: String? = nil, windows: [MetricsWindowBounds]? = nil, entities: [MetricsMetricTotals]? = nil, traffic: [MetricsMetricTotals]? = nil, storage: [MetricsMetricTotals]? = nil, series: [MetricsSeries]? = nil, seriesWindow: MetricsSeriesWindow? = nil, unassembledMetrics: [String]? = nil) {
+        self.asOf = asOf
+        self.platformScope = platformScope
+        self.trafficSince = trafficSince
+        self.windows = windows
+        self.entities = entities
+        self.traffic = traffic
+        self.storage = storage
+        self.series = series
+        self.seriesWindow = seriesWindow
+        self.unassembledMetrics = unassembledMetrics
+    }
+}
+
+public struct MetricsWindowBounds: Codable {
+    public let window: String?
+    public let dateFrom: String?
+    public let dateTo: String?
+
+
+    public init(window: String? = nil, dateFrom: String? = nil, dateTo: String? = nil) {
+        self.window = window
+        self.dateFrom = dateFrom
+        self.dateTo = dateTo
+    }
+}
+
+public struct MetricsMetricTotals: Codable {
+    public let metric: String?
+    public let unit: String?
+    public let values: [MetricsWindowValue]?
+
+
+    public init(metric: String? = nil, unit: String? = nil, values: [MetricsWindowValue]? = nil) {
+        self.metric = metric
+        self.unit = unit
+        self.values = values
+    }
+}
+
+public struct MetricsWindowValue: Codable {
+    public let window: String?
+    public let quantity: String?
+    public let unit: String?
+
+
+    public init(window: String? = nil, quantity: String? = nil, unit: String? = nil) {
+        self.window = window
+        self.quantity = quantity
+        self.unit = unit
+    }
+}
+
+public struct MetricsSeriesWindow: Codable {
+    public let dateFrom: String?
+    public let dateTo: String?
+
+
+    public init(dateFrom: String? = nil, dateTo: String? = nil) {
+        self.dateFrom = dateFrom
+        self.dateTo = dateTo
+    }
+}
+
+public struct MetricsSeries: Codable {
+    public let metric: String?
+    public let unit: String?
+    public let points: [MetricsSeriesPoint]?
+
+
+    public init(metric: String? = nil, unit: String? = nil, points: [MetricsSeriesPoint]? = nil) {
+        self.metric = metric
+        self.unit = unit
+        self.points = points
+    }
+}
+
+public struct MetricsSeriesPoint: Codable {
+    public let date: String?
+    public let quantity: String?
+
+
+    public init(date: String? = nil, quantity: String? = nil) {
+        self.date = date
+        self.quantity = quantity
+    }
+}
+
 public struct ApplicationsListResponse: Codable {
     public let code: Int?
     public let data: Any?
@@ -2116,6 +2238,19 @@ public struct RootDomainsCreateResponse201: Codable {
 }
 
 public struct RootDomainsRetrieveResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct RootDomainsUpdateResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -2948,6 +3083,32 @@ public struct TrafficUsagesRetrieveResponse: Codable {
 }
 
 public struct PlatformTrafficUsagesRetrieveResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct MetricsSummariesRetrieveResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct PlatformMetricsSummariesRetrieveResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?

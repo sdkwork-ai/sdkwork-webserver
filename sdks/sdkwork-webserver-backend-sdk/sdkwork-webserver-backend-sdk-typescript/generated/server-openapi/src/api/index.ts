@@ -15,3 +15,4 @@ export { AgentApi, createAgentApi } from './agent';
 export { AuditApi, createAuditApi } from './audit';
 export { ClusterApi, createClusterApi } from './cluster';
 export { TrafficUsageApi, createTrafficUsageApi } from './traffic-usage';
+export { MetricsSummaryApi, createMetricsSummaryApi } from './metrics-summary';

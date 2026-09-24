@@ -76,6 +76,7 @@ client.getHttpClient().setHeader("X-Custom-Header", "value");
 - `client.getAudit()` - audit API
 - `client.getCluster()` - cluster API
 - `client.getTrafficUsage()` - traffic_usage API
+- `client.getMetricsSummary()` - metrics_summary API
 
 ## Usage Examples
 
@@ -244,6 +245,17 @@ params.put("date_to", "date-to");
 params.put("dimension", "dimension");
 params.put("top_apps", 4);
 TrafficUsagesRetrieveResponse result = client.getTrafficUsage().trafficUsagesRetrieve(params);
+System.out.println(result);
+```
+
+### metrics_summary
+
+```java
+// Retrieve the dashboard metric summary of the caller's own tenant
+Map<String, Object> params = new LinkedHashMap<>();
+params.put("date_from", "date-from");
+params.put("date_to", "date-to");
+MetricsSummariesRetrieveResponse result = client.getMetricsSummary().metricsSummariesRetrieve(params);
 System.out.println(result);
 ```
 

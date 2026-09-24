@@ -6,7 +6,6 @@ import { CloudAccountAdminSurface, webserverModule as cloudAccountAdminModule } 
 import { DashboardAdminSurface, TrafficStatisticsAdminSurface, webserverModule as dataStatisticsAdminModule } from "@sdkwork/webserver-pc-admin-data-statistics";
 import { ClusterOverviewSurface, webserverModule as clusterModule } from "@sdkwork/webserver-pc-admin-cluster";
 import { ServedCertificateAdminSurface, ServedDomainAdminSurface, webserverModule as deliveryAdminModule } from "@sdkwork/webserver-pc-admin-delivery";
-import { webserverModule as diagnosticsModule } from "@sdkwork/webserver-pc-admin-diagnostics";
 import { webserverModule as mcpAdminModule, McpAdminSurface, type McpAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-mcp";
 import { webserverModule as pluginsAdminModule, PluginsAdminSurface, type PluginsAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-plugins";
 import { webserverModule as skillsAdminModule, SkillsAdminSurface, type SkillsAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-skills";
@@ -19,6 +18,7 @@ import { WebserverConsoleSdkProvider } from "@sdkwork/webserver-pc-console-core"
 import { DeployAppsManagementSurface, DeployDomainManagementSurface, webserverModule as deliveryModule } from "@sdkwork/webserver-pc-console-delivery";
 import { webserverModule as mcpModule, McpConsoleSurface, type McpConsoleSurfaceProps } from "@sdkwork/webserver-pc-console-mcp";
 import { webserverModule as pluginsModule, PluginsConsoleSurface, type PluginsConsoleSurfaceProps } from "@sdkwork/webserver-pc-console-plugins";
+import { webserverModule as sandboxModule, SandboxInstancesConsoleSurface, type SandboxInstancesConsoleSurfaceProps } from "@sdkwork/webserver-pc-console-sandbox";
 import { WebserverConsoleShell } from "@sdkwork/webserver-pc-console-shell";
 import { webserverModule as skillsModule, SkillsConsoleSurface, type SkillsConsoleSurfaceProps } from "@sdkwork/webserver-pc-console-skills";
 import { lazy, Suspense, use, useMemo } from "react";
@@ -39,7 +39,12 @@ import { useSdkworkModuleMessages } from "@sdkwork/i18n-pc-react";
 // the failure this guards against is exactly a module that was implemented and
 // tested but never added here, which a harness carrying its own list of modules
 // reproduces instead of catching.
-export const consoleModules = [deliveryModule, pluginsModule, skillsModule, mcpModule, cloudAccountModule, dataStatisticsModule] satisfies readonly WebserverPcModuleDefinition[];
+// VM Instances is the per-user sandbox registry owned by sdkwork-sandbox:
+// the console is where an operator applies for a sandbox, resizes it, suspends
+// it, or retires it. It is console-only — the tenant-wide inventory needs a
+// different authorization argument — and its transport is composed by
+// console-core, so the capability package holds no request shape of its own.
+export const consoleModules = [deliveryModule, pluginsModule, skillsModule, mcpModule, sandboxModule, cloudAccountModule, dataStatisticsModule] satisfies readonly WebserverPcModuleDefinition[];
 // Domains and Certificates reappear here at the *tenant* level: the served root
 // domains / subdomains this edge answers for (reconciled from its configuration
 // at startup) and the TLS certificates over them. That is a different plane from
@@ -57,7 +62,7 @@ export const consoleModules = [deliveryModule, pluginsModule, skillsModule, mcpM
 // operator actually remediates. Re-adding any of the four here would reintroduce
 // a single-node control surface next to the cluster one, which is the duplicate
 // the removal is meant to end.
-export const adminModules = [appsAdminModule, deliveryAdminModule, cloudAccountAdminModule, clusterModule, diagnosticsModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule, storageModule, dataStatisticsAdminModule] satisfies readonly WebserverPcModuleDefinition[];
+export const adminModules = [appsAdminModule, deliveryAdminModule, cloudAccountAdminModule, clusterModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule, storageModule, dataStatisticsAdminModule] satisfies readonly WebserverPcModuleDefinition[];
 const LazyAdminSurface = lazy(() => import("./WebserverAdminSurface.tsx").then((module) => ({ default: module.WebserverAdminSurface })));
 
 export interface TrafficPageRendererInput {
@@ -126,6 +131,12 @@ export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: Webs
     plugins: <PluginsConsoleSurface attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as PluginsConsoleSurfaceProps["attachSdkClientBoundaries"]} driveAppApiBaseUrl={driveBaseUrl} locale={locale} ownerKey={operatorId} resource="plugins" tokenManager={runtime.tokenManager} />,
     skills: <SkillsConsoleSurface appApiBaseUrl={runtime.config.appApiBaseUrl} attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as SkillsConsoleSurfaceProps["attachSdkClientBoundaries"]} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={driveBaseUrl} locale={locale} resource="skills" tokenManager={runtime.tokenManager} />,
     mcp: <McpConsoleSurface appApiBaseUrl={runtime.config.appApiBaseUrl} attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as McpConsoleSurfaceProps["attachSdkClientBoundaries"]} backendApiBaseUrl={runtime.config.backendApiBaseUrl} driveAppApiBaseUrl={driveBaseUrl} locale={locale} resource="mcp" tokenManager={runtime.tokenManager} />,
+    // The VM Instances page talks to sdkwork-sandbox's own app-api face on
+    // this origin. Its client is hand-written in console-core (that module keeps
+    // its SDK family inactive for Phase 0), and the page registers it with the
+    // session boundary itself so a 401 from this plane clears the session like
+    // one from any generated client.
+    "sandbox-instances": <SandboxInstancesConsoleSurface appApiBaseUrl={runtime.config.appApiBaseUrl} attachSdkClientBoundaries={runtime.attachSdkClientBoundaries as SandboxInstancesConsoleSurfaceProps["attachSdkClientBoundaries"]} locale={locale} resource="sandbox-instances" tokenManager={runtime.tokenManager} />,
     // The cloud account center is an IAM-owned resource served by the IAM backend
     // API, so the page comes from the IAM capability package and this host injects
     // only the session scope. The IAM service facade driving it is composed by

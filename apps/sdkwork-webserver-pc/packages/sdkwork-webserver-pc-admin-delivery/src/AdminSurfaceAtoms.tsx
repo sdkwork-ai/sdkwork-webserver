@@ -1,6 +1,6 @@
 import { translateWebserver, type WebserverLocale } from "@sdkwork/webserver-pc-commons";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 /**
  * The chrome both tenant-level delivery ledgers are built from.
@@ -68,10 +68,21 @@ export function newIdempotencyKey(): string {
  *
  * Class-driven, exactly like the console's: the tone comes from the shared
  * `status-*` palette in the Deployments stylesheet rather than a parallel
- * variant prop, so a state with no rule of its own (an `ISSUED` certificate
- * included) reads in the neutral tone instead of silently borrowing a colour
- * that means something else. A value this build does not know at all prints
- * itself.
+ * variant prop, so a state with no rule of its own reads in the neutral tone
+ * instead of silently borrowing a colour that means something else. A value this
+ * build does not know at all prints itself.
+ *
+ * That fallback is for a state that has no counterpart at all — `ARCHIVED` is the
+ * live example, and neutral is the right answer for a retired one. It is not a
+ * licence to drop a tone that means something. `ISSUED` is this plane's spelling
+ * of the state the console renders as `ACTIVE`, and the revision this file
+ * replaced painted it success (`certificateStatusVariant` in the before-harness,
+ * `HarnessBeforeCertificateSurface.tsx`). The class-driven rewrite lost the
+ * spelling and the chip fell through to neutral — an issued certificate was the
+ * one badge on the ledger that read as unstyled, grey on grey, against the
+ * console's green for the same row. `deploy-surface.css` carries `status-issued`
+ * in the success group again, and it carries the console's spelling beside it, so
+ * the two planes cannot drift apart in silence.
  */
 const STATUS_LABELS: Partial<Record<string, MessageKey>> = {
   ACTIVE: "resource.domains.active",
@@ -280,9 +291,102 @@ function DialogBackdrop({ children, close }: { children: ReactNode; close(): voi
   );
 }
 
+/**
+ * The side panel a form is filled in on, as three slots.
+ *
+ * Re-authored mirror of the console's `SideDrawer` (`@sdkwork/deployments-pc-
+ * console-delivery`), for the same reason every atom above is re-authored: the
+ * console package owns its pages, and this capability package reaching into it
+ * would invert that ownership. What is shared is the design — the class
+ * vocabulary `deploy-surface.css` already carries for the drawer (`.delivery-
+ * drawer-backdrop`, `.delivery-dialog.delivery-drawer`, the three bands) — so
+ * the emitted markup is the console's markup and the two planes read as one
+ * product. Swapping this body for a shared component later is the whole
+ * migration, exactly as the console's own doc says.
+ *
+ * `header` (title + close) and `footer` (the action row) are `flex: 0 0 auto`
+ * and the body between them is the only thing that scrolls, so a form taller
+ * than the window spends its height in the middle of the panel: the title and
+ * the submit row stay where the operator last saw them. That contract is why
+ * the footer is a prop rather than a child — the three bands have to be
+ * siblings for the flex column to pin the outer two. `footer` left `undefined`
+ * draws no action row at all, rather than an empty bar with a border.
+ *
+ * The drawer blocks page scroll and takes focus on open (the backdrop blocks
+ * the pointer but not the wheel, so a ledger taller than the window would
+ * otherwise scroll underneath it), closes on Escape, and hands focus back to
+ * whoever held it. The effect is mount-scoped on purpose: the drawer is
+ * mounted and unmounted by its owner, and re-running it on every render of the
+ * form inside would steal focus back from whatever field the operator had just
+ * reached.
+ */
+export function SideDrawer({
+  children,
+  close,
+  closeLabel,
+  footer,
+  title,
+}: {
+  children: ReactNode;
+  close(): void;
+  closeLabel: string;
+  footer?: ReactNode;
+  title: string;
+}) {
+  const titleId = useId();
+  const panelRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // `preventScroll` keeps the browser from scrolling the page behind the
+    // drawer to bring the panel into view.
+    panelRef.current?.focus({ preventScroll: true });
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-scoped contract; see the doc above.
+  }, []);
+
+  return (
+    <div
+      className="delivery-drawer-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) close();
+      }}
+      role="presentation"
+    >
+      <aside
+        aria-labelledby={titleId}
+        aria-modal="true"
+        className="dialog delivery-dialog delivery-drawer"
+        ref={panelRef}
+        role="dialog"
+        tabIndex={-1}
+      >
+        <header>
+          <h2 id={titleId}>{title}</h2>
+          <DialogCloseButton close={close} label={closeLabel} />
+        </header>
+        <div className="delivery-drawer-body">{children}</div>
+        {footer !== undefined ? <div className="delivery-drawer-footer">{footer}</div> : null}
+      </aside>
+    </div>
+  );
+}
+
 function DialogCloseButton({ close, label }: { close(): void; label: string }) {
   return (
-    <button className="icon-button" onClick={close} title={label} type="button">
+    // `aria-label` rather than relying on `title`: an icon-only button's
+    // accessible name should not depend on the tooltip fallback.
+    <button aria-label={label} className="icon-button" onClick={close} title={label} type="button">
       <X size={18} />
     </button>
   );

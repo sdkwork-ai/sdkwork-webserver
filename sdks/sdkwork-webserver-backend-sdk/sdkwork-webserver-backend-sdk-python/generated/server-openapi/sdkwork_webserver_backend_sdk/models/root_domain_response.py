@@ -15,3 +15,6 @@ class RootDomainResponse:
     active_deployment_count: str
     created_at: str
     updated_at: str
+    display_name: Optional[str] = None
+    dns_provider: Optional[str] = None
+    provider_zone_ref: Optional[str] = None

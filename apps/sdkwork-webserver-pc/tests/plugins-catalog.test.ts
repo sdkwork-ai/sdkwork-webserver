@@ -47,6 +47,7 @@ import {
 import {
   PLUGIN_HOST_TOOL_IDS,
   PLUGIN_HOST_TOOL_GROUPS,
+  PLUGIN_HOST_TOOL_MONOGRAMS,
   normalizePluginHostTools,
   normalizePluginContributions,
 } from "../packages/sdkwork-webserver-pc-console-plugins/src/plugin-tool-catalog.ts";
@@ -163,6 +164,21 @@ describe("plugin catalog model", () => {
     expect(normalizePluginHostTools(["cursor", "unknown_host", "codex"])).toEqual(["cursor", "codex"]);
     expect(normalizePluginContributions(["skills", "not_real", "tools"])).toEqual(["skills", "tools"]);
     expect(normalizePluginHostTools(["workbuddy", "zcode"])).toEqual(["workbuddy", "zcode"]);
+  });
+
+  it("offers BirdCoder as a selectable agent host", () => {
+    expect(PLUGIN_HOST_TOOL_IDS).toContain("birdcoder");
+    expect(PLUGIN_HOST_TOOL_GROUPS.find((group) => group.ids.includes("birdcoder"))?.id).toBe(
+      "agent",
+    );
+    // Unknown variants are dropped, the canonical id survives normalization.
+    expect(normalizePluginHostTools(["birdcoder", "birdcoder2"])).toEqual(["birdcoder"]);
+  });
+
+  it("gives every host tool a chip monogram", () => {
+    for (const id of PLUGIN_HOST_TOOL_IDS) {
+      expect(PLUGIN_HOST_TOOL_MONOGRAMS[id].length).toBeGreaterThan(0);
+    }
   });
 
   it("groups host tools into a complete, duplicate-free partition", () => {

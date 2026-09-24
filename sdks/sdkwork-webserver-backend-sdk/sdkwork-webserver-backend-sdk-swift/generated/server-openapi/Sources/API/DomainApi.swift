@@ -34,6 +34,17 @@ public class DomainApi {
         return try await client.get(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))"), responseType: RootDomainsRetrieveResponse.self)
     }
 
+    /// Edit a tenant root-domain Zone
+    public func rootDomainsUpdate(rootDomainId: String, body: UpdateRootDomainRequest, idempotencyKey: String) async throws -> RootDomainsUpdateResponse? {
+        let requestHeaders = buildRequestHeaders(
+            [
+                "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
+            ],
+            [:]
+        )
+        return try await client.patch(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: RootDomainsUpdateResponse.self)
+    }
+
     /// Delete an empty tenant root-domain Zone
     public func rootDomainsDelete(rootDomainId: String, idempotencyKey: String) async throws -> Void {
         let requestHeaders = buildRequestHeaders(

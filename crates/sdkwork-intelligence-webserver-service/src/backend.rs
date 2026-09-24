@@ -1,7 +1,7 @@
 //! Backend-api service surface implementation.
 
 use async_trait::async_trait;
-use chrono::{Duration, NaiveDate, Utc};
+use chrono::{Datelike, Duration, NaiveDate, Utc};
 use sdkwork_webserver_contract::{
     web_is_platform_operator_tenant, ClusterEventPage, ClusterHeartbeatSamplePage, ClusterHostPage,
     ClusterHostResponse, ClusterInstancePage, ClusterInstanceResponse, ClusterOverviewResponse,
@@ -11,13 +11,19 @@ use sdkwork_webserver_contract::{
     CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
     CreateSourceVersionRequest, EnqueueClusterPeerMessagesRequest,
     EnqueueClusterPeerMessagesResponse, ImportGitSourceVersionRequest, IssueCertificateRequest,
-    ListApplicationsQuery, ListNginxConfigsQuery, ListRootDomainsQuery, TrafficUsageStatisticsQuery,
+    ListApplicationsQuery, ListNginxConfigsQuery, ListRootDomainsQuery, MetricsSeriesWindow,
+    MetricsSummaryQuery, MetricsSummaryResponse, MetricsWindowBounds, MetricsWindowRequest,
+    TrafficUsageStatisticsQuery,
     TrafficUsageStatisticsResponse, TrafficUsageWindow, UpdateApplicationRequest,
     UpdateCertificateRequest, UpdateClusterHostRequest, UpdateClusterInstanceRequest,
     UpdateClusterRequest, UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest,
+    UpdateRootDomainRequest,
     WebAppApi, WebAppRequestContext, WebAppResourceScope, WebBackendApi, WebBackendRequestContext,
     WebServiceError, WebServiceResult, DEFAULT_TRAFFIC_USAGE_TOP_APPS,
     DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS, MAX_TRAFFIC_USAGE_TOP_APPS, MAX_TRAFFIC_USAGE_WINDOW_DAYS,
+    METRICS_ENTITY_TENANTS, METRICS_LAST_SEVEN_DAYS_SPAN, METRICS_WINDOWS,
+    METRICS_WINDOW_CURRENT_MONTH, METRICS_WINDOW_LAST_7_DAYS, METRICS_WINDOW_LIFETIME,
+    METRICS_WINDOW_TODAY,
 };
 
 use crate::{AuditLogWrite, WebService};
@@ -104,6 +110,69 @@ impl WebService {
             ));
         }
         Ok(CreateRootDomainRequest { hostname })
+    }
+
+    /// Validate and canonicalise a partial root-domain edit.
+    ///
+    /// The descriptive fields mirror the tenant console's zone form exactly: a
+    /// field left blank is *omitted*, and an omitted field leaves the stored
+    /// value alone. That is why a blank string folds to `None` here rather than
+    /// being sent through as "clear it" — the two planes have to read the same
+    /// form the same way, and this is the reading the console already ships.
+    ///
+    /// Lengths are the column widths (`display_name` 200, `dns_provider` 64,
+    /// `provider_zone_ref` 512). Rejecting over-length here keeps a too-long
+    /// value a validation problem at the edge instead of a store error after
+    /// the fact.
+    fn normalize_root_domain_update_request(
+        request: &UpdateRootDomainRequest,
+    ) -> WebServiceResult<UpdateRootDomainRequest> {
+        fn optional_text(value: Option<&String>, max_len: usize, field: &str) -> WebServiceResult<Option<String>> {
+            let Some(value) = value else {
+                return Ok(None);
+            };
+            let value = value.trim();
+            if value.is_empty() {
+                return Ok(None);
+            }
+            if value.chars().count() > max_len {
+                return Err(WebServiceError::validation(format!(
+                    "{field} must be at most {max_len} characters"
+                )));
+            }
+            Ok(Some(value.to_string()))
+        }
+
+        if let Some(status) = request.status {
+            if !(0..=2).contains(&status) {
+                return Err(WebServiceError::validation(
+                    "status must be between 0 and 2",
+                ));
+            }
+        }
+
+        let display_name = optional_text(request.display_name.as_ref(), 200, "displayName")?;
+        let dns_provider = optional_text(request.dns_provider.as_ref(), 64, "dnsProvider")?
+            .map(|value| value.to_ascii_lowercase());
+        let provider_zone_ref =
+            optional_text(request.provider_zone_ref.as_ref(), 512, "providerZoneRef")?;
+
+        if display_name.is_none()
+            && dns_provider.is_none()
+            && provider_zone_ref.is_none()
+            && request.status.is_none()
+        {
+            return Err(WebServiceError::validation(
+                "at least one of displayName, dnsProvider, providerZoneRef or status is required",
+            ));
+        }
+
+        Ok(UpdateRootDomainRequest {
+            display_name,
+            dns_provider,
+            provider_zone_ref,
+            status: request.status,
+        })
     }
 
     fn normalize_root_domain_hostname_request(
@@ -314,6 +383,32 @@ impl WebBackendApi for WebService {
         )
         .await;
         Ok(())
+    }
+
+    async fn update_root_domain(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+        request: &UpdateRootDomainRequest,
+    ) -> WebServiceResult<sdkwork_webserver_contract::RootDomainResponse> {
+        let tenant_id = Self::require_backend_tenant(context)?;
+        let request = Self::normalize_root_domain_update_request(request)?;
+        let root_domain = self
+            .repository
+            .update_root_domain(tenant_id, root_domain_id, &request)
+            .await?;
+        // One audit action for both edits: the actor, the zone and the instant
+        // are what an audit trail is read for, and the field-level diff lives in
+        // the row's own `updated_at`/`version` rather than in a second action
+        // name per field.
+        self.audit_backend_action(
+            context,
+            "root_domains.update",
+            "root_domain",
+            &root_domain.id,
+        )
+        .await;
+        Ok(root_domain)
     }
 
     async fn list_root_domain_hostnames(
@@ -1271,9 +1366,94 @@ impl WebBackendApi for WebService {
         let window = resolve_traffic_usage_window(query)?;
         self.read_traffic_usage_statistics(None, &window).await
     }
+
+    async fn retrieve_metrics_summary(
+        &self,
+        context: &WebBackendRequestContext,
+        query: &MetricsSummaryQuery,
+    ) -> WebServiceResult<MetricsSummaryResponse> {
+        let tenant_id = Some(Self::require_backend_tenant(context)?);
+        let windows = resolve_metrics_windows();
+        let series = resolve_metrics_series_window(query)?;
+        self.read_metrics_summary(tenant_id, &windows, &series).await
+    }
+
+    async fn retrieve_platform_metrics_summary(
+        &self,
+        context: &WebBackendRequestContext,
+        query: &MetricsSummaryQuery,
+    ) -> WebServiceResult<MetricsSummaryResponse> {
+        require_platform_operator_tenant(context)?;
+        let windows = resolve_metrics_windows();
+        let series = resolve_metrics_series_window(query)?;
+        self.read_metrics_summary(None, &windows, &series).await
+    }
 }
 
 impl WebService {
+    /// Shared body of both metric-summary readings; `tenant_id: None` means
+    /// "every tenant" and is reachable only through the platform operation.
+    ///
+    /// The scope-shaping lives here rather than in the read model on purpose.
+    /// Which metrics exist is a consequence of the *authorization* this layer
+    /// resolved, so this layer is where "a tenant-scoped reading has no tenant
+    /// count" is enforced; a read model that forgot would otherwise ship a
+    /// structurally-constant `1` as a platform metric, and nothing downstream
+    /// could tell that it had.
+    ///
+    /// A missing reader is reported as `503 unavailable` for the same reason the
+    /// traffic readings do it: an empty metric row and an unwired one look
+    /// identical once drawn.
+    async fn read_metrics_summary(
+        &self,
+        tenant_id: Option<i64>,
+        windows: &MetricsWindowRequest,
+        series_window: &MetricsSeriesWindow,
+    ) -> WebServiceResult<MetricsSummaryResponse> {
+        let port = self.metrics_summary.as_ref().ok_or_else(|| {
+            WebServiceError::unavailable(
+                "the dashboard metrics summary read model is not assembled in this deployment",
+            )
+        })?;
+        let readings = port
+            .retrieve_metrics_summary(tenant_id, windows, series_window)
+            .await?;
+        let platform_scope = tenant_id.is_none();
+        Ok(MetricsSummaryResponse {
+            as_of: windows.as_of.clone(),
+            platform_scope,
+            traffic_since: readings.traffic_since,
+            windows: metrics_window_bounds(windows),
+            entities: if platform_scope {
+                readings.entities
+            } else {
+                readings
+                    .entities
+                    .into_iter()
+                    .filter(|metric| metric.metric != METRICS_ENTITY_TENANTS)
+                    .collect()
+            },
+            traffic: readings.traffic,
+            // Passed through unshaped by reach: how much space a tenant holds
+            // is answerable for the caller's own tenant, so unlike the tenant
+            // count there is nothing here a scope has to withhold.
+            storage: readings.storage,
+            // The series and its window travel together and are passed through
+            // unshaped by reach, on the same terms as the entities: an agent or
+            // a user that exists in the caller's tenant is a real figure for
+            // that tenant, and the tenant series this reading does not request
+            // is withheld by the read model rather than filtered here — there is
+            // no platform-only member to strip.
+            series: readings.series,
+            series_window: series_window.clone(),
+            // Not filtered by reach: a deployment that cannot count agents
+            // cannot count them for anybody, so the same names apply to both
+            // readings and a console that hid them would be claiming a
+            // capability the edge does not have.
+            unassembled_metrics: readings.unassembled_metrics,
+        })
+    }
+
     /// Shared body of both traffic-usage readings; `tenant_id: None` means
     /// "every tenant" and is reachable only through the platform operation.
     ///
@@ -1413,7 +1593,8 @@ fn validate_tenant_scope_hash(value: &str) -> WebServiceResult<()> {
     Ok(())
 }
 
-/// Gate for the cross-tenant traffic reading.
+/// The one predicate every platform-wide reading rests on: the caller must
+/// belong to the operator tenant.
 ///
 /// Resolved through [`web_is_platform_operator_tenant`] rather than a literal
 /// so this guard, the route guard, and the IAM bootstrap cannot disagree about
@@ -1421,15 +1602,27 @@ fn validate_tenant_scope_hash(value: &str) -> WebServiceResult<()> {
 /// already follows. A context bound to any other tenant is rejected rather
 /// than silently narrowed to that tenant's slice: a narrowed answer looks like
 /// a working platform total and would be believed.
-fn require_traffic_usage_platform_operator(
-    context: &WebBackendRequestContext,
-) -> WebServiceResult<()> {
+///
+/// Kept to exactly one body rather than copied per surface. Two identical
+/// copies are how one reachable path ends up missing a change applied to the
+/// other, and this particular failure is invisible in the response — a
+/// tenant-scoped reading served as the platform total carries no field that
+/// reveals it.
+fn require_platform_operator_tenant(context: &WebBackendRequestContext) -> WebServiceResult<()> {
     let tenant_id = context.tenant_id.map(|id| id.to_string());
     if web_is_platform_operator_tenant(tenant_id.as_deref()) {
         Ok(())
     } else {
         Err(WebServiceError::Forbidden)
     }
+}
+
+/// Gate for the cross-tenant traffic reading — the shared operator predicate
+/// under the name of the operation it guards.
+fn require_traffic_usage_platform_operator(
+    context: &WebBackendRequestContext,
+) -> WebServiceResult<()> {
+    require_platform_operator_tenant(context)
 }
 
 /// Turns the wire query into a concrete window.
@@ -1442,29 +1635,7 @@ fn require_traffic_usage_platform_operator(
 fn resolve_traffic_usage_window(
     query: &TrafficUsageStatisticsQuery,
 ) -> WebServiceResult<TrafficUsageWindow> {
-    let date_to = match query.date_to.as_deref() {
-        Some(value) => parse_traffic_usage_date("dateTo", value)?,
-        None => Utc::now().date_naive() + Duration::days(1),
-    };
-    let date_from = match query.date_from.as_deref() {
-        Some(value) => parse_traffic_usage_date("dateFrom", value)?,
-        None => date_to - Duration::days(DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS),
-    };
-    if date_from >= date_to {
-        return Err(WebServiceError::validation(
-            "dateFrom must be earlier than dateTo (dateTo is exclusive)",
-        ));
-    }
-    // A bound on the work, not on how far back an operator may look: the daily
-    // series is one row per (day, dimension) and the aggregate scans the fact
-    // table, so an unchecked span lets one request ask for the whole retention
-    // period and hold a shared-pool connection while it does.
-    let span_days = (date_to - date_from).num_days();
-    if span_days > MAX_TRAFFIC_USAGE_WINDOW_DAYS {
-        return Err(WebServiceError::validation(format!(
-            "the window must not exceed {MAX_TRAFFIC_USAGE_WINDOW_DAYS} days; read a longer range as consecutive windows"
-        )));
-    }
+    let (date_from, date_to) = resolve_date_bounds(query.date_from.as_deref(), query.date_to.as_deref())?;
     let dimension = match query.dimension.as_deref() {
         Some(value) => {
             let trimmed = value.trim();
@@ -1489,6 +1660,132 @@ fn resolve_traffic_usage_window(
         dimension,
         top_apps,
     })
+}
+
+/// Turns a caller-supplied pair of optional bounds into concrete UTC days.
+///
+/// Split out of the two readings that accept a window — the traffic usage
+/// reading and the metric summary's series — because "what does an omitted
+/// bound mean" must have exactly **one** answer. Two implementations would
+/// default differently the first time one of them was edited, and the failure
+/// is invisible: both would still return a plausible window, and the two lines
+/// of one chart would simply be drawn over different periods.
+///
+/// The defaults end **exclusively** at tomorrow (UTC), so a read always covers
+/// today's partial day instead of dropping it. The span bound is a bound on the
+/// *work*: both readings return one row per day per series, so an unchecked span
+/// lets one request ask for the whole retention period and hold a shared-pool
+/// connection while it does.
+fn resolve_date_bounds(
+    date_from: Option<&str>,
+    date_to: Option<&str>,
+) -> WebServiceResult<(NaiveDate, NaiveDate)> {
+    let date_to = match date_to {
+        Some(value) => parse_traffic_usage_date("dateTo", value)?,
+        None => Utc::now().date_naive() + Duration::days(1),
+    };
+    let date_from = match date_from {
+        Some(value) => parse_traffic_usage_date("dateFrom", value)?,
+        None => date_to - Duration::days(DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS),
+    };
+    if date_from >= date_to {
+        return Err(WebServiceError::validation(
+            "dateFrom must be earlier than dateTo (dateTo is exclusive)",
+        ));
+    }
+    let span_days = (date_to - date_from).num_days();
+    if span_days > MAX_TRAFFIC_USAGE_WINDOW_DAYS {
+        return Err(WebServiceError::validation(format!(
+            "the window must not exceed {MAX_TRAFFIC_USAGE_WINDOW_DAYS} days; read a longer range as consecutive windows"
+        )));
+    }
+    Ok((date_from, date_to))
+}
+
+/// Resolves the metric summary's **series** window.
+///
+/// Deliberately the same shape — same parameter names, same default, same bound
+/// — as the traffic reading's window, because one chart draws both. The four
+/// card windows are **not** resolved here and are unaffected by the query: they
+/// are properties of the product rather than of the caller's view, and
+/// `resolve_metrics_windows` reads the clock for them alone.
+fn resolve_metrics_series_window(
+    query: &MetricsSummaryQuery,
+) -> WebServiceResult<MetricsSeriesWindow> {
+    let (date_from, date_to) = resolve_date_bounds(query.date_from.as_deref(), query.date_to.as_deref())?;
+    Ok(MetricsSeriesWindow {
+        date_from: date_from.format("%Y-%m-%d").to_string(),
+        date_to: date_to.format("%Y-%m-%d").to_string(),
+    })
+}
+
+/// Resolves the four reporting windows against the current UTC clock.
+///
+/// The three bounded windows share one **exclusive** upper bound — tomorrow
+/// (UTC) — so `today` covers the whole of today including the hours already
+/// elapsed, for the same reason the traffic readings' default end bound does.
+/// Their lower bounds are:
+///
+/// - `today` — today itself;
+/// - `last_7_days` — six days before today, so a "7 day" window holds seven
+///   calendar days rather than eight. An off-by-one here is invisible in the
+///   figure and only ever wrong in the label, which is the kind of error that
+///   survives review;
+/// - `current_month` — the first of the current month, which on the first of
+///   the month is today rather than a day of the previous month.
+///
+/// `lifetime` gets no bound at all: what it covers is a property of the figures
+/// rather than of the calendar, and the read model reports it back through
+/// `trafficSince` instead of having a lower bound invented for it here.
+///
+/// The clock is read exactly once. Two reads of `Utc::now()` can straddle
+/// midnight and label one response's figures with two different days.
+fn resolve_metrics_windows() -> MetricsWindowRequest {
+    let today = Utc::now().date_naive();
+    let day = |offset_days: i64| (today + Duration::days(offset_days)).format("%Y-%m-%d").to_string();
+    MetricsWindowRequest {
+        as_of: day(0),
+        last_seven_days_from: day(-(METRICS_LAST_SEVEN_DAYS_SPAN - 1)),
+        // `day0()` is the zero-based day of the month, so subtracting it lands
+        // on the first without a date constructor that can fail.
+        current_month_from: (today - Duration::days(i64::from(today.day0())))
+            .format("%Y-%m-%d")
+            .to_string(),
+        ends_before: day(1),
+    }
+}
+
+/// The concrete bounds behind the window ids, for the response to state.
+///
+/// Ordered by the contract's own vocabulary rather than by this function's
+/// literal order, so a window added to [`METRICS_WINDOWS`] cannot end up
+/// described in one place and drawn in another.
+fn metrics_window_bounds(windows: &MetricsWindowRequest) -> Vec<MetricsWindowBounds> {
+    let starts: [(&str, Option<&str>); 4] = [
+        (METRICS_WINDOW_TODAY, Some(windows.as_of.as_str())),
+        (
+            METRICS_WINDOW_LAST_7_DAYS,
+            Some(windows.last_seven_days_from.as_str()),
+        ),
+        (
+            METRICS_WINDOW_CURRENT_MONTH,
+            Some(windows.current_month_from.as_str()),
+        ),
+        (METRICS_WINDOW_LIFETIME, None),
+    ];
+    METRICS_WINDOWS
+        .iter()
+        .filter_map(|window| {
+            starts
+                .iter()
+                .find(|(id, _)| id == window)
+                .map(|(_, date_from)| MetricsWindowBounds {
+                    window: (*window).to_owned(),
+                    date_from: date_from.map(str::to_owned),
+                    date_to: windows.ends_before.clone(),
+                })
+        })
+        .collect()
 }
 
 /// Strict `YYYY-MM-DD`. The shape is checked before the calendar: `chrono`

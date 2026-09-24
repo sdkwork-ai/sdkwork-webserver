@@ -2,7 +2,7 @@
 
 import { WebserverAdminSdkProvider, type WebserverAdminSdkClient } from "@sdkwork/webserver-pc-admin-core";
 import { ServedCertificateAdminSurface, ServedDomainAdminSurface } from "@sdkwork/webserver-pc-admin-delivery";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -120,8 +120,10 @@ interface Stubs {
   createSubdomain: ReturnType<typeof vi.fn>;
   deleteRootDomain: ReturnType<typeof vi.fn>;
   deleteDomain: ReturnType<typeof vi.fn>;
+  issue: ReturnType<typeof vi.fn>;
   listSubdomains: ReturnType<typeof vi.fn>;
   retrieveRootDomain: ReturnType<typeof vi.fn>;
+  updateRootDomain: ReturnType<typeof vi.fn>;
 }
 
 function stubClient(): Stubs {
@@ -134,9 +136,11 @@ function stubClient(): Stubs {
   const createSubdomain = vi.fn().mockResolvedValue(SUBDOMAINS[0]);
   const deleteRootDomain = vi.fn().mockResolvedValue(undefined);
   const deleteDomain = vi.fn().mockResolvedValue(undefined);
+  const issue = vi.fn().mockResolvedValue(undefined);
   const retrieveRootDomain = vi.fn().mockResolvedValue(ROOTS[0]);
+  const updateRootDomain = vi.fn().mockResolvedValue(ROOTS[0]);
   const client = {
-    certificate: { list: vi.fn().mockResolvedValue(page(CERTIFICATES)) },
+    certificate: { issue, list: vi.fn().mockResolvedValue(page(CERTIFICATES)) },
     domain: {
       delete: deleteDomain,
       list: vi.fn().mockResolvedValue(page(SUBDOMAINS)),
@@ -146,19 +150,41 @@ function stubClient(): Stubs {
         list: vi.fn().mockResolvedValue(page(ROOTS)),
         retrieve: retrieveRootDomain,
         subdomains: { create: createSubdomain, list: listSubdomains },
+        update: updateRootDomain,
       },
     },
   } as unknown as WebserverAdminSdkClient;
-  return { client, createRootDomain, createSubdomain, deleteDomain, deleteRootDomain, listSubdomains, retrieveRootDomain };
+  return {
+    client,
+    createRootDomain,
+    createSubdomain,
+    deleteDomain,
+    deleteRootDomain,
+    issue,
+    listSubdomains,
+    retrieveRootDomain,
+    updateRootDomain,
+  };
 }
 
-/** Mounts a surface the way `WebserverWorkspace` does: at `<surface>/<resource>/*`. */
-function renderInProvider(ui: ReactNode, client: WebserverAdminSdkClient, entry: string) {
+/**
+ * Mounts a surface the way `WebserverWorkspace` does: at `<surface>/<resource>/*`.
+ *
+ * `entry` is the full location, so a case that arrives through a link — the
+ * Domains ledger's request-certificate action — can carry its query string the
+ * way the browser does.
+ */
+function renderInProvider(
+  ui: ReactNode,
+  client: WebserverAdminSdkClient,
+  entry: string,
+  basePath = entry,
+) {
   return render(
     <WebserverAdminSdkProvider client={client}>
       <MemoryRouter initialEntries={[entry]}>
         <Routes>
-          <Route element={ui} path={`${entry}/*`} />
+          <Route element={ui} path={`${basePath}/*`} />
         </Routes>
       </MemoryRouter>
     </WebserverAdminSdkProvider>,
@@ -202,11 +228,10 @@ describe("served domain admin surface", () => {
     const { client, deleteRootDomain, listSubdomains } = stubClient();
     renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
 
-    const rootRow = (await screen.findByText("sdkwork.com")).closest("tr");
-    const deleteButton = rootRow?.querySelector("button");
-    expect(deleteButton).not.toBeNull();
-
-    fireEvent.click(deleteButton as HTMLElement);
+    // `zowalk.com` is the root that owns no subdomain, so it is the one whose
+    // delete is offered at all — see the availability case below.
+    const deleteButton = await screen.findByRole("button", { name: "Delete zowalk.com" });
+    fireEvent.click(deleteButton);
 
     // The action opens the page's own dialog rather than window.confirm, so the
     // destructive step is a second, explicit click.
@@ -214,11 +239,97 @@ describe("served domain admin surface", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
 
     expect(deleteRootDomain).toHaveBeenCalledWith(
-      ROOT_ID,
+      "360974393242841088",
       expect.objectContaining({ idempotencyKey: expect.any(String) }),
     );
     // ...and the delete did not navigate into the root that was just removed.
     expect(listSubdomains).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The console's zone ledger carries five actions, and this ledger has to read
+   * as the same ledger: two named navigations (entering the hostname list,
+   * requesting a certificate — neither is guessable from a glyph), then the
+   * lifecycle pair, then the destructive one. The order is part of the design,
+   * not an accident of how the cell was written, so it is pinned here.
+   */
+  it("offers the console's five zone actions, in the console's order", async () => {
+    const { client } = stubClient();
+    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+
+    const row = (await screen.findByText("sdkwork.com")).closest("tr");
+    const actions = Array.from(row?.querySelectorAll(".row-actions > *") ?? []);
+    expect(actions.map((node) => node.getAttribute("aria-label"))).toEqual([
+      "Hostnames · sdkwork.com",
+      "Certificates · sdkwork.com",
+      "Edit sdkwork.com",
+      "Pause sdkwork.com",
+      "Delete sdkwork.com",
+    ]);
+    // The first two carry words; the console's rules size the column for four
+    // 32px glyphs plus gaps, and a bare globe/certificate glyph there is exactly
+    // the defect the console's own comment warns about.
+    expect(actions[0]?.className).toContain("table-action-text");
+    expect(actions[1]?.className).toContain("table-action-text");
+    expect(actions[2]?.className).not.toContain("table-action-text");
+  });
+
+  it("links the request-certificate action at the certificate ledger, scoped to that root", async () => {
+    const { client } = stubClient();
+    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+
+    const link = await screen.findByRole("link", { name: "Certificates · sdkwork.com" });
+    expect(link.getAttribute("href")).toBe(
+      `/admin/certificates?rootDomainId=${encodeURIComponent(ROOT_ID)}&apex=sdkwork.com`,
+    );
+  });
+
+  /**
+   * The console blocks the zone delete while the zone still owns anything, and
+   * the operations plane enforces the same thing server-side (`subdomain_count >
+   * 0` → 409). Offering an enabled button that can only come back refused is the
+   * failure this pins down.
+   */
+  it("offers the delete only for a root that owns no subdomain", async () => {
+    const { client } = stubClient();
+    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+
+    const blocked = await screen.findByRole("button", { name: "Delete sdkwork.com" });
+    expect((blocked as HTMLButtonElement).disabled).toBe(true);
+    const offered = screen.getByRole("button", { name: "Delete zowalk.com" });
+    expect((offered as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("pauses an active root through the one partial-edit call", async () => {
+    const { client, updateRootDomain } = stubClient();
+    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Pause sdkwork.com" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+
+    expect(updateRootDomain).toHaveBeenCalledWith(
+      ROOT_ID,
+      { status: 2 },
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
+  });
+
+  it("sends only the fields the edit form changed", async () => {
+    const { client, updateRootDomain } = stubClient();
+    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit sdkwork.com" }));
+    // Nothing changed yet, so there is nothing to send.
+    expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "SDKWork" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(updateRootDomain).toHaveBeenCalledWith(
+      ROOT_ID,
+      { displayName: "SDKWork" },
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
   });
 
   it("registers a new root domain with an idempotency key the server can dedupe on", async () => {
@@ -280,5 +391,123 @@ describe("served certificate admin surface", () => {
       "Revoke sdkwork-served",
       "Delete sdkwork-served",
     ]);
+  });
+
+  /**
+   * The Domains ledger's request-certificate action is a navigation, so the
+   * landing page has to honour what it carries: the form opens, and its
+   * identifier picker is scoped to the root domain that sent the operator here
+   * rather than to the whole tenant inventory. Both halves are the console's
+   * behaviour for `?zoneId=…`, mirrored on this plane.
+   */
+  it("opens the request form scoped to the root domain it was sent with", async () => {
+    const { client, listSubdomains } = stubClient();
+    renderInProvider(
+      <ServedCertificateAdminSurface locale="en-US" resource="certificates" />,
+      client,
+      `/admin/certificates?rootDomainId=${encodeURIComponent(ROOT_ID)}&apex=sdkwork.com`,
+      "/admin/certificates",
+    );
+
+    // The scoped read is the evidence: the toolbar's own entry point reads the
+    // whole inventory instead.
+    expect(listSubdomains).toHaveBeenCalledWith(ROOT_ID, { page: 1, pageSize: 200 });
+    expect(await screen.findByText("Served hostnames to cover")).toBeTruthy();
+    // Scoped to the dialog: the ledger behind it renders the issued
+    // certificate's identifiers, which is the same hostname seen twice.
+    const dialog = within(screen.getByRole("dialog"));
+    expect(dialog.getByText("sdkwork.com")).toBeTruthy();
+    expect(dialog.getByText("server-dev.sdkwork.com")).toBeTruthy();
+  });
+
+  it("reads the whole inventory when the toolbar opens the request form", async () => {
+    const { client, listSubdomains } = stubClient();
+    renderInProvider(<ServedCertificateAdminSurface locale="en-US" resource="certificates" />, client, "/admin/certificates");
+
+    await screen.findByText("sdkwork-served");
+    expect(listSubdomains).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Issue certificate" }));
+    expect(await screen.findByText("Served hostnames to cover")).toBeTruthy();
+    expect(listSubdomains).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The drawer is a form whose default matters. The key algorithm control is
+   * rendered with RSA pressed — the platform default, shown as a choice rather
+   * than assumed — and submitting without touching it asks for RSA on the wire,
+   * with the idempotency key the server dedupes retries on.
+   */
+  it("issues through the drawer with the RSA default and an idempotency key", async () => {
+    const { client, issue } = stubClient();
+    renderInProvider(<ServedCertificateAdminSurface locale="en-US" resource="certificates" />, client, "/admin/certificates");
+
+    await screen.findByText("sdkwork-served");
+    fireEvent.click(screen.getByRole("button", { name: "Issue certificate" }));
+    fireEvent.click(await screen.findByLabelText("server-admin-dev.sdkwork.com"));
+    fireEvent.click(screen.getByLabelText("server-dev.sdkwork.com"));
+    fireEvent.click(screen.getByRole("button", { name: "Issue" }));
+
+    expect(issue).toHaveBeenCalledWith(
+      { domainIds: ["d-server-admin-dev", "d-server-dev"], certType: 1, keyAlgorithm: "RSA", autoRenew: true },
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
+  });
+
+  it("sends ECDSA only after the operator switches the algorithm control", async () => {
+    const { client, issue } = stubClient();
+    renderInProvider(<ServedCertificateAdminSurface locale="en-US" resource="certificates" />, client, "/admin/certificates");
+
+    await screen.findByText("sdkwork-served");
+    fireEvent.click(screen.getByRole("button", { name: "Issue certificate" }));
+    fireEvent.click(await screen.findByLabelText("server-dev.sdkwork.com"));
+    fireEvent.click(screen.getByRole("button", { name: "ECDSA" }));
+    fireEvent.click(screen.getByRole("button", { name: "Issue" }));
+
+    expect(issue).toHaveBeenCalledWith(
+      { domainIds: ["d-server-dev"], certType: 1, keyAlgorithm: "ECDSA", autoRenew: true },
+      expect.anything(),
+    );
+  });
+
+  /** Escape and the header's own close button are both exits; neither submits. */
+  it("closes the drawer on Escape and on its close button, without issuing", async () => {
+    const { client, issue } = stubClient();
+    renderInProvider(<ServedCertificateAdminSurface locale="en-US" resource="certificates" />, client, "/admin/certificates");
+
+    await screen.findByText("sdkwork-served");
+    fireEvent.click(screen.getByRole("button", { name: "Issue certificate" }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Issue certificate" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(issue).not.toHaveBeenCalled();
+  });
+
+  /** The picker's search appears only once the list is long enough to need it. */
+  it("filters the hostname picker once the inventory is long enough to need it", async () => {
+    const { client } = stubClient();
+    const many = Array.from({ length: 10 }, (_, index) => ({
+      hostname: `svc-${String(index).padStart(2, "0")}.sdkwork.com`,
+      id: `d-svc-${index}`,
+      status: 1,
+    }));
+    (client.domain.list as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      items: many,
+      pageInfo: { hasMore: false, mode: "offset", page: 1, pageSize: 50 },
+    });
+    renderInProvider(<ServedCertificateAdminSurface locale="en-US" resource="certificates" />, client, "/admin/certificates");
+
+    await screen.findByText("sdkwork-served");
+    fireEvent.click(screen.getByRole("button", { name: "Issue certificate" }));
+
+    const search = await screen.findByPlaceholderText("Search hostnames");
+    fireEvent.change(search, { target: { value: "svc-07" } });
+    expect(screen.getByLabelText("svc-07.sdkwork.com")).toBeTruthy();
+    expect(screen.queryByLabelText("svc-00.sdkwork.com")).toBeNull();
   });
 });

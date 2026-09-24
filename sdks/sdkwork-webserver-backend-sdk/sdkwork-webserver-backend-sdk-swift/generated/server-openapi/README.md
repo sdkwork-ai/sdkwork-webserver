@@ -63,6 +63,7 @@ client.setHeader("X-Custom-Header", value: "value")
 - `client.audit` - audit API
 - `client.cluster` - cluster API
 - `client.trafficUsage` - traffic_usage API
+- `client.metricsSummary` - metrics_summary API
 
 ## Usage Examples
 
@@ -242,6 +243,18 @@ let params: [String: Any] = [
     "top_apps": 4
 ]
 let result = try await client.trafficUsage.trafficUsagesRetrieve(params: params)
+print(result)
+```
+
+### metrics_summary
+
+```swift
+// Retrieve the dashboard metric summary of the caller's own tenant
+let params: [String: Any] = [
+    "date_from": "date-from",
+    "date_to": "date-to"
+]
+let result = try await client.metricsSummary.metricsSummariesRetrieve(params: params)
 print(result)
 ```
 

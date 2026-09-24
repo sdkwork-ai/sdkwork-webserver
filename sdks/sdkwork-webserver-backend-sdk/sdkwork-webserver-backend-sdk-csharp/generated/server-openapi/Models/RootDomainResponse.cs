@@ -8,6 +8,9 @@ namespace SDKWork.WebserverBackendSdk.Models
     {
         public string Id { get; set; }
         public string Hostname { get; set; }
+        public string? DisplayName { get; set; }
+        public string? DnsProvider { get; set; }
+        public string? ProviderZoneRef { get; set; }
         public int Status { get; set; }
         public string SubdomainCount { get; set; }
         public string BoundSubdomainCount { get; set; }

@@ -30,3 +30,5 @@ pub mod cluster;
 pub use cluster::ClusterApi;
 pub mod traffic_usage;
 pub use traffic_usage::TrafficUsageApi;
+pub mod metrics_summary;
+pub use metrics_summary::MetricsSummaryApi;

@@ -127,6 +127,17 @@ pub async fn assemble_business_routes(
         Some(reader) => runtime.service.with_traffic_usage_reader(reader),
         None => runtime.service,
     };
+    // The dashboard metric summary spans the IAM subjects, the metered usage
+    // facts, and this repository's own application table, so it is probed
+    // separately: a host may have one of these and not another, and each
+    // reading reports its own absence. Same rule as above — an unassembled
+    // reader is a `503` capability, never a row of zeros, because "there are no
+    // users" and "this deployment cannot count users" are opposite claims that
+    // draw the same picture.
+    let service = match crate::metrics_summary::shared_metrics_summary_reader().await {
+        Some(reader) => service.with_metrics_summary_reader(reader),
+        None => service,
+    };
     let service = Arc::new(service);
     let audit_emitter: Arc<dyn AuditEmitter> =
         Arc::new(WebFrameworkAuditEmitter::new(service.clone()));
@@ -278,6 +289,9 @@ pub async fn ensure_database_lifecycle_from_env() -> Result<(), ApiAssemblyError
         .await
         .map_err(|detail| ApiAssemblyError::DatabaseMigration { detail })?;
     sdkwork_api_mcp_assembly::bootstrap_database_from_env()
+        .await
+        .map_err(|detail| ApiAssemblyError::DatabaseMigration { detail })?;
+    sdkwork_api_sandbox_assembly::bootstrap_database_from_env()
         .await
         .map_err(|detail| ApiAssemblyError::DatabaseMigration { detail })?;
     Ok(())

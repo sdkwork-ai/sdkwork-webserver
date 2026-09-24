@@ -458,6 +458,32 @@
       "rateLimitTier": null
     },
     {
+      "method": "PATCH",
+      "path": "/backend/v3/api/root_domains/{rootDomainId}",
+      "operationId": "rootDomains.update",
+      "tags": [
+        "domain"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.sites.write",
+      "idempotent": true,
+      "rateLimitTier": null
+    },
+    {
       "method": "DELETE",
       "path": "/backend/v3/api/root_domains/{rootDomainId}",
       "operationId": "rootDomains.delete",
@@ -2283,6 +2309,58 @@
       "operationId": "platformTrafficUsages.retrieve",
       "tags": [
         "trafficUsage"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.traffic.read",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "GET",
+      "path": "/backend/v3/api/metrics_summaries",
+      "operationId": "metricsSummaries.retrieve",
+      "tags": [
+        "metricsSummary"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.traffic.read",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "GET",
+      "path": "/backend/v3/api/platform_metrics_summaries",
+      "operationId": "platformMetricsSummaries.retrieve",
+      "tags": [
+        "metricsSummary"
       ],
       "auth": {
         "mode": "dual-token",

@@ -1,8 +1,8 @@
 import { useWebserverAdminSdk } from "@sdkwork/webserver-pc-admin-core";
 import type { ApplicationDomainResponse, RootDomainResponse } from "@sdkwork/webserver-pc-admin-core";
 import type { WebserverLocale } from "@sdkwork/webserver-pc-commons";
-import { ArrowLeft, Globe2, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowLeft, CirclePause, CirclePlay, FileKey2, Globe2, Pencil, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, Route, Routes, useParams } from "react-router-dom";
 
 import {
@@ -15,6 +15,7 @@ import {
   formatInstant,
   newIdempotencyKey,
   translator,
+  type Translator,
 } from "./AdminSurfaceAtoms.tsx";
 
 /**
@@ -59,6 +60,19 @@ import {
 
 const PAGE_SIZE = 50;
 
+/**
+ * The operations surface's certificate ledger.
+ *
+ * The tenant console's zone row links to `/console/certificates?zoneId=…&apex=…`
+ * and that page opens its request form pre-scoped to the zone; the operations
+ * surface mirrors the gesture at its own base path. The two paths are written
+ * out rather than derived because the base path belongs to the host that mounts
+ * the surface (`WebserverAuthorizedWorkspace` fixes `/admin` and `/console`), and
+ * a capability package has no way to ask for it — the console hardcodes its half
+ * for the same reason.
+ */
+const CERTIFICATES_PATH = "/admin/certificates";
+
 /** Root-domain lifecycle on the wire: 0=pending, 1=active, 2=disabled. */
 const ALL_STATUSES = "ALL";
 const STATUS_FILTERS = [ALL_STATUSES, 1, 0, 2] as const;
@@ -95,6 +109,8 @@ function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
   const [keyword, setKeyword] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<RootDomainResponse>();
+  const [editTarget, setEditTarget] = useState<RootDomainResponse>();
+  const [statusTarget, setStatusTarget] = useState<RootDomainResponse>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -144,6 +160,33 @@ function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
       })
       .catch((cause) => {
         setDeleteTarget(undefined);
+        setError(errorText(cause));
+      })
+      .finally(() => setBusy(false));
+  };
+
+  /**
+   * Edit and lifecycle share one call shape.
+   *
+   * The contract sends only the members the caller names, so the edit form and
+   * the pause/resume confirmation are two bodies of the same request rather than
+   * two endpoints — which is also why the console reaches both through one
+   * `updateDomainZone`.
+   */
+  const patchRoot = (
+    root: RootDomainResponse,
+    body: { displayName?: string; dnsProvider?: string; providerZoneRef?: string; status?: number },
+    done: () => void,
+  ) => {
+    setBusy(true);
+    void client.domain.rootDomains
+      .update(root.id, body, { idempotencyKey: newIdempotencyKey() })
+      .then(() => {
+        done();
+        setRoots(null);
+      })
+      .catch((cause) => {
+        done();
         setError(errorText(cause));
       })
       .finally(() => setBusy(false));
@@ -238,7 +281,20 @@ function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
                 </tr>
               </thead>
               <tbody>
-                {(roots ?? []).map((root) => (
+                {(roots ?? []).map((root) => {
+                  // The console blocks the delete while the zone still owns
+                  // anything at all — `hostnameCount > 1 || certificateCount > 0
+                  // || bindingCount > 0`. Its `> 1` is "more than the apex row
+                  // itself", because the Deployments plane registers the apex as
+                  // a hostname of its own zone. On this plane the apex lives in
+                  // `webserver_root_domain` and is never duplicated into
+                  // `webserver_domain`, so the same intent reads as "any child at
+                  // all". It is also verbatim the predicate the delete endpoint
+                  // enforces (`subdomain_count > 0` → 409), so the button's
+                  // availability follows the call it makes rather than promising
+                  // one that cannot succeed.
+                  const deleteBlocked = Number(root.subdomainCount) > 0;
+                  return (
                   <tr key={root.id}>
                     <td>
                       <Link className="primary-cell-link" to={root.id}>
@@ -266,26 +322,57 @@ function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
                     <td>{formatInstant(root.updatedAt, locale)}</td>
                     <td>
                       <div className="row-actions">
-                        {/* Text label rather than a bare glyph, exactly as the
-                            console's zone ledger does it: entering the hostname
-                            list is the thing an operator opens this table for,
-                            and it is not guessable from a globe icon alone. The
-                            literal word also stays inside the accessible name. */}
+                        {/* The first two actions carry words rather than bare
+                            glyphs, exactly as the console's zone ledger does it:
+                            entering the hostname list and requesting a
+                            certificate are the two things an operator opens this
+                            table for, and neither is guessable from an icon
+                            alone. The literal word stays inside the accessible
+                            name so the label still matches what is read out. */}
                         <Link
-                          aria-label={`${t("resource.domains.openHostnames")} · ${root.hostname}`}
+                          aria-label={`${t("resource.domains.hostnames")} · ${root.hostname}`}
                           className="table-action table-action-text"
                           title={t("resource.domains.openHostnames")}
                           to={root.id}
                         >
                           <Globe2 size={15} />
-                          <span>{t("resource.domains.openHostnames")}</span>
+                          <span>{t("resource.domains.hostnames")}</span>
                         </Link>
+                        <Link
+                          aria-label={`${t("resource.domains.certificates")} · ${root.hostname}`}
+                          className="table-action table-action-text"
+                          title={t("resource.domains.requestCertificate")}
+                          to={`${CERTIFICATES_PATH}?rootDomainId=${encodeURIComponent(root.id)}&apex=${encodeURIComponent(root.hostname)}`}
+                        >
+                          <FileKey2 size={15} />
+                          <span>{t("resource.domains.certificates")}</span>
+                        </Link>
+                        <button
+                          aria-label={`${t("resource.domains.edit")} ${root.hostname}`}
+                          className="table-action"
+                          onClick={() => setEditTarget(root)}
+                          title={t("resource.domains.edit")}
+                          type="button"
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button
+                          aria-label={`${
+                            root.status === 1 ? t("resource.domains.pause") : t("resource.domains.resume")
+                          } ${root.hostname}`}
+                          className="table-action"
+                          onClick={() => setStatusTarget(root)}
+                          title={root.status === 1 ? t("resource.domains.pause") : t("resource.domains.resume")}
+                          type="button"
+                        >
+                          {root.status === 1 ? <CirclePause size={16} /> : <CirclePlay size={16} />}
+                        </button>
                         <button
                           aria-label={`${t("resource.domains.delete")} ${root.hostname}`}
                           className="table-action danger-action"
-                          disabled={busy}
+                          disabled={busy || deleteBlocked}
                           onClick={() => setDeleteTarget(root)}
-                          title={t("resource.domains.delete")}
+                          title={deleteBlocked ? t("resource.domains.deleteBlocked") : t("resource.domains.delete")}
                           type="button"
                         >
                           <Trash2 size={16} />
@@ -293,7 +380,8 @@ function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
             {!busy && (roots ?? []).length === 0 ? (
@@ -353,7 +441,170 @@ function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
           title={t("resource.domains.delete")}
         />
       ) : null}
+
+      {editTarget ? (
+        <EditRootDomainDialog
+          close={() => setEditTarget(undefined)}
+          onError={setError}
+          root={editTarget}
+          submit={(body) => patchRoot(editTarget, body, () => setEditTarget(undefined))}
+          t={t}
+        />
+      ) : null}
+
+      {/* Pausing and resuming are one dialog because they are one decision seen
+          from two sides, and the wording carries which side this is. The console
+          asks the same question on its zone ledger. */}
+      {statusTarget ? (
+        <ConfirmDialog
+          close={() => setStatusTarget(undefined)}
+          confirmLabel={statusTarget.status === 1 ? t("resource.domains.pause") : t("resource.domains.resume")}
+          dangerous={statusTarget.status === 1}
+          message={
+            statusTarget.status === 1
+              ? t("resource.domains.pauseRootConfirm")
+              : t("resource.domains.resumeRootConfirm")
+          }
+          onConfirm={() =>
+            patchRoot(
+              statusTarget,
+              // 1 = active, 2 = disabled, which is the lifecycle the column
+              // itself declares (`chk_webserver_root_domain_status`).
+              { status: statusTarget.status === 1 ? 2 : 1 },
+              () => setStatusTarget(undefined),
+            )
+          }
+          t={t}
+          title={
+            statusTarget.status === 1
+              ? t("resource.domains.pauseRootTitle")
+              : t("resource.domains.resumeRootTitle")
+          }
+        />
+      ) : null}
     </section>
+  );
+}
+
+/**
+ * Root-domain edit form.
+ *
+ * The three fields the plane stores, in the console's dialog chrome. The apex is
+ * shown read-only rather than as a disabled input: it is the row's identity — a
+ * wildcard or a subdomain here would break the uniqueness index every hostname
+ * under it resolves against — so it is a value being shown, not a field being
+ * edited.
+ *
+ * A field left blank is omitted from the request, which the contract reads as
+ * "leave it as it is". That is the same reading the console's zone form has, and
+ * it is why saving with nothing changed is refused here instead of being sent as
+ * a request that would come back 422: there is no member to send.
+ */
+function EditRootDomainDialog({
+  close,
+  onError,
+  root,
+  submit,
+  t,
+}: {
+  close(): void;
+  onError(message: string | undefined): void;
+  root: RootDomainResponse;
+  submit(body: { displayName?: string; dnsProvider?: string; providerZoneRef?: string }): void;
+  t: Translator;
+}) {
+  const [displayName, setDisplayName] = useState(root.displayName ?? "");
+  const [dnsProvider, setDnsProvider] = useState(root.dnsProvider ?? "");
+  const [providerZoneRef, setProviderZoneRef] = useState(root.providerZoneRef ?? "");
+
+  const fields = { displayName, dnsProvider, providerZoneRef };
+  const current = {
+    displayName: root.displayName ?? "",
+    dnsProvider: root.dnsProvider ?? "",
+    providerZoneRef: root.providerZoneRef ?? "",
+  };
+  const changed = (Object.keys(fields) as (keyof typeof fields)[]).filter(
+    (key) => fields[key].trim() !== current[key],
+  );
+
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (changed.length === 0) return;
+    onError(undefined);
+    const body: { displayName?: string; dnsProvider?: string; providerZoneRef?: string } = {};
+    for (const key of changed) {
+      const value = fields[key].trim();
+      // Blank means "left alone", so it is dropped rather than sent: the wire
+      // has no "clear this" for these three, and sending an empty string would
+      // be rejected by `minLength: 1` even though it reads as the same intent.
+      if (value !== "") body[key] = value;
+    }
+    if (Object.keys(body).length === 0) {
+      onError(t("resource.domains.editNeedsAValue"));
+      return;
+    }
+    submit(body);
+  };
+
+  return (
+    <div
+      className="dialog-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) close();
+      }}
+      role="presentation"
+    >
+      <form
+        aria-labelledby="served-domain-edit-title"
+        aria-modal="true"
+        className="dialog delivery-dialog"
+        onSubmit={onSubmit}
+        role="dialog"
+      >
+        <header>
+          <h2 id="served-domain-edit-title">{t("resource.domains.editRoot")}</h2>
+        </header>
+        <div className="form-grid">
+          <label className="form-field-wide">
+            <span>{t("resource.domains.rootHostname")}</span>
+            <input readOnly value={root.hostname} />
+          </label>
+          <label>
+            <span>{t("resource.domains.displayName")}</span>
+            <input
+              name="displayName"
+              onChange={(event) => setDisplayName(event.target.value)}
+              placeholder={root.hostname}
+              value={displayName}
+            />
+          </label>
+          <label>
+            <span>{t("resource.domains.dnsProvider")}</span>
+            <input
+              name="dnsProvider"
+              onChange={(event) => setDnsProvider(event.target.value)}
+              value={dnsProvider}
+            />
+          </label>
+          <label className="form-field-wide">
+            <span>{t("resource.domains.providerZoneRef")}</span>
+            <input
+              name="providerZoneRef"
+              onChange={(event) => setProviderZoneRef(event.target.value)}
+              value={providerZoneRef}
+            />
+          </label>
+        </div>
+        <footer className="dialog-footer">
+          <button className="secondary-button" onClick={close} type="button">
+            {t("resource.domains.cancel")}
+          </button>
+          <button className="command-button" disabled={changed.length === 0} type="submit">
+            {t("resource.domains.save")}
+          </button>
+        </footer>
+      </form>
+    </div>
   );
 }
 

@@ -8,6 +8,7 @@ pub mod paths;
 pub mod routes;
 pub mod server_files_routes;
 pub mod traffic_usage_routes;
+pub mod metrics_summary_routes;
 pub mod web_bootstrap;
 pub mod webserver_config_routes;
 

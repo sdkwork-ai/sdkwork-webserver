@@ -21,4 +21,5 @@ class Api(private val client: HttpClient) {
     val audit: AuditApi = AuditApi(client)
     val cluster: ClusterApi = ClusterApi(client)
     val trafficUsage: TrafficUsageApi = TrafficUsageApi(client)
+    val metricsSummary: MetricsSummaryApi = MetricsSummaryApi(client)
 }

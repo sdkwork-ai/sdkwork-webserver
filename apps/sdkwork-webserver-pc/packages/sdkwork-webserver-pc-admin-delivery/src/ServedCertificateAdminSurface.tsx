@@ -1,12 +1,14 @@
 import { useWebserverAdminSdk } from "@sdkwork/webserver-pc-admin-core";
 import type { ApplicationDomainResponse, CertificateResponse } from "@sdkwork/webserver-pc-admin-core";
 import type { WebserverLocale } from "@sdkwork/webserver-pc-commons";
-import { Ban, CalendarClock, FileKey2, Plus, RefreshCw, RotateCw, Trash2 } from "lucide-react";
+import { Ban, CalendarClock, FileKey2, Plus, RefreshCw, RotateCw, Search, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import {
   ConfirmDialog,
   Pagination,
+  SideDrawer,
   StatusBadge,
   errorText,
   formatInstant,
@@ -53,6 +55,7 @@ const REVOKE_REASONS = [
 
 type RevokeReason = (typeof REVOKE_REASONS)[number];
 type CertificateType = 1 | 3;
+type CertificateKeyAlgorithm = "RSA" | "ECDSA";
 
 export interface ServedCertificateAdminSurfaceProps {
   locale: WebserverLocale;
@@ -70,16 +73,38 @@ export function ServedCertificateAdminSurface({ locale, resource }: ServedCertif
 function CertificateLedger({ locale }: { locale: WebserverLocale }) {
   const client = useWebserverAdminSdk();
   const t = translator(locale);
+  // The entry point from the Domains ledger, read the way the console's
+  // Certificates page reads its own: a root domain plus the apex as a label. The
+  // form then opens on the root domain alone and the operator picks hostnames
+  // inside it — a request for one preselected name is a different gesture and has
+  // its own entry point on the hostname ledger.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialRootDomainId = searchParams.get("rootDomainId") ?? undefined;
+  const initialApex = searchParams.get("apex") ?? undefined;
   const [certificates, setCertificates] = useState<CertificateResponse[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [build, setBuild] = useState(0);
-  const [issueOpen, setIssueOpen] = useState(false);
+  const [issueOpen, setIssueOpen] = useState(Boolean(initialRootDomainId));
   const [renewTarget, setRenewTarget] = useState<CertificateResponse>();
   const [revokeTarget, setRevokeTarget] = useState<CertificateResponse>();
   const [deleteTarget, setDeleteTarget] = useState<CertificateResponse>();
+
+  // A second navigation from the Domains ledger updates the query string without
+  // remounting this page, so the form has to reopen on the new parameters rather
+  // than only on the first render.
+  useEffect(() => {
+    if (initialRootDomainId) setIssueOpen(true);
+  }, [initialRootDomainId]);
+
+  const closeIssue = () => {
+    setIssueOpen(false);
+    // Dropping the parameters keeps the URL honest: the form is closed, so
+    // nothing is preselected any more, and a reload does not reopen it.
+    setSearchParams({}, { replace: true });
+  };
 
   useEffect(() => {
     let active = true;
@@ -284,9 +309,11 @@ function CertificateLedger({ locale }: { locale: WebserverLocale }) {
 
       {issueOpen ? (
         <IssueCertificateDialog
-          close={() => setIssueOpen(false)}
+          apex={initialApex}
+          close={closeIssue}
           done={reload}
           onError={setError}
+          rootDomainId={initialRootDomainId}
           t={t}
         />
       ) : null}
@@ -337,38 +364,66 @@ function CertificateLedger({ locale }: { locale: WebserverLocale }) {
 }
 
 /**
- * Issue form.
+ * Issue form, in the drawer chrome.
  *
  * The identifier picker reads the served-domain inventory and renders it as a
- * checkbox grid rather than a multi-select: the coverage of a certificate is a
- * set an operator builds and re-reads, and a native multi-select shows neither
- * the whole set nor what is not in it. The rows come from the same plane the
- * Domains page reads, so a certificate cannot name a hostname this edge does not
- * answer for.
+ * selectable grid rather than a multi-select: the coverage of a certificate is
+ * a set an operator builds and re-reads, and a native multi-select shows
+ * neither the whole set nor what is not in it. The rows come from the same
+ * plane the Domains page reads, so a certificate cannot name a hostname this
+ * edge does not answer for.
+ *
+ * The drawer, not a centred dialog, is the frame for that building work: the
+ * picker is tall (a filter, the grid, the running selection), the ledger it is
+ * answered against stays legible beside the panel instead of disappearing
+ * under it, and the submit row is pinned to the panel's bottom band instead of
+ * scrolling away with the form. It is the console's request form restated on
+ * this plane with the same class vocabulary, so the two read as one product.
+ *
+ * `rootDomainId` scopes the picker to one root domain, which is what the Domains
+ * ledger's "request certificate" action opens. The console's request form takes
+ * the same parameter from the same gesture (`zoneId` there); `apex` is carried
+ * only as a label, because the scoped read is the thing that actually decides
+ * what is offered.
  */
 function IssueCertificateDialog({
+  apex,
   close,
   done,
   onError,
+  rootDomainId,
   t,
 }: {
+  apex?: string | undefined;
   close(): void;
   done(): void;
   onError(message: string | undefined): void;
+  rootDomainId?: string | undefined;
   t: Translator;
 }) {
   const client = useWebserverAdminSdk();
   const [identifiers, setIdentifiers] = useState<ApplicationDomainResponse[] | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [certType, setCertType] = useState<CertificateType>(1);
+  // RSA is the platform default (the shared vocabulary in sdkwork-deploy-core):
+  // a managed certificate is renewed unattended, and RSA-2048 is the leaf key
+  // every TLS client accepts. The control is rendered anyway, because a default
+  // the operator cannot see is a decision they cannot overturn — and ECDSA is
+  // one click away for a name whose clients are all known to support it.
+  const [keyAlgorithm, setKeyAlgorithm] = useState<CertificateKeyAlgorithm>("RSA");
   const [autoRenew, setAutoRenew] = useState(true);
+  const [filter, setFilter] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
   useEffect(() => {
     let active = true;
-    void client.domain
-      .list({ page: 1, pageSize: 200 })
+    // One scoped read and one whole-inventory read are the same call shape, so
+    // the only thing the scope changes is which plane answers.
+    const read = rootDomainId
+      ? client.domain.rootDomains.subdomains.list(rootDomainId, { page: 1, pageSize: 200 })
+      : client.domain.list({ page: 1, pageSize: 200 });
+    void read
       .then((result) => {
         if (active) setIdentifiers(result.items);
       })
@@ -378,17 +433,27 @@ function IssueCertificateDialog({
     return () => {
       active = false;
     };
-  }, [client]);
+  }, [client, rootDomainId]);
 
   const toggle = (id: string) =>
     setSelected((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
+
+  // Alphabetical, because the picker is read as a list to scan: the inventory's
+  // own order is the reconcile's write order, which says nothing to an operator
+  // choosing coverage. Sorting a copy keeps the read's result untouched.
+  const inventory = [...(identifiers ?? [])].sort((a, b) => a.hostname.localeCompare(b.hostname));
+  const needle = filter.trim().toLowerCase();
+  const visible = needle
+    ? inventory.filter((domain) => domain.hostname.toLowerCase().includes(needle))
+    : inventory;
+  const selectedHostnames = inventory.filter((domain) => selected.includes(domain.id));
 
   const submit = () => {
     if (selected.length === 0) return;
     setBusy(true);
     setError(undefined);
     void client.certificate
-      .issue({ domainIds: selected, certType, autoRenew }, { idempotencyKey: newIdempotencyKey() })
+      .issue({ domainIds: selected, certType, keyAlgorithm, autoRenew }, { idempotencyKey: newIdempotencyKey() })
       .then(() => {
         close();
         done();
@@ -401,27 +466,74 @@ function IssueCertificateDialog({
       .finally(() => setBusy(false));
   };
 
+  // The refusal and the row are the footer band's two children, spaced by the
+  // band's own gap — see `.delivery-drawer-footer` in `deploy-surface.css`.
+  const footer = (
+    <>
+      {error ? (
+        <div className="error-banner" role="alert">
+          {error}
+        </div>
+      ) : null}
+      <div className="dialog-footer">
+        <button className="secondary-button" onClick={close} type="button">
+          {t("resource.certificates.cancel")}
+        </button>
+        <button className="command-button" disabled={busy || selected.length === 0} onClick={submit} type="button">
+          {t("resource.certificates.issueSubmit")}
+        </button>
+      </div>
+    </>
+  );
+
   return (
-    <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }} role="presentation">
-      <div
-        aria-labelledby="served-certificate-issue-title"
-        aria-modal="true"
-        className="dialog delivery-dialog delivery-dialog-wide"
-        role="dialog"
+    <SideDrawer
+      close={close}
+      closeLabel={t("resource.certificates.close")}
+      footer={footer}
+      title={t("resource.certificates.issue")}
+    >
+      {/* A form, so the drawer's density pass (the group rhythm keyed on
+          `form>.form-fieldset`) applies and Enter in a control submits. */}
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
       >
-        <header>
-          <h2 id="served-certificate-issue-title">{t("resource.certificates.issue")}</h2>
-        </header>
-        <div className="form-grid single-column">
-          <fieldset className="form-fieldset">
-            <legend>{t("resource.certificates.selectIdentifiers")}</legend>
-            {identifiers === null ? (
-              <p className="form-hint">{t("resource.certificates.loading")}</p>
-            ) : identifiers.length === 0 ? (
-              <p className="form-hint">{t("resource.domains.noSubdomains")}</p>
-            ) : (
+        <fieldset className="form-fieldset">
+          <legend>{t("resource.certificates.selectIdentifiers")}</legend>
+          {/* The root domain the picker is scoped to, and only when the caller
+              named one: the toolbar opens this form with no scope at all, and
+              an empty label line there would read as a missing value. */}
+          {apex ? <p className="form-hint">{apex}</p> : null}
+          {identifiers === null ? (
+            <p className="form-hint">{t("resource.certificates.loading")}</p>
+          ) : inventory.length === 0 ? (
+            <p className="form-hint">{t("resource.domains.noSubdomains")}</p>
+          ) : (
+            <>
+              {/* Filtering earns its box only once the list is long enough to
+                  need it: under a screenful the search box pushes the rows it
+                  filters out of view, which is the opposite of what it is for.
+                  Enter inside it must not submit the form around it. */}
+              {inventory.length > 8 ? (
+                <div className="search-box selector-search">
+                  <Search size={16} />
+                  <input
+                    aria-label={t("resource.certificates.searchHostnames")}
+                    disabled={busy}
+                    onChange={(event) => setFilter(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.preventDefault();
+                    }}
+                    placeholder={t("resource.certificates.searchHostnames")}
+                    value={filter}
+                  />
+                </div>
+              ) : null}
               <div className="hostname-selector-list">
-                {identifiers.map((domain) => (
+                {visible.map((domain) => (
                   <label key={domain.id}>
                     <input
                       checked={selected.includes(domain.id)}
@@ -435,54 +547,96 @@ function IssueCertificateDialog({
                     </span>
                   </label>
                 ))}
+                {visible.length === 0 ? (
+                  <p className="selector-empty">{t("resource.certificates.noHostnameMatch")}</p>
+                ) : null}
               </div>
-            )}
-          </fieldset>
-          <fieldset className="form-fieldset">
-            <legend>{t("resource.certificates.certName")}</legend>
-            <div className="hostname-summary">
-              <label className="checkbox-field">
-                <input
-                  checked={certType === 1}
-                  disabled={busy}
-                  name="certType"
-                  onChange={() => setCertType(1)}
-                  type="radio"
-                />
-                {t("resource.certificates.letsEncrypt")}
-              </label>
-              <label className="checkbox-field">
-                <input
-                  checked={certType === 3}
-                  disabled={busy}
-                  name="certType"
-                  onChange={() => setCertType(3)}
-                  type="radio"
-                />
-                {t("resource.certificates.selfSigned")}
-              </label>
-              <label className="checkbox-field">
-                <input checked={autoRenew} disabled={busy} onChange={() => setAutoRenew((value) => !value)} type="checkbox" />
-                {t("resource.certificates.autoRenew")}
-              </label>
-            </div>
-          </fieldset>
-        </div>
-        {error ? (
-          <div className="error-banner" role="alert">
-            {error}
+              {/* The running selection, as chips: the grid shows what is
+                  offered, this shows what was actually built — including the
+                  ones a filter is currently hiding. */}
+              {selectedHostnames.length > 0 ? (
+                <div className="selected-hostnames">
+                  <span>{t("resource.certificates.selectedCount", { count: selectedHostnames.length })}</span>
+                  <div>
+                    {selectedHostnames.map((domain) => (
+                      <span key={domain.id}>
+                        {domain.hostname}
+                        <button
+                          aria-label={t("resource.certificates.removeHostname", { hostname: domain.hostname })}
+                          disabled={busy}
+                          onClick={() => toggle(domain.id)}
+                          title={t("resource.certificates.removeHostname", { hostname: domain.hostname })}
+                          type="button"
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </>
+          )}
+        </fieldset>
+        {/* This group used to borrow the certificate-name column heading as its
+            legend, which read as "type the name here"; it is the issuance
+            options group and is labelled as one now. */}
+        <fieldset className="form-fieldset">
+          <legend>{t("resource.certificates.issueOptions")}</legend>
+          <div className="hostname-summary">
+            <label className="checkbox-field">
+              <input
+                checked={certType === 1}
+                disabled={busy}
+                name="certType"
+                onChange={() => setCertType(1)}
+                type="radio"
+              />
+              {t("resource.certificates.letsEncrypt")}
+            </label>
+            <label className="checkbox-field">
+              <input
+                checked={certType === 3}
+                disabled={busy}
+                name="certType"
+                onChange={() => setCertType(3)}
+                type="radio"
+              />
+              {t("resource.certificates.selfSigned")}
+            </label>
+            <label className="checkbox-field">
+              <input checked={autoRenew} disabled={busy} onChange={() => setAutoRenew((value) => !value)} type="checkbox" />
+              {t("resource.certificates.autoRenew")}
+            </label>
           </div>
-        ) : null}
-        <footer className="dialog-footer">
-          <button className="secondary-button" onClick={close} type="button">
-            {t("resource.certificates.cancel")}
-          </button>
-          <button className="command-button" disabled={busy || selected.length === 0} onClick={submit} type="button">
-            {t("resource.certificates.issueSubmit")}
-          </button>
-        </footer>
-      </div>
-    </div>
+          <fieldset className="form-fieldset">
+            <legend>{t("resource.certificates.keyAlgorithmTitle")}</legend>
+            <div
+              aria-label={t("resource.certificates.keyAlgorithmTitle")}
+              className="segmented-control algorithm-control"
+              role="group"
+            >
+              {(["RSA", "ECDSA"] as const).map((value) => (
+                <button
+                  aria-pressed={keyAlgorithm === value}
+                  disabled={busy}
+                  key={value}
+                  onClick={() => setKeyAlgorithm(value)}
+                  type="button"
+                >
+                  {value}
+                </button>
+              ))}
+            </div>
+            <p className="form-hint">
+              {keyAlgorithm === "RSA"
+                ? t("resource.certificates.keyAlgorithmRsaHint")
+                : t("resource.certificates.keyAlgorithmEcdsaHint")}
+            </p>
+          </fieldset>
+        </fieldset>
+      </form>
+    </SideDrawer>
   );
 }
 

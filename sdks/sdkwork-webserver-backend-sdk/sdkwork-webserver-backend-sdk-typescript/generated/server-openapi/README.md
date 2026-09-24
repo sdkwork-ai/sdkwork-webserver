@@ -69,6 +69,7 @@ const client = new SdkworkBackendClient({
 - `client.audit` - audit API
 - `client.cluster` - cluster API
 - `client.trafficUsage` - traffic_usage API
+- `client.metricsSummary` - metrics_summary API
 
 ## Usage Examples
 
@@ -234,6 +235,17 @@ const params = {
   top_apps: 4,
 };
 const result = await client.trafficUsage.retrieve(params);
+```
+
+### metrics_summary
+
+```typescript
+// Retrieve the dashboard metric summary of the caller's own tenant
+const params = {
+  date_from: 'date_from',
+  date_to: 'date_to',
+};
+const result = await client.metricsSummary.retrieve(params);
 ```
 
 ## Error Handling

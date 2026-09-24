@@ -51,6 +51,22 @@ class DomainApi {
     })();
   }
 
+  /// Edit a tenant root-domain Zone
+  Future<RootDomainsUpdateResponse?> rootDomainsUpdate(String rootDomainId, UpdateRootDomainRequest body, String idempotencyKey) async {
+    final requestHeaders = buildRequestHeaders(
+      <String, HeaderParameterSpec>{
+        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
+      },
+      <String, HeaderParameterSpec>{},
+    );
+    final payload = body.toJson();
+    final response = await _client.patch(ApiPaths.backendPath('/root_domains/${serializePathParameter(rootDomainId, const PathParameterSpec('rootDomainId', 'simple', false))}'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : RootDomainsUpdateResponse.fromJson(map);
+    })();
+  }
+
   /// Delete an empty tenant root-domain Zone
   Future<void> rootDomainsDelete(String rootDomainId, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(

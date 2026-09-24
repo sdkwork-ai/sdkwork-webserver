@@ -204,6 +204,12 @@ fn root_domain_zone_routes_keep_authorization_and_navigation_contracts() {
             true,
         ),
         (
+            HttpMethod::Patch,
+            "rootDomains.update",
+            "web.sites.write",
+            true,
+        ),
+        (
             HttpMethod::Get,
             "rootDomains.subdomains.list",
             "web.sites.read",

@@ -41,6 +41,16 @@ public class DomainApi {
         return client.convertValue(raw, new TypeReference<RootDomainsRetrieveResponse>() {});
     }
 
+    /** Edit a tenant root-domain Zone */
+    public RootDomainsUpdateResponse rootDomainsUpdate(String rootDomainId, UpdateRootDomainRequest body, String idempotencyKey) throws Exception {
+        Map<String, String> requestHeaders = buildRequestHeaders(
+                Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
+                Map.of()
+        );
+        Object raw = client.patch(ApiPaths.backendPath("/root_domains/" + serializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false)) + ""), body, null, requestHeaders, "application/json");
+        return client.convertValue(raw, new TypeReference<RootDomainsUpdateResponse>() {});
+    }
+
     /** Delete an empty tenant root-domain Zone */
     public Void rootDomainsDelete(String rootDomainId, String idempotencyKey) throws Exception {
         Map<String, String> requestHeaders = buildRequestHeaders(

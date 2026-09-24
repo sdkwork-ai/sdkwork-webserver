@@ -70,6 +70,7 @@ client.SetHeader("X-Custom-Header", "value")
 - `client.Audit` - audit API
 - `client.Cluster` - cluster API
 - `client.TrafficUsage` - traffic_usage API
+- `client.MetricsSummary` - metrics_summary API
 
 ## Usage Examples
 
@@ -291,6 +292,21 @@ params := map[string]interface{}{
     "top_apps": 4,
 }
 result, err := client.TrafficUsage.TrafficUsagesRetrieve(params)
+if err != nil {
+    panic(err)
+}
+fmt.Println(result)
+```
+
+### metrics_summary
+
+```go
+// Retrieve the dashboard metric summary of the caller's own tenant
+params := map[string]interface{}{
+    "date_from": "date_from",
+    "date_to": "date_to",
+}
+result, err := client.MetricsSummary.MetricsSummariesRetrieve(params)
 if err != nil {
     panic(err)
 }

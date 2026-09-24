@@ -172,6 +172,20 @@ html[data-sdk-color-mode="dark"] .workspace-account-avatar { color: #93c5fd; bac
 .scope-selector { flex: 1 1 240px; max-width: 340px; }
 .scope-selector select { min-width: 0; width: 100%; border: 0; outline: none; background: transparent; color: inherit; }
 .scope-selector option, .form-grid option { color: var(--sdk-color-text-primary); background: var(--sdk-color-surface-panel); }
+/* The native `<select>` dropdown is painted by the browser, outside this sheet's
+   cascade, and it resolves its surface from the select's own background when that is
+   opaque, otherwise from the option's, otherwise from the UA light canvas. Tailwind's
+   preflight sets `background-color: transparent` on every `select`, and a
+   `color-scheme: dark` on the root does not repaint the popup — so any control that
+   was never given an opaque background (an unstyled `<select>` in a table cell, one
+   dressed with `bg-transparent`, a drawer form field) opens a white list with
+   light-on-dark text in dark theme. Naming the surface on `option` gives every popup
+   a themed default. It lives in `base` on purpose: the scoped `option` rules above and
+   everything unlayered stay above it, so a deliberate per-control surface still wins,
+   and this only fills the gap the preflight left. */
+@layer base {
+  select option, select optgroup { color: var(--sdk-color-text-primary); background: var(--sdk-color-surface-panel); }
+}
 .actions { min-width: 0; margin-left: auto; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
 .filter-count { min-width: 20px; height: 20px; display: inline-grid; place-content: center; color: var(--webserver-color-on-accent); background: var(--webserver-color-command-background); border-radius: 999px; font-size: 11px; font-weight: 750; }
 .filter-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 10px; padding: 12px; margin: 10px 0; color: var(--sdk-color-text-primary); background: var(--sdk-color-surface-panel-muted); border: 1px solid var(--sdk-color-border-default); border-radius: 6px; }
@@ -189,7 +203,59 @@ html[data-sdk-color-mode="dark"] .workspace-account-avatar { color: #93c5fd; bac
 .danger-button:hover { background: var(--webserver-color-danger-surface); }
 .refresh-button { color: var(--sdk-color-text-secondary); border-color: var(--sdk-color-border-default); background: var(--sdk-color-surface-panel); }
 button:disabled { cursor: not-allowed; opacity: .48; }
-.data-surface { min-height: 0; flex: 1 1 auto; display: grid; grid-template-rows: minmax(0, 1fr) auto; margin-top: 12px; overflow: hidden; border: 1px solid var(--sdk-color-border-default); border-radius: 6px; background: var(--sdk-color-surface-panel); box-shadow: var(--sdk-shadow-sm); }
+.data-surface { min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; margin-top: 12px; overflow: hidden; border: 1px solid var(--sdk-color-border-default); border-radius: 6px; background: var(--sdk-color-surface-panel); box-shadow: var(--sdk-shadow-sm); }
+/* The framework `DataTable` paints its own surface chrome — border, radius,
+   panel background, `--sdk-shadow-sm` — and `.data-surface` above paints the
+   same four. `.data-surface` carries no padding, so the composite's frame lands
+   1px inside the host's: a doubled 2px outline and two overlapping rounded
+   corners on every list page (measured in a real browser: host 987.69x691.16
+   against composite 985.69x192, identical `borderColor` and identical `6px`
+   radius).
+
+   So inside `.data-surface` the host frame is the panel and the composite's
+   surface yields to it. The same three rules also complete the height chain the
+   host rule above can only start: it can bound the frame (`flex: 1 1 auto` plus
+   `min-height: 0`), but nothing between it and `[data-slot="table-viewport"]`
+   grew, and both consequences fell out of that one measurement:
+     - zero rows: the surface hugged its content, so the empty state sat in a
+       192px box at the top of a 691px panel — 499px of void under it;
+     - twenty rows: the surface was squeezed to the row height, its 1459.61px
+       viewport overflowed it, and its `overflow: hidden` swallowed ten rows and
+       the whole pagination footer. The pager was not mis-sized, it was
+       unreachable.
+
+   Growing the surface and the framework's own scrolling viewport fixes both:
+   the table now fills the pane, and what does not fit scrolls inside it.
+
+   The frame is a flow column rather than the two-row grid it used to be
+   (`grid-template-rows: minmax(0, 1fr) auto`). That grid only modelled the
+   table as the frame's *sole* child: the moment a page put anything else in it,
+   the `1fr` first track went to whichever child came first. Three console pages
+   hit that and paid for it differently — two abandoned the class for a frame of
+   their own (`.statistics-surface`, `.cluster-overview-surface`, each carrying
+   the same panel look plus the flow layout the grid could not give them), and
+   the plugin page gave the frame a scoped `display: flex` override. A flow
+   column has no such trap: every child keeps its own height and only the table
+   grows, so what a page puts in the frame stops deciding whether the frame
+   works. */
+.data-surface > [data-slot="data-table"] {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.data-surface [data-sdk-region="data-table-surface"] {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.data-surface [data-slot="table-viewport"] {
+  flex: 1 1 auto;
+  min-height: 0;
+}
 .status-badge.source-config-ready { color: var(--sdk-color-text-secondary); background: var(--sdk-color-surface-panel-muted); border: 1px solid var(--sdk-color-border-subtle); }
 .status-badge.source-config-missing { color: var(--sdk-color-text-muted); background: transparent; border: 1px dashed var(--sdk-color-border-default); }
 .empty-state { width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 24px; color: var(--sdk-color-text-muted); font-size: 13px; text-align: center; }
@@ -1638,10 +1704,11 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   }
 }
 
-/* Canonical Skills / MCP / Plugins console embeds */
+/* Canonical Skills / MCP / Plugins / Sandbox console embeds */
 .skills-console-surface,
 .mcp-console-surface,
 .plugins-console-surface,
+.sandbox-console-surface,
 .skills-admin-surface,
 .mcp-admin-surface,
 .plugins-admin-surface,
@@ -1687,6 +1754,7 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
 .mcp-console-surface > div,
 .mcp-console-surface > section,
 .plugins-console-surface > section,
+.sandbox-console-surface > section,
 .plugins-admin-surface > section,
 .skills-admin-surface > section,
 .mcp-admin-surface > div:last-child {
@@ -1701,6 +1769,7 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
 .embedded-fill-page > .data-surface,
 .mcp-console-surface .data-surface,
 .plugins-console-surface .data-surface,
+.sandbox-console-surface .data-surface,
 .plugins-admin-surface .data-surface,
 .skills-admin-surface .data-surface,
 .mcp-admin-surface .data-surface {
@@ -1718,6 +1787,7 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
 .skills-console-header h2,
 .mcp-console-surface h2,
 .plugins-console-surface h2,
+.sandbox-console-surface h2,
 .plugins-admin-surface h2 {
   margin: 0;
   font-size: 18px;
@@ -1726,6 +1796,7 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
 .skills-console-header p,
 .mcp-console-surface p,
 .plugins-console-surface .skills-console-header p,
+.sandbox-console-surface .skills-console-header p,
 .plugins-admin-surface .skills-console-header p {
   margin: 6px 0 0;
   color: var(--sdk-color-text-secondary);
@@ -1875,10 +1946,11 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   cursor: pointer;
 }
 
-/* Shared list-CRUD drawer / confirm modal (Skills + MCP + Plugins + Storage embeds) */
+/* Shared list-CRUD drawer / confirm modal (Skills + MCP + Plugins + Sandbox + Storage embeds) */
 .skills-console-surface,
 .mcp-console-surface,
 .plugins-console-surface,
+.sandbox-console-surface,
 .skills-admin-surface,
 .mcp-admin-surface,
 .plugins-admin-surface,
@@ -2483,6 +2555,16 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   border: 1px solid var(--sdk-color-border-default);
   border-radius: 10px;
   background: var(--sdk-color-surface-panel, #fff);
+  /* The bar is a card above the table's frame, and its chip matrix is taller
+     than the table wants to live with: 573px of a 689px pane as measured on the
+     real page, which is what left a twenty-row table 102px — one and a half
+     rows of the twenty it was paginating. Half the pane is the ceiling; past it
+     the bar scrolls, so every chip stays reachable and the table keeps the other
+     half. A share rather than a pixel cap, because the point is the split. */
+  max-height: 50%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 .plugin-filter-bar-heading {
   display: flex;
@@ -3136,6 +3218,184 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   font-weight: 650;
   color: var(--sdk-color-text-secondary);
 }
+
+/* The dashboard's cardinal metric row.
+
+   Two groups over four windows. A card leads with the widest window's figure:
+   it is the one a reader can anchor on, and the only one that does not need the
+   period it covers spelled out to be comparable between visits. The narrower
+   windows follow as a labelled trio under a rule, so the card reads
+   value → breakdown rather than as four equivalent numbers.
+
+   Styled entirely from theme tokens — no literal colours and no new custom
+   properties — so the row follows the light/dark switch without a second
+   declaration block to keep in sync. The hover/focus lift is the whole
+   interaction: these cards are read, not clicked, so nothing here is a tab stop
+   and nothing looks like a control. `:focus-within` is kept so a card would
+   still respond if a control is ever placed inside one. */
+.statistics-metrics {
+  margin: 16px 0 22px;
+}
+.statistics-metrics-group {
+  margin: 0 0 18px;
+}
+.statistics-metrics-legend {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0 0 10px;
+}
+.statistics-metrics-legend h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--sdk-color-text-secondary);
+}
+.statistics-metrics-legend span {
+  font-size: 12px;
+  color: var(--sdk-color-text-muted);
+}
+.statistics-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
+  gap: 12px;
+}
+.statistics-metric-card {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 16px 18px 14px;
+  border: 1px solid var(--sdk-color-border-default);
+  border-radius: 8px;
+  background: var(--sdk-color-surface-panel);
+  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+/* Drawn inside the card so the accent cannot move the grid when it appears. */
+.statistics-metric-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  border-radius: 8px 8px 0 0;
+  background: var(--sdk-color-brand-primary);
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.statistics-metric-card:hover,
+.statistics-metric-card:focus-within {
+  transform: translateY(-2px);
+  border-color: var(--sdk-color-border-strong);
+  box-shadow: var(--sdk-shadow-lg);
+}
+.statistics-metric-card:hover::before,
+.statistics-metric-card:focus-within::before {
+  opacity: 0.85;
+}
+.statistics-metric-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.statistics-metric-name {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--sdk-color-text-secondary);
+}
+.statistics-metric-badge {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--sdk-color-surface-elevated);
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--sdk-color-text-muted);
+}
+.statistics-metric-headline {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: var(--sdk-color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.statistics-metric-breakdown {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--sdk-color-border-subtle);
+}
+.statistics-metric-cell {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.statistics-metric-cell span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sdk-color-text-muted);
+}
+.statistics-metric-cell strong {
+  font-size: 14px;
+  font-weight: 680;
+  color: var(--sdk-color-text-primary);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* A metric whose source this deployment does not assemble — the agents figure
+   on an edge that does not run the agents module.
+   The card keeps its frame, its name, and its place in the grid: the row must
+   not lose a tile because a module is absent. What changes is that it reads as
+   "no figure here" rather than as a figure: a dashed border and a muted surface
+   say in the card's own language what the badge says in words. */
+.statistics-metric-card--unassembled {
+  border-style: dashed;
+  background: var(--sdk-color-surface-panel-muted);
+}
+/* The brand accent along the top is the card's "this is a live figure" cue, so
+   it is withheld here: a card with no reading must not light up like the ones
+   that carry one, or the one state an operator must not miss would be the one
+   that looks most alive. */
+.statistics-metric-card--unassembled::before {
+  content: none;
+}
+/* The badge follows the card into the out-of-line language instead of inverting
+   into a filled chip. It must not borrow `--sdk-color-surface-overlay`: that is
+   a *scrim* token, defined as `rgba(9, 9, 11, 0.45)` in both modes because its
+   job is to darken whatever is behind a dialog. Used as a fill it composites to
+   #8a8a8c over this card and then carries `--sdk-color-text-secondary`
+   (#3f3f46), which measures 3.04:1 — under the 4.5:1 floor for 11px text, and
+   under it in the one mode an operator is most likely to be reading.
+   An outline is also the honest reading: a chip with no fill, on a card that
+   has no figure. `box-shadow` rather than `border` keeps the ring out of the
+   box model, so the unassembled card's head is not 2px taller than its
+   neighbours and the row of tiles still lines up. */
+.statistics-metric-badge--unassembled {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--sdk-color-border-default);
+  color: var(--sdk-color-text-secondary);
+}
+.statistics-metric-unassembled {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--sdk-color-text-muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .statistics-metric-card,
+  .statistics-metric-card::before {
+    transition: none;
+  }
+  .statistics-metric-card:hover,
+  .statistics-metric-card:focus-within {
+    transform: none;
+  }
+}
 .statistics-block {
   margin: 0 0 24px;
 }
@@ -3157,44 +3417,182 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   font-style: italic;
 }
 
-/* The daily series.
+/* The daily chart.
 
-   Each series is indexed to its own peak, so the bars are read as shape rather
-   than as magnitude. The track gives the bars a common floor and the height is
-   the index in percent; the footnote above the block states what 100 means. */
-.statistics-series {
-  margin: 0 0 14px;
+   One metric at a time, on that metric's own axis: the tab strip picks the
+   metric and the pressed-button group picks the shape. The plot is a positioned
+   HTML box rather than a scaled SVG — `preserveAspectRatio: none` would smear
+   the stroke and turn a day marker into an ellipse — so only the line's
+   *positions* are stretched; its stroke width is held by `vector-effect` on the
+   polyline, and the day markers are pixel-sized spans that do not scale at all. */
+.statistics-chart-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-bottom: 10px;
 }
-.statistics-series-head {
+.statistics-chart-tabs,
+.statistics-chart-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.statistics-chart-kinds {
+  padding: 2px;
+  border: 1px solid var(--sdk-color-border-default);
+  border-radius: var(--sdk-radius-control);
+  background: var(--sdk-color-surface-panel-muted);
+}
+.statistics-chart-tab,
+.statistics-chart-kind {
+  padding: 5px 11px;
+  border: 1px solid transparent;
+  border-radius: var(--sdk-radius-control);
+  background: transparent;
+  color: var(--sdk-color-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.statistics-chart-tab:hover,
+.statistics-chart-kind:hover {
+  border-color: var(--sdk-color-border-subtle);
+  color: var(--sdk-color-text-primary);
+}
+.statistics-chart-tab[aria-selected="true"] {
+  border-color: var(--sdk-color-border-strong);
+  background: var(--sdk-color-surface-panel);
+  color: var(--sdk-color-text-primary);
+  box-shadow: var(--sdk-shadow-sm);
+}
+.statistics-chart-kind[aria-pressed="true"] {
+  background: var(--sdk-color-surface-panel);
+  color: var(--sdk-color-brand-primary);
+  box-shadow: var(--sdk-shadow-sm);
+}
+.statistics-chart-tab:focus-visible,
+.statistics-chart-kind:focus-visible {
+  outline: 2px solid var(--sdk-color-border-focus);
+  outline-offset: 1px;
+}
+.statistics-chart {
+  --statistics-chart-height: 180px;
+  display: grid;
+  /* The gutter is the widest axis label, not a fixed width: a nine-digit
+     quantity is longer than any guess, and clipping it would hide the figures
+     the axis exists to state. The floor keeps a short axis from hugging the
+     plot when the labels are only `0` and `4`. */
+  grid-template-columns: minmax(48px, max-content) minmax(0, 1fr);
+  gap: 0 10px;
+}
+.statistics-chart-axis {
+  position: relative;
+  height: var(--statistics-chart-height);
+  padding-right: 8px;
+}
+.statistics-chart-tick,
+.statistics-chart-tick-sizer {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.statistics-chart-tick {
+  position: absolute;
+  right: 8px;
+  transform: translateY(50%);
+  color: var(--sdk-color-text-muted);
+}
+/* Back in flow, and invisible: this one label is what gives the grid column its
+   `max-content` width, because the visible ones are absolutely positioned and
+   so contribute nothing to their parent's size. It is deliberately not a
+   `.statistics-chart-tick` — it is not a tick, and a reader counting ticks must
+   not count it. */
+.statistics-chart-tick-sizer {
+  position: static;
+  visibility: hidden;
+}
+.statistics-chart-plot {
+  position: relative;
+  height: var(--statistics-chart-height);
+  border-bottom: 1px solid var(--sdk-color-border-strong);
+}
+.statistics-chart-grid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--sdk-color-border-subtle);
+}
+.statistics-chart-bar {
+  position: absolute;
+  bottom: 0;
+  min-height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--sdk-color-brand-primary);
+  transition: background-color 120ms ease;
+}
+.statistics-chart-bar:hover {
+  background: var(--sdk-color-brand-primary-hover);
+}
+.statistics-chart-segment {
+  position: absolute;
+  inset: 0;
+}
+.statistics-chart-line {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.statistics-chart-line polyline {
+  fill: none;
+  stroke: var(--sdk-color-brand-primary);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.statistics-chart-dot {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin: 0 0 -3.5px -3.5px;
+  border: 2px solid var(--sdk-color-brand-primary);
+  border-radius: 50%;
+  background: var(--sdk-color-surface-panel);
+}
+/* Sits in the plot's own column, so the readout lines up with the axis it
+   describes instead of with the tick gutter. The top margin clears the floor
+   tick's own overhang: a tick is centred on its gridline, so the bottommost one
+   hangs half a line below the plot — close enough to this row that the two used
+   to read as one run-on string (`0 B 峰值 14.1 MB`). */
+.statistics-chart-meta {
+  grid-column: 2;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 4px;
-}
-.statistics-series-name {
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--sdk-color-text-primary);
-}
-.statistics-series-peak {
+  margin-top: 16px;
   font-size: 12px;
   color: var(--sdk-color-text-muted);
 }
-.statistics-series-track {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 56px;
-  padding: 0 2px;
-  border-bottom: 1px solid var(--sdk-color-border-subtle);
+.statistics-chart-peak {
+  font-weight: 600;
+  color: var(--sdk-color-text-secondary);
 }
-.statistics-series-bar {
-  flex: 1 1 0;
-  min-width: 2px;
-  min-height: 2px;
-  border-radius: 2px 2px 0 0;
-  background: var(--sdk-color-brand-primary);
+.statistics-chart-range {
+  font-variant-numeric: tabular-nums;
+}
+@media (prefers-reduced-motion: reduce) {
+  .statistics-chart-tab,
+  .statistics-chart-kind,
+  .statistics-chart-bar {
+    transition: none;
+  }
 }
 
 /* The three states a reading can be in. "Unavailable" and "error" are split
@@ -3280,4 +3678,91 @@ html[data-sdk-color-mode="dark"] .webserver-auth-page {
   margin: 0;
   font-size: 12px;
   color: var(--sdk-color-state-danger);
+}
+
+/* Sandbox Instances console: the per-user Agent VM registry.
+
+   The page is a canonical console embed, so it joins the frame groups above
+   (`.sandbox-console-surface` appears there) rather than restating the panel
+   layout; only the cells whose content is this page's own vocabulary are
+   declared here. Every value is a theme token, so the dark scheme needs no
+   second block. */
+.sandbox-name-cell,
+.sandbox-option-group {
+  display: grid;
+  gap: 6px;
+}
+.sandbox-name-cell {
+  gap: 2px;
+  min-width: 0;
+}
+.sandbox-name-cell strong { font-size: 13px; font-weight: 650; }
+.sandbox-name-cell small {
+  display: block;
+  /* Bounded so a 36-character instance id ellipsizes inside the cell instead of
+     widening the column: the full value stays reachable through `title`. */
+  max-width: 26ch;
+  overflow: hidden;
+  color: var(--sdk-color-text-secondary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sandbox-resources { color: var(--sdk-color-text-secondary); font-size: 12px; }
+.sandbox-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.sandbox-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--sdk-color-surface-panel-muted, #f1f5f9);
+  color: var(--sdk-color-text-secondary);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+.sandbox-badge--default { font-style: italic; }
+.sandbox-state-filter {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--sdk-color-border-default);
+  border-radius: 6px;
+  background: var(--sdk-color-surface-panel);
+  color: var(--sdk-color-text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+/* The host field contract (`.skills-console-field input` above) paints every
+   nested input as a full-width 36px form control with its own padding and
+   border — right for a text box, wrong for a checkbox picker, where it would
+   stretch each box across the column and lose the row rhythm. The
+   `[type="checkbox"]` qualifier is what outranks that rule. */
+.sandbox-option-group--grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  column-gap: 12px;
+}
+.sandbox-option-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.sandbox-option-group input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--webserver-color-command-background, #2563eb);
+}
+/* Raw cause inside the unavailable frame: subordinate to the title, but legible
+   enough to tell an auth refusal from an outage. Every declaration is a token,
+   so this needs no dark counterpart. */
+.sandbox-error-cause {
+  color: var(--sdk-color-text-secondary);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
 }

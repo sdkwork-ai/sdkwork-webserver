@@ -2,8 +2,8 @@ use crate::audited_sql;
 use super::{EngineRow, WebRepository};
 use sdkwork_webserver_contract::{
     CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainDeploymentResponse, DomainPage,
-    DomainResponse, ListRootDomainsQuery, RootDomainPage, RootDomainResponse, WebServiceError,
-    WebServiceResult,
+    DomainResponse, ListRootDomainsQuery, RootDomainPage, RootDomainResponse, UpdateRootDomainRequest,
+    WebServiceError, WebServiceResult,
 };
 use sqlx::Row;
 
@@ -46,7 +46,8 @@ impl WebRepository {
             // domain ids so the site-binding/listener joins cannot multiply
             // the counts; only the active-deployment filter keeps a per-row
             // latest-deployment lookup, indexed by (tenant_id, site_id).
-            "SELECT r.uuid, r.hostname, r.status,
+            "SELECT r.uuid, r.hostname, r.display_name, r.dns_provider, r.provider_zone_ref,
+                    r.status,
                     COALESCE(agg.subdomain_count, 0) AS subdomain_count,
                     COALESCE(agg.bound_subdomain_count, 0) AS bound_subdomain_count,
                     COALESCE(agg.verified_subdomain_count, 0) AS verified_subdomain_count,
@@ -138,7 +139,8 @@ impl WebRepository {
         root_domain_id: &str,
     ) -> WebServiceResult<RootDomainResponse> {
         let row = sqlx::query(
-            "SELECT r.uuid, r.hostname, r.status,
+            "SELECT r.uuid, r.hostname, r.display_name, r.dns_provider, r.provider_zone_ref,
+                    r.status,
                     (SELECT COUNT(*) FROM webserver_domain d
                      WHERE d.tenant_id = r.tenant_id AND d.root_domain_id = r.id
                        AND d.deleted_at IS NULL) AS subdomain_count,
@@ -236,6 +238,55 @@ impl WebRepository {
             return Err(WebServiceError::not_found("root domain not found"));
         }
         Ok(())
+    }
+
+    /// Partial edit of a tenant root-domain Zone.
+    ///
+    /// One statement covers every subset the callers send: `COALESCE` makes an
+    /// absent member a no-op, which is exactly what the request contract means
+    /// by "leave it as it is". A separate statement per subset would let the
+    /// edit form and the pause/resume action drift apart in what they touch.
+    ///
+    /// `hostname` is not in the `SET` list: the apex is the row's identity, and
+    /// the tenant-level uniqueness index is built on it. Renaming a root domain
+    /// is a delete-and-recreate, not an edit.
+    pub(super) async fn update_root_domain_repo(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        request: &UpdateRootDomainRequest,
+    ) -> WebServiceResult<RootDomainResponse> {
+        let now = now_rfc3339();
+        let now_expression = instant_write_expression("$7");
+        let sql = format!(
+            "UPDATE webserver_root_domain
+             SET display_name = COALESCE($3, display_name),
+                 dns_provider = COALESCE($4, dns_provider),
+                 provider_zone_ref = COALESCE($5, provider_zone_ref),
+                 status = COALESCE($6, status),
+                 updated_at = {now_expression}, version = version + 1
+             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL"
+        );
+        let result = sqlx::query(audited_sql(&sql))
+            .bind(tenant_id)
+            .bind(root_domain_id)
+            .bind(request.display_name.as_deref())
+            .bind(request.dns_provider.as_deref())
+            .bind(request.provider_zone_ref.as_deref())
+            .bind(request.status)
+            .bind(&now)
+            .execute(&self.pool)
+            .await
+            .map_err(|error| store_error("update webserver_root_domain", error))?;
+        if result.rows_affected() == 0 {
+            return Err(WebServiceError::not_found("root domain not found"));
+        }
+
+        // Re-read through the same projection the list and retrieve use, so the
+        // counters a caller sees after an edit are the ones the next read will
+        // show rather than values assembled from the update.
+        self.retrieve_root_domain_repo(tenant_id, root_domain_id)
+            .await
     }
 
     pub(super) async fn list_root_domain_hostnames_repo(
@@ -547,6 +598,9 @@ fn map_root_domain_row(row: &EngineRow) -> Result<RootDomainResponse, sqlx::Erro
     Ok(RootDomainResponse {
         id: row.try_get("uuid")?,
         hostname: row.try_get("hostname")?,
+        display_name: row.try_get("display_name")?,
+        dns_provider: row.try_get("dns_provider")?,
+        provider_zone_ref: row.try_get("provider_zone_ref")?,
         status: row.try_get("status")?,
         subdomain_count: row.try_get("subdomain_count")?,
         bound_subdomain_count: row.try_get("bound_subdomain_count")?,

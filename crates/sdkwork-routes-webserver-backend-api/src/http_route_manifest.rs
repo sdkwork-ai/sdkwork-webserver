@@ -106,6 +106,12 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "rootDomains.retrieve",
     ).with_required_permission("web.sites.read"),
     HttpRoute::dual_token(
+        HttpMethod::Patch,
+        "/backend/v3/api/root_domains/{rootDomainId}",
+        "domain",
+        "rootDomains.update",
+    ).with_required_permission("web.sites.write").with_idempotent(true),
+    HttpRoute::dual_token(
         HttpMethod::Delete,
         "/backend/v3/api/root_domains/{rootDomainId}",
         "domain",
@@ -530,6 +536,18 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "/backend/v3/api/platform_traffic_usage",
         "trafficUsage",
         "platformTrafficUsages.retrieve",
+    ).with_required_permission("web.traffic.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/metrics_summaries",
+        "metricsSummary",
+        "metricsSummaries.retrieve",
+    ).with_required_permission("web.traffic.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/platform_metrics_summaries",
+        "metricsSummary",
+        "platformMetricsSummaries.retrieve",
     ).with_required_permission("web.traffic.read"),
 ];
 
