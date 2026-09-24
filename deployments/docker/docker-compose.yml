@@ -89,6 +89,19 @@ x-webserver-common: &webserver-common
     retries: 8
     start_period: 120s
 
+x-certificate-worker-common: &certificate-worker-common
+  image: registry.sdkwork.com/apps/sdkwork-webserver-standalone:${SDKWORK_WEBSERVER_IMAGE_TAG:-0.1.0}
+  restart: unless-stopped
+  logging: *default-logging
+  # The certificate worker is the only executor of webserver_certificate_operation
+  # (issue/renew/revoke). Without it the management API accepts operations that
+  # stay queued forever, so every compose topology that runs the gateway also
+  # runs one worker replica (claims are SKIP LOCKED + lease fenced, so extra
+  # replicas are safe but unnecessary).
+  command: ["certificate-worker"]
+  volumes:
+    - ../../bin/container/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -315,6 +328,155 @@ services:
       - ../../../sdkwork-deployments/database:/app/share/sdkwork/deploy/database:ro
 
     logging: *default-logging
+
+  certificate-worker-development:
+    <<: *certificate-worker-common
+    profiles: [development]
+    container_name: sdkwork-webserver-certificate-worker-development
+    env_file:
+      - path: env/development.env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      webserver-development:
+        condition: service_healthy
+    environment:
+      SDKWORK_WEBSERVER_ENVIRONMENT: development
+      SDKWORK_WEBSERVER_PROFILE_ID: standalone.development
+      SDKWORK_DATABASE_ENGINE: postgresql
+      SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-postgres}
+      SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
+      SDKWORK_DATABASE_NAME: ${WEBSERVER_POSTGRES_DEV_DB:-sdkwork_ai_dev}
+      SDKWORK_DATABASE_SCHEMA: ${WEBSERVER_POSTGRES_DEV_DB:-sdkwork_ai_dev}
+      SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC: "false"
+      SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_DEV_USER:-sdkwork_ai_dev}
+      SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_DEV_PASSWORD:-sdkworkdev123}
+      SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-disable}
+      SDKWORK_DATABASE_MAX_CONNECTIONS: "4"
+      SDKWORK_WEBSERVER_REDIS_ENABLED: "true"
+      SDKWORK_WEBSERVER_REDIS_HOST: ${WEBSERVER_REDIS_HOST:-redis}
+      SDKWORK_WEBSERVER_REDIS_PORT: ${WEBSERVER_REDIS_PORT:-6379}
+      SDKWORK_WEBSERVER_REDIS_DATABASE: "0"
+      SDKWORK_WEBSERVER_REDIS_TLS: ${WEBSERVER_REDIS_TLS:-false}
+      SDKWORK_WEBSERVER_REDIS_PASSWORD: ${WEBSERVER_REDIS_PASSWORD:-}
+      SDKWORK_WEBSERVER_CERT_WORKER_ID: ${SDKWORK_WEBSERVER_CERT_WORKER_ID:-certificate-worker-development-0}
+    volumes:
+      - webserver-secrets-development:/etc/sdkwork/webserver/secrets
+      - webserver-data-development:/var/lib/sdkwork/webserver
+      - ../../bin/container/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
+
+  certificate-worker-test:
+    <<: *certificate-worker-common
+    profiles: [test]
+    container_name: sdkwork-webserver-certificate-worker-test
+    env_file:
+      - path: env/test.env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      webserver-test:
+        condition: service_healthy
+    environment:
+      SDKWORK_WEBSERVER_ENVIRONMENT: test
+      SDKWORK_WEBSERVER_PROFILE_ID: standalone.test
+      SDKWORK_DATABASE_ENGINE: postgresql
+      SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-postgres}
+      SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
+      SDKWORK_DATABASE_NAME: ${WEBSERVER_POSTGRES_TEST_DB:-sdkwork_ai_test}
+      SDKWORK_DATABASE_SCHEMA: ${WEBSERVER_POSTGRES_TEST_DB:-sdkwork_ai_test}
+      SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC: "false"
+      SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_TEST_USER:-sdkwork_ai_test}
+      SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_TEST_PASSWORD:-sdkworktest123}
+      SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-disable}
+      SDKWORK_DATABASE_MAX_CONNECTIONS: "4"
+      SDKWORK_WEBSERVER_REDIS_ENABLED: "true"
+      SDKWORK_WEBSERVER_REDIS_HOST: ${WEBSERVER_REDIS_HOST:-redis}
+      SDKWORK_WEBSERVER_REDIS_PORT: ${WEBSERVER_REDIS_PORT:-6379}
+      SDKWORK_WEBSERVER_REDIS_DATABASE: "1"
+      SDKWORK_WEBSERVER_REDIS_TLS: ${WEBSERVER_REDIS_TLS:-false}
+      SDKWORK_WEBSERVER_REDIS_PASSWORD: ${WEBSERVER_REDIS_PASSWORD:-}
+      SDKWORK_WEBSERVER_CERT_WORKER_ID: ${SDKWORK_WEBSERVER_CERT_WORKER_ID:-certificate-worker-test-0}
+    volumes:
+      - webserver-secrets-test:/etc/sdkwork/webserver/secrets
+      - webserver-data-test:/var/lib/sdkwork/webserver
+      - ../../bin/container/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
+
+  certificate-worker-staging:
+    <<: *certificate-worker-common
+    profiles: [staging]
+    container_name: sdkwork-webserver-certificate-worker-staging
+    env_file:
+      - path: env/staging.env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      webserver-staging:
+        condition: service_healthy
+    environment:
+      SDKWORK_WEBSERVER_ENVIRONMENT: staging
+      SDKWORK_WEBSERVER_PROFILE_ID: standalone.staging
+      SDKWORK_DATABASE_ENGINE: postgresql
+      SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-postgres}
+      SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
+      SDKWORK_DATABASE_NAME: ${WEBSERVER_POSTGRES_STAGING_DB:-sdkwork_ai_staging}
+      SDKWORK_DATABASE_SCHEMA: ${WEBSERVER_POSTGRES_STAGING_DB:-sdkwork_ai_staging}
+      SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC: "false"
+      SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_STAGING_USER:-sdkwork_ai_staging}
+      SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_STAGING_PASSWORD:-sdkworkstaging123}
+      SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-disable}
+      SDKWORK_DATABASE_MAX_CONNECTIONS: "4"
+      SDKWORK_WEBSERVER_REDIS_ENABLED: "true"
+      SDKWORK_WEBSERVER_REDIS_HOST: ${WEBSERVER_REDIS_HOST:-redis}
+      SDKWORK_WEBSERVER_REDIS_PORT: ${WEBSERVER_REDIS_PORT:-6379}
+      SDKWORK_WEBSERVER_REDIS_DATABASE: "2"
+      SDKWORK_WEBSERVER_REDIS_TLS: ${WEBSERVER_REDIS_TLS:-false}
+      SDKWORK_WEBSERVER_REDIS_PASSWORD: ${WEBSERVER_REDIS_PASSWORD:-}
+      SDKWORK_WEBSERVER_CERT_WORKER_ID: ${SDKWORK_WEBSERVER_CERT_WORKER_ID:-certificate-worker-staging-0}
+    volumes:
+      - webserver-secrets-staging:/etc/sdkwork/webserver/secrets
+      - webserver-data-staging:/var/lib/sdkwork/webserver
+      - ../../bin/container/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
+
+  certificate-worker-production:
+    <<: *certificate-worker-common
+    profiles: [production]
+    container_name: sdkwork-webserver-certificate-worker-production
+    env_file:
+      - path: env/production.env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      webserver-production:
+        condition: service_healthy
+    environment:
+      SDKWORK_WEBSERVER_ENVIRONMENT: production
+      SDKWORK_WEBSERVER_PROFILE_ID: standalone.production
+      SDKWORK_DATABASE_ENGINE: postgresql
+      SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-postgres}
+      SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
+      SDKWORK_DATABASE_NAME: ${WEBSERVER_POSTGRES_PROD_DB:-sdkwork_ai_prod}
+      SDKWORK_DATABASE_SCHEMA: ${WEBSERVER_POSTGRES_PROD_DB:-sdkwork_ai_prod}
+      SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC: "false"
+      SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_PROD_USER:-sdkwork_ai_prod}
+      SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_PROD_PASSWORD:-sdkworkprod123}
+      SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-disable}
+      SDKWORK_DATABASE_MAX_CONNECTIONS: "4"
+      SDKWORK_WEBSERVER_REDIS_ENABLED: "true"
+      SDKWORK_WEBSERVER_REDIS_HOST: ${WEBSERVER_REDIS_HOST:-redis}
+      SDKWORK_WEBSERVER_REDIS_PORT: ${WEBSERVER_REDIS_PORT:-6379}
+      SDKWORK_WEBSERVER_REDIS_DATABASE: "2"
+      SDKWORK_WEBSERVER_REDIS_TLS: ${WEBSERVER_REDIS_TLS:-false}
+      SDKWORK_WEBSERVER_REDIS_PASSWORD: ${WEBSERVER_REDIS_PASSWORD:-}
+      SDKWORK_WEBSERVER_CERT_WORKER_ID: ${SDKWORK_WEBSERVER_CERT_WORKER_ID:-certificate-worker-production-0}
+    volumes:
+      - webserver-secrets-production:/etc/sdkwork/webserver/secrets
+      - webserver-data-production:/var/lib/sdkwork/webserver
+      - ../../bin/container/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
+
 volumes:
   webserver-postgres-data:
   webserver-redis-data:

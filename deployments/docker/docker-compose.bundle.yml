@@ -141,7 +141,6 @@ x-webserver-common: &webserver-common
     # passes explicitly mapped variables into the container (pass-through trap).
     # Encrypted tenant secret_refs cannot be decoded without it.
     SDKWORK_IAM_SIGNING_MASTER_SECRET: ${SDKWORK_IAM_SIGNING_MASTER_SECRET:-}
-    SDKWORK_WEBSERVER_CERT_WORKER_ID: ${SDKWORK_WEBSERVER_CERT_WORKER_ID:-certificate-worker-0}
     # Adaptive Web static roots (SDKWORK_WEBSERVER_SPEC.md §13.6): the webserver
     # process serves its own standalone build from the checkout when overridden,
     # falling back to the bundled image roots.
@@ -282,6 +281,69 @@ services:
       - "${SDKWORK_WEBSERVER_MGMT_BIND_IP:-127.0.0.1}:${SDKWORK_WEBSERVER_MGMT_HOST_PORT:?required}:3800"
 
     logging: *default-logging
+
+  # One certificate worker per environment (profile `worker`; deploy.sh starts
+  # it after instance 1 migrated the database). It is the only executor of
+  # webserver_certificate_operation — issue/renew/revoke — and publishes node
+  # TLS material into the shared webserver-data volume the gateway instances
+  # serve. Claims are FOR UPDATE SKIP LOCKED with expiring leases and fencing
+  # tokens, so extra replicas are safe but unnecessary.
+  certificate-worker:
+    <<: *webserver-common
+    profiles: [worker]
+    command: ["certificate-worker"]
+    deploy:
+      resources:
+        limits:
+          cpus: "${SDKWORK_WEBSERVER_WORKER_CPU_LIMIT:-1.0}"
+          memory: ${SDKWORK_WEBSERVER_WORKER_MEMORY_LIMIT:-1g}
+          pids: 128
+        reservations:
+          cpus: "0.25"
+          memory: 256m
+    # The worker has no HTTP surface; deploy.sh liveness falls back to the
+    # container process state.
+    healthcheck:
+      disable: true
+    # Overridden from *webserver-common: the space checkouts and drive cache
+    # bind mounts are gateway concerns the worker never touches. The shared
+    # secrets volume carries the encryption keys the worker decrypts material
+    # with; the shared data volume carries ACME accounts and TLS material.
+    volumes:
+      - webserver-secrets:/etc/sdkwork/webserver/secrets
+      - webserver-data:/var/lib/sdkwork/webserver
+    environment:
+      SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT: "3800"
+      SDKWORK_WEBSERVER_ENVIRONMENT: ${SDKWORK_WEBSERVER_ENVIRONMENT:?required}
+      SDKWORK_WEBSERVER_PROFILE_ID: ${SDKWORK_WEBSERVER_PROFILE_ID:-standalone.${SDKWORK_WEBSERVER_ENVIRONMENT}}
+      SDKWORK_WEBSERVER_PRIMARY_DOMAIN: ${SDKWORK_WEBSERVER_PRIMARY_DOMAIN:-sdkwork.com}
+      SDKWORK_WEBSERVER_PUBLIC_SCHEME: ${SDKWORK_WEBSERVER_PUBLIC_SCHEME:-http}
+      SDKWORK_WEBSERVER_APPLICATION_PUBLIC_HTTP_URL: ${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_HTTP_URL:-}
+      SDKWORK_WEBSERVER_APPLICATION_PUBLIC_INGRESS_BIND: ${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_INGRESS_BIND:-0.0.0.0:3800}
+      SDKWORK_WEBSERVER_ACME_PROFILE: ${SDKWORK_WEBSERVER_ACME_PROFILE:-staging}
+      SDKWORK_WEBSERVER_ACME_DIRECTORY_URL: ${SDKWORK_WEBSERVER_ACME_DIRECTORY_URL:-}
+      SDKWORK_WEBSERVER_ACME_CONTACT_EMAIL: ${SDKWORK_WEBSERVER_ACME_CONTACT_EMAIL:-admin@localhost}
+      SDKWORK_DEPLOY_SANDBOX_KEY: ${SDKWORK_DEPLOY_SANDBOX_KEY:-deploy.local.opt_deploy}
+      SDKWORK_DEPLOY_SANDBOX_ROOT: ${SDKWORK_DEPLOY_SANDBOX_ROOT:-/opt/deploy}
+      SDKWORK_DATABASE_ENGINE: postgresql
+      SDKWORK_DATABASE_HOST: ${SDKWORK_DATABASE_HOST:-postgres}
+      SDKWORK_DATABASE_PORT: ${SDKWORK_DATABASE_PORT:-5432}
+      SDKWORK_DATABASE_NAME: ${SDKWORK_DATABASE_NAME:-sdkwork_ai_dev}
+      SDKWORK_DATABASE_SCHEMA: ${SDKWORK_DATABASE_SCHEMA:-${SDKWORK_DATABASE_NAME:-sdkwork_ai_dev}}
+      SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC: ${SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC:-false}
+      SDKWORK_DATABASE_USERNAME: ${SDKWORK_DATABASE_USERNAME:-sdkwork_ai_dev}
+      SDKWORK_DATABASE_PASSWORD: ${SDKWORK_DATABASE_PASSWORD:-}
+      SDKWORK_DATABASE_SSL_MODE: ${SDKWORK_DATABASE_SSL_MODE:-disable}
+      SDKWORK_DATABASE_MAX_CONNECTIONS: 4
+      SDKWORK_WEBSERVER_REDIS_ENABLED: "true"
+      SDKWORK_WEBSERVER_REDIS_HOST: ${SDKWORK_WEBSERVER_REDIS_HOST:-redis}
+      SDKWORK_WEBSERVER_REDIS_PORT: ${SDKWORK_WEBSERVER_REDIS_PORT:-6379}
+      SDKWORK_WEBSERVER_REDIS_DATABASE: ${SDKWORK_WEBSERVER_REDIS_DATABASE:-0}
+      SDKWORK_WEBSERVER_REDIS_TLS: ${SDKWORK_WEBSERVER_REDIS_TLS:-false}
+      SDKWORK_WEBSERVER_REDIS_PASSWORD: ${SDKWORK_WEBSERVER_REDIS_PASSWORD:-}
+      SDKWORK_WEBSERVER_CERT_WORKER_ID: ${SDKWORK_WEBSERVER_CERT_WORKER_ID:-certificate-worker-0}
+      RUST_LOG: ${RUST_LOG:-info}
+
 networks:
   sdkwork:
     name: sdkwork-webserver-${SDKWORK_WEBSERVER_ENVIRONMENT:?required}

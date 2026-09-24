@@ -296,6 +296,7 @@ case "${REPLICAS}" in ''|*[!0-9]*) die "--replicas must be a positive integer" ;
 
 DEPS_PROJECT="sdkwork-webserver-${ENVIRONMENT}-deps"
 GATEWAY_PROJECT="sdkwork-webserver-${ENVIRONMENT}-gateway"
+WORKER_PROJECT="sdkwork-webserver-${ENVIRONMENT}-worker"
 NETWORK="sdkwork-webserver-${ENVIRONMENT}"
 HEALTH_TIMEOUT="${SDKWORK_DEPLOY_HEALTH_TIMEOUT:-600}"
 
@@ -381,6 +382,22 @@ ensure_gateway() {
   if ! wait_container_healthy "${GATEWAY_PROJECT}" gateway "${SDKWORK_DEPLOY_GATEWAY_HEALTH_TIMEOUT:-180}"; then
     info "warning: gateway sibling not healthy; module /api/ will 504 until it is fixed"
   fi
+}
+
+# --- certificate worker (one per environment) -----------------------------------
+# The worker is the only executor of webserver_certificate_operation. It runs
+# after instance 1 migrated the database and shares the per-environment secrets
+# and data volumes so ACME accounts and TLS material stay consistent with the
+# instances that serve them.
+compose_worker() {
+  docker compose -p "${WORKER_PROJECT}" --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" --profile worker "$@"
+}
+
+start_worker() {
+  export_instance_env 1
+  run docker compose -p "${WORKER_PROJECT}" --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" --profile worker up -d
+  wait_container_healthy "${WORKER_PROJECT}" certificate-worker "${HEALTH_TIMEOUT}" \
+    || die "certificate worker failed readiness"
 }
 
 # --- instances -------------------------------------------------------------------
@@ -476,6 +493,7 @@ apply() {
     wait_container_healthy "sdkwork-webserver-${ENVIRONMENT}-i${index}" webserver "${HEALTH_TIMEOUT}" \
       || die "webserver instance ${index} failed readiness"
   done
+  start_worker
   info "environment ${ENVIRONMENT}: ${REPLICAS} instance(s) applied"
   info "instance management ports: $((PORT_BASE))..$((PORT_BASE + REPLICAS - 1)) -> 3800"
   if [ -f "${COMPOSE_EDGE_FILE}" ]; then
@@ -502,6 +520,11 @@ lifecycle() {
     run docker compose -p "sdkwork-webserver-${ENVIRONMENT}-i${index}" "${INSTANCE_ENV_FILE_ARGS[@]}" \
       -f "${COMPOSE_FILE}" --profile instance "${verb}"
   done
+  if [ "${verb}" = "start" ]; then
+    start_worker
+  else
+    run docker compose -p "${WORKER_PROJECT}" --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" --profile worker "${verb}"
+  fi
   if [ -f "${COMPOSE_GATEWAY_FILE}" ]; then
     export_instance_env 1
     run docker compose -p "${GATEWAY_PROJECT}" --env-file "${ENV_FILE}" -f "${COMPOSE_GATEWAY_FILE}" "${verb}" 2>/dev/null || true
@@ -516,6 +539,7 @@ down() {
     run docker compose -p "sdkwork-webserver-${ENVIRONMENT}-i${index}" "${INSTANCE_ENV_FILE_ARGS[@]}" \
       -f "${COMPOSE_FILE}" --profile instance down
   done
+  run docker compose -p "${WORKER_PROJECT}" --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" --profile worker down
   if [ "${EXTERNAL}" != "1" ]; then
     export_instance_env 1
     run docker compose -p "${DEPS_PROJECT}" --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" --profile deps down
@@ -551,6 +575,8 @@ ps() {
     info "deps:"
     docker compose -p "${DEPS_PROJECT}" --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" --profile deps ps
   fi
+  info "certificate worker:"
+  docker compose -p "${WORKER_PROJECT}" --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" --profile worker ps
 }
 
 logs() {

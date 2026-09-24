@@ -6,6 +6,7 @@ CONFIG_ROOT="${SDKWORK_WEBSERVER_CONFIG_ROOT:-/etc/sdkwork/webserver}"
 SECRETS_ROOT="${CONFIG_ROOT}/secrets"
 RUNTIME_CONFIG_FILE="${CONFIG_ROOT}/config.toml"
 GATEWAY_BINARY="/app/bin/sdkwork-api-webserver-standalone-gateway"
+WORKER_BINARY="/app/bin/sdkwork-webserver-certificate-worker"
 PLATFORM_GATEWAY_BINARY="${SDKWORK_MODULE_API_GATEWAY_BINARY:-/app/bin/sdkwork-api-cloud-gateway}"
 PLATFORM_GATEWAY_INSTALL_ROOT="${SDKWORK_MODULE_API_GATEWAY_INSTALL_ROOT:-/opt/sdkwork/api-gateway}"
 PLATFORM_GATEWAY_CONFIG="${SDKWORK_MODULE_API_GATEWAY_CONFIG_FILE:-/etc/sdkwork/api-gateway/sdkwork-api-cloud-gateway.toml}"
@@ -2265,6 +2266,29 @@ main() {
   if ! resolve_gateway_binary; then
     log "gateway binary is missing at ${GATEWAY_BINARY}"
     exit 1
+  fi
+
+  # Certificate-worker fast path: the worker shares the gateway image and its
+  # generated config.toml, but it must not clone module workspaces, materialize
+  # module imports, or self-issue bootstrap certificates the way the gateway
+  # bootstrap does. Prepare only the secret files the generated configuration
+  # references, render that configuration from the same env the gateway reads,
+  # and exec the worker. Skipping the full bootstrap also keeps a worker
+  # replica from racing the gateway over module import state.
+  if [ "${1:-}" = "certificate-worker" ]; then
+    if [ ! -x "${WORKER_BINARY}" ]; then
+      log "certificate worker binary is missing at ${WORKER_BINARY}"
+      exit 1
+    fi
+    apply_primary_domain
+    ensure_database_secret
+    ensure_drive_delivery_cache_root
+    for secret_name in encryption-key deploy-encryption-key; do
+      ensure_secret_file "${secret_name}"
+    done
+    render_runtime_config
+    log "starting certificate worker"
+    exec_as_service_user "${WORKER_BINARY}"
   fi
 
   apply_primary_domain
