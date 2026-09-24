@@ -564,7 +564,6 @@ impl WebRepository {
         tenant_id: i64,
         application_id: &str,
     ) -> WebServiceResult<ApplicationResponse> {
-        use sqlx::Row;
         let site_id = self.resolve_site_id_repo(tenant_id, application_id).await?;
         let mut tx = self
             .pool

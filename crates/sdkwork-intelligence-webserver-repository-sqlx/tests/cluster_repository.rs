@@ -538,7 +538,12 @@ async fn verify_operator_status_ownership_and_probe_latch(context: &TestContext)
         .await
         .expect("default cluster");
     let host = repository
-        .upsert_cluster_host(host_write(0, cluster.cluster_id, "owner-host", "mc-owner-host"))
+        .upsert_cluster_host(host_write(
+            0,
+            cluster.cluster_id,
+            "owner-host",
+            "mc-owner-host",
+        ))
         .await
         .expect("ownership host");
     let instance = repository
@@ -640,7 +645,10 @@ async fn verify_operator_status_ownership_and_probe_latch(context: &TestContext)
         assert_eq!(outcome.eject_transition, expected == 3);
     }
     let ejected = instance_state(context, instance.id).await;
-    assert_eq!(ejected.status, 4, "an ejected instance is reported as error");
+    assert_eq!(
+        ejected.status, 4,
+        "an ejected instance is reported as error"
+    );
     assert_eq!(ejected.probe_failures, 3);
     let ejected_at = ejected
         .ejected_at
@@ -727,7 +735,12 @@ async fn verify_operator_rename_survives_re_registration(context: &TestContext) 
         .expect("default cluster");
 
     let host = repository
-        .upsert_cluster_host(host_write(0, cluster.cluster_id, "rename-host", "mc-rename-host"))
+        .upsert_cluster_host(host_write(
+            0,
+            cluster.cluster_id,
+            "rename-host",
+            "mc-rename-host",
+        ))
         .await
         .expect("rename host");
     // First registration seeds the name from the machine's own report.
@@ -756,7 +769,12 @@ async fn verify_operator_rename_survives_re_registration(context: &TestContext) 
     // 2. The node re-registers: same machine code, and it reports its own
     //    default name again.
     repository
-        .upsert_cluster_host(host_write(0, cluster.cluster_id, "rename-host", "mc-rename-host"))
+        .upsert_cluster_host(host_write(
+            0,
+            cluster.cluster_id,
+            "rename-host",
+            "mc-rename-host",
+        ))
         .await
         .expect("re-register host");
 
@@ -839,7 +857,12 @@ async fn verify_machine_absence_does_not_erase_operator_values(context: &TestCon
         .await
         .expect("default cluster");
     let host = repository
-        .upsert_cluster_host(host_write(0, cluster.cluster_id, "absence-host", "mc-absence-host"))
+        .upsert_cluster_host(host_write(
+            0,
+            cluster.cluster_id,
+            "absence-host",
+            "mc-absence-host",
+        ))
         .await
         .expect("absence host");
     let instance = repository
@@ -942,14 +965,17 @@ struct InstanceState {
 }
 
 async fn instance_state(context: &TestContext, instance_id: i64) -> InstanceState {
-    let row = sqlx::query_as::<_, (
-        i32,
-        i32,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        i32,
-    )>(
+    let row = sqlx::query_as::<
+        _,
+        (
+            i32,
+            i32,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            i32,
+        ),
+    >(
         "SELECT status, probe_failures, CAST(ejected_at AS TEXT), CAST(last_online_at AS TEXT),
                 CAST(last_heartbeat_at AS TEXT), restart_count
          FROM webserver_cluster_instance WHERE id = $1",
@@ -1177,7 +1203,19 @@ async fn verify_liveness_sweep_events_and_pagination(context: &TestContext) {
 
     // Instance listing filters by health state and paginates by cursor.
     let unhealthy_page = repository
-        .list_cluster_instances(None, None, None, Some("UNHEALTHY"), None, None, &[], None, None, 200, None)
+        .list_cluster_instances(
+            None,
+            None,
+            None,
+            Some("UNHEALTHY"),
+            None,
+            None,
+            &[],
+            None,
+            None,
+            200,
+            None,
+        )
         .await
         .expect("unhealthy instances");
     assert!(unhealthy_page

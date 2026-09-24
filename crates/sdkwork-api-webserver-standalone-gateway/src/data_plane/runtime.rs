@@ -39,7 +39,6 @@ const MAX_TLS_MATERIAL_BYTES: u64 = 1024 * 1024;
 /// unchanged apart from a warning (PRD SS77).
 fn build_tunnel(
     config: &sdkwork_webserver_core::WebServerAppConfig,
-    metrics: &Arc<DataPlaneMetrics>,
 ) -> (
     Option<Arc<sdkwork_webserver_tunnel::gateway::GatewayShared>>,
     Option<sdkwork_webserver_tunnel::TunnelGatewayOptions>,
@@ -336,7 +335,7 @@ impl DataPlaneRuntime {
             Duration::from_millis(app.config().limits.max_connection_age_ms),
             metrics.clone(),
         );
-        let (tunnel, tunnel_options) = build_tunnel(app.config(), &metrics);
+        let (tunnel, tunnel_options) = build_tunnel(app.config());
         let initial = RuntimeGeneration::build(app, revision, 1, metrics.clone())?;
         let limit_req = ArcSwap::from_pointee(LimitReqRuntime::from_zones(
             &initial.app.config().limit_req_zones,

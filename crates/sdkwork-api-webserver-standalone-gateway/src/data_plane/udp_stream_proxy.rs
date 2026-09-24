@@ -65,8 +65,44 @@ struct Session {
     _permit: OwnedSemaphorePermit,
 }
 
+/// Per-listener session table shared between the accept loop and the spawned
+/// new-session setup tasks. Locks are held only across map operations.
+#[derive(Default)]
+struct UdpSessions {
+    sessions: HashMap<SocketAddr, Arc<Mutex<Session>>>,
+    /// Client addresses whose session setup task is still resolving/binding.
+    /// Datagrams from a pending address are dropped (UDP senders retransmit);
+    /// without this guard every retransmission would spawn a second setup.
+    pending: HashMap<SocketAddr, Instant>,
+}
+
+impl UdpSessions {
+    fn reap(&mut self, now: Instant, proxy_timeout: Duration) {
+        // Idle sessions older than proxy_timeout are reaped; the session's
+        // own forwarder also stops after the same window.
+        self.sessions.retain(|_, session| {
+            now.duration_since(
+                session
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .last_activity,
+            ) < proxy_timeout
+        });
+        // Pending entries clear themselves on every setup exit path; this is
+        // a crash-only backstop so a cancelled task cannot wedge an address.
+        self.pending
+            .retain(|_, started| now.duration_since(*started) < UDP_TARGET_RESOLVE_TIMEOUT * 2);
+    }
+}
+
 /// Accept loop for one UDP stream listener. Targets are resolved from the
 /// current configuration generation (reloads take effect per datagram).
+///
+/// New-session setup (DNS resolve + upstream bind) runs in a spawned task so
+/// one slow resolution cannot stall the single datagram loop: a flood of
+/// spoofed source addresses is bounded by `connection_permits`, which the
+/// pending setup holds for its whole lifetime, and datagrams for still-pending
+/// addresses are dropped rather than queued.
 pub(crate) async fn serve_udp_stream_listener(
     runtime: Arc<super::DataPlaneRuntime>,
     listener: PreparedUdpStreamListener,
@@ -78,7 +114,7 @@ pub(crate) async fn serve_udp_stream_listener(
         proxy_timeout,
         round_robin,
     } = listener;
-    let mut sessions: HashMap<SocketAddr, Arc<Mutex<Session>>> = HashMap::new();
+    let shared = Arc::new(Mutex::new(UdpSessions::default()));
     let mut buffer = vec![0_u8; UDP_DATAGRAM_MAX_BYTES];
     loop {
         tokio::select! {
@@ -97,53 +133,59 @@ pub(crate) async fn serve_udp_stream_listener(
                     continue;
                 };
                 let now = Instant::now();
-                // Idle sessions older than proxy_timeout are reaped; the
-                // session's own forwarder also stops after the same window.
-                sessions.retain(|_, session| {
-                    now.duration_since(session.lock().map_or(now, |guard| guard.last_activity)) < proxy_timeout
-                });
-                let session = match sessions.entry(client) {
-                    std::collections::hash_map::Entry::Occupied(mut occupied) => {
-                        if let Ok(mut guard) = occupied.get_mut().lock() {
-                            guard.last_activity = now;
+                let session = {
+                    let mut state = shared
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    state.reap(now, proxy_timeout);
+                    match state.sessions.get(&client) {
+                        Some(session) => {
+                            if let Ok(mut guard) = session.lock() {
+                                guard.last_activity = now;
+                            }
+                            Some(session.clone())
                         }
-                        occupied.into_mut().clone()
+                        None => {
+                            if state.pending.contains_key(&client) {
+                                // Setup in flight; the client retransmits.
+                                continue;
+                            }
+                            state.pending.insert(client, now);
+                            let Some((host, port, _health)) = resolve_udp_target(
+                                &generation,
+                                &stream_config.target,
+                                client.ip(),
+                                &round_robin,
+                            ) else {
+                                state.pending.remove(&client);
+                                continue;
+                            };
+                            // Acquiring the permit before the spawn keeps the
+                            // count of resolving + live sessions inside the
+                            // listener's connection budget.
+                            let Ok(permit) = runtime.connection_permits.clone().try_acquire_owned()
+                            else {
+                                state.pending.remove(&client);
+                                continue;
+                            };
+                            let first = buffer[..length].to_vec();
+                            tokio::spawn(setup_new_session(
+                                shared.clone(),
+                                client,
+                                first,
+                                host,
+                                port,
+                                proxy_timeout,
+                                permit,
+                            ));
+                            // The setup task forwards this datagram once the
+                            // upstream socket exists.
+                            None
+                        }
                     }
-                    std::collections::hash_map::Entry::Vacant(vacant) => {
-                        let Some((host, port, _health)) = resolve_udp_target(
-                            &generation,
-                            &stream_config.target,
-                            client.ip(),
-                            &round_robin,
-                        ) else {
-                            continue;
-                        };
-                        let Ok(permit) = runtime.connection_permits.clone().try_acquire_owned() else {
-                            continue;
-                        };
-                        let Ok(mut addresses) =
-                            tokio::time::timeout(UDP_TARGET_RESOLVE_TIMEOUT, tokio::net::lookup_host((host.as_str(), port))).await
-                        else {
-                            continue;
-                        };
-                        let Some(target) = addresses.ok().and_then(|mut addresses| addresses.next()) else {
-                            continue;
-                        };
-                        let Ok(upstream) = UdpSocket::bind("0.0.0.0:0").await else {
-                            continue;
-                        };
-                        let upstream = Arc::new(upstream);
-                        let new_session = Arc::new(Mutex::new(Session {
-                            upstream: upstream.clone(),
-                            client,
-                            target,
-                            last_activity: now,
-                            _permit: permit,
-                        }));
-                        spawn_reply_forwarder(new_session.clone(), proxy_timeout);
-                        vacant.insert(new_session.clone());
-                        new_session
-                    }
+                };
+                let Some(session) = session else {
+                    continue;
                 };
                 let send_target = match session.lock() {
                     Ok(guard) => Some((guard.target, guard.upstream.clone())),
@@ -156,11 +198,66 @@ pub(crate) async fn serve_udp_stream_listener(
                     None => Ok(0),
                 };
                 if forwarded.is_err() {
-                    sessions.remove(&client);
+                    shared
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .sessions
+                        .remove(&client);
                 }
             }
         }
     }
+}
+
+/// Resolves and binds one new client session off the accept loop, forwards
+/// the triggering datagram, and starts the reply forwarder. Every failure
+/// path clears the pending marker and drops the permit.
+async fn setup_new_session(
+    shared: Arc<Mutex<UdpSessions>>,
+    client: SocketAddr,
+    first: Vec<u8>,
+    host: String,
+    port: u16,
+    proxy_timeout: Duration,
+    permit: OwnedSemaphorePermit,
+) {
+    let clear_pending = |shared: &Arc<Mutex<UdpSessions>>| {
+        if let Ok(mut state) = shared.lock() {
+            state.pending.remove(&client);
+        }
+    };
+    let resolved = tokio::time::timeout(UDP_TARGET_RESOLVE_TIMEOUT, async {
+        tokio::net::lookup_host((host.as_str(), port))
+            .await
+            .ok()
+            .and_then(|mut addresses| addresses.next())
+    })
+    .await;
+    let Some(target) = resolved.unwrap_or(None) else {
+        clear_pending(&shared);
+        return;
+    };
+    let Ok(upstream) = UdpSocket::bind("0.0.0.0:0").await else {
+        clear_pending(&shared);
+        return;
+    };
+    let upstream = Arc::new(upstream);
+    let new_session = Arc::new(Mutex::new(Session {
+        upstream: upstream.clone(),
+        client,
+        target,
+        last_activity: Instant::now(),
+        _permit: permit,
+    }));
+    {
+        let Ok(mut state) = shared.lock() else {
+            return;
+        };
+        state.pending.remove(&client);
+        state.sessions.insert(client, new_session.clone());
+    }
+    spawn_reply_forwarder(new_session, proxy_timeout);
+    let _ = upstream.send_to(&first, target).await;
 }
 
 fn spawn_reply_forwarder(session: Arc<Mutex<Session>>, proxy_timeout: Duration) {

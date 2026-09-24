@@ -278,8 +278,6 @@ pub(crate) async fn relay_cluster_http(
     visitor_ip: IpAddr,
     mut request: axum::http::Request<Body>,
 ) -> Result<axum::response::Response<Body>, TunnelRelayError> {
-    use std::str::FromStr;
-
     let is_websocket = is_upgrade_request(&request);
     let downstream_upgrade = if is_websocket {
         Some(hyper::upgrade::on(&mut request))
@@ -357,7 +355,7 @@ pub(crate) async fn relay_cluster_http(
         })?;
 
     if is_websocket && response.status() == axum::http::StatusCode::SWITCHING_PROTOCOLS {
-        let mut upstream_upgrade = hyper::upgrade::on(&mut response);
+        let upstream_upgrade = hyper::upgrade::on(&mut response);
         if let Some(downstream) = downstream_upgrade {
             tokio::spawn(async move {
                 let outcome = async {

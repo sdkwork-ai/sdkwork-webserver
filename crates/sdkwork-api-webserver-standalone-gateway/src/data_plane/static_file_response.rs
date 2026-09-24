@@ -480,7 +480,7 @@ mod tests {
     async fn if_match_is_a_precondition_with_412() {
         let temp = NamedTempFile::new().unwrap();
         temp.as_file().write_all(b"0123456789").unwrap();
-        let etag = entity_tag(&temp.as_file().metadata().unwrap()).unwrap();
+        let _etag = entity_tag(&temp.as_file().metadata().unwrap()).unwrap();
         let call = |value: &'static str| {
             let opened_file = opened(&temp);
             async move {

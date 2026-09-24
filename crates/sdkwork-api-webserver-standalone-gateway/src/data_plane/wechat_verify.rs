@@ -32,10 +32,6 @@ use axum::{
     http::{Response, StatusCode},
 };
 
-/// 微信验证文件的响应体上限。与控制面的内容上限一致：微信校验文件是一个
-/// 短 token，这个界只封滥用。
-const MAX_VERIFICATION_BODY_BYTES: usize = 2048;
-
 /// 单个文件名的长度上限，与控制面一致。
 const MAX_VERIFICATION_FILE_NAME_BYTES: usize = 64;
 
@@ -286,7 +282,7 @@ mod tests {
 
     #[tokio::test]
     async fn an_exact_hit_is_served_verbatim() {
-        let mut source = MapSource::default();
+        let source = MapSource::default();
         source
             .files
             .lock()
@@ -303,7 +299,7 @@ mod tests {
 
     #[tokio::test]
     async fn everything_else_falls_through() {
-        let mut source = MapSource::default();
+        let source = MapSource::default();
         source
             .files
             .lock()
@@ -339,7 +335,7 @@ mod tests {
 
     #[tokio::test]
     async fn write_verbs_are_refused_only_where_a_file_exists() {
-        let mut source = MapSource::default();
+        let source = MapSource::default();
         source
             .files
             .lock()

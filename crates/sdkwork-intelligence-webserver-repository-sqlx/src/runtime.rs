@@ -171,14 +171,12 @@ fn certificate_issuer_from_env(
     // The declared challenge method. `AUTO` (the default, and the only sensible
     // one for a deployment that has not thought about it) resolves to HTTP-01
     // for single-domain certificates and to DNS-01 for wildcards.
-    let declared = match std::env::var(sdkwork_webserver_core::runtime_env::ACME_CHALLENGE_METHOD_ENV)
-    {
-        Ok(value) => {
-            sdkwork_webserver_acme_service::DeclaredChallengeMethod::parse(&value)
-                .map_err(|error| format!("ACME challenge method is invalid: {error}"))?
-        }
-        Err(_) => sdkwork_webserver_acme_service::DeclaredChallengeMethod::default(),
-    };
+    let declared =
+        match std::env::var(sdkwork_webserver_core::runtime_env::ACME_CHALLENGE_METHOD_ENV) {
+            Ok(value) => sdkwork_webserver_acme_service::DeclaredChallengeMethod::parse(&value)
+                .map_err(|error| format!("ACME challenge method is invalid: {error}"))?,
+            Err(_) => sdkwork_webserver_acme_service::DeclaredChallengeMethod::default(),
+        };
     issuer.set_declared_challenge_method(declared);
 
     // Attach the cloud DNS accounts. Without this the issuer has no way to
@@ -192,10 +190,9 @@ fn certificate_issuer_from_env(
                 std::path::Path::new(path.trim()),
             )
             .map_err(|error| format!("ACME DNS accounts cannot be loaded: {error}"))?;
-            let registry = sdkwork_webserver_acme_service::DnsCloudAccountRegistry::from_configs(
-                &configs,
-            )
-            .map_err(|error| format!("ACME DNS accounts are invalid: {error}"))?;
+            let registry =
+                sdkwork_webserver_acme_service::DnsCloudAccountRegistry::from_configs(&configs)
+                    .map_err(|error| format!("ACME DNS accounts are invalid: {error}"))?;
             tracing::info!(
                 accounts = registry.len(),
                 zones = %registry

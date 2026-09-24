@@ -134,7 +134,7 @@ async fn sandbox_module() -> Result<WebModule, StandaloneProfileError> {
     let pool = shared_pool(SANDBOX_OWNER)?;
     sdkwork_api_sandbox_assembly::web_module_with_pool(pool)
         .await
-        .map_err(|detail| unavailable(SANDBOX_OWNER, detail))
+        .map_err(|detail| unavailable(SANDBOX_OWNER, detail.to_string()))
 }
 
 /// Deployments domain and certificate management, the standalone control plane.

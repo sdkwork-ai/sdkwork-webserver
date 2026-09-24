@@ -142,9 +142,7 @@ pub fn collect_served_server_names() -> (Vec<String>, ServedNameSources) {
 
     match merged_imports_app_config() {
         Ok(Some(app)) => {
-            let found = server_names_of(&app)
-                .map(str::to_owned)
-                .collect::<Vec<_>>();
+            let found = server_names_of(&app).map(str::to_owned).collect::<Vec<_>>();
             sources.import_names = found.len();
             names.extend(found);
         }
@@ -366,13 +364,15 @@ pub async fn reconcile_served_domains(
             .bind(tenant_id)
             .bind(root_id)
             .bind(&hostname.hostname)
-            .bind(if hostname.wildcard { "WILDCARD" } else { "EXACT" })
+            .bind(if hostname.wildcard {
+                "WILDCARD"
+            } else {
+                "EXACT"
+            })
             .bind(&metadata)
             .fetch_optional(&mut *transaction)
             .await
-            .map_err(|error| {
-                format!("upsert served subdomain {}: {error}", hostname.hostname)
-            })?;
+            .map_err(|error| format!("upsert served subdomain {}: {error}", hostname.hostname))?;
             match hostname_row {
                 Some((_, true)) => summary.hostnames_created += 1,
                 // Already present under this tenant: kept as it is, including the

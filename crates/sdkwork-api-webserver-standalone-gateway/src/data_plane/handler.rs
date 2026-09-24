@@ -20,8 +20,8 @@ use sdkwork_webserver_core::{
     prefer_h5_surface, verify_secure_link,
     website_runtime::{ProviderResourceReference, WebsiteProviderType},
     AccessDecision, AuthBasicDecision, ErrorPageConfig, ResourceConfig, RewriteOutcome,
-    RoutePathType, SecureLinkFailure, SecurityHeadersConfig, SelectedRoute, VirtualHostConfig,
-    XFrameOptions, MAX_REWRITE_INTERNAL_REDIRECTS,
+    RoutePathType, SecureLinkFailure, SecurityHeadersConfig, SelectedRoute, XFrameOptions,
+    MAX_REWRITE_INTERNAL_REDIRECTS,
 };
 use sdkwork_webserver_delivery_runtime::{
     AppConfigProviderPolicy, AppConfigResourceHandler, AppConfigResourceRoute,

@@ -21,8 +21,8 @@ use sdkwork_webserver_contract::{
     UpdateApplicationRequest, UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest,
     WebServiceErrorKind, WebsiteRuntimeSetSnapshot,
 };
-use sdkwork_webserver_core::website_runtime::website_runtime_set_snapshot_sha256;
 use sdkwork_webserver_core::web_platform_operator_tenant_id;
+use sdkwork_webserver_core::website_runtime::website_runtime_set_snapshot_sha256;
 use sdkwork_webserver_database_host::bootstrap_web_database;
 use sqlx::{PgPool, Row};
 

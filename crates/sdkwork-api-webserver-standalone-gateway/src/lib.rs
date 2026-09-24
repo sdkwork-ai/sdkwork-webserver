@@ -62,8 +62,8 @@ pub use packaged_runtime::configure_packaged_runtime_roots_from_env;
 #[cfg(feature = "management")]
 pub use served_domains::{
     collect_served_server_names, derive_served_domains, reconcile_served_domains,
-    reconcile_served_domains_at_startup, ServedDomainsSummary, ServedHostname,
-    ServedNameSources, ServedRootDomain, SERVED_DOMAIN_RECONCILE_ENV,
+    reconcile_served_domains_at_startup, ServedDomainsSummary, ServedHostname, ServedNameSources,
+    ServedRootDomain, SERVED_DOMAIN_RECONCILE_ENV,
 };
 #[cfg(feature = "management")]
 pub use usage_metering::EmbeddedUsageIngestChannel;
