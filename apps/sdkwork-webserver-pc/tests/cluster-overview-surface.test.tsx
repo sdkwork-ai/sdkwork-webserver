@@ -123,7 +123,10 @@ function captureRefreshes() {
     handlers.push(handler as () => void);
     const token = startInterval(handler, timeout);
     tokens.push(token);
-    return token;
+    // The bound DOM `setInterval` returns a numeric token while the vitest
+    // spy is typed against the Node `Timeout` overload; the value is only
+    // ever fed back to `clearInterval`, which accepts the numeric token.
+    return token as unknown as NodeJS.Timeout;
   });
   vi.spyOn(window, "clearInterval").mockImplementation((token) => {
     cleared.push(token);

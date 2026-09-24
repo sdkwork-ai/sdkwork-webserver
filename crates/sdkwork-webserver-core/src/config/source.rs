@@ -639,10 +639,7 @@ mod tests {
         assert_eq!(loaded.app.app_key, DEFAULT_APP_KEY);
         assert_eq!(loaded.app.virtual_hosts.len(), 1);
         let revision = loaded.revision.expect("single-file revision");
-        assert_eq!(
-            revision.size_bytes(),
-            fs::metadata(&toml).unwrap().len() as u64
-        );
+        assert_eq!(revision.size_bytes(), fs::metadata(&toml).unwrap().len());
     }
 
     #[test]

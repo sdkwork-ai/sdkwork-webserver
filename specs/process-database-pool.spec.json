@@ -70,6 +70,14 @@
           ]
         },
         {
+          "module": "sdkwork-sandbox",
+          "ownerAssembly": "sdkwork-api-sandbox-assembly",
+          "poolMode": "installed-process-pool",
+          "evidence": [
+            "../sdkwork-sandbox/crates/sdkwork-api-sandbox-assembly/src/bootstrap.rs"
+          ]
+        },
+        {
           "module": "sdkwork-deployments",
           "ownerAssembly": "sdkwork-api-deployments-assembly",
           "poolMode": "installed-process-pool",
@@ -212,6 +220,35 @@
           ],
           "hostEvidence": [
             "../sdkwork-deployments/crates/sdkwork-deploy-database-host/src/lib.rs"
+          ],
+          "migrationPath": {
+            "entrypoint": "sdkwork_api_webserver_assembly::migrate_database_from_env",
+            "evidence": [
+              "crates/sdkwork-api-webserver-standalone-gateway/src/bootstrap.rs"
+            ]
+          }
+        },
+        {
+          "dependencyAssembly": "sdkwork-api-sandbox-assembly",
+          "module": "sdkwork-sandbox",
+          "order": "sandbox-lifecycle-before-webserver-management-serve",
+          "invokedVia": "owner-assembly",
+          "ownerAssembly": "sdkwork-api-webserver-assembly",
+          "ownerLifecycleEntrypoint": "ensure_database_lifecycle_from_env",
+          "stages": [
+            "init",
+            "migrate",
+            "drift"
+          ],
+          "lifecycleEntrypoint": "bootstrap_database_from_env",
+          "servePathEvidence": [
+            "crates/sdkwork-api-webserver-standalone-gateway/src/main.rs"
+          ],
+          "evidence": [
+            "crates/sdkwork-api-webserver-assembly/src/bootstrap.rs"
+          ],
+          "hostEvidence": [
+            "../sdkwork-sandbox/crates/sdkwork-sandbox-database-host/src/lib.rs"
           ],
           "migrationPath": {
             "entrypoint": "sdkwork_api_webserver_assembly::migrate_database_from_env",

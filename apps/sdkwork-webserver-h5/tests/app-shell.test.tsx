@@ -13,6 +13,12 @@ function applicationFixture(overrides: Partial<DeployAppResponse> = {}): DeployA
   return {
     appKind: "SPA_WEB",
     appStatus: "ACTIVE",
+    // Required by the contract: ownership is tenant-wide for this fixture, and
+    // the base must carry every required prop so the Partial spread cannot
+    // widen them away.
+    ownerType: "TENANT",
+    tenantId: "tenant-1",
+    nginxConfigOverridden: false,
     createdAt: "2026-09-01T00:00:00Z",
     defaultEnvironment: "production",
     id: "app-1",

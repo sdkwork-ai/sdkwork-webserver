@@ -60,7 +60,14 @@ const BASE_ACTIONS = [
   "Details Store Front",
 ];
 
-function stubAppsList(row: typeof APP_ROW = APP_ROW): ReturnType<typeof vi.fn> {
+/**
+ * Row fixture. `ownerId` is part of the AppResponse contract — the server
+ * resolves the USER/ORGANIZATION subject for the owner column — but the
+ * base fixture is a TENANT-scoped row and leaves it unset.
+ */
+type AppRowFixture = typeof APP_ROW & { ownerId?: string };
+
+function stubAppsList(row: AppRowFixture = APP_ROW): ReturnType<typeof vi.fn> {
   const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({
     code: 0,
     data: { items: [row], pageInfo: { mode: "offset", page: 1, pageSize: 20, hasMore: false } },
@@ -222,7 +229,7 @@ describe("applications ledger ownership columns", () => {
     cleanup();
 
     // Personal: the owner column carries the user id the server resolved.
-    stubAppsList({ ...APP_ROW, ownerType: "USER", ownerUserId: "user-42", ownerId: "user-42" });
+    stubAppsList({ ...APP_ROW, ownerType: "USER", ownerId: "user-42" });
     renderAppsSurface();
     const personalRow = (await screen.findByText("Store Front")).closest("tr") as HTMLElement;
     expect(within(personalRow).getByText("Personal app")).toBeTruthy();

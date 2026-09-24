@@ -164,6 +164,10 @@
         "export": "sdkwork_api_deployments_assembly::assemble_same_origin_contribution_with_pool"
       },
       {
+        "name": "sandboxSameOriginModule",
+        "export": "sdkwork_api_sandbox_assembly::web_module_with_pool"
+      },
+      {
         "name": "webserverHttpHost",
         "export": "crate-root",
         "provider": "sdkwork-webserver-http-host"

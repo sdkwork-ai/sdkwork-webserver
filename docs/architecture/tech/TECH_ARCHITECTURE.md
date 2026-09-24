@@ -25,6 +25,7 @@ Specs: ARCHITECTURE_DECISION_SPEC.md, DOCUMENTATION_SPEC.md, RUST_CODE_SPEC.md, 
 - [TECH-cluster-management.md](TECH-cluster-management.md) - distributed cluster plane: hosts, process instances, heartbeats, peer messaging, and admin monitoring.
 - [TECH-runtime-data-plane.md](TECH-runtime-data-plane.md) - target and implementation status for the Rust HTTP/HTTPS request data plane.
 - [TECH-resolution-cache.md](TECH-resolution-cache.md) - multi-layer DNS/IP resolution cache layers, TTL policy, and negative caching.
+- [TECH-tunnel-frp-parity.md](TECH-tunnel-frp-parity.md) - tunnel/FRP feature-parity matrix against frp v0.68.0 (benchmark docs), covering `sdkwork-webserver-tunnel*` and the webserver integration surface.
 - [TECH-app-domain-publishing-fallback.md](TECH-app-domain-publishing-fallback.md) - app publishing default-domain and custom-domain fallback behavior on the data plane.
 - [TECH-standards-alignment.md](TECH-standards-alignment.md) - pointer to the repository standards-alignment matrix.
 - [ADR-20260715-rust-webserver-data-plane.md](../decisions/ADR-20260715-rust-webserver-data-plane.md) - accepted data-plane component and technology decision.
@@ -145,6 +146,36 @@ repository operations fail closed on a missing tenant, the heartbeat observation
 validates against a fingerprint projection instead of decrypting every certificate
 bundle per beat, the bootstrap sequence serializes on a PostgreSQL advisory lock,
 and the retry backoff carries deterministic jitter.
+
+2026-09 hardening round 4 (production-readiness audit remediation): every docker-compose
+topology (per-environment, bundle, demo) now runs the certificate worker — the only
+executor of `webserver_certificate_operation` — through a `certificate-worker`
+entrypoint fast path that renders the shared config.toml and execs the worker without
+the gateway's module-import bootstrap; the backend API no longer publishes
+`applications.deployments.create` / `.rollback` (nothing shipped can advance a
+`webserver_deployment` past `PENDING`, so accepting the work was a fake success; the
+list surface and storage contract remain for the external deployment authority);
+`GET .../clusters/instances/{instanceId}/metrics/history` is a real keyset-cursor
+list (`page_size` + `cursor`, path added to the cursor allowlist) instead of a
+contract the pagination middleware rejected on every documented request, and the
+cursor-mode cluster page envelopes emit the required `pageInfo.pageSize`; cluster
+self-report heartbeats derive `healthState` from the measured RSS against the
+deployment's `SDKWORK_WEBSERVER_MEMORY_LIMIT` (75%/90% -> DEGRADED/UNHEALTHY)
+instead of a constant HEALTHY; UDP stream listeners resolve and bind new sessions
+in spawned tasks holding an admission permit (a spoofed-source flood can no longer
+serialize the single datagram loop behind 5-second DNS lookups); the tunnel gateway
+gates QUIC control and TCP visitor accepts behind `limits.maxConnections`
+(default 8192) so the concurrent task count no longer scales with arrival rate;
+the certificate worker's domain verification sweep shares the operation cycle's
+shutdown/watchdog select; the delivery-runtime resolution cache uses a std Mutex
+for its synchronous critical sections; the keyset-cursor HMAC secret is required
+explicitly in production-like environments (bootstrap fails closed) and never
+falls back to an empty secret in development; and the certificate list computes
+its filtered total with `COUNT(*) OVER ()` instead of duplicating the dual-EXISTS
+predicate in a separate COUNT. Known limitation (documented on
+`CLUSTER_HOP_HEADER`): the east-west hop marker is forgeable by visitors on a
+shared listener; hardening it requires an east-west listener with its own trust
+declaration, which the listener configuration model does not express today.
 
 The host synchronization process is named **Web Node Daemon** in all new
 runtime and operational surfaces. The canonical packaged/development entry

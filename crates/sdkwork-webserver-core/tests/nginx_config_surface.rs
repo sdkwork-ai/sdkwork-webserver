@@ -1143,7 +1143,18 @@ server {{
 fn every_supported_directive_family_materializes() {
     for case in SURFACE {
         let config = materialize_ok(case.nginx);
-        (case.check)(&config);
+        // Surface the case name on failure: a panic inside the check fn
+        // otherwise reports only the line, not which surface drifted.
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            (case.check)(&config);
+        }))
+        .unwrap_or_else(|panic| {
+            let detail = panic
+                .downcast_ref::<String>()
+                .cloned()
+                .unwrap_or_else(|| "non-string panic".to_owned());
+            panic!("surface case '{}' failed: {detail}", case.name);
+        });
     }
 }
 
@@ -1281,7 +1292,7 @@ const FAIL_CLOSED_STREAM: &[(&str, &str, &str)] = &[
 
 #[test]
 fn every_stream_fail_closed_form_produces_a_precise_diagnostic() {
-    for (name, body, expected) in FAIL_CLOSED_STREAM {
+    for (_name, body, expected) in FAIL_CLOSED_STREAM {
         let text = format!(
             "stream {{\n    server {{\n        listen 5100;\n        {body}\n        proxy_pass 127.0.0.1:15100;\n    }}\n}}\n",
         );
@@ -1325,7 +1336,7 @@ const FAIL_CLOSED_TOP: &[(&str, &str, &str)] = &[
 
 #[test]
 fn every_top_level_fail_closed_form_produces_a_precise_diagnostic() {
-    for (name, body, expected) in FAIL_CLOSED_TOP {
+    for (_name, body, expected) in FAIL_CLOSED_TOP {
         materialize_err(body, expected);
     }
 }

@@ -1769,11 +1769,7 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
         assert!(!glob_match("a*b", "ac"));
     }
 
-    fn certificate_fixture(
-        id: &str,
-        server_names: Vec<String>,
-        base: &std::path::Path,
-    ) -> crate::config::CertificateConfig {
+    fn certificate_fixture(id: &str, server_names: Vec<String>) -> crate::config::CertificateConfig {
         crate::config::CertificateConfig {
             id: id.to_owned(),
             server_names,
@@ -1807,7 +1803,6 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
             certificates: vec![certificate_fixture(
                 "sdkwork.com",
                 vec!["im.sdkwork.com".to_owned(), "im-dev.sdkwork.com".to_owned()],
-                &temp,
             )],
             tls_policies: Vec::new(),
             resolvers: Vec::new(),
@@ -1866,7 +1861,6 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
             certificates: vec![certificate_fixture(
                 "example.com",
                 vec!["im.example.com".to_owned()],
-                &temp,
             )],
             tls_policies: Vec::new(),
             resolvers: Vec::new(),

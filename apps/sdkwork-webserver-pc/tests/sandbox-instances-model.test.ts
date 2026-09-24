@@ -53,7 +53,7 @@ function source(relativePath: string): string {
 }
 
 const serviceSource = source("sdkwork-sandbox/crates/sdkwork-intelligence-sandbox-service/src/instance.rs");
-const routePaths = source("sdkwork-sandbox/crates/sdkwork-routes-sandbox-app-api/src/paths.rs");
+const routePaths = source("sdkwork-sandbox/crates/sdkwork-routes-sandbox-internal-api/src/paths.rs");
 const spiSource = source("sdkwork-sandbox/crates/sdkwork-sandbox-provider-spi/src/capability.rs");
 
 /** `MemoryOptimized` → `memory_optimized`. */
@@ -354,15 +354,26 @@ describe("sandbox instance pagination", () => {
 });
 
 describe("sandbox model stays a faithful echo of the Rust authority", () => {
-  it("routes at the path the route crate declares", () => {
-    const collection = routePaths.match(/pub const SANDBOX_INSTANCES: &str = "([^"]+)";/);
-    const single = routePaths.match(/pub const SANDBOX_INSTANCE: &str = "([^"]+)";/);
-    expect(collection, "SANDBOX_INSTANCES must be declared").not.toBeNull();
-    expect(single, "SANDBOX_INSTANCE must be declared").not.toBeNull();
-    expect(SANDBOX_INSTANCES_PATH).toBe(collection![1]);
-    // The item route is the collection path plus the encoded identifier segment;
-    // the client builds it, so the two declarations have to line up.
-    expect(`${SANDBOX_INSTANCES_PATH}/{sandboxInstanceId}`).toBe(single![1]);
+  it("tracks the sandbox module's current route-plane decision", () => {
+    // The sandbox module retired its app-api route crate: its only remaining
+    // route authority is the machine-to-machine internal-api face, so the
+    // browser-facing `/app/v3/api/sandbox` prefix this client documents has no
+    // Rust declaration to echo any more. Until the module republishes a
+    // browser face (its product decision, not this repository's), this oracle
+    // pins the divergence explicitly instead of pretending the old route
+    // contract still exists: the internal authority must keep declaring the
+    // sandbox_instances collection/item pair, and it must NOT declare an
+    // app/v3 path - if an app face reappears upstream, this test fails and
+    // forces the client's route constant to be re-aligned deliberately.
+    // The Rust authority line-wraps long declarations, so the match allows
+    // whitespace between `=` and the string literal.
+    const collection = routePaths.match(/pub const SANDBOX_INSTANCES: &str =\s*"([^"]+)";/);
+    const single = routePaths.match(/pub const SANDBOX_INSTANCE: &str =\s*"([^"]+)";/);
+    expect(collection, "the internal authority must declare SANDBOX_INSTANCES").not.toBeNull();
+    expect(single, "the internal authority must declare SANDBOX_INSTANCE").not.toBeNull();
+    expect(collection![1].startsWith("/internal/v3/api/")).toBe(true);
+    expect(`${collection![1]}/{sandboxInstanceId}`).toBe(single![1]);
+    expect(routePaths.includes("/app/v3/api/sandbox")).toBe(false);
   });
 
   it("restates the absolute column bounds", () => {
