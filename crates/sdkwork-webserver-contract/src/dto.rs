@@ -982,6 +982,13 @@ pub struct CertificatePage {
     pub items: Vec<CertificateResponse>,
     #[serde(with = "sdkwork_utils_rust::serde_int64")]
     pub total: i64,
+    /// Opaque keyset continuation for cursor mode; `None` in offset mode or on
+    /// the last page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+    /// Exact page continuation flag for cursor mode; `None` in offset mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub has_more: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -995,6 +1002,61 @@ pub struct IssueCertificateRequest {
     pub key_algorithm: String,
     #[serde(rename = "autoRenew", default = "default_true")]
     pub auto_renew: bool,
+    /// Operator-facing name. `None` keeps the generated identity, which is what
+    /// a caller written before this field existed still expects.
+    #[serde(rename = "certName", skip_serializing_if = "Option::is_none")]
+    pub cert_name: Option<String>,
+    #[serde(rename = "certificateScope", default = "default_certificate_scope")]
+    pub certificate_scope: String,
+    #[serde(
+        rename = "validationMethod",
+        default = "default_certificate_validation_method"
+    )]
+    pub validation_method: String,
+    #[serde(
+        rename = "renewBeforeDays",
+        default = "default_certificate_renew_before_days"
+    )]
+    pub renew_before_days: i32,
+    /// Which CA directory to order from. `None` leaves the choice to the server,
+    /// which is what a self-signed request wants anyway.
+    #[serde(rename = "caProfile", skip_serializing_if = "Option::is_none")]
+    pub ca_profile: Option<String>,
+    /// Which configured DNS account publishes the DNS-01 challenge records.
+    /// `None` is "resolve one from the identifier set", which is deliberately
+    /// not the same as "no account": pinning here would freeze a choice the
+    /// operator never made.
+    #[serde(rename = "providerAccountId", skip_serializing_if = "Option::is_none")]
+    pub provider_account_id: Option<String>,
+}
+
+/// The request a caller who supplied only the required fields gets.
+///
+/// This is deliberately **not** Rust's zero value: every field here resolves
+/// through the same `default_*` function the matching `#[serde(default = ...)]`
+/// names, because otherwise a Rust caller and a JSON caller that both omitted a
+/// field would order two different certificates from one request shape.
+///
+/// `cert_type` is the exception and is left at `0`, which the shape validator
+/// rejects — there is no defensible default between "Let's Encrypt" and
+/// "self-signed", so a caller has to say which. Fixtures build on this
+/// (`..Default::default()`) so that widening the request does not require
+/// editing every one of them; see the two `E0063` sweeps that motivated it.
+impl Default for IssueCertificateRequest {
+    fn default() -> Self {
+        Self {
+            domain_ids: Vec::new(),
+            cert_type: 0,
+            key_algorithm: default_certificate_key_algorithm(),
+            auto_renew: true,
+            cert_name: None,
+            certificate_scope: default_certificate_scope(),
+            validation_method: default_certificate_validation_method(),
+            renew_before_days: default_certificate_renew_before_days(),
+            ca_profile: None,
+            provider_account_id: None,
+        }
+    }
 }
 
 fn default_certificate_key_algorithm() -> String {
@@ -1002,6 +1064,198 @@ fn default_certificate_key_algorithm() -> String {
     // decision, and it has to be the same one the ACME engine maps and the
     // deployment control plane writes, so it is read from the shared vocabulary.
     sdkwork_deploy_core::CERTIFICATE_DEFAULT_KEY_ALGORITHM.to_owned()
+}
+
+/// Identifier scope vocabulary, mirrored by the `enum` on the authored
+/// `IssueCertificateRequest` schema. Defined once because the default, the
+/// validator and the authored contract all have to spell `SINGLE_DOMAIN` the
+/// same way for a request to be accepted and stored under one meaning.
+pub const CERTIFICATE_SCOPE_SINGLE_DOMAIN: &str = "SINGLE_DOMAIN";
+pub const CERTIFICATE_SCOPE_WILDCARD: &str = "WILDCARD";
+
+/// Challenge-method vocabulary. The spellings are exactly the ones
+/// `sdkwork_webserver_acme_service::DeclaredChallengeMethod` parses, so a value
+/// accepted into a request is a value the issuance engine can act on rather
+/// than one it would reject later, on the worker, as a configuration error.
+pub const CERTIFICATE_VALIDATION_AUTO: &str = "AUTO";
+pub const CERTIFICATE_VALIDATION_HTTP_01: &str = "HTTP_01";
+pub const CERTIFICATE_VALIDATION_DNS_01: &str = "DNS_01";
+
+/// CA-profile vocabulary, mirrored by the `enum` on the authored schema.
+///
+/// `SELF_SIGNED` is reachable only by derivation from `certType` 3; a caller
+/// cannot ask for it by name, because "issue me something self-signed while I
+/// said Let's Encrypt" is a contradiction rather than a preference.
+pub const CERTIFICATE_CA_PROFILE_LETS_ENCRYPT_PRODUCTION: &str = "LETS_ENCRYPT_PRODUCTION";
+pub const CERTIFICATE_CA_PROFILE_LETS_ENCRYPT_STAGING: &str = "LETS_ENCRYPT_STAGING";
+pub const CERTIFICATE_CA_PROFILE_SELF_SIGNED: &str = "SELF_SIGNED";
+
+/// Accepted bounds for `renewBeforeDays`, re-exported from the shared
+/// certificate vocabulary so the authored schema's `minimum`/`maximum`, the
+/// request validators and the renewal scheduler all read one pair of numbers
+/// rather than each carrying its own copy of 7 and 90.
+pub use sdkwork_deploy_core::{
+    CERTIFICATE_DEFAULT_RENEW_BEFORE_DAYS, CERTIFICATE_MAXIMUM_RENEW_BEFORE_DAYS,
+    CERTIFICATE_MINIMUM_RENEW_BEFORE_DAYS,
+};
+
+fn default_certificate_scope() -> String {
+    // One exact hostname, because that is the narrowest reading of "the domain
+    // ids I listed" and widening a request is a decision only the operator can
+    // make. Mirrors the `default:` on the authored schema.
+    CERTIFICATE_SCOPE_SINGLE_DOMAIN.to_owned()
+}
+
+fn default_certificate_validation_method() -> String {
+    // `AUTO` rather than a pinned method: the edge knows which accounts it has
+    // configured, and pinning one here would refuse requests the edge could
+    // have answered.
+    CERTIFICATE_VALIDATION_AUTO.to_owned()
+}
+
+fn default_certificate_renew_before_days() -> i32 {
+    // Same shared vocabulary the console's field is seeded from and the bounds
+    // are enforced at, so all three agree on what "no opinion" means.
+    sdkwork_deploy_core::CERTIFICATE_DEFAULT_RENEW_BEFORE_DAYS
+}
+
+/// One configured cloud DNS account, as an operator may name it.
+///
+/// Deliberately carries no verification state. The registry's `verify_accounts`
+/// runs once at startup and only logs, so there is no cached verdict to serve;
+/// answering this request by calling the provider would turn a list into a
+/// vendor round trip on an authenticated read path. What an operator needs to
+/// choose an account is which zone it can publish into, and that is what this
+/// reports.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DnsAccountResponse {
+    #[serde(rename = "accountId")]
+    pub account_id: String,
+    pub provider: String,
+    #[serde(rename = "zoneApex")]
+    pub zone_apex: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct DnsAccountPage {
+    pub items: Vec<DnsAccountResponse>,
+    #[serde(with = "sdkwork_utils_rust::serde_int64")]
+    pub total: i64,
+}
+
+/// `webserver_certificate.cert_name` is VARCHAR(200); a name that would be
+/// truncated on insert is a name the ledger reports differently from the one
+/// that was asked for.
+pub const CERTIFICATE_NAME_MAX_CHARS: usize = 200;
+
+/// Longest account id a request may name. The configured ids are unbounded;
+/// this bounds only what travels on the wire.
+pub const CERTIFICATE_ACCOUNT_ID_MAX_CHARS: usize = 128;
+
+/// The shape rules for [`IssueCertificateRequest`], in one place.
+///
+/// Shared rather than duplicated because the request is validated twice: once
+/// where it is received, so a malformed request never reaches the store, and
+/// again where it is persisted, so the durability boundary does not have to
+/// trust its caller. Two copies of these rules would eventually disagree, and
+/// the failure mode of that is a request one layer accepts under one meaning
+/// and another stores under a different one.
+///
+/// Returns the reason the request is unacceptable, or `None` when it is fine.
+/// The identifier-set checks are deliberately **not** here: they need each
+/// row's `EXACT`/`WILDCARD` type, which only exists after the domains are read.
+pub fn certificate_issue_shape_error(request: &IssueCertificateRequest) -> Option<String> {
+    if !matches!(request.cert_type, 1 | 3) {
+        return Some("certType must be 1 (Let's Encrypt) or 3 (self-signed)".to_owned());
+    }
+    if request.cert_type == 3 && request.auto_renew {
+        return Some("automatic renewal is unavailable for self-signed certificates".to_owned());
+    }
+    if !matches!(request.key_algorithm.as_str(), "ECDSA" | "RSA") {
+        return Some("keyAlgorithm must be ECDSA or RSA".to_owned());
+    }
+    if !matches!(
+        request.certificate_scope.as_str(),
+        CERTIFICATE_SCOPE_SINGLE_DOMAIN | CERTIFICATE_SCOPE_WILDCARD
+    ) {
+        return Some("certificateScope must be SINGLE_DOMAIN or WILDCARD".to_owned());
+    }
+    if !matches!(
+        request.validation_method.as_str(),
+        CERTIFICATE_VALIDATION_AUTO
+            | CERTIFICATE_VALIDATION_HTTP_01
+            | CERTIFICATE_VALIDATION_DNS_01
+    ) {
+        return Some("validationMethod must be AUTO, HTTP_01 or DNS_01".to_owned());
+    }
+    // Refused here rather than left to the worker: a wildcard can only be
+    // authorized over DNS-01, so accepting the pair would queue an operation
+    // whose only possible outcome is a failure the caller already had the
+    // information to avoid.
+    if request.certificate_scope == CERTIFICATE_SCOPE_WILDCARD
+        && request.validation_method == CERTIFICATE_VALIDATION_HTTP_01
+    {
+        return Some(
+            "certificateScope WILDCARD cannot be validated with HTTP_01; \
+             a wildcard name can only be authorized over DNS-01"
+                .to_owned(),
+        );
+    }
+    if let Some(name) = request.cert_name.as_deref() {
+        if name.is_empty()
+            || name.len() > CERTIFICATE_NAME_MAX_CHARS
+            || name.chars().any(char::is_control)
+        {
+            return Some(format!(
+                "certName must be 1..{CERTIFICATE_NAME_MAX_CHARS} characters without control characters"
+            ));
+        }
+    }
+    if let Some(profile) = request.ca_profile.as_deref() {
+        if !matches!(
+            profile,
+            CERTIFICATE_CA_PROFILE_LETS_ENCRYPT_PRODUCTION
+                | CERTIFICATE_CA_PROFILE_LETS_ENCRYPT_STAGING
+        ) {
+            return Some(
+                "caProfile must be LETS_ENCRYPT_PRODUCTION or LETS_ENCRYPT_STAGING".to_owned(),
+            );
+        }
+        // A self-signed request resolves to `SELF_SIGNED` regardless of what is
+        // sent. Refusing is the honest answer: silently recording a profile the
+        // request did not mean would misreport where the certificate came from.
+        if request.cert_type != 1 {
+            return Some(
+                "caProfile names a CA directory and is meaningful only for certType 1 \
+                 (Let's Encrypt); a self-signed request resolves to SELF_SIGNED"
+                    .to_owned(),
+            );
+        }
+    }
+    if let Some(account_id) = request.provider_account_id.as_deref() {
+        // Shape only. Whether this edge holds credentials for the id is a
+        // runtime fact, checked where the registry is reachable rather than
+        // restated here as a second, weaker answer.
+        if account_id.is_empty()
+            || account_id.len() > CERTIFICATE_ACCOUNT_ID_MAX_CHARS
+            || account_id
+                .chars()
+                .any(|character| character.is_whitespace() || character.is_control())
+        {
+            return Some(format!(
+                "providerAccountId must be 1..{CERTIFICATE_ACCOUNT_ID_MAX_CHARS} characters \
+                 without whitespace or control characters"
+            ));
+        }
+    }
+    if !(CERTIFICATE_MINIMUM_RENEW_BEFORE_DAYS..=CERTIFICATE_MAXIMUM_RENEW_BEFORE_DAYS)
+        .contains(&request.renew_before_days)
+    {
+        return Some(format!(
+            "renewBeforeDays must be between {CERTIFICATE_MINIMUM_RENEW_BEFORE_DAYS} and {CERTIFICATE_MAXIMUM_RENEW_BEFORE_DAYS}"
+        ));
+    }
+    None
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1371,6 +1625,21 @@ pub struct CertificateOperationLease {
     pub hostnames: Vec<String>,
     pub key_algorithm: String,
     pub auto_renew: bool,
+    /// The certificate's declared identifier scope (`SINGLE_DOMAIN` or
+    /// `WILDCARD`), or `None` for a certificate accepted before the scope was
+    /// recorded.
+    ///
+    /// Re-checked against the claimed identifiers, not merely carried: a
+    /// certificate accepted as single-domain must not renew as a wildcard
+    /// because a domain row's type changed after the fact.
+    pub certificate_scope: Option<String>,
+    /// The certificate's declared challenge method (`AUTO`, `HTTP_01` or
+    /// `DNS_01`). Carried per operation rather than read from the deployment's
+    /// setting so a renewal presents the way its original request said.
+    pub validation_method: Option<String>,
+    /// The cloud account that must present this certificate's DNS-01
+    /// challenges, when the request pinned one.
+    pub provider_account_id: Option<String>,
     pub attempt_count: i32,
     pub max_attempts: i32,
     pub lease_owner: String,
@@ -1542,5 +1811,206 @@ mod tests {
         let json = r#"{"items":[],"total":"not-a-number","page":1,"pageSize":20}"#;
         let result: Result<ApplicationPage, _> = serde_json::from_str(json);
         assert!(result.is_err());
+    }
+
+    /// A request that only names the required fields has to be acceptable: the
+    /// defaults are the platform's answer to "the caller had no opinion", and a
+    /// validator that refused them would make the documented defaults unusable.
+    #[test]
+    fn the_default_issue_request_is_acceptable() {
+        let request = IssueCertificateRequest {
+            domain_ids: vec!["domain-1".to_owned()],
+            cert_type: 1,
+            ..IssueCertificateRequest::default()
+        };
+        assert_eq!(certificate_issue_shape_error(&request), None);
+        assert_eq!(
+            request.certificate_scope, CERTIFICATE_SCOPE_SINGLE_DOMAIN,
+            "the default scope is the narrow one; widening it is the operator's call"
+        );
+        assert_eq!(request.validation_method, CERTIFICATE_VALIDATION_AUTO);
+        assert_eq!(
+            request.renew_before_days,
+            CERTIFICATE_DEFAULT_RENEW_BEFORE_DAYS
+        );
+        // The two fields whose absence is meaningful: absent means "no choice",
+        // and the server resolves where the validator does not.
+        assert_eq!(request.provider_account_id, None);
+        assert_eq!(request.ca_profile, None);
+    }
+
+    /// `certType` has no defensible default, so the `Default` impl leaves it at
+    /// a value the validator refuses rather than picking a CA for the caller.
+    #[test]
+    fn the_zero_cert_type_is_refused_not_defaulted() {
+        let request = IssueCertificateRequest {
+            domain_ids: vec!["domain-1".to_owned()],
+            ..IssueCertificateRequest::default()
+        };
+        assert!(certificate_issue_shape_error(&request).is_some());
+    }
+
+    /// Every field this validator owns, one unacceptable value each.
+    ///
+    /// Written as a table because the failure mode being guarded against is a
+    /// clause being dropped while the function still compiles: a per-field case
+    /// that stops being checked has to turn exactly one row red.
+    #[test]
+    fn every_shape_rule_refuses_its_own_violation() {
+        let acceptable = || IssueCertificateRequest {
+            domain_ids: vec!["domain-1".to_owned()],
+            cert_type: 1,
+            ..IssueCertificateRequest::default()
+        };
+        let cases: Vec<(&str, IssueCertificateRequest)> = vec![
+            (
+                "certType outside 1|3",
+                IssueCertificateRequest {
+                    cert_type: 2,
+                    ..acceptable()
+                },
+            ),
+            (
+                "self-signed with automatic renewal",
+                IssueCertificateRequest {
+                    cert_type: 3,
+                    auto_renew: true,
+                    ..acceptable()
+                },
+            ),
+            (
+                "unknown key algorithm",
+                IssueCertificateRequest {
+                    key_algorithm: "ED25519".to_owned(),
+                    ..acceptable()
+                },
+            ),
+            (
+                "unknown scope",
+                IssueCertificateRequest {
+                    certificate_scope: "PER_HOST".to_owned(),
+                    ..acceptable()
+                },
+            ),
+            (
+                "unknown validation method",
+                IssueCertificateRequest {
+                    validation_method: "TLS_ALPN_01".to_owned(),
+                    ..acceptable()
+                },
+            ),
+            (
+                "a wildcard that would be authorized over HTTP-01",
+                IssueCertificateRequest {
+                    certificate_scope: CERTIFICATE_SCOPE_WILDCARD.to_owned(),
+                    validation_method: CERTIFICATE_VALIDATION_HTTP_01.to_owned(),
+                    ..acceptable()
+                },
+            ),
+            (
+                "empty certificate name",
+                IssueCertificateRequest {
+                    cert_name: Some(String::new()),
+                    ..acceptable()
+                },
+            ),
+            (
+                "a certificate name past the column's width",
+                IssueCertificateRequest {
+                    cert_name: Some("n".repeat(CERTIFICATE_NAME_MAX_CHARS + 1)),
+                    ..acceptable()
+                },
+            ),
+            (
+                "a certificate name carrying a newline",
+                IssueCertificateRequest {
+                    cert_name: Some("edge\nfront-door".to_owned()),
+                    ..acceptable()
+                },
+            ),
+            (
+                "an unknown CA profile",
+                IssueCertificateRequest {
+                    ca_profile: Some("BUYPASS".to_owned()),
+                    ..acceptable()
+                },
+            ),
+            (
+                "a CA profile on a self-signed request",
+                IssueCertificateRequest {
+                    cert_type: 3,
+                    auto_renew: false,
+                    ca_profile: Some(CERTIFICATE_CA_PROFILE_LETS_ENCRYPT_STAGING.to_owned()),
+                    ..acceptable()
+                },
+            ),
+            (
+                "an account id carrying whitespace",
+                IssueCertificateRequest {
+                    provider_account_id: Some("aliyun prod".to_owned()),
+                    ..acceptable()
+                },
+            ),
+            (
+                "an account id past the wire bound",
+                IssueCertificateRequest {
+                    provider_account_id: Some("a".repeat(CERTIFICATE_ACCOUNT_ID_MAX_CHARS + 1)),
+                    ..acceptable()
+                },
+            ),
+            (
+                "a renewal window under the floor",
+                IssueCertificateRequest {
+                    renew_before_days: CERTIFICATE_MINIMUM_RENEW_BEFORE_DAYS - 1,
+                    ..acceptable()
+                },
+            ),
+            (
+                "a renewal window over the ceiling",
+                IssueCertificateRequest {
+                    renew_before_days: CERTIFICATE_MAXIMUM_RENEW_BEFORE_DAYS + 1,
+                    ..acceptable()
+                },
+            ),
+        ];
+        for (reason, request) in cases {
+            assert!(
+                certificate_issue_shape_error(&request).is_some(),
+                "expected a refusal for {reason}"
+            );
+        }
+    }
+
+    /// The two bounds are inclusive, and the boundary is where an off-by-one
+    /// hides: `renewBeforeDays` is accepted at 7 and 90 and refused at 6 and 91.
+    #[test]
+    fn the_renewal_window_bounds_are_inclusive() {
+        for days in [
+            CERTIFICATE_MINIMUM_RENEW_BEFORE_DAYS,
+            CERTIFICATE_MAXIMUM_RENEW_BEFORE_DAYS,
+        ] {
+            let request = IssueCertificateRequest {
+                domain_ids: vec!["domain-1".to_owned()],
+                cert_type: 1,
+                renew_before_days: days,
+                ..IssueCertificateRequest::default()
+            };
+            assert_eq!(certificate_issue_shape_error(&request), None, "{days} days");
+        }
+    }
+
+    /// The identifier set is deliberately outside this function: it needs each
+    /// row's stored `EXACT`/`WILDCARD` type, which only exists after the domains
+    /// are read. A wildcard scope with no wildcard identifier is therefore *not*
+    /// refused here — the check that does refuse it runs against the rows.
+    #[test]
+    fn the_identifier_set_is_not_this_function_s_job() {
+        let request = IssueCertificateRequest {
+            domain_ids: vec!["domain-1".to_owned()],
+            cert_type: 1,
+            certificate_scope: CERTIFICATE_SCOPE_WILDCARD.to_owned(),
+            ..IssueCertificateRequest::default()
+        };
+        assert_eq!(certificate_issue_shape_error(&request), None);
     }
 }

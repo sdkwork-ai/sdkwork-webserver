@@ -154,14 +154,32 @@ fn valid_failure_code(value: &str) -> bool {
         })
 }
 
+/// Measures the encoded manifest without materializing it. The framework
+/// serializes the response exactly once on the way out; this check only needs
+/// the byte count, so a full-size buffer (up to the cap itself) is never
+/// allocated just to be thrown away.
 fn validate_node_sync_response_size(
     manifest: &AgentSyncResponse,
     maximum_bytes: usize,
 ) -> WebServiceResult<()> {
-    let bytes = serde_json::to_vec(manifest)
-        .map_err(|error| WebServiceError::Internal(format!("encode node sync response: {error}")))?
-        .len();
-    if bytes > maximum_bytes {
+    struct CountingWriter {
+        count: usize,
+    }
+    impl std::io::Write for CountingWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.count = self.count.saturating_add(buf.len());
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let mut writer = CountingWriter { count: 0 };
+    serde_json::to_writer(&mut writer, manifest).map_err(|error| {
+        WebServiceError::Internal(format!("encode node sync response: {error}"))
+    })?;
+    if writer.count > maximum_bytes {
         return Err(WebServiceError::Internal(format!(
             "node sync response exceeds {maximum_bytes} bytes"
         )));

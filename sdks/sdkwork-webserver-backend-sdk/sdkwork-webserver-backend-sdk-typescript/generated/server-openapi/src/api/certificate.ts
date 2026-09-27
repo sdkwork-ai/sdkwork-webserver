@@ -1,8 +1,31 @@
 import { backendApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { CertificateOperationResponse, CertificateResponse, CreateListenerCertificateBindingRequest, IssueCertificateRequest, ListenerCertificateBindingResponse, PageInfo, RevokeCertificateRequest, SdkWorkAsyncData, UpdateCertificateRequest } from '../types';
+import type { CertificateOperationResponse, CertificateResponse, CreateListenerCertificateBindingRequest, DnsAccountResponse, IssueCertificateRequest, ListenerCertificateBindingResponse, PageInfo, RevokeCertificateRequest, SdkWorkAsyncData, UpdateCertificateRequest } from '../types';
 
+
+export interface CertificateDnsAccountsListParams {
+  page?: number;
+  pageSize?: number;
+}
+
+export class CertificateDnsAccountsApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** List the cloud DNS accounts this edge can present challenges with */
+  async list(params?: CertificateDnsAccountsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: DnsAccountResponse[]; pageInfo: PageInfo; }> {
+    const query = buildQueryString([
+      { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
+      { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+    ]);
+    return this.client.request<{ items: DnsAccountResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/dns_accounts`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+  }
+}
 
 export class CertificateOperationsApi {
   private client: HttpClient;
@@ -90,8 +113,8 @@ export class CertificateApplicationsApi {
 }
 
 export interface CertificateListParams {
-  page?: number;
   pageSize?: number;
+  cursor?: string;
   domainId?: string;
 }
 
@@ -119,19 +142,21 @@ export class CertificateApi {
   private client: HttpClient;
   public readonly applications: CertificateApplicationsApi;
   public readonly operations: CertificateOperationsApi;
+  public readonly dnsAccounts: CertificateDnsAccountsApi;
 
   constructor(client: HttpClient) {
     this.client = client;
     this.applications = new CertificateApplicationsApi(client);
     this.operations = new CertificateOperationsApi(client);
+    this.dnsAccounts = new CertificateDnsAccountsApi(client);
   }
 
 
 /** List canonical certificates */
   async list(params?: CertificateListParams, requestOptions?: ApiRequestOptions): Promise<{ items: CertificateResponse[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
-      { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+      { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'domain_id', value: params?.domainId, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: CertificateResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/certificates`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });

@@ -97,9 +97,9 @@ var_dump($result);
 ```php
 <?php
 
-// List canonical certificates
-$params = ['page' => 1, 'page_size' => 2, 'domain_id' => '00000000-0000-0000-0000-000000000001'];
-$result = $client->certificate->certificatesList($params);
+// List the cloud DNS accounts this edge can present challenges with
+$params = ['page' => 1, 'page_size' => 2];
+$result = $client->certificate->dnsAccountsList($params);
 var_dump($result);
 ```
 

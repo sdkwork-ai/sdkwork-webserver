@@ -10,5 +10,11 @@ namespace SDKWork.WebserverBackendSdk.Models
         public int CertType { get; set; }
         public string? KeyAlgorithm { get; set; }
         public bool? AutoRenew { get; set; }
+        public string? CertName { get; set; }
+        public string? CertificateScope { get; set; }
+        public string? ValidationMethod { get; set; }
+        public int? RenewBeforeDays { get; set; }
+        public string? CaProfile { get; set; }
+        public string? ProviderAccountId { get; set; }
     }
 }

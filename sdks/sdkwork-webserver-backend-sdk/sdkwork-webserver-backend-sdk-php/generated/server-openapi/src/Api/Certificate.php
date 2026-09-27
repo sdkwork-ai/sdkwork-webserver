@@ -13,6 +13,7 @@ use SDKWork\Webserver\BackendSdk\Models\CertificatesRenewResponse202;
 use SDKWork\Webserver\BackendSdk\Models\CertificatesRevokeResponse;
 use SDKWork\Webserver\BackendSdk\Models\CertificatesUpdateResponse;
 use SDKWork\Webserver\BackendSdk\Models\CreateListenerCertificateBindingRequest;
+use SDKWork\Webserver\BackendSdk\Models\DnsAccountsListResponse;
 use SDKWork\Webserver\BackendSdk\Models\IssueCertificateRequest;
 use SDKWork\Webserver\BackendSdk\Models\RevokeCertificateRequest;
 use SDKWork\Webserver\BackendSdk\Models\UpdateCertificateRequest;
@@ -67,12 +68,12 @@ final class CertificateApi extends BaseApi
     }
 
     /** List canonical certificates */
-    public function certificatesList(?int $page = null, ?int $pageSize = null, ?string $domainId = null): ?CertificatesListResponse
+    public function certificatesList(?int $pageSize = null, ?string $cursor = null, ?string $domainId = null): ?CertificatesListResponse
     {
         $path = '/backend/v3/api/certificates';
         $query = $this->buildQueryString([
-            new QueryParameterSpec('page', $page, 'form', true, false, null),
             new QueryParameterSpec('page_size', $pageSize, 'form', true, false, null),
+            new QueryParameterSpec('cursor', $cursor, 'form', true, false, null),
             new QueryParameterSpec('domain_id', $domainId, 'form', true, false, null),
         ]);
         $path = $this->appendQueryString($path, $query);
@@ -172,6 +173,19 @@ final class CertificateApi extends BaseApi
             'json' => $payload,
         ]);
         return is_array($result) ? CertificatesRevokeResponse::fromArray($result) : null;
+    }
+
+    /** List the cloud DNS accounts this edge can present challenges with */
+    public function dnsAccountsList(?int $page = null, ?int $pageSize = null): ?DnsAccountsListResponse
+    {
+        $path = '/backend/v3/api/dns_accounts';
+        $query = $this->buildQueryString([
+            new QueryParameterSpec('page', $page, 'form', true, false, null),
+            new QueryParameterSpec('page_size', $pageSize, 'form', true, false, null),
+        ]);
+        $path = $this->appendQueryString($path, $query);
+        $result = $this->client->request('GET', $path, []);
+        return is_array($result) ? DnsAccountsListResponse::fromArray($result) : null;
     }
 
     private function buildRequestHeaders(array $headers, array $cookies): array

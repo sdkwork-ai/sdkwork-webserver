@@ -331,6 +331,7 @@ pub trait WebAppApi: Send + Sync {
         domain_id: Option<&str>,
         page: i32,
         page_size: i32,
+        cursor: Option<&str>,
     ) -> WebServiceResult<CertificatePage>;
 
     async fn issue_certificate(
@@ -613,6 +614,7 @@ pub trait WebBackendApi: Send + Sync {
         domain_id: Option<&str>,
         page: i32,
         page_size: i32,
+        cursor: Option<&str>,
     ) -> WebServiceResult<CertificatePage>;
 
     async fn issue_managed_certificate(
@@ -684,6 +686,18 @@ pub trait WebBackendApi: Send + Sync {
         page: i32,
         page_size: i32,
     ) -> WebServiceResult<CertificateDistributionPage>;
+
+    /// The cloud DNS accounts this edge can publish challenge records with.
+    ///
+    /// Served so an operator can name an account on an issue request instead of
+    /// guessing; the answer is the runtime registry the ACME engine itself
+    /// presents with, not a second copy that could disagree with it.
+    async fn list_dns_accounts(
+        &self,
+        context: &WebBackendRequestContext,
+        page: i32,
+        page_size: i32,
+    ) -> WebServiceResult<DnsAccountPage>;
 
     async fn list_nginx_configs(
         &self,

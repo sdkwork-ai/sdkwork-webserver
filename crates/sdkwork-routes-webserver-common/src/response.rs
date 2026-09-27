@@ -8,8 +8,9 @@ use sdkwork_utils_rust::{
 use sdkwork_webserver_contract::{
     ApplicationPage, AuditLogPage, CertificateDistributionPage, CertificatePage, ClusterEventPage,
     ClusterHeartbeatSamplePage, ClusterHostPage, ClusterInstancePage, ClusterPage, DeploymentPage,
-    DomainPage, EnvVariablePage, HealthCheckPage, ListenerCertificateBindingPage, NginxConfigPage,
-    PlatformTargetPage, RootDomainPage, ServerPage, SourceVersionPage, WebServiceResult,
+    DnsAccountPage, DomainPage, EnvVariablePage, HealthCheckPage, ListenerCertificateBindingPage,
+    NginxConfigPage, PlatformTargetPage, RootDomainPage, ServerPage, SourceVersionPage,
+    WebServiceResult,
 };
 use serde::Serialize;
 
@@ -250,12 +251,38 @@ pub fn ok_certificate_page(
     result: WebServiceResult<CertificatePage>,
     page: i32,
     page_size: i32,
+    cursor_request: bool,
 ) -> Result<Response, WebApiError> {
     match result {
-        Ok(page_data) => Ok(envelope(
-            StatusCode::OK,
-            build_page_data(page_data.items, page, page_size, page_data.total),
-        )),
+        Ok(page_data) => {
+            // The page-one offset read carries the exact total, the exact
+            // `has_more`, and the minted keyset continuation together; the
+            // request that follows a cursor gets the pure cursor payload with
+            // no total (a deep keyset page must not pay for a COUNT).
+            let payload = if cursor_request {
+                SdkWorkPageData {
+                    items: page_data.items,
+                    page_info: PageInfo {
+                        mode: PageMode::Cursor,
+                        page: None,
+                        page_size: Some(page_size),
+                        total_items: None,
+                        total_pages: None,
+                        next_cursor: page_data.next_cursor,
+                        has_more: page_data.has_more,
+                    },
+                }
+            } else {
+                let mut page_info = offset_page_info(page, page_size, page_data.total);
+                page_info.next_cursor = page_data.next_cursor;
+                page_info.has_more = page_data.has_more.or(page_info.has_more);
+                SdkWorkPageData {
+                    items: page_data.items,
+                    page_info,
+                }
+            };
+            Ok(envelope(StatusCode::OK, payload))
+        }
         Err(error) => Err(error.into()),
     }
 }
@@ -281,6 +308,20 @@ pub fn ok_certificate_distribution_page(
         Ok(page) => Ok(envelope(
             StatusCode::OK,
             build_page_data(page.items, page.page, page.page_size, page.total),
+        )),
+        Err(error) => Err(error.into()),
+    }
+}
+
+pub fn ok_dns_account_page(
+    result: WebServiceResult<DnsAccountPage>,
+    page: i32,
+    page_size: i32,
+) -> Result<Response, WebApiError> {
+    match result {
+        Ok(page_data) => Ok(envelope(
+            StatusCode::OK,
+            build_page_data(page_data.items, page, page_size, page_data.total),
         )),
         Err(error) => Err(error.into()),
     }

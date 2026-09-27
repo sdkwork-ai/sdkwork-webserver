@@ -760,6 +760,7 @@ pub trait WebRepositoryPort: Send + Sync {
         domain_id: Option<&str>,
         page: i32,
         page_size: i32,
+        cursor: Option<&str>,
     ) -> WebServiceResult<CertificatePage>;
 
     async fn enqueue_certificate_issue(

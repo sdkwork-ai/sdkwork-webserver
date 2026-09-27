@@ -52,10 +52,10 @@ class CertificateApi {
   }
 
   /// List canonical certificates
-  Future<CertificatesListResponse?> certificatesList([int? page, int? pageSize, String? domainId]) async {
+  Future<CertificatesListResponse?> certificatesList([int? pageSize, String? cursor, String? domainId]) async {
     final query = buildQueryString([
-      QueryParameterSpec('page', page, 'form', true, false, null),
       QueryParameterSpec('page_size', pageSize, 'form', true, false, null),
+      QueryParameterSpec('cursor', cursor, 'form', true, false, null),
       QueryParameterSpec('domain_id', domainId, 'form', true, false, null)
     ]);
     final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.backendPath('/certificates'), query));
@@ -145,6 +145,19 @@ class CertificateApi {
     return (() {
       final map = sdkworkResponseAsMap(response);
       return map == null ? null : CertificatesRevokeResponse.fromJson(map);
+    })();
+  }
+
+  /// List the cloud DNS accounts this edge can present challenges with
+  Future<DnsAccountsListResponse?> dnsAccountsList([int? page, int? pageSize]) async {
+    final query = buildQueryString([
+      QueryParameterSpec('page', page, 'form', true, false, null),
+      QueryParameterSpec('page_size', pageSize, 'form', true, false, null)
+    ]);
+    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.backendPath('/dns_accounts'), query));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : DnsAccountsListResponse.fromJson(map);
     })();
   }
 }

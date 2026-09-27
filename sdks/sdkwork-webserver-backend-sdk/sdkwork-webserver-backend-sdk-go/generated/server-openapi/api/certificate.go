@@ -60,10 +60,10 @@ func (a *CertificateApi) ApplicationsDomainsListenerCertificateBindingsDelete(ap
 }
 
 // List canonical certificates
-func (a *CertificateApi) CertificatesList(page *int, pageSize *int, domainId *string) (sdktypes.CertificatesListResponse, error) {
+func (a *CertificateApi) CertificatesList(pageSize *int, cursor *string, domainId *string) (sdktypes.CertificatesListResponse, error) {
     query := BuildQueryString([]QueryParameterSpec{
-        {Name: "page", Value: func() interface{} { if page == nil { return nil }; return *page }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "page_size", Value: func() interface{} { if pageSize == nil { return nil }; return *pageSize }(), Style: "form", Explode: true, AllowReserved: false},
+        {Name: "cursor", Value: func() interface{} { if cursor == nil { return nil }; return *cursor }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "domain_id", Value: func() interface{} { if domainId == nil { return nil }; return *domainId }(), Style: "form", Explode: true, AllowReserved: false},
     })
     raw, err := a.client.Get(AppendQueryString(BackendApiPath("/certificates"), query), nil, nil)
@@ -152,6 +152,20 @@ func (a *CertificateApi) CertificatesRevoke(certificateId string, body sdktypes.
         return zero, err
     }
     return decodeResult[sdktypes.CertificatesRevokeResponse](raw)
+}
+
+// List the cloud DNS accounts this edge can present challenges with
+func (a *CertificateApi) DnsAccountsList(page *int, pageSize *int) (sdktypes.DnsAccountsListResponse, error) {
+    query := BuildQueryString([]QueryParameterSpec{
+        {Name: "page", Value: func() interface{} { if page == nil { return nil }; return *page }(), Style: "form", Explode: true, AllowReserved: false},
+        {Name: "page_size", Value: func() interface{} { if pageSize == nil { return nil }; return *pageSize }(), Style: "form", Explode: true, AllowReserved: false},
+    })
+    raw, err := a.client.Get(AppendQueryString(BackendApiPath("/dns_accounts"), query), nil, nil)
+    if err != nil {
+        var zero sdktypes.DnsAccountsListResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.DnsAccountsListResponse](raw)
 }
 
 type PathParameterSpec struct {

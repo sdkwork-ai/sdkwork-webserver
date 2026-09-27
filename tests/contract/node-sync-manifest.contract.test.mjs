@@ -54,7 +54,7 @@ test('node sync service and daemon retain independent final response bounds', ()
     /INNER JOIN webserver_certificate_secret_bundle/u,
   );
   assert.match(repositorySource, /decrypt_certificate_secret_bundle/u);
-  assert.match(service, /serde_json::to_vec\(manifest\)/u);
+  assert.match(service, /serde_json::to_writer\(&mut writer, manifest\)/u);
   assert.match(daemon, /const MAX_SYNC_RESPONSE_BYTES: usize = 16 \* 1024 \* 1024/u);
   assert.match(daemon, /node identity mismatch between heartbeat acknowledgement and sync manifest/u);
   assert.match(daemon, /duplicate Nginx activation domain/u);

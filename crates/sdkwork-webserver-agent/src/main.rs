@@ -132,20 +132,45 @@ pub async fn run() -> anyhow::Result<()> {
     .await;
 
     let mut consecutive_failures: u32 = 0;
+    // A cycle that outlives this bound is cancelled so synchronization and
+    // graceful shutdown always make progress, mirroring the certificate
+    // worker's watchdog. The HTTP legs are individually timed out by the SDK
+    // client; this bounds a hung local step (nginx activation, state writes)
+    // that no request timeout covers.
+    let cycle_timeout_secs = (runtime.interval_secs.saturating_mul(12))
+        .clamp(MIN_CYCLE_TIMEOUT_SECS, MAX_CYCLE_TIMEOUT_SECS);
+    let mut shutdown_task = tokio::spawn(shutdown_signal());
     loop {
-        if let Err(error) = sync_once(
-            &edge,
-            &clients,
-            &state_path,
-            &mut local_state,
-            &served_certificates,
-        )
-        .await
-        {
-            warn!(error = %error, "node sync cycle failed");
-            consecutive_failures = consecutive_failures.saturating_add(1);
-        } else {
-            consecutive_failures = 0;
+        tokio::select! {
+            result = sync_once(
+                &edge,
+                &clients,
+                &state_path,
+                &mut local_state,
+                &served_certificates,
+            ) => match result {
+                Ok(()) => {
+                    consecutive_failures = 0;
+                }
+                Err(error) => {
+                    warn!(error = %error, "node sync cycle failed");
+                    consecutive_failures = consecutive_failures.saturating_add(1);
+                }
+            },
+            result = &mut shutdown_task => {
+                result
+                    .map_err(|error| anyhow::anyhow!("node daemon shutdown task failed: {error}"))?
+                    .map_err(|error| anyhow::anyhow!("node daemon shutdown listener failed: {error}"))?;
+                info!("sdkwork web node daemon stopped before the next sync cycle");
+                break;
+            }
+            () = tokio::time::sleep(Duration::from_secs(cycle_timeout_secs)) => {
+                consecutive_failures = consecutive_failures.saturating_add(1);
+                warn!(
+                    cycle_timeout_secs,
+                    "node sync cycle exceeded its watchdog timeout"
+                );
+            }
         }
         // Exponential backoff on failure (capped at the configured interval) so
         // the control plane is not hammered while it is degraded; jitter spreads
@@ -157,7 +182,39 @@ pub async fn run() -> anyhow::Result<()> {
         };
         let delay =
             Duration::from_secs(base_secs) + Duration::from_millis(jitter_millis(base_secs * 500));
-        tokio::time::sleep(delay).await;
+        tokio::select! {
+            () = tokio::time::sleep(delay) => {}
+            result = &mut shutdown_task => {
+                result
+                    .map_err(|error| anyhow::anyhow!("node daemon shutdown task failed: {error}"))?
+                    .map_err(|error| anyhow::anyhow!("node daemon shutdown listener failed: {error}"))?;
+                info!("sdkwork web node daemon stopped during the sync backoff");
+                break;
+            }
+        }
+    }
+    Ok(())
+}
+
+const MIN_CYCLE_TIMEOUT_SECS: u64 = 60;
+const MAX_CYCLE_TIMEOUT_SECS: u64 = 3_600;
+
+async fn shutdown_signal() -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+
+        let mut interrupt = signal(SignalKind::interrupt())?;
+        let mut terminate = signal(SignalKind::terminate())?;
+        tokio::select! {
+            _ = interrupt.recv() => Ok(()),
+            _ = terminate.recv() => Ok(()),
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        tokio::signal::ctrl_c().await
     }
 }
 

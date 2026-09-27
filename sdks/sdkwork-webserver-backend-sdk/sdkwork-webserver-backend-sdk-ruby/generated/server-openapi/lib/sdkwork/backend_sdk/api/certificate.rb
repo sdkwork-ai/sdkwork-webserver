@@ -8,6 +8,7 @@ require_relative '../models/certificates_renew_response202'
 require_relative '../models/certificates_revoke_response'
 require_relative '../models/certificates_update_response'
 require_relative '../models/create_listener_certificate_binding_request'
+require_relative '../models/dns_accounts_list_response'
 require_relative '../models/issue_certificate_request'
 require_relative '../models/revoke_certificate_request'
 require_relative '../models/update_certificate_request'
@@ -63,11 +64,11 @@ module Sdkwork
           end
 
           # List canonical certificates
-          def certificates_list(page: nil, page_size: nil, domain_id: nil)
+          def certificates_list(page_size: nil, cursor: nil, domain_id: nil)
             path = '/backend/v3/api/certificates'
             query = build_query_string([
-              QueryParameterSpec.new('page', page, 'form', true, false, nil),
               QueryParameterSpec.new('page_size', page_size, 'form', true, false, nil),
+              QueryParameterSpec.new('cursor', cursor, 'form', true, false, nil),
               QueryParameterSpec.new('domain_id', domain_id, 'form', true, false, nil),
             ])
             path = append_query_string(path, query)
@@ -165,6 +166,20 @@ module Sdkwork
             options[:json] = payload unless payload.nil?
             result = @client.request('POST', path, **options)
             result.is_a?(Hash) ? Models::CertificatesRevokeResponse.from_hash(result) : nil
+          end
+
+          # List the cloud DNS accounts this edge can present challenges with
+          def dns_accounts_list(page: nil, page_size: nil)
+            path = '/backend/v3/api/dns_accounts'
+            query = build_query_string([
+              QueryParameterSpec.new('page', page, 'form', true, false, nil),
+              QueryParameterSpec.new('page_size', page_size, 'form', true, false, nil),
+            ])
+            path = append_query_string(path, query)
+            options = {}
+
+            result = @client.request('GET', path, **options)
+            result.is_a?(Hash) ? Models::DnsAccountsListResponse.from_hash(result) : nil
           end
 
         private

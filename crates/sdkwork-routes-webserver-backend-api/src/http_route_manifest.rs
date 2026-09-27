@@ -245,6 +245,12 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     ).with_required_permission("web.certificates.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
+        "/backend/v3/api/dns_accounts",
+        "certificate",
+        "dnsAccounts.list",
+    ).with_required_permission("web.certificates.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
         "/backend/v3/api/nginx/configs",
         "nginx",
         "configs.list",

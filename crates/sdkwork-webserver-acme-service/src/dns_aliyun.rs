@@ -826,7 +826,7 @@ mod duplicate_publish_tests {
     use axum::extract::Query;
     use axum::response::{IntoResponse, Response};
     use axum::{Json, Router};
-    use serde_json::{json, Value};
+    use serde_json::json;
     use std::collections::HashMap;
 
     /// The vendor's own duplicate refusal followed by an exact read must come

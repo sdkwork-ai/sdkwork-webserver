@@ -103,13 +103,12 @@ const result = await client.applicationDomain.applications.domains.list(applicat
 ### certificate
 
 ```typescript
-// List canonical certificates
+// List the cloud DNS accounts this edge can present challenges with
 const params = {
   page: 1,
   page_size: 2,
-  domain_id: 'domain_id',
 };
-const result = await client.certificate.list(params);
+const result = await client.certificate.dnsAccounts.list(params);
 ```
 
 ### domain

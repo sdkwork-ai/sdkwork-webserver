@@ -9,3 +9,9 @@ class IssueCertificateRequest:
     cert_type: int
     key_algorithm: Optional[str] = None
     auto_renew: Optional[bool] = None
+    cert_name: Optional[str] = None
+    certificate_scope: Optional[str] = None
+    validation_method: Optional[str] = None
+    renew_before_days: Optional[int] = None
+    ca_profile: Optional[str] = None
+    provider_account_id: Optional[str] = None

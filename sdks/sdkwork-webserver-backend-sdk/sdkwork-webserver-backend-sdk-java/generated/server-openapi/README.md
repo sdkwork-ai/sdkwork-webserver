@@ -110,12 +110,11 @@ System.out.println(result);
 ### certificate
 
 ```java
-// List canonical certificates
+// List the cloud DNS accounts this edge can present challenges with
 Map<String, Object> params = new LinkedHashMap<>();
 params.put("page", 1);
 params.put("page_size", 2);
-params.put("domain_id", "00000000-0000-0000-0000-000000000001");
-CertificatesListResponse result = client.getCertificate().certificatesList(params);
+DnsAccountsListResponse result = client.getCertificate().dnsAccountsList(params);
 System.out.println(result);
 ```
 

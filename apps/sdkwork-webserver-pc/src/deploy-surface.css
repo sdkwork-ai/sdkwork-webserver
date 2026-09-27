@@ -116,13 +116,17 @@
 .deploy-surface .pagination{min-height:50px;display:flex;justify-content:flex-end;align-items:center;gap:8px;color:var(--sdk-color-text-secondary)}
 /* The Domains and Certificates ledgers, and the hostname picker inside them.
    `DeliveryManagement.tsx` renders `table-frame domain-table-frame` /
-   `domain-table` / `operations-column` for the two ledgers and
-   `table-frame hostname-picker-frame` / `domain-table hostname-picker-table` for
-   the picker, so these rules are as load-bearing as the skeleton above — they
-   are the same deletion (256a65f6) and are restored with it. The picker's own
-   rules stay even though a newer picker structure is being prepared here: until
-   that markup lands in the source of truth, this is the one the page renders,
-   and the two class sets do not collide.
+   `domain-table` / `operations-column` for the two ledgers, and
+   `ServedCertificateAdminSurface.tsx` renders `table-frame hostname-picker-frame` /
+   `domain-table hostname-picker-table` for the picker, so these rules are as
+   load-bearing as the skeleton above — they are the same deletion (256a65f6) and
+   are restored with it. The picker's own rules were kept here while a
+   framework-`DataTable` version of that markup was being tried; the version that
+   landed is this one again, because the field holds a single hostname and the
+   framework's selectable mode can only render a set of ticks under a select-all.
+   `.hostname-picker-filters` and `.hostname-picker-tabs` are the exception: no
+   markup in either repository asks for them, and they are left alone here rather
+   than swept up with a change that is about the choice control.
    `.selector-pagination` is deliberately not restored: it belonged to an earlier
    candidate list whose markup no longer exists in either repository. */
 .deploy-surface .domain-table-frame{flex:1 1 auto;min-height:0;margin-top:12px}
@@ -141,6 +145,11 @@
 .deploy-surface .hostname-picker-table tbody tr{cursor:pointer}
 .deploy-surface .hostname-picker-table .hostname-cell>span{display:grid;gap:2px;min-width:0}
 .deploy-surface .hostname-picker-table .operations-column{min-width:130px}
+/* The empty answer is a row of the table rather than a block beside it, so it
+   lands under the headers it answers about and scrolls with them. `max-width` is
+   reset because every other cell in this table caps itself at 280px — a cap that
+   belongs to one hostname, not to a sentence spanning all six columns. */
+.deploy-surface .hostname-picker-table td.hostname-picker-empty{max-width:none;padding:26px 10px;text-align:center;color:var(--sdk-color-text-muted)}
 .deploy-surface .empty-state{width:100%;height:100%;min-height:220px;display:grid;place-content:center;gap:10px;color:var(--sdk-color-text-muted)}.deploy-surface .error-banner, .deploy-surface .warning{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;margin:8px 0;border:1px solid var(--webserver-color-danger-border);background:var(--webserver-color-danger-surface);color:var(--webserver-color-danger-text);border-radius:5px}.deploy-surface .warning{background:var(--webserver-color-warning-surface);border-color:var(--webserver-color-warning-border);color:var(--webserver-color-warning-text)}.deploy-surface .dialog-backdrop{position:fixed;inset:0;background:color-mix(in srgb, var(--sdk-color-surface-overlay) 72%, rgba(0, 0, 0, .54));display:grid;place-items:center;padding:18px;z-index:50}.deploy-surface .dialog{width:min(620px,100%);max-height:calc(100vh - 36px);overflow:auto;background:var(--sdk-color-surface-panel);padding:20px;border-radius:7px;box-shadow:var(--sdk-shadow-lg)}.deploy-surface .dialog header, .deploy-surface .dialog footer{display:flex;justify-content:space-between;align-items:center;gap:10px}.deploy-surface .dialog label{display:grid;gap:7px;margin:16px 0;font-size:13px;font-weight:650}.deploy-surface .dialog footer{justify-content:flex-end}.deploy-surface .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 16px;align-items:start;margin:16px 0}.deploy-surface .form-grid label{display:grid;align-content:start;gap:7px;margin:0;min-width:0}.deploy-surface .form-grid input:not([type="checkbox"]), .deploy-surface .form-grid textarea, .deploy-surface .form-grid select, .deploy-surface .dialog>label input[type="file"]{width:100%;min-height:40px;border:1px solid var(--sdk-color-border-default);border-radius:5px;padding:9px 10px;background:var(--sdk-color-surface-panel)}.deploy-surface .form-grid textarea{min-height:104px;resize:vertical;font-family:inherit;font-size:13px;line-height:1.45}.deploy-surface .form-grid label:has(textarea){grid-column:1/-1}.deploy-surface .checkbox-field, .deploy-surface .confirm-check{display:flex!important;align-items:center;gap:9px!important}.deploy-surface .checkbox-field input, .deploy-surface .confirm-check input{width:16px;height:16px;margin:0}.deploy-surface .confirm-check{padding:11px 12px;border:1px solid var(--webserver-color-warning-border);background:var(--webserver-color-warning-surface);border-radius:5px}.deploy-surface .status-badge{display:inline-flex;align-items:center;min-height:24px;padding:2px 8px;border-radius:999px;background:var(--sdk-color-surface-elevated);color:var(--sdk-color-text-secondary);font-size:12px;font-weight:650}.deploy-surface .status-active, .deploy-surface .status-success, .deploy-surface .status-verified, .deploy-surface .status-1, .deploy-surface .status-issued{background:var(--webserver-color-success-surface);color:var(--webserver-color-success-text)}
 /* The one spelling the shared tone map was missing. Every other state the Web
    Server's certificate vocabulary emits is already here — pending, issuing,
@@ -308,15 +317,15 @@
 .deploy-surface .hostname-picker-zone[aria-pressed="true"]{border-color:var(--sdk-color-brand-primary);background:color-mix(in srgb, var(--sdk-color-brand-primary) 10%, var(--sdk-color-surface-panel))}
 .deploy-surface .hostname-picker-zone strong{overflow-wrap:anywhere;font-size:13px;line-height:1.35}
 .deploy-surface .hostname-picker-hostnames{min-width:0}
-/* A hostname row is the click target for taking its name: the checkbox column is
+/* A hostname row is the click target for taking its name: the choice column is
    the control, but a hostname is one line of a table read down, and aiming at a
-   16px box to take it is how a set ends up holding the wrong names.
+   16px circle to take it is how the wrong name ends up chosen.
    Both cursors are declared here rather than left to the table's own utilities
    because a utility only exists in the product build: the harness renders this
    dialog without Tailwind, so a row that relied on `cursor-pointer` would be a row
    that behaved differently in the two. `not-allowed` on a refused row is the same
    cursor every other disabled control in this app uses, and it is what stops a row
-   whose checkbox is disabled from inviting the click it will ignore.
+   whose radio is disabled from inviting the click it will ignore.
    The two are ordered so the refused row wins: same specificity class, later rule.
    Mirrors the same rule pair in
    sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css. */
@@ -325,8 +334,8 @@
 .deploy-surface .hostname-picker-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 12px;margin-bottom:6px}
 .deploy-surface .hostname-picker-head .hostname-picker-caption{margin-bottom:0}
 .deploy-surface .hostname-picker-hostnames>.form-hint{display:block;margin:0 0 9px}
-/* The count leads the footer rather than trailing the buttons: it reports on the
-   set the buttons will act on, so it belongs on the side the reading starts. */
+/* The summary leads the footer rather than trailing the buttons: it says what the
+   confirm will carry back, so it belongs on the side the reading starts. */
 .deploy-surface .hostname-picker-count{margin-right:auto;align-self:center;font-size:12px;color:var(--sdk-color-text-secondary)}
 /* The tabs and the filter box share one row rather than taking a row each: the
    picker dialog is a fixed frame whose scrolling lives inside the table, so every
@@ -346,7 +355,9 @@
 .deploy-surface .hostname-picker-tabs button{min-height:32px;padding:0 11px;font-size:12px}
 .deploy-surface .hostname-picker-tabs button:disabled{cursor:not-allowed}
 /* The chosen name is marked on the row as well as on its radio: the circle is a
-   14px target in a column of names, and the row is what the click lands on. */
+   14px target in a column of names, and the row is what the click lands on. One
+   name can be chosen, so at most one row carries the mark, and the rail says the
+   same thing on the other side of the pane. */
 .deploy-surface .hostname-picker-hostnames tbody tr[data-state="selected"]{background:color-mix(in srgb, var(--sdk-color-brand-primary) 10%, var(--sdk-color-surface-panel))}
 .deploy-surface .hostname-choice{display:inline-flex;align-items:center;justify-content:center;width:100%;cursor:inherit}
 .deploy-surface .hostname-choice input{margin:0;accent-color:var(--sdk-color-brand-primary)}
@@ -407,12 +418,13 @@
    overflow then escapes upward to the dialog, where `overflow:hidden` clips it. */
 .deploy-surface .delivery-dialog-picker>.hostname-picker{flex:1 1 auto;min-height:0}
 .deploy-surface .delivery-dialog-picker>.hostname-picker>.hostname-picker-hostnames{display:flex;flex-direction:column;min-height:0}
-/* The rows scroll; the caption, the hint, the search box and the add button stay put.
-   `data-table` is the scrollport rather than `[data-slot="table-viewport"]`, because
-   the viewport only carries `overflow:auto` through a Tailwind utility — present in
-   the product build and absent from every harness that renders this form, so a rule
-   leaning on it would be a rule that only worked in one of the two. */
-.deploy-surface .delivery-dialog-picker .hostname-picker-hostnames>[data-slot="data-table"]{flex:1 1 auto;min-height:0;overflow:auto}
+/* The rows scroll; the caption and the search box stay put. The scrollport is the
+   frame, and it is named here rather than left to `.hostname-picker-frame`'s own
+   `min(52vh,400px)` cap: that cap was sized for a picker that shrank to its
+   contents, and this dialog's height is fixed, so the rows take whatever the rest
+   of the column leaves. `.table-frame` already carries the `overflow:auto` the
+   sticky header needs on an ancestor. */
+.deploy-surface .delivery-dialog-picker .hostname-picker-hostnames>.hostname-picker-frame{flex:1 1 auto;min-height:0;max-height:none}
 /* Side by side, the rail gives up its own `min(58vh,460px)` cap and scrolls the full
    pane height instead; the pane takes the row that is left. Scoped to the two-column
    band with a min-width query rather than declared unscoped, because the stacked band
@@ -598,7 +610,7 @@
    sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css.
 
    `position:relative` is declared here for the entry animation below, which moves
-   the panel with `right` rather than with `transform`. A transform on the panel
+   the panel with `left` rather than with `transform`. A transform on the panel
    would make it the containing block for `position: fixed` descendants, and this
    wizard opens three dialogs of its own — the hostname picker, the account picker
    and the account form. Measured during the entry: the picker's backdrop resolved
@@ -606,7 +618,7 @@
    80vw width fell to the clamp's floor and the dialog came out wider than the
    form it was opened over. A relative offset paints the same slide and leaves no
    containing block behind. */
-.deploy-surface .delivery-dialog.delivery-drawer{position:relative;width:min(720px,94vw);height:100%;max-height:100vh;padding:0;border-radius:0;display:flex;flex-direction:column;overflow:hidden;border-left:1px solid var(--sdk-color-border-default);box-shadow:var(--sdk-shadow-lg)}
+.deploy-surface .delivery-dialog.delivery-drawer{position:relative;width:min(720px,94vw);height:100%;max-height:100vh;padding:0;border-radius:0;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--sdk-color-border-default);box-shadow:var(--sdk-shadow-lg)}
 /* The panel is three bands, and only the middle one scrolls.
    Header and action row are `flex:0 0 auto`; the body between them is the only
    `flex:1 1 auto` child and the only one that scrolls, so a form taller than the
@@ -642,7 +654,7 @@
 /* `position`/`z-index`/`bottom` as well as the box: the shared rule pins its row with
    all four, and a band that reset only the margins would still paint a second top
    border under its own. */
-.deploy-surface .delivery-dialog .delivery-drawer-footer .dialog-footer{position:static;bottom:auto;z-index:auto;margin:0;padding:0;border-top:0;background:none}
+.deploy-surface .delivery-dialog .delivery-drawer-footer .dialog-footer{position:static;bottom:auto;z-index:auto;margin:0;padding:0;border-top:0;background:none;display:flex;justify-content:flex-end;gap:10px}
 /* The rhythm the single column needs.
    Every spacing in this wizard was set for a form that had to fit an 864px
    scrollport: the group margins, the field gaps and the label-to-control gap all
@@ -657,16 +669,16 @@
    each: a grid item's margin does not collapse, so a margin here would be added to
    the gap instead of being absorbed by it. */
 .deploy-surface .delivery-dialog.delivery-drawer .dialog-pair>.form-fieldset,.deploy-surface .delivery-dialog.delivery-drawer .certificate-form-grid>.form-fieldset{margin:0}
-/* A full-height column with the panel on its right edge: the dialog backdrop's own
+/* A full-height column with the panel on its left edge: the dialog backdrop's own
    centring grid is the part that used to put the wizard in the middle of the page.
    The dimming is the scoped copy's own token mix, so the drawer and the dialog read
    as the same kind of interruption. */
-.deploy-surface .delivery-drawer-backdrop{position:fixed;inset:0;z-index:50;display:flex;justify-content:flex-end;background:color-mix(in srgb, var(--sdk-color-surface-overlay) 72%, rgba(0, 0, 0, .54))}
+.deploy-surface .delivery-drawer-backdrop{position:fixed;inset:0;z-index:50;display:flex;justify-content:flex-start;background:color-mix(in srgb, var(--sdk-color-surface-overlay) 72%, rgba(0, 0, 0, .54))}
 /* The slide is motion and therefore optional; the dim is what carries the state
    change for anyone who has asked for less of it. */
 @media(prefers-reduced-motion:no-preference){.deploy-surface .delivery-drawer-backdrop{animation:delivery-drawer-dim 160ms ease-out}.deploy-surface .delivery-dialog.delivery-drawer{animation:delivery-drawer-slide 200ms cubic-bezier(.22,.61,.36,1)}}
 @keyframes delivery-drawer-dim{from{opacity:0}to{opacity:1}}
-@keyframes delivery-drawer-slide{from{right:-28px;opacity:.55}to{right:0;opacity:1}}
+@keyframes delivery-drawer-slide{from{left:-28px;opacity:.55}to{left:0;opacity:1}}
 /* A window too narrow for a side panel gets the whole width rather than a 94% sliver
    of it. */
 @media(max-width:760px){.deploy-surface .delivery-dialog.delivery-drawer{width:100%}}

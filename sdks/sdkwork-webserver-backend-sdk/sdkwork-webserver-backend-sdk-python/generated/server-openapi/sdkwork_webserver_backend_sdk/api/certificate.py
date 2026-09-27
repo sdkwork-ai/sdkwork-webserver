@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 from ..http_client import HttpClient
-from ..models import ApplicationsDomainsListenerCertificateBindingsCreateResponse201, ApplicationsDomainsListenerCertificateBindingsListResponse, CertificatesIssueResponse202, CertificatesListResponse, CertificatesOperationsRetrieveResponse, CertificatesRenewResponse202, CertificatesRevokeResponse, CertificatesUpdateResponse, CreateListenerCertificateBindingRequest, IssueCertificateRequest, RevokeCertificateRequest, UpdateCertificateRequest
+from ..models import ApplicationsDomainsListenerCertificateBindingsCreateResponse201, ApplicationsDomainsListenerCertificateBindingsListResponse, CertificatesIssueResponse202, CertificatesListResponse, CertificatesOperationsRetrieveResponse, CertificatesRenewResponse202, CertificatesRevokeResponse, CertificatesUpdateResponse, CreateListenerCertificateBindingRequest, DnsAccountsListResponse, IssueCertificateRequest, RevokeCertificateRequest, UpdateCertificateRequest
 
 def _append_query_string(path: str, raw_query_string: str) -> str:
     query = raw_query_string.lstrip('?')
@@ -244,13 +244,14 @@ class CertificateApi:
         self._client = client
         self.applications = CertificateApplicationsApi(client)
         self.operations = CertificateOperationsApi(client)
+        self.dns_accounts = CertificateDnsAccountsApi(client)
 
 
-    def list(self, page: Optional[int] = None, page_size: Optional[int] = None, domain_id: Optional[str] = None) -> CertificatesListResponse:
+    def list(self, page_size: Optional[int] = None, cursor: Optional[str] = None, domain_id: Optional[str] = None) -> CertificatesListResponse:
         """List canonical certificates"""
         query = build_query_string([
-            {'name': 'page', 'value': page, 'style': 'form', 'explode': True, 'allow_reserved': False},
             {'name': 'page_size', 'value': page_size, 'style': 'form', 'explode': True, 'allow_reserved': False},
+            {'name': 'cursor', 'value': cursor, 'style': 'form', 'explode': True, 'allow_reserved': False},
             {'name': 'domain_id', 'value': domain_id, 'style': 'form', 'explode': True, 'allow_reserved': False},
         ])
         return self._client.get(_append_query_string(f"/backend/v3/api/certificates", query))
@@ -366,3 +367,18 @@ class CertificateOperationsApi:
     def retrieve(self, operation_id: str) -> CertificatesOperationsRetrieveResponse:
         """Retrieve a certificate operation"""
         return self._client.get(f"/backend/v3/api/certificates/operations/{serialize_path_parameter(operation_id, {'name': 'operationId', 'style': 'simple', 'explode': False})}")
+
+class CertificateDnsAccountsApi:
+    """certificate certificate.dns_accounts API client."""
+
+    def __init__(self, client: HttpClient):
+        self._client = client
+
+
+    def list(self, page: Optional[int] = None, page_size: Optional[int] = None) -> DnsAccountsListResponse:
+        """List the cloud DNS accounts this edge can present challenges with"""
+        query = build_query_string([
+            {'name': 'page', 'value': page, 'style': 'form', 'explode': True, 'allow_reserved': False},
+            {'name': 'page_size', 'value': page_size, 'style': 'form', 'explode': True, 'allow_reserved': False},
+        ])
+        return self._client.get(_append_query_string(f"/backend/v3/api/dns_accounts", query))

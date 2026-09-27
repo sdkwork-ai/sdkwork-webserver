@@ -136,7 +136,7 @@ function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
         setHasMore(result.pageInfo.hasMore === true);
       })
       .catch((cause) => {
-        if (active) setError(errorText(cause));
+        if (active) setError(errorText(cause, t));
       })
       .finally(() => {
         if (active) setBusy(false);
@@ -160,7 +160,7 @@ function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
       })
       .catch((cause) => {
         setDeleteTarget(undefined);
-        setError(errorText(cause));
+        setError(errorText(cause, t));
       })
       .finally(() => setBusy(false));
   };
@@ -187,7 +187,7 @@ function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
       })
       .catch((cause) => {
         done();
-        setError(errorText(cause));
+        setError(errorText(cause, t));
       })
       .finally(() => setBusy(false));
   };
@@ -639,7 +639,7 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
         setHasMore(hostnameResult.pageInfo.hasMore === true);
       })
       .catch((cause) => {
-        if (active) setError(errorText(cause));
+        if (active) setError(errorText(cause, t));
       })
       .finally(() => {
         if (active) setBusy(false);
@@ -660,7 +660,7 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
       })
       .catch((cause) => {
         setDeleteTarget(undefined);
-        setError(errorText(cause));
+        setError(errorText(cause, t));
       })
       .finally(() => setBusy(false));
   };

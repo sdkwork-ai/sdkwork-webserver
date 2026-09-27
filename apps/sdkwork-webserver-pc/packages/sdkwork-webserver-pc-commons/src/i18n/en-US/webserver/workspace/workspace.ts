@@ -124,7 +124,10 @@ export const webserverWorkspaceEnUs = {
   "auth.webAdministrator": "Tenant administrator",
   "auth.webSuperAdmin": "Web super administrator",
   "auth.platformSuperAdmin": "Platform super administrator",
-  "access.title": "No management modules available",
+  "surfaceCrash.title": "This page could not be rendered",
+  "surfaceCrash.description": "The page hit an unexpected error and was stopped before it could take effect. Other pages are unaffected; retrying re-mounts it.",
+  "surfaceCrash.retry": "Retry this page",
+"access.title": "No management modules available",
   "access.description": "This account has not been granted Web Server administration access.",
   "access.resource.title": "This feature is not authorized",
   "access.resource.description": "You can still browse the console. Data and actions become available when the required IAM permission is granted.",
@@ -330,7 +333,7 @@ export const webserverWorkspaceEnUs = {
   "resource.certificates.close": "Close",
   "resource.certificates.searchHostnames": "Search hostnames",
   "resource.certificates.noHostnameMatch": "No served hostname matches this search",
-  "resource.certificates.selectedCount": "{count} selected",
+  "resource.certificates.selectedHostname": "Selected hostname",
   "resource.certificates.removeHostname": "Remove {hostname}",
   "resource.certificates.issueOptions": "Issuance options",
   "resource.certificates.keyAlgorithmTitle": "Key algorithm",
@@ -338,6 +341,74 @@ export const webserverWorkspaceEnUs = {
     "Default. RSA-2048 is accepted by every TLS client, so the certificate keeps working on old stacks through unattended renewals.",
   "resource.certificates.keyAlgorithmEcdsaHint":
     "Faster handshakes on smaller keys. Choose it when every client that reaches this name is known to support ECDSA P-256.",
+  // The "issue a certificate" form and the hostname picker. These keys mean the
+  // same thing as the Deployments console's identically named fields, because
+  // both forms do the same job. The cloud-account entry is deliberately
+  // different: the console lists the account center's multi-scope accounts,
+  // while the edge lists the accounts it actually holds credentials for, and
+  // those credentials are deployment configuration.
+  "resource.certificates.certificateType": "Certificate type",
+  "resource.certificates.scopeSingleDomain": "Single domain",
+  "resource.certificates.scopeWildcard": "Wildcard",
+  "resource.certificates.scopeSingleDomainHint": "Covers exact hostnames only; a wildcard is refused.",
+  "resource.certificates.scopeWildcardHint":
+    "Needs at least one wildcard hostname. A wildcard can only be authorized over DNS-01, so HTTP-01 is not offered alongside it.",
+  "resource.certificates.pickHostnames": "Choose hostnames",
+  "resource.certificates.rootDomainUnset":
+    "No root domain chosen yet. Open the list to choose one and the hostnames to cover.",
+  "resource.certificates.rootDomainLabel": "Root domain: {apex}",
+  "resource.certificates.hostnameRequired": "Choose at least one hostname.",
+  "resource.certificates.wildcardRequired": "A wildcard certificate needs at least one wildcard hostname.",
+  "resource.certificates.singleDomainRejectsWildcard": "A single-domain certificate cannot include a wildcard hostname.",
+  "resource.certificates.hostnamePickerTitle": "Choose hostnames",
+  "resource.certificates.rootDomainSelect": "Root domain",
+  "resource.certificates.hostnameCandidates": "Declared hostnames in this root domain",
+  "resource.certificates.hostnamesLoading": "Loading hostnames…",
+  "resource.certificates.noRootDomains": "No root domain is available",
+  "resource.certificates.noHostnamesInRootDomain": "This root domain has no hostnames yet",
+  // One name at a time: a certificate covers a single hostname, so the rail says
+  // only *that* something is chosen and the footer says which name Confirm will
+  // carry back. An empty choice is a state rather than a failure — it is how the
+  // choice is cleared — so it has wording of its own.
+  "resource.certificates.pickerChosen": "Chosen",
+  "resource.certificates.pickerNoChoice": "No hostname chosen yet",
+  "resource.certificates.pickerChosenName": "Chosen: {hostname}",
+  "resource.certificates.pickerChooseHostname": "Choose {hostname}",
+  "resource.certificates.confirm": "Confirm",
+  "resource.certificates.wildcard": "Wildcard",
+  "resource.certificates.exact": "Exact",
+  "resource.certificates.validationMethod": "Validation method",
+  "resource.certificates.validationAuto": "Automatic",
+  "resource.certificates.validationHttp01": "HTTP-01",
+  "resource.certificates.validationDns01": "DNS-01",
+  "resource.certificates.validationAutoHint":
+    "The edge decides from what it has configured: HTTP-01 when a webroot is set, DNS-01 when a cloud account covers every hostname.",
+  "resource.certificates.validationWildcardRequiresDns01": "A wildcard can only be authorized over DNS-01.",
+  "resource.certificates.cloudAccount": "Cloud account",
+  "resource.certificates.cloudAccountAuto": "Automatic",
+  "resource.certificates.cloudAccountHint":
+    "The edge resolves one from the hostnames. Once chosen, this certificate's DNS-01 records are published by that account, renewals included.",
+  "resource.certificates.cloudAccountAutoHint":
+    "No account is pinned: the edge picks one that covers every hostname this certificate is about to serve.",
+  "resource.certificates.cloudAccountReadFailed":
+    "This edge's DNS accounts could not be read; a gateway that predates the endpoint has to be rebuilt.",
+  "resource.certificates.cloudAccountUnavailable":
+    "No DNS account is configured on this edge, so DNS-01 and wildcard certificates are both unavailable.",
+  "resource.certificates.cloudAccountClear": "Use automatic",
+  "resource.certificates.cloudAccountPick": "Choose account",
+  "resource.certificates.cloudAccountPickerTitle": "Choose a cloud account",
+  "resource.certificates.cloudAccountPickerLegend": "DNS accounts configured on this edge",
+  "resource.certificates.caProfile": "CA profile",
+  "resource.certificates.caProfileProduction": "Let's Encrypt production",
+  "resource.certificates.caProfileStaging": "Let's Encrypt staging",
+  "resource.certificates.caProfileHint":
+    "This edge orders from one directory. Choosing the other is refused with the configured one named, rather than quietly ordering elsewhere.",
+  "resource.certificates.certNameField": "Certificate name",
+  "resource.certificates.certNameFieldHint": "Leave it empty to keep the generated identity.",
+  "resource.certificates.renewBeforeDays": "Renew before (days)",
+  "resource.certificates.renewBeforeDaysHint":
+    "How long before expiry renewal begins; 7 to 90 days. Only meaningful while automatic renewal is on.",
+  "resource.certificates.renewBeforeDaysInvalid": "Enter a whole number of days from 7 to 90.",
   "resource.cloud-accounts.label": "Cloud Accounts",
   "resource.cloud-accounts.description": "Provider accounts held by you, your organization, or the tenant, owned by SDKWork IAM",
   "resource.cloud-accounts.admin.label": "Cloud Account Admin",

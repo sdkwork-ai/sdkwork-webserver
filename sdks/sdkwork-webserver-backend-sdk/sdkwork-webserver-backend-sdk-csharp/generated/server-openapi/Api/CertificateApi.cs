@@ -61,12 +61,12 @@ namespace SDKWork.WebserverBackendSdk.Api
         /// <summary>
         /// List canonical certificates
         /// </summary>
-        public async Task<SDKWork.WebserverBackendSdk.Models.CertificatesListResponse?> CertificatesListAsync(int? page = null, int? pageSize = null, string? domainId = null)
+        public async Task<SDKWork.WebserverBackendSdk.Models.CertificatesListResponse?> CertificatesListAsync(int? pageSize = null, string? cursor = null, string? domainId = null)
         {
             var queryString = BuildQueryString(new[]
             {
-                new QueryParameterSpec("page", page, "form", true, false, null),
                 new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
+                new QueryParameterSpec("cursor", cursor, "form", true, false, null),
                 new QueryParameterSpec("domain_id", domainId, "form", true, false, null),
             });
             return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.CertificatesListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath("/certificates"), queryString));
@@ -153,6 +153,19 @@ namespace SDKWork.WebserverBackendSdk.Api
                 new Dictionary<string, HeaderParameterSpec>()
             );
             return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.CertificatesRevokeResponse>(ApiPaths.BackendPath($"/certificates/{SerializePathParameter(certificateId, new PathParameterSpec("certificateId", "simple", false))}/revoke"), body, null, requestHeaders, "application/json");
+        }
+
+        /// <summary>
+        /// List the cloud DNS accounts this edge can present challenges with
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.DnsAccountsListResponse?> DnsAccountsListAsync(int? page = null, int? pageSize = null)
+        {
+            var queryString = BuildQueryString(new[]
+            {
+                new QueryParameterSpec("page", page, "form", true, false, null),
+                new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
+            });
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.DnsAccountsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath("/dns_accounts"), queryString));
         }
 
         private sealed record PathParameterSpec(string Name, string Style, bool Explode);

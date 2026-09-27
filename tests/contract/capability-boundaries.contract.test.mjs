@@ -144,7 +144,7 @@ test('every capability the service consumes optionally is implemented and inject
   // nothing to check.
   assert.deepEqual(
     optionalPorts.map((entry) => entry.port),
-    ['TrafficUsageReadPort'],
+    ['TrafficUsageReadPort', 'MetricsSummaryReadPort'],
     'the set of optionally-consumed capability ports changed; re-point this gate at the new set',
   );
 

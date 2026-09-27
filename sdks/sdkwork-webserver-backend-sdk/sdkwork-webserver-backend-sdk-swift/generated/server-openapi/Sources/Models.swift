@@ -711,13 +711,38 @@ public struct IssueCertificateRequest: Codable {
     public let certType: Int?
     public let keyAlgorithm: String?
     public let autoRenew: Bool?
+    public let certName: String?
+    public let certificateScope: String?
+    public let validationMethod: String?
+    public let renewBeforeDays: Int?
+    public let caProfile: String?
+    public let providerAccountId: String?
 
 
-    public init(domainIds: [String]? = nil, certType: Int? = nil, keyAlgorithm: String? = nil, autoRenew: Bool? = nil) {
+    public init(domainIds: [String]? = nil, certType: Int? = nil, keyAlgorithm: String? = nil, autoRenew: Bool? = nil, certName: String? = nil, certificateScope: String? = nil, validationMethod: String? = nil, renewBeforeDays: Int? = nil, caProfile: String? = nil, providerAccountId: String? = nil) {
         self.domainIds = domainIds
         self.certType = certType
         self.keyAlgorithm = keyAlgorithm
         self.autoRenew = autoRenew
+        self.certName = certName
+        self.certificateScope = certificateScope
+        self.validationMethod = validationMethod
+        self.renewBeforeDays = renewBeforeDays
+        self.caProfile = caProfile
+        self.providerAccountId = providerAccountId
+    }
+}
+
+public struct DnsAccountResponse: Codable {
+    public let accountId: String?
+    public let provider: String?
+    public let zoneApex: String?
+
+
+    public init(accountId: String? = nil, provider: String? = nil, zoneApex: String? = nil) {
+        self.accountId = accountId
+        self.provider = provider
+        self.zoneApex = zoneApex
     }
 }
 
@@ -2485,6 +2510,19 @@ public struct CertificatesRevokeResponse: Codable {
 }
 
 public struct CertificatesDistributionListResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct DnsAccountsListResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?

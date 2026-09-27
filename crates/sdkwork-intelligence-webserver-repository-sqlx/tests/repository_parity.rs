@@ -193,6 +193,7 @@ async fn postgres_repository_transactions_tenants_idempotency_and_pagination_are
     verify_repository_contract(&context).await;
     verify_certificate_activation_compensation(&context).await;
     verify_certificate_revocation_ari_and_tls_projection(&context).await;
+    verify_certificate_keyset_pagination(&context).await;
     context.pool.close().await;
 }
 
@@ -250,6 +251,7 @@ async fn verify_certificate_revocation_ari_and_tls_projection(context: &TestCont
             cert_type: 3,
             key_algorithm: "ECDSA".to_string(),
             auto_renew: false,
+            ..IssueCertificateRequest::default()
         },
         "parity-certificate-revoke",
         "repository-parity-revoke",
@@ -353,6 +355,7 @@ async fn verify_certificate_revocation_ari_and_tls_projection(context: &TestCont
             cert_type: 1,
             key_algorithm: "ECDSA".to_string(),
             auto_renew: true,
+            ..IssueCertificateRequest::default()
         },
         "parity-certificate-ari",
         "repository-parity-ari",
@@ -544,6 +547,7 @@ async fn verify_certificate_activation_compensation(context: &TestContext) {
                 cert_type: 3,
                 key_algorithm: "ECDSA".to_string(),
                 auto_renew: false,
+                ..IssueCertificateRequest::default()
             },
             Some("certificate-compensation"),
         )
@@ -1341,6 +1345,7 @@ async fn verify_public_repository_surface(
                 cert_type: 3,
                 key_algorithm: "ECDSA".to_string(),
                 auto_renew: true,
+                ..IssueCertificateRequest::default()
             },
             Some("detached-self-signed-auto-renew"),
         )
@@ -1377,6 +1382,7 @@ async fn verify_public_repository_surface(
             cert_type: 3,
             key_algorithm: "ECDSA".to_string(),
             auto_renew: false,
+            ..IssueCertificateRequest::default()
         },
         "detached-certificate-ecdsa",
         "repository-detached-ecdsa",
@@ -1411,6 +1417,7 @@ async fn verify_public_repository_surface(
             cert_type: 3,
             key_algorithm: "RSA".to_string(),
             auto_renew: false,
+            ..IssueCertificateRequest::default()
         },
         "detached-certificate-rsa",
         "repository-detached-rsa",
@@ -1437,14 +1444,14 @@ async fn verify_public_repository_surface(
         2
     );
     assert!(repository
-        .list_certificates(TENANT_A, None, None, None, 1, 20)
+        .list_certificates(TENANT_A, None, None, None, 1, 20, None)
         .await
         .expect("list detached certificate for backend admin")
         .items
         .iter()
         .any(|item| item.id == detached_certificate.id));
     assert!(!repository
-        .list_certificates(TENANT_A, Some(91), None, None, 1, 20)
+        .list_certificates(TENANT_A, Some(91), None, None, 1, 20, None)
         .await
         .expect("list owner-scoped certificates")
         .items
@@ -1680,6 +1687,7 @@ async fn verify_public_repository_surface(
             cert_type: 1,
             key_algorithm: "ECDSA".to_string(),
             auto_renew: true,
+            ..IssueCertificateRequest::default()
         },
         "parity-certificate-issue",
         "repository-parity-issue",
@@ -1729,7 +1737,7 @@ async fn verify_public_repository_surface(
     let initial_listener_version_id = listener_binding.desired_certificate_version_id.clone();
     assert_eq!(
         repository
-            .list_certificates(TENANT_A, None, None, None, 1, 20)
+            .list_certificates(TENANT_A, None, None, None, 1, 20, None)
             .await
             .expect("list certificate timestamp projections")
             .total,
@@ -1737,7 +1745,7 @@ async fn verify_public_repository_surface(
     );
     assert_eq!(
         repository
-            .list_certificates(TENANT_A, Some(91), Some(site_id), None, 1, 20)
+            .list_certificates(TENANT_A, Some(91), Some(site_id), None, 1, 20, None)
             .await
             .expect("owning user can list application certificates")
             .total,
@@ -1745,14 +1753,14 @@ async fn verify_public_repository_surface(
     );
     assert_eq!(
         repository
-            .list_certificates(TENANT_A, None, None, Some(&domain.id), 1, 20)
+            .list_certificates(TENANT_A, None, None, Some(&domain.id), 1, 20, None)
             .await
             .expect("filter certificates by domain")
             .total,
         1
     );
     assert!(repository
-        .list_certificates(TENANT_A, Some(92), Some(site_id), None, 1, 20)
+        .list_certificates(TENANT_A, Some(92), Some(site_id), None, 1, 20, None)
         .await
         .expect("another user receives an empty certificate page")
         .items
@@ -1767,6 +1775,7 @@ async fn verify_public_repository_surface(
                 cert_type: 1,
                 key_algorithm: "ECDSA".to_string(),
                 auto_renew: true,
+                ..IssueCertificateRequest::default()
             },
             Some("parity-wrong-owner-issue"),
         )
@@ -1839,7 +1848,7 @@ async fn verify_public_repository_surface(
     assert_eq!(enabled_certificate.id, certificate_id);
     assert_eq!(
         repository
-            .list_certificates(TENANT_A, None, None, None, 1, 20)
+            .list_certificates(TENANT_A, None, None, None, 1, 20, None)
             .await
             .expect("automatic renewal update preserves canonical row")
             .total,
@@ -1855,6 +1864,7 @@ async fn verify_public_repository_surface(
             cert_type: 3,
             key_algorithm: "ECDSA".to_string(),
             auto_renew: false,
+            ..IssueCertificateRequest::default()
         },
         "parity-listener-same-algorithm",
         "repository-listener-same-algorithm",
@@ -2039,6 +2049,7 @@ async fn verify_public_repository_surface(
                 cert_type: 1,
                 key_algorithm: "ECDSA".to_string(),
                 auto_renew: false,
+                ..IssueCertificateRequest::default()
             },
             Some("parity-terminal-issuance-failure"),
         )
@@ -2289,14 +2300,14 @@ async fn verify_public_repository_surface(
         .await
         .expect("soft-delete domain timestamps");
     assert!(repository
-        .list_certificates(TENANT_A, Some(91), None, Some(&domain.id), 1, 20)
+        .list_certificates(TENANT_A, Some(91), None, Some(&domain.id), 1, 20, None)
         .await
         .expect("owner certificate remains visible after application unbind")
         .items
         .iter()
         .any(|item| item.id == certificate_id));
     assert!(repository
-        .list_certificates(TENANT_A, Some(92), None, Some(&domain.id), 1, 20)
+        .list_certificates(TENANT_A, Some(92), None, Some(&domain.id), 1, 20, None)
         .await
         .expect("another owner cannot list the detached certificate")
         .items
@@ -2318,6 +2329,149 @@ async fn verify_public_repository_surface(
         .retrieve_application(TENANT_A, None, application_id)
         .await
         .expect_err("soft-deleted site must not be retrievable");
+}
+
+/// `certificates.list` is cursor mode: the first (no-cursor) request is an
+/// offset page that carries the exact total and the minted continuation, and
+/// every later page must come from the opaque keyset cursor. Deep offsets are
+/// refused so the dual-EXISTS predicate never rescans discarded rows.
+async fn verify_certificate_keyset_pagination(context: &TestContext) {
+    let repository = &context.repository;
+    let application = repository
+        .create_application(
+            TENANT_A,
+            Some(31),
+            Some(91),
+            &CreateApplicationRequest {
+                name: "keyset-certificates".to_string(),
+                slug: Some("keyset-certificates".to_string()),
+                description: None,
+                app_kind: "STATIC_WEB".to_string(),
+                runtime_config: None,
+                store_listing: None,
+            },
+        )
+        .await
+        .expect("create keyset application");
+    let site_id = repository
+        .resolve_site_id(TENANT_A, &application.id)
+        .await
+        .expect("resolve keyset site");
+
+    let mut certificate_ids = Vec::new();
+    for index in 0..3 {
+        let domain = repository
+            .create_domain(
+                TENANT_A,
+                &site_id,
+                &CreateDomainRequest {
+                    hostname: format!("keyset-{index}.example.test"),
+                    is_primary: index == 0,
+                    ssl_enabled: true,
+                    ssl_provider: Some("self-signed".to_string()),
+                },
+            )
+            .await
+            .expect("create keyset domain");
+        let lease = enqueue_and_claim_certificate(
+            repository,
+            TENANT_A,
+            Some(91),
+            Some(91),
+            &IssueCertificateRequest {
+                domain_ids: vec![domain.id.clone()],
+                cert_type: 3,
+                key_algorithm: "ECDSA".to_string(),
+                auto_renew: false,
+                ..IssueCertificateRequest::default()
+            },
+            &format!("parity-certificate-keyset-{index}"),
+            "repository-parity-keyset",
+        )
+        .await;
+        repository
+            .finalize_certificate_operation(
+                &lease,
+                &test_certificate_update(
+                    &format!("keyset-{index}.example.test"),
+                    3,
+                    "ECDSA",
+                    '7',
+                    false,
+                ),
+            )
+            .await
+            .expect("finalize keyset certificate");
+        certificate_ids.push(lease.certificate_id);
+    }
+
+    // Page one without a cursor: exact total, exact continuation, minted token.
+    let first_page = repository
+        .list_certificates(TENANT_A, Some(91), Some(&site_id), None, 1, 2, None)
+        .await
+        .expect("list first certificate keyset page");
+    assert_eq!(
+        first_page.total, 3,
+        "page one carries the exact filtered total"
+    );
+    assert_eq!(first_page.has_more, Some(true));
+    assert_eq!(first_page.items.len(), 2);
+    let cursor = first_page
+        .next_cursor
+        .clone()
+        .expect("page one mints the keyset continuation");
+
+    // The cursor page continues without overlap and reports the end exactly.
+    let second_page = repository
+        .list_certificates(
+            TENANT_A,
+            Some(91),
+            Some(&site_id),
+            None,
+            1,
+            2,
+            Some(&cursor),
+        )
+        .await
+        .expect("list second certificate keyset page");
+    assert_eq!(second_page.items.len(), 1);
+    assert_eq!(second_page.has_more, Some(false));
+    assert!(second_page.next_cursor.is_none());
+    let seen = first_page
+        .items
+        .iter()
+        .chain(second_page.items.iter())
+        .map(|item| item.id.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(seen.len(), 3, "cursor pages must not overlap or skip");
+    for id in &certificate_ids {
+        assert!(
+            seen.contains(id),
+            "keyset pages must cover every certificate"
+        );
+    }
+
+    // Deep offsets stay refused on this growing collection.
+    let deep_offset = repository
+        .list_certificates(TENANT_A, Some(91), Some(&site_id), None, 2, 2, None)
+        .await
+        .expect_err("deep offset must be refused");
+    assert_eq!(deep_offset.kind(), WebServiceErrorKind::Validation);
+
+    // A tampered cursor is a client error, never a silent restart.
+    let tampered = repository
+        .list_certificates(
+            TENANT_A,
+            Some(91),
+            Some(&site_id),
+            None,
+            1,
+            2,
+            Some(&format!("{cursor}x")),
+        )
+        .await
+        .expect_err("a tampered cursor must be refused");
+    assert_eq!(tampered.kind(), WebServiceErrorKind::Validation);
 }
 
 fn test_media_resource(node_id: &str, width: i32, height: i32) -> MediaResource {

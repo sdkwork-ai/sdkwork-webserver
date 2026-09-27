@@ -511,10 +511,13 @@ async fn store_proxy_response(
         .find(|(name, _)| name.eq_ignore_ascii_case("vary"))
         .map(|(_, value)| super::cache::parse_vary_header(value))
         .unwrap_or_default();
-    let (parts, body) = response.into_parts();
-    let Ok(bytes) = collect_body_limited(body, maximum_bytes).await else {
-        return Response::from_parts(parts, Body::empty());
-    };
+    // A body that declares itself larger than the cache object ceiling is
+    // never consumed: it streams through untouched, exactly like nginx
+    // refusing to cache an oversized object while still serving it whole.
+    let declared = declared_body_length(response.headers());
+    if declared.is_some_and(|length| length > maximum_bytes) {
+        return response;
+    }
     let key = super::cache::CacheKey::new(
         &base_key.method,
         &base_key.host,
@@ -529,23 +532,75 @@ async fn store_proxy_response(
         vary,
         fresh_seconds: freshness.fresh_seconds.unwrap_or(0),
     };
-    cache.insert(key, metadata, bytes.clone(), decision).await;
-    Response::from_parts(parts, Body::from(bytes))
+    let (parts, body) = response.into_parts();
+    // Tee the upstream body: the client receives every frame as it arrives
+    // while a bounded side copy accumulates for the cache fill. An oversized
+    // mid-stream body (no usable Content-Length) keeps streaming and only
+    // abandons the cache copy, so a client can never observe a truncated or
+    // length-mismatched response from this path.
+    let (body_tx, body_rx) = tokio::sync::mpsc::channel::<Result<bytes::Bytes, axum::Error>>(
+        CACHE_FILL_CHANNEL_CAPACITY,
+    );
+    let fill_cache = Arc::clone(cache);
+    tokio::spawn(async move {
+        use futures_util::StreamExt;
+        let mut stream = body.into_data_stream();
+        let mut buffered = declared
+            .map(|length| Vec::with_capacity(length.min(maximum_bytes) as usize))
+            .unwrap_or_default();
+        let mut collecting = true;
+        loop {
+            let chunk = match stream.next().await {
+                Some(Ok(chunk)) => chunk,
+                Some(Err(error)) => {
+                    // Never answer a mid-body upstream failure with a
+                    // truncated success: surface the error so the transfer
+                    // aborts instead of completing short.
+                    let _ = body_tx.send(Err(error)).await;
+                    return;
+                }
+                None => break,
+            };
+            if collecting {
+                if buffered.len() as u64 + chunk.len() as u64 > maximum_bytes {
+                    collecting = false;
+                    buffered = Vec::new();
+                } else {
+                    buffered.extend_from_slice(&chunk);
+                }
+            }
+            if body_tx.send(Ok(chunk)).await.is_err() {
+                // The client went away; the fill has no consumer left.
+                return;
+            }
+        }
+        if collecting {
+            fill_cache
+                .insert(key, metadata, bytes::Bytes::from(buffered), decision)
+                .await;
+        }
+    });
+    let streamed = futures_util::stream::unfold(body_rx, |mut rx| async move {
+        rx.recv().await.map(|frame| (frame, rx))
+    });
+    Response::from_parts(parts, Body::from_stream(streamed))
 }
 
-async fn collect_body_limited(body: Body, maximum_bytes: u64) -> Result<bytes::Bytes, ()> {
-    use futures_util::StreamExt;
-    let mut stream = body.into_data_stream();
-    let mut collected = Vec::new();
-    while let Some(frame) = stream.next().await {
-        let chunk = frame.map_err(|_| ())?;
-        if collected.len() as u64 + chunk.len() as u64 > maximum_bytes {
-            return Err(());
-        }
-        collected.extend_from_slice(&chunk);
-    }
-    Ok(bytes::Bytes::from(collected))
+/// The declared `Content-Length` of a response, when the header parses.
+fn declared_body_length(headers: &axum::http::HeaderMap) -> Option<u64> {
+    headers
+        .get(CONTENT_LENGTH)?
+        .to_str()
+        .ok()?
+        .parse::<u64>()
+        .ok()
 }
+
+/// Frames buffered between the upstream tee pump and the client body for one
+/// cache fill. Small enough to keep the extra buffering negligible, large
+/// enough that the pump and the client transfer do not lockstep on every
+/// chunk.
+const CACHE_FILL_CHANNEL_CAPACITY: usize = 16;
 
 fn cache_maximum_object_bytes(cache: &Arc<super::cache::HttpResponseCache>) -> u64 {
     // The facade clamps inserts; read the configured limit through a helper.

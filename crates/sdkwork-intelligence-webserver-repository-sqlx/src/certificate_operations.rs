@@ -1,7 +1,9 @@
 use sdkwork_webserver_contract::{
-    CertificateOperationAcceptedResponse, CertificateOperationLease, CertificateOperationResponse,
-    IssueCertificateRequest, WebServiceError, WebServiceResult,
-    CERTIFICATE_FAILURE_DETAIL_MAX_CHARS,
+    certificate_issue_shape_error, CertificateOperationAcceptedResponse, CertificateOperationLease,
+    CertificateOperationResponse, IssueCertificateRequest, WebServiceError, WebServiceResult,
+    CERTIFICATE_CA_PROFILE_LETS_ENCRYPT_PRODUCTION, CERTIFICATE_CA_PROFILE_SELF_SIGNED,
+    CERTIFICATE_FAILURE_DETAIL_MAX_CHARS, CERTIFICATE_SCOPE_SINGLE_DOMAIN,
+    CERTIFICATE_SCOPE_WILDCARD,
 };
 use serde_json::json;
 use sqlx::Row;
@@ -90,24 +92,51 @@ impl WebRepository {
             }
         }
 
+        // The scope check needs the rows' own `EXACT`/`WILDCARD` types, so it
+        // runs here rather than with the shape checks that precede the read.
+        let identifier_types = domains
+            .iter()
+            .map(|domain| {
+                domain
+                    .try_get::<String, _>("hostname_type")
+                    .map_err(|error| store_error("map certificate hostname type", error))
+            })
+            .collect::<WebServiceResult<Vec<_>>>()?;
+        validate_certificate_scope_against_identifiers(
+            &request.certificate_scope,
+            &identifier_types,
+        )?;
+
         let certificate_internal_id = next_id(self.id_generator())?;
         let certificate_uuid = new_uuid();
+        // An unnamed request keeps the generated identity, which is what every
+        // caller written before `certName` existed expects to find in the
+        // ledger; a named one gets the operator's own words.
+        let cert_name = request
+            .cert_name
+            .as_deref()
+            .unwrap_or(certificate_uuid.as_str());
+        let metadata = certificate_issue_metadata(request);
         sqlx::query(
             "INSERT INTO webserver_certificate (
                 id, uuid, tenant_id, user_id, cert_name, cert_type, ca_profile,
                 preferred_key_algorithm, auto_renew, renewal_status, status, metadata,
                 created_at, updated_at, version
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 2, 0, '{}', NOW(), NOW(), 0)",
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 2, 0, $10, NOW(), NOW(), 0)",
         )
         .bind(certificate_internal_id)
         .bind(&certificate_uuid)
         .bind(tenant_id)
         .bind(asset_owner_id)
-        .bind(&certificate_uuid)
+        .bind(cert_name)
         .bind(request.cert_type)
-        .bind(certificate_ca_profile(request.cert_type))
+        .bind(certificate_ca_profile(
+            request.cert_type,
+            request.ca_profile.as_deref(),
+        ))
         .bind(&request.key_algorithm)
         .bind(request.auto_renew)
+        .bind(&metadata)
         .execute(&mut *tx)
         .await
         .map_err(|error| store_error("insert pending webserver_certificate", error))?;
@@ -346,7 +375,19 @@ impl WebRepository {
                                '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}'
                           THEN (certificate.metadata #>> '{ari,windowStart}')::timestamptz
                           ELSE NULL END,
-                     version.not_after - ($1 * INTERVAL '1 day')
+                     version.not_after - (COALESCE(
+                         -- The certificate's own lead time wins; the deployment's
+                         -- configured default is the fallback for a certificate
+                         -- stored before the field existed. Cast through a
+                         -- regex-guarded CASE rather than `::int` directly,
+                         -- because a malformed stored value would otherwise
+                         -- abort the whole scheduling query for every
+                         -- certificate, not just its own.
+                         CASE WHEN certificate.metadata #>> '{renewBeforeDays}' ~ '^[0-9]{1,3}$'
+                              THEN (certificate.metadata #>> '{renewBeforeDays}')::int
+                              ELSE NULL END,
+                         $1
+                       ) * INTERVAL '1 day')
                    ) <= NOW()
                AND NOT EXISTS (
                    SELECT 1 FROM webserver_certificate_operation active_operation
@@ -500,7 +541,7 @@ impl WebRepository {
                     operation.lease_owner, operation.fencing_token,
                     certificate.uuid AS certificate_uuid, certificate.cert_type,
                     certificate.cert_name, certificate.preferred_key_algorithm,
-                    certificate.auto_renew, identifier.hostnames
+                    certificate.auto_renew, certificate.metadata, identifier.hostnames
              FROM webserver_certificate_operation operation
              INNER JOIN webserver_certificate certificate
                ON certificate.tenant_id = operation.tenant_id
@@ -911,14 +952,36 @@ fn certificate_operation_idempotency_key_hash(
 }
 
 fn certificate_issue_request_sha256(request: &IssueCertificateRequest) -> String {
+    // v2: the fingerprint covers every field that changes what is issued or
+    // where it comes from. v1 hashed only the type, key algorithm, auto-renew
+    // flag and domain ids, so two requests differing solely in their cloud
+    // account, CA profile, scope, name or validation method hashed alike — and
+    // the second was answered with the first one's operation, i.e. accepted,
+    // acknowledged and never performed. The version prefix means an in-flight
+    // retry stored under v1 will not match once, which costs one duplicate
+    // operation rather than a silently swallowed request.
     let mut canonical = format!(
-        "v1:ISSUE:{}:{}:{}:",
+        "v2:ISSUE:{}:{}:{}:{}:{}:{}:{}:{}:",
         request.cert_type,
         request.key_algorithm,
-        u8::from(request.auto_renew)
+        u8::from(request.auto_renew),
+        request.certificate_scope,
+        request.validation_method,
+        request.renew_before_days,
+        request.ca_profile.as_deref().unwrap_or(""),
+        request.cert_name.as_deref().unwrap_or(""),
     );
     for domain_id in &request.domain_ids {
         canonical.push_str(&format!("{}:{domain_id}:", domain_id.len()));
+    }
+    // Presence-marked rather than folded into an empty string: "no account
+    // pinned" and "pinned to an account whose id is empty" are different
+    // requests, and only one of them is even reachable.
+    match request.provider_account_id.as_deref() {
+        Some(account_id) => {
+            canonical.push_str(&format!("acct:{}:{account_id}:", account_id.len()));
+        }
+        None => canonical.push_str("acct:-:"),
     }
     sha256_hex(&canonical)
 }
@@ -945,29 +1008,88 @@ fn validate_certificate_issue_request(request: &IssueCertificateRequest) -> WebS
     {
         return Err(WebServiceError::validation("domainIds must be unique"));
     }
-    if !matches!(request.cert_type, 1 | 3) {
-        return Err(WebServiceError::validation(
-            "certType must be 1 (Let's Encrypt) or 3 (self-signed)",
-        ));
-    }
-    if request.cert_type == 3 && request.auto_renew {
-        return Err(WebServiceError::validation(
-            "automatic renewal is supported only for ACME certificates",
-        ));
-    }
-    if !matches!(request.key_algorithm.as_str(), "ECDSA" | "RSA") {
-        return Err(WebServiceError::validation(
-            "keyAlgorithm must be ECDSA or RSA",
-        ));
+    // Everything else is the shared shape rule, so this boundary and the
+    // receive-side one cannot drift into accepting different requests.
+    if let Some(reason) = certificate_issue_shape_error(request) {
+        return Err(WebServiceError::validation(reason));
     }
     Ok(())
 }
 
-fn certificate_ca_profile(cert_type: i32) -> &'static str {
-    match cert_type {
-        1 => "LETS_ENCRYPT_PRODUCTION",
-        3 => "SELF_SIGNED",
-        _ => "CUSTOM",
+/// The identifier set has to agree with the declared scope, and only the
+/// resolved rows can say whether it does.
+///
+/// Kept apart from [`validate_certificate_issue_request`], which runs before any
+/// row is read: this check needs each identifier's `EXACT`/`WILDCARD` type, so
+/// it belongs where the rows are in hand.
+fn validate_certificate_scope_against_identifiers(
+    scope: &str,
+    identifier_types: &[String],
+) -> WebServiceResult<()> {
+    let wildcards = identifier_types
+        .iter()
+        .filter(|hostname_type| hostname_type.as_str() == "WILDCARD")
+        .count();
+    match scope {
+        CERTIFICATE_SCOPE_SINGLE_DOMAIN if wildcards > 0 => Err(WebServiceError::validation(
+            "certificateScope SINGLE_DOMAIN cannot cover a wildcard identifier; \
+             ask for WILDCARD scope or drop the wildcard name",
+        )),
+        CERTIFICATE_SCOPE_WILDCARD if wildcards == 0 => Err(WebServiceError::validation(
+            "certificateScope WILDCARD requires at least one wildcard identifier",
+        )),
+        _ => Ok(()),
+    }
+}
+
+/// The request's per-certificate settings, as the certificate's stored
+/// document.
+///
+/// JSONB rather than columns because these are per-certificate *preferences*
+/// read back by one consumer (the operation worker and the renewal scheduler),
+/// and a migration for each would be four schema changes to carry one
+/// decision. The keys are fixed and read back by name; an absent key means the
+/// caller expressed no preference, which is distinct from a default the edge
+/// invented.
+fn certificate_issue_metadata(request: &IssueCertificateRequest) -> serde_json::Value {
+    let mut metadata = serde_json::Map::new();
+    metadata.insert(
+        "certificateScope".to_owned(),
+        json!(request.certificate_scope),
+    );
+    metadata.insert(
+        "validationMethod".to_owned(),
+        json!(request.validation_method),
+    );
+    metadata.insert("renewBeforeDays".to_owned(), json!(request.renew_before_days));
+    if let Some(account_id) = request.provider_account_id.as_deref() {
+        metadata.insert("providerAccountId".to_owned(), json!(account_id));
+    }
+    serde_json::Value::Object(metadata)
+}
+
+/// Reads one string key out of a certificate's stored document.
+fn certificate_metadata_string(
+    metadata: Option<&serde_json::Value>,
+    key: &str,
+) -> Option<String> {
+    metadata?
+        .get(key)?
+        .as_str()
+        .map(str::to_owned)
+        .filter(|value| !value.is_empty())
+}
+
+fn certificate_ca_profile(cert_type: i32, requested: Option<&str>) -> String {
+    // The request wins for an ACME certificate, because that is the operator's
+    // decision; a self-signed request has no CA directory and resolves from its
+    // type. `requested` is already known to be a Let's Encrypt profile when
+    // `cert_type` is 1, because validation refuses any other pairing.
+    match (cert_type, requested) {
+        (1, Some(profile)) => profile.to_owned(),
+        (1, None) => CERTIFICATE_CA_PROFILE_LETS_ENCRYPT_PRODUCTION.to_owned(),
+        (3, _) => CERTIFICATE_CA_PROFILE_SELF_SIGNED.to_owned(),
+        _ => "CUSTOM".to_owned(),
     }
 }
 
@@ -1090,6 +1212,7 @@ fn map_certificate_operation_lease(
             "certificate operation has no identifiers",
         ))));
     }
+    let metadata: Option<serde_json::Value> = row.try_get("metadata")?;
     Ok(CertificateOperationLease {
         tenant_id: row.try_get("tenant_id")?,
         operation_id: row.try_get("operation_uuid")?,
@@ -1100,6 +1223,13 @@ fn map_certificate_operation_lease(
         hostnames,
         key_algorithm: row.try_get("preferred_key_algorithm")?,
         auto_renew: bool_from_row(row, "auto_renew")?,
+        // Absent for a certificate stored before these keys existed, and `None`
+        // then means "no recorded preference" rather than a default the read
+        // invented — the executor falls back to the deployment's setting, which
+        // is what such a certificate was issued under.
+        certificate_scope: certificate_metadata_string(metadata.as_ref(), "certificateScope"),
+        validation_method: certificate_metadata_string(metadata.as_ref(), "validationMethod"),
+        provider_account_id: certificate_metadata_string(metadata.as_ref(), "providerAccountId"),
         attempt_count: row.try_get("attempt_count")?,
         max_attempts: row.try_get("max_attempts")?,
         lease_owner: row.try_get("lease_owner")?,
@@ -1159,8 +1289,7 @@ mod tests {
         let request = IssueCertificateRequest {
             domain_ids: vec!["domain-a".to_string(), "domain-b".to_string()],
             cert_type: 1,
-            key_algorithm: "ECDSA".to_string(),
-            auto_renew: true,
+            ..IssueCertificateRequest::default()
         };
         assert_eq!(
             certificate_issue_request_sha256(&request),
@@ -1191,8 +1320,10 @@ mod tests {
         let request = IssueCertificateRequest {
             domain_ids: vec!["domain-a".to_string()],
             cert_type: 3,
-            key_algorithm: "ECDSA".to_string(),
+            // The one thing this test is about; everything else is the default
+            // request, so a later field cannot make this fixture invalid first.
             auto_renew: true,
+            ..IssueCertificateRequest::default()
         };
         assert!(validate_certificate_issue_request(&request).is_err());
     }

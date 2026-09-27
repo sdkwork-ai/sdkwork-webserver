@@ -42,10 +42,10 @@ class CertificateApi(private val client: HttpClient) {
     }
 
     /** List canonical certificates */
-    suspend fun certificatesList(page: Int? = null, pageSize: Int? = null, domainId: String? = null): CertificatesListResponse? {
+    suspend fun certificatesList(pageSize: Int? = null, cursor: String? = null, domainId: String? = null): CertificatesListResponse? {
         val query = buildQueryString(listOf(
-            QueryParameterSpec("page", page, "form", true, false, null),
             QueryParameterSpec("page_size", pageSize, "form", true, false, null),
+            QueryParameterSpec("cursor", cursor, "form", true, false, null),
             QueryParameterSpec("domain_id", domainId, "form", true, false, null)
         ))
         val raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/certificates"), query))
@@ -115,6 +115,16 @@ class CertificateApi(private val client: HttpClient) {
         )
         val raw = client.post(ApiPaths.backendPath("/certificates/${serializePathParameter(certificateId, PathParameterSpec("certificateId", "simple", false))}/revoke"), body, null, requestHeaders, "application/json")
         return client.convertValue(raw, object : TypeReference<CertificatesRevokeResponse>() {})
+    }
+
+    /** List the cloud DNS accounts this edge can present challenges with */
+    suspend fun dnsAccountsList(page: Int? = null, pageSize: Int? = null): DnsAccountsListResponse? {
+        val query = buildQueryString(listOf(
+            QueryParameterSpec("page", page, "form", true, false, null),
+            QueryParameterSpec("page_size", pageSize, "form", true, false, null)
+        ))
+        val raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/dns_accounts"), query))
+        return client.convertValue(raw, object : TypeReference<DnsAccountsListResponse>() {})
     }
 
     private data class PathParameterSpec(val name: String, val style: String, val explode: Boolean)

@@ -95,12 +95,11 @@ println!("{result:?}");
 
 ```rust
 use std::collections::HashMap;
-// List canonical certificates
+// List the cloud DNS accounts this edge can present challenges with
 let mut query = HashMap::new();
 query.insert("page".to_string(), serde_json::json!(1));
 query.insert("page_size".to_string(), serde_json::json!(2));
-query.insert("domain_id".to_string(), serde_json::json!("00000000-0000-0000-0000-000000000001"));
-let result = client.certificate().certificates_list(Some(&query)).await?;
+let result = client.certificate().dns_accounts_list(Some(&query)).await?;
 println!("{result:?}");
 ```
 

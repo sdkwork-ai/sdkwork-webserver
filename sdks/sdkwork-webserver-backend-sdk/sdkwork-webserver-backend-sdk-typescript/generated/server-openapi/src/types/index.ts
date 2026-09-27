@@ -38,6 +38,7 @@ export type { ApplicationSourceVersionResponse } from './application-source-vers
 export type { CreateApplicationDeploymentRequest } from './create-application-deployment-request';
 export type { ApplicationDeploymentResponse } from './application-deployment-response';
 export type { IssueCertificateRequest } from './issue-certificate-request';
+export type { DnsAccountResponse } from './dns-account-response';
 export type { CertificateIdentifierResponse } from './certificate-identifier-response';
 export type { UpdateCertificateRequest } from './update-certificate-request';
 export type { CertificateResponse } from './certificate-response';
@@ -143,6 +144,7 @@ export type { CertificatesUpdateResponse } from './certificates-update-response'
 export type { CertificatesRenewResponse202 } from './certificates-renew-response202';
 export type { CertificatesRevokeResponse } from './certificates-revoke-response';
 export type { CertificatesDistributionListResponse } from './certificates-distribution-list-response';
+export type { DnsAccountsListResponse } from './dns-accounts-list-response';
 export type { ConfigsListResponse } from './configs-list-response';
 export type { ConfigsCreateResponse201 } from './configs-create-response201';
 export type { ConfigsRetrieveResponse } from './configs-retrieve-response';

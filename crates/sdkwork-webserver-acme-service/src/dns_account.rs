@@ -70,6 +70,21 @@ impl std::fmt::Debug for DnsCloudAccount {
     }
 }
 
+/// Zone resolution pinned to one account: an identifier resolves to this
+/// account's apex while this account covers it, and to nothing when it does
+/// not.
+///
+/// Implemented on the account rather than as a separate wrapper so pinning
+/// cannot disagree with [`DnsCloudAccount::covers`] — the same predicate the
+/// registry dispatches on and the request path validates against. The
+/// unconditional [`crate::dns_zone::SingleZoneResolver`] cannot express "no",
+/// which is why it is not reused here.
+impl crate::dns_zone::DnsZoneResolver for DnsCloudAccount {
+    fn zone_for(&self, identifier: &str) -> Option<String> {
+        self.covers(identifier).then(|| self.zone_apex.clone())
+    }
+}
+
 impl DnsCloudAccount {
     /// True when this account's zone covers `hostname` (the hostname equals
     /// the zone or lives beneath it). Wildcard identifiers are normalized to
@@ -79,6 +94,40 @@ impl DnsCloudAccount {
             Ok(base) => base == self.zone_apex || base.ends_with(&format!(".{}", self.zone_apex)),
             Err(_) => false,
         }
+    }
+}
+
+/// One associated account, as an authenticated read reports it.
+///
+/// Deliberately narrow: no credential, no presenter, and no verification
+/// verdict. The credential lives behind the presenter and has no business
+/// leaving this module, and the verdict has no cached form to report — the
+/// startup probe logs what the provider said rather than storing it, so
+/// serving one here would either be stale or cost a vendor round trip on a
+/// read path. What an operator needs in order to choose an account is which
+/// zone it can publish into, and that is all this carries.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DnsAccountDescriptor {
+    pub account_id: String,
+    pub provider: String,
+    pub zone_apex: String,
+}
+
+impl DnsCloudAccountRegistry {
+    /// Every associated account, in registration order.
+    ///
+    /// Ordered rather than keyed so a list endpoint can page it stably: the
+    /// registry is built once at startup and never reordered, so registration
+    /// order is a reproducible sort.
+    pub fn describe(&self) -> Vec<DnsAccountDescriptor> {
+        self.accounts
+            .iter()
+            .map(|account| DnsAccountDescriptor {
+                account_id: account.account_id.clone(),
+                provider: account.provider.as_str().to_owned(),
+                zone_apex: account.zone_apex.clone(),
+            })
+            .collect()
     }
 }
 
@@ -136,6 +185,17 @@ impl DnsCloudAccountRegistry {
     /// True when no cloud account is associated.
     pub fn is_empty(&self) -> bool {
         self.accounts.is_empty()
+    }
+
+    /// Looks up one account by its operator-facing id.
+    ///
+    /// Exact match, not a suffix or prefix: the id is what an issue request
+    /// names, and a fuzzy match here would let `aliyun-prod` silently resolve
+    /// to `aliyun-prod-2` — a different credential publishing the record.
+    pub fn account(&self, account_id: &str) -> Option<&DnsCloudAccount> {
+        self.accounts
+            .iter()
+            .find(|account| account.account_id == account_id)
     }
 
     /// Resolves the covering account for one identifier by longest

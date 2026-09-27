@@ -51,10 +51,10 @@ impl CertificateApi {
     }
 
     /// List canonical certificates
-    pub async fn certificates_list(&self, page: Option<i64>, page_size: Option<i64>, domain_id: Option<&str>) -> Result<serde_json::Value, SdkworkError> {
+    pub async fn certificates_list(&self, page_size: Option<i64>, cursor: Option<&str>, domain_id: Option<&str>) -> Result<serde_json::Value, SdkworkError> {
         let query = build_query_string(&[
-            QueryParameterSpec::new("page", page, "form", true, false, None),
             QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
+            QueryParameterSpec::new("cursor", cursor, "form", true, false, None),
             QueryParameterSpec::new("domain_id", domain_id, "form", true, false, None),
         ]);
         let path = append_query_string(backend_path(&"/certificates".to_string()), &query);
@@ -125,6 +125,16 @@ impl CertificateApi {
             &[],
         );
         self.client.post(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
+    }
+
+    /// List the cloud DNS accounts this edge can present challenges with
+    pub async fn dns_accounts_list(&self, page: Option<i64>, page_size: Option<i64>) -> Result<serde_json::Value, SdkworkError> {
+        let query = build_query_string(&[
+            QueryParameterSpec::new("page", page, "form", true, false, None),
+            QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
+        ]);
+        let path = append_query_string(backend_path(&"/dns_accounts".to_string()), &query);
+        self.client.get(&path, None, None).await
     }
 
 }

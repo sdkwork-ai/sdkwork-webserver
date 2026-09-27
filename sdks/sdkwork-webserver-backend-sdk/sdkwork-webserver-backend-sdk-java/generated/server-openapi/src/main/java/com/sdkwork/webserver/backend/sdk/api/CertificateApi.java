@@ -44,10 +44,10 @@ public class CertificateApi {
     }
 
     /** List canonical certificates */
-    public CertificatesListResponse certificatesList(Integer page, Integer pageSize, String domainId) throws Exception {
+    public CertificatesListResponse certificatesList(Integer pageSize, String cursor, String domainId) throws Exception {
         String query = buildQueryString(List.of(
-            new QueryParameterSpec("page", page, "form", true, false, null),
             new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
+            new QueryParameterSpec("cursor", cursor, "form", true, false, null),
             new QueryParameterSpec("domain_id", domainId, "form", true, false, null)
         ));
         Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/certificates"), query));
@@ -108,6 +108,16 @@ public class CertificateApi {
         );
         Object raw = client.post(ApiPaths.backendPath("/certificates/" + serializePathParameter(certificateId, new PathParameterSpec("certificateId", "simple", false)) + "/revoke"), body, null, requestHeaders, "application/json");
         return client.convertValue(raw, new TypeReference<CertificatesRevokeResponse>() {});
+    }
+
+    /** List the cloud DNS accounts this edge can present challenges with */
+    public DnsAccountsListResponse dnsAccountsList(Integer page, Integer pageSize) throws Exception {
+        String query = buildQueryString(List.of(
+            new QueryParameterSpec("page", page, "form", true, false, null),
+            new QueryParameterSpec("page_size", pageSize, "form", true, false, null)
+        ));
+        Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/dns_accounts"), query));
+        return client.convertValue(raw, new TypeReference<DnsAccountsListResponse>() {});
     }
 
     private record PathParameterSpec(String name, String style, boolean explode) {}

@@ -160,8 +160,16 @@ list (`page_size` + `cursor`, path added to the cursor allowlist) instead of a
 contract the pagination middleware rejected on every documented request, and the
 cursor-mode cluster page envelopes emit the required `pageInfo.pageSize`; cluster
 self-report heartbeats derive `healthState` from the measured RSS against the
-deployment's `SDKWORK_WEBSERVER_MEMORY_LIMIT` (75%/90% -> DEGRADED/UNHEALTHY)
-instead of a constant HEALTHY; UDP stream listeners resolve and bind new sessions
+deployment's `SDKWORK_WEBSERVER_MEMORY_LIMIT` (75%/90% -> DEGRADED/UNHEALTHY, and
+an unreadable reading or budget reports `UNKNOWN` rather than a claimed state)
+instead of a constant HEALTHY; the certificate ledger list is cursor mode — the
+no-cursor page carries the exact total plus the minted keyset continuation, and
+deeper offset pages are refused; DNS-01 challenge records are withdrawn from a
+cancellation guard, so an issuance cut off by the operation timeout or the
+worker watchdog cannot leak live TXT credentials; a cancelled certificate
+operation can no longer leave an orphaned lease heartbeat renewing its lease
+forever; and the cache-fill path tees the upstream body to the client, so an
+object beyond the cache ceiling streams whole instead of truncating; UDP stream listeners resolve and bind new sessions
 in spawned tasks holding an admission permit (a spoofed-source flood can no longer
 serialize the single datagram loop behind 5-second DNS lookups); the tunnel gateway
 gates QUIC control and TCP visitor accepts behind `limits.maxConnections`

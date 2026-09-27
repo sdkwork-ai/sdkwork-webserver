@@ -1057,6 +1057,32 @@
     },
     {
       "method": "GET",
+      "path": "/backend/v3/api/dns_accounts",
+      "operationId": "dnsAccounts.list",
+      "tags": [
+        "certificate"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.certificates.read",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "GET",
       "path": "/backend/v3/api/nginx/configs",
       "operationId": "configs.list",
       "tags": [

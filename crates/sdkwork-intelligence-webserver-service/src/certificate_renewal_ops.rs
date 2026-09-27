@@ -3,10 +3,13 @@
 use std::sync::Arc;
 
 use chrono::{Duration, Utc};
-use sdkwork_webserver_acme_service::{AcmeServiceError, CertificateIssuer, ChallengePlan};
+use sdkwork_webserver_acme_service::{
+    contains_wildcard_identifier, AcmeServiceError, CertificateIssuer, ChallengePlan,
+    DeclaredChallengeMethod,
+};
 use sdkwork_webserver_contract::{
     CertificateIssueUpdate, CertificateOperationCycleReport, CertificateOperationLease,
-    WebServiceResult,
+    WebServiceResult, CERTIFICATE_SCOPE_SINGLE_DOMAIN, CERTIFICATE_SCOPE_WILDCARD,
 };
 use tokio::task::JoinSet;
 
@@ -118,7 +121,10 @@ async fn execute_certificate_operation(
     // Long-running issuer work (DNS propagation, CA retries) may outlive the
     // original claim lease; a heartbeat keeps the fencing token's lease current
     // so a slow operation is never reaped or re-claimed while still running.
-    let heartbeat = spawn_certificate_lease_heartbeat(Arc::clone(&repository), lease.clone());
+    let heartbeat = CertificateLeaseHeartbeatGuard(spawn_certificate_lease_heartbeat(
+        Arc::clone(&repository),
+        lease.clone(),
+    ));
     // Challenge strategy is resolved by the issuer, not here: it is the only
     // component that knows the declared method, whether a webroot is
     // configured, and whether a DNS account covers every identifier. Single
@@ -129,11 +135,51 @@ async fn execute_certificate_operation(
     // registry while the presenter came from a registry nothing ever attached,
     // so every wildcard was routed to HTTP-01 and rejected).
     let outcome = async {
-        let plan = certificate_issuer.challenge_plan(&lease.hostnames)?;
+        // The certificate's own declaration, not the deployment's current
+        // setting: a renewal must present the way its original request said, or
+        // an operator who pinned an account would find the second renewal going
+        // out through whichever account the registry happens to prefer.
+        let declared = lease
+            .validation_method
+            .as_deref()
+            .map(DeclaredChallengeMethod::parse)
+            .transpose()?;
+        // Re-checked rather than assumed: the identifier rows are read fresh on
+        // every claim, so a domain whose type changed after the certificate was
+        // accepted could otherwise widen a single-domain certificate into a
+        // wildcard one without anyone asking for it.
+        if let Some(scope) = lease.certificate_scope.as_deref() {
+            // The crate's one wildcard predicate, not a local `starts_with("*.")`:
+            // the order path and this check have to agree on what a wildcard is,
+            // or a name one accepts the other rejects.
+            let wildcard = contains_wildcard_identifier(&lease.hostnames);
+            match scope {
+                CERTIFICATE_SCOPE_SINGLE_DOMAIN if wildcard => {
+                    return Err(AcmeServiceError::validation(
+                        "a certificate accepted as SINGLE_DOMAIN now resolves to a wildcard \
+                         identifier; the certificate must be requested again under WILDCARD scope",
+                    ));
+                }
+                CERTIFICATE_SCOPE_WILDCARD if !wildcard => {
+                    return Err(AcmeServiceError::validation(
+                        "a certificate accepted as WILDCARD no longer resolves to any wildcard \
+                         identifier",
+                    ));
+                }
+                _ => {}
+            }
+        }
+        let plan = certificate_issuer.challenge_plan_with(
+            &lease.hostnames,
+            declared,
+            lease.provider_account_id.as_deref(),
+        )?;
         tracing::debug!(
             tenant_id = lease.tenant_id,
             operation_id = %lease.operation_id,
             challenge_method = plan.method(),
+            certificate_scope = lease.certificate_scope.as_deref().unwrap_or("AUTO"),
+            provider_account_id = lease.provider_account_id.as_deref().unwrap_or("AUTO"),
             "resolved the certificate challenge method"
         );
         let dns01 = match &plan {
@@ -319,6 +365,30 @@ async fn persist_certificate_operation_failure(
     } else {
         CertificateOperationOutcome::Retried
     })
+}
+
+/// Aborts the lease heartbeat when the operation task ends for any reason:
+/// a normal return, an error return, or cancellation by the worker's cycle
+/// watchdog or graceful shutdown dropping this future. A heartbeat detached
+/// from its operation would keep renewing the lease forever (the renewal
+/// predicate only requires `status = 'RUNNING'` and a matching owner and
+/// fencing token), so the operation would never expire back into
+/// `claim_certificate_operations` and renewal would silently stall until the
+/// worker restarts. The explicit `abort()` calls on the success and failure
+/// paths stop the heartbeat before post-work runs; this guard is what makes
+/// every cancellation path safe.
+struct CertificateLeaseHeartbeatGuard(tokio::task::JoinHandle<()>);
+
+impl CertificateLeaseHeartbeatGuard {
+    fn abort(&self) {
+        self.0.abort();
+    }
+}
+
+impl Drop for CertificateLeaseHeartbeatGuard {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
 }
 
 /// Periodically extends the lease of a RUNNING certificate operation while the

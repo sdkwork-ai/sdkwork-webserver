@@ -41,8 +41,9 @@ pub use dns::{
     InMemoryDns01Presenter, ManualDns01Presenter, ACME_CHALLENGE_LABEL,
 };
 pub use dns_account::{
-    load_dns_account_configs, DispatchingDns01Presenter, DnsAccountVerificationReport,
-    DnsCloudAccount, DnsCloudAccountConfig, DnsCloudAccountRegistry, MAX_DNS_ACCOUNTS_FILE_BYTES,
+    load_dns_account_configs, DispatchingDns01Presenter, DnsAccountDescriptor,
+    DnsAccountVerificationReport, DnsCloudAccount, DnsCloudAccountConfig, DnsCloudAccountRegistry,
+    MAX_DNS_ACCOUNTS_FILE_BYTES,
 };
 pub use dns_aliyun::{AliyunDns01Presenter, ALIYUN_DEFAULT_BASE_URL};
 pub use dns_cloudflare::{CloudflareDns01Presenter, CLOUDFLARE_DEFAULT_BASE_URL};

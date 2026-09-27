@@ -99,13 +99,12 @@ print(result)
 ### certificate
 
 ```swift
-// List canonical certificates
+// List the cloud DNS accounts this edge can present challenges with
 let params: [String: Any] = [
     "page": 1,
-    "page_size": 2,
-    "domain_id": "00000000-0000-0000-0000-000000000001"
+    "page_size": 2
 ]
-let result = try await client.certificate.certificatesList(params: params)
+let result = try await client.certificate.dnsAccountsList(params: params)
 print(result)
 ```
 

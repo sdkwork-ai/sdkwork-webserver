@@ -2483,7 +2483,8 @@
       "get": {
         "operationId": "certificates.list",
         "summary": "List canonical certificates",
-        "x-sdkwork-pagination-mode": "offset",
+        "x-sdkwork-pagination-mode": "cursor",
+        "description": "Cursor mode over the per-issuance-growing certificate collection. The first request (no cursor) is an offset page that carries the exact total and, when more rows exist, the opaque `nextCursor` every later page must present; `page` beyond the first offset page is refused.",
         "tags": [
           "certificate"
         ],
@@ -2501,10 +2502,10 @@
         "x-sdkwork-owner": "sdkwork-webserver",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PageParam"
+            "$ref": "#/components/parameters/PageSizeParam"
           },
           {
-            "$ref": "#/components/parameters/PageSizeParam"
+            "$ref": "#/components/parameters/CursorParam"
           },
           {
             "name": "domain_id",
@@ -3080,6 +3081,76 @@
                               "type": "array",
                               "items": {
                                 "$ref": "#/components/schemas/CertificateDistributionResponse"
+                              }
+                            },
+                            "pageInfo": {
+                              "$ref": "#/components/schemas/PageInfo"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
+    },
+    "/backend/v3/api/dns_accounts": {
+      "get": {
+        "operationId": "dnsAccounts.list",
+        "summary": "List the cloud DNS accounts this edge can present challenges with",
+        "x-sdkwork-pagination-mode": "offset",
+        "tags": [
+          "certificate"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.certificates.read",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/PageSizeParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cloud DNS account list returned successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "items",
+                            "pageInfo"
+                          ],
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/DnsAccountResponse"
                               }
                             },
                             "pageInfo": {
@@ -6510,7 +6581,7 @@
       "get": {
         "operationId": "metricsSummaries.retrieve",
         "summary": "Retrieve the dashboard metric summary of the caller's own tenant",
-        "description": "The dashboard's cardinal metrics — how many users and applications the caller's tenant has, and how much traffic this edge metered for it — each reported across four windows: `today`, `last_7_days`, `current_month`, and `lifetime`.\nThe reach is fixed by this operation: the counts and the traffic cover the caller's own tenant, taken from the authenticated context, so no query parameter can widen it. The platform-wide reading lives at `/backend/v3/api/platform_metrics_summaries` and is restricted to the platform operator tenant.\nEvery figure is an aggregate. No user, tenant, or application is returned, so the reading reports the size of an estate without becoming a second, quieter way to enumerate its subjects.\nThe tenant count is absent here rather than reported at `1`: a tenant counting itself is a constant, and a surface handed one would draw it.\n`date_from` and `date_to` bound the **series** — the per-day trend — and never the four card windows, which stay resolved server-side from the clock. The series window is the caller's because the same window control drives the traffic trend drawn beside it on one chart; the two readings must resolve the same period or their lines would be plotted against a domain their days were not cut against.",
+        "description": "The dashboard's cardinal metrics - how many users and applications the caller's tenant has, and how much traffic this edge metered for it - each reported across four windows: `today`, `last_7_days`, `current_month`, and `lifetime`.\nThe reach is fixed by this operation: the counts and the traffic cover the caller's own tenant, taken from the authenticated context, so no query parameter can widen it. The platform-wide reading lives at `/backend/v3/api/platform_metrics_summaries` and is restricted to the platform operator tenant.\nEvery figure is an aggregate. No user, tenant, or application is returned, so the reading reports the size of an estate without becoming a second, quieter way to enumerate its subjects.\nThe tenant count is absent here rather than reported at `1`: a tenant counting itself is a constant, and a surface handed one would draw it.\n`date_from` and `date_to` bound the **series** - the per-day trend - and never the four card windows, which stay resolved server-side from the clock. The series window is the caller's because the same window control drives the traffic trend drawn beside it on one chart; the two readings must resolve the same period or their lines would be plotted against a domain their days were not cut against.",
         "tags": [
           "metricsSummary"
         ],
@@ -6590,7 +6661,7 @@
       "get": {
         "operationId": "platformMetricsSummaries.retrieve",
         "summary": "Retrieve the dashboard metric summary of every tenant",
-        "description": "The dashboard's cardinal metrics over every tenant this edge serves, and the only reading that reports a **tenant count**: on the own-tenant operation that figure is structurally one.\nRestricted to the platform operator tenant: a tenant-bound context is rejected with 40301 rather than narrowed to its own slice, so a misrouted admin page fails loudly instead of presenting one tenant's estate as the platform's.\nReads across three owners — the IAM subjects, the metered usage facts, and the Web Server's own application table — and reports the capability as unavailable (`503`) when this deployment does not assemble all of them, because a count of zero and an inability to count are opposite claims that draw the same picture.\nA fourth owner is **optional**: the agents catalog is not declared by any topology profile, so a deployment that does not run the agents module still answers — with the agents metric named in `unassembledMetrics` rather than reported at `0`.\n`date_from` and `date_to` bound the **series** only; see the own-tenant operation for why that window is the caller's while the cards' are not.",
+        "description": "The dashboard's cardinal metrics over every tenant this edge serves, and the only reading that reports a **tenant count**: on the own-tenant operation that figure is structurally one.\nRestricted to the platform operator tenant: a tenant-bound context is rejected with 40301 rather than narrowed to its own slice, so a misrouted admin page fails loudly instead of presenting one tenant's estate as the platform's.\nReads across three owners - the IAM subjects, the metered usage facts, and the Web Server's own application table - and reports the capability as unavailable (`503`) when this deployment does not assemble all of them, because a count of zero and an inability to count are opposite claims that draw the same picture.\nA fourth owner is **optional**: the agents catalog is not declared by any topology profile, so a deployment that does not run the agents module still answers - with the agents metric named in `unassembledMetrics` rather than reported at `0`.\n`date_from` and `date_to` bound the **series** only; see the own-tenant operation for why that window is the caller's while the cards' are not.",
         "tags": [
           "metricsSummary"
         ],
@@ -8349,11 +8420,79 @@
               "RSA"
             ],
             "default": "RSA",
-            "description": "Key algorithm of the issued leaf. Defaults to RSA: a managed certificate is renewed unattended and RSA-2048 is the leaf key every TLS client accepts, so a certificate requested without an opinion on this stays reachable from old stacks as well. Ask for ECDSA explicitly where every client is known to support P-256."
+            "description": "Key algorithm of the issued leaf. Defaults to RSA: a managed certificate is renewed unattended and RSA-2048 is the leaf key every TLS client accepts, so a certificate requested without an opinion on this stays reachable from old stacks as well. Ask for ECDSA explicitly where every client is known to support P-256.\nNamed `keyAlgorithm` rather than the control plane's `preferredKeyAlgorithm`: the Web Server's field predates it and is served by twelve generated SDKs, so a rename would be a breaking change to a published request shape for no wire-level gain. The two carry the same two values and the consoles label both the localized and the English name of the field."
           },
           "autoRenew": {
             "type": "boolean",
             "default": true
+          },
+          "certName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Operator-facing name of the certificate. Optional: an unnamed request keeps the generated name, so an existing caller that does not send one is unaffected. Bounded at 200 because that is the width of `webserver_certificate.cert_name`."
+          },
+          "certificateScope": {
+            "type": "string",
+            "enum": [
+              "SINGLE_DOMAIN",
+              "WILDCARD"
+            ],
+            "default": "SINGLE_DOMAIN",
+            "description": "What the identifier set is allowed to contain. `SINGLE_DOMAIN` admits only exact hostnames and refuses a wildcard; `WILDCARD` requires at least one wildcard and is refused together with `HTTP_01`, because a wildcard can only be authorized over DNS-01.\nUnlike the control plane's field of the same name, this does **not** plan the wildcard's apex in: the identifier set here is resolved from the served, verified domain rows the caller names, so adding an apex the caller did not name would attach a SAN to a hostname this edge has no verified row for. Where the apex should be covered, it is named as its own identifier."
+          },
+          "validationMethod": {
+            "type": "string",
+            "enum": [
+              "AUTO",
+              "HTTP_01",
+              "DNS_01"
+            ],
+            "default": "AUTO",
+            "description": "How the ACME challenge is answered. `AUTO` lets the edge choose from what it has configured; `HTTP_01` and `DNS_01` pin the method. `WILDCARD` coverage is refused with `HTTP_01`, because a wildcard can only be authorized over DNS-01 and the refusal is stated rather than silently upgraded."
+          },
+          "renewBeforeDays": {
+            "type": "integer",
+            "minimum": 7,
+            "maximum": 90,
+            "default": 30,
+            "description": "How many days before expiry an unattended renewal is scheduled. Bounded at 7..90 to match the stored constraint, and only meaningful while `autoRenew` is true."
+          },
+          "caProfile": {
+            "type": "string",
+            "enum": [
+              "LETS_ENCRYPT_PRODUCTION",
+              "LETS_ENCRYPT_STAGING"
+            ],
+            "description": "Which Let's Encrypt directory to order from. Only meaningful for `certType` 1; a self-signed request resolves to `SELF_SIGNED` on the server regardless of what is sent."
+          },
+          "providerAccountId": {
+            "type": "string",
+            "pattern": "^[^\\s\\x00-\\x1f\\x7f]{1,128}$",
+            "description": "Which of the edge's configured DNS accounts publishes the DNS-01 challenge records. Optional: omitted means the edge resolves an account from the identifier set, and an id that the edge has no credentials for is refused rather than quietly replaced. The accounts that may be named are listed by `GET /backend/v3/api/dns_accounts`.\nThe pattern bounds the id rather than shaping it: no surrounding whitespace and no control characters, because the id reaches a log line and a stored document. It deliberately says nothing about the id's structure: a DNS accounts file may spell an id in any alphabet, and a structural pattern here would refuse ids the edge is happily loading."
+          }
+        }
+      },
+      "DnsAccountResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "accountId",
+          "provider",
+          "zoneApex"
+        ],
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "description": "Stable operator-facing reference, and the value `providerAccountId` on an issue request names."
+          },
+          "provider": {
+            "type": "string",
+            "description": "Provider family whose API this account presents challenges through."
+          },
+          "zoneApex": {
+            "type": "string",
+            "description": "Hosted zone apex the account can publish into. An identifier is covered when it equals this apex or lives beneath it."
           }
         }
       },
@@ -9134,6 +9273,7 @@
           "size": {
             "type": "string",
             "format": "int64",
+            "pattern": "^-?[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "projectType": {
@@ -9176,6 +9316,7 @@
           "size": {
             "type": "string",
             "format": "int64",
+            "pattern": "^-?[0-9]+$",
             "x-sdkwork-int64-string": true
           }
         }
@@ -9238,11 +9379,13 @@
           "size": {
             "type": "string",
             "format": "int64",
+            "pattern": "^-?[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "updatedAt": {
             "type": "string",
             "format": "int64",
+            "pattern": "^-?[0-9]+$",
             "x-sdkwork-int64-string": true,
             "description": "Last modification time, Unix seconds."
           },
@@ -9297,6 +9440,7 @@
           "size": {
             "type": "string",
             "format": "int64",
+            "pattern": "^-?[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "sha256": {
@@ -9306,6 +9450,7 @@
           "updatedAt": {
             "type": "string",
             "format": "int64",
+            "pattern": "^-?[0-9]+$",
             "x-sdkwork-int64-string": true,
             "description": "Last modification time, Unix seconds."
           }
@@ -9348,6 +9493,7 @@
           "size": {
             "type": "string",
             "format": "int64",
+            "pattern": "^-?[0-9]+$",
             "x-sdkwork-int64-string": true
           },
           "sha256": {
@@ -9361,6 +9507,7 @@
           "updatedAt": {
             "type": "string",
             "format": "int64",
+            "pattern": "^-?[0-9]+$",
             "x-sdkwork-int64-string": true,
             "description": "Modification time of the written file, Unix seconds."
           }
@@ -9958,7 +10105,9 @@
           },
           "totalItems": {
             "type": "string",
-            "pattern": "^-?[0-9]+$"
+            "format": "int64",
+            "pattern": "^-?[0-9]+$",
+            "x-sdkwork-int64-string": true
           },
           "totalPages": {
             "type": "integer",
@@ -10917,7 +11066,7 @@
       "MetricsSummaryResponse": {
         "type": "object",
         "additionalProperties": false,
-        "description": "The dashboard's cardinal metrics, each reported across the same four **half-open** windows (`today`, `last_7_days`, `current_month`, `lifetime`). Three groups share the window vocabulary but not its meaning: for the entity counts a window names when the subjects arrived, and `lifetime` is therefore the live population rather than an arrival count; for the metered traffic every window is a volume accumulated inside it, and `lifetime` is everything the facts cover — which is why `trafficSince` reports the day they start on; for the storage figures a narrow window is the part of the current holding added inside it, and `lifetime` is what is held *now* — a held figure rather than a running total, since an object removed from storage stops counting in every window including the one it was born in.\n`series` reports the same entity metrics at **per-day** granularity, over the window named by `seriesWindow` rather than over the four above: the four card windows belong to the product and are resolved server-side from the clock, while the series window belongs to the caller and comes from the query string, because the plot it feeds also draws the traffic reading's per-day series and that plot has one x domain. A caller that draws both must pass one pair of bounds to both operations rather than omitting them: each operation resolves an omitted bound from the clock on its own, and two defaults are two windows. The two are reported separately so a surface cannot label a day's figure with a period it was not cut against.",
+        "description": "The dashboard's cardinal metrics, each reported across the same four **half-open** windows (`today`, `last_7_days`, `current_month`, `lifetime`). Three groups share the window vocabulary but not its meaning: for the entity counts a window names when the subjects arrived, and `lifetime` is therefore the live population rather than an arrival count; for the metered traffic every window is a volume accumulated inside it, and `lifetime` is everything the facts cover, which is why `trafficSince` reports the day they start on; for the storage figures a narrow window is the part of the current holding added inside it, and `lifetime` is what is held *now* - a held figure rather than a running total, since an object removed from storage stops counting in every window including the one it was born in.\n`series` reports the same entity metrics at **per-day** granularity, over the window named by `seriesWindow` rather than over the four above: the four card windows belong to the product and are resolved server-side from the clock, while the series window belongs to the caller and comes from the query string, because the plot it feeds also draws the traffic reading's per-day series and that plot has one x domain. A caller that draws both must pass one pair of bounds to both operations rather than omitting them: each operation resolves an omitted bound from the clock on its own, and two defaults are two windows. The two are reported separately so a surface cannot label a day's figure with a period it was not cut against.",
         "required": [
           "asOf",
           "platformScope",
@@ -10982,7 +11131,7 @@
           },
           "unassembledMetrics": {
             "type": "array",
-            "description": "Metric ids this deployment could not read, because the source behind them is not assembled here. Not metrics that came back empty: a metric answered `0` is reported as the figure `0`, and this list is the other case, where no figure exists and none was invented. The agents figure is the one that can land here — no topology profile declares the agents module, so a deployment that does not run it cannot count agents, and saying so is the only true answer.\nA surface must draw these as a missing capability rather than as a zero, which is the same distinction the whole reading draws with a `503`.",
+            "description": "Metric ids this deployment could not read, because the source behind them is not assembled here. Not metrics that came back empty: a metric answered `0` is reported as the figure `0`, and this list is the other case, where no figure exists and none was invented. The agents figure is the one that can land here: no topology profile declares the agents module, so a deployment that does not run it cannot count agents, and saying so is the only true answer.\nA surface must draw these as a missing capability rather than as a zero, which is the same distinction the whole reading draws with a `503`.",
             "items": {
               "type": "string",
               "minLength": 1,
@@ -11018,7 +11167,7 @@
       "MetricsMetricTotals": {
         "type": "object",
         "additionalProperties": false,
-        "description": "One metric across every window. `metric` is one of the entity ids (`users`, `tenants`, `applications`, `agents`), one of the storage ids (`storage.used_bytes`, `storage.object_count`), or a metered dimension (`traffic.requests`, …), which is left open on the same terms as the traffic readings: a dimension this contract has not heard of reaches the surface instead of failing the response.",
+        "description": "One metric across every window. `metric` is one of the entity ids (`users`, `tenants`, `applications`, `agents`), one of the storage ids (`storage.used_bytes`, `storage.object_count`), or a metered dimension (`traffic.requests`, ...), which is left open on the same terms as the traffic readings: a dimension this contract has not heard of reaches the surface instead of failing the response.",
         "required": [
           "metric",
           "unit",

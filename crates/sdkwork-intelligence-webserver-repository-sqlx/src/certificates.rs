@@ -9,8 +9,8 @@ use sdkwork_webserver_contract::{
 use sqlx::Row;
 
 use super::support::{
-    bool_from_row, instant_from_row, new_uuid, next_id, optional_instant_from_row, pagination,
-    store_error,
+    bool_from_row, cursor_instant_from_row, decode_keyset_cursor, encode_keyset_cursor,
+    instant_from_row, new_uuid, next_id, optional_instant_from_row, pagination, store_error,
 };
 use super::certificate_secrets::{
     certificate_secret_ref, decrypt_certificate_secret_bundle,
@@ -27,13 +27,37 @@ impl WebRepository {
         domain_uuid: Option<&str>,
         page: i32,
         page_size: i32,
+        cursor: Option<&str>,
     ) -> WebServiceResult<CertificatePage> {
+        if let Some(cursor) = cursor {
+            return self
+                .list_certificates_cursor_repo(
+                    tenant_id,
+                    owner_id,
+                    site_uuid,
+                    domain_uuid,
+                    page_size,
+                    cursor,
+                )
+                .await;
+        }
+        // Offset mode remains only for single-page reads (page 1). Deep OFFSET
+        // on this per-issuance-growing collection is rejected; clients must
+        // continue with the opaque keyset cursor (PAGINATION_SPEC §3/§6).
+        if page > 1 {
+            return Err(WebServiceError::validation(
+                "cursor is required beyond the first page of certificates; offset pagination is not supported on this growing collection",
+            ));
+        }
         let (_page, page_size, offset) = pagination(page, page_size)?;
         // The filtered total is computed in the page query itself
         // (`COUNT(*) OVER ()`), so the expensive dual-EXISTS predicate runs
         // once per page instead of twice. An empty page (offset beyond the
         // end) yields no window value and falls back to the standalone
-        // COUNT below.
+        // COUNT below. The fetch is `page_size + 1` so the page-one response
+        // can carry an exact `has_more` and mint the keyset continuation the
+        // client must use beyond this page.
+        let fetch_size = i64::from(page_size) + 1;
         let windowed_total = |rows: &[EngineRow]| -> Option<i64> {
             rows.first()
                 .and_then(|row| row.try_get::<i64, _>("page_total").ok())
@@ -67,12 +91,17 @@ impl WebRepository {
         .bind(owner_id)
         .bind(site_uuid)
         .bind(domain_uuid)
-        .bind(page_size)
+        .bind(fetch_size)
         .bind(offset)
         .fetch_all(&self.pool)
         .await
         .map_err(|error| store_error("list webserver_certificate", error))?;
-        let total = match windowed_total(&rows) {
+        let has_more = rows.len() > page_size as usize;
+        let page_rows = rows
+            .into_iter()
+            .take(page_size as usize)
+            .collect::<Vec<_>>();
+        let total = match windowed_total(&page_rows) {
             Some(total) => total,
             None => {
                 let total: i64 = sqlx::query_scalar(
@@ -108,14 +137,122 @@ impl WebRepository {
                 total
             }
         };
-        let items = rows
+        let items = page_rows
             .iter()
             .map(map_certificate_row)
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| {
                 WebServiceError::Internal(format!("map webserver_certificate row: {error}"))
             })?;
-        Ok(CertificatePage { items, total })
+        // Mint the keyset continuation so the client never needs a second
+        // offset request: page one carries the exact total, the exact
+        // `has_more`, and the opaque cursor for the next keyset page.
+        let next_cursor = has_more
+            .then(|| {
+                let last = page_rows
+                    .last()
+                    .ok_or_else(|| WebServiceError::Internal("empty certificate page".to_string()))?;
+                let updated_at = cursor_instant_from_row(last, "updated_at")
+                    .map_err(|error| store_error("map webserver_certificate cursor instant", error))?;
+                let id: i64 = last
+                    .try_get("id")
+                    .map_err(|error| store_error("map webserver_certificate cursor id", error))?;
+                Ok::<_, WebServiceError>(encode_keyset_cursor(&updated_at, id))
+            })
+            .transpose()?;
+        Ok(CertificatePage {
+            items,
+            total,
+            next_cursor,
+            has_more: Some(has_more),
+        })
+    }
+
+    /// Keyset page over `(updated_at DESC, id DESC)` with an opaque cursor;
+    /// fetches `page_size + 1` rows so `has_more` is exact and no COUNT runs
+    /// against the per-issuance-growing certificate collection.
+    async fn list_certificates_cursor_repo(
+        &self,
+        tenant_id: i64,
+        owner_id: Option<i64>,
+        site_uuid: Option<&str>,
+        domain_uuid: Option<&str>,
+        page_size: i32,
+        cursor: &str,
+    ) -> WebServiceResult<CertificatePage> {
+        if !(1..=200).contains(&page_size) {
+            return Err(WebServiceError::validation(
+                "page_size must be between 1 and 200",
+            ));
+        }
+        let (cursor_updated_at, cursor_id) = decode_keyset_cursor(cursor)
+            .ok_or_else(|| WebServiceError::validation("cursor is invalid"))?;
+        let sql = certificate_cursor_select(
+            "c.tenant_id = $1 AND c.deleted_at IS NULL
+             AND ($2 IS NULL OR c.user_id = $2)
+             AND ($3 IS NULL OR EXISTS (
+                 SELECT 1 FROM webserver_certificate_identifier site_ci
+                 INNER JOIN webserver_site_binding site_b ON site_b.tenant_id = site_ci.tenant_id
+                     AND site_b.domain_id = site_ci.domain_id AND site_b.deleted_at IS NULL
+                     AND site_b.status <> 'ARCHIVED'
+                 INNER JOIN webserver_site site_s ON site_s.tenant_id = site_b.tenant_id
+                     AND site_s.id = site_b.site_id
+                 WHERE site_ci.tenant_id = c.tenant_id
+                   AND site_ci.certificate_id = c.id AND site_s.uuid = $3
+                   AND site_s.deleted_at IS NULL
+             ))
+             AND ($4 IS NULL OR EXISTS (
+                 SELECT 1 FROM webserver_certificate_identifier domain_ci
+                 INNER JOIN webserver_domain domain_d ON domain_d.tenant_id = domain_ci.tenant_id
+                     AND domain_d.id = domain_ci.domain_id
+                     AND ($2 IS NULL OR domain_d.user_id = $2)
+                 WHERE domain_ci.tenant_id = c.tenant_id
+                   AND domain_ci.certificate_id = c.id
+                   AND domain_d.uuid = $4 AND domain_d.deleted_at IS NULL
+             ))
+             AND (c.updated_at, c.id) < (CAST($5 AS TIMESTAMPTZ), $6)
+             ORDER BY c.updated_at DESC, c.id DESC LIMIT $7",
+        );
+        let fetch_size = i64::from(page_size) + 1;
+        let rows = sqlx::query(audited_sql(&sql))
+            .bind(tenant_id)
+            .bind(owner_id)
+            .bind(site_uuid)
+            .bind(domain_uuid)
+            .bind(&cursor_updated_at)
+            .bind(cursor_id)
+            .bind(fetch_size)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|error| store_error("list webserver_certificate cursor", error))?;
+        let has_more = rows.len() > page_size as usize;
+        let page_rows = rows.into_iter().take(page_size as usize).collect::<Vec<_>>();
+        let items = page_rows
+            .iter()
+            .map(map_certificate_row)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| {
+                WebServiceError::Internal(format!("map webserver_certificate row: {error}"))
+            })?;
+        let next_cursor = has_more
+            .then(|| {
+                let last = page_rows
+                    .last()
+                    .ok_or_else(|| WebServiceError::Internal("empty cursor page".to_string()))?;
+                let updated_at = cursor_instant_from_row(last, "updated_at")
+                    .map_err(|error| store_error("map webserver_certificate cursor instant", error))?;
+                let id: i64 = last
+                    .try_get("id")
+                    .map_err(|error| store_error("map webserver_certificate cursor id", error))?;
+                Ok::<_, WebServiceError>(encode_keyset_cursor(&updated_at, id))
+            })
+            .transpose()?;
+        Ok(CertificatePage {
+            items,
+            total: 0,
+            next_cursor,
+            has_more: Some(has_more),
+        })
     }
 
     pub(super) async fn update_certificate_auto_renew_repo(
@@ -677,7 +814,44 @@ fn certificate_select(predicate: &str) -> String {
                         AND d.id = ci.domain_id
                     WHERE ci.tenant_id = c.tenant_id AND ci.certificate_id = c.id
                 ), '[]'::jsonb) AS TEXT) AS identifiers,
-                CAST(c.created_at AS TEXT) AS created_at
+                CAST(c.created_at AS TEXT) AS created_at,
+                CAST(c.updated_at AS TEXT) AS updated_at,
+                c.id
+         FROM webserver_certificate c
+             LEFT JOIN webserver_certificate_version v
+             ON v.id = c.current_version_id
+             AND v.certificate_id = c.id
+         WHERE {predicate}"
+    )
+}
+
+/// Cursor-mode projection: identical columns to [`certificate_select`] except
+/// the `COUNT(*) OVER ()` window (whose whole-row scan is what keyset
+/// pagination exists to avoid) is replaced by the `id`/`updated_at` columns
+/// the opaque continuation token is derived from.
+fn certificate_cursor_select(predicate: &str) -> String {
+    format!(
+        "SELECT c.uuid, c.cert_name, c.cert_type, v.issuer,
+                v.fingerprint_sha256 AS fingerprint,
+                COALESCE(v.key_algorithm, c.preferred_key_algorithm) AS key_algorithm,
+                CAST(v.not_before AS TEXT) AS not_before,
+                CAST(v.not_after AS TEXT) AS not_after,
+                c.auto_renew, c.renewal_status, c.status,
+                CAST(COALESCE((
+                    SELECT jsonb_agg(jsonb_build_object(
+                        'domainId', d.uuid,
+                        'hostname', ci.hostname,
+                        'identifierType', ci.identifier_type,
+                        'position', ci.position
+                    ) ORDER BY ci.position)
+                    FROM webserver_certificate_identifier ci
+                    INNER JOIN webserver_domain d ON d.tenant_id = ci.tenant_id
+                        AND d.id = ci.domain_id
+                    WHERE ci.tenant_id = c.tenant_id AND ci.certificate_id = c.id
+                ), '[]'::jsonb) AS TEXT) AS identifiers,
+                CAST(c.created_at AS TEXT) AS created_at,
+                CAST(c.updated_at AS TEXT) AS updated_at,
+                c.id
          FROM webserver_certificate c
              LEFT JOIN webserver_certificate_version v
              ON v.id = c.current_version_id

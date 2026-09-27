@@ -144,6 +144,21 @@ impl CertificateIssuer {
         self.config.renew_before_days
     }
 
+    /// Which CA directory this deployment orders from, in the wire vocabulary
+    /// an issue request uses for `caProfile`.
+    ///
+    /// Reported rather than assumed so a request naming the other directory is
+    /// refused with a message that names the one this edge is configured for —
+    /// the alternative is accepting the value and ordering from somewhere else,
+    /// which is a silent lie about where the certificate came from.
+    pub fn acme_profile(&self) -> &'static str {
+        if self.config.use_production {
+            "LETS_ENCRYPT_PRODUCTION"
+        } else {
+            "LETS_ENCRYPT_STAGING"
+        }
+    }
+
     /// Attaches the cloud-account registry. Renewals and new issuance then
     /// use DNS-01 with per-identifier zone resolution; wildcards renew
     /// unattended.
@@ -172,6 +187,21 @@ impl CertificateIssuer {
             .is_some_and(|registry| registry.covers_all(hostnames.iter().map(String::as_str)))
     }
 
+    /// The configured cloud DNS accounts, as an authenticated read may report
+    /// them.
+    ///
+    /// An empty vector is the truthful answer for a deployment with no account
+    /// file, not an error: such an edge issues single-domain certificates over
+    /// HTTP-01 and simply has no accounts to offer. Read-only, so it is safe on
+    /// an `Arc<CertificateIssuer>` held by the request path — only startup
+    /// mutates the attachment.
+    pub fn dns_accounts(&self) -> Vec<crate::DnsAccountDescriptor> {
+        self.dns_accounts
+            .as_ref()
+            .map(|registry| registry.describe())
+            .unwrap_or_default()
+    }
+
     /// What this deployment can actually do for `hostnames`.
     ///
     /// Both inputs are computed here rather than at the call site so a caller
@@ -196,6 +226,56 @@ impl CertificateIssuer {
         )
     }
 
+    /// The challenge plan for one order under a per-certificate override.
+    ///
+    /// The certificate's own `validation_method` and `provider_account_id`
+    /// arrive here rather than the engine reading a setting: every renewal of a
+    /// certificate must resolve the challenge the way its original request did,
+    /// or an operator pinning an account would find the second renewal
+    /// presenting through whichever account the registry happens to prefer.
+    ///
+    /// `declared` is `None` when the certificate expressed no preference, in
+    /// which case the deployment's declared method stands. `account_id` pins
+    /// the account that presents the challenge; an id the edge has no
+    /// credentials for is refused rather than quietly replaced.
+    pub fn challenge_plan_with(
+        &self,
+        hostnames: &[String],
+        declared: Option<DeclaredChallengeMethod>,
+        account_id: Option<&str>,
+    ) -> AcmeServiceResult<ChallengePlan> {
+        let declared = declared.unwrap_or(self.declared_challenge_method);
+        let availability = ChallengeAvailability {
+            http01_webroot_configured: self.config.webroot.is_some(),
+            // A pinned account replaces the registry's own coverage answer:
+            // the question is no longer "does some account cover every
+            // identifier" but "does *the named* account".
+            dns01_accounts_cover_all: match account_id {
+                Some(account_id) => self
+                    .dns_accounts
+                    .as_ref()
+                    .and_then(|registry| registry.account(account_id))
+                    .is_some_and(|account| hostnames.iter().all(|name| account.covers(name))),
+                None => self.dns_accounts_cover(hostnames),
+            },
+        };
+        match resolve_challenge_method(declared, hostnames, availability)? {
+            ResolvedChallenge::Http01 => Ok(ChallengePlan::Http01),
+            ResolvedChallenge::Dns01 => {
+                let context = self
+                    .dns01_context_with(hostnames, account_id)
+                    .ok_or_else(|| {
+                        // Unreachable while the policy resolved DNS-01 from the same
+                        // registry, but fail closed rather than silently downgrade.
+                        AcmeServiceError::config(
+                            "DNS-01 was selected but no cloud account covers every identifier",
+                        )
+                    })?;
+                Ok(ChallengePlan::Dns01(context))
+            }
+        }
+    }
+
     /// The complete challenge decision for one order: the method **and**, for
     /// DNS-01, the presenter and zone resolver.
     ///
@@ -205,31 +285,48 @@ impl CertificateIssuer {
     /// presenter came from a registry that nothing ever attached, so wildcards
     /// were routed to HTTP-01 and rejected by the engine.
     pub fn challenge_plan(&self, hostnames: &[String]) -> AcmeServiceResult<ChallengePlan> {
-        match self.resolve_challenge(hostnames)? {
-            ResolvedChallenge::Http01 => Ok(ChallengePlan::Http01),
-            ResolvedChallenge::Dns01 => {
-                let context = self.dns01_context(hostnames).ok_or_else(|| {
-                    // Unreachable while the policy resolved DNS-01 from the same
-                    // registry, but fail closed rather than silently downgrade.
-                    AcmeServiceError::config(
-                        "DNS-01 was selected but no cloud account covers every identifier",
-                    )
-                })?;
-                Ok(ChallengePlan::Dns01(context))
-            }
-        }
+        self.challenge_plan_with(hostnames, None, None)
     }
 
     /// Builds the DNS-01 challenge context from the associated cloud
     /// accounts (dispatching presenter + per-identifier zone resolution).
     pub fn dns01_context(&self, hostnames: &[String]) -> Option<IssuerDns01Context> {
+        self.dns01_context_with(hostnames, None)
+    }
+
+    /// Builds the DNS-01 challenge context, optionally pinned to one account.
+    ///
+    /// Pinning changes both halves together and that is the point: the presenter
+    /// publishes through the named account, and the zone resolver answers with
+    /// that account's apex, so a record can never be published by one account to
+    /// a zone another one owns.
+    pub fn dns01_context_with(
+        &self,
+        hostnames: &[String],
+        account_id: Option<&str>,
+    ) -> Option<IssuerDns01Context> {
         let registry = Arc::clone(self.dns_accounts.as_ref()?);
-        if !registry.covers_all(hostnames.iter().map(String::as_str)) {
+        let pinned = match account_id {
+            Some(account_id) => {
+                let account = registry.account(account_id)?;
+                if !hostnames.iter().all(|name| account.covers(name)) {
+                    return None;
+                }
+                Some(account.clone())
+            }
+            None => None,
+        };
+        if pinned.is_none() && !registry.covers_all(hostnames.iter().map(String::as_str)) {
             return None;
         }
+        let presenter: Arc<dyn crate::dns::Dns01Presenter> = match &pinned {
+            Some(account) => Arc::clone(&account.presenter),
+            None => registry.dispatch_presenter(),
+        };
         Some(IssuerDns01Context {
-            presenter: registry.dispatch_presenter(),
+            presenter,
             registry,
+            pinned,
         })
     }
 
@@ -316,7 +413,14 @@ impl CertificateIssuer {
                 "unsupported certType {other}; supported: 1 (Let's Encrypt), 3 (self-signed)"
             ))),
         }?;
-        validate_issued_material(material, cert_type, hostnames, cert_name, key_algorithm)
+        validate_issued_material(
+            material,
+            cert_type,
+            hostnames.to_vec(),
+            cert_name.to_string(),
+            key_algorithm.to_string(),
+        )
+        .await
     }
 }
 
@@ -328,15 +432,25 @@ impl CertificateIssuer {
 /// Owned DNS-01 challenge context sourced from the issuer's cloud-account
 /// registry; yields the borrowing [`AcmeDns01Context`] for an issuance call.
 pub struct IssuerDns01Context {
-    presenter: Arc<crate::dns_account::DispatchingDns01Presenter>,
+    /// The dispatcher, or — when `pinned` is set — the pinned account's own
+    /// presenter. Typed as the trait rather than as the dispatcher because a
+    /// pinned order does not route by zone at all.
+    presenter: Arc<dyn crate::dns::Dns01Presenter>,
     registry: Arc<crate::dns_account::DnsCloudAccountRegistry>,
+    /// Set when the order named the account that must present its challenge.
+    /// Held (not just borrowed) so the zone resolver handed to the order can
+    /// outlive this call.
+    pinned: Option<crate::dns_account::DnsCloudAccount>,
 }
 
 impl IssuerDns01Context {
     pub fn into_context(&self) -> AcmeDns01Context<'_> {
         AcmeDns01Context {
-            presenter: self.presenter.as_ref(),
-            zones: self.registry.as_ref(),
+            presenter: Arc::clone(&self.presenter),
+            zones: match &self.pinned {
+                Some(account) => account,
+                None => self.registry.as_ref(),
+            },
         }
     }
 }
@@ -374,13 +488,40 @@ impl std::fmt::Debug for ChallengePlan {
 }
 
 pub struct AcmeDns01Context<'a> {
-    pub presenter: &'a dyn Dns01Presenter,
+    /// Owned so a cancelled issuance can still withdraw its published TXT
+    /// records from a detached task (`lets_encrypt::Dns01PresentationGuard`).
+    pub presenter: Arc<dyn Dns01Presenter>,
     /// Zone resolver: maps each authorization identifier to its hosted zone
     /// apex (cloud-account registry or a single-zone adapter).
     pub zones: &'a dyn crate::dns_zone::DnsZoneResolver,
 }
 
-fn validate_issued_material(
+/// Verifies issued material against the request, off the async runtime.
+///
+/// PEM/x509 parsing and SPKI derivation are CPU-bound (leaf plus chain, up to
+/// a few MiB), so the work runs on the blocking pool the same way issuance
+/// key generation does; the comparisons themselves are cheap.
+async fn validate_issued_material(
+    material: IssuedCertificateMaterial,
+    expected_cert_type: i32,
+    expected_hostnames: Vec<String>,
+    expected_cert_name: String,
+    expected_key_algorithm: String,
+) -> AcmeServiceResult<IssuedCertificateMaterial> {
+    tokio::task::spawn_blocking(move || {
+        validate_issued_material_inner(
+            material,
+            expected_cert_type,
+            &expected_hostnames,
+            &expected_cert_name,
+            &expected_key_algorithm,
+        )
+    })
+    .await
+    .map_err(|error| AcmeServiceError::Internal(format!("join material validation: {error}")))?
+}
+
+fn validate_issued_material_inner(
     material: IssuedCertificateMaterial,
     expected_cert_type: i32,
     expected_hostnames: &[String],
@@ -691,46 +832,49 @@ mod tests {
         assert!(material.private_key_pem.contains("BEGIN PRIVATE KEY"));
     }
 
-    #[test]
-    fn validates_issued_certificate_material() {
+    #[tokio::test]
+    async fn validates_issued_certificate_material() {
         validate_issued_material(
             self_signed_material(),
             3,
-            &["dev.localhost".to_string()],
-            "dev-localhost",
-            "ECDSA",
+            vec!["dev.localhost".to_string()],
+            "dev-localhost".to_string(),
+            "ECDSA".to_string(),
         )
+        .await
         .expect("valid issued material");
     }
 
-    #[test]
-    fn rejects_issued_certificate_with_unrequested_san() {
+    #[tokio::test]
+    async fn rejects_issued_certificate_with_unrequested_san() {
         let error = validate_issued_material(
             self_signed_material(),
             3,
-            &["other.localhost".to_string()],
-            "dev-localhost",
-            "ECDSA",
+            vec!["other.localhost".to_string()],
+            "dev-localhost".to_string(),
+            "ECDSA".to_string(),
         )
+        .await
         .expect_err("SAN mismatch must fail closed");
         assert!(error.to_string().contains("SANs do not match"));
     }
 
-    #[test]
-    fn rejects_issued_certificate_with_unrequested_key_algorithm() {
+    #[tokio::test]
+    async fn rejects_issued_certificate_with_unrequested_key_algorithm() {
         let error = validate_issued_material(
             self_signed_material(),
             3,
-            &["dev.localhost".to_string()],
-            "dev-localhost",
-            "RSA",
+            vec!["dev.localhost".to_string()],
+            "dev-localhost".to_string(),
+            "RSA".to_string(),
         )
+        .await
         .expect_err("key algorithm mismatch must fail closed");
         assert!(error.to_string().contains("algorithm does not match"));
     }
 
-    #[test]
-    fn rejects_issued_certificate_with_mismatched_private_key() {
+    #[tokio::test]
+    async fn rejects_issued_certificate_with_mismatched_private_key() {
         let mut material = self_signed_material();
         material.private_key_pem = generate_key_pair("ECDSA")
             .expect("replacement key")
@@ -738,10 +882,11 @@ mod tests {
         let error = validate_issued_material(
             material,
             3,
-            &["dev.localhost".to_string()],
-            "dev-localhost",
-            "ECDSA",
+            vec!["dev.localhost".to_string()],
+            "dev-localhost".to_string(),
+            "ECDSA".to_string(),
         )
+        .await
         .expect_err("certificate and key mismatch must fail closed");
         assert!(error.to_string().contains("does not match the leaf"));
     }
@@ -750,8 +895,8 @@ mod tests {
     /// rejection table to be exercised, not only SAN and SPKI. The certificate
     /// below is well-formed and correctly keyed but its window starts in the
     /// future, so `validate_issued_material` must refuse to store it.
-    #[test]
-    fn rejects_issued_certificate_that_is_not_yet_valid() {
+    #[tokio::test]
+    async fn rejects_issued_certificate_that_is_not_yet_valid() {
         use rcgen::{CertificateParams, DistinguishedName, DnType};
         use time::OffsetDateTime;
 
@@ -795,25 +940,27 @@ mod tests {
         let error = validate_issued_material(
             material,
             3,
-            &["dev.localhost".to_string()],
-            "dev-localhost",
-            "ECDSA",
+            vec!["dev.localhost".to_string()],
+            "dev-localhost".to_string(),
+            "ECDSA".to_string(),
         )
+        .await
         .expect_err("a certificate that is not yet valid must fail closed");
         assert!(error.to_string().contains("not currently valid"));
     }
 
-    #[test]
-    fn rejects_issued_certificate_with_tampered_metadata() {
+    #[tokio::test]
+    async fn rejects_issued_certificate_with_tampered_metadata() {
         let mut material = self_signed_material();
         material.fingerprint_sha256 = "0".repeat(64);
         let error = validate_issued_material(
             material,
             3,
-            &["dev.localhost".to_string()],
-            "dev-localhost",
-            "ECDSA",
+            vec!["dev.localhost".to_string()],
+            "dev-localhost".to_string(),
+            "ECDSA".to_string(),
         )
+        .await
         .expect_err("metadata mismatch must fail closed");
         assert!(error.to_string().contains("metadata does not match"));
     }

@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
 use instant_acme::{
@@ -28,16 +29,18 @@ use crate::{AcmeConfig, AcmeServiceError, AcmeServiceResult};
 const MAX_AUTHORIZATIONS_PER_ORDER: usize = crate::MAX_CERTIFICATE_IDENTIFIERS;
 
 /// How an order proves control of its identifiers.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) enum AcmeChallengeMode<'a> {
     /// HTTP-01 through the edge webroot. Exact identifiers only.
     Http01,
     /// DNS-01 through a provider presenter or a manual operator flow. The
     /// zone resolver maps each authorization's identifier to its hosted
     /// zone, so certificates spanning multiple zones (and multiple cloud
-    /// accounts) renew unattended.
+    /// accounts) renew unattended. The presenter is owned (not borrowed) so
+    /// the withdrawal guard can hand surviving challenge records to a
+    /// detached task when this future is cancelled mid-flight.
     Dns01 {
-        presenter: &'a dyn Dns01Presenter,
+        presenter: Arc<dyn Dns01Presenter>,
         zones: &'a dyn crate::dns_zone::DnsZoneResolver,
     },
 }
@@ -157,9 +160,16 @@ async fn issue_lets_encrypt_inner(
         .map(Identifier::Dns)
         .collect::<Vec<_>>();
 
-    // DNS-01 presentations are collected outside the order block so they can be
-    // withdrawn on every exit path, including a timeout or a CA refusal.
-    let mut presentations: Vec<Dns01RecordHandle> = Vec::new();
+    // DNS-01 presentations are owned by the guard so they are withdrawn on
+    // every exit path — including the outer operation timeout and the
+    // certificate worker's cycle watchdog cancelling this future mid-flight
+    // (see `Dns01PresentationGuard`).
+    let mut dns01_guard = match &mode {
+        AcmeChallengeMode::Dns01 { presenter, .. } => {
+            Some(Dns01PresentationGuard::new(Arc::clone(presenter)))
+        }
+        AcmeChallengeMode::Http01 => None,
+    };
     let outcome: AcmeServiceResult<IssuedCertificateMaterial> = async {
         let mut order = account
             .new_order(&NewOrder::new(&identifiers))
@@ -195,14 +205,14 @@ async fn issue_lets_encrypt_inner(
             // Derive the label from `mode` rather than from `challenge_type`:
             // the latter is moved into `authz.challenge(...)` before the error
             // closure could borrow it.
-            let challenge_label = challenge_type_label(mode);
+            let challenge_label = challenge_type_label(&mode);
             let mut challenge = authz.challenge(challenge_type).ok_or_else(|| {
                 AcmeServiceError::provider(format!(
                     "the CA offers no {challenge_label} challenge for this authorization"
                 ))
             })?;
 
-            match mode {
+            match &mode {
                 AcmeChallengeMode::Http01 => {
                     let token = challenge.token.clone();
                     let key_auth = challenge.key_authorization().as_str().to_string();
@@ -231,7 +241,9 @@ async fn issue_lets_encrypt_inner(
                     let record_value = dns01_txt_value(digest.as_ref());
                     let request = Dns01RecordRequest::new(zone_apex, record_name, record_value)?;
                     let handle = presenter.publish(&request).await?;
-                    presentations.push(handle);
+                    if let Some(guard) = dns01_guard.as_mut() {
+                        guard.push(handle);
+                    }
                 }
             }
 
@@ -306,14 +318,71 @@ async fn issue_lets_encrypt_inner(
     }
     .await;
 
-    // Withdraw on both success and failure. A leftover TXT record is a stale
-    // credential that a third party could present against the same identifier,
-    // so it must not outlive the order. A failed withdrawal is logged but must
-    // not mask the issuance outcome.
-    if let AcmeChallengeMode::Dns01 { presenter, .. } = mode {
-        withdraw_dns01_presentations(presenter, &presentations).await;
+    // Withdraw on both success and failure while an async context is still
+    // available, so the normal exit never needs the detached path. A leftover
+    // TXT record is a stale credential that a third party could present
+    // against the same identifier, so it must not outlive the order. A failed
+    // withdrawal is logged but must not mask the issuance outcome. When this
+    // future is cancelled instead of completed, the guard's `Drop` is what
+    // withdraws the surviving records (a `Drop` cannot `.await`, so it hands
+    // them to a detached task bounded by the presenter's request timeouts).
+    if let Some(guard) = dns01_guard.as_mut() {
+        guard.withdraw().await;
     }
     outcome
+}
+
+/// Owns the DNS-01 records published for one order until they are withdrawn.
+///
+/// The inline [`Dns01PresentationGuard::withdraw`] covers the normal exit.
+/// Cancellation — the outer operation timeout in [`issue_lets_encrypt`], or
+/// the certificate worker's cycle watchdog dropping the issuance future
+/// mid-flight — cannot await, so [`Drop for Dns01PresentationGuard`] hands the
+/// surviving records to a detached withdrawal task. Without it, a cancelled
+/// order leaks live challenge TXT records for the identifier: a stale
+/// credential a third party could present against the same identifier.
+struct Dns01PresentationGuard {
+    presenter: Arc<dyn Dns01Presenter>,
+    published: Vec<Dns01RecordHandle>,
+}
+
+impl Dns01PresentationGuard {
+    fn new(presenter: Arc<dyn Dns01Presenter>) -> Self {
+        Self {
+            presenter,
+            published: Vec::new(),
+        }
+    }
+
+    fn push(&mut self, handle: Dns01RecordHandle) {
+        self.published.push(handle);
+    }
+
+    async fn withdraw(&mut self) {
+        withdraw_dns01_presentations(self.presenter.as_ref(), &self.published).await;
+        self.published.clear();
+    }
+}
+
+impl Drop for Dns01PresentationGuard {
+    fn drop(&mut self) {
+        if self.published.is_empty() {
+            return;
+        }
+        let published = std::mem::take(&mut self.published);
+        match tokio::runtime::Handle::try_current() {
+            Ok(runtime) => {
+                let presenter = Arc::clone(&self.presenter);
+                runtime.spawn(async move {
+                    withdraw_dns01_presentations(presenter.as_ref(), &published).await;
+                });
+            }
+            Err(_) => tracing::error!(
+                record_count = published.len(),
+                "no async runtime is available to withdraw published DNS-01 challenge records"
+            ),
+        }
+    }
 }
 
 async fn withdraw_dns01_presentations(
@@ -335,7 +404,7 @@ fn is_wildcard_identifier(hostname: &str) -> bool {
     crate::challenge_policy::is_wildcard_identifier(hostname)
 }
 
-fn challenge_type_label(mode: AcmeChallengeMode<'_>) -> &'static str {
+fn challenge_type_label(mode: &AcmeChallengeMode<'_>) -> &'static str {
     match mode {
         AcmeChallengeMode::Http01 => "http-01",
         AcmeChallengeMode::Dns01 { .. } => "dns-01",
@@ -361,14 +430,14 @@ mod tests {
 
     #[test]
     fn challenge_labels_are_the_acme_wire_tokens() {
-        assert_eq!(challenge_type_label(AcmeChallengeMode::Http01), "http-01");
-        let presenter = crate::dns::InMemoryDns01Presenter::new();
+        assert_eq!(challenge_type_label(&AcmeChallengeMode::Http01), "http-01");
+        let presenter = Arc::new(crate::dns::InMemoryDns01Presenter::new());
         let zones = crate::dns_zone::SingleZoneResolver {
             zone_apex: "example.com".to_owned(),
         };
         assert_eq!(
-            challenge_type_label(AcmeChallengeMode::Dns01 {
-                presenter: &presenter,
+            challenge_type_label(&AcmeChallengeMode::Dns01 {
+                presenter,
                 zones: &zones,
             }),
             "dns-01"

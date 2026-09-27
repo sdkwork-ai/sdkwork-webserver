@@ -494,16 +494,6 @@ impl WebService {
     pub(crate) fn validate_certificate_issue_request(
         request: &IssueCertificateRequest,
     ) -> WebServiceResult<()> {
-        if !matches!(request.cert_type, 1 | 3) {
-            return Err(sdkwork_webserver_contract::WebServiceError::validation(
-                "certType must be 1 (Let's Encrypt) or 3 (self-signed)",
-            ));
-        }
-        if request.cert_type == 3 && request.auto_renew {
-            return Err(sdkwork_webserver_contract::WebServiceError::validation(
-                "automatic renewal is unavailable for self-signed certificates",
-            ));
-        }
         if request.domain_ids.is_empty() || request.domain_ids.len() > MAX_CERTIFICATE_IDENTIFIERS {
             return Err(sdkwork_webserver_contract::WebServiceError::validation(
                 "domainIds must contain between 1 and 8 identifiers",
@@ -522,9 +512,12 @@ impl WebService {
                 ));
             }
         }
-        if !matches!(request.key_algorithm.as_str(), "ECDSA" | "RSA") {
+        // The cert type, key algorithm and every field added for the console
+        // alignment are one shared rule, so this receive-side check and the
+        // repository's store-side one cannot accept different requests.
+        if let Some(reason) = sdkwork_webserver_contract::certificate_issue_shape_error(request) {
             return Err(sdkwork_webserver_contract::WebServiceError::validation(
-                "keyAlgorithm must be ECDSA or RSA",
+                reason,
             ));
         }
         Ok(())
@@ -1394,6 +1387,7 @@ impl WebAppApi for WebService {
         domain_id: Option<&str>,
         page: i32,
         page_size: i32,
+        cursor: Option<&str>,
     ) -> WebServiceResult<sdkwork_webserver_contract::CertificatePage> {
         let tenant_id = if let Some(site_id) = site_id {
             self.require_application_access(context, site_id).await?.0
@@ -1402,7 +1396,9 @@ impl WebAppApi for WebService {
         };
         let owner_id = Self::owner_filter(context)?;
         self.repository
-            .list_certificates(tenant_id, owner_id, site_id, domain_id, page, page_size)
+            .list_certificates(
+                tenant_id, owner_id, site_id, domain_id, page, page_size, cursor,
+            )
             .await
     }
 
@@ -1869,8 +1865,7 @@ mod tests {
             WebService::validate_certificate_issue_request(&IssueCertificateRequest {
                 domain_ids: vec!["domain-1".to_owned(), "domain-2".to_owned()],
                 cert_type: 1,
-                key_algorithm: "ECDSA".to_owned(),
-                auto_renew: true,
+                ..IssueCertificateRequest::default()
             })
             .is_ok()
         );
@@ -1878,8 +1873,10 @@ mod tests {
             WebService::validate_certificate_issue_request(&IssueCertificateRequest {
                 domain_ids: vec!["domain-1".to_owned()],
                 cert_type: 3,
-                key_algorithm: "RSA".to_owned(),
+                // Self-signed may not renew automatically; that is the whole
+                // point of this second case, so it survives the defaults.
                 auto_renew: true,
+                ..IssueCertificateRequest::default()
             })
             .is_err()
         );

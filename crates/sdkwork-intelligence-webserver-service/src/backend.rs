@@ -635,9 +635,11 @@ impl WebBackendApi for WebService {
         domain_id: Option<&str>,
         page: i32,
         page_size: i32,
+        cursor: Option<&str>,
     ) -> WebServiceResult<sdkwork_webserver_contract::CertificatePage> {
         let app_context = Self::backend_app_context(context)?;
-        WebAppApi::list_certificates(self, &app_context, None, domain_id, page, page_size).await
+        WebAppApi::list_certificates(self, &app_context, None, domain_id, page, page_size, cursor)
+            .await
     }
 
     async fn issue_managed_certificate(
@@ -646,6 +648,37 @@ impl WebBackendApi for WebService {
         request: &IssueCertificateRequest,
     ) -> WebServiceResult<sdkwork_webserver_contract::CertificateOperationAcceptedResponse> {
         Self::validate_certificate_issue_request(request)?;
+        // Two facts only the running engine can answer, so they are checked
+        // here rather than restated as shape rules the contract crate could
+        // only answer weakly: which cloud accounts this edge holds credentials
+        // for, and which CA directory it is configured to order from.
+        //
+        // Both refuse rather than fall back. Accepting an unknown account would
+        // mean the operator's choice was silently replaced by whichever account
+        // the registry prefers, and accepting the other CA profile would mean
+        // the certificate came from somewhere other than where the request said.
+        if let Some(account_id) = request.provider_account_id.as_deref() {
+            let known = self
+                .certificate_issuer
+                .dns_accounts()
+                .iter()
+                .any(|account| account.account_id == account_id);
+            if !known {
+                return Err(WebServiceError::validation(format!(
+                    "providerAccountId `{account_id}` is not one of the cloud DNS accounts \
+                     configured on this edge; list them with GET /backend/v3/api/dns_accounts"
+                )));
+            }
+        }
+        if let Some(profile) = request.ca_profile.as_deref() {
+            let configured = self.certificate_issuer.acme_profile();
+            if profile != configured {
+                return Err(WebServiceError::validation(format!(
+                    "caProfile `{profile}` does not match this edge's ACME directory, which is \
+                     configured for `{configured}`"
+                )));
+            }
+        }
         let tenant_id = Self::require_backend_tenant(context)?;
         let operation = self
             .repository
@@ -852,6 +885,44 @@ impl WebBackendApi for WebService {
         self.repository
             .list_certificate_distribution(tenant_id, page, page_size)
             .await
+    }
+
+    async fn list_dns_accounts(
+        &self,
+        context: &WebBackendRequestContext,
+        page: i32,
+        page_size: i32,
+    ) -> WebServiceResult<sdkwork_webserver_contract::DnsAccountPage> {
+        // Tenant-gated like every other read on this surface. The accounts are
+        // process configuration rather than tenant rows, so this is not an
+        // ownership check — but who holds DNS credentials for which zones is
+        // not something an unauthenticated caller should be able to enumerate,
+        // and the route is dual-token anyway.
+        Self::require_backend_tenant(context)?;
+        // Read from the issuer's registry rather than a second source: this
+        // must answer with the accounts the ACME engine will actually present
+        // through, or the picker would offer a choice the issuance path cannot
+        // honour.
+        let accounts = self.certificate_issuer.dns_accounts();
+        let total = i64::try_from(accounts.len()).unwrap_or(i64::MAX);
+        // The registry is a startup-time list, so paging is a slice rather than
+        // a query. Saturating arithmetic because `page`/`page_size` are caller
+        // input and an overflow here would be a panic on a read path.
+        let page_size = page_size.max(1);
+        let skip =
+            usize::try_from(page.saturating_sub(1).saturating_mul(page_size)).unwrap_or(usize::MAX);
+        let take = usize::try_from(page_size).unwrap_or(usize::MAX);
+        let items = accounts
+            .into_iter()
+            .skip(skip)
+            .take(take)
+            .map(|account| sdkwork_webserver_contract::DnsAccountResponse {
+                account_id: account.account_id,
+                provider: account.provider,
+                zone_apex: account.zone_apex,
+            })
+            .collect();
+        Ok(sdkwork_webserver_contract::DnsAccountPage { items, total })
     }
 
     async fn list_nginx_configs(

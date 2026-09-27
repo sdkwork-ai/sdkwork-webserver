@@ -479,9 +479,12 @@ impl WebRepositoryPort for WebRepository {
         domain_id: Option<&str>,
         page: i32,
         page_size: i32,
+        cursor: Option<&str>,
     ) -> WebServiceResult<CertificatePage> {
-        self.list_certificates_repo(tenant_id, owner_id, site_id, domain_id, page, page_size)
-            .await
+        self.list_certificates_repo(
+            tenant_id, owner_id, site_id, domain_id, page, page_size, cursor,
+        )
+        .await
     }
 
     async fn enqueue_certificate_issue(

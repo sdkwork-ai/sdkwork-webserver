@@ -57,7 +57,7 @@ export function ServedCertificateAdminSurface({ locale, resource }: ServedCertif
 
   const load = useCallback(async () => {
     try {
-      const result = await client.certificate.list({ page, pageSize: PAGE_SIZE });
+      const result = await client.certificate.list({ pageSize: PAGE_SIZE });
       setCertificates(result.items);
       // `PageInfo.hasMore` is optional on the wire (`PageInfo` at
       // `types/page-info.ts`); an absent flag means "no continuation", never

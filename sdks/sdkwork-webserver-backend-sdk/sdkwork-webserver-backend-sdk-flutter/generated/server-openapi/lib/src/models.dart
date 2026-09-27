@@ -2217,12 +2217,24 @@ class IssueCertificateRequest {
   final int certType;
   final String? keyAlgorithm;
   final bool? autoRenew;
+  final String? certName;
+  final String? certificateScope;
+  final String? validationMethod;
+  final int? renewBeforeDays;
+  final String? caProfile;
+  final String? providerAccountId;
 
   IssueCertificateRequest({
     required this.domainIds,
     required this.certType,
     this.keyAlgorithm,
-    this.autoRenew
+    this.autoRenew,
+    this.certName,
+    this.certificateScope,
+    this.validationMethod,
+    this.renewBeforeDays,
+    this.caProfile,
+    this.providerAccountId
   });
 
   factory IssueCertificateRequest.fromJson(Map<String, dynamic> json) {
@@ -2245,7 +2257,13 @@ class IssueCertificateRequest {
         return value;
       })(),
       keyAlgorithm: json['keyAlgorithm']?.toString(),
-      autoRenew: json['autoRenew'] is bool ? json['autoRenew'] : null
+      autoRenew: json['autoRenew'] is bool ? json['autoRenew'] : null,
+      certName: json['certName']?.toString(),
+      certificateScope: json['certificateScope']?.toString(),
+      validationMethod: json['validationMethod']?.toString(),
+      renewBeforeDays: json['renewBeforeDays'] is int ? json['renewBeforeDays'] : null,
+      caProfile: json['caProfile']?.toString(),
+      providerAccountId: json['providerAccountId']?.toString()
     );
   }
 
@@ -2255,6 +2273,58 @@ class IssueCertificateRequest {
       'certType': certType,
       'keyAlgorithm': keyAlgorithm,
       'autoRenew': autoRenew,
+      'certName': certName,
+      'certificateScope': certificateScope,
+      'validationMethod': validationMethod,
+      'renewBeforeDays': renewBeforeDays,
+      'caProfile': caProfile,
+      'providerAccountId': providerAccountId,
+    };
+  }
+}
+
+class DnsAccountResponse {
+  final String accountId;
+  final String provider;
+  final String zoneApex;
+
+  DnsAccountResponse({
+    required this.accountId,
+    required this.provider,
+    required this.zoneApex
+  });
+
+  factory DnsAccountResponse.fromJson(Map<String, dynamic> json) {
+    return DnsAccountResponse(
+      accountId: (() {
+        final value = json['accountId']?.toString();
+        if (value == null) {
+          throw FormatException('DnsAccountResponse.accountId is required');
+        }
+        return value;
+      })(),
+      provider: (() {
+        final value = json['provider']?.toString();
+        if (value == null) {
+          throw FormatException('DnsAccountResponse.provider is required');
+        }
+        return value;
+      })(),
+      zoneApex: (() {
+        final value = json['zoneApex']?.toString();
+        if (value == null) {
+          throw FormatException('DnsAccountResponse.zoneApex is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'accountId': accountId,
+      'provider': provider,
+      'zoneApex': zoneApex,
     };
   }
 }
@@ -8319,6 +8389,52 @@ class CertificatesDistributionListResponse {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('CertificatesDistributionListResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class DnsAccountsListResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  DnsAccountsListResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory DnsAccountsListResponse.fromJson(Map<String, dynamic> json) {
+    return DnsAccountsListResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('DnsAccountsListResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('DnsAccountsListResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('DnsAccountsListResponse.traceId is required');
         }
         return value;
       })()

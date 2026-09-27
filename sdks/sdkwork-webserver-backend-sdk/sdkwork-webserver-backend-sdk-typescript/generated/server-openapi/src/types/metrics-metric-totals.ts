@@ -1,6 +1,6 @@
 import type { MetricsWindowValue } from './metrics-window-value';
 
-/** One metric across every window. `metric` is one of the entity ids (`users`, `tenants`, `applications`, `agents`), one of the storage ids (`storage.used_bytes`, `storage.object_count`), or a metered dimension (`traffic.requests`, …), which is left open on the same terms as the traffic readings: a dimension this contract has not heard of reaches the surface instead of failing the response. */
+/** One metric across every window. `metric` is one of the entity ids (`users`, `tenants`, `applications`, `agents`), one of the storage ids (`storage.used_bytes`, `storage.object_count`), or a metered dimension (`traffic.requests`, ...), which is left open on the same terms as the traffic readings: a dimension this contract has not heard of reaches the surface instead of failing the response. */
 export interface MetricsMetricTotals {
   metric: string;
   unit: string;

@@ -16,6 +16,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::Arc;
 use std::time::Duration;
 
 use axum::{routing::get, Router};
@@ -426,7 +427,7 @@ async fn wildcard_issuance_over_dns01_against_pebble() {
         zone_apex: "example.com".to_string(),
     };
     let dns01 = AcmeDns01Context {
-        presenter: &presenter,
+        presenter: Arc::new(presenter),
         zones: &zones,
     };
 

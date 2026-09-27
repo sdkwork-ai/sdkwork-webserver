@@ -37,9 +37,9 @@ const MACHINE_CODE_MIN_CHARS: usize = 8;
 /// (`SDKWORK_WEBSERVER_MEMORY_LIMIT`, the same governance limit compose and
 /// Kubernetes apply). At 75% of budget the instance reports `DEGRADED`, at
 /// 90% `UNHEALTHY`; without both a reading and a budget the instance reports
-/// `HEALTHY` because liveness is owned by the heartbeat itself and silence is
-/// judged by the registry sweep — an unmeasurable process must not invent a
-/// reading it does not have.
+/// `UNKNOWN` because liveness is owned by the heartbeat itself and silence is
+/// judged by the registry sweep — an unmeasurable process must not claim a
+/// healthy reading it does not have.
 const MEMORY_DEGRADED_RATIO_PERCENT: i64 = 75;
 const MEMORY_UNHEALTHY_RATIO_PERCENT: i64 = 90;
 
@@ -334,20 +334,22 @@ fn parse_memory_limit_mib(raw: Option<&str>) -> Option<i64> {
 }
 
 /// One heartbeat's measured health: the state string the contract expects
-/// (`HEALTHY`/`DEGRADED`/`UNHEALTHY`) plus the memory utilization percent
-/// when both a reading and a budget exist.
+/// (`HEALTHY`/`DEGRADED`/`UNHEALTHY`/`UNKNOWN`) plus the memory utilization
+/// percent when both a reading and a budget exist. An unmeasurable process
+/// reports `UNKNOWN` — never a constant `HEALTHY`, which would let a memory
+/// runaway look healthy to the registry for as long as the sampling fails.
 fn measured_health_state(
     rss_mb: Option<i64>,
     limit_mb: Option<i64>,
 ) -> (&'static str, Option<i64>) {
     let Some(rss) = rss_mb else {
-        return ("HEALTHY", None);
+        return ("UNKNOWN", None);
     };
     let Some(limit) = limit_mb else {
-        return ("HEALTHY", None);
+        return ("UNKNOWN", None);
     };
     if limit <= 0 {
-        return ("HEALTHY", None);
+        return ("UNKNOWN", None);
     }
     let percent = rss.saturating_mul(100) / limit;
     let state = if percent >= MEMORY_UNHEALTHY_RATIO_PERCENT {
@@ -665,10 +667,11 @@ mod tests {
 
     #[test]
     fn health_state_is_measured_against_the_configured_budget() {
-        // No reading or no budget: the instance must not invent a claim, but
-        // liveness is owned by the beat itself, so the state stays HEALTHY.
-        assert_eq!(measured_health_state(None, Some(4096)), ("HEALTHY", None));
-        assert_eq!(measured_health_state(Some(1024), None), ("HEALTHY", None));
+        // No reading or no budget: the instance must not invent a claim, and a
+        // memory budget it cannot evaluate is not a healthy evaluation, so the
+        // honest answer is UNKNOWN while liveness stays owned by the beat.
+        assert_eq!(measured_health_state(None, Some(4096)), ("UNKNOWN", None));
+        assert_eq!(measured_health_state(Some(1024), None), ("UNKNOWN", None));
         // 50% of budget.
         assert_eq!(
             measured_health_state(Some(2048), Some(4096)),

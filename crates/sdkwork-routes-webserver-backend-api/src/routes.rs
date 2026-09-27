@@ -22,9 +22,10 @@ use crate::{
 };
 use sdkwork_routes_webserver_common::{
     accepted_async, created_resource, no_content, ok_application_page, ok_audit_log_page,
-    ok_certificate_distribution_page, ok_certificate_page, ok_deployment_page, ok_domain_page,
-    ok_listener_certificate_binding_page, ok_nginx_config_page, ok_resource, ok_root_domain_page,
-    ok_server_page, ok_source_version_page, validate_pagination_query, WebApiError,
+    ok_certificate_distribution_page, ok_certificate_page, ok_deployment_page, ok_dns_account_page,
+    ok_domain_page, ok_listener_certificate_binding_page, ok_nginx_config_page, ok_resource,
+    ok_root_domain_page, ok_server_page, ok_source_version_page, validate_pagination_query,
+    WebApiError,
 };
 
 /// Router state shared by every handler of this surface.
@@ -137,6 +138,7 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn WebBackendApi>) -> Rout
             paths::CERTIFICATE_DISTRIBUTION,
             get(list_certificate_distribution),
         )
+        .route(paths::DNS_ACCOUNTS, get(list_dns_accounts))
         .route(
             paths::NGINX_CONFIGS,
             get(list_nginx_configs).post(create_nginx_config),
@@ -275,6 +277,7 @@ struct CertificatePageQuery {
     page_size: i32,
     #[serde(rename = "domain_id")]
     domain_id: Option<String>,
+    cursor: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -709,10 +712,12 @@ async fn list_managed_certificates(
                 query.domain_id.as_deref(),
                 query.page,
                 query.page_size,
+                query.cursor.as_deref(),
             )
             .await,
         query.page,
         query.page_size,
+        query.cursor.is_some(),
     )
 }
 
@@ -870,6 +875,22 @@ async fn list_certificate_distribution(
             .api
             .list_certificate_distribution(&context, query.page, query.page_size)
             .await,
+    )
+}
+
+async fn list_dns_accounts(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Query(query): Query<PageQuery>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    ok_dns_account_page(
+        state
+            .api
+            .list_dns_accounts(&context, query.page, query.page_size)
+            .await,
+        query.page,
+        query.page_size,
     )
 }
 

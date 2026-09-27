@@ -304,7 +304,11 @@ async fn membership_tick(
         // 1 = online. A node only reaches this code while its membership loop
         // is running, so the claim is grounded in the loop's own liveness.
         status: 1,
-        health_state: "HEALTHY".to_owned(),
+        // This loop measures liveness only; it has no memory reading or
+        // budget, so it must not claim a `HEALTHY` it cannot measure. The
+        // registry reads `UNKNOWN` as "not assessed", the same semantics the
+        // gateway self-report uses.
+        health_state: "UNKNOWN".to_owned(),
         uptime_seconds: i64::try_from(started_at.elapsed().as_secs()).unwrap_or(i64::MAX),
         build_version: Some(identity.build_version.clone()),
         metrics: quality_metrics(previous_rtt_millis),

@@ -112,13 +112,12 @@ fmt.Println(result)
 ### certificate
 
 ```go
-// List canonical certificates
+// List the cloud DNS accounts this edge can present challenges with
 params := map[string]interface{}{
     "page": 1,
     "page_size": 2,
-    "domain_id": "domain_id",
 }
-result, err := client.Certificate.CertificatesList(params)
+result, err := client.Certificate.DnsAccountsList(params)
 if err != nil {
     panic(err)
 }

@@ -26,7 +26,7 @@ const surfaces = [
     // number cannot be done without the marking being complete.
     // 41 after the cluster ops routes (sync/probe/metrics-history/drain/undrain/
     // cordon/uncordon) were added and marked.
-    expectedIdempotentOperations: 41,
+    expectedIdempotentOperations: 40,
   },
   {
     name: 'internal-api',

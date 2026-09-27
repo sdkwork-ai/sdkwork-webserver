@@ -286,3 +286,10 @@ console.log(JSON.stringify({
   warnings: summarize(warnings),
   optimizations: summarize(optimizations),
 }, null, 2));
+
+// A report that finds critical issues must not exit 0, or CI and operators
+// read the run as an audit pass.
+const criticalCount = Object.values(critical).reduce((total, items) => total + items.length, 0);
+if (criticalCount > 0) {
+  process.exitCode = 1;
+}

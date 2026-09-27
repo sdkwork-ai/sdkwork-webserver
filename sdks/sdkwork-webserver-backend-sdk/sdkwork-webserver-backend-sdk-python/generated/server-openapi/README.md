@@ -99,13 +99,12 @@ print(result)
 ### certificate
 
 ```python
-# List canonical certificates
+# List the cloud DNS accounts this edge can present challenges with
 params = {
     'page': 1,
     'page_size': 2,
-    'domain_id': 'domain_id',
 }
-result = client.certificate.list(params)
+result = client.certificate.dns_accounts.list(params)
 print(result)
 ```
 

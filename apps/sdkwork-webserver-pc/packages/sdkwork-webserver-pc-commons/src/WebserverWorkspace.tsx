@@ -1,5 +1,6 @@
 import {
   Activity,
+  AlertTriangle,
   BadgeCheck,
   Check,
   ChevronLeft,
@@ -27,6 +28,8 @@ import {
   X,
 } from "lucide-react";
 import {
+  Component,
+  Fragment,
   useEffect,
   useId,
   useMemo,
@@ -192,14 +195,18 @@ export function WebserverWorkspace({
               <Route
                 key={entry.resource}
                 path={`/${adminEntryPathSegment(entry)}/*`}
-                element={resourceRenderers?.[entry.resource] ?? (
-                  <ResourcePage
-                    entry={entry}
-                    locale={locale}
-                    permissionScope={permissionScope}
-                    source={registry[entry.resource]}
-                    surface={surface}
-                  />
+                element={(
+                  <SurfaceErrorBoundary key={entry.resource} locale={locale}>
+                    {resourceRenderers?.[entry.resource] ?? (
+                      <ResourcePage
+                        entry={entry}
+                        locale={locale}
+                        permissionScope={permissionScope}
+                        source={registry[entry.resource]}
+                        surface={surface}
+                      />
+                    )}
+                  </SurfaceErrorBoundary>
                 )}
               />
             ))}
@@ -227,6 +234,61 @@ function SurfaceAccessState({ locale }: { locale: WebserverLocale }) {
       <p>{t("access.description")}</p>
     </section>
   );
+}
+
+/**
+ * Route-level crash containment.
+ *
+ * A render-time exception in one workspace page must take down that page, not
+ * the whole SPA: this boundary holds the shell, the sidebar, and every other
+ * route alive, announces the failure (`role="alert"`), and offers a remount.
+ * Keying an instance per resource (see the `Routes` below) also resets it when
+ * the operator navigates elsewhere and back, so recovery never depends on a
+ * full page reload.
+ */
+class SurfaceErrorBoundary extends Component<
+  { children: ReactNode; locale: WebserverLocale },
+  { error: unknown; attempt: number }
+> {
+  override state: { error: unknown; attempt: number } = { attempt: 0, error: undefined };
+
+  static getDerivedStateFromError(error: unknown) {
+    return { error };
+  }
+
+  override componentDidCatch(error: unknown) {
+    // The boundary keeps the operator working; the actual diagnosis belongs in
+    // the console, so the crash is reported rather than swallowed.
+    console.error("workspace surface crashed", error);
+  }
+
+  override render() {
+    if (this.state.error !== undefined) {
+      const t = (key: WebserverMessageKey, values: Record<string, string | number> = {}) => (
+        translateWebserver(this.props.locale, key, values)
+      );
+      return (
+        <section className="surface-access-state" role="alert">
+          <AlertTriangle aria-hidden="true" size={22} />
+          <h1>{t("surfaceCrash.title")}</h1>
+          <p>{t("surfaceCrash.description")}</p>
+          <button
+            className="icon-button"
+            onClick={() => {
+              this.setState((state) => ({ attempt: state.attempt + 1, error: undefined }));
+            }}
+            type="button"
+          >
+            <RefreshCw aria-hidden="true" size={16} />
+            {t("surfaceCrash.retry")}
+          </button>
+        </section>
+      );
+    }
+    return (
+      <Fragment key={this.state.attempt}>{this.props.children}</Fragment>
+    );
+  }
 }
 
 function ResourcePage({

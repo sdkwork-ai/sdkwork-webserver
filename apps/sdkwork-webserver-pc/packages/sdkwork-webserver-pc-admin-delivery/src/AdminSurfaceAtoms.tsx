@@ -1,4 +1,8 @@
-import { translateWebserver, type WebserverLocale } from "@sdkwork/webserver-pc-commons";
+import {
+  formatWebserverErrorMessage,
+  translateWebserver,
+  type WebserverLocale,
+} from "@sdkwork/webserver-pc-commons";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 
@@ -27,8 +31,15 @@ export function translator(locale: WebserverLocale): Translator {
   return (key, values) => translateWebserver(locale, key, values);
 }
 
-export function errorText(cause: unknown): string | undefined {
-  return cause instanceof Error && cause.message ? cause.message : undefined;
+/**
+ * Every rejection an operator can see goes through the commons formatter, so a
+ * structured problem detail, an async-operation failure, and a plain `Error`
+ * all render as actionable copy in the surface's own locale. The previous
+ * shape returned `undefined` for a non-`Error` rejection, which left a data
+ * surface spinning on its loading state with the failure swallowed.
+ */
+export function errorText(cause: unknown, t: Translator): string {
+  return formatWebserverErrorMessage(cause, t);
 }
 
 export function formatInstant(instant: string | undefined, locale: WebserverLocale): string {
@@ -191,7 +202,7 @@ export function FormDialog({
     setBusy(true);
     setError(undefined);
     void submit(value)
-      .catch((cause) => setError(errorText(cause)))
+      .catch((cause) => setError(errorText(cause, t)))
       .finally(() => setBusy(false));
   };
 
@@ -274,7 +285,15 @@ export function ConfirmDialog({
   );
 }
 
-function DialogBackdrop({ children, close }: { children: ReactNode; close(): void }) {
+/**
+ * Backdrop for the console's centred dialog chrome.
+ *
+ * Exported because the certificate form's hostname picker is a second centred
+ * dialog on this plane — it opens from the drawer, so it cannot use the drawer
+ * chrome itself — and it has to sit on the same backdrop as every other dialog
+ * here rather than re-declaring one and drifting from it.
+ */
+export function DialogBackdrop({ children, close }: { children: ReactNode; close(): void }) {
   return (
     // A click on the backdrop itself closes; a click anywhere inside does not,
     // which is why the handler compares the event target against the backdrop
@@ -382,7 +401,7 @@ export function SideDrawer({
   );
 }
 
-function DialogCloseButton({ close, label }: { close(): void; label: string }) {
+export function DialogCloseButton({ close, label }: { close(): void; label: string }) {
   return (
     // `aria-label` rather than relying on `title`: an icon-only button's
     // accessible name should not depend on the tooltip fallback.

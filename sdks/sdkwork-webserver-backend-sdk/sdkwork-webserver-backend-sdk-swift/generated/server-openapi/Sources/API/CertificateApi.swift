@@ -39,10 +39,10 @@ public class CertificateApi {
     }
 
     /// List canonical certificates
-    public func certificatesList(page: Int? = nil, pageSize: Int? = nil, domainId: String? = nil) async throws -> CertificatesListResponse? {
+    public func certificatesList(pageSize: Int? = nil, cursor: String? = nil, domainId: String? = nil) async throws -> CertificatesListResponse? {
         let query = buildQueryString([
-            QueryParameterSpec(name: "page", value: page, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "page_size", value: pageSize, style: "form", explode: true, allowReserved: false, contentType: nil),
+            QueryParameterSpec(name: "cursor", value: cursor, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "domain_id", value: domainId, style: "form", explode: true, allowReserved: false, contentType: nil)
         ])
         return try await client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/certificates"), query), responseType: CertificatesListResponse.self)
@@ -106,6 +106,15 @@ public class CertificateApi {
             [:]
         )
         return try await client.post(ApiPaths.backendPath("/certificates/\(serializePathParameter(certificateId, PathParameterSpec(name: "certificateId", style: "simple", explode: false)))/revoke"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: CertificatesRevokeResponse.self)
+    }
+
+    /// List the cloud DNS accounts this edge can present challenges with
+    public func dnsAccountsList(page: Int? = nil, pageSize: Int? = nil) async throws -> DnsAccountsListResponse? {
+        let query = buildQueryString([
+            QueryParameterSpec(name: "page", value: page, style: "form", explode: true, allowReserved: false, contentType: nil),
+            QueryParameterSpec(name: "page_size", value: pageSize, style: "form", explode: true, allowReserved: false, contentType: nil)
+        ])
+        return try await client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/dns_accounts"), query), responseType: DnsAccountsListResponse.self)
     }
 
     private struct PathParameterSpec {

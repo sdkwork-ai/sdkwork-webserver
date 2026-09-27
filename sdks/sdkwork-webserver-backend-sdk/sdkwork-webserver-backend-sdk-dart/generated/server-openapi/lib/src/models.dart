@@ -1584,12 +1584,24 @@ class IssueCertificateRequest {
   final int? certType;
   final String? keyAlgorithm;
   final bool? autoRenew;
+  final String? certName;
+  final String? certificateScope;
+  final String? validationMethod;
+  final int? renewBeforeDays;
+  final String? caProfile;
+  final String? providerAccountId;
 
   IssueCertificateRequest({
     this.domainIds,
     this.certType,
     this.keyAlgorithm,
-    this.autoRenew
+    this.autoRenew,
+    this.certName,
+    this.certificateScope,
+    this.validationMethod,
+    this.renewBeforeDays,
+    this.caProfile,
+    this.providerAccountId
   });
 
   factory IssueCertificateRequest.fromJson(Map<String, dynamic> json) {
@@ -1606,7 +1618,13 @@ class IssueCertificateRequest {
       })(),
       certType: json['certType'] is int ? json['certType'] : null,
       keyAlgorithm: json['keyAlgorithm']?.toString(),
-      autoRenew: json['autoRenew'] is bool ? json['autoRenew'] : null
+      autoRenew: json['autoRenew'] is bool ? json['autoRenew'] : null,
+      certName: json['certName']?.toString(),
+      certificateScope: json['certificateScope']?.toString(),
+      validationMethod: json['validationMethod']?.toString(),
+      renewBeforeDays: json['renewBeforeDays'] is int ? json['renewBeforeDays'] : null,
+      caProfile: json['caProfile']?.toString(),
+      providerAccountId: json['providerAccountId']?.toString()
     );
   }
 
@@ -1616,6 +1634,40 @@ class IssueCertificateRequest {
       'certType': certType,
       'keyAlgorithm': keyAlgorithm,
       'autoRenew': autoRenew,
+      'certName': certName,
+      'certificateScope': certificateScope,
+      'validationMethod': validationMethod,
+      'renewBeforeDays': renewBeforeDays,
+      'caProfile': caProfile,
+      'providerAccountId': providerAccountId,
+    };
+  }
+}
+
+class DnsAccountResponse {
+  final String? accountId;
+  final String? provider;
+  final String? zoneApex;
+
+  DnsAccountResponse({
+    this.accountId,
+    this.provider,
+    this.zoneApex
+  });
+
+  factory DnsAccountResponse.fromJson(Map<String, dynamic> json) {
+    return DnsAccountResponse(
+      accountId: json['accountId']?.toString(),
+      provider: json['provider']?.toString(),
+      zoneApex: json['zoneApex']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'accountId': accountId,
+      'provider': provider,
+      'zoneApex': zoneApex,
     };
   }
 }
@@ -5748,6 +5800,34 @@ class CertificatesDistributionListResponse {
 
   factory CertificatesDistributionListResponse.fromJson(Map<String, dynamic> json) {
     return CertificatesDistributionListResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class DnsAccountsListResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  DnsAccountsListResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory DnsAccountsListResponse.fromJson(Map<String, dynamic> json) {
+    return DnsAccountsListResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()

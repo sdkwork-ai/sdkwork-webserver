@@ -104,13 +104,12 @@ println(result)
 ### certificate
 
 ```kotlin
-// List canonical certificates
+// List the cloud DNS accounts this edge can present challenges with
 val params = linkedMapOf<String, Any>(
     "page" to 1,
-    "page_size" to 2,
-    "domain_id" to "00000000-0000-0000-0000-000000000001"
+    "page_size" to 2
 )
-val result = client.certificate.certificatesList(params)
+val result = client.certificate.dnsAccountsList(params)
 println(result)
 ```
 

@@ -92,13 +92,12 @@ print(result);
 
 ### certificate
 ```dart
-// List canonical certificates
+// List the cloud DNS accounts this edge can present challenges with
 final params = <String, dynamic>{
   'page': 1,
   'page_size': 2,
-  'domain_id': '00000000-0000-0000-0000-000000000001',
 };
-final result = await client.certificate.certificatesList(params);
+final result = await client.certificate.dnsAccountsList(params);
 print(result);
 ```
 

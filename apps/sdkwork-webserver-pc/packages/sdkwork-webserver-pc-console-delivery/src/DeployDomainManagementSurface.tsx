@@ -9,7 +9,14 @@ import { useMemo } from "react";
  * Server console. The menu entries (Domains / Certificates) stay in place
  * while the pages themselves are the canonical sdkwork-deployments
  * implementation, sharing the same IAM dual-token session through the
- * injected token manager. Styles are scoped by `.deploy-domains-surface`.
+ * injected token manager.
+ *
+ * Styles are scoped by the root `deploy-surface` class below, which is what
+ * `apps/sdkwork-webserver-pc/src/deploy-surface.css` reads (it is imported by
+ * `src/main.tsx` and scopes every rule under that one class). The class name
+ * is the contract: it is `deploy-surface`, not the `deploy-domains-surface`
+ * this comment used to name, and a reader who greps the old name finds no
+ * stylesheet at all.
  */
 export interface DeployDomainManagementSurfaceProps {
   deployBaseUrl: string;
