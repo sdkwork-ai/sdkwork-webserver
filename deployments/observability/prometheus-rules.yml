@@ -1,0 +1,87 @@
+# SDKWork Web Server — Prometheus alert rules (first slice)
+#
+# Grounded exclusively in the series the fixed data-plane operations registry
+# actually exports (REQ-2026-0033/0034): every expression below names a series
+# and a label value that exists in `sdkwork_web_data_plane_*`. Alerts that need
+# series the registry does not carry yet — certificate expiry, node
+# convergence, rollout state — are deliberately absent and tracked in
+# docs/runbooks/troubleshooting.md; adding a rule before its series exists
+# would produce an alert that can never fire, which is a fake control.
+#
+# Scrape target: the loopback-only host-operations listener `/metrics`
+# (default port 3811; see deployments/observability/README.md).
+
+groups:
+  - name: sdkwork-webserver-data-plane
+    rules:
+      - alert: SdkworkWebOperationsScrapeDown
+        expr: up{job="sdkwork-webserver-operations"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "The host-operations metrics endpoint is not scrapeable"
+          description: "Prometheus cannot reach the loopback /metrics listener for 5 minutes. Either the process is down or the operations listener stopped answering — both are page-worthy."
+          runbook_url: "docs/runbooks/troubleshooting.md"
+
+      - alert: SdkworkWebResourcePressureSustained
+        expr: sdkwork_web_data_plane_resource_pressure == 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "The data plane sheds load under sustained resource pressure"
+          description: "The admission controller is in the pressure state (reason: {{ $labels.reason }}) for 5 minutes. Requests are being refused before task admission; capacity must be added or the pressure source resolved."
+          runbook_url: "docs/runbooks/capacity-planning.md"
+
+      - alert: SdkworkWebUpstreamTransportFailures
+        expr: |
+          sum(rate(sdkwork_web_data_plane_upstream_results_total{result="transport_failure"}[5m]))
+            / sum(rate(sdkwork_web_data_plane_upstream_results_total[5m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 5% of upstream attempts fail at the transport layer"
+          description: "Connect/TLS/handshake failures dominate upstream outcomes for 10 minutes. Check upstream health and network reachability before users notice."
+          runbook_url: "docs/runbooks/troubleshooting.md"
+
+      - alert: SdkworkWebUpstreamTimeouts
+        expr: |
+          sum(rate(sdkwork_web_data_plane_upstream_results_total{result="timeout"}[5m]))
+            / sum(rate(sdkwork_web_data_plane_upstream_results_total[5m])) > 0.10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 10% of upstream attempts time out"
+          description: "Upstreams are answering too slowly for 10 minutes; the request deadlines convert the stall into 504s for end users."
+          runbook_url: "docs/runbooks/troubleshooting.md"
+
+      - alert: SdkworkWebRequestRejectionSustained
+        expr: sum(rate(sdkwork_web_data_plane_request_rejections_total[5m])) > 5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Request admission keeps rejecting at more than 5 requests/second"
+          description: "The non-queuing request gate refuses work for 15 minutes — the process is saturated (concurrent-request ceiling or admission budget), not merely busy."
+          runbook_url: "docs/runbooks/capacity-planning.md"
+
+      - alert: SdkworkWebProtocolErrorBurst
+        expr: sum(increase(sdkwork_web_data_plane_protocol_errors_total[10m])) > 100
+        labels:
+          severity: warning
+        annotations:
+          summary: "Burst of protocol-level errors on the public listeners"
+          description: "More than 100 wire-guard/parser/handshake rejections in 10 minutes (kind: {{ $labels.kind }}). A burst is usually a client bug, a scanner, or a hostile probe — worth one look, not necessarily a page."
+          runbook_url: "docs/runbooks/troubleshooting.md"
+
+      - alert: SdkworkWebSocketDrainTimeouts
+        expr: increase(sdkwork_web_data_plane_websocket_drain_timeouts_total[15m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tunnel drain exceeded its budget during shutdown or retire"
+          description: "WebSocket tunnels did not finish draining within the shared drain budget. Sessions were force-closed; investigate what kept them busy."
+          runbook_url: "docs/runbooks/troubleshooting.md"

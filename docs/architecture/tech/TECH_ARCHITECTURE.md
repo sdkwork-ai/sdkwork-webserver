@@ -229,6 +229,18 @@ configurations should declare a `limitReqZone` plus per-route `limitReq`
 rules, and the per-tenant rate dimension stays architecturally deferred —
 PRD-FR-015 forbids a control-plane lookup in the request path, so a tenant
 key can only enter the throttle once an in-process identity plane exists.
+The alerting gap narrows to a real first slice: `deployments/observability/
+prometheus-rules.yml` carries seven alerts grounded exclusively in series
+the operations registry actually exports (scrape-down, sustained resource
+pressure, upstream transport-failure/timeout ratios, sustained request
+rejection, protocol-error bursts, WebSocket drain timeouts), and backup
+sets can now be encrypted at rest (`SDKWORK_BACKUP_AGE_RECIPIENT`,
+fail-closed when the age binary is missing; all three restore paths handle
+the encrypted set). Rules that would need series the registry does not
+carry — certificate expiry, node convergence, rollout state — are
+deliberately absent until their series exist; the cross-repo sandbox
+contract test now pins the restructured sibling surface (machine-only
+routes, menu codes grantable) instead of reading the retired app-api crate.
 
 The host synchronization process is named **Web Node Daemon** in all new
 runtime and operational surfaces. The canonical packaged/development entry
