@@ -43,6 +43,7 @@ use super::{
     connection_limit::{ConnectionLimitedStream, ConnectionLimiter},
     gzip_predicate::NginxGzipPredicate,
     handler::route_request,
+    handshake_timeout::HandshakeTimeoutAcceptor,
     http1_wire::Http1WireGuardAcceptor,
     http2_wire::Http2WireGuardAcceptor,
     io_timeout::WriteTimeoutAcceptor,
@@ -627,6 +628,7 @@ async fn serve_listener(
     let http1_only = listener.config.protocols == [ListenerProtocol::Http1];
     let http2_only = listener.config.protocols == [ListenerProtocol::Http2];
     let connection_write_timeout = Duration::from_millis(limits.connection_write_timeout_ms);
+    let handshake_timeout = Duration::from_millis(limits.tls_handshake_timeout_ms);
     let http1_keep_alive_idle_timeout =
         Duration::from_millis(limits.http1_keep_alive_idle_timeout_ms);
     let maximum_connection_age = Duration::from_millis(limits.max_connection_age_ms);
@@ -652,9 +654,13 @@ async fn serve_listener(
         );
         let http2 = Http2WireGuardAcceptor::new_observed(http1, &limits, runtime.metrics.clone());
         let keep_alive = Http1KeepAliveTimeoutAcceptor::new(http2, http1_keep_alive_idle_timeout);
-        let acceptor = WriteTimeoutAcceptor::new_observed(
-            keep_alive,
-            connection_write_timeout,
+        let acceptor = HandshakeTimeoutAcceptor::new_observed(
+            WriteTimeoutAcceptor::new_observed(
+                keep_alive,
+                connection_write_timeout,
+                runtime.metrics.clone(),
+            ),
+            handshake_timeout,
             runtime.metrics.clone(),
         );
         serve_connections(
@@ -675,20 +681,24 @@ async fn serve_listener(
     } else {
         let limiter =
             ConnectionLimiter::new(global_permits, maximum_connections, runtime.metrics.clone());
-        let acceptor = WriteTimeoutAcceptor::new_observed(
-            Http1KeepAliveTimeoutAcceptor::new(
-                Http2WireGuardAcceptor::new_observed(
-                    Http1WireGuardAcceptor::new_observed(
-                        DefaultAcceptor::new(),
+        let acceptor = HandshakeTimeoutAcceptor::new_observed(
+            WriteTimeoutAcceptor::new_observed(
+                Http1KeepAliveTimeoutAcceptor::new(
+                    Http2WireGuardAcceptor::new_observed(
+                        Http1WireGuardAcceptor::new_observed(
+                            DefaultAcceptor::new(),
+                            &limits,
+                            runtime.metrics.clone(),
+                        ),
                         &limits,
                         runtime.metrics.clone(),
                     ),
-                    &limits,
-                    runtime.metrics.clone(),
+                    http1_keep_alive_idle_timeout,
                 ),
-                http1_keep_alive_idle_timeout,
+                connection_write_timeout,
+                runtime.metrics.clone(),
             ),
-            connection_write_timeout,
+            handshake_timeout,
             runtime.metrics.clone(),
         );
         serve_connections(

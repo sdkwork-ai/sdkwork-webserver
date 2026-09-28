@@ -7,12 +7,59 @@
 
 use std::net::IpAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::body::Body;
 use hyper_util::rt::TokioIo;
 use sdkwork_webserver_tunnel::gateway::{GatewayShared, RelayVisitor};
 use sdkwork_webserver_tunnel::TunnelGatewayOptions;
 use sdkwork_webserver_tunnel_core::TunnelConfig;
+
+/// Hostname endpoints resolve on the async resolver with a deadline: a
+/// blocking `getaddrinfo` inside the relay would stall one Tokio worker per
+/// relayed request, and a saturated resolver would stall all of them.
+const CLUSTER_ENDPOINT_RESOLVE_TIMEOUT: Duration = Duration::from_secs(5);
+/// The relayed connect to a cluster instance is bounded independently of the
+/// outer request deadline so an unreachable instance fails fast.
+const CLUSTER_ENDPOINT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Relay WebSocket pumps are raw byte bridges between two upgraded sockets;
+/// neither socket is owned by hyper after the 101, so the listener's
+/// connection-age limit cannot reclaim them. The pump therefore carries its
+/// own finite lifetime (aligned with the default `maxConnectionAgeMs`) and
+/// closes the relay when it expires instead of pinning two sockets forever.
+const RELAY_PUMP_MAXIMUM_LIFETIME: Duration = Duration::from_secs(3_600);
+
+fn cluster_failure(message: String) -> TunnelRelayError {
+    TunnelRelayError::Failure(sdkwork_webserver_tunnel_core::TunnelError::ConnectionFailed(message))
+}
+
+/// Bridges one upgraded visitor socket to one upgraded upstream socket until
+/// either side closes or the pump lifetime expires.
+async fn pump_websocket(
+    downstream: hyper::upgrade::OnUpgrade,
+    upstream: hyper::upgrade::OnUpgrade,
+) -> std::io::Result<()> {
+    tokio::time::timeout(RELAY_PUMP_MAXIMUM_LIFETIME, async {
+        let downstream = downstream
+            .await
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
+        let upstream = upstream
+            .await
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
+        let mut downstream = TokioIo::new(downstream);
+        let mut upstream = TokioIo::new(upstream);
+        tokio::io::copy_bidirectional(&mut downstream, &mut upstream)
+            .await
+            .map(|_| ())
+    })
+    .await
+    .map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "relay websocket pump lifetime exceeded",
+        )
+    })?
+}
 
 /// Builds the gateway options from the app config's `[tunnel]` section.
 /// Returns `None` when the section is absent or disabled (PRD §77: a
@@ -146,19 +193,8 @@ pub(crate) async fn relay_tunnel_http(
             let metrics = metrics.clone();
             metrics.record_stream_open();
             tokio::spawn(async move {
-                let outcome = async {
-                    let downstream = downstream
-                        .await
-                        .map_err(|error| std::io::Error::other(error.to_string()))?;
-                    let upstream = upstream_upgrade
-                        .await
-                        .map_err(|error| std::io::Error::other(error.to_string()))?;
-                    let mut downstream = TokioIo::new(downstream);
-                    let mut upstream = TokioIo::new(upstream);
-                    tokio::io::copy_bidirectional(&mut downstream, &mut upstream).await
-                };
-                match outcome.await {
-                    Ok((_, _)) => {}
+                match pump_websocket(downstream, upstream_upgrade).await {
+                    Ok(()) => {}
                     Err(error) => {
                         tracing::debug!(error = %error, "tunnel websocket pump ended");
                     }
@@ -301,38 +337,36 @@ pub(crate) async fn relay_cluster_http(
         .trim_start_matches("https://")
         .trim_end_matches('/')
         .to_owned();
-    let socket_addr: std::net::SocketAddr = authority
-        .parse()
-        .map_err(|_| TunnelRelayError::NoRoute)
-        .or_else(|_| {
-            use std::net::ToSocketAddrs;
-            authority
-                .to_socket_addrs()
-                .map_err(|error| {
-                    TunnelRelayError::Failure(
-                        sdkwork_webserver_tunnel_core::TunnelError::ConnectionFailed(
-                            error.to_string(),
-                        ),
-                    )
-                })?
-                .next()
-                .ok_or_else(|| {
-                    TunnelRelayError::Failure(
-                        sdkwork_webserver_tunnel_core::TunnelError::ConnectionFailed(format!(
-                            "unresolvable cluster endpoint {authority}"
-                        )),
-                    )
-                })
-        })?;
-    let tcp = tokio::net::TcpStream::connect(socket_addr)
-        .await
-        .map_err(|error| {
-            TunnelRelayError::Failure(
-                sdkwork_webserver_tunnel_core::TunnelError::ConnectionFailed(format!(
-                    "cluster instance {socket_addr}: {error}"
-                )),
+    let socket_addr: std::net::SocketAddr = match authority.parse::<std::net::SocketAddr>() {
+        Ok(addr) => addr,
+        Err(_) => {
+            let mut resolved = tokio::time::timeout(
+                CLUSTER_ENDPOINT_RESOLVE_TIMEOUT,
+                tokio::net::lookup_host(authority.as_str()),
             )
-        })?;
+            .await
+            .map_err(|_| {
+                cluster_failure(format!("resolving cluster endpoint {authority} timed out"))
+            })?
+            .map_err(|error| {
+                cluster_failure(format!("resolving cluster endpoint {authority}: {error}"))
+            })?;
+            resolved.next().ok_or_else(|| {
+                cluster_failure(format!("unresolvable cluster endpoint {authority}"))
+            })?
+        }
+    };
+    let tcp = tokio::time::timeout(
+        CLUSTER_ENDPOINT_CONNECT_TIMEOUT,
+        tokio::net::TcpStream::connect(socket_addr),
+    )
+    .await
+    .map_err(|_| {
+        cluster_failure(format!(
+            "connecting to cluster instance {socket_addr} timed out"
+        ))
+    })?
+    .map_err(|error| cluster_failure(format!("cluster instance {socket_addr}: {error}")))?;
     let (mut sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(tcp))
         .await
         .map_err(|error| {
@@ -358,22 +392,8 @@ pub(crate) async fn relay_cluster_http(
         let upstream_upgrade = hyper::upgrade::on(&mut response);
         if let Some(downstream) = downstream_upgrade {
             tokio::spawn(async move {
-                let outcome = async {
-                    let downstream = downstream
-                        .await
-                        .map_err(|error| std::io::Error::other(error.to_string()))?;
-                    let upstream = upstream_upgrade
-                        .await
-                        .map_err(|error| std::io::Error::other(error.to_string()))?;
-                    let mut downstream = TokioIo::new(downstream);
-                    let mut upstream = TokioIo::new(upstream);
-                    tokio::io::copy_bidirectional(&mut downstream, &mut upstream).await
-                };
-                match outcome.await {
-                    Ok((_, _)) => {}
-                    Err(error) => {
-                        tracing::debug!(error = %error, "cluster websocket pump ended");
-                    }
+                if let Err(error) = pump_websocket(downstream, upstream_upgrade).await {
+                    tracing::debug!(error = %error, "cluster websocket pump ended");
                 }
             });
         }

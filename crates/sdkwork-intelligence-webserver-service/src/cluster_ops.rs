@@ -1198,6 +1198,16 @@ impl WebService {
         let revision = self.repository.next_cluster_sync_revision_id().await?;
         let canonical = serde_json::to_vec(&payload)
             .map_err(|error| WebServiceError::Internal(format!("encode payload: {error}")))?;
+        // The revision payload is stored whole; the HTTP body limit alone is
+        // not a payload contract, so the service enforces the same 16 KiB
+        // ceiling the peer-message enqueue path applies.
+        const MAX_SYNC_REVISION_PAYLOAD_BYTES: usize = 16 * 1024;
+        if canonical.len() > MAX_SYNC_REVISION_PAYLOAD_BYTES {
+            return Err(WebServiceError::validation(&format!(
+                "sync revision payload is {} bytes; maximum is {MAX_SYNC_REVISION_PAYLOAD_BYTES}",
+                canonical.len()
+            )));
+        }
         let sha256 = sha256_hash(&canonical);
         let size_bytes = i64::try_from(canonical.len()).unwrap_or(i64::MAX);
         let now = now_rfc3339();

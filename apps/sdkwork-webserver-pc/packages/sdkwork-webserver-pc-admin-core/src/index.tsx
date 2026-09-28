@@ -26,6 +26,7 @@ export type {
   ClusterOverviewResponse,
   ClusterResponse,
   DnsAccountResponse,
+  DomainVerifyResponse,
   MetricsMetricTotals,
   MetricsSummaryResponse,
   MetricsWindowBounds,

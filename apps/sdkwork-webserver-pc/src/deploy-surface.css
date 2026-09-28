@@ -90,29 +90,17 @@
 .deploy-surface .scope-badge-tenant{background:var(--webserver-color-success-surface);color:var(--webserver-color-success-text)}
 .deploy-surface .scope-badge-organization{background:var(--sdk-color-brand-primary-soft);color:var(--sdk-color-brand-primary)}
 .deploy-surface .scope-badge-platform{background:var(--webserver-color-warning-surface);color:var(--webserver-color-warning-text)}
-.deploy-surface .scope-filter{height:38px;display:flex;align-items:center;gap:8px;background:var(--sdk-color-surface-panel);border:1px solid var(--sdk-color-border-default);padding:0 10px;border-radius:5px}
-.deploy-surface .scope-filter-label{color:var(--sdk-color-text-secondary);font-size:12px;font-weight:650;white-space:nowrap}
-.deploy-surface .scope-filter select{min-width:0;border:0;outline:none;background:transparent;color:var(--sdk-color-text-primary)}
-/* The options need a surface of their own, because the dropdown popup is painted
-   by the browser and never enters this sheet's cascade: the `color` above reaches
-   the `<option>`s by inheritance, but nothing here gave them a background, and a
-   `<select>` left at `background:transparent` makes the popup fall back to the
-   UA's *light* default. `color-scheme: dark` — which the host does supply on
-   `html[data-sdk-color-mode="dark"]` — does not repaint it. Measured in Chrome at
-   1280x900: popup #ffffff with the options at #fafafa, i.e. white on white, with
-   only the hovered row legible; that is the screenshot this fixes. The pair below
-   is the one the host already uses for `.scope-selector option` / `.form-grid
-   option` (src/index.css), and it puts the popup on the panel token in both
-   schemes: 8.73:1 dark, 8.9:1 light, measured the same way.
-   `.form-grid select` and `.selector-zone select` deliberately get no counterpart:
-   both already carry an opaque `--sdk-color-surface-panel`, and an opaque select
-   background is what the popup copies — verified by swapping only the transparency
-   and watching the popup follow it. Mirrored in
-   sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css. */
-.deploy-surface .scope-filter option{color:var(--sdk-color-text-primary);background:var(--sdk-color-surface-panel)}
 /* Used by the publishing page's empty domain cell; absent here until now, so it
    rendered at full contrast in this console only. */
 .deploy-surface .muted{color:var(--sdk-color-text-muted)}
+/* The publishing page's domain cell: one `code` plus a "+N" pill. These rules
+   live unscoped in sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css
+   (lines 234-236) and were never mirrored here, so in this console the code
+   wrapped instead of truncating. Colours are literals over there; here they are
+   the panel tokens. */
+.deploy-surface .domain-cell{display:inline-flex;align-items:center;gap:6px;max-width:100%}
+.deploy-surface .domain-cell code{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.deploy-surface .domain-more{flex:0 0 auto;padding:1px 6px;border-radius:999px;background:var(--sdk-color-surface-panel-muted,#e7ecef);color:var(--sdk-color-text-secondary,#536067);font-size:11px;font-weight:650}
 .deploy-surface .pagination{min-height:50px;display:flex;justify-content:flex-end;align-items:center;gap:8px;color:var(--sdk-color-text-secondary)}
 /* The Domains and Certificates ledgers, and the hostname picker inside them.
    `DeliveryManagement.tsx` renders `table-frame domain-table-frame` /
@@ -725,3 +713,69 @@
 .deploy-surface .cloud-account-suggestion{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;padding:8px 10px;border:1px solid var(--webserver-color-warning-border);background:var(--webserver-color-warning-surface);border-radius:5px}
 .deploy-surface .cloud-account-suggestion .secondary-button{min-height:30px;flex:0 0 auto}
 @media(max-width:760px){.deploy-surface .cloud-account-suggestion{align-items:stretch}.deploy-surface .cloud-account-suggestion .secondary-button{width:100%}}
+/* The applications ledger's toolbar. Every facet sits directly above the rows it
+   narrows; nothing lives in a side rail any more. Two facets, and they differ in
+   where they are applied:
+   - **ownership** is the *server's* (a tab is pushed down as `scope`), and it is
+     offered **only on the admin surface**, whose reach spans several levels; the
+     console reaches one level, so it gets no control rather than a control with a
+     single answer;
+   - **type** is the *browser's* (the contract has no type parameter), shown as a
+     row of toggle chips — each chip carries its own count and its own on/off
+     state, which is exactly the property a collapsed `<select>` cannot have and
+     the reason it was replaced.
+   The unscoped source of this block is
+   sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css; the shapes are
+   the same and only the tokens differ. */
+.deploy-surface .apps-ledger{display:flex;flex-direction:column;gap:10px;margin-top:18px;min-width:0}
+/* The ownership group: its label and its tab strip travel together, exactly like
+   `.apps-kind-facets` below. Both groups share ONE toolbar row with the search
+   box — they narrow three orthogonal axes (ownership / type / keyword), and
+   stacking them would read as if the lower row were a child of the upper one.
+   The label is inside the group so a wrapped toolbar never leaves it stranded on
+   the previous line, away from the strip it names. */
+.deploy-surface .apps-owner-facets{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0}
+/* The ownership tab row. Only the admin surface renders it — that is the one
+   surface whose reach spans several ownership levels, so it is the only one with
+   a choice to offer. It is a **server** facet (a tab is pushed down as
+   `apps.list`'s `scope`), so it reads as one tab strip rather than as independent
+   chips, and it carries no counts: a count would need a second request, and the
+   tab does not hide rows the page already has — it re-reads them at another level.
+
+   It wraps instead of scrolling: five levels already run past a narrow console,
+   and a strip that clips its last tab is a control the operator cannot see. */
+.deploy-surface .apps-owner-tabs{display:flex;align-items:center;flex-wrap:wrap;gap:2px;padding:2px;border:1px solid var(--sdk-color-border-subtle);border-radius:6px;background:var(--sdk-color-surface-elevated);min-width:0}
+.deploy-surface .apps-owner-tab{min-height:28px;padding:0 12px;border:0;border-radius:4px;background:transparent;color:var(--sdk-color-text-secondary);font-size:12px;font-weight:650}
+.deploy-surface .apps-owner-tab:hover{background:var(--sdk-color-surface-panel-muted);color:var(--sdk-color-text-primary)}
+/* The selected fill is the brand primary, the same treatment
+   `.segmented-control button[aria-pressed]` and `.apps-kind-chip[aria-pressed]`
+   take in this console, so "this one is in effect" reads the same wherever it is
+   painted. */
+.deploy-surface .apps-owner-tab[aria-selected="true"]{background:var(--sdk-color-brand-primary);color:var(--webserver-color-on-accent)}
+.deploy-surface .apps-owner-tab:focus-visible{outline:2px solid var(--sdk-color-border-focus);outline-offset:1px}
+/* The chip row: one toggle per type that actually has rows. A zero-count entry
+   is not rendered — it could only ever produce an empty table — and it cannot
+   strand a selection either, because the counts are taken over the whole loaded
+   set, which the type facet itself never shrinks. */
+.deploy-surface .apps-kind-facets{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0}
+.deploy-surface .apps-facet-label{font-size:12px;font-weight:650;color:var(--sdk-color-text-secondary)}
+.deploy-surface .apps-kind-chip{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 10px;border:1px solid var(--sdk-color-border-default);border-radius:999px;background:var(--sdk-color-surface-panel);color:var(--sdk-color-text-secondary);font-size:12px;font-weight:650}
+.deploy-surface .apps-kind-chip:hover{border-color:var(--sdk-color-border-strong);background:var(--sdk-color-surface-elevated);color:var(--sdk-color-text-primary)}
+/* The pressed fill is the brand accent, the same one the segmented controls in
+   this console take, so "on" looks the same wherever it is painted. */
+.deploy-surface .apps-kind-chip[aria-pressed="true"]{border-color:var(--sdk-color-brand-primary);background:var(--sdk-color-brand-primary);color:var(--webserver-color-on-accent)}
+.deploy-surface .apps-kind-chip:focus-visible{outline:2px solid var(--sdk-color-border-focus);outline-offset:1px}
+.deploy-surface .apps-kind-chip-count{font-size:11px;font-weight:400;color:var(--sdk-color-text-muted);font-variant-numeric:tabular-nums}
+.deploy-surface .apps-kind-chip[aria-pressed="true"] .apps-kind-chip-count{color:inherit;opacity:.8}
+.deploy-surface .apps-facet-clear{min-height:30px;padding:0 10px;border:1px solid transparent;border-radius:5px;background:transparent;color:var(--webserver-color-warning-text);font-size:12px}
+.deploy-surface .apps-facet-clear:hover{border-color:var(--webserver-color-warning-border);background:var(--webserver-color-warning-surface);color:var(--webserver-color-warning-text)}
+.deploy-surface .apps-ledger-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.deploy-surface .apps-ledger-toolbar .search-box{flex:1 1 240px}
+.deploy-surface .apps-search-clear{display:inline-flex;align-items:center;justify-content:center;flex:0 0 22px;width:22px;height:22px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--sdk-color-text-secondary)}
+.deploy-surface .apps-search-clear:hover{background:var(--sdk-color-surface-elevated);color:var(--sdk-color-text-primary)}
+.deploy-surface .apps-ledger-summary{margin-left:auto;font-size:12px;color:var(--sdk-color-text-secondary);white-space:nowrap}
+/* Two notes share this treatment: the page-ceiling caveat, and the "why is there
+   no H5 chip" explanation that appears once the type facet is in use. Both are
+   the contract's state rather than the operator's, which is what the amber marks
+   in this sheet. The toolbar itself needs no breakpoint — the chips wrap. */
+.deploy-surface .apps-ledger-note{margin:0;font-size:12px;line-height:1.5;color:var(--webserver-color-warning-text)}

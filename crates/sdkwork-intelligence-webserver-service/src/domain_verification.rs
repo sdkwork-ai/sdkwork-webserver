@@ -62,19 +62,6 @@ impl DnsTxtDomainOwnershipVerifier {
     }
 }
 
-impl Default for DnsTxtDomainOwnershipVerifier {
-    /// Panics only if neither the system nor the default resolver
-    /// configuration can build, which leaves no verifier to construct; the
-    /// composition path uses [`Self::new`] and propagates instead.
-    #[allow(clippy::panic)]
-    fn default() -> Self {
-        match Self::new() {
-            Ok(verifier) => verifier,
-            Err(error) => panic!("no DNS resolver configuration could be built: {error}"),
-        }
-    }
-}
-
 #[async_trait]
 impl DomainOwnershipVerifier for DnsTxtDomainOwnershipVerifier {
     async fn observe(

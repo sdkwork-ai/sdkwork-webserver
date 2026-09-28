@@ -9,8 +9,8 @@ use sqlx::Row;
 
 use super::support::{
     bool_from_row, instant_from_row, instant_write_expression, new_uuid, next_id, now_rfc3339,
-    optional_instant_from_row, pagination, resolve_site_internal_id, resolve_site_owner_id,
-    store_error,
+    like_contains_pattern, optional_instant_from_row, pagination, resolve_site_internal_id,
+    resolve_site_owner_id, store_error,
 };
 
 impl WebRepository {
@@ -25,13 +25,13 @@ impl WebRepository {
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .map(|value| format!("%{}%", value.to_ascii_lowercase()));
+            .map(|value| like_contains_pattern(&value.to_ascii_lowercase()));
 
         let total: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM webserver_root_domain r
              WHERE r.tenant_id = $1 AND r.deleted_at IS NULL
                AND ($2 IS NULL OR r.status = $2)
-               AND ($3 IS NULL OR LOWER(r.hostname) LIKE $3)",
+               AND ($3 IS NULL OR LOWER(r.hostname) LIKE $3 ESCAPE '\')",
         )
         .bind(tenant_id)
         .bind(query.status)
@@ -81,7 +81,7 @@ impl WebRepository {
              ) agg ON TRUE
              WHERE r.tenant_id = $1 AND r.deleted_at IS NULL
                AND ($2 IS NULL OR r.status = $2)
-               AND ($3 IS NULL OR LOWER(r.hostname) LIKE $3)
+               AND ($3 IS NULL OR LOWER(r.hostname) LIKE $3 ESCAPE '\')
              ORDER BY r.updated_at DESC, r.id DESC LIMIT $4 OFFSET $5",
         )
         .bind(tenant_id)
@@ -195,17 +195,28 @@ impl WebRepository {
         tenant_id: i64,
         root_domain_id: &str,
     ) -> WebServiceResult<()> {
+        // Guard count and soft delete share one transaction with the root row
+        // locked, so a concurrent hostname insert (which locks the same root
+        // row first, see `create_root_domain_hostname_repo`) cannot slip an
+        // orphan hostname past the check-then-act window or free the zone
+        // while a child still references it.
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|error| store_error("begin root domain delete transaction", error))?;
         let row = sqlx::query(
             "SELECT r.id,
                     (SELECT COUNT(*) FROM webserver_domain d
                      WHERE d.tenant_id = r.tenant_id AND d.root_domain_id = r.id
                        AND d.deleted_at IS NULL) AS subdomain_count
              FROM webserver_root_domain r
-             WHERE r.tenant_id = $1 AND r.uuid = $2 AND r.deleted_at IS NULL",
+             WHERE r.tenant_id = $1 AND r.uuid = $2 AND r.deleted_at IS NULL
+             FOR UPDATE OF r",
         )
         .bind(tenant_id)
         .bind(root_domain_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *tx)
         .await
         .map_err(|error| store_error("load webserver_root_domain delete state", error))?
         .ok_or_else(|| WebServiceError::not_found("root domain not found"))?;
@@ -231,12 +242,15 @@ impl WebRepository {
             .bind(tenant_id)
             .bind(root_domain_id)
             .bind(&now)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .map_err(|error| store_error("delete webserver_root_domain", error))?;
         if result.rows_affected() == 0 {
             return Err(WebServiceError::not_found("root domain not found"));
         }
+        tx.commit()
+            .await
+            .map_err(|error| store_error("commit root domain delete", error))?;
         Ok(())
     }
 
@@ -338,13 +352,23 @@ impl WebRepository {
         root_domain_id: &str,
         request: &CreateRootDomainHostnameRequest,
     ) -> WebServiceResult<DomainResponse> {
+        // The root row is read under the same lock the delete path takes, so a
+        // hostname cannot be inserted against a root that is being soft
+        // deleted concurrently: one of the two statements serializes after the
+        // other and sees the deleted (or guarded) state.
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|error| store_error("begin create root domain hostname", error))?;
         let root = sqlx::query(
             "SELECT id, hostname FROM webserver_root_domain
-             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
+             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL
+             FOR UPDATE",
         )
         .bind(tenant_id)
         .bind(root_domain_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *tx)
         .await
         .map_err(|error| store_error("load webserver_root_domain for hostname", error))?
         .ok_or_else(|| WebServiceError::not_found("root domain not found"))?;
@@ -382,12 +406,6 @@ impl WebRepository {
         let id = next_id(self.id_generator())?;
         let uuid = new_uuid();
         let now = now_rfc3339();
-
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(|error| store_error("begin create root domain hostname", error))?;
 
         if request.is_primary {
             let site_internal_id =

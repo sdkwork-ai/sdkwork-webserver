@@ -97,6 +97,34 @@ const SUBDOMAINS = [
   },
 ];
 
+/**
+ * The wildcard form of `sdkwork.com`, as the Domains page declares it.
+ *
+ * The record name is `*` and the stored hostname is `*.sdkwork.com`: the
+ * asterisk is a *record* name that the backend composes with the root domain, and
+ * the composed hostname is what the picker offers and what the issuance path
+ * reads `hostname_type` off. A fixture that carried only the hostname would not
+ * exercise the declaration half of the flow.
+ */
+const WILDCARD_SUBDOMAIN = {
+  certificateCount: "0",
+  createdAt: "2026-09-23T02:23:21.936919Z",
+  hostname: "*.sdkwork.com",
+  id: "d-wildcard",
+  isPrimary: false,
+  isVerified: true,
+  recordName: "*",
+  rootDomainId: ROOT_ID,
+  sslEnabled: true,
+  sslProvider: "letsencrypt",
+  status: 1,
+};
+
+/** One offset page, in the shape the paged domain reads answer with. */
+function hostnamePage(items: readonly unknown[]) {
+  return { items, pageInfo: { hasMore: false, mode: "offset", page: 1, pageSize: 50 } };
+}
+
 const CERTIFICATES = [
   {
     autoRenew: true,
@@ -137,19 +165,18 @@ interface Stubs {
   deleteDomain: ReturnType<typeof vi.fn>;
   dnsAccounts: ReturnType<typeof vi.fn>;
   issue: ReturnType<typeof vi.fn>;
+  listCertificates: ReturnType<typeof vi.fn>;
   listSubdomains: ReturnType<typeof vi.fn>;
   renewCertificate: ReturnType<typeof vi.fn>;
   retrieveRootDomain: ReturnType<typeof vi.fn>;
   revokeCertificate: ReturnType<typeof vi.fn>;
   updateCertificate: ReturnType<typeof vi.fn>;
   updateRootDomain: ReturnType<typeof vi.fn>;
+  verifyDomain: ReturnType<typeof vi.fn>;
 }
 
 function stubClient(): Stubs {
-  const page = (items: readonly unknown[]) => ({
-    items,
-    pageInfo: { hasMore: false, mode: "offset", page: 1, pageSize: 50 },
-  });
+  const page = hostnamePage;
   const listSubdomains = vi.fn().mockResolvedValue(page(SUBDOMAINS));
   const createRootDomain = vi.fn().mockResolvedValue(ROOTS[0]);
   const createSubdomain = vi.fn().mockResolvedValue(SUBDOMAINS[0]);
@@ -157,12 +184,22 @@ function stubClient(): Stubs {
   const deleteDomain = vi.fn().mockResolvedValue(undefined);
   const dnsAccounts = vi.fn().mockResolvedValue(page(DNS_ACCOUNTS));
   const issue = vi.fn().mockResolvedValue(undefined);
+  const listCertificates = vi.fn().mockResolvedValue(page(CERTIFICATES));
   const retrieveRootDomain = vi.fn().mockResolvedValue(ROOTS[0]);
   const updateRootDomain = vi.fn().mockResolvedValue(ROOTS[0]);
   const deleteCertificate = vi.fn().mockResolvedValue(undefined);
   const renewCertificate = vi.fn().mockResolvedValue(undefined);
   const revokeCertificate = vi.fn().mockResolvedValue(undefined);
   const updateCertificate = vi.fn().mockResolvedValue(CERTIFICATES[0]);
+  const verifyDomain = vi.fn().mockResolvedValue({
+    attemptCount: 1,
+    expiresAt: "2026-09-23T03:23:21.936919Z",
+    method: "DNS_TXT",
+    recordName: "_sdkwork-verification.sdkwork.com",
+    recordValue: "sdkwork-domain-verification=challenge-1",
+    status: "PENDING",
+    verified: false,
+  });
   const client = {
     certificate: {
       // The issue form reads the edge's configured DNS accounts on open, so a
@@ -171,7 +208,7 @@ function stubClient(): Stubs {
       delete: deleteCertificate,
       dnsAccounts: { list: dnsAccounts },
       issue,
-      list: vi.fn().mockResolvedValue(page(CERTIFICATES)),
+      list: listCertificates,
       renew: renewCertificate,
       revoke: revokeCertificate,
       update: updateCertificate,
@@ -179,6 +216,9 @@ function stubClient(): Stubs {
     domain: {
       delete: deleteDomain,
       list: vi.fn().mockResolvedValue(page(SUBDOMAINS)),
+      // The ownership challenge: the Domains ledger's own verify action, which is
+      // the only step that turns a declared hostname into a coverable one.
+      verify: verifyDomain,
       rootDomains: {
         create: createRootDomain,
         delete: deleteRootDomain,
@@ -198,12 +238,14 @@ function stubClient(): Stubs {
     deleteRootDomain,
     dnsAccounts,
     issue,
+    listCertificates,
     listSubdomains,
     renewCertificate,
     retrieveRootDomain,
     revokeCertificate,
     updateCertificate,
     updateRootDomain,
+    verifyDomain,
   };
 }
 
@@ -339,6 +381,24 @@ describe("served domain admin surface", () => {
   });
 
   /**
+   * Every dialog on this plane shares one overlay contract (focus on open,
+   * Escape to dismiss, scroll lock, focus restore). Escape is pinned here so
+   * the shared backdrop keeps honouring the keyboard: a confirmation that
+   * could only be left by clicking would trap keyboard operators.
+   */
+  it("dismisses the delete confirmation on Escape without deleting", async () => {
+    const { client, deleteRootDomain } = stubClient();
+    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete zowalk.com" }));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(deleteRootDomain).not.toHaveBeenCalled();
+  });
+
+  /**
    * The console's zone ledger carries five actions, and this ledger has to read
    * as the same ledger: two named navigations (entering the hostname list,
    * requesting a certificate — neither is guessable from a glyph), then the
@@ -455,6 +515,79 @@ describe("served domain admin surface", () => {
       { idempotencyKey: expect.any(String) },
     );
   });
+
+  /**
+   * The wildcard hostname is the one shape a `certificateScope WILDCARD` request
+   * can cover, and this dialog is the only place it can be declared: `*` is the
+   * record name that composes to `*.example.com`, which is what the backend
+   * stores as a `WILDCARD` hostname. Without this the certificate form's wildcard
+   * scope has nothing to offer and the flow ends at its own picker.
+   *
+   * The assertion is on the wire payload rather than on the box being ticked,
+   * because the box is only interesting for what it puts in `recordName`.
+   */
+  it("declares the wildcard form of the root domain when the wildcard box is ticked", async () => {
+    const { client, createSubdomain } = stubClient();
+    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+
+    fireEvent.click(await screen.findByText("sdkwork.com"));
+    await screen.findByText("server-dev.sdkwork.com");
+
+    fireEvent.click(screen.getByRole("button", { name: "Add subdomain" }));
+    fireEvent.click(screen.getByLabelText("Wildcard subdomain"));
+    // The field shows what the request will carry, rather than leaving the star
+    // to be inferred from the box beside it.
+    expect((screen.getByLabelText("Record name") as HTMLInputElement).value).toBe("*");
+    expect(screen.getByText(/Declares \*\.sdkwork\.com/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(createSubdomain).toHaveBeenCalledWith(
+      ROOT_ID,
+      { recordName: "*", sslEnabled: true },
+      { idempotencyKey: expect.any(String) },
+    );
+  });
+
+  /**
+   * A hostname is stored pending until its ownership challenge is checked, and the
+   * issuance path covers `VERIFIED` rows only — so this control is the step between
+   * declaring a hostname and being able to cover it. Without it a hostname
+   * declared here never becomes coverable, and the wildcard form has no other
+   * route at all: `*.example.com` is not reconciled from the edge's own
+   * configuration unless that configuration already names it.
+   *
+   * The challenge is asserted rather than the call: which TXT record to publish is
+   * the only thing the operator can act on, and a dialog that reported "pending"
+   * without the record name and value would be a loop with no exit.
+   */
+  it("verifies a declared hostname and shows the challenge to publish", async () => {
+    const { client, listSubdomains, verifyDomain } = stubClient();
+    listSubdomains.mockResolvedValue(
+      hostnamePage([{ ...SUBDOMAINS[0], isVerified: false }, SUBDOMAINS[1]]),
+    );
+    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+
+    fireEvent.click(await screen.findByText("sdkwork.com"));
+    await screen.findByText("server-dev.sdkwork.com");
+    // A verified row has nothing to verify, so the control is not offered there.
+    expect(screen.queryByRole("button", { name: "Verify server-admin-dev.sdkwork.com" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Verify server-dev.sdkwork.com" }));
+
+    expect(verifyDomain).toHaveBeenCalledWith("d-server-dev", { idempotencyKey: expect.any(String) });
+    const dialog = await screen.findByRole("dialog", { name: "Verify server-dev.sdkwork.com" });
+    await waitFor(() =>
+      expect((within(dialog).getByLabelText("TXT record name") as HTMLInputElement).value).toBe(
+        "_sdkwork-verification.sdkwork.com",
+      ),
+    );
+    expect((within(dialog).getByLabelText("TXT record value") as HTMLInputElement).value).toBe(
+      "sdkwork-domain-verification=challenge-1",
+    );
+    // Still pending, so the loop has to stay available rather than closing on a
+    // verdict the operator cannot change.
+    expect(within(dialog).getByRole("button", { name: "Check again" })).toBeTruthy();
+  });
 });
 
 describe("served certificate admin surface", () => {
@@ -467,6 +600,26 @@ describe("served certificate admin surface", () => {
     expect(row?.textContent).toContain("server-dev.sdkwork.com");
     expect(row?.textContent).toContain("server-admin-dev.sdkwork.com");
     expect(row?.textContent).toContain("Issued");
+  });
+
+  /**
+   * The ledger effect depends on the locale-bound translator. A fresh
+   * translator closure on every render used to re-run the effect forever:
+   * fetch completes -> setState -> new `t` identity -> refetch. The
+   * translator is memoized per locale, so the request count must settle at
+   * one per pagination build instead of growing without bound.
+   */
+  it("fetches the ledger once per build, not once per render", async () => {
+    const { client, listCertificates } = stubClient();
+    renderInProvider(<ServedCertificateAdminSurface locale="en-US" resource="certificates" />, client, "/admin/certificates");
+
+    await screen.findByText("sdkwork-served");
+    // Any unbounded refetch loop shows up within a few macrotask flushes:
+    // every completed fetch used to schedule the next one immediately.
+    for (let flush = 0; flush < 5; flush += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(listCertificates).toHaveBeenCalledTimes(1);
   });
 
   it("offers the certificate lifecycle actions on each row", async () => {
@@ -647,6 +800,113 @@ describe("served certificate admin surface", () => {
       },
       expect.objectContaining({ idempotencyKey: expect.any(String) }),
     );
+  });
+
+  /**
+   * The wildcard flow, read from the certificate form's side: a root domain that
+   * has declared its wildcard hostname offers it under the wildcard scope, and
+   * the request that leaves the drawer names that hostname and that scope.
+   *
+   * This is the half the Domains-page test hands off to. Before the declaration
+   * path existed, no `WILDCARD` hostname could be created from the product, so
+   * this pane had nothing to offer and `certificateScope WILDCARD` was refused by
+   * the server with "requires at least one wildcard identifier" no matter what the
+   * operator did here.
+   */
+  it("issues a wildcard certificate from the wildcard hostname the root domain declared", async () => {
+    const { client, issue, listSubdomains } = stubClient();
+    listSubdomains.mockResolvedValue(hostnamePage([WILDCARD_SUBDOMAIN, ...SUBDOMAINS]));
+    renderInProvider(<ServedCertificateAdminSurface locale="en-US" resource="certificates" />, client, "/admin/certificates");
+
+    await screen.findByText("sdkwork-served");
+    fireEvent.click(screen.getByRole("button", { name: "Issue certificate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Wildcard" }));
+
+    // The declared wildcard is the one selectable row, which is what makes this
+    // the *wildcard* flow rather than "whatever happened to be on offer": the
+    // exact rows beside it are refused, and the declare-it-first hint that stands
+    // in when a root domain has no wildcard is absent here.
+    const picker = await openHostnamePicker();
+    await waitFor(() => expect(picker.querySelectorAll("tbody tr").length).toBe(3));
+    const wildcardRow = pickerRowFor(picker, "*.sdkwork.com") as HTMLElement;
+    const exactRow = pickerRowFor(picker, "server-dev.sdkwork.com") as HTMLElement;
+    expect(wildcardRow.querySelector<HTMLInputElement>('input[type="radio"]')?.disabled).toBe(false);
+    expect(exactRow.querySelector<HTMLInputElement>('input[type="radio"]')?.disabled).toBe(true);
+    expect(within(picker).queryByText(/No wildcard hostname is declared/)).toBeNull();
+
+    await pickHostname(picker, "*.sdkwork.com");
+    fireEvent.click(within(picker).getByRole("button", { name: "Confirm" }));
+    fireEvent.click(screen.getByRole("button", { name: "Issue" }));
+
+    expect(issue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domainIds: ["d-wildcard"],
+        certificateScope: "WILDCARD",
+        // A wildcard can only be authorized over DNS-01, so the automatic
+        // resolution is the only method the drawer may send here; naming HTTP-01
+        // would be a request the server refuses on its face.
+        validationMethod: "AUTO",
+      }),
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
+  });
+
+  /**
+   * A wildcard scope with no wildcard hostname declared is the one state where
+   * every row is refused. The pane has to say what is missing *and* where it is
+   * declared: a column of dead radios with no explanation is exactly how the scope
+   * came to read as a dead end.
+   */
+  it("refuses exact hostnames under the wildcard scope and says what to declare", async () => {
+    const { client } = stubClient();
+    renderInProvider(<ServedCertificateAdminSurface locale="en-US" resource="certificates" />, client, "/admin/certificates");
+
+    await screen.findByText("sdkwork-served");
+    fireEvent.click(screen.getByRole("button", { name: "Issue certificate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Wildcard" }));
+    const picker = await openHostnamePicker();
+    await waitFor(() => expect(picker.querySelectorAll("tbody tr").length).toBe(2));
+
+    // Both fixture hostnames are exact, and the server requires at least one
+    // wildcard identifier for this scope, so neither can satisfy it.
+    const radios = [...picker.querySelectorAll<HTMLInputElement>('tbody input[type="radio"]')];
+    expect(radios.length).toBe(2);
+    expect(radios.every((radio) => radio.disabled)).toBe(true);
+    // Showed, not hidden, and each refused row carries its own reason.
+    expect(
+      within(picker).getAllByText("A wildcard certificate can only be built from a wildcard hostname.").length,
+    ).toBe(2);
+    // The hint names the concrete hostname to declare, so the refusal is
+    // actionable rather than a statement that the scope is unusable.
+    expect(
+      within(picker).getByText(
+        /No wildcard hostname is declared under this root domain\. Add \*\.sdkwork\.com on the Domains page/,
+      ),
+    ).toBeTruthy();
+  });
+
+  /**
+   * Ownership evidence is the issuance path's own precondition: it resolves
+   * `domainIds` against rows whose verification status is `VERIFIED` only. A
+   * picker that offered an unverified name would move that refusal to the submit,
+   * where it reads as a server fault rather than as the step that was skipped.
+   */
+  it("refuses a hostname whose ownership is not verified yet", async () => {
+    const { client, listSubdomains } = stubClient();
+    listSubdomains.mockResolvedValue(hostnamePage([{ ...SUBDOMAINS[0], isVerified: false }]));
+    renderInProvider(<ServedCertificateAdminSurface locale="en-US" resource="certificates" />, client, "/admin/certificates");
+
+    await screen.findByText("sdkwork-served");
+    fireEvent.click(screen.getByRole("button", { name: "Issue certificate" }));
+    const picker = await openHostnamePicker();
+    const row = await waitFor(() => {
+      const found = pickerRowFor(picker, "server-dev.sdkwork.com");
+      expect(found).toBeTruthy();
+      return found as HTMLElement;
+    });
+
+    expect(row.querySelector<HTMLInputElement>('input[type="radio"]')?.disabled).toBe(true);
+    expect(row.textContent).toContain("Not verified yet");
   });
 
   it("sends ECDSA only after the operator switches the algorithm control", async () => {

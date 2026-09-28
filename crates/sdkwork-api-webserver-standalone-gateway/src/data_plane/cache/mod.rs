@@ -66,6 +66,8 @@ impl HttpResponseCache {
                     config.max_entries,
                     config.max_memory_bytes,
                     PathBuf::from(path),
+                    config.max_disk_bytes,
+                    config.max_disk_entries,
                 ) {
                     Ok(backend) => {
                         tracing::info!(disk_path = %path, "proxy cache disk backend enabled");
@@ -285,6 +287,8 @@ mod tests {
             max_entries: 4,
             max_object_bytes: 1024,
             max_memory_bytes: 4096,
+            max_disk_bytes: 8192,
+            max_disk_entries: 8,
             default_ttl_seconds: 60,
             stale_ttl_seconds: 60,
             disk_path: None,

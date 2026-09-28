@@ -17,6 +17,7 @@ use sqlx::Row;
 
 use crate::audited_sql;
 use super::support::{
+    like_contains_pattern,
     cursor_instant_from_row, decode_keyset_cursor, encode_keyset_cursor, instant_from_row,
     instant_write_expression, json_write_expression, new_uuid, next_id, now_rfc3339,
     optional_instant_from_row, pagination, sha256_hex, store_error,
@@ -570,8 +571,8 @@ impl WebRepository {
                 .collect();
             Some(Value::Object(pairs).to_string())
         };
-        let search_pattern = search
-            .map(|term| format!("%{}%", term.trim().to_ascii_lowercase()));
+        let search_pattern =
+            search.map(|term| like_contains_pattern(&term.trim().to_ascii_lowercase()));
         let rows = if let Some(cursor) = cursor {
             let (cursor_updated_at, cursor_id) = decode_keyset_cursor(cursor)
                 .ok_or_else(|| WebServiceError::validation("cursor is invalid"))?;
@@ -589,8 +590,9 @@ impl WebRepository {
                    AND ($8::INT IS NULL OR i.join_mode = $8)
                    AND ($9::INT IS NULL OR i.sync_status = $9)
                    AND ($10::JSONB IS NULL OR i.labels @> $10::JSONB)
-                   AND ($11::TEXT IS NULL OR i.name ILIKE $11
-                        OR i.public_endpoint ILIKE $11 OR ch.hostname ILIKE $11)
+                   AND ($11::TEXT IS NULL OR i.name ILIKE $11 ESCAPE '\'
+                        OR i.public_endpoint ILIKE $11 ESCAPE '\'
+                        OR ch.hostname ILIKE $11 ESCAPE '\')
                    AND ($12::TEXT IS NULL OR i.build_version = $12)
                  ORDER BY i.updated_at DESC, i.id DESC LIMIT $13");
             sqlx::query(audited_sql(&sql))
@@ -624,8 +626,9 @@ impl WebRepository {
                    AND ($8::INT IS NULL OR i.join_mode = $8)
                    AND ($9::INT IS NULL OR i.sync_status = $9)
                    AND ($10::JSONB IS NULL OR i.labels @> $10::JSONB)
-                   AND ($11::TEXT IS NULL OR i.name ILIKE $11
-                        OR i.public_endpoint ILIKE $11 OR ch.hostname ILIKE $11)
+                   AND ($11::TEXT IS NULL OR i.name ILIKE $11 ESCAPE '\'
+                        OR i.public_endpoint ILIKE $11 ESCAPE '\'
+                        OR ch.hostname ILIKE $11 ESCAPE '\')
                    AND ($12::TEXT IS NULL OR i.build_version = $12)
                  ORDER BY i.updated_at DESC, i.id DESC LIMIT $2 OFFSET $3");
             sqlx::query(audited_sql(&sql))
@@ -1742,6 +1745,7 @@ impl WebRepository {
                       < {now_expression} - (c.offline_threshold_seconds * INTERVAL '1 second')
                 ORDER BY i2.last_heartbeat_at
                 LIMIT $2
+                FOR UPDATE SKIP LOCKED
              )
              UPDATE webserver_cluster_instance i
              SET status = 0, updated_at = {now_expression}, version = i.version + 1
@@ -1790,6 +1794,7 @@ impl WebRepository {
                   )
                 ORDER BY h2.last_heartbeat_at
                 LIMIT $2
+                FOR UPDATE SKIP LOCKED
              )
              UPDATE webserver_cluster_host h
              SET status = 0, updated_at = {now_expression}, version = h.version + 1

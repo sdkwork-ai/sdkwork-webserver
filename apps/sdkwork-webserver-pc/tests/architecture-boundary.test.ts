@@ -20,16 +20,46 @@ describe("surface SDK boundaries", () => {
   // manager into those pages' clients is surface-neutral — it has no
   // admin/console divergence. So a second copy of such a bridge is a defect,
   // not a parallel: the console-delivery package owns every deployments bridge
-  // and the admin faces re-export them. `check-frontend-composition` cannot see
+  // and the admin faces delegate to them. `check-frontend-composition` cannot see
   // this (it validates role direction and SDK imports, not duplicate
   // implementations), so the guard lives here.
+  //
+  // ## Why this asserts *composition* and not the filename
+  //
+  // This test used to reject any `Deploy*{Management,Admin}Surface.tsx` inside an
+  // `-admin-` package, which was a proxy for "no second bridge". The admin
+  // Applications page has since grown a legitimate admin-only marker — the
+  // `surface="admin"` that gives it an ownership tab row the tenant console does
+  // not have — so the proxy now rejects the allowed case while still being unable
+  // to tell it apart from the forbidden one. A gate that fires on the legal state
+  // is not a gate, so it was rewritten to assert the property it was always
+  // standing in for: **an admin-side adapter may only mark the surface; it may
+  // compose nothing.** A bridge, by contrast, is exactly a thing that constructs
+  // a client. The filename check is kept only for the *marker* to prove it
+  // delegates to the bridge rather than re-implementing the page.
   it("keeps exactly one implementation per bridged deployments surface", () => {
     const adapters = files(resolve(root, "packages")).filter((path) => /Deploy(?:Apps|Domain)(?:Management|Admin)Surface\.tsx$/.test(path));
-    expect(adapters.filter((path) => path.includes("-admin-"))).toEqual([]);
-    expect(adapters.filter((path) => path.includes("sdkwork-webserver-pc-console-delivery"))).toHaveLength(adapters.length);
+
+    // The bridge is `*ManagementSurface.tsx`, it lives in console-delivery, and
+    // each bridged page has exactly one.
+    const bridges = adapters.filter((path) => /ManagementSurface\.tsx$/.test(path));
+    expect(bridges.filter((path) => path.includes("sdkwork-webserver-pc-console-delivery"))).toHaveLength(bridges.length);
+    for (const surface of ["Apps", "Domain"]) {
+      expect(bridges.filter((path) => path.endsWith(`Deploy${surface}ManagementSurface.tsx`))).toHaveLength(1);
+    }
+
+    // Everything else named like an adapter is a marker, and a marker composes
+    // nothing: no deployments client, no reach into deployments' core, and it has
+    // to go through the bridge rather than around it.
+    for (const path of adapters.filter((candidate) => !bridges.includes(candidate))) {
+      const source = readFileSync(path, "utf8");
+      expect(source, `${path} composes deployments clients — that is a second bridge, not a marker`).not.toContain("createDeploymentsConsoleClients");
+      expect(source, `${path} reaches into deployments' console-core — a marker takes its clients as props`).not.toContain("deployments-pc-console-core");
+      expect(source, `${path} must delegate to the bridging surface`).toContain("DeployAppsManagementSurface");
+    }
+
     const adminIndex = readFileSync(resolve(root, "packages/sdkwork-webserver-pc-admin-apps/src/index.ts"), "utf8");
-    expect(adminIndex).toContain("DeployAppsManagementSurface as DeployAppsAdminSurface");
-    expect(adminIndex).toContain("@sdkwork/webserver-pc-console-delivery");
+    expect(adminIndex).toContain("./DeployAppsAdminSurface.tsx");
   });
   // Console and admin tables are rendered by the framework `DataTable`, which owns
   // pagination, sorting, sticky headers, selection, and row actions

@@ -137,10 +137,16 @@ async fn read_challenge_key_authorization(
         return Ok(None);
     }
     let mut key_authorization = Vec::with_capacity(opened.metadata.len() as usize);
-    opened
-        .file
+    // `.take(MAX + 1)` bounds the read against a file that grows between the
+    // stat and the read: at most one extra byte proves oversize without ever
+    // materializing it.
+    let mut bounded = opened.file.take(u64::from(MAX_CHALLENGE_BODY_BYTES) + 1);
+    bounded
         .read_to_end(&mut key_authorization)
         .map_err(|_| StaticPathError::Io)?;
+    if key_authorization.len() as u64 > u64::from(MAX_CHALLENGE_BODY_BYTES) {
+        return Ok(None);
+    }
     Ok(Some(key_authorization))
 }
 

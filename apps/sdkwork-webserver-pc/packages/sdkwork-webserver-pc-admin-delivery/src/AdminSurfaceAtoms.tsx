@@ -4,7 +4,7 @@ import {
   type WebserverLocale,
 } from "@sdkwork/webserver-pc-commons";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 
 /**
  * The chrome both tenant-level delivery ledgers are built from.
@@ -286,24 +286,62 @@ export function ConfirmDialog({
 }
 
 /**
+ * The overlay contract every dialog on this plane shares: take focus on open,
+ * close on Escape, block page scroll while mounted, and hand focus back to
+ * whoever held it on the way out.
+ *
+ * The effect is mount-scoped on purpose: dialogs are mounted and unmounted by
+ * their owners, and re-running it on every render of the form inside would
+ * steal focus back from whatever field the operator had just reached. `close`
+ * is captured from the first mount for the same reason the drawer has always
+ * captured it.
+ */
+function useDialogOverlayContract(close: () => void, focusTarget: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // `preventScroll` keeps the browser from scrolling the page behind the
+    // overlay to bring the panel into view.
+    focusTarget.current?.focus({ preventScroll: true });
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-scoped contract; see the doc above.
+  }, []);
+}
+
+/**
  * Backdrop for the console's centred dialog chrome.
  *
- * Exported because the certificate form's hostname picker is a second centred
- * dialog on this plane — it opens from the drawer, so it cannot use the drawer
- * chrome itself — and it has to sit on the same backdrop as every other dialog
- * here rather than re-declaring one and drifting from it.
+ * Carries the shared overlay contract (focus, Escape, scroll lock, focus
+ * restore) so every centred dialog — form, confirm, hostname picker, hostname
+ * verification — inherits it without each caller re-declaring the listeners.
+ * The backdrop panel itself is the focus target: it is inside the modal
+ * subtree, so Tab moves into the dialog's own controls from there.
+ *
+ * A click on the backdrop itself closes; a click anywhere inside does not,
+ * which is why the handler compares the event target against the backdrop
+ * rather than relying on propagation.
  */
 export function DialogBackdrop({ children, close }: { children: ReactNode; close(): void }) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  useDialogOverlayContract(close, panelRef);
   return (
-    // A click on the backdrop itself closes; a click anywhere inside does not,
-    // which is why the handler compares the event target against the backdrop
-    // rather than relying on propagation.
     <div
       className="dialog-backdrop"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) close();
       }}
+      ref={panelRef}
       role="presentation"
+      tabIndex={-1}
     >
       {children}
     </div>
@@ -354,25 +392,9 @@ export function SideDrawer({
 }) {
   const titleId = useId();
   const panelRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    // `preventScroll` keeps the browser from scrolling the page behind the
-    // drawer to bring the panel into view.
-    panelRef.current?.focus({ preventScroll: true });
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = previousOverflow;
-      previouslyFocused?.focus();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-scoped contract; see the doc above.
-  }, []);
+  // Same contract as every centred dialog: focus, Escape, scroll lock, focus
+  // restore (see `useDialogOverlayContract`).
+  useDialogOverlayContract(close, panelRef);
 
   return (
     <div

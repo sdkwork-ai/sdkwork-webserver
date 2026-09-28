@@ -166,7 +166,7 @@ impl WebRepository {
              WHERE tenant_id = $1 AND uuid = $4"
         );
 
-        sqlx::query(audited_sql(&update_sql))
+        let heartbeat = sqlx::query(audited_sql(&update_sql))
             .bind(agent.tenant_id)
             .bind(metadata_patch.to_string())
             .bind(&now)
@@ -174,6 +174,12 @@ impl WebRepository {
             .execute(&self.pool)
             .await
             .map_err(|error| store_error("record webserver_server heartbeat", error))?;
+        // A deleted (or concurrently removed) server row must not receive a
+        // fabricated acknowledgement: the daemon would keep reporting against
+        // a node the control plane no longer knows.
+        if heartbeat.rows_affected() == 0 {
+            return Err(WebServiceError::not_found("server not found"));
+        }
 
         if !request.certificate_observations.is_empty() {
             let recorded = self

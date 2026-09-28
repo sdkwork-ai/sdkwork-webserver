@@ -56,6 +56,14 @@ async fn main() -> anyhow::Result<()> {
         MAX_RENEWAL_SCHEDULE_INTERVAL_SECS,
     )?;
     let worker_id = resolve_worker_id(std::env::var("SDKWORK_WEBSERVER_CERT_WORKER_ID").ok())?;
+    // Optional liveness marker: the loop touches this file once per iteration
+    // so a Kubernetes exec probe can fail a pod whose reactor wedged in a way
+    // even the cycle watchdog no longer observes. Disabled when unset.
+    let heartbeat_path = std::env::var("SDKWORK_WEBSERVER_CERT_WORKER_HEARTBEAT_PATH")
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+        .map(std::path::PathBuf::from);
 
     info!(
         worker_id,
@@ -210,6 +218,15 @@ async fn main() -> anyhow::Result<()> {
                 break;
             }
             () = tokio::time::sleep(delay) => {}
+        }
+        if let Some(path) = &heartbeat_path {
+            // Best-effort: a failed write must not stop certificate work; the
+            // probe simply sees a stale file and restarts the pod.
+            let now_millis = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis();
+            let _ = std::fs::write(path, now_millis.to_string());
         }
     }
 

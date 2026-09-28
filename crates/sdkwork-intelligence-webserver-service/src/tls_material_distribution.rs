@@ -362,9 +362,15 @@ fn write_bounded_file(path: &Path, content: &[u8]) -> WebServiceResult<()> {
             WebServiceError::Internal(format!("write TLS material {}: {error}", path.display()))
         })?;
     drop(file);
-    fs::rename(&staged, path).map_err(|error| {
-        WebServiceError::Internal(format!("activate TLS material {}: {error}", path.display()))
-    })?;
+    if let Err(error) = fs::rename(&staged, path) {
+        // A failed activation must not leave the staged secret beside the
+        // version material until some unrelated grace-period reap.
+        let _ = fs::remove_file(&staged);
+        return Err(WebServiceError::Internal(format!(
+            "activate TLS material {}: {error}",
+            path.display()
+        )));
+    }
     // Directory fsync makes the material rename durable across a crash.
     sync_directory(parent)?;
     Ok(())

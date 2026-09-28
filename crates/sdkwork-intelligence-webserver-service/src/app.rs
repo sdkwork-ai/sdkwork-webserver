@@ -21,6 +21,18 @@ const MAX_STORE_PREVIEWS: usize = 8;
 const MAX_CERTIFICATE_IDENTIFIERS: usize = 8;
 const DEFAULT_SOURCE_VERSION_RETENTION_LIMIT: i32 = 5;
 const MAX_SOURCE_VERSION_RETENTION_LIMIT: i32 = 50;
+/// Per-tenant application capacity (PRD section 8.3 quota). Env-tunable so a
+/// deployment can raise it for a paying tenant; the count is advisory under
+/// concurrency (see the repository count query) but bounds unattended growth.
+const DEFAULT_MAX_APPLICATIONS_PER_TENANT: i64 = 100;
+
+fn max_applications_per_tenant() -> i64 {
+    std::env::var("SDKWORK_WEBSERVER_MAX_APPLICATIONS_PER_TENANT")
+        .ok()
+        .and_then(|value| value.trim().parse::<i64>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(DEFAULT_MAX_APPLICATIONS_PER_TENANT)
+}
 
 impl WebService {
     fn require_tenant(context: &WebAppRequestContext) -> WebServiceResult<i64> {
@@ -425,8 +437,58 @@ impl WebService {
         Ok(())
     }
 
+    /// The exact-hostname shape rule, plus the `sslProvider` vocabulary.
+    ///
+    /// Exact here means *no wildcard label at all*: this is the rule for a full
+    /// hostname a caller names outright (an application domain, a root-domain
+    /// apex, a managed domain asset). The one hostname shape it refuses and
+    /// that the product does support — a wildcard declared relative to a root
+    /// domain — has its own entry point in
+    /// [`Self::validate_root_domain_record_name`], which is the only caller
+    /// allowed to admit it.
     pub(crate) fn validate_domain_request(request: &CreateDomainRequest) -> WebServiceResult<()> {
-        let hostname = request.hostname.as_str();
+        Self::validate_hostname_labels(&request.hostname)?;
+        Self::validate_ssl_provider(request.ssl_provider.as_deref())
+    }
+
+    /// The shape rule for a hostname declared *relative* to a root domain.
+    ///
+    /// A record name is composed into a full hostname by
+    /// `create_root_domain_hostname_repo` as `{record_name}.{root_hostname}`, so
+    /// a lone `*` here becomes `*.example.com` — the single wildcard form a CA
+    /// issues and the one value `webserver_domain.hostname_type` types as
+    /// `WILDCARD`.
+    ///
+    /// Without this entry point the wildcard flow is unreachable from the
+    /// product: no other path creates a `WILDCARD` domain row, the certificate
+    /// form can only name rows that exist, and `certificateScope WILDCARD`
+    /// therefore always failed at `certificateScope WILDCARD requires at least
+    /// one wildcard identifier`.
+    ///
+    /// The star may only be the *leftmost* label, and only the whole label:
+    /// `a.*.example.com` and `ap*.example.com` are not names any CA issues, and
+    /// the ACME engine's identifier predicate reads the leftmost label the same
+    /// way, so a looser rule here would store a row the issuance path refuses.
+    pub(crate) fn validate_root_domain_record_name(record_name: &str) -> WebServiceResult<()> {
+        if record_name == "*" {
+            // Composes to `*.{root}`: one wildcard label over the whole zone,
+            // which is the form `*.example.com` the issuance path requires.
+            return Ok(());
+        }
+        if let Some(rest) = record_name.strip_prefix("*.") {
+            // Composes to `*.{rest}.{root}`: still exactly one leftmost star, so
+            // the remainder carries the ordinary label rule.
+            return Self::validate_hostname_labels(rest);
+        }
+        Self::validate_hostname_labels(record_name)
+    }
+
+    /// The DNS label rule, on a hostname with no wildcard label.
+    ///
+    /// Every stored hostname obeys this; the wildcard *marker* is stripped by
+    /// the caller before it is applied, so there is one implementation of "a
+    /// safe ASCII DNS name" rather than one per accepted shape.
+    fn validate_hostname_labels(hostname: &str) -> WebServiceResult<()> {
         if hostname.is_empty()
             || hostname != hostname.trim()
             || hostname.len() > 253
@@ -446,11 +508,12 @@ impl WebService {
                 "hostname must be a safe ASCII DNS name",
             ));
         }
-        if request
-            .ssl_provider
-            .as_deref()
-            .is_some_and(|provider| !matches!(provider, "letsencrypt" | "custom" | "none"))
-        {
+        Ok(())
+    }
+
+    /// The `sslProvider` vocabulary every domain write shares.
+    pub(crate) fn validate_ssl_provider(provider: Option<&str>) -> WebServiceResult<()> {
+        if provider.is_some_and(|provider| !matches!(provider, "letsencrypt" | "custom" | "none")) {
             return Err(sdkwork_webserver_contract::WebServiceError::validation(
                 "sslProvider must be letsencrypt, custom, or none",
             ));
@@ -900,6 +963,13 @@ impl WebAppApi for WebService {
         let owner_id = Self::owner_filter(context)?;
         Self::validate_app_kind(&request.app_kind)?;
         Self::validate_store_listing(request.store_listing.as_ref(), false)?;
+        let capacity = max_applications_per_tenant();
+        let current = self.repository.count_tenant_applications(tenant_id).await?;
+        if current >= capacity {
+            return Err(WebServiceError::conflict(&format!(
+                "tenant already owns {current} applications; the per-tenant capacity is {capacity}"
+            )));
+        }
         let site = self
             .repository
             .create_application(tenant_id, context.organization_id, owner_id, request)
@@ -1880,5 +1950,56 @@ mod tests {
             })
             .is_err()
         );
+    }
+
+    /// The record-name rule is what makes a wildcard hostname declarable, and it
+    /// exists only there: a full hostname a caller names outright stays exact.
+    ///
+    /// The two halves are asserted together on purpose. Widening the exact rule
+    /// instead would have admitted `*.example.com` as an *application* domain and
+    /// an *apex*, both of which the issuance path and the SNI index treat as a
+    /// different thing than a hostname declared under a root domain.
+    #[test]
+    fn wildcard_record_names_are_declarable_without_widening_the_exact_rule() {
+        // The wildcard form the certificate plane needs: `*` composes to
+        // `*.{root}`, which is the value `hostname_type` types as `WILDCARD`.
+        assert!(WebService::validate_root_domain_record_name("*").is_ok());
+        // One leftmost star, over a deeper suffix, is still one wildcard label.
+        assert!(WebService::validate_root_domain_record_name("*.internal").is_ok());
+        // The ordinary record names keep working through the same entry point.
+        assert!(WebService::validate_root_domain_record_name("www").is_ok());
+        assert!(WebService::validate_root_domain_record_name("api.internal").is_ok());
+
+        // A star anywhere but the leftmost label is not a name any CA issues, so
+        // it must not become a stored `WILDCARD` row that issuance then refuses.
+        for rejected in ["*.", "a.*", "a.*.b", "ap*.example", "*.*", "*a", "a*"] {
+            assert!(
+                WebService::validate_root_domain_record_name(rejected).is_err(),
+                "record name `{rejected}` must be refused"
+            );
+        }
+        // The label rule itself is unchanged: no spaces, no empty labels, no
+        // leading or trailing hyphens, no non-ASCII.
+        for rejected in ["", " ", "bad host", "-lead", "trail-", "a..b", "中文"] {
+            assert!(
+                WebService::validate_root_domain_record_name(rejected).is_err(),
+                "record name `{rejected}` must be refused"
+            );
+        }
+
+        // The exact-hostname rule is untouched: a wildcard full hostname is still
+        // refused where a caller names a hostname outright.
+        for rejected in ["*.example.test", "*", "*.internal"] {
+            assert!(
+                WebService::validate_domain_request(&CreateDomainRequest {
+                    hostname: rejected.to_owned(),
+                    is_primary: false,
+                    ssl_enabled: true,
+                    ssl_provider: None,
+                })
+                .is_err(),
+                "exact hostname `{rejected}` must be refused"
+            );
+        }
     }
 }

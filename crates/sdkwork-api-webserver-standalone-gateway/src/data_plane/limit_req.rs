@@ -67,12 +67,18 @@ impl ZoneState {
     fn try_acquire(&mut self, client_ip: IpAddr, burst: u32) -> bool {
         let now = Instant::now();
         if !self.entries.contains_key(&client_ip) && self.entries.len() as u32 >= self.max_keys {
-            // The zone is saturated with distinct clients. Reject the new
-            // key instead of evicting an arbitrary victim: eviction would
-            // let an IP flood continuously reset legitimate clients' token
-            // buckets, defeating rate limiting for them (the same
-            // reject-new-keys policy limit_conn applies).
-            return false;
+            // The zone is saturated with distinct clients. Idle buckets are
+            // reaped before refusing: a bucket idle longer than one burst
+            // drain window has fully replenished at the configured rate, so
+            // removing it cannot reset any client's tokens — it only clears
+            // departed clients. Evicting *active* victims instead would let
+            // an IP flood continuously reset legitimate clients' buckets;
+            // a zone still full of active clients rejects the new key.
+            let idle_limit = self.burst_idle_window(burst);
+            self.reap_idle_buckets(now, idle_limit);
+            if self.entries.len() as u32 >= self.max_keys {
+                return false;
+            }
         }
         let rate = self.rate_per_second;
         let bucket = self.entries.entry(client_ip).or_insert_with(|| Bucket {
@@ -88,6 +94,17 @@ impl ZoneState {
         }
         bucket.excess += 1.0;
         true
+    }
+
+    /// How long a bucket must stay idle for its excess to have fully drained
+    /// (drain at `rate`, plus a margin so borderline buckets are kept).
+    fn burst_idle_window(&self, burst: u32) -> std::time::Duration {
+        std::time::Duration::from_secs_f64(f64::from(burst) / self.rate_per_second + 60.0)
+    }
+
+    fn reap_idle_buckets(&mut self, now: Instant, idle_limit: std::time::Duration) {
+        self.entries
+            .retain(|_, bucket| now.saturating_duration_since(bucket.last) < idle_limit);
     }
 }
 
@@ -135,11 +152,67 @@ mod tests {
         assert_eq!(runtime.admit(first, &rules), LimitReqDecision::Allow);
         assert_eq!(runtime.admit(second, &rules), LimitReqDecision::Allow);
 
-        // The flood cannot push a new key past the capacity...
+        // The flood cannot push a new key past the capacity: both buckets
+        // are fresh, so the idle reap keeps them and the zone stays full.
         assert_eq!(runtime.admit(flooder, &rules), LimitReqDecision::Reject);
-        // ...and must not evict the established clients' buckets: both keep
-        // their state and remain admissible within burst.
+        // ...and the flood must not evict the established clients' buckets:
+        // both keep their state and remain admissible within burst.
         assert_eq!(runtime.admit(first, &rules), LimitReqDecision::Allow);
         assert_eq!(runtime.admit(second, &rules), LimitReqDecision::Allow);
+    }
+
+    #[test]
+    fn idle_buckets_are_reaped_so_saturation_does_not_outlive_the_flood() {
+        let mut zone = super::ZoneState {
+            max_keys: 2,
+            rate_per_second: 1.0,
+            entries: std::collections::HashMap::new(),
+        };
+        let now = std::time::Instant::now();
+        zone.entries.insert(
+            IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)),
+            super::Bucket {
+                excess: 0.0,
+                last: now,
+            },
+        );
+        let departed = now - std::time::Duration::from_secs(3_600);
+        zone.entries.insert(
+            IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2)),
+            super::Bucket {
+                excess: 0.0,
+                last: departed,
+            },
+        );
+
+        // A short window keeps the active bucket and reaps the departed one.
+        zone.reap_idle_buckets(now, std::time::Duration::from_secs(60));
+        assert_eq!(zone.entries.len(), 1);
+        assert!(zone
+            .entries
+            .contains_key(&IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1))));
+
+        // A window longer than any idleness keeps everything.
+        let mut zone = super::ZoneState {
+            max_keys: 2,
+            rate_per_second: 1.0,
+            entries: std::collections::HashMap::new(),
+        };
+        zone.entries.insert(
+            IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)),
+            super::Bucket {
+                excess: 0.0,
+                last: now,
+            },
+        );
+        zone.entries.insert(
+            IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2)),
+            super::Bucket {
+                excess: 0.0,
+                last: departed,
+            },
+        );
+        zone.reap_idle_buckets(now, std::time::Duration::from_secs(86_400));
+        assert_eq!(zone.entries.len(), 2);
     }
 }

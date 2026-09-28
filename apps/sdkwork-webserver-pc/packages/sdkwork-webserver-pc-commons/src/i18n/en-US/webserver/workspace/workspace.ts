@@ -250,6 +250,29 @@ export const webserverWorkspaceEnUs = {
   "resource.domains.addRootPlaceholder": "e.g. example.com",
   "resource.domains.addSubdomain": "Add subdomain",
   "resource.domains.addSubdomainPlaceholder": "e.g. www or api.internal",
+  "resource.domains.addSubdomainWildcard": "Wildcard subdomain",
+  // The wildcard form of a hostname is a record name, not a hostname: `*` is
+  // composed with the root domain, so the hint names the result rather than
+  // asking the operator to work out what the star will become.
+  "resource.domains.addSubdomainWildcardHint":
+    "Declares {hostname}, meaning every one-label name under this root domain. It is the only hostname a wildcard certificate can be built from, and its ownership challenge is the same TXT record as the apex's.",
+  // Ownership verification. A hostname is stored pending until this runs, and only
+  // a verified hostname can be covered by a certificate, so the copy has to carry
+  // both halves: which TXT record to publish, and that this control re-checks it.
+  "resource.domains.verify": "Verify",
+  "resource.domains.verifyActionHint":
+    "Publish the ownership TXT record this hostname needs. Only a verified hostname can be covered by a certificate.",
+  "resource.domains.verifyTitle": "Verify {hostname}",
+  "resource.domains.verifyIdle": "No challenge yet.",
+  "resource.domains.verifyRunning": "Reading the ownership challenge…",
+  "resource.domains.verifyHint":
+    "Publish this TXT record, then check again. Propagation can take a few minutes.",
+  "resource.domains.verifyVerifiedHint":
+    "Ownership is proven. This hostname can now be covered by a certificate.",
+  "resource.domains.verifyRecordName": "TXT record name",
+  "resource.domains.verifyRecordValue": "TXT record value",
+  "resource.domains.verifyAttempts": "Attempt {count} · expires {expiresAt}",
+  "resource.domains.verifyRecheck": "Check again",
   "resource.domains.refresh": "Refresh",
   "resource.domains.selectRoot": "Select a root domain to see the hostnames registered under it.",
   "resource.domains.subdomainsOf": "Hostnames under {hostname}",
@@ -366,6 +389,17 @@ export const webserverWorkspaceEnUs = {
   "resource.certificates.hostnamesLoading": "Loading hostnames…",
   "resource.certificates.noRootDomains": "No root domain is available",
   "resource.certificates.noHostnamesInRootDomain": "This root domain has no hostnames yet",
+  // Why the picker refuses a row. Each one is a request the server would refuse
+  // too, so the row says which rule it broke instead of leaving a dead control to
+  // be guessed at.
+  "resource.certificates.pickerRefusedUnverified":
+    "Not verified yet. Issuance only covers hostnames whose ownership evidence is current.",
+  "resource.certificates.pickerRefusedExactUnderWildcard":
+    "A wildcard certificate can only be built from a wildcard hostname.",
+  // The one state where every row is refused, so it has to say what is missing
+  // *and* where the missing thing is declared, or the scope reads as a dead end.
+  "resource.certificates.pickerNoWildcardHostname":
+    "No wildcard hostname is declared under this root domain. Add {hostname} on the Domains page, verify its TXT record, then issue this certificate.",
   // One name at a time: a certificate covers a single hostname, so the rail says
   // only *that* something is chosen and the footer says which name Confirm will
   // carry back. An empty choice is a state rather than a failure — it is how the

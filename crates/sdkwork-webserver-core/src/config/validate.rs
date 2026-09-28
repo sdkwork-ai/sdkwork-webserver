@@ -18,6 +18,27 @@ use super::{
 
 const MAX_DIAGNOSTICS: usize = 128;
 const MAX_TOTAL_ROUTES: usize = 10_000;
+/// Regex source bound (PRD section 8.3 regex-complexity quota): the engine
+/// itself is linear-time, so the remaining unbounded cost is compiling an
+/// adversarially large pattern during activation. 1 KiB covers every real
+/// location/rewrite pattern.
+const MAX_REGEX_PATTERN_BYTES: usize = 1_024;
+
+fn validate_regex_pattern(validator: &mut SemanticValidator, path: String, pattern: &str) {
+    if pattern.len() > MAX_REGEX_PATTERN_BYTES {
+        validator.push(
+            path,
+            format!(
+                "regex pattern is {} bytes; maximum is {MAX_REGEX_PATTERN_BYTES}",
+                pattern.len()
+            ),
+        );
+        return;
+    }
+    if let Err(error) = regex::Regex::new(pattern) {
+        validator.push(path, format!("invalid regex pattern: {error}"));
+    }
+}
 const MAX_TOTAL_UPSTREAM_TARGETS: usize = 10_000;
 
 pub(crate) fn validate_webserver_config(
@@ -1176,6 +1197,12 @@ impl SemanticValidator {
                 "connection write timeout must be between 100 ms and 1 hour",
             );
         }
+        if !(100..=3_600_000).contains(&limits.tls_handshake_timeout_ms) {
+            self.push(
+                "/limits/tlsHandshakeTimeoutMs",
+                "TLS handshake timeout must be between 100 ms and 1 hour",
+            );
+        }
         if !(100..=3_600_000).contains(&limits.http1_keep_alive_idle_timeout_ms) {
             self.push(
                 "/limits/http1KeepAliveIdleTimeoutMs",
@@ -1804,12 +1831,7 @@ fn validate_routes(
             } else {
                 configured_path.clone()
             };
-            if let Err(error) = regex::Regex::new(&pattern) {
-                validator.push(
-                    format!("{path}/match/path"),
-                    format!("invalid regex location pattern: {error}"),
-                );
-            }
+            validate_regex_pattern(validator, format!("{path}/match/path"), &pattern);
         } else if let Err(error) = super::uri::validate_canonical_uri_path(
             configured_path,
             limits.max_decoded_path_bytes,
@@ -1839,12 +1861,11 @@ fn validate_routes(
         }
         for (rule_index, rule) in route.rewrite.iter().enumerate() {
             let pattern = &rule.pattern;
-            if let Err(error) = regex::Regex::new(pattern) {
-                validator.push(
-                    format!("{path}/rewrite/{rule_index}/pattern"),
-                    format!("invalid rewrite pattern: {error}"),
-                );
-            }
+            validate_regex_pattern(
+                validator,
+                format!("{path}/rewrite/{rule_index}/pattern"),
+                pattern,
+            );
             if rule.replacement.is_empty() {
                 validator.push(
                     format!("{path}/rewrite/{rule_index}/replacement"),

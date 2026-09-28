@@ -53,6 +53,27 @@ spec:
           imagePullPolicy: IfNotPresent
           command:
             - /app/bin/sdkwork-webserver-certificate-worker
+          # The worker is a loop, not an HTTP service: liveness is the
+          # per-cycle heartbeat file the binary touches (the loop cadence is
+          # seconds; the watchdog bounds one cycle at one minute), so a
+          # wedged reactor is restarted instead of holding its lease until
+          # expiry.
+          startupProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - test $(( $(date +%s) - $(stat -c %Y /tmp/worker-heartbeat 2>/dev/null || echo 0) )) -lt 600
+            periodSeconds: 30
+            failureThreshold: 30
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - test $(( $(date +%s) - $(stat -c %Y /tmp/worker-heartbeat 2>/dev/null || echo 0) )) -lt 600
+            periodSeconds: 60
+            failureThreshold: 3
           env:
             - name: SDKWORK_WEBSERVER_ENVIRONMENT
               value: production
@@ -70,6 +91,8 @@ spec:
               value: "3600"
             - name: SDKWORK_WEBSERVER_CERT_RENEW_BEFORE_DAYS
               value: "30"
+            - name: SDKWORK_WEBSERVER_CERT_WORKER_HEARTBEAT_PATH
+              value: /tmp/worker-heartbeat
             - name: SDKWORK_WEBSERVER_SECRET_ENCRYPTION_KEY
               valueFrom:
                 secretKeyRef:
@@ -131,7 +154,8 @@ spec:
           persistentVolumeClaim:
             claimName: sdkwork-webserver-certificate-state
         - name: temporary
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 256Mi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

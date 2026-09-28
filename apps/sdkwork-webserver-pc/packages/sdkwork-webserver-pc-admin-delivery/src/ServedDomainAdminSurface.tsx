@@ -1,12 +1,18 @@
 import { useWebserverAdminSdk } from "@sdkwork/webserver-pc-admin-core";
-import type { ApplicationDomainResponse, RootDomainResponse } from "@sdkwork/webserver-pc-admin-core";
+import type {
+  ApplicationDomainResponse,
+  DomainVerifyResponse,
+  RootDomainResponse,
+} from "@sdkwork/webserver-pc-admin-core";
 import type { WebserverLocale } from "@sdkwork/webserver-pc-commons";
-import { ArrowLeft, CirclePause, CirclePlay, FileKey2, Globe2, Pencil, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, CirclePause, CirclePlay, FileKey2, Globe2, Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, Route, Routes, useParams } from "react-router-dom";
 
 import {
   ConfirmDialog,
+  DialogBackdrop,
+  DialogCloseButton,
   FormDialog,
   Metric,
   Pagination,
@@ -242,6 +248,7 @@ function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
               setRoots(null);
               setPage(1);
             }}
+            aria-label={t("resource.domains.refresh")}
             title={t("resource.domains.refresh")}
             type="button"
           >
@@ -618,6 +625,17 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ApplicationDomainResponse>();
+  // Ownership verification for one declared hostname. The challenge and the
+  // control that re-runs it live together, because the second call is the same
+  // call: re-reading the record is how a published TXT value is noticed.
+  const [verifyTarget, setVerifyTarget] = useState<ApplicationDomainResponse>();
+  const [challenge, setChallenge] = useState<DomainVerifyResponse>();
+  // The record name and its wildcard form are one answer, so they are one piece
+  // of state: ticking the box *is* setting the name to `*`, and clearing it gives
+  // the operator back whatever they had typed. Keeping the two apart would let
+  // the field and the box disagree about what the request is about to carry.
+  const [recordNameDraft, setRecordNameDraft] = useState("");
+  const [wildcardRecord, setWildcardRecord] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -665,6 +683,43 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
       .finally(() => setBusy(false));
   };
 
+  /**
+   * Create or re-check one hostname's ownership challenge.
+   *
+   * The endpoint is one operation with two readings, which is why a single button
+   * serves both: the first call mints the TXT record, and every later call
+   * observes DNS again and answers with the current verdict. A verified answer
+   * reloads the ledger, because the row the certificate picker reads is the
+   * stored one — the response alone would leave the table still saying PENDING.
+   *
+   * This is the step the wildcard flow cannot skip. `*.example.com` is not
+   * something the edge reconciles from its own configuration unless the
+   * configuration already names it, so a wildcard hostname declared here has no
+   * other route to `VERIFIED` — and a certificate identifier may only name a
+   * verified hostname.
+   */
+  const runVerification = (hostname: ApplicationDomainResponse) => {
+    setBusy(true);
+    setError(undefined);
+    void client.domain
+      .verify(hostname.id, { idempotencyKey: newIdempotencyKey() })
+      .then((result) => {
+        setChallenge(result);
+        if (result.verified) {
+          setHostnames(null);
+          setPage(1);
+        }
+      })
+      .catch((cause) => setError(errorText(cause, t)))
+      .finally(() => setBusy(false));
+  };
+
+  const startVerification = (hostname: ApplicationDomainResponse) => {
+    setVerifyTarget(hostname);
+    setChallenge(undefined);
+    runVerification(hostname);
+  };
+
   return (
     <section className="resource-page domain-page">
       <Link className="back-link" to="..">
@@ -683,6 +738,7 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
               setHostnames(null);
               setPage(1);
             }}
+            aria-label={t("resource.domains.refresh")}
             title={t("resource.domains.refresh")}
             type="button"
           >
@@ -757,6 +813,23 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
                   <td>{hostname.certificateCount}</td>
                   <td>
                     <div className="row-actions">
+                      {/* Offered only while the row is unverified: ownership
+                          evidence is the issuance path's precondition, so this is
+                          the step that turns a declared hostname into one a
+                          certificate can cover — and on an already-verified row it
+                          is a control that does nothing. */}
+                      {hostname.isVerified ? null : (
+                        <button
+                          aria-label={`${t("resource.domains.verify")} ${hostname.hostname}`}
+                          className="table-action"
+                          disabled={busy}
+                          onClick={() => startVerification(hostname)}
+                          title={t("resource.domains.verifyActionHint")}
+                          type="button"
+                        >
+                          <ShieldCheck size={16} />
+                        </button>
+                      )}
                       <button
                         aria-label={`${t("resource.domains.delete")} ${hostname.hostname}`}
                         className="table-action danger-action"
@@ -804,6 +877,8 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
               { idempotencyKey: newIdempotencyKey() },
             );
             setCreateOpen(false);
+            setWildcardRecord(false);
+            setRecordNameDraft("");
             setHostnames(null);
             setPage(1);
           }}
@@ -812,18 +887,58 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
           title={t("resource.domains.addSubdomain")}
         >
           {(disabled) => (
-            <label>
-              {t("resource.domains.recordName")}
-              <input
-                disabled={disabled}
-                name="recordName"
-                placeholder={t("resource.domains.addSubdomainPlaceholder")}
-                required
-                type="text"
-              />
-            </label>
+            <>
+              {/* The record-name field is first in the tree, and the checkbox
+                  below it carries no `name`: `FormDialog` submits the first named
+                  control's value, so the box toggles what the field holds rather
+                  than competing with it for the one value the dialog has. */}
+              <label>
+                {t("resource.domains.recordName")}
+                <input
+                  disabled={disabled}
+                  name="recordName"
+                  onChange={(event) => setRecordNameDraft(event.target.value)}
+                  placeholder={
+                    wildcardRecord ? "*" : t("resource.domains.addSubdomainPlaceholder")
+                  }
+                  readOnly={wildcardRecord}
+                  required
+                  type="text"
+                  value={wildcardRecord ? "*" : recordNameDraft}
+                />
+              </label>
+              {/* `readOnly`, never `disabled`: a disabled control is dropped from
+                  the submitted form data, so the wildcard value would vanish and
+                  the dialog would submit the checkbox instead. */}
+              <label className="checkbox-field">
+                <input
+                  checked={wildcardRecord}
+                  disabled={disabled}
+                  onChange={() => setWildcardRecord((value) => !value)}
+                  type="checkbox"
+                />
+                {t("resource.domains.addSubdomainWildcard")}
+              </label>
+              <small className="form-hint">
+                {t("resource.domains.addSubdomainWildcardHint", {
+                  hostname: `*.${root?.hostname ?? ""}`,
+                })}
+              </small>
+            </>
           )}
         </FormDialog>
+      ) : null}
+
+      {verifyTarget ? (
+        <VerifyHostnameDialog
+          busy={busy}
+          challenge={challenge}
+          close={() => setVerifyTarget(undefined)}
+          domain={verifyTarget}
+          locale={locale}
+          recheck={() => runVerification(verifyTarget)}
+          t={t}
+        />
       ) : null}
 
       {deleteTarget ? (
@@ -838,6 +953,101 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
         />
       ) : null}
     </section>
+  );
+}
+
+/**
+ * Ownership verification for one declared hostname.
+ *
+ * A hostname registered here is stored `PENDING`, and the issuance path resolves
+ * certificate identifiers against `VERIFIED` rows only — so a name that is never
+ * verified can be declared and then covered by nothing. The challenge is a TXT
+ * record; the same control re-runs the check, which is what makes this a loop
+ * rather than a one-shot.
+ *
+ * The wildcard form is the reason this dialog exists at all: `*.example.com` is
+ * not reconciled from the edge's own configuration unless that configuration
+ * already names it, so a wildcard hostname declared here has no other route to
+ * `VERIFIED`. Its challenge is the same TXT name as the apex's, because the
+ * ownership question a wildcard asks is about the zone, not the star.
+ */
+function VerifyHostnameDialog({
+  busy,
+  challenge,
+  close,
+  domain,
+  locale,
+  recheck,
+  t,
+}: {
+  busy: boolean;
+  challenge: DomainVerifyResponse | undefined;
+  close(): void;
+  domain: ApplicationDomainResponse;
+  locale: WebserverLocale;
+  recheck(): void;
+  t: Translator;
+}) {
+  return (
+    <DialogBackdrop close={close}>
+      <div
+        aria-labelledby="served-domain-verify-title"
+        aria-modal="true"
+        className="dialog delivery-dialog"
+        role="dialog"
+      >
+        <header>
+          <h2 id="served-domain-verify-title">
+            {t("resource.domains.verifyTitle", { hostname: domain.hostname })}
+          </h2>
+          <DialogCloseButton close={close} label={t("resource.domains.cancel")} />
+        </header>
+        {challenge === undefined ? (
+          // No challenge yet: the first call either answers or fails, and the
+          // failure is reported by the ledger's banner behind this dialog.
+          <p className="form-hint">{busy ? t("resource.domains.verifyRunning") : t("resource.domains.verifyIdle")}</p>
+        ) : (
+          <div className="form-grid single-column">
+            <p className="form-hint">
+              {challenge.verified
+                ? t("resource.domains.verifyVerifiedHint")
+                : t("resource.domains.verifyHint")}
+            </p>
+            {/* The two values are the whole instruction an operator needs: which
+                record name to create and what to put in it. Read-only rather than
+                disabled, so both can still be selected and copied. */}
+            <label>
+              {t("resource.domains.verifyRecordName")}
+              <input readOnly value={challenge.recordName} />
+            </label>
+            <label>
+              {t("resource.domains.verifyRecordValue")}
+              <input readOnly value={challenge.recordValue} />
+            </label>
+            <div className="hostname-summary">
+              <StatusBadge t={t} value={challenge.status} />
+              <small className="form-hint">
+                {t("resource.domains.verifyAttempts", {
+                  count: challenge.attemptCount,
+                  expiresAt: formatInstant(challenge.expiresAt, locale),
+                })}
+              </small>
+            </div>
+            {challenge.failureCode === undefined ? null : (
+              <small className="form-error">{challenge.failureCode}</small>
+            )}
+          </div>
+        )}
+        <footer className="dialog-footer">
+          <button className="secondary-button" onClick={close} type="button">
+            {t("resource.domains.cancel")}
+          </button>
+          <button className="command-button" disabled={busy} onClick={recheck} type="button">
+            {t("resource.domains.verifyRecheck")}
+          </button>
+        </footer>
+      </div>
+    </DialogBackdrop>
   );
 }
 

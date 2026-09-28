@@ -74,6 +74,10 @@ impl WebRepositoryPort for WebRepository {
             .await
     }
 
+    async fn count_tenant_applications(&self, tenant_id: i64) -> WebServiceResult<i64> {
+        self.count_tenant_applications_repo(tenant_id).await
+    }
+
     async fn retrieve_application(
         &self,
         tenant_id: i64,

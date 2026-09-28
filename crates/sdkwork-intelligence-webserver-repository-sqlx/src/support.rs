@@ -8,6 +8,18 @@ pub(crate) fn now_rfc3339() -> String {
     sdkwork_utils_rust::datetime::format_datetime(sdkwork_utils_rust::datetime::now(), None)
 }
 
+/// Builds the replacement argument of a `... LIKE $N ESCAPE '\'` contains
+/// filter: the caller's keyword becomes a literal substring pattern, with
+/// backslash, percent, and underscore escaped so a keyword of `"%"` filters on
+/// a literal percent sign instead of matching every row.
+pub(crate) fn like_contains_pattern(keyword: &str) -> String {
+    let escaped = keyword
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
+    format!("%{escaped}%")
+}
+
 pub(crate) fn store_error(context: &str, error: SqlxError) -> WebServiceError {
     tracing::error!(context, error = ?error, "database operation failed");
     match error {
@@ -287,7 +299,17 @@ pub(crate) async fn resolve_site_owner_id(
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_database_instant, pagination};
+    use super::{like_contains_pattern, normalize_database_instant, pagination};
+
+    #[test]
+    fn escapes_wildcards_and_backslash_in_contains_patterns() {
+        assert_eq!(like_contains_pattern("plain"), "%plain%");
+        // A bare percent must filter on a literal percent sign, not match
+        // every row.
+        assert_eq!(like_contains_pattern("%"), "%\\%%");
+        assert_eq!(like_contains_pattern("a_b"), "%a\\_b%");
+        assert_eq!(like_contains_pattern("a\\b"), "%a\\\\b%");
+    }
 
     #[test]
     fn pagination_rejects_invalid_inputs_and_computes_offset_without_i32_overflow() {

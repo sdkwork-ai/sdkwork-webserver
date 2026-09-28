@@ -177,26 +177,23 @@ impl WebService {
         })
     }
 
+    /// Canonicalise and check the record name a hostname is declared under.
+    ///
+    /// `@` is the apex and is passed through untouched, because the repository
+    /// substitutes the root domain's own hostname for it and validating the
+    /// marker itself as a hostname would refuse it. Everything else is validated
+    /// by the *record-name* rule rather than the exact-hostname one, which is
+    /// what admits the wildcard form: `*` composes to `*.example.com`, the one
+    /// shape that produces a `WILDCARD` domain row and therefore the only way a
+    /// `certificateScope WILDCARD` request can ever find an identifier to cover.
     fn normalize_root_domain_hostname_request(
         request: &CreateRootDomainHostnameRequest,
     ) -> WebServiceResult<CreateRootDomainHostnameRequest> {
         let record_name = request.record_name.trim().to_ascii_lowercase();
         if record_name != "@" {
-            Self::validate_domain_request(&CreateDomainRequest {
-                hostname: record_name.clone(),
-                is_primary: request.is_primary,
-                ssl_enabled: request.ssl_enabled,
-                ssl_provider: request.ssl_provider.clone(),
-            })?;
-        } else if request
-            .ssl_provider
-            .as_deref()
-            .is_some_and(|provider| !matches!(provider, "letsencrypt" | "custom" | "none"))
-        {
-            return Err(WebServiceError::validation(
-                "sslProvider must be letsencrypt, custom, or none",
-            ));
+            Self::validate_root_domain_record_name(&record_name)?;
         }
+        Self::validate_ssl_provider(request.ssl_provider.as_deref())?;
         if request.application_id.is_none() && request.is_primary {
             return Err(WebServiceError::validation(
                 "an unbound hostname cannot be primary",
@@ -648,37 +645,9 @@ impl WebBackendApi for WebService {
         request: &IssueCertificateRequest,
     ) -> WebServiceResult<sdkwork_webserver_contract::CertificateOperationAcceptedResponse> {
         Self::validate_certificate_issue_request(request)?;
-        // Two facts only the running engine can answer, so they are checked
-        // here rather than restated as shape rules the contract crate could
-        // only answer weakly: which cloud accounts this edge holds credentials
-        // for, and which CA directory it is configured to order from.
-        //
-        // Both refuse rather than fall back. Accepting an unknown account would
-        // mean the operator's choice was silently replaced by whichever account
-        // the registry prefers, and accepting the other CA profile would mean
-        // the certificate came from somewhere other than where the request said.
-        if let Some(account_id) = request.provider_account_id.as_deref() {
-            let known = self
-                .certificate_issuer
-                .dns_accounts()
-                .iter()
-                .any(|account| account.account_id == account_id);
-            if !known {
-                return Err(WebServiceError::validation(format!(
-                    "providerAccountId `{account_id}` is not one of the cloud DNS accounts \
-                     configured on this edge; list them with GET /backend/v3/api/dns_accounts"
-                )));
-            }
-        }
-        if let Some(profile) = request.ca_profile.as_deref() {
-            let configured = self.certificate_issuer.acme_profile();
-            if profile != configured {
-                return Err(WebServiceError::validation(format!(
-                    "caProfile `{profile}` does not match this edge's ACME directory, which is \
-                     configured for `{configured}`"
-                )));
-            }
-        }
+        // The edge-truth rules (known DNS account, configured ACME directory)
+        // live on the shared issuance path, so both doors enforce them.
+        self.validate_certificate_issue_edge_truth(request)?;
         let tenant_id = Self::require_backend_tenant(context)?;
         let operation = self
             .repository
@@ -782,6 +751,14 @@ impl WebBackendApi for WebService {
         certificate_id: &str,
         request: &sdkwork_webserver_contract::RevokeCertificateRequest,
     ) -> WebServiceResult<sdkwork_webserver_contract::CertificateResponse> {
+        // Ordering contract: the CA acknowledges the revocation BEFORE the
+        // aggregate flips. A control-plane failure between the two leaves a
+        // CA-revoked certificate whose aggregate still reads active until an
+        // operator retries - retries are safe (self-signed skips the CA call;
+        // the CA treats an already-revoked serial as success), so the interim
+        // is recoverable rather than silent. A persisted "revocation pending"
+        // state would make the window observable at the cost of a schema
+        // state machine; the honest interim today is the CA's own status.
         let tenant_id = Self::require_backend_tenant(context)?;
         let reason = sdkwork_webserver_acme_service::CertificateRevocationReason::parse(
             &request.reason,
@@ -898,6 +875,15 @@ impl WebBackendApi for WebService {
         // ownership check — but who holds DNS credentials for which zones is
         // not something an unauthenticated caller should be able to enumerate,
         // and the route is dual-token anyway.
+        //
+        // PRD-FR-030 note (reviewed exception): host-scoped surfaces answer
+        // the platform operator tenant, but this inventory is deliberately
+        // tenant-visible — the certificate issuance picker on the tenant
+        // admin surface must offer the accounts issuance will actually use.
+        // The disclosure is metadata only (accountId/provider/zoneApex, never
+        // credentials), the operation's `web.*` permission still applies, and
+        // a `*` grant alone never reaches here. Documented in
+        // TECH_ARCHITECTURE.md alongside the other FR-030 scopes.
         Self::require_backend_tenant(context)?;
         // Read from the issuer's registry rather than a second source: this
         // must answer with the accounts the ACME engine will actually present

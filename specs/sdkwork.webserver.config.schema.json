@@ -243,6 +243,20 @@
           "default": 134217728,
           "description": "Maximum total response body bytes resident in the memory cache tier."
         },
+        "maxDiskBytes": {
+          "type": "integer",
+          "minimum": 1048576,
+          "maximum": 68719476736,
+          "default": 1073741824,
+          "description": "Maximum total cached object bytes on the disk tier; the oldest objects are evicted beyond it."
+        },
+        "maxDiskEntries": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 10000000,
+          "default": 100000,
+          "description": "Maximum cached object count on the disk tier."
+        },
         "defaultTtlSeconds": {
           "type": "integer",
           "minimum": 0,
@@ -352,6 +366,13 @@
           "maximum": 3600000,
           "default": 30000,
           "description": "Maximum continuous Pending duration for downstream write, flush, or shutdown operations."
+        },
+        "tlsHandshakeTimeoutMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 3600000,
+          "default": 60000,
+          "description": "Maximum whole pre-serve accept phase per connection: TLS handshake plus the HTTP/1+HTTP/2 wire-guard preread. nginx ssl_handshake_timeout parity."
         },
         "http1KeepAliveIdleTimeoutMs": {
           "type": "integer",

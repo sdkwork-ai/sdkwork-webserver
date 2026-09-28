@@ -60,7 +60,10 @@ services:
     cap_add:
       - NET_BIND_SERVICE
     ports:
-      - "${SDKWORK_WEBSERVER_PROD_HOST_PORT:-18080}:3800"
+      # The composed gateway port carries the management plane; it defaults to
+      # loopback like the bundle compose does. Override
+      # SDKWORK_WEBSERVER_MGMT_BIND_IP=0.0.0.0 only behind a firewall/LB.
+      - "${SDKWORK_WEBSERVER_MGMT_BIND_IP:-127.0.0.1}:${SDKWORK_WEBSERVER_PROD_HOST_PORT:-18080}:3800"
       - "${SDKWORK_WEBSERVER_PROD_IMPORT_HTTP_HOST_PORT:-18098}:80"
       - "${SDKWORK_WEBSERVER_PROD_HTTPS_HOST_PORT:-38430}:443"
     env_file:
@@ -92,7 +95,7 @@ services:
       SDKWORK_MODULE_API_GATEWAY_INSTALL_ROOT: ${SDKWORK_MODULE_API_GATEWAY_INSTALL_ROOT:-/opt/sdkwork/api-gateway}
       SDKWORK_DEPLOY_SANDBOX_KEY: ${SDKWORK_DEPLOY_SANDBOX_KEY:-deploy.local.opt_deploy}
       SDKWORK_DEPLOY_SANDBOX_ROOT: ${SDKWORK_DEPLOY_SANDBOX_ROOT:-/opt/deploy}
-      SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_CORS_ALLOWED_ORIGINS:-http://server.sdkwork.com,http://localhost:18080,http://127.0.0.1:18080,app://dsh,app://birdcoder,app://sdkwork,app://dtupay,tauri://localhost,https://servicewechat.com,https://server.sdkwork.com,https://server.birdcoder.com,https://server.dtupay.com,https://server.sdkwork.cn,https://server.birdcoder.cn,https://server.dtupay.cn,https://server.skubc.com,https://server.skubc.cn,https://server.zowalk.com,https://server.zowalk.cn,https://server.offer86.com,https://server.offer86.cn,https://server.86offer.com,https://server.86offer.cn,https://server-app.sdkwork.com,https://server-app.birdcoder.com,https://server-app.dtupay.com,https://server-app.sdkwork.cn,https://server-app.birdcoder.cn,https://server-app.dtupay.cn,https://server-app.skubc.com,https://server-app.skubc.cn,https://server-app.zowalk.com,https://server-app.zowalk.cn,https://server-app.offer86.com,https://server-app.offer86.cn,https://server-app.86offer.com,https://server-app.86offer.cn,https://server-admin.sdkwork.com,https://server-admin.birdcoder.com,https://server-admin.dtupay.com,https://server-admin.sdkwork.cn,https://server-admin.birdcoder.cn,https://server-admin.dtupay.cn,https://server-admin.skubc.com,https://server-admin.skubc.cn,https://server-admin.zowalk.com,https://server-admin.zowalk.cn,https://server-admin.offer86.com,https://server-admin.offer86.cn,https://server-admin.86offer.com,https://server-admin.86offer.cn}
+      SDKWORK_CORS_ALLOWED_ORIGINS: ${SDKWORK_CORS_ALLOWED_ORIGINS:-app://dsh,app://birdcoder,app://sdkwork,app://dtupay,tauri://localhost,https://servicewechat.com,https://server.sdkwork.com,https://server.birdcoder.com,https://server.dtupay.com,https://server.sdkwork.cn,https://server.birdcoder.cn,https://server.dtupay.cn,https://server.skubc.com,https://server.skubc.cn,https://server.zowalk.com,https://server.zowalk.cn,https://server.offer86.com,https://server.offer86.cn,https://server.86offer.com,https://server.86offer.cn,https://server-app.sdkwork.com,https://server-app.birdcoder.com,https://server-app.dtupay.com,https://server-app.sdkwork.cn,https://server-app.birdcoder.cn,https://server-app.dtupay.cn,https://server-app.skubc.com,https://server-app.skubc.cn,https://server-app.zowalk.com,https://server-app.zowalk.cn,https://server-app.offer86.com,https://server-app.offer86.cn,https://server-app.86offer.com,https://server-app.86offer.cn,https://server-admin.sdkwork.com,https://server-admin.birdcoder.com,https://server-admin.dtupay.com,https://server-admin.sdkwork.cn,https://server-admin.birdcoder.cn,https://server-admin.dtupay.cn,https://server-admin.skubc.com,https://server-admin.skubc.cn,https://server-admin.zowalk.com,https://server-admin.zowalk.cn,https://server-admin.offer86.com,https://server-admin.offer86.cn,https://server-admin.86offer.com,https://server-admin.86offer.cn}
       SDKWORK_DATABASE_ENGINE: postgresql
       SDKWORK_DATABASE_HOST: ${WEBSERVER_POSTGRES_HOST:-host.docker.internal}
       SDKWORK_DATABASE_PORT: ${WEBSERVER_POSTGRES_PORT:-5432}
@@ -101,7 +104,10 @@ services:
       SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC: "false"
       SDKWORK_DATABASE_USERNAME: ${WEBSERVER_POSTGRES_PROD_USER:-sdkwork_ai_prod}
       SDKWORK_DATABASE_PASSWORD: ${WEBSERVER_POSTGRES_PROD_PASSWORD:-}
-      SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-disable}
+      # Production demands TLS on the database connection; point
+      # WEBSERVER_POSTGRES_SSL_MODE=disable only at a non-TLS host PostgreSQL
+      # and record the exception with the deployment.
+      SDKWORK_DATABASE_SSL_MODE: ${WEBSERVER_POSTGRES_SSL_MODE:-require}
       SDKWORK_DATABASE_MAX_CONNECTIONS: "20"
       SDKWORK_WEBSERVER_REDIS_ENABLED: "true"
       SDKWORK_WEBSERVER_REDIS_HOST: ${WEBSERVER_REDIS_HOST:-host.docker.internal}

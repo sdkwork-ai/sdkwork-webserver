@@ -60,6 +60,10 @@ fn default_connection_write_timeout_ms() -> u64 {
     30_000
 }
 
+fn default_tls_handshake_timeout_ms() -> u64 {
+    60_000
+}
+
 fn default_http1_keep_alive_idle_timeout_ms() -> u64 {
     75_000
 }
@@ -632,6 +636,8 @@ pub struct WebServerLimits {
     pub response_body_idle_timeout_ms: u64,
     #[serde(default = "default_connection_write_timeout_ms")]
     pub connection_write_timeout_ms: u64,
+    #[serde(default = "default_tls_handshake_timeout_ms")]
+    pub tls_handshake_timeout_ms: u64,
     #[serde(default = "default_http1_keep_alive_idle_timeout_ms")]
     pub http1_keep_alive_idle_timeout_ms: u64,
     #[serde(default = "default_http1_max_pipeline_depth")]
@@ -721,6 +727,7 @@ impl Default for WebServerLimits {
             request_body_idle_timeout_ms: default_request_body_idle_timeout_ms(),
             response_body_idle_timeout_ms: default_response_body_idle_timeout_ms(),
             connection_write_timeout_ms: default_connection_write_timeout_ms(),
+            tls_handshake_timeout_ms: default_tls_handshake_timeout_ms(),
             http1_keep_alive_idle_timeout_ms: default_http1_keep_alive_idle_timeout_ms(),
             http1_max_pipeline_depth: default_http1_max_pipeline_depth(),
             drain_timeout_ms: default_drain_timeout_ms(),
@@ -1895,6 +1902,16 @@ pub struct ProxyCacheConfig {
     /// `proxy_cache_path max_size` analog for the memory L1).
     #[serde(default = "default_proxy_cache_max_memory_bytes")]
     pub max_memory_bytes: u64,
+    /// Maximum total object bytes on the disk tier; the oldest objects are
+    /// evicted when the tier outgrows it (nginx `proxy_cache_path max_size`
+    /// for the L2). Unique-URL floods can otherwise fill the disk without
+    /// bound.
+    #[serde(default = "default_proxy_cache_max_disk_bytes")]
+    pub max_disk_bytes: u64,
+    /// Maximum object count on the disk tier, enforced alongside
+    /// `max_disk_bytes`.
+    #[serde(default = "default_proxy_cache_max_disk_entries")]
+    pub max_disk_entries: u64,
     /// Freshness used when the response declares no Cache-Control/Expires.
     #[serde(default = "default_proxy_cache_ttl_seconds")]
     pub default_ttl_seconds: u64,
@@ -1915,6 +1932,8 @@ impl Default for ProxyCacheConfig {
             max_entries: default_proxy_cache_max_entries(),
             max_object_bytes: default_proxy_cache_max_object_bytes(),
             max_memory_bytes: default_proxy_cache_max_memory_bytes(),
+            max_disk_bytes: default_proxy_cache_max_disk_bytes(),
+            max_disk_entries: default_proxy_cache_max_disk_entries(),
             default_ttl_seconds: default_proxy_cache_ttl_seconds(),
             stale_ttl_seconds: default_proxy_cache_stale_ttl_seconds(),
             disk_path: None,
@@ -1932,6 +1951,14 @@ fn default_proxy_cache_max_object_bytes() -> u64 {
 
 fn default_proxy_cache_max_memory_bytes() -> u64 {
     128 * 1024 * 1024
+}
+
+fn default_proxy_cache_max_disk_bytes() -> u64 {
+    1024 * 1024 * 1024
+}
+
+fn default_proxy_cache_max_disk_entries() -> u64 {
+    100_000
 }
 
 fn default_proxy_cache_ttl_seconds() -> u64 {

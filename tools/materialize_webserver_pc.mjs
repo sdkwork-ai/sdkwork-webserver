@@ -134,17 +134,23 @@ const packages = [
   },
   { id: "admin-core", surface: "backend-admin", capability: "admin-core", deps: { "@sdkwork/drive-app-sdk": "workspace:*", "@sdkwork/webserver-backend-sdk": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", "@sdkwork/sdk-common": "workspace:*", react: "catalog:" }, sdk: "sdkwork-webserver-backend-sdk", sdkPackage: "@sdkwork/webserver-backend-sdk", sdkAuthority: "sdkwork-webserver-backend-api", coreComposition: true },
   { id: "admin-shell", surface: "backend-admin", capability: "admin-shell", deps: { "@sdkwork/webserver-pc-commons": "workspace:*", react: "catalog:" } },
-  // The backend-admin "Applications" entry renders the exact same canonical
+  // The backend-admin "Applications" entry renders the same canonical
   // `deploy_app` publishing page as the app-console one, and the bridge that
   // turns base URLs plus a token manager into that page's two clients is
-  // surface-neutral — it has no admin/console divergence at all. Both copies
-  // were introduced by the same commit and never diverged since, so this
-  // package re-exports console-delivery's adapter instead of keeping a second
-  // byte-identical copy. Only the menu entry (the part that really is
-  // surface-specific) stays local. `frontend-composition` forbids a commons/
-  // core package from depending on a capability package, and this direction
-  // mirrors the existing `admin-plugins` -> `console-plugins` precedent.
-  { id: "admin-apps", surface: "backend-admin", capability: "apps", deps: { "@sdkwork/webserver-pc-commons": "workspace:*", "@sdkwork/webserver-pc-console-delivery": "workspace:*" }, module: [["apps", "Applications", "Publish and operate deploy_app applications", "deploy.apps.read"]], extraIndexExports: ['export { DeployAppsManagementSurface as DeployAppsAdminSurface } from "@sdkwork/webserver-pc-console-delivery";'] },
+  // surface-neutral — it composes no admin/console divergence of its own. So the
+  // page and the bridge stay in console-delivery, and this package owns only the
+  // part that really is surface-specific: the menu entry, plus the `surface`
+  // marker that tells the page which face it is rendering.
+  //
+  // The marker is a local authored file rather than a re-export, because it now
+  // has something to say: the admin face reaches every ownership level, so its
+  // page grows an ownership tab row pushed down as `apps.list`'s `scope`; the
+  // tenant console reaches the caller's own apps only, so it gets no control for
+  // that axis at all. A bare alias could not express that, and the difference is
+  // user-visible. `DeployAppsAdminSurface.tsx` is a pass-through that constructs
+  // nothing — `architecture-boundary.test.ts` asserts it stays that way, so a
+  // second bridge cannot creep in behind the marker.
+  { id: "admin-apps", surface: "backend-admin", capability: "apps", deps: { "@sdkwork/webserver-pc-commons": "workspace:*", "@sdkwork/webserver-pc-console-delivery": "workspace:*" }, module: [["apps", "Applications", "Publish and operate deploy_app applications", "deploy.apps.read"]], extraIndexExports: ['export * from "./DeployAppsAdminSurface.tsx";'] },
   // Domains and Certificates here are the *tenant-level* half of the domain
   // story: the hostnames this edge actually answers for (`webserver_root_domain`
   // / `webserver_domain`, reconciled from the effective sidecar and module

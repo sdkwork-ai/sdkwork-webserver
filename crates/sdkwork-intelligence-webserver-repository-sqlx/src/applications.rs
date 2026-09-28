@@ -9,8 +9,8 @@ use sqlx::Row;
 
 use super::support::{
     bool_from_row, instant_from_row, instant_write_expression, json_from_row,
-    json_write_expression, new_uuid, next_id, now_rfc3339, pagination, resolve_site_internal_id,
-    store_error,
+    json_write_expression, like_contains_pattern, new_uuid, next_id, now_rfc3339, pagination,
+    resolve_site_internal_id, store_error,
 };
 
 /// SELECT projection joining the application resource row with its backing
@@ -48,14 +48,14 @@ impl WebRepository {
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .map(|value| format!("%{value}%"));
+            .map(like_contains_pattern);
         let count_sql = "SELECT COUNT(*) AS total FROM webserver_application a
              JOIN webserver_site s ON s.id = a.site_id AND s.tenant_id = a.tenant_id
              WHERE a.tenant_id = $1 AND a.deleted_at IS NULL AND s.deleted_at IS NULL
                AND ($2 IS NULL OR s.status = $2)
                AND ($3 IS NULL OR s.application_type = $3)
                AND ($4 IS NULL OR s.site_type = $4)
-               AND ($5 IS NULL OR a.name LIKE $5 OR a.slug LIKE $5)
+               AND ($5 IS NULL OR a.name LIKE $5 ESCAPE '\' OR a.slug LIKE $5 ESCAPE '\')
                AND ($6 IS NULL OR (a.data_scope = 3 AND a.user_id = $6))";
         let list_sql = format!(
             "{APPLICATION_SELECT}
@@ -63,7 +63,7 @@ impl WebRepository {
                AND ($2 IS NULL OR s.status = $2)
                AND ($3 IS NULL OR s.application_type = $3)
                AND ($4 IS NULL OR s.site_type = $4)
-               AND ($5 IS NULL OR a.name LIKE $5 OR a.slug LIKE $5)
+               AND ($5 IS NULL OR a.name LIKE $5 ESCAPE '\' OR a.slug LIKE $5 ESCAPE '\')
                AND ($6 IS NULL OR (a.data_scope = 3 AND a.user_id = $6))
              ORDER BY a.updated_at DESC, a.id DESC LIMIT $7 OFFSET $8"
         );
@@ -111,6 +111,25 @@ impl WebRepository {
             page,
             page_size,
         })
+    }
+
+    /// Live application count for one tenant: the per-tenant capacity quota
+    /// (PRD section 8.3) is checked against this before a create is accepted.
+    /// Advisory under concurrency - two simultaneous creates can both observe
+    /// room - but it bounds unattended growth.
+    pub(super) async fn count_tenant_applications_repo(
+        &self,
+        tenant_id: i64,
+    ) -> WebServiceResult<i64> {
+        let total: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM webserver_application
+             WHERE tenant_id = $1 AND deleted_at IS NULL",
+        )
+        .bind(tenant_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|error| store_error("count tenant webserver_application", error))?;
+        Ok(total)
     }
 
     /// Creates the application resource together with its backing site

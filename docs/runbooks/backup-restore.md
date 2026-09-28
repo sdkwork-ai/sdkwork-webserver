@@ -7,6 +7,10 @@
 > 已验证的恢复演练"（RPO ≈ 24h，RTO ≈ 4h）。要达成 PRD 目标需启用
 > WAL 流复制与物理基线备份（REQ-2026-0051 已验证该路径），并接入告警。
 > 在此之前，不要在对外承诺中引用 PRD 恢复目标。
+>
+> **备份集尚未静态加密**：备份集含配置副本（密钥文件）与数据库转储，目录权限
+> 0700，但落盘内容为明文。接入加密（age/gpg，目标机密钥）之前，备份介质的
+> 外泄等同于密钥与数据同时外泄——商业化发布前必须补齐。
 备份集生成在目标机 `/opt/deploy/sdkwork-webserver/backups/`，包含：配置（env 链）、
 数据库（pg_dump 自定义格式）、卷（可选）、manifest.json + 每组件 `.sha256`。
 
@@ -52,11 +56,21 @@ restore 流程：校验 checksum → `deploy.sh --down` 停栈 → 恢复所选�
 
 ## 5. 保留与清理
 
-| 环境 | 保留代数 |
+`bin/backup.sh create` 在每次成功备份后自动执行保留策略：按环境只保留最新的
+`SDKWORK_BACKUP_KEEP` 代（默认 7），更旧的备份集在目标机上按**逐个枚举的集合名**
+删除（名称必须严格匹配 `<module>-<environment>-<UTC 戳>` 形状，绝不使用通配符）。
+
+| 环境 | 建议 `SDKWORK_BACKUP_KEEP` |
 |---|---|
 | development / test | 3 |
 | staging / demo | 7 |
-| production | 30 + 每次发布前的最后一份 |
+| production | 30（发布前另做一次手动 `create`） |
+
+生产环境示例（workflow/部署环境变量）：
+
+```bash
+SDKWORK_BACKUP_KEEP=30 bin/backup.sh create --environment production
+```
 
 清理使用 `--purge` 前先备份：
 ```bash

@@ -185,6 +185,51 @@ predicate in a separate COUNT. Known limitation (documented on
 shared listener; hardening it requires an east-west listener with its own trust
 declaration, which the listener configuration model does not express today.
 
+2026-09 hardening round 5 (post-remediation re-audit fixes): the
+certificate list's keyset cursor is reachable on the wire again —
+`/backend/v3/api/certificates` is in the pagination middleware's cursor
+allow-list (the keyset conversion had missed it, so every `cursor` request
+died with `40003`) and a new lockstep test parses the OpenAPI authority so a
+cursor-declared list cannot ship without its middleware entry; HTTPS and
+plaintext listeners bound the whole pre-serve accept phase with the new
+`limits.tlsHandshakeTimeoutMs` (nginx `ssl_handshake_timeout` parity; a
+trickling ClientHello can no longer hold its admission permits forever, and
+the new `handshake_timeout` protocol-error series counts rejections); the
+proxy cache disk tier is bounded by `maxDiskBytes`/`maxDiskEntries` with an
+oldest-modified eviction sweep (a unique-URL flood can no longer fill the
+disk); `limit_req` zones reap buckets idle longer than one burst drain window
+before refusing new keys, so saturation no longer outlives the flood; relay
+WebSocket pumps carry a finite lifetime and the cluster east-west relay
+resolves hostnames on the async resolver with resolve/connect deadlines; the
+repository closes the root-domain delete/create check-then-act window with a
+shared row lock, refuses heartbeat acknowledgements for a deleted server row,
+locks the rollback source row inside its transaction, and takes
+`SKIP LOCKED` on both cluster sweep CTEs; certificate issuance enforces the
+edge-truth checks (known DNS account, configured ACME directory) on the app
+and backend surfaces through one shared validator; the ACME challenge file
+read is `.take()`-bounded; per-tenant application capacity is enforced at
+create (`SDKWORK_WEBSERVER_MAX_APPLICATIONS_PER_TENANT`, default 100) and
+regex location/rewrite patterns carry a source-length bound; server-files
+operations carry a documented non-idempotency rationale (synchronous
+commands, no durable accepted work to deduplicate); cluster sync revisions
+enforce the 16 KiB payload ceiling at the service boundary; and failed TLS
+material activations delete their staged secret file. Deployment posture:
+the production compose binds the composed gateway port to loopback by
+default and defaults the database connection to `sslmode=require`, the
+production CORS default drops plaintext and localhost origins, the
+certificate worker writes a per-cycle heartbeat consumed by new K8s
+exec probes (plus an emptyDir size limit), backup sets are pruned to
+`SDKWORK_BACKUP_KEEP` generations per environment after every successful
+backup (documented in the backup runbook, which also declares the remaining
+static-encryption gap), and the tenant-visible DNS-account inventory is
+recorded as a reviewed PRD-FR-030 exception (metadata-only disclosure, the
+issuance picker needs it). Rate-limit zones stay app-configuration-owned by
+design (the nginx-compatible ownership model): production app
+configurations should declare a `limitReqZone` plus per-route `limitReq`
+rules, and the per-tenant rate dimension stays architecturally deferred —
+PRD-FR-015 forbids a control-plane lookup in the request path, so a tenant
+key can only enter the throttle once an in-process identity plane exists.
+
 The host synchronization process is named **Web Node Daemon** in all new
 runtime and operational surfaces. The canonical packaged/development entry
 point is `sdkwork-webserver-node-daemon`; `sdkwork-webserver-agent` is retained only as a

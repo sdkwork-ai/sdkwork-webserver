@@ -61,9 +61,11 @@ pub struct GatewayShared {
     /// (PRD §35 create-route API; memory-only in V1).
     pub pending_declarations: AsyncMutex<HashMap<DeviceId, Vec<TunnelRouteTemplate>>>,
     /// Global visitor/control connection admission. Every accepted QUIC
-    /// control connection and every visitor TCP/UDP session holds one
-    /// permit for its lifetime, so the concurrent task count is bounded by
-    /// `limits.max_connections` instead of the arrival rate.
+    /// control connection and every visitor TCP session holds one permit
+    /// for its lifetime; UDP visitor sessions hold the per-session
+    /// stream-budget permit instead (`maxStreamsPerSession` x sessions), so
+    /// the concurrent task count is bounded in both cases rather than by
+    /// the arrival rate.
     pub connection_admission: Arc<tokio::sync::Semaphore>,
     /// Public TCP listeners for `tcp` routes (PRD §31).
     pub(crate) tcp: Mutex<listeners::TcpListenerSet>,

@@ -103,6 +103,13 @@ on:
         required: false
         default: main
 
+# The packaging surface is one reusable job (GITHUB_WORKFLOW_SPEC): the
+# grants below are what the pinned reusable workflow needs for release
+# publishing, attestation, and artifact metadata on push/release/dispatch.
+# pull_request runs reuse the same job but stay least-privileged in practice:
+# GitHub downgrades every fork pull_request token to read-only regardless of
+# this block, no pull_request_target trigger exists, and the reusable
+# workflow is pinned by full SHA.
 permissions:
   contents: write
   actions: read

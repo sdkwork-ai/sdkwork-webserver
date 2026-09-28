@@ -242,6 +242,25 @@ export const webserverWorkspaceZhCn = {
   "resource.domains.addRootPlaceholder": "例如 example.com",
   "resource.domains.addSubdomain": "新增子域名",
   "resource.domains.addSubdomainPlaceholder": "例如 www 或 api.internal",
+  "resource.domains.addSubdomainWildcard": "泛域名（通配符）",
+  // 通配符是「记录名」而不是完整主机名：`*` 会与根域名拼成完整主机名，所以提示直接给出
+  // 拼好的结果，而不是让操作者自己推断星号会变成什么。
+  "resource.domains.addSubdomainWildcardHint":
+    "将登记 {hostname}，覆盖该根域名下的全部一级主机名。它也是签发泛域名证书唯一可选的主机名，归属校验与根域名本身共用同一条 TXT 记录。",
+  // 归属验证。主机名在验证完成前一直是 pending，而只有已验证的主机名才能被证书覆盖，
+  // 因此文案要同时给出两件事：要发布哪条 TXT 记录，以及这个按钮会重新检查。
+  "resource.domains.verify": "验证",
+  "resource.domains.verifyActionHint":
+    "发布该主机名所需的归属 TXT 记录。只有已验证的主机名才能被证书覆盖。",
+  "resource.domains.verifyTitle": "验证 {hostname}",
+  "resource.domains.verifyIdle": "尚无校验记录。",
+  "resource.domains.verifyRunning": "正在读取归属校验记录…",
+  "resource.domains.verifyHint": "请发布该 TXT 记录后再次检查。DNS 生效可能需要几分钟。",
+  "resource.domains.verifyVerifiedHint": "归属已确认。该主机名现在可以被证书覆盖。",
+  "resource.domains.verifyRecordName": "TXT 记录名",
+  "resource.domains.verifyRecordValue": "TXT 记录值",
+  "resource.domains.verifyAttempts": "第 {count} 次尝试 · {expiresAt} 到期",
+  "resource.domains.verifyRecheck": "再次检查",
   "resource.domains.refresh": "刷新",
   "resource.domains.selectRoot": "选择一个根域名，查看其下已登记的主机名。",
   "resource.domains.subdomainsOf": "{hostname} 下的主机名",
@@ -354,6 +373,14 @@ export const webserverWorkspaceZhCn = {
   "resource.certificates.hostnamesLoading": "正在读取主机名…",
   "resource.certificates.noRootDomains": "没有可用的根域名",
   "resource.certificates.noHostnamesInRootDomain": "该根域名下还没有主机名",
+  // 选择器拒绝某一行时的原因。每一条都是服务端同样会拒绝的请求，所以行内直接说明违反了
+  // 哪条规则，而不是留下一个只能靠猜的禁用控件。
+  "resource.certificates.pickerRefusedUnverified": "该主机名尚未验证。只有归属证据仍然有效的主机名才能用于签发。",
+  "resource.certificates.pickerRefusedExactUnderWildcard": "泛域名证书只能选择通配符主机名。",
+  // 唯一一种「整屏都不可选」的状态，因此必须同时说明缺什么、以及去哪里补，否则这个证书
+  // 类型会读起来像死路。
+  "resource.certificates.pickerNoWildcardHostname":
+    "该根域名下还没有登记通配符主机名。请先在域名管理中新增 {hostname} 并完成 TXT 验证，再回来签发。",
   // 单选：一张证书只覆盖一个主机名，所以左栏只标「已选」，由 footer 左端说明「确定」
   // 会把哪一个名字带回去。空选择是合法状态（它就是「取消选择」的方式），因此也有话说。
   "resource.certificates.pickerChosen": "已选",

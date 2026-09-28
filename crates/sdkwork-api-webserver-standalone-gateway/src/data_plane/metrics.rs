@@ -73,7 +73,7 @@ const DURATION_BUCKET_MICROSECONDS: [u64; 11] = [
     5_000, 10_000, 25_000, 50_000, 100_000, 250_000, 500_000, 1_000_000, 2_500_000, 5_000_000,
     10_000_000,
 ];
-const PROTOCOL_ERROR_KINDS: [&str; 7] = [
+const PROTOCOL_ERROR_KINDS: [&str; 8] = [
     "http1_wire",
     "http2_wire",
     "request_body_timeout",
@@ -81,6 +81,7 @@ const PROTOCOL_ERROR_KINDS: [&str; 7] = [
     "response_body_timeout",
     "response_body_io",
     "downstream_write_timeout",
+    "handshake_timeout",
 ];
 const DNS_RESULTS: [&str; 8] = [
     "success",
@@ -196,6 +197,7 @@ pub(super) enum ProtocolErrorKind {
     ResponseBodyTimeout = 4,
     ResponseBodyIo = 5,
     DownstreamWriteTimeout = 6,
+    HandshakeTimeout = 7,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

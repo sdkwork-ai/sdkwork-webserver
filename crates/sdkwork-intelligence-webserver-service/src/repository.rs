@@ -445,6 +445,8 @@ pub trait WebRepositoryPort: Send + Sync {
         request: &CreateApplicationRequest,
     ) -> WebServiceResult<ApplicationResponse>;
 
+    async fn count_tenant_applications(&self, tenant_id: i64) -> WebServiceResult<i64>;
+
     async fn retrieve_application(
         &self,
         tenant_id: i64,

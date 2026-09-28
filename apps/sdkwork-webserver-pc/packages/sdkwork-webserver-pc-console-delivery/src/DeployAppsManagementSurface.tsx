@@ -12,16 +12,24 @@ import { useMemo } from "react";
  * injected token manager.
  *
  * The page is host-agnostic by contract (`PublishingAppsPage` takes its two
- * generated clients as props), so this adapter owns exactly one thing: turning
- * the host's base URLs plus token manager into those clients. Styles are scoped
- * by `.deploy-surface`, the shared scope for every deployments surface bridged
- * into this host.
+ * generated clients as props), so this adapter owns exactly two things: turning
+ * the host's base URLs plus token manager into those clients, and forwarding the
+ * `surface` marker. Styles are scoped by `.deploy-surface`, the shared scope for
+ * every deployments surface bridged into this host.
+ *
+ * `surface` is forwarded verbatim and nothing here branches on it — the page owns
+ * what the marker changes (the ownership facet: the admin face reaches several
+ * ownership levels and gets a tab row for it, the console reaches one and gets no
+ * control). It defaults to `console`, the narrower surface, so the console mount
+ * passes nothing and only `DeployAppsAdminSurface` has to say what it is.
  */
 export interface DeployAppsManagementSurfaceProps {
   deployBaseUrl: string;
   driveBaseUrl: string;
   locale: DeploymentsLocale;
   tokenManager: AuthTokenManager;
+  /** Which surface is rendering the page. Defaults to `"console"`. */
+  surface?: "admin" | "console";
 }
 
 export function DeployAppsManagementSurface({
@@ -29,6 +37,7 @@ export function DeployAppsManagementSurface({
   driveBaseUrl,
   locale,
   tokenManager,
+  surface = "console",
 }: DeployAppsManagementSurfaceProps) {
   const clients = useMemo(
     () => createDeploymentsConsoleClients({ deployBaseUrl, driveBaseUrl, tokenManager }),
@@ -36,7 +45,12 @@ export function DeployAppsManagementSurface({
   );
   return (
     <div className="deploy-surface">
-      <PublishingAppsPage deployClient={clients.deploy} driveClient={clients.drive} locale={locale} />
+      <PublishingAppsPage
+        deployClient={clients.deploy}
+        driveClient={clients.drive}
+        locale={locale}
+        surface={surface}
+      />
     </div>
   );
 }

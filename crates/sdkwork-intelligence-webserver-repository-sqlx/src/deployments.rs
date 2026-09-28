@@ -553,6 +553,15 @@ impl WebRepository {
         idempotency_key: Option<&str>,
     ) -> WebServiceResult<DeploymentResponse> {
         let site_internal_id = resolve_site_internal_id(&self.pool, tenant_id, site_id).await?;
+        // The source read sits inside the insert transaction with the source
+        // row locked, so a concurrent status flip cannot slip between the
+        // "only a successful deployment can be rolled back" guard and the
+        // restore command: the row stays locked until the command commits.
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|error| store_error("begin rollback webserver_deployment transaction", error))?;
         let source = sqlx::query(
             "SELECT deployment.id, deployment.status, deployment.deploy_type,
                     deployment.environment, deployment.version_tag, deployment.commit_hash,
@@ -564,12 +573,13 @@ impl WebRepository {
                ON source_version.id = deployment.source_version_id
               AND source_version.tenant_id = deployment.tenant_id
               AND source_version.site_id = deployment.site_id
-             WHERE deployment.tenant_id = $1 AND deployment.site_id = $2 AND deployment.uuid = $3",
+             WHERE deployment.tenant_id = $1 AND deployment.site_id = $2 AND deployment.uuid = $3
+             FOR UPDATE OF deployment",
         )
         .bind(tenant_id)
         .bind(site_internal_id)
         .bind(deployment_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *tx)
         .await
         .map_err(|error| store_error("rollback webserver_deployment lookup", error))?
         .ok_or_else(|| WebServiceError::not_found("deployment not found"))?;
@@ -671,12 +681,6 @@ impl WebRepository {
         );
 
         // Keep the immutable source untouched; this transaction only creates a restore command.
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(|error| store_error("begin rollback webserver_deployment transaction", error))?;
-
         let insert_result = sqlx::query(audited_sql(&insert_sql))
             .bind(id)
             .bind(&uuid)

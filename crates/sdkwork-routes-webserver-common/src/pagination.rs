@@ -14,20 +14,21 @@ const MAXIMUM_CURSOR_BYTES: usize = 512;
 /// their OpenAPI contract. `cursor` on any other endpoint fails closed. The
 /// patterns MUST stay in lockstep with the OpenAPI authorities
 /// (`apis/*openapi.yaml` `x-sdkwork-pagination-mode: cursor`); the unit tests
-/// below pin the exact route constants from the app-api/backend-api path
-/// modules to fail fast on route renames.
-const CURSOR_PAGINATED_PATH_PATTERNS: [&str; 11] = [
+/// below pin the exact route constants from the backend-api path modules to
+/// fail fast on route renames. The retired `/app/v3/api` surface is owned by
+/// sdkwork-deployments and never reaches this middleware, so it has no
+/// entries here.
+const CURSOR_PAGINATED_PATH_PATTERNS: [&str; 10] = [
     "/backend/v3/api/audit_logs",
     "/backend/v3/api/applications/{applicationId}/deployments",
     "/backend/v3/api/applications/{applicationId}/source_versions",
+    "/backend/v3/api/certificates",
     "/backend/v3/api/servers",
     "/backend/v3/api/clusters/hosts",
     "/backend/v3/api/clusters/instances",
     "/backend/v3/api/clusters/events",
     "/backend/v3/api/clusters/instances/{instanceId}/heartbeats",
     "/backend/v3/api/clusters/instances/{instanceId}/metrics/history",
-    "/app/v3/api/applications/{applicationId}/deployments",
-    "/app/v3/api/applications/{applicationId}/source_versions",
 ];
 
 /// Reject malformed or non-canonical pagination query parameters before handlers run.
@@ -125,7 +126,51 @@ fn path_matches_cursor_patterns(path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_query;
+    use super::{validate_query, CURSOR_PAGINATED_PATH_PATTERNS};
+
+    #[test]
+    fn cursor_patterns_match_the_openapi_authority() {
+        // The documented invariant above is enforced here against the source
+        // of truth itself: every operation the backend authority declares
+        // with `x-sdkwork-pagination-mode: cursor` must have its path in the
+        // middleware allowlist, and the allowlist must contain nothing the
+        // authority does not declare. A new keyset list cannot ship without
+        // its cursor becoming reachable on the wire (the missing-certificates
+        // regression class).
+        let authority = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../apis/backend-api/web/openapi.yaml");
+        let source = std::fs::read_to_string(&authority)
+            .unwrap_or_else(|error| panic!("read {}: {error}", authority.display()));
+        let mut declared: Vec<String> = Vec::new();
+        let mut current_path: Option<String> = None;
+        for line in source.lines() {
+            if let Some(rest) = line.strip_prefix("  /") {
+                if let Some(path) = rest.strip_suffix(':') {
+                    current_path = Some(format!("/{path}"));
+                }
+            } else if line.trim() == "x-sdkwork-pagination-mode: cursor" {
+                let path = current_path
+                    .clone()
+                    .unwrap_or_else(|| "pagination mode declared outside any path".to_string());
+                declared.push(path);
+            }
+        }
+        assert!(
+            !declared.is_empty(),
+            "the OpenAPI authority stopped declaring cursor pagination; \
+             the middleware allowlist and this test need revisiting"
+        );
+        let mut expected: Vec<String> = CURSOR_PAGINATED_PATH_PATTERNS
+            .iter()
+            .map(|pattern| pattern.to_string())
+            .collect();
+        declared.sort();
+        expected.sort();
+        assert_eq!(
+            declared, expected,
+            "cursor allowlist and the OpenAPI authority drifted apart"
+        );
+    }
 
     #[test]
     fn accepts_canonical_values_and_rejects_aliases() {
@@ -151,21 +196,27 @@ mod tests {
         // Cursor-paginated growing collections (nodes, revisions) accept
         // cursor after the keyset upgrade; other lists still fail closed.
         assert!(validate_query(Some("cursor=opaque-token"), "/backend/v3/api/servers").is_ok());
+        // The per-issuance-growing certificate ledger is keyset-paginated:
+        // `cursor` is the only continuation and `page` beyond one is refused
+        // here exactly like the repository refuses deep offsets.
+        assert!(
+            validate_query(Some("cursor=opaque-token"), "/backend/v3/api/certificates").is_ok()
+        );
+        assert!(validate_query(Some("page=2"), "/backend/v3/api/certificates").is_err());
+        // Even the first offset page is requested without `page` on a
+        // keyset endpoint: the parameter is refused outright.
+        assert!(validate_query(Some("page=1"), "/backend/v3/api/certificates").is_err());
+        // The retired `/app/v3/api` surface is owned by sdkwork-deployments
+        // and never reaches this middleware; cursor on such a path fails
+        // closed here.
         assert!(validate_query(
             Some("cursor=opaque-token"),
             "/app/v3/api/applications/app-1/source_versions"
         )
-        .is_ok());
+        .is_err());
         assert!(validate_query(
             Some("cursor=opaque-token"),
             "/app/v3/api/applications/app-1/deployments"
-        )
-        .is_ok());
-        // The legacy app site-scoped collection paths never existed in the
-        // OpenAPI authority; cursor on them must keep failing closed.
-        assert!(validate_query(
-            Some("cursor=opaque-token"),
-            "/app/v3/api/sites/site-1/source_versions"
         )
         .is_err());
         assert!(validate_query(

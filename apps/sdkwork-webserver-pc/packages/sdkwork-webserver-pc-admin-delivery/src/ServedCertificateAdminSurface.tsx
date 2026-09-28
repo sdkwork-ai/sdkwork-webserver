@@ -7,7 +7,7 @@ import type {
 } from "@sdkwork/webserver-pc-admin-core";
 import { pollWebserverOperation, type WebserverLocale } from "@sdkwork/webserver-pc-commons";
 import { BadgeCheck, Ban, CalendarClock, FileKey2, Globe2, Plus, RefreshCw, RotateCw, Search, Trash2, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import {
@@ -103,7 +103,9 @@ export function ServedCertificateAdminSurface({ locale, resource }: ServedCertif
 
 function CertificateLedger({ locale }: { locale: WebserverLocale }) {
   const client = useWebserverAdminSdk();
-  const t = translator(locale);
+  // Memoized per locale: a fresh translator closure every render sat in the
+  // list effect's dependency array below and refetched the ledger forever.
+  const t = useMemo(() => translator(locale), [locale]);
   // The entry point from the Domains ledger, read the way the console's
   // Certificates page reads its own: a root domain plus the apex as a label. The
   // form then opens on the root domain alone and the operator picks hostnames
@@ -148,11 +150,17 @@ function CertificateLedger({ locale }: { locale: WebserverLocale }) {
     let active = true;
     setBusy(true);
     setError(undefined);
+    // The pager label names the page that actually loaded, so the requested
+    // page is captured now and adopted only when the fetch answers: a failed
+    // navigation keeps the rows still on screen together with their page
+    // number instead of labelling stale rows as the page that never loaded.
+    const requestedPage = cursorStack.length + 1;
     void client.certificate
       .list({ pageSize: PAGE_SIZE, cursor })
       .then((result) => {
         if (!active) return;
         setCertificates(result.items);
+        setPage(requestedPage);
         // `PageInfo.hasMore` is optional on the wire; an absent flag means "no
         // continuation", never "unknown", so it folds to `false` rather than
         // leaking `undefined` into the pager.
@@ -168,7 +176,7 @@ function CertificateLedger({ locale }: { locale: WebserverLocale }) {
     return () => {
       active = false;
     };
-  }, [build, client, cursor, page, t]);
+  }, [build, client, cursor, cursorStack, t]);
 
   const reload = () => {
     setCertificates(null);
@@ -184,25 +192,30 @@ function CertificateLedger({ locale }: { locale: WebserverLocale }) {
     if (!nextCursor || !hasMore) return;
     setCursorStack((stack) => [...stack, cursor ?? ""]);
     setCursor(nextCursor);
-    setPage((value) => value + 1);
+    // The page label follows the fetch: it advances when the requested page
+    // actually loads (the effect above), never before.
   };
 
   const gotoPreviousPage = () => {
     const previous = cursorStack[cursorStack.length - 1];
     setCursorStack((stack) => stack.slice(0, -1));
     setCursor(previous ? previous : undefined);
-    setPage((value) => Math.max(1, value - 1));
   };
 
   // Issue and renew answer 202 with a durable operation, not a finished row.
   // The ledger reloads immediately so the operator sees the operation in
   // flight, and the poller reloads again on the terminal state so success or
-  // failure shows up without a manual refresh.
+  // failure shows up without a manual refresh. A poll that ends without a
+  // verdict (deadline, transient network) surfaces through the banner rather
+  // than disappearing: closing this page never cancels the durable server
+  // work, only the observation of it.
   const trackOperation = (accepted: { operationId?: string } | undefined) => {
     const operationId = accepted?.operationId;
     if (!operationId) return;
     void pollWebserverOperation(operationId, (id, options) => client.certificate.operations.retrieve(id, options))
-      .catch(() => undefined)
+      .catch((cause) => {
+        setError(errorText(cause, t));
+      })
       .then(() => reload());
   };
 
@@ -227,7 +240,7 @@ function CertificateLedger({ locale }: { locale: WebserverLocale }) {
           <h1>{t("resource.certificates.admin.label")}</h1>
         </div>
         <div className="actions">
-          <button className="icon-button" disabled={busy} onClick={reload} title={t("resource.domains.refresh")} type="button">
+          <button aria-label={t("resource.domains.refresh")} className="icon-button" disabled={busy} onClick={reload} title={t("resource.domains.refresh")} type="button">
             <RefreshCw size={17} />
           </button>
           <button className="command-button" onClick={() => setIssueOpen(true)} type="button">
@@ -761,13 +774,48 @@ function HostnamePickerDialog({
     setDraft((current) => (current !== undefined && current.rootDomainId === rootDomainId ? current : undefined));
   };
 
-  const rowBlocked = (row: ApplicationDomainResponse) =>
-    scope === "SINGLE_DOMAIN" && isWildcardHostname(row.hostname);
+  /**
+   * Why the current certificate type refuses this row, or `undefined` when it
+   * accepts it.
+   *
+   * Three refusals, and each one is a request the server would refuse anyway, so
+   * offering the row would only move the failure to the submit:
+   *
+   * * **Unverified.** Issuance resolves `domainIds` against rows whose
+   *   verification status is `VERIFIED`, so a name without ownership evidence
+   *   cannot be covered by any certificate. `PRD-https-and-certificates` §4
+   *   states the same rule from the form's side: only `isVerified` assets are
+   *   selectable, and the server's own answer for the rest is "one or more
+   *   verified certificate domains are unavailable".
+   * * **A wildcard under `SINGLE_DOMAIN`** — no CA issues that pairing.
+   * * **An exact name under `WILDCARD`.** One name is chosen at a time, and the
+   *   server requires at least one `WILDCARD` identifier for that scope, so a
+   *   lone exact name can never satisfy it. A wildcard does not cover its own
+   *   apex (`*.example.com` serves one left DNS label, not `example.com`), so a
+   *   wildcard certificate built here covers the subtree and the apex keeps its
+   *   own certificate.
+   */
+  const rowRefusal = (row: ApplicationDomainResponse): MessageKey | undefined => {
+    if (!row.isVerified) return "resource.certificates.pickerRefusedUnverified";
+    if (scope === "SINGLE_DOMAIN") {
+      return isWildcardHostname(row.hostname)
+        ? "resource.certificates.singleDomainRejectsWildcard"
+        : undefined;
+    }
+    return isWildcardHostname(row.hostname)
+      ? undefined
+      : "resource.certificates.pickerRefusedExactUnderWildcard";
+  };
 
   const needle = filter.trim().toLowerCase();
   const candidateRows = rows ?? [];
   const listed =
     needle === "" ? candidateRows : candidateRows.filter((row) => row.hostname.toLowerCase().includes(needle));
+  // A wildcard certificate can only be built from a hostname declared in the
+  // wildcard form, and that form is not something this dialog can create — it is
+  // a record name under the root domain, declared on the Domains page. Saying so
+  // here is what keeps the scope from reading as "there is nothing to choose".
+  const wildcardRows = candidateRows.filter((row) => isWildcardHostname(row.hostname)).length;
 
   return (
     <DialogBackdrop close={close}>
@@ -831,6 +879,17 @@ function HostnamePickerDialog({
                 />
               </div>
             ) : null}
+            {/* A wildcard scope with no wildcard hostname under this root domain
+                is the one state where every row is refused, so the pane says what
+                is missing and where it is declared instead of leaving the operator
+                to infer it from a column of disabled radios. */}
+            {scope === "WILDCARD" && !busy && rows !== null && wildcardRows === 0 ? (
+              <small className="form-hint">
+                {t("resource.certificates.pickerNoWildcardHostname", {
+                  hostname: `*.${rootDomains?.find((root) => root.id === activeRootDomainId)?.hostname ?? ""}`,
+                })}
+              </small>
+            ) : null}
             {/* A table, not a grid of cards. The same facts sit under every name —
                 which record it is, what the name is, whether control of it is
                 proven, what serves it, and how many certificates already claim it —
@@ -879,8 +938,12 @@ function HostnamePickerDialog({
                       // rather than hidden: the operator asked which hostnames this
                       // root domain has, and an answer that silently omitted the
                       // ones the scope cannot take would read as a root domain that
-                      // is missing them.
-                      const blocked = rowBlocked(row);
+                      // is missing them. The reason is written into the row as well
+                      // as its `title`, because a pointer-only explanation leaves a
+                      // keyboard or screen-reader operator with a row that is simply
+                      // dead.
+                      const refusal = rowRefusal(row);
+                      const blocked = refusal !== undefined;
                       const chosen = draft !== undefined && draft.id === row.id;
                       return (
                         // The row is the click target as well as its control: a
@@ -895,6 +958,7 @@ function HostnamePickerDialog({
                           onClick={() => {
                             if (!blocked) setDraft(row);
                           }}
+                          title={refusal === undefined ? undefined : t(refusal)}
                         >
                           <td className="selection-column">
                             <span className="hostname-choice">
@@ -925,6 +989,9 @@ function HostnamePickerDialog({
                                     ? t("resource.certificates.wildcard")
                                     : t("resource.certificates.exact")}
                                 </small>
+                                {refusal === undefined ? null : (
+                                  <small className="form-error">{t(refusal)}</small>
+                                )}
                               </span>
                             </span>
                           </td>
@@ -1093,6 +1160,10 @@ function IssueCertificateDialog({
   // Resolving the caller's target into the row it names, so a link from a
   // hostname row opens the form on that hostname rather than on an empty field
   // the operator has to rebuild.
+  //
+  // Only a verified row is taken. The picker refuses an unverified name for the
+  // same reason the issuance path does, and a seed that ignored that would reopen
+  // the form on exactly the choice the dialog had just been taught to refuse.
   const seeded = useRef(false);
   useEffect(() => {
     if (seeded.current || chosenRootDomainId === "") return;
@@ -1106,7 +1177,9 @@ function IssueCertificateDialog({
     void readAllPages((page) => client.domain.rootDomains.subdomains.list(chosenRootDomainId, page))
       .then((items) => {
         if (!active) return;
-        const row = items.find((item) => item.hostname.trim().toLowerCase() === target);
+        const row = items.find(
+          (item) => item.isVerified && item.hostname.trim().toLowerCase() === target,
+        );
         if (row !== undefined) setSelection(row);
       })
       .catch((cause) => {
@@ -1134,13 +1207,13 @@ function IssueCertificateDialog({
       ? undefined
       : "resource.certificates.renewBeforeDaysInvalid";
 
-  // Two of the three states here cannot be reached from inside the picker: it
-  // disables the rows the scope refuses, so a wildcard cannot be chosen under
-  // `SINGLE_DOMAIN` and an exact name cannot be chosen under `WILDCARD`. They are
-  // still reachable by changing the certificate type *after* choosing — nothing in
-  // the picker goes back and unsets a choice the new type cannot take — so the
-  // form reports the pair that is on screen now rather than trusting the order the
-  // two clicks happened in.
+  // The picker refuses exactly the rows each scope cannot take — a wildcard under
+  // `SINGLE_DOMAIN`, an exact name under `WILDCARD`, and an unverified name under
+  // either — so this pair is unreachable from inside it. It is still reachable by
+  // changing the certificate type *after* choosing, because nothing in the picker
+  // goes back and unsets a choice the new type cannot take, and by reopening a
+  // draft the caller seeded. The form therefore reports the pair that is on screen
+  // now rather than trusting the order the two clicks happened in.
   const selectionIssue: MessageKey | undefined =
     selection === undefined
       ? "resource.certificates.hostnameRequired"
