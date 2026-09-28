@@ -77,6 +77,26 @@ groups:
           description: "More than 100 wire-guard/parser/handshake rejections in 10 minutes (kind: {{ $labels.kind }}). A burst is usually a client bug, a scanner, or a hostile probe — worth one look, not necessarily a page."
           runbook_url: "docs/runbooks/troubleshooting.md"
 
+      - alert: SdkworkWebCertificateExpiringSoon
+        expr: sdkwork_webserver_certificate_expiring_soon > 0
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Certificates expiring within 30 days"
+          description: "{{ $value }} active certificate(s) enter their final 30 days. The certificate worker renews them; a value that keeps rising past the renewal window means the worker is stalled."
+          runbook_url: "docs/runbooks/certificate-incident.md"
+
+      - alert: SdkworkWebCertificateExpiryCritical
+        expr: sdkwork_webserver_certificate_expiry_seconds_min >= 0 and sdkwork_webserver_certificate_expiry_seconds_min < 172800
+        for: 30m
+        labels:
+          severity: critical
+        annotations:
+          summary: "An active certificate is inside its final 48 hours"
+          description: "The smallest seconds-to-expiry over served certificates dropped below 48h; issuance or renewal is not keeping up and a public hostname will fail TLS handshakes soon. (The -1 unknown state is excluded: it means no observation, not an imminent expiry.)"
+          runbook_url: "docs/runbooks/certificate-incident.md"
+
       - alert: SdkworkWebSocketDrainTimeouts
         expr: increase(sdkwork_web_data_plane_websocket_drain_timeouts_total[15m]) > 0
         labels:

@@ -475,6 +475,10 @@ impl WebRepositoryPort for WebRepository {
             .await
     }
 
+    async fn certificate_expiry_summary(&self) -> WebServiceResult<(i64, i64)> {
+        self.certificate_expiry_summary_repo().await
+    }
+
     async fn list_certificates(
         &self,
         tenant_id: i64,

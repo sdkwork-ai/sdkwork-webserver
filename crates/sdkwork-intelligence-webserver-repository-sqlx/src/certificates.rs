@@ -171,6 +171,32 @@ impl WebRepository {
     /// Keyset page over `(updated_at DESC, id DESC)` with an opaque cursor;
     /// fetches `page_size + 1` rows so `has_more` is exact and no COUNT runs
     /// against the per-issuance-growing certificate collection.
+    /// Cluster-wide certificate health for the operations metrics sampler:
+    /// the smallest seconds-to-expiry over active, non-revoked certificates
+    /// (-1 when none exist) and how many expire within 30 days. Fixed shape,
+    /// one row, no tenant scoping on purpose - the sampler runs inside the
+    /// edge process and reports the whole served set, the same scope the TLS
+    /// material publisher distributes.
+    pub(super) async fn certificate_expiry_summary_repo(&self) -> WebServiceResult<(i64, i64)> {
+        let row = sqlx::query(
+            "SELECT COALESCE(MIN(EXTRACT(EPOCH FROM (not_after - NOW())))::BIGINT, -1)
+                    AS min_seconds,
+                    COUNT(*) FILTER (WHERE not_after < NOW() + INTERVAL '30 days') AS expiring_soon
+             FROM webserver_certificate
+             WHERE deleted_at IS NULL AND status = 1",
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|error| store_error("summarize webserver_certificate expiry", error))?;
+        let min_seconds = row
+            .try_get::<i64, _>("min_seconds")
+            .map_err(|error| store_error("map webserver_certificate min expiry", error))?;
+        let expiring_soon = row
+            .try_get::<i64, _>("expiring_soon")
+            .map_err(|error| store_error("map webserver_certificate expiring count", error))?;
+        Ok((min_seconds, expiring_soon))
+    }
+
     async fn list_certificates_cursor_repo(
         &self,
         tenant_id: i64,

@@ -236,9 +236,15 @@ pressure, upstream transport-failure/timeout ratios, sustained request
 rejection, protocol-error bursts, WebSocket drain timeouts), and backup
 sets can now be encrypted at rest (`SDKWORK_BACKUP_AGE_RECIPIENT`,
 fail-closed when the age binary is missing; all three restore paths handle
-the encrypted set). Rules that would need series the registry does not
-carry — certificate expiry, node convergence, rollout state — are
-deliberately absent until their series exist; the cross-repo sandbox
+the encrypted set). Certificate expiry joined the
+registry as its own management-side snapshot (`data_plane::certificates_metrics`):
+a bounded, shutdown-aware sampler on the `data-plane` command reads the
+minimum seconds-to-expiry over active certificates plus the 30-day count
+through the shared pool and the operations `/metrics` handler renders the
+two gauges, and two alerts consume them (30-day warning, 48-hour critical;
+the -1 no-observation state is never read as an expiry). Node convergence
+and rollout state remain deliberately absent until their series exist;
+the cross-repo sandbox
 contract test now pins the restructured sibling surface (machine-only
 routes, menu codes grantable) instead of reading the retired app-api crate.
 

@@ -28,18 +28,17 @@ the corresponding metric series (tracked in TECH_ARCHITECTURE.md and the
 troubleshooting runbook). Until then, certificate-expiry detection runs
 through `bin/doctor.sh` and the certificate-incident runbook's SQL checks.
 
-## Next slice (decided design, not yet implemented)
+## Certificate expiry series (implemented)
 
-Certificate-expiry series follow the tunnel precedent: the operations
-`/metrics` handler already appends `tunnel.metrics.render_prometheus()` next
-to the data-plane registry, so the expiry series get their own small registry
-(`CertificateExpiryMetrics`) owned by the management side — never widening the
-data-plane registry's charter (REQ-2026-0033/0034). A supervised sampler
-task (shutdown-watch aware, like every background supervisor) runs on the
-management side where the repository handle lives, queries the minimum
-`not_after` over active, non-revoked certificates plus the count expiring
-within 30 days through a new dedicated repository port method, and stores two
-atomic values the renderer emits as
-`sdkwork_webserver_certificate_expiry_seconds_min` (gauge, -1 = unknown) and
-`sdkwork_webserver_certificate_expiring_soon` (gauge). The corresponding
-alerts then join this rule file.
+`sdkwork_webserver_certificate_expiry_seconds_min` (gauge; -1 = no
+observation yet) and `sdkwork_webserver_certificate_expiring_soon` are
+sampled by the `data-plane` command: a supervised, shutdown-aware task
+(`SDKWORK_WEBSERVER_CERT_METRICS_INTERVAL_SECS`, default 300 s, clamped
+30..3600) reads the minimum seconds-to-expiry over active, non-revoked
+certificates plus the 30-day expiring count through the shared database
+pool and records them into the snapshot the operations `/metrics` handler
+renders. Sampling is best effort by design — an edge without a
+control-plane database simply reports "no observation" (PRD-FR-015); a
+failed sample leaves the last value and logs. The two certificate alerts
+in `prometheus-rules.yml` consume these series; node-divergence and
+rollout-state alerts remain absent until their series exist.

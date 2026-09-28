@@ -8,6 +8,7 @@ rust-version.workspace = true
 default = ["management"]
 management = [
   "dep:sdkwork-api-webserver-assembly",
+  "dep:sdkwork-intelligence-webserver-repository-sqlx",
   "dep:sdkwork-api-iam-assembly",
   "dep:sdkwork-api-drive-assembly",
   "dep:sdkwork-api-skills-assembly",
@@ -45,6 +46,7 @@ sdkwork-api-drive-assembly = { workspace = true, optional = true }
 sdkwork-api-skills-assembly = { workspace = true, optional = true }
 sdkwork-api-mcp-assembly = { workspace = true, optional = true }
 sdkwork-api-sandbox-assembly = { workspace = true, optional = true }
+sdkwork-intelligence-webserver-repository-sqlx = { workspace = true, optional = true }
 async-trait.workspace = true
 atomic-waker.workspace = true
 arc-swap.workspace = true

@@ -46,6 +46,12 @@ impl WebService {
         Ok(())
     }
 
+    /// Cluster-wide certificate health read for the operations metrics
+    /// sampler; see the repository query for the exact shape.
+    pub async fn certificate_expiry_summary(&self) -> WebServiceResult<(i64, i64)> {
+        self.repository.certificate_expiry_summary().await
+    }
+
     pub async fn enqueue_certificate_issue(
         &self,
         context: &WebAppRequestContext,

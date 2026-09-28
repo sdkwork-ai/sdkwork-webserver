@@ -116,6 +116,7 @@ async fn run() -> MainResult<()> {
                     format!("data-plane operations config is invalid: {error}"),
                 )
             })?;
+            spawn_certificate_expiry_sampler();
             run_data_plane_command(
                 config_path(arguments.next())?,
                 format_override,
@@ -440,6 +441,58 @@ async fn run_management_plane() -> MainResult<()> {
         .with_graceful_shutdown(shutdown_signal())
         .await?;
     Ok(())
+}
+
+/// Samples cluster-wide certificate expiry into the operations metrics
+/// snapshot (`data_plane::certificates_metrics`). Best effort by design: the
+/// edge serves without the control-plane database (PRD-FR-015), so a failed
+/// bootstrap or a failed sample leaves the last observation in place and logs
+/// - the gauges honestly report "no observation" (-1) until one lands. The
+/// interval is env-tunable and bounded; sampling is a periodic read, never a
+/// request-path dependency.
+fn spawn_certificate_expiry_sampler() {
+    const DEFAULT_INTERVAL_SECS: u64 = 300;
+    const MIN_INTERVAL_SECS: u64 = 30;
+    const MAX_INTERVAL_SECS: u64 = 3_600;
+    let interval_secs = std::env::var("SDKWORK_WEBSERVER_CERT_METRICS_INTERVAL_SECS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map(|value| value.clamp(MIN_INTERVAL_SECS, MAX_INTERVAL_SECS))
+        .unwrap_or(DEFAULT_INTERVAL_SECS);
+    tokio::spawn(async move {
+        sdkwork_database_sqlx::enable_process_shared_database_pool();
+        let runtime =
+            match sdkwork_intelligence_webserver_repository_sqlx::bootstrap_web_runtime_from_env()
+                .await
+            {
+                Ok(runtime) => runtime,
+                Err(error) => {
+                    tracing::info!(
+                        error = %error,
+                        "certificate expiry sampler disabled: no control-plane database is configured for this edge"
+                    );
+                    return;
+                }
+            };
+        tracing::info!(interval_secs, "certificate expiry sampler started");
+        loop {
+            tokio::select! {
+                _ = tokio::time::sleep(std::time::Duration::from_secs(interval_secs)) => {}
+                _ = shutdown_signal() => return,
+            }
+            match runtime.service.certificate_expiry_summary().await {
+                Ok((minimum_seconds, expiring_soon)) => {
+                    sdkwork_api_webserver_standalone_gateway::record_certificate_expiry(
+                        minimum_seconds,
+                        expiring_soon,
+                    );
+                }
+                Err(error) => {
+                    tracing::warn!(error = %error, "certificate expiry sample failed");
+                }
+            }
+        }
+    });
 }
 
 /// True when the bind host is the IPv4/IPv6 loopback (optionally with a

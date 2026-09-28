@@ -3,6 +3,7 @@ mod acme_challenge;
 mod active_health;
 pub(crate) mod cache;
 mod cache_policy;
+pub(crate) mod certificates_metrics;
 mod connection_limit;
 pub(crate) mod credential_entry_injection;
 mod dns;

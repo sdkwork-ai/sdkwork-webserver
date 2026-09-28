@@ -213,6 +213,7 @@ pub(crate) async fn serve_operations_listener(
                 if let Some(tunnel) = runtime.tunnel.as_ref() {
                     text.push_str(&tunnel.metrics.render_prometheus());
                 }
+                text.push_str(&super::certificates_metrics::render_prometheus());
                 (
                     StatusCode::OK,
                     [(

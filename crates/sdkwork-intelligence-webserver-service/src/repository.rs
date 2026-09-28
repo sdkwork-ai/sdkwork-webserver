@@ -754,6 +754,8 @@ pub trait WebRepositoryPort: Send + Sync {
         variable_id: &str,
     ) -> WebServiceResult<()>;
 
+    async fn certificate_expiry_summary(&self) -> WebServiceResult<(i64, i64)>;
+
     async fn list_certificates(
         &self,
         tenant_id: i64,
