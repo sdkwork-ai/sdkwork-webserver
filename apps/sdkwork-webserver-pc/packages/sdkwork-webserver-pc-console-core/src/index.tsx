@@ -68,6 +68,7 @@ export type {
 } from "./sandbox-client.ts";
 export {
   WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD,
+  WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD_RESOURCE_ID,
   WEBSERVER_PC_UPLOAD_DECLARATIONS,
 } from "./sdk/uploadDeclaration";
 export type {

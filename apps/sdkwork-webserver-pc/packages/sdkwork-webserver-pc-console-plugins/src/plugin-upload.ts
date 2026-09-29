@@ -2,6 +2,7 @@ import { Sha256Hasher } from "@sdkwork/utils/crypto";
 import { hexEncode } from "@sdkwork/utils/encoding";
 import {
   WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD,
+  WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD_RESOURCE_ID,
   type SdkworkDriveAppClient,
 } from "@sdkwork/webserver-pc-console-core";
 
@@ -34,7 +35,7 @@ export async function uploadPluginArchive(
   const uploaded = await drive.uploader.uploadArchive({
     file,
     appResourceType: WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD.appResourceType,
-    appResourceId: file.name,
+    appResourceId: WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD_RESOURCE_ID,
     scene: WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD.scene,
     source: WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD.source,
     originalFileName: file.name,

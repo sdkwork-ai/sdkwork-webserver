@@ -28,7 +28,7 @@ export const WEBSERVER_PC_UPLOAD_SOURCE = 'sdkwork-webserver-pc' as const;
 
 /** A published plugin package archive uploaded from the web console. */
 export const WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD = {
-  appResourceIdKind: 'entity',
+  appResourceIdKind: 'application',
   appResourceType: 'web.plugin.package',
   purpose: 'Plugin package archive uploaded from the web console.',
   retention: 'long_term',
@@ -36,6 +36,16 @@ export const WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD = {
   source: WEBSERVER_PC_UPLOAD_SOURCE,
   uploadProfileCode: 'archive',
 } as const satisfies WebserverPcUploadDeclarationEntry;
+
+/**
+ * Stable application-scope resource id sent as `appResourceId` for plugin archives.
+ *
+ * The create flow uploads the archive before any plugin entity exists, so the id must not be
+ * derived from the uploaded file's name (`DRIVE_SPEC.md` section 18.3): a runtime file name is
+ * neither an entity identifier nor a stable statistic dimension. The original file name already
+ * travels as `originalFileName`.
+ */
+export const WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD_RESOURCE_ID = 'plugin-package-archive' as const;
 
 /** Every declared upload purpose for this application. */
 export const WEBSERVER_PC_UPLOAD_DECLARATIONS: readonly WebserverPcUploadDeclarationEntry[] = [
