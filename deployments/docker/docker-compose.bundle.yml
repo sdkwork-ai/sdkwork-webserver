@@ -141,6 +141,10 @@ x-webserver-common: &webserver-common
     # passes explicitly mapped variables into the container (pass-through trap).
     # Encrypted tenant secret_refs cannot be decoded without it.
     SDKWORK_IAM_SIGNING_MASTER_SECRET: ${SDKWORK_IAM_SIGNING_MASTER_SECRET:-}
+    # IAM provider-credential master secret: fail-closed envelope key for stored
+    # provider credentials (drive storage accounts). Storage provider bootstrap
+    # and account writes return 50001 without it.
+    SDKWORK_IAM_PROVIDER_CREDENTIAL_MASTER_SECRET: ${SDKWORK_IAM_PROVIDER_CREDENTIAL_MASTER_SECRET:-}
     # Adaptive Web static roots (SDKWORK_WEBSERVER_SPEC.md §13.6): the webserver
     # process serves its own standalone build from the checkout when overridden,
     # falling back to the bundled image roots.

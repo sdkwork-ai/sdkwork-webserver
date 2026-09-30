@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use sdkwork_drive_config::DatabaseConfig;
-use sdkwork_drive_object_runtime::DriveObjectStoreRuntime;
+use sdkwork_drive_object_runtime::{DriveObjectStoreRuntime, ProviderAccessIntent};
 use sdkwork_drive_uploader_service::service::{
     DriveUploaderService, PrepareUploaderUploadCommand, SqlUploaderStore, UploadBytesCommand,
     UploaderActor, UploaderRetention, UploaderTarget,
@@ -11,7 +11,6 @@ use sdkwork_intelligence_webserver_service::{
 };
 use sdkwork_webserver_contract::{SourceVersionConfigSnapshot, WebServiceError, WebServiceResult};
 use sha2::{Digest, Sha256};
-use sqlx::PgPool;
 use std::io::{Cursor, Write};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
@@ -39,7 +38,6 @@ const MAXIMUM_GIT_IMPORT_CONCURRENCY: usize = 16;
 const GIT_IMPORT_CONCURRENCY_ENV: &str = "SDKWORK_WEBSERVER_GIT_IMPORT_CONCURRENCY";
 
 pub struct GitDriveSourceImporter {
-    pool: PgPool,
     uploader: DriveUploaderService<SqlUploaderStore>,
     object_runtime: DriveObjectStoreRuntime,
     import_permits: Arc<Semaphore>,
@@ -68,8 +66,7 @@ impl GitDriveSourceImporter {
         }
         Ok(Self {
             uploader: DriveUploaderService::new(SqlUploaderStore::new(pool.clone())),
-            object_runtime: DriveObjectStoreRuntime::new(pool.clone()),
-            pool,
+            object_runtime: DriveObjectStoreRuntime::new(pool),
             import_permits: Arc::new(Semaphore::new(concurrency)),
         })
     }
@@ -126,21 +123,9 @@ impl GitDriveSourceImporter {
         let provider_id = prepared.storage_provider_id.as_deref().ok_or_else(|| {
             WebServiceError::Internal("Drive upload is missing a storage provider".to_string())
         })?;
-        let provider_version: i64 = sqlx::query_scalar(
-            "SELECT version FROM dr_drive_storage_provider WHERE id = $1 AND status = 'active'",
-        )
-        .bind(provider_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|error| {
-            WebServiceError::Internal(format!("resolve Drive storage provider failed: {error}"))
-        })?
-        .ok_or_else(|| {
-            WebServiceError::Internal("Drive storage provider is unavailable".to_string())
-        })?;
         let object_store = self
             .object_runtime
-            .resolve(provider_id, provider_version)
+            .resolve(provider_id, ProviderAccessIntent::Write)
             .await
             .map_err(|error| {
                 WebServiceError::Internal(format!("resolve Drive object store failed: {error}"))

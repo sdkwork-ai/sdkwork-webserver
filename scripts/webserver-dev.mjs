@@ -26,6 +26,17 @@ const CRITICAL_SOURCE_FILES = [
   'scripts/lib/webserver-topology.mjs',
 ];
 
+// Provider credentials (drive storage accounts) are sealed with a fail-closed
+// AES-256-GCM envelope keyed by this variable, and the seal refuses to run
+// without it (SDKWORK_IAM_PROVIDER_CREDENTIAL_MASTER_SECRET in the IAM
+// envelope contract). The value is sealed into stored envelopes, so the
+// development default has to stay stable across restarts or previously seeded
+// credentials become unreadable. Operators override it through the process
+// environment; non-development runs fail fast instead of using a known value.
+const PROVIDER_CREDENTIAL_MASTER_SECRET_ENV = 'SDKWORK_IAM_PROVIDER_CREDENTIAL_MASTER_SECRET';
+const DEVELOPMENT_PROVIDER_CREDENTIAL_MASTER_SECRET =
+  'dev-only-sdkwork-webserver-provider-credential-master-secret';
+
 function parseArgs(argv) {
   const settings = {
     database: 'postgres',
@@ -87,6 +98,19 @@ function ensureCriticalSources() {
   });
 }
 
+function resolveProviderCredentialMasterSecret(settings) {
+  const provided = process.env[PROVIDER_CREDENTIAL_MASTER_SECRET_ENV];
+  if (provided !== undefined && provided.trim().length > 0) {
+    return { defaulted: false, value: provided.trim() };
+  }
+  if (settings.environment === 'development') {
+    return { defaulted: true, value: DEVELOPMENT_PROVIDER_CREDENTIAL_MASTER_SECRET };
+  }
+  throw new Error(
+    `${PROVIDER_CREDENTIAL_MASTER_SECRET_ENV} must be configured before provider credentials can be stored; generate one with: openssl rand -base64 32`,
+  );
+}
+
 function buildRuntimeEnv(settings) {
   const profileId = `${settings.deploymentProfile}.${settings.environment}`;
   const profileEnv = loadProfile(profileId);
@@ -96,9 +120,11 @@ function buildRuntimeEnv(settings) {
   );
   const databaseSource = path.relative(REPO_ROOT, path.resolve(REPO_ROOT, settings.devEnvFile));
   const autoMigrate = settings.environment === 'development' ? 'true' : 'false';
+  const providerCredentialMasterSecret = resolveProviderCredentialMasterSecret(settings);
 
   return {
     databaseSource,
+    providerCredentialMasterSecretDefaulted: providerCredentialMasterSecret.defaulted,
     env: {
       ...iamEnv,
       ...IAM_APPLICATION_BOOTSTRAP_ENV,
@@ -111,6 +137,7 @@ function buildRuntimeEnv(settings) {
       SDKWORK_WEBSERVER_APP_ROOT: REPO_ROOT,
       SDKWORK_WEBSERVER_RUNTIME_TARGET: 'server',
       SDKWORK_WEBSERVER_SNOWFLAKE_NODE_ID: process.env.SDKWORK_WEBSERVER_SNOWFLAKE_NODE_ID ?? '0',
+      [PROVIDER_CREDENTIAL_MASTER_SECRET_ENV]: providerCredentialMasterSecret.value,
     },
   };
 }
@@ -131,6 +158,11 @@ async function run() {
   console.log(
     `[sdkwork-web] managementUrl=${runtime.env.SDKWORK_WEBSERVER_APPLICATION_PUBLIC_HTTP_URL}`,
   );
+  if (runtime.providerCredentialMasterSecretDefaulted) {
+    console.log(
+      `[sdkwork-web] ${PROVIDER_CREDENTIAL_MASTER_SECRET_ENV}=development-default (override via the process environment)`,
+    );
+  }
 
   const command = process.platform === 'win32' ? 'cargo.exe' : 'cargo';
   const args = [

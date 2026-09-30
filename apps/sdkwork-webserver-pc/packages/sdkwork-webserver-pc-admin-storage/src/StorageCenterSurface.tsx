@@ -74,8 +74,15 @@ export function StorageCenterSurface({
   tokenManager,
 }: StorageCenterSurfaceProps) {
   const adminStorageSdkClient = useMemo(
-    () => createDriveAdminStorageHostClient({ baseUrl: adminStorageApiBaseUrl, tokenManager }),
-    [adminStorageApiBaseUrl, tokenManager],
+    () =>
+      createDriveAdminStorageHostClient({
+        baseUrl: adminStorageApiBaseUrl,
+        tokenManager,
+        // Locale-sensitive backend fields (provider-kind display names) follow
+        // the host language through the standard Accept-Language header.
+        locale,
+      }),
+    [adminStorageApiBaseUrl, tokenManager, locale],
   );
   // The shared pages read exactly two session facts — the tenant they act in
   // and the actor a mutation is attributed to — so the adapter projects those
