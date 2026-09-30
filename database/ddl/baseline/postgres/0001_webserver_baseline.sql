@@ -1987,6 +1987,349 @@ ALTER TABLE webserver_application
         'IOS_APP', 'ANDROID_APP', 'HARMONYOS_APP'
     ));
 
+-- folded migration: migrations/postgres/0011_application_list_covering_index.up.sql
+-- sdkwork:migration
+-- id: 0011_application_list_covering_index
+-- engine: postgres
+-- module: web
+-- description: Adds the covering index for the tenant application listing
+--   (ORDER BY updated_at DESC, id DESC with a tenant_id equality predicate
+--   and no status predicate). The existing indexes lead with status or
+--   user_id, so every page of applications.list sorted the tenant's whole
+--   application set. The new index matches the repository's keyset convention
+--   (tenant_id, updated_at DESC, id DESC) and is partial on deleted_at IS
+--   NULL to mirror the listing predicate.
+-- reversible: true
+-- rollback: down-migration drops the index
+-- transactional: true
+-- lock: lightweight
+-- lock_timeout: 2s
+-- statement_timeout: 30s
+
+CREATE INDEX IF NOT EXISTS idx_webserver_application_tenant_updated_id
+    ON webserver_application (tenant_id, updated_at DESC, id DESC)
+    WHERE deleted_at IS NULL;
+
+-- folded migration: migrations/postgres/0014_webserver_cluster_join_modes_and_sync.up.sql
+-- sdkwork:migration
+-- id: 0014_webserver_cluster_join_modes_and_sync
+-- engine: postgres
+-- module: web
+-- reversible: true
+
+-- Cluster plane v2: per-host/instance join mode (LAN same-subnet vs TUNNEL
+-- API-only remote), node service-quality scores, and the configuration /
+-- application data-sync plane (desired revisions + per-instance applied
+-- acknowledgments). Tenant 0 = platform-shared cluster infrastructure.
+
+ALTER TABLE webserver_cluster_host
+    ADD COLUMN IF NOT EXISTS join_mode INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS tunnel_route_domain VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS tunnel_endpoint VARCHAR(255);
+
+ALTER TABLE webserver_cluster_host
+    DROP CONSTRAINT IF EXISTS chk_webserver_cluster_host_join_mode;
+ALTER TABLE webserver_cluster_host
+    ADD CONSTRAINT chk_webserver_cluster_host_join_mode CHECK (join_mode BETWEEN 0 AND 1);
+
+COMMENT ON COLUMN webserver_cluster_host.join_mode IS 'Join mode: 0=LAN (same-subnet direct API/shared database), 1=TUNNEL (API-only through the reverse tunnel)';
+COMMENT ON COLUMN webserver_cluster_host.tunnel_route_domain IS 'Tunnel route domain that reaches this host through the public gateway (TUNNEL hosts)';
+COMMENT ON COLUMN webserver_cluster_host.tunnel_endpoint IS 'Advertised gateway endpoint (host:port) this host dials for its tunnel (TUNNEL hosts)';
+
+CREATE INDEX IF NOT EXISTS idx_webserver_cluster_host_cluster_join_mode
+    ON webserver_cluster_host (tenant_id, cluster_id, join_mode)
+    WHERE deleted_at IS NULL;
+
+ALTER TABLE webserver_cluster_instance
+    ADD COLUMN IF NOT EXISTS join_mode INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS tunnel_route_domain VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS quality_score INTEGER,
+    ADD COLUMN IF NOT EXISTS desired_config_revision VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS applied_config_revision VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS desired_applications_revision VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS applied_applications_revision VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS sync_status INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE webserver_cluster_instance
+    DROP CONSTRAINT IF EXISTS chk_webserver_cluster_instance_join_mode;
+ALTER TABLE webserver_cluster_instance
+    ADD CONSTRAINT chk_webserver_cluster_instance_join_mode CHECK (join_mode BETWEEN 0 AND 1);
+
+ALTER TABLE webserver_cluster_instance
+    DROP CONSTRAINT IF EXISTS chk_webserver_cluster_instance_quality_score;
+ALTER TABLE webserver_cluster_instance
+    ADD CONSTRAINT chk_webserver_cluster_instance_quality_score CHECK (quality_score IS NULL OR quality_score BETWEEN 0 AND 100);
+
+ALTER TABLE webserver_cluster_instance
+    DROP CONSTRAINT IF EXISTS chk_webserver_cluster_instance_sync_status;
+ALTER TABLE webserver_cluster_instance
+    ADD CONSTRAINT chk_webserver_cluster_instance_sync_status CHECK (sync_status BETWEEN 0 AND 3);
+
+COMMENT ON COLUMN webserver_cluster_instance.join_mode IS 'Join mode: 0=LAN (same-subnet direct API/shared database), 1=TUNNEL (API-only through the reverse tunnel)';
+COMMENT ON COLUMN webserver_cluster_instance.tunnel_route_domain IS 'Tunnel route domain that reaches this instance through the public gateway (TUNNEL instances)';
+COMMENT ON COLUMN webserver_cluster_instance.quality_score IS 'Node service quality score 0..=100 derived from the latest heartbeat quality sample';
+COMMENT ON COLUMN webserver_cluster_instance.desired_config_revision IS 'Desired configuration revision (sync plane); NULL until the cluster publishes one';
+COMMENT ON COLUMN webserver_cluster_instance.applied_config_revision IS 'Configuration revision the instance last acknowledged as applied';
+COMMENT ON COLUMN webserver_cluster_instance.desired_applications_revision IS 'Desired applications-manifest revision (sync plane); NULL until published';
+COMMENT ON COLUMN webserver_cluster_instance.applied_applications_revision IS 'Applications-manifest revision the instance last acknowledged as applied';
+COMMENT ON COLUMN webserver_cluster_instance.sync_status IS 'Aggregate sync status: 0=unknown, 1=in_sync, 2=pending, 3=failed';
+
+CREATE INDEX IF NOT EXISTS idx_webserver_cluster_instance_cluster_join_mode
+    ON webserver_cluster_instance (tenant_id, cluster_id, join_mode, status)
+    WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_webserver_cluster_instance_sync_status
+    ON webserver_cluster_instance (tenant_id, cluster_id, sync_status)
+    WHERE deleted_at IS NULL;
+
+-- Desired-state revisions published by the cluster administrator. One row
+-- per (cluster, kind, revision); the latest row per kind is the desired
+-- state every instance must apply and acknowledge.
+CREATE TABLE IF NOT EXISTS webserver_cluster_sync_revision (
+    id            BIGINT       NOT NULL,
+    uuid          VARCHAR(64)  NOT NULL,
+    tenant_id     BIGINT       NOT NULL DEFAULT 0,
+    cluster_id    BIGINT       NOT NULL,
+    kind          INTEGER      NOT NULL,
+    revision      VARCHAR(64)  NOT NULL,
+    sha256        VARCHAR(64)  NOT NULL,
+    payload       JSONB        NOT NULL,
+    size_bytes    BIGINT       NOT NULL DEFAULT 0,
+    created_by    VARCHAR(100),
+    created_at    TIMESTAMPTZ  NOT NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_webserver_cluster_sync_uuid UNIQUE (uuid),
+    CONSTRAINT uk_webserver_cluster_sync_revision UNIQUE (tenant_id, cluster_id, kind, revision),
+    CONSTRAINT fk_webserver_cluster_sync_cluster FOREIGN KEY (tenant_id, cluster_id)
+        REFERENCES webserver_cluster (tenant_id, id),
+    CONSTRAINT chk_webserver_cluster_sync_kind CHECK (kind BETWEEN 0 AND 1)
+);
+
+COMMENT ON TABLE webserver_cluster_sync_revision IS 'Desired-state revision published to cluster instances (config / applications sync plane)';
+COMMENT ON COLUMN webserver_cluster_sync_revision.kind IS 'Sync payload kind: 0=config (webserver runtime configuration), 1=applications (application management manifest)';
+COMMENT ON COLUMN webserver_cluster_sync_revision.revision IS 'Monotonic revision label (snowflake id string) used by instances to detect drift';
+COMMENT ON COLUMN webserver_cluster_sync_revision.sha256 IS 'SHA-256 of the canonical payload JSON for integrity verification on the node';
+COMMENT ON COLUMN webserver_cluster_sync_revision.payload IS 'Desired-state payload (JSON document the node applies)';
+COMMENT ON COLUMN webserver_cluster_sync_revision.size_bytes IS 'Serialized payload size in bytes';
+
+-- Listing the sync history of one cluster, newest first.
+CREATE INDEX IF NOT EXISTS idx_webserver_cluster_sync_cluster_kind_created
+    ON webserver_cluster_sync_revision (tenant_id, cluster_id, kind, created_at DESC);
+
+-- folded migration: migrations/postgres/0015_webserver_cluster_load_balancing.up.sql
+-- sdkwork:migration
+-- id: 0015_webserver_cluster_load_balancing
+-- engine: postgres
+-- module: web
+-- reversible: true
+
+-- Cluster auto-routing configuration: the load balancing strategy used when
+-- routing requests across the cluster's healthy instances, and the service
+-- domains the cluster serves (auto-routing matches request hosts against
+-- these).
+
+ALTER TABLE webserver_cluster
+    ADD COLUMN IF NOT EXISTS lb_strategy VARCHAR(32) NOT NULL DEFAULT 'round_robin',
+    ADD COLUMN IF NOT EXISTS served_domains JSONB NOT NULL DEFAULT '[]';
+
+COMMENT ON COLUMN webserver_cluster.lb_strategy IS 'Request routing strategy across cluster instances: round_robin (default) | weighted_round_robin | least_connections | random | random_two_choices | ip_hash | consistent_hash';
+COMMENT ON COLUMN webserver_cluster.served_domains IS 'Service domains auto-routed to cluster instances (JSON array, lowercase)';
+
+-- folded migration: migrations/postgres/0016_webserver_cluster_instance_ops.up.sql
+-- sdkwork:migration
+-- id: 0016_webserver_cluster_instance_ops
+-- engine: postgres
+-- module: web
+-- reversible: true
+
+-- Per-instance operations: graceful drain, routing cordon/uncordon, labels,
+-- restart tracking (auto-recovery evidence), and active-probe auto-eject /
+-- auto-recover state.
+
+ALTER TABLE webserver_cluster_instance
+    ADD COLUMN IF NOT EXISTS routing_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS draining BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS drain_started_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS restart_count INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS last_restarted_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS ejected_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS probe_failures INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS probe_url VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS labels JSONB NOT NULL DEFAULT '{}';
+
+COMMENT ON COLUMN webserver_cluster_instance.routing_enabled IS 'Cordon switch: FALSE removes the instance from the routing pool while it keeps serving existing work';
+COMMENT ON COLUMN webserver_cluster_instance.draining IS 'Graceful drain in progress: excluded from routing and expected to stop after in-flight work completes';
+COMMENT ON COLUMN webserver_cluster_instance.drain_started_at IS 'Drain start instant (NULL when not draining)';
+COMMENT ON COLUMN webserver_cluster_instance.restart_count IS 'Process restarts observed via registration (process_started_at changes); auto-recovery evidence';
+COMMENT ON COLUMN webserver_cluster_instance.last_restarted_at IS 'Latest observed restart instant';
+COMMENT ON COLUMN webserver_cluster_instance.ejected_at IS 'Set when the active prober auto-ejects the instance; cleared on probe recovery';
+COMMENT ON COLUMN webserver_cluster_instance.probe_failures IS 'Consecutive active-probe failures';
+COMMENT ON COLUMN webserver_cluster_instance.probe_url IS 'Override URL the active prober checks (defaults to the instance bind endpoint)';
+COMMENT ON COLUMN webserver_cluster_instance.labels IS 'Operator labels JSON object (free-form organization metadata)';
+
+CREATE INDEX IF NOT EXISTS idx_webserver_cluster_instance_routing
+    ON webserver_cluster_instance (tenant_id, cluster_id, routing_enabled, draining)
+    WHERE deleted_at IS NULL;
+
+-- folded migration: migrations/postgres/0017_webserver_cluster_instance_detail.up.sql
+-- sdkwork:migration
+-- id: 0017_webserver_cluster_instance_detail
+-- engine: postgres
+-- module: web
+-- reversible: true
+
+-- Per-instance flexible configuration: routing weight override (LB input)
+-- and operator maintenance note (instance detail context).
+
+ALTER TABLE webserver_cluster_instance
+    ADD COLUMN IF NOT EXISTS routing_weight INTEGER NOT NULL DEFAULT 1,
+    ADD COLUMN IF NOT EXISTS maintenance_note VARCHAR(255);
+
+ALTER TABLE webserver_cluster_instance
+    DROP CONSTRAINT IF EXISTS chk_webserver_cluster_instance_routing_weight;
+ALTER TABLE webserver_cluster_instance
+    ADD CONSTRAINT chk_webserver_cluster_instance_routing_weight
+    CHECK (routing_weight BETWEEN 1 AND 10000);
+
+COMMENT ON COLUMN webserver_cluster_instance.routing_weight IS 'Per-instance load balancing weight override (1..=10000); consumed by the routing topology';
+COMMENT ON COLUMN webserver_cluster_instance.maintenance_note IS 'Operator maintenance reason/context shown on the instance detail surface';
+
+-- folded migration: migrations/postgres/0018_webserver_cluster_instance_slot_identity.up.sql
+-- sdkwork:migration
+-- id: 0018_webserver_cluster_instance_slot_identity
+-- engine: postgres
+-- module: web
+-- description: Gives a cluster instance a stable identity derived from the
+--   listening slot (host + bind address + bind port) instead of the operating
+--   system process id. Registration previously upserted on
+--   (tenant_id, host_id, process_pid); a restarted process always carries a new
+--   pid, so the conflict target never matched and every restart inserted a new
+--   row with a new uuid. One edge host that restarts N times left N dead
+--   instance rows, none of which could ever be reused, and the operator-facing
+--   inventory could not be reconciled with the real topology. Instance identity
+--   is now the deployment slot (Kubernetes StatefulSet identity / Nomad alloc
+--   slot / Consul service-instance model): the same host listening on the same
+--   address keeps one row and one uuid across restarts, while pid, started-at,
+--   uptime and restart count are run-state observations of that slot.
+--   Existing duplicates are collapsed onto the newest row before the unique
+--   index is created, because the index cannot be built over a table that still
+--   contains the duplicated slots.
+-- reversible: true
+-- rollback: down-migration drops the generated identity column and restores the pid uniqueness
+-- transactional: true
+-- lock: access-exclusive
+-- lock_timeout: 30s
+-- statement_timeout: 120s
+
+-- ---------------------------------------------------------------------------
+-- 1. Stable identity column.
+--
+-- A slot is `bindHost:bindPort` (the address the instance actually listens on).
+-- An empty/absent bind host normalizes to `0.0.0.0` so `:8080` and
+-- `0.0.0.0:8080` are the same slot rather than two rows that never collide.
+-- Instances that report no bind port at all (`bindPort IS NULL`) have no slot
+-- identity to key on and keep the process-pid fallback, which is the only
+-- identity available for them; `pid:` is namespaced so it can never collide
+-- with a real `host:port` value.
+--
+-- The column is GENERATED ... STORED rather than application-supplied so the
+-- identity is a table invariant: no writer, including a direct SQL session, can
+-- register the same slot under two representations.
+-- ---------------------------------------------------------------------------
+ALTER TABLE webserver_cluster_instance
+    ADD COLUMN IF NOT EXISTS instance_key VARCHAR(160)
+    GENERATED ALWAYS AS (
+        CASE
+            WHEN bind_port IS NOT NULL
+                THEN COALESCE(NULLIF(BTRIM(bind_host), ''), '0.0.0.0') || ':' || bind_port::TEXT
+            WHEN process_pid IS NOT NULL
+                THEN 'pid:' || process_pid::TEXT
+            ELSE NULL
+        END
+    ) STORED;
+
+COMMENT ON COLUMN webserver_cluster_instance.instance_key IS
+    'Stable instance identity: `<bindHost|0.0.0.0>:<bindPort>` for listening instances, `pid:<processPid>` as the fallback when no bind port was reported (NULL when neither is known). Survives process restarts; run-state (pid, process_started_at, uptime, restart_count) is observed against it';
+
+-- ---------------------------------------------------------------------------
+-- 2. Collapse existing duplicate slots onto the newest row.
+--
+-- This MUST run before the unique index: the databases that hit the defect
+-- already contain N rows per slot, and CREATE UNIQUE INDEX would fail on them.
+-- The newest row per slot (highest updated_at, then highest id) is kept and
+-- inherits the number of rows folded into it as restart evidence - each
+-- collapsed row was the same slot running as a previous process. The other rows
+-- are soft-deleted so they release the slot for the unique index, and their
+-- lifecycle history stays auditable.
+-- ---------------------------------------------------------------------------
+WITH ranked AS (
+    SELECT id,
+           tenant_id,
+           host_id,
+           instance_key,
+           ROW_NUMBER() OVER (
+               PARTITION BY tenant_id, host_id, instance_key
+               ORDER BY updated_at DESC, id DESC
+           ) AS slot_rank,
+           COUNT(*) OVER (
+               PARTITION BY tenant_id, host_id, instance_key
+           ) - 1 AS collapsed_count
+    FROM webserver_cluster_instance
+    WHERE deleted_at IS NULL
+      AND instance_key IS NOT NULL
+)
+UPDATE webserver_cluster_instance AS instance
+   SET restart_count = instance.restart_count + ranked.collapsed_count,
+       updated_at = NOW(),
+       version = instance.version + 1
+  FROM ranked
+ WHERE instance.id = ranked.id
+   AND ranked.slot_rank = 1
+   AND ranked.collapsed_count > 0;
+
+WITH ranked AS (
+    SELECT id,
+           ROW_NUMBER() OVER (
+               PARTITION BY tenant_id, host_id, instance_key
+               ORDER BY updated_at DESC, id DESC
+           ) AS slot_rank
+    FROM webserver_cluster_instance
+    WHERE deleted_at IS NULL
+      AND instance_key IS NOT NULL
+)
+UPDATE webserver_cluster_instance AS instance
+   SET deleted_at = NOW(),
+       updated_at = NOW(),
+       version = instance.version + 1
+  FROM ranked
+ WHERE instance.id = ranked.id
+   AND ranked.slot_rank > 1;
+
+-- ---------------------------------------------------------------------------
+-- 3. The slot is the registration conflict target.
+--
+-- Soft-deleted rows release the slot, so a removed instance never blocks its
+-- own re-registration. `instance_key IS NOT NULL` keeps rows with no identity
+-- at all out of the constraint (they can only be produced by a caller that
+-- reports neither a bind port nor a pid, which validate_registration rejects
+-- on the service plane).
+-- ---------------------------------------------------------------------------
+CREATE UNIQUE INDEX IF NOT EXISTS uk_webserver_cluster_instance_slot
+    ON webserver_cluster_instance (tenant_id, host_id, instance_key)
+    WHERE deleted_at IS NULL AND instance_key IS NOT NULL;
+
+-- ---------------------------------------------------------------------------
+-- 4. Retire pid uniqueness.
+--
+-- The operating system reuses process ids, so this index could not express
+-- instance identity: it rejected a legitimate re-registration whenever a new
+-- process happened to reuse a pid still held by another slot's live row, while
+-- failing to collide on the case it was meant to catch (the same slot restarting
+-- under a new pid). Keeping it alongside the slot index would make the slot
+-- update fail on pid reuse, so it is dropped rather than demoted.
+-- ---------------------------------------------------------------------------
+DROP INDEX IF EXISTS uk_webserver_cluster_instance_process;
+
 -- folded migration: migrations/postgres/0020_webserver_application_surface_registry.up.sql
 -- sdkwork:migration
 -- id: 0020_webserver_application_surface_registry
