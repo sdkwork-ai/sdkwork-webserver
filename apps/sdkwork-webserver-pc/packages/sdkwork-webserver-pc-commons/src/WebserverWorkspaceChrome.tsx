@@ -3,27 +3,37 @@ import {
   AppWindow,
   Bell,
   Boxes,
+  Building2,
   ChartLine,
   CloudCog,
   Cpu,
   Globe2,
   HardDrive,
   House,
+  KeyRound,
+  KeySquare,
   LayoutDashboard,
   Layers3,
+  Link2,
   LogOut,
+  MessageCircle,
   Network,
   Puzzle,
   Plug,
+  QrCode,
   Rocket,
   ScrollText,
   Server,
   Settings2,
+  ShieldAlert,
   ShieldCheck,
+  Smartphone,
   Sparkles,
+  UserCog,
+  Users,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 
 import type { WebserverMessageKey } from "./i18n/index.ts";
 import type { WebserverResourceKey } from "./types.ts";
@@ -46,6 +56,14 @@ export interface WorkspaceModuleTab {
 }
 
 interface WorkspaceHeaderProps {
+  /**
+   * Module that owns the current route, resolved by the workspace through
+   * segment-aware longest-prefix matching over the module path prefixes. A tab
+   * stays selected for every page inside its module — its landing `href` is
+   * only the first entry, so react-router's own URL match would drop the
+   * selection the moment the operator opens a sibling entry.
+   */
+  activeModuleId?: string;
   adminRole?: string;
   basePath: string;
   /** Admin modules rendered as tabs. Omitted or single-entry → no tab bar. */
@@ -66,6 +84,7 @@ interface WorkspaceSidebarProps {
 }
 
 export function WorkspaceHeader({
+  activeModuleId,
   adminRole,
   basePath,
   moduleTabs,
@@ -98,17 +117,26 @@ export function WorkspaceHeader({
       <div className={`workspace-header-actions${hasModuleTabs ? " has-modules" : ""}`}>
         {hasModuleTabs ? (
           <nav aria-label={t("nav.modules")} className="workspace-header-nav">
-            {moduleTabs?.map((tab) => (
-              <NavLink
-                className={({ isActive }) => `workspace-module-tab${isActive ? " is-active" : ""}`}
-                key={tab.id}
-                title={tab.description ?? tab.label}
-                to={tab.href}
-              >
-                <ModuleIcon moduleId={tab.id} />
-                <span>{tab.label}</span>
-              </NavLink>
-            ))}
+            {moduleTabs?.map((tab) => {
+              // Selection follows module ownership of the current route, not
+              // NavLink's URL match: the tab's `href` is only the module's
+              // landing entry, so matching it would deselect the tab on every
+              // sibling entry of the same module. A plain `Link` keeps
+              // react-router from re-deriving activity/aria-current per URL.
+              const isActive = tab.id === activeModuleId;
+              return (
+                <Link
+                  aria-current={isActive ? "page" : undefined}
+                  className={`workspace-module-tab${isActive ? " is-active" : ""}`}
+                  key={tab.id}
+                  title={tab.description ?? tab.label}
+                  to={tab.href}
+                >
+                  <ModuleIcon moduleId={tab.id} />
+                  <span>{tab.label}</span>
+                </Link>
+              );
+            })}
           </nav>
         ) : null}
         <div className="workspace-header-account-group">
@@ -157,7 +185,11 @@ export function WorkspaceSidebar({ basePath, entries, surface, t }: WorkspaceSid
   // Ungrouped entries keep the leading, unlabelled nav they always had; a
   // declared section only adds a titled block beneath it, so a workspace with
   // no grouped resource renders byte-for-byte the same markup as before.
-  const groups = groupMenuEntries(entries);
+  // `groupMenuEntries` always emits the leading group (the caller decides
+  // whether it keeps the slot); a module that hands every entry to a section
+  // (Identity & Access does) would otherwise render an empty nav block, so the
+  // sidebar drops any group with nothing to draw.
+  const groups = groupMenuEntries(entries).filter((group) => group.entries.length > 0);
   return (
     <aside className="sidebar">
       <span className="sidebar-label">{t("nav.workspace")}</span>
@@ -193,6 +225,8 @@ export function WorkspaceSidebar({ basePath, entries, surface, t }: WorkspaceSid
 function ModuleIcon({ moduleId }: { moduleId: string }): ReactNode {
   const iconProps = { "aria-hidden": true, size: 16 } as const;
   switch (moduleId) {
+    case "iam":
+      return <ShieldCheck {...iconProps} />;
     case "storageCenter":
       return <CloudCog {...iconProps} />;
     case "clusterCenter":
@@ -237,6 +271,36 @@ function ResourceIcon({ resource }: { resource: WebserverResourceKey }): ReactNo
       return <Cpu {...iconProps} />;
     case "cluster-events":
       return <ScrollText {...iconProps} />;
+    // Identity & Access entries; the icon per entry mirrors the icon
+    // sdkwork-cloudrouter's IAM admin menu draws for the same page.
+    case "iam-users":
+      return <Users {...iconProps} />;
+    case "iam-organizations":
+      return <Building2 {...iconProps} />;
+    case "iam-tenants":
+      return <Network {...iconProps} />;
+    case "iam-applications":
+      return <AppWindow {...iconProps} />;
+    case "iam-roles":
+      return <UserCog {...iconProps} />;
+    case "iam-permissions":
+      return <ShieldCheck {...iconProps} />;
+    case "iam-policies":
+      return <ScrollText {...iconProps} />;
+    case "iam-authorizations":
+      return <KeySquare {...iconProps} />;
+    case "iam-oauth-providers":
+      return <KeyRound {...iconProps} />;
+    case "iam-oauth-mini-programs":
+      return <Smartphone {...iconProps} />;
+    case "iam-oauth-official-accounts":
+      return <MessageCircle {...iconProps} />;
+    case "iam-oauth-scan-login":
+      return <QrCode {...iconProps} />;
+    case "iam-account-binding":
+      return <Link2 {...iconProps} />;
+    case "iam-audit":
+      return <ShieldAlert {...iconProps} />;
     case "dashboard":
       return <LayoutDashboard {...iconProps} />;
     case "traffic-usage":

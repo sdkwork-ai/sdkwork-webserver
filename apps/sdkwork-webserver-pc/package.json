@@ -51,6 +51,7 @@
     "@sdkwork/webserver-pc-admin-data-statistics": "workspace:*",
     "@sdkwork/webserver-pc-admin-delivery": "workspace:*",
     "@sdkwork/webserver-pc-admin-diagnostics": "workspace:*",
+    "@sdkwork/webserver-pc-admin-iam": "workspace:*",
     "@sdkwork/webserver-pc-admin-mcp": "workspace:*",
     "@sdkwork/webserver-pc-admin-nginx": "workspace:*",
     "@sdkwork/webserver-pc-admin-plugins": "workspace:*",

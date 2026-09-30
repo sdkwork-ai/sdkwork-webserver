@@ -29,6 +29,23 @@ const WEBSERVER_ADMIN_PERMISSIONS = [
   // tenant-scoped reading needs no entry here — the console surface renders its
   // entries for any authenticated user.
   "web.traffic.read",
+  // Identity & Access is an IAM-owned operations capability of this edge: the
+  // IAM backend API answers in-process, so an identity operator must be able to
+  // open the backend-admin surface or the module is permanently filtered out of
+  // their menu. These are the entry-gate codes the `iam` module's menu checks —
+  // each entry below them is still filtered by its own code, so an operator
+  // holding only, say, `iam.users.read` sees the directory and nothing else.
+  "iam.users.read",
+  "iam.organizations.read",
+  "iam.tenants.read",
+  "iam.tenant_applications.update",
+  "iam.roles.read",
+  "iam.permissions.read",
+  "iam.policies.read",
+  "iam.role_bindings.read",
+  "iam.oauth.read",
+  "iam.account_binding_policy.read",
+  "iam.audit_events.read",
 ] as const;
 
 const WEBSERVER_SUPER_ADMIN_PERMISSIONS = [

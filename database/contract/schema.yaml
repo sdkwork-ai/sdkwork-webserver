@@ -1097,3 +1097,6 @@ tables:
     indexes:
       - { name: idx_webserver_cluster_peer_message_pending, columns: [tenant_id, to_instance_id, deliver_at, id] }
       - { name: idx_webserver_cluster_peer_message_cluster_created, columns: [tenant_id, cluster_id, created_at, id] }
+  - name: webserver_application_host
+    lifecycle_status: active
+    owner: web-platform

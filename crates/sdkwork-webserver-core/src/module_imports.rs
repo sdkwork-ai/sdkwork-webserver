@@ -155,8 +155,10 @@ pub(crate) fn is_nginx_conf_path(path: &Path) -> bool {
 ///
 /// High-cohesion import (SDKWORK_WEBSERVER_SPEC.md §17.3): the import
 /// aggregator includes the module's own checkout sidecar, so the module id is
-/// the path segment before `deployments/webserver/`.
-pub(crate) fn module_dir_id_from_nginx_sidecar(path: &Path) -> Option<String> {
+/// the path segment before `deployments/webserver/`. `None` when the path does
+/// not follow that layout (for example an installed flat sidecar), so callers
+/// can fall back to their own stable id.
+pub fn module_dir_id_from_nginx_sidecar(path: &Path) -> Option<String> {
     let components = path
         .components()
         .map(|component| component.as_os_str().to_string_lossy().into_owned())
@@ -175,8 +177,10 @@ pub(crate) fn module_dir_id_from_nginx_sidecar(path: &Path) -> Option<String> {
 
 /// Split a `nginx.<profile>.<environment>.conf` sidecar name into its profile
 /// and lifecycle environment. `None` for any other naming, so legacy
-/// single-file sidecars keep the bare module id.
-pub(crate) fn sidecar_profile_environment(path: &Path) -> Option<(&str, &str)> {
+/// single-file sidecars keep the bare module id. Public because the
+/// application registry (and any other consumer) must read the same
+/// profile/environment off a sidecar name that the import loader does.
+pub fn sidecar_profile_environment(path: &Path) -> Option<(&str, &str)> {
     let stem = path.file_stem().and_then(|value| value.to_str())?.trim();
     let mut parts = stem.strip_prefix("nginx.")?.split('.');
     let profile = parts.next()?;

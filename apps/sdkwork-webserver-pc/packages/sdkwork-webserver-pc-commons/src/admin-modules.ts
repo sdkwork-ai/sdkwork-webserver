@@ -26,6 +26,11 @@ export type WebserverMenuSectionId =
   | "aiEcosystem"
   | "cloudAccess"
   | "dataStatistics"
+  | "iamDirectory"
+  | "iamAccessControl"
+  | "iamOauth"
+  | "iamFederation"
+  | "iamSecurity"
   | "audit";
 
 /** Sidebar section order is the declaration order of this array. */
@@ -86,6 +91,50 @@ export const MENU_SECTIONS: readonly WebserverMenuSectionDefinition[] = [
     // intentionally absent here, because a section is a grouping of readings
     // and the overview leads the sidebar rather than belonging to it.
     resources: ["traffic-usage"],
+  },
+  {
+    id: "iamDirectory",
+    labelKey: "menuSection.iamDirectory",
+    // The Identity & Access directory: the IAM-owned admin plane is grouped
+    // into the same five sections sdkwork-cloudrouter's IAM admin menu uses
+    // (directory, access control, OAuth, federation, security), so the two
+    // applications read identically. The sections only render while the `iam`
+    // module tab is active — a section claims nothing on any other surface's
+    // menu — and every heading differs from the entry labels beneath it, the
+    // same rule that made 云接入 the heading over 云账号.
+    resources: ["iam-users", "iam-organizations", "iam-tenants", "iam-applications"],
+  },
+  {
+    id: "iamAccessControl",
+    labelKey: "menuSection.iamAccessControl",
+    resources: ["iam-roles", "iam-permissions", "iam-policies", "iam-authorizations"],
+  },
+  {
+    id: "iamOauth",
+    labelKey: "menuSection.iamOauth",
+    resources: [
+      "iam-oauth-providers",
+      "iam-oauth-mini-programs",
+      "iam-oauth-official-accounts",
+      "iam-oauth-scan-login",
+    ],
+  },
+  {
+    id: "iamFederation",
+    labelKey: "menuSection.iamFederation",
+    // A one-resource section is only safe while its heading differs from the
+    // label of the entry it holds: 连接与联合 vs 账号绑定.
+    resources: ["iam-account-binding"],
+  },
+  {
+    id: "iamSecurity",
+    labelKey: "menuSection.iamSecurity",
+    // The IAM audit trail is a distinct plane from the operations audit above
+    // (a separate resource key, `iam-audit` vs `audit`): this one is the
+    // IAM-owned evidence of identity operations, not this edge's operator
+    // action log. Declared before `audit` so the operations trail still closes
+    // the sidebar on the surfaces where it mounts.
+    resources: ["iam-audit"],
   },
   {
     id: "audit",
@@ -159,7 +208,7 @@ export function groupMenuEntries<TEntry extends { resource: string }>(
  * module (`/admin/storage`) be carved out of the catch-all `home` module
  * (`/admin`) without enumerating what stays behind.
  */
-export type WebserverAdminModuleId = "home" | "storageCenter" | "clusterCenter";
+export type WebserverAdminModuleId = "home" | "iam" | "storageCenter" | "clusterCenter";
 
 export interface WebserverAdminModuleDefinition {
   id: WebserverAdminModuleId;
@@ -183,6 +232,15 @@ export const ADMIN_MODULES: readonly WebserverAdminModuleDefinition[] = [
     descriptionKey: "module.home.description",
     // Catch-all owner: every backend-admin path not claimed by a narrower module.
     pathPrefixes: ["/admin"],
+  },
+  {
+    id: "iam",
+    labelKey: "module.iam",
+    descriptionKey: "module.iam.description",
+    // Identity & Access: the IAM-owned admin planes, mounted right after the
+    // overview — the same position sdkwork-cloudrouter's header gives its IAM
+    // module — with every entry under the module's own `/admin/iam` subtree.
+    pathPrefixes: ["/admin/iam"],
   },
   {
     id: "storageCenter",

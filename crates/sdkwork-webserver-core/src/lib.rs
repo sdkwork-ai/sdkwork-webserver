@@ -60,8 +60,9 @@ pub use config_paths::{
     RUNTIME_CONFIG_FILE_NAME, SECRETS_SUBDIR,
 };
 pub use module_imports::{
-    load_module_import_app_config, merge_import_specs, parse_env_imports, resolve_import_path,
-    resolve_import_profile, validate_imports, validate_module_import, ModuleImportError,
+    load_module_import_app_config, merge_import_specs, module_dir_id_from_nginx_sidecar,
+    parse_env_imports, resolve_import_path, resolve_import_environment, resolve_import_profile,
+    sidecar_profile_environment, validate_imports, validate_module_import, ModuleImportError,
     ModuleImportValidation, WebserverImportEntry, WebserverModuleImport, MODULE_IMPORTS_ENV,
 };
 pub use nginx::prefer_h5_surface;

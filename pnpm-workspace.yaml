@@ -13,10 +13,26 @@ packages:
   - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-sdk-adapter"
   - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-service"
   - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-application-bootstrap"
+  # The shared desktop-auth port `sdkwork-auth-pc-react` depends on; the sibling
+  # checkout gained the dependency after this workspace's lockfile was cut, so
+  # `workspace:*` resolution needs the package declared here too.
+  - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-desktop-auth"
   - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-auth-pc-react"
   - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-auth-runtime-pc-react"
   - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-react"
   - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-core"
+  # Identity & Access admin capability workspaces. The backend-admin "iam"
+  # module mounts their pages over the shared SdkworkIamService facade (the same
+  # packages sdkwork-cloudrouter consumes), so each must be a workspace member
+  # for `workspace:*` resolution — same rule as the console cloud-account pair
+  # below.
+  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-user"
+  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-tenant"
+  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-organization"
+  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-permission"
+  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-oauth"
+  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-account-binding"
+  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-audit"
   - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-console-core"
   - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-console-cloud-account"
   - "../sdkwork-iam/sdks/sdkwork-iam-app-sdk/sdkwork-iam-app-sdk-typescript"

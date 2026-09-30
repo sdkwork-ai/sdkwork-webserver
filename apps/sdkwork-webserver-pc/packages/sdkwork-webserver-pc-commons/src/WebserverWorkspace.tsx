@@ -170,6 +170,7 @@ export function WebserverWorkspace({
   return (
     <div className="app-layout">
       <WorkspaceHeader
+        activeModuleId={activeModuleId}
         adminRole={adminRole}
         basePath={basePath}
         moduleTabs={moduleTabs}

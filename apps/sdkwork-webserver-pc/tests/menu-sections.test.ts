@@ -191,6 +191,83 @@ describe("workspace menu sections", () => {
     expect(groups[1].entries.map((entry) => entry.resource)).toEqual(["apps", "domains"]);
   });
 
+  it("declares the five Identity & Access sections between the readings and the audit trail", () => {
+    // The IAM-owned admin plane is grouped into the same five sections
+    // sdkwork-cloudrouter's IAM admin menu uses, so the two applications read
+    // identically. The sections render only while the `iam` module tab is
+    // active; on any other surface they claim nothing and are dropped.
+    expect(MENU_SECTIONS.map((section) => section.id)).toEqual([
+      "delivery",
+      "aiEcosystem",
+      "cloudAccess",
+      "dataStatistics",
+      "iamDirectory",
+      "iamAccessControl",
+      "iamOauth",
+      "iamFederation",
+      "iamSecurity",
+      "audit",
+    ]);
+    expect(MENU_SECTIONS.find((section) => section.id === "iamDirectory")?.resources).toEqual([
+      "iam-users",
+      "iam-organizations",
+      "iam-tenants",
+      "iam-applications",
+    ]);
+    expect(MENU_SECTIONS.find((section) => section.id === "iamAccessControl")?.resources).toEqual([
+      "iam-roles",
+      "iam-permissions",
+      "iam-policies",
+      "iam-authorizations",
+    ]);
+    expect(MENU_SECTIONS.find((section) => section.id === "iamOauth")?.resources).toEqual([
+      "iam-oauth-providers",
+      "iam-oauth-mini-programs",
+      "iam-oauth-official-accounts",
+      "iam-oauth-scan-login",
+    ]);
+    expect(MENU_SECTIONS.find((section) => section.id === "iamFederation")?.resources).toEqual([
+      "iam-account-binding",
+    ]);
+    expect(MENU_SECTIONS.find((section) => section.id === "iamSecurity")?.resources).toEqual([
+      "iam-audit",
+    ]);
+    // The operations audit trail still closes the sidebar: the IAM sections sit
+    // between the readings and it, never after it.
+    expect(MENU_SECTIONS[MENU_SECTIONS.length - 1]?.id).toBe("audit");
+  });
+
+  it("claims every Identity & Access entry into a section, leaving the leading group empty", () => {
+    const groups = groupMenuEntries([
+      { resource: "iam-users" },
+      { resource: "iam-organizations" },
+      { resource: "iam-tenants" },
+      { resource: "iam-applications" },
+      { resource: "iam-roles" },
+      { resource: "iam-permissions" },
+      { resource: "iam-policies" },
+      { resource: "iam-authorizations" },
+      { resource: "iam-oauth-providers" },
+      { resource: "iam-oauth-mini-programs" },
+      { resource: "iam-oauth-official-accounts" },
+      { resource: "iam-oauth-scan-login" },
+      { resource: "iam-account-binding" },
+      { resource: "iam-audit" },
+    ]);
+
+    expect(groups.map((group) => group.id)).toEqual([
+      null,
+      "iamDirectory",
+      "iamAccessControl",
+      "iamOauth",
+      "iamFederation",
+      "iamSecurity",
+    ]);
+    // Every entry is claimed, so the leading group is present but empty — the
+    // sidebar drops it rather than drawing a bare unlabelled nav.
+    expect(groups[0].entries).toEqual([]);
+  });
+
   it("keeps an ungrouped-only workspace in a single leading group", () => {
     const groups = groupMenuEntries([{ resource: "nginx" }, { resource: "servers" }]);
 

@@ -187,6 +187,12 @@
       "owner": "web-platform",
       "compliance_level": "L2",
       "lifecycle_status": "active"
+    },
+    {
+      "table_name": "webserver_application_host",
+      "owner": "web-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
     }
   ]
 }

@@ -1,0 +1,3 @@
+# iam
+
+This package owns the Identity & Access capability on the backend-admin surface. It is a thin host adapter over the IAM-owned admin planes: the users, organizations, tenants, applications, roles, permissions, policies, authorizations, OAuth, account-binding, and audit pages all come from the shared `@sdkwork/iam-pc-admin-*` packages, driven by the `SdkworkIamService` facade composed by `@sdkwork/webserver-pc-console-core`. The adapter contributes the menu entries, the resource keys, the session permission scope, and the sub-path routing (organization structure, OAuth custom menus) that the flat resource routes carry.

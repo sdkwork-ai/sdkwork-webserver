@@ -59,6 +59,25 @@ export type WebserverResourceKey =
   | "cluster-hosts"
   | "cluster-instances"
   | "cluster-events"
+  // Identity & Access: the IAM-owned backend-admin planes, bridged from the
+  // shared `@sdkwork/iam-pc-admin-*` capability workspaces (the same packages
+  // sdkwork-cloudrouter mounts). Every entry lives under the `/admin/iam`
+  // module subtree; the resource keys stay slash-free so i18n and the data
+  // source registry keep a stable key.
+  | "iam-users"
+  | "iam-organizations"
+  | "iam-tenants"
+  | "iam-applications"
+  | "iam-roles"
+  | "iam-permissions"
+  | "iam-policies"
+  | "iam-authorizations"
+  | "iam-oauth-providers"
+  | "iam-oauth-mini-programs"
+  | "iam-oauth-official-accounts"
+  | "iam-oauth-scan-login"
+  | "iam-account-binding"
+  | "iam-audit"
   // `dashboard` is the leading overview of the workspace and stays unclaimed by
   // any sidebar section; `traffic-usage` is the filterable reading the
   // `dataStatistics` section groups. Both read the Web Server's own traffic

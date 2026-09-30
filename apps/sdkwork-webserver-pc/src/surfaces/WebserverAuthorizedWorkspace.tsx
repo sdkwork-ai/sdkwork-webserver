@@ -6,11 +6,12 @@ import { CloudAccountAdminSurface, webserverModule as cloudAccountAdminModule } 
 import { DashboardAdminSurface, TrafficStatisticsAdminSurface, webserverModule as dataStatisticsAdminModule } from "@sdkwork/webserver-pc-admin-data-statistics";
 import { ClusterOverviewSurface, webserverModule as clusterModule } from "@sdkwork/webserver-pc-admin-cluster";
 import { ServedCertificateAdminSurface, ServedDomainAdminSurface, webserverModule as deliveryAdminModule } from "@sdkwork/webserver-pc-admin-delivery";
+import { IamAdminSurface, webserverModule as iamAdminModule, type IamAdminResource } from "@sdkwork/webserver-pc-admin-iam";
 import { webserverModule as mcpAdminModule, McpAdminSurface, type McpAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-mcp";
 import { webserverModule as pluginsAdminModule, PluginsAdminSurface, type PluginsAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-plugins";
 import { webserverModule as skillsAdminModule, SkillsAdminSurface, type SkillsAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-skills";
 import { StorageCenterSurface, webserverModule as storageModule, type StorageCenterResource } from "@sdkwork/webserver-pc-admin-storage";
-import { hasWebserverAdminAccess, type WebserverPcModuleDefinition, type WebserverPcSurface } from "@sdkwork/webserver-pc-commons";
+import { hasWebserverAdminAccess, type WebserverPcModuleDefinition, type WebserverPcSurface, type WebserverResourceKey } from "@sdkwork/webserver-pc-commons";
 import type { WebserverLocale } from "@sdkwork/webserver-pc-core";
 import { CloudAccountManagementSurface, webserverModule as cloudAccountModule } from "@sdkwork/webserver-pc-console-cloud-account";
 import { DashboardSurface, TrafficStatisticsSurface, webserverModule as dataStatisticsModule } from "@sdkwork/webserver-pc-console-data-statistics";
@@ -21,7 +22,7 @@ import { webserverModule as pluginsModule, PluginsConsoleSurface, type PluginsCo
 import { webserverModule as sandboxModule, SandboxInstancesConsoleSurface, type SandboxInstancesConsoleSurfaceProps } from "@sdkwork/webserver-pc-console-sandbox";
 import { WebserverConsoleShell } from "@sdkwork/webserver-pc-console-shell";
 import { webserverModule as skillsModule, SkillsConsoleSurface, type SkillsConsoleSurfaceProps } from "@sdkwork/webserver-pc-console-skills";
-import { lazy, Suspense, use, useMemo } from "react";
+import { lazy, Suspense, use, useMemo, type ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import type { BootstrappedWebserverPcRuntime } from "../bootstrap/runtime.ts";
 import { webserverApplicationCatalog } from "../i18n/index.ts";
@@ -62,7 +63,7 @@ export const consoleModules = [deliveryModule, pluginsModule, skillsModule, mcpM
 // operator actually remediates. Re-adding any of the four here would reintroduce
 // a single-node control surface next to the cluster one, which is the duplicate
 // the removal is meant to end.
-export const adminModules = [appsAdminModule, deliveryAdminModule, cloudAccountAdminModule, clusterModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule, storageModule, dataStatisticsAdminModule] satisfies readonly WebserverPcModuleDefinition[];
+export const adminModules = [appsAdminModule, deliveryAdminModule, cloudAccountAdminModule, iamAdminModule, clusterModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule, storageModule, dataStatisticsAdminModule] satisfies readonly WebserverPcModuleDefinition[];
 const LazyAdminSurface = lazy(() => import("./WebserverAdminSurface.tsx").then((module) => ({ default: module.WebserverAdminSurface })));
 
 export interface TrafficPageRendererInput {
@@ -96,6 +97,52 @@ export function trafficPageRenderers({ backendApiBaseUrl, locale, permissionScop
   return {
     dashboard: <Dashboard backendApiBaseUrl={backendApiBaseUrl} locale={locale} permissionScope={permissionScope} resource="dashboard" tokenManager={tokenManager} />,
     "traffic-usage": <TrafficStatistics backendApiBaseUrl={backendApiBaseUrl} locale={locale} permissionScope={permissionScope} resource="traffic-usage" tokenManager={tokenManager} />,
+  };
+}
+
+export interface IamAdminRendererInput {
+  locale: WebserverLocale;
+  permissionScope: readonly string[];
+  tenantId: string;
+}
+
+/**
+ * The renderer entries for the Identity & Access pages.
+ *
+ * Every page comes from the shared `@sdkwork/iam-pc-admin-*` capability
+ * workspaces (the same packages sdkwork-cloudrouter mounts) over the shared
+ * `SdkworkIamService` facade composed by console-core, so this host owns only
+ * the menu entries, the session facts, and the route mounting. The keys must
+ * cover the `iam` module's entries exactly — an entry without a renderer
+ * renders an empty registry state, and a renderer without an entry is a page
+ * that can never be reached. Extracted and exported, exactly like
+ * `trafficPageRenderers`, so the acceptance harness mounts this same map
+ * instead of a copy of it.
+ */
+export function iamAdminResourceRenderers({ locale, permissionScope, tenantId }: IamAdminRendererInput): Partial<Record<WebserverResourceKey, ReactNode>> {
+  const iamSurface = (resource: IamAdminResource) => (
+    <IamAdminSurface
+      locale={locale}
+      permissionScope={permissionScope}
+      resource={resource}
+      tenantId={tenantId}
+    />
+  );
+  return {
+    "iam-users": iamSurface("iam-users"),
+    "iam-organizations": iamSurface("iam-organizations"),
+    "iam-tenants": iamSurface("iam-tenants"),
+    "iam-applications": iamSurface("iam-applications"),
+    "iam-roles": iamSurface("iam-roles"),
+    "iam-permissions": iamSurface("iam-permissions"),
+    "iam-policies": iamSurface("iam-policies"),
+    "iam-authorizations": iamSurface("iam-authorizations"),
+    "iam-oauth-providers": iamSurface("iam-oauth-providers"),
+    "iam-oauth-mini-programs": iamSurface("iam-oauth-mini-programs"),
+    "iam-oauth-official-accounts": iamSurface("iam-oauth-official-accounts"),
+    "iam-oauth-scan-login": iamSurface("iam-oauth-scan-login"),
+    "iam-account-binding": iamSurface("iam-account-binding"),
+    "iam-audit": iamSurface("iam-audit"),
   };
 }
 
@@ -192,6 +239,11 @@ export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: Webs
     // `cluster-clusters` / `cluster-hosts` / `cluster-instances` /
     // `cluster-events` are registry-driven and need no renderer entry.
     "cluster-overview": <ClusterOverviewSurface locale={locale} resource="cluster-overview" />,
+    // Identity & Access mounts the IAM-owned admin pages. The pages come from
+    // the shared iam-pc-admin capability workspaces over the console-core
+    // composed SdkworkIamService (read off the provider wrapping these routes),
+    // so this host injects only the session facts the pages gate on.
+    ...iamAdminResourceRenderers({ locale, permissionScope, tenantId }),
     ...trafficPageRenderers({
       backendApiBaseUrl: runtime.config.backendApiBaseUrl,
       locale,

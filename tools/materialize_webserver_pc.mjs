@@ -104,7 +104,7 @@ const packages = [
   // measurement group. Both entries carry `web.traffic.read`; the scope behind
   // that permission is decided server-side (own tenant here, every tenant on the
   // operations surface), never by a query parameter the client could flip.
-  { id: "console-data-statistics", surface: "app-console", capability: "data-statistics", deps: { "@sdkwork/sdk-common": "workspace:*", "@sdkwork/ui-pc-react": "workspace:*", "@sdkwork/webserver-pc-admin-core": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", "lucide-react": "catalog:", react: "catalog:" }, module: [["dashboard", "Dashboard", "Traffic this edge served you over the recent window", "web.traffic.read"], ["traffic-usage", "Traffic Statistics", "Requests, bytes, and per-app breakdown over a date window", "web.traffic.read"]], extraIndexExports: ['export * from "./DataStatisticsSurface.tsx";', 'export * from "./data-statistics-model.ts";', 'export * from "./traffic-usage-client.ts";'], dependencyPolicy: "Consumes the shared workspace chrome, the framework DataTable, and the i18n catalog from @sdkwork/webserver-pc-commons, and the Web Server backend client plus its wire types from @sdkwork/webserver-pc-admin-core, which is the only sanctioned point of entry to the generated backend SDK.", sdkPolicy: "This package imports no generated SDK. It constructs the backend client through `createWebserverAdminSdkClient` re-exported by @sdkwork/webserver-pc-admin-core and passes it the injected base URL and IAM token manager, so the dual-token session and the generated transport stay owned by core.", readme: "This package owns the data-statistics capability on the app-console surface: the Dashboard overview and the Traffic Statistics reading. Both call the Web Server backend's traffic-usage contract and render the totals, the daily series, the per-app breakdown, and — on the operations mount — the per-tenant breakdown. The pages are one implementation with two reaches: the symbols this surface registers read the caller's own tenant, the `*Platform*` symbols the operations surface re-exports read every tenant this edge serves, and which tenants answer is derived server-side from the authenticated context. A read the edge cannot produce (503) is rendered as an unavailable capability rather than as an empty chart, because \"not assembled\" and \"no traffic\" otherwise look identical." },
+  { id: "console-data-statistics", surface: "app-console", capability: "data-statistics", deps: { "@sdkwork/sdk-common": "workspace:*", "@sdkwork/ui-pc-react": "workspace:*", "@sdkwork/webserver-pc-admin-core": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", "lucide-react": "catalog:", react: "catalog:" }, module: [["dashboard", "Dashboard", "Traffic this edge served you over the recent window", "web.traffic.read"], ["traffic-usage", "Traffic Statistics", "Requests, bytes, and per-app breakdown over a date window", "web.traffic.read"]], extraIndexExports: ['export * from "./DataStatisticsSurface.tsx";', 'export * from "./data-statistics-model.ts";', 'export * from "./metrics-summary-client.ts";', 'export * from "./traffic-usage-client.ts";'], dependencyPolicy: "Consumes the shared workspace chrome, the framework DataTable, and the i18n catalog from @sdkwork/webserver-pc-commons, and the Web Server backend client plus its wire types from @sdkwork/webserver-pc-admin-core, which is the only sanctioned point of entry to the generated backend SDK.", sdkPolicy: "This package imports no generated SDK. It constructs the backend client through `createWebserverAdminSdkClient` re-exported by @sdkwork/webserver-pc-admin-core and passes it the injected base URL and IAM token manager, so the dual-token session and the generated transport stay owned by core.", readme: "This package owns the data-statistics capability on the app-console surface: the Dashboard overview and the Traffic Statistics reading. Both call the Web Server backend's traffic-usage contract and render the totals, the daily series, the per-app breakdown, and — on the operations mount — the per-tenant breakdown. The pages are one implementation with two reaches: the symbols this surface registers read the caller's own tenant, the `*Platform*` symbols the operations surface re-exports read every tenant this edge serves, and which tenants answer is derived server-side from the authenticated context. A read the edge cannot produce (503) is rendered as an unavailable capability rather than as an empty chart, because \"not assembled\" and \"no traffic\" otherwise look identical." },
   // The cloud account center hosts the IAM-owned provider account plane
   // (`iam_provider_account` plus `iam_provider_credential`) inside the Web Server
   // console. It is a thin host adapter: the page, controller, vocabulary, and
@@ -182,6 +182,64 @@ const packages = [
   { id: "admin-webserver-config", surface: "backend-admin", capability: "webserver-config", deps: { "@sdkwork/webserver-pc-admin-core": "workspace:*", "@sdkwork/sdk-common": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", "@monaco-editor/react": "catalog:", "monaco-editor": "catalog:", "lucide-react": "catalog:", react: "catalog:", "react-router-dom": "^7.15.0" }, sdkPolicy: "This package consumes the backend admin SDK exclusively through @sdkwork/webserver-pc-admin-core public exports (createWebserverAdminSdkClient and wire types); raw HTTP and direct generated-SDK imports are forbidden in authored UI code.", module: [["webserver-config", "Server Config", "Edit the deployed default config, import plane, and module sidecar configuration online", "web.servers.files.read"]], extraIndexExports: ['export * from "./WebserverConfigSurface.tsx";', 'export * from "./webserver-config-client.ts";', 'export * from "./config-language.ts";'] },
   { id: "admin-diagnostics", surface: "backend-admin", capability: "diagnostics", deps: { "@sdkwork/webserver-pc-commons": "workspace:*" }, module: [["diagnostics", "Diagnostics", "Runtime status and convergence diagnostics", "web.servers.read"]] },
   { id: "admin-audit", surface: "backend-admin", capability: "audit", deps: { "@sdkwork/webserver-pc-commons": "workspace:*" }, module: [["audit", "Audit", "Operator action evidence", "web.auditLogs.read"]] },
+  // Identity & Access hosts the IAM-owned backend-admin plane (users,
+  // organizations, tenants, tenant applications, roles, permissions, policies,
+  // authorizations, OAuth, account binding, audit) inside the Web Server edge.
+  // The surface is a thin host adapter, exactly like Storage Center: the pages,
+  // controllers, permission vocabulary, and i18n all come from the shared
+  // `sdkwork-iam-pc-admin-*` packages sdkwork-cloudrouter mounts too, so the two
+  // applications reuse one module instead of forking it. The SdkworkIamService
+  // facade driving the controllers is composed by console-core and read off the
+  // console SDK provider that wraps both surfaces.
+  {
+    id: "admin-iam",
+    surface: "backend-admin",
+    capability: "iam",
+    deps: {
+      "@sdkwork/iam-contracts": "workspace:*",
+      "@sdkwork/iam-pc-admin-account-binding": "workspace:*",
+      "@sdkwork/iam-pc-admin-audit": "workspace:*",
+      "@sdkwork/iam-pc-admin-oauth": "workspace:*",
+      "@sdkwork/iam-pc-admin-organization": "workspace:*",
+      "@sdkwork/iam-pc-admin-permission": "workspace:*",
+      "@sdkwork/iam-pc-admin-tenant": "workspace:*",
+      "@sdkwork/iam-pc-admin-user": "workspace:*",
+      "@sdkwork/webserver-pc-commons": "workspace:*",
+      "@sdkwork/webserver-pc-console-core": "workspace:*",
+      "lucide-react": "catalog:",
+      react: "catalog:",
+      "react-router-dom": "^7.15.0",
+    },
+    sdkPolicy: "This package owns no SDK client and imports no generated SDK. IAM's generated clients may only be composed by a core package, so the console-core built SdkworkIamService facade arrives through the console SDK provider.",
+    dependencyPolicy: "Host adapter only. The pages, controllers, permission vocabulary, and i18n are consumed from the shared @sdkwork/iam-pc-admin-* packages; permission predicates come from @sdkwork/iam-contracts; no page, form, or request shape is re-implemented here.",
+    readme: "This package owns the Identity & Access capability on the backend-admin surface. It is a thin host adapter over the IAM-owned admin planes: the users, organizations, tenants, applications, roles, permissions, policies, authorizations, OAuth, account-binding, and audit pages all come from the shared `@sdkwork/iam-pc-admin-*` packages, driven by the `SdkworkIamService` facade composed by `@sdkwork/webserver-pc-console-core`. The adapter contributes the menu entries, the resource keys, the session permission scope, and the sub-path routing (organization structure, OAuth custom menus) that the flat resource routes carry.",
+    moduleNote: [
+      "Every entry sits under the module's own `/admin/iam` prefix, exactly like",
+      "Storage Center's `/admin/storage/<child>` and Cluster's `/admin/cluster/*`.",
+      "No entry claims the bare `iam` path: `/admin/iam` itself is the tab landing",
+      "route (the first visible entry wins), and an entry owning it would make one",
+      "operator URL resolve to a page while the tab treats it as its own root.",
+      "Entry order mirrors sdkwork-cloudrouter's IAM admin menu (directory, access",
+      "control, OAuth, federation, audit) so the two applications read the same.",
+    ],
+    module: [
+      ["iam-users", "Users", "Identity accounts and their lifecycle", "iam.users.read", "iam/users"],
+      ["iam-organizations", "Organizations", "Organization, department, and position structure", "iam.organizations.read", "iam/organizations"],
+      ["iam-tenants", "Tenants", "Tenants and their membership", "iam.tenants.read", "iam/tenants"],
+      ["iam-applications", "Applications", "Applications and endpoints registered for the tenant", "iam.tenant_applications.update", "iam/applications"],
+      ["iam-roles", "Roles", "Role catalog and role permission bindings", "iam.roles.read", "iam/roles"],
+      ["iam-permissions", "Permissions", "Backend operation permission catalog", "iam.permissions.read", "iam/permissions"],
+      ["iam-policies", "Policies", "Authorization policy management", "iam.policies.read", "iam/policies"],
+      ["iam-authorizations", "Authorizations", "Role bindings and grant relationships", "iam.role_bindings.read", "iam/authorizations"],
+      ["iam-oauth-providers", "Third-Party Platform Login", "Third-party OAuth provider connections", "iam.oauth.read", "iam/oauth/providers"],
+      ["iam-oauth-mini-programs", "Mini Program Accounts", "Mini program account management", "iam.oauth.read", "iam/oauth/mini-programs"],
+      ["iam-oauth-official-accounts", "Official Accounts", "Official accounts and their custom menus", "iam.oauth.read", "iam/oauth/official-accounts"],
+      ["iam-oauth-scan-login", "Scan Login", "Scan-login mode configuration", "iam.oauth.read", "iam/oauth/scan-login"],
+      ["iam-account-binding", "Account Binding", "Account binding policy", "iam.account_binding_policy.read", "iam/account-binding"],
+      ["iam-audit", "Audit Logs", "IAM audit event trail", "iam.audit_events.read", "iam/audit"],
+    ],
+    extraIndexExports: ['export * from "./IamAdminSurface.tsx";'],
+  },
   // Storage Center hosts the drive-owned admin storage plane (providers, kinds,
   // buckets, bindings) inside the Web Server edge. The surface is a thin host
   // adapter: the pages, service, types, and i18n all come from the shared

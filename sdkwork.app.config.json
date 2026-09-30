@@ -45,7 +45,19 @@
       "web.servers.files.deploy",
       "web.auditLogs.read",
       "web.cluster.read",
-      "web.cluster.write"
+      "web.cluster.write",
+      "iam.users.read",
+      "iam.organizations.read",
+      "iam.tenants.read",
+      "iam.tenant_applications.update",
+      "iam.roles.read",
+      "iam.permissions.read",
+      "iam.policies.read",
+      "iam.role_bindings.read",
+      "iam.oauth.read",
+      "iam.oauth.manage",
+      "iam.account_binding_policy.read",
+      "iam.audit_events.read"
     ]
   },
   "runtime": {
