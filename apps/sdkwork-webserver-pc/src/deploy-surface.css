@@ -728,12 +728,12 @@
    sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css; the shapes are
    the same and only the tokens differ. */
 .deploy-surface .apps-ledger{display:flex;flex-direction:column;gap:10px;margin-top:18px;min-width:0}
-/* The ownership group: its label and its tab strip travel together, exactly like
-   `.apps-kind-facets` below. Both groups share ONE toolbar row with the search
-   box — they narrow three orthogonal axes (ownership / type / keyword), and
-   stacking them would read as if the lower row were a child of the upper one.
-   The label is inside the group so a wrapped toolbar never leaves it stranded on
-   the previous line, away from the strip it names. */
+/* The ownership group: only the tab strip travels in it — the visible label was
+   dropped because the first tab ("All ownership levels") already names the axis,
+   and the strip is named for assistive tech via `aria-label` instead. The group
+   shares ONE toolbar row with the type chips and the search box — they narrow
+   three orthogonal axes (ownership / type / keyword), and stacking them would
+   read as if the lower row were a child of the upper one. */
 .deploy-surface .apps-owner-facets{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0}
 /* The ownership tab row. Only the admin surface renders it — that is the one
    surface whose reach spans several ownership levels, so it is the only one with
@@ -779,3 +779,39 @@
    the contract's state rather than the operator's, which is what the amber marks
    in this sheet. The toolbar itself needs no breakpoint — the chips wrap. */
 .deploy-surface .apps-ledger-note{margin:0;font-size:12px;line-height:1.5;color:var(--webserver-color-warning-text)}
+/* The identity cell: avatar tile + name over slug, one column. The tile is the
+   row's shape — recognizable before the name is read — and the slug demotes to
+   a secondary line because the cell already answers "which app" twice; a second
+   column for it spent 160px of table width restating the first.
+   Source of truth: sdkwork-deployments/apps/sdkwork-deployments-pc/src/styles.css
+   (literal colors there, this console's tokens here). Keep the two in step. */
+.deploy-surface .apps-identity{display:inline-flex;align-items:center;gap:10px;min-width:0;max-width:100%;vertical-align:middle}
+.deploy-surface .apps-identity-text{display:flex;flex-direction:column;gap:1px;min-width:0}
+.deploy-surface .apps-identity-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:1.35}
+.deploy-surface .apps-identity-slug{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,"Cascadia Mono",Consolas,monospace;font-size:11px;line-height:1.35;color:var(--sdk-color-text-muted)}
+/* The avatar tile: a deterministic gradient with the application-kind glyph in
+   white — always renderable from row data, so the ledger never shows a blank
+   box or a spinner where an identity belongs. The inset hairline keeps the
+   tile crisp against the row, and the uploaded store icon (`AppAvatar`'s img)
+   fades in over it only once decoded, so a slow network shows the tile, not a
+   half-loaded image. */
+.deploy-surface .apps-avatar{position:relative;display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;border-radius:8px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(15,23,42,.08)}
+.deploy-surface .apps-avatar-glyph{color:rgba(255,255,255,.95);filter:drop-shadow(0 1px 1px rgba(15,23,42,.22))}
+.deploy-surface .apps-avatar-image{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .18s ease;outline:1px solid rgba(15,23,42,.06);outline-offset:-1px}
+.deploy-surface .apps-avatar-image-loaded{opacity:1}
+/* The palette: ten two-stop gradients, hue-spread so nearby hash buckets stay
+   distinguishable, saturated enough to carry a white glyph, muted enough to sit
+   in a dense table. The index space is fixed by
+   `APP_AVATAR_GRADIENT_COUNT` in the publishing package's `service/app-icon.ts`
+   — grow the palette there and here in the same change. */
+.deploy-surface .apps-avatar-gradient-0{background:linear-gradient(135deg,#6366f1,#8b5cf6)}
+.deploy-surface .apps-avatar-gradient-1{background:linear-gradient(135deg,#0ea5e9,#38bdf8)}
+.deploy-surface .apps-avatar-gradient-2{background:linear-gradient(135deg,#0d9488,#2dd4bf)}
+.deploy-surface .apps-avatar-gradient-3{background:linear-gradient(135deg,#16a34a,#4ade80)}
+.deploy-surface .apps-avatar-gradient-4{background:linear-gradient(135deg,#f59e0b,#fbbf24)}
+.deploy-surface .apps-avatar-gradient-5{background:linear-gradient(135deg,#f43f5e,#fb7185)}
+.deploy-surface .apps-avatar-gradient-6{background:linear-gradient(135deg,#d946ef,#e879f9)}
+.deploy-surface .apps-avatar-gradient-7{background:linear-gradient(135deg,#7c3aed,#a78bfa)}
+.deploy-surface .apps-avatar-gradient-8{background:linear-gradient(135deg,#64748b,#94a3b8)}
+.deploy-surface .apps-avatar-gradient-9{background:linear-gradient(135deg,#ea580c,#fb923c)}
+@media(prefers-reduced-motion:reduce){.deploy-surface .apps-avatar-image{transition:none}}

@@ -152,9 +152,11 @@ describe("applications ledger operations column", () => {
     renderAppsSurface();
     await screen.findByText("Store Front");
 
+    // The name column is the identity cell since the avatar landed: it leads
+    // with the app's avatar tile and carries the slug as a secondary line, so
+    // the standalone Slug column is gone from the ledger's shape.
     expect(screen.getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual([
       "Name",
-      "Slug",
       "Kind",
       "Status",
       "Ownership",
