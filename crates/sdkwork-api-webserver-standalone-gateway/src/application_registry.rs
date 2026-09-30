@@ -637,6 +637,27 @@ mod tests {
         }
     }
 
+    /// A materializable nginx sidecar whose file name controls the
+    /// `<profile>.<environment>` the import loader derives.
+    fn write_conf_sidecar(dir: &std::path::Path, file_name: &str) -> std::path::PathBuf {
+        std::fs::create_dir_all(dir).expect("materialize sidecar directory");
+        let path = dir.join(file_name);
+        std::fs::write(
+            &path,
+            "user sdkwork;\nevents {}\nhttp { server { listen 80; server_name sidecar.example.com; location / { return 200; } } }\n",
+        )
+        .expect("write sidecar");
+        path
+    }
+
+    fn scratch_dir(label: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "sdkwork-appreg-{label}-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ))
+    }
+
     fn static_resource(
         id: &str,
         root: &str,
@@ -784,21 +805,38 @@ mod tests {
 
     #[test]
     fn derive_skips_disabled_imports_and_sorts_by_slug() {
-        let mut disabled = import("b-module");
+        let temp = scratch_dir("derive");
+        let _ = std::fs::remove_dir_all(&temp);
+        let z_path = write_conf_sidecar(&temp.join("z"), "nginx.cloud.production.conf");
+        let a_path = write_conf_sidecar(&temp.join("a"), "nginx.cloud.test.conf");
+        let mut z = import("z-module");
+        z.path = z_path;
+        let mut disabled = import("m-module");
         disabled.enabled = false;
-        let enabled = import("a-module");
+        let mut a = import("a-module");
+        a.path = a_path;
         let derived =
-            derive_applications(&[disabled, enabled]).expect("derive must not fail on skips");
-        assert_eq!(derived.len(), 1);
-        assert_eq!(derived[0].import_id, "a-module");
+            derive_applications(&[z, disabled, a]).expect("derive must not fail on skips");
+        assert_eq!(derived.len(), 2, "disabled imports must be skipped");
+        assert_eq!(
+            derived[0].import_id, "a-module",
+            "slug order must be deterministic"
+        );
+        assert_eq!(derived[0].environment, "test");
+        assert_eq!(derived[1].import_id, "z-module");
+        assert_eq!(derived[1].environment, "production");
+        let _ = std::fs::remove_dir_all(&temp);
     }
 
     #[test]
     fn a_conf_sidecar_without_profile_environment_aborts_the_derive() {
+        let temp = scratch_dir("undeclared");
+        let _ = std::fs::remove_dir_all(&temp);
         let mut module = import("legacy");
-        module.path = std::path::PathBuf::from("/srv/sidecar/nginx.conf");
+        module.path = write_conf_sidecar(&temp.join("legacy"), "sidecar.conf");
         let error = derive_applications(&[module]).expect_err("undeclared env must abort");
         assert!(error.contains("does not declare"), "{error}");
+        let _ = std::fs::remove_dir_all(&temp);
     }
 
     #[test]
