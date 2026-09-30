@@ -147,7 +147,11 @@ fn layout_v2_webserver_dir(path: &Path) -> bool {
     path.join("server.common.toml").is_file()
 }
 
-pub(crate) fn is_nginx_conf_path(path: &Path) -> bool {
+/// Whether a module import path is a stock nginx `.conf` sidecar (as opposed
+/// to a layout v3 TOML directory). Public for the same reason
+/// [`sidecar_profile_environment`] is: the application surface registry must
+/// classify an import exactly the way the import loader does.
+pub fn is_nginx_conf_path(path: &Path) -> bool {
     path.extension().and_then(|value| value.to_str()) == Some("conf")
 }
 

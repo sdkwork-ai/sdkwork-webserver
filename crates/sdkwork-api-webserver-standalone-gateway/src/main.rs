@@ -2,10 +2,11 @@ use std::{error::Error, io, path::PathBuf};
 
 use sdkwork_api_webserver_standalone_gateway::{
     build_router, configure_packaged_runtime_roots_from_env,
-    issue_credential_entry_bootstrap_token_to_file, reconcile_served_domains_at_startup,
-    reset_admin_account_from_env, run_data_plane_from_config_with_operations_until,
-    run_data_plane_with_operations_until, run_database_migrate_only,
-    validate_adaptive_app_shell_from_env, AdminResetOptions, DataPlaneOperationsConfig,
+    issue_credential_entry_bootstrap_token_to_file, reconcile_application_registry_at_startup,
+    reconcile_served_domains_at_startup, reset_admin_account_from_env,
+    run_data_plane_from_config_with_operations_until, run_data_plane_with_operations_until,
+    run_database_migrate_only, validate_adaptive_app_shell_from_env, AdminResetOptions,
+    DataPlaneOperationsConfig,
 };
 use sdkwork_webserver_core::{
     compile_merged_imports_app, imported_certificate_names, resolve_nginx_sidecar_path,
@@ -435,6 +436,11 @@ async fn run_management_plane() -> MainResult<()> {
     // sees the inventory, and it never fails the boot: a domain row is
     // bookkeeping, and refusing to serve over it would be an outage.
     reconcile_served_domains_at_startup().await;
+    // The same authority folds into the application surface registry: every
+    // materialized module import is one application with its per-server-block
+    // hostname inventory. Same fail-open posture, same before-the-listener
+    // placement.
+    reconcile_application_registry_at_startup().await;
     let listener = tokio::net::TcpListener::bind(&bind_address).await?;
     tracing::info!(address = %bind_address, "management listener started");
     axum::serve(listener, app)

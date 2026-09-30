@@ -24,18 +24,32 @@
 -- lock_timeout: 30s
 -- statement_timeout: 120s
 
+-- Idempotent by design: the lifecycle applies the baseline without recording
+-- history rows for the folded migrations, so a fresh install plus autoMigrate
+-- replays this file over baseline-created objects. Every statement below must
+-- therefore tolerate its object already existing (the `DO $$` guard is used
+-- because PostgreSQL `ADD CONSTRAINT` has no `IF NOT EXISTS`).
 ALTER TABLE webserver_application
-    ADD COLUMN metadata JSONB NOT NULL DEFAULT '{}';
+    ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}';
 
 ALTER TABLE webserver_application
-    ADD COLUMN access_surfaces JSONB NOT NULL DEFAULT '[]';
+    ADD COLUMN IF NOT EXISTS access_surfaces JSONB NOT NULL DEFAULT '[]';
 
 -- The array element shape ({"surface": "PC" | "H5"}) is owned by the writers
 -- and documented in database/contract/schema.yaml; the constraint pins the
 -- container so a malformed document cannot enter silently.
-ALTER TABLE webserver_application
-    ADD CONSTRAINT chk_webserver_application_access_surfaces
-    CHECK (jsonb_typeof(access_surfaces) = 'array');
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'chk_webserver_application_access_surfaces'
+          AND conrelid = 'webserver_application'::regclass
+    ) THEN
+        ALTER TABLE webserver_application
+            ADD CONSTRAINT chk_webserver_application_access_surfaces
+            CHECK (jsonb_typeof(access_surfaces) = 'array');
+    END IF;
+END $$;
 
 COMMENT ON COLUMN webserver_application.access_surfaces IS
     'Access surfaces of the application: JSONB array of {"surface": "PC" | "H5"}; empty when the application serves no static web surface';

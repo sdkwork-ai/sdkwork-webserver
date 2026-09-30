@@ -36,8 +36,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 use sdkwork_database_id::{uuid_v4, SnowflakeIdGenerator};
 use sdkwork_webserver_core::{
     merged_imports_app_config, normalize_tls_server_name, resolve_nginx_sidecar_path,
-    web_platform_operator_tenant_id, ConfigFormat, ConfigLoadOptions, VirtualHostConfig,
-    WebServerAppConfig, WebServerConfigLoader,
+    ConfigFormat, ConfigLoadOptions, VirtualHostConfig, WebServerAppConfig, WebServerConfigLoader,
 };
 use sqlx::PgPool;
 
@@ -45,10 +44,10 @@ use sqlx::PgPool;
 /// but has no domain inventory is the defect this module exists to remove.
 pub const SERVED_DOMAIN_RECONCILE_ENV: &str = "SDKWORK_WEBSERVER_SERVED_DOMAIN_RECONCILE";
 
-/// `metadata.source` of every row this module owns. Retirement is scoped to
-/// exactly this value, so a row an operator or an application created is
-/// structurally out of reach.
-const SERVED_DOMAIN_SOURCE: &str = "served-config";
+/// `metadata.source` of every row this module owns — the shared
+/// [`crate::reconcile_support::SERVED_CONFIG_METADATA_SOURCE`] keyspace, so a
+/// row an operator or an application created is structurally out of reach.
+use crate::reconcile_support::SERVED_CONFIG_METADATA_SOURCE as SERVED_DOMAIN_SOURCE;
 
 /// One observed hostname and whether it is a wildcard.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -236,21 +235,8 @@ where
         .collect()
 }
 
-/// Whether a `SDKWORK_WEBSERVER_SERVED_DOMAIN_RECONCILE` value disables the pass.
-///
-/// Split out from the environment read so the accepted spellings are testable
-/// without mutating a process-global.
-fn reconcile_disabled_value(value: &str) -> bool {
-    matches!(
-        value.trim().to_ascii_lowercase().as_str(),
-        "" | "0" | "false" | "off" | "no" | "disabled"
-    )
-}
-
 fn reconcile_enabled() -> bool {
-    std::env::var(SERVED_DOMAIN_RECONCILE_ENV)
-        .map(|value| !reconcile_disabled_value(&value))
-        .unwrap_or(true)
+    crate::reconcile_support::reconcile_enabled_for(SERVED_DOMAIN_RECONCILE_ENV)
 }
 
 /// Reconcile the served hostnames into `webserver_root_domain` /
@@ -453,51 +439,11 @@ pub async fn reconcile_served_domains_at_startup() {
         );
         return;
     }
-    let Some(pool) = sdkwork_database_sqlx::process_shared_database_pool() else {
-        tracing::warn!(
-            "the shared database pool is unavailable; the served-domain inventory was not reconciled"
-        );
+    let Some(context) =
+        crate::reconcile_support::startup_reconcile_context("the served-domain inventory").await
+    else {
         return;
     };
-    let sdkwork_database_sqlx::DatabasePool::Postgres(pool, _) = pool;
-    let tenant_id = match web_platform_operator_tenant_id().parse::<i64>() {
-        Ok(tenant_id) => tenant_id,
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "the platform operator tenant id is not numeric; the served-domain inventory was not reconciled"
-            );
-            return;
-        }
-    };
-    let id_generator = match std::env::var("SDKWORK_WEBSERVER_SNOWFLAKE_NODE_ID") {
-        Ok(value) => match value.parse::<u16>() {
-            Ok(node_id) => match SnowflakeIdGenerator::new(node_id) {
-                Ok(generator) => generator,
-                Err(error) => {
-                    tracing::warn!(
-                        error = %error,
-                        "invalid snowflake node id; the served-domain inventory was not reconciled"
-                    );
-                    return;
-                }
-            },
-            Err(error) => {
-                tracing::warn!(
-                    error = %error,
-                    "SDKWORK_WEBSERVER_SNOWFLAKE_NODE_ID is not a node id; the served-domain inventory was not reconciled"
-                );
-                return;
-            }
-        },
-        Err(_) => {
-            tracing::warn!(
-                "SDKWORK_WEBSERVER_SNOWFLAKE_NODE_ID is required to allocate domain ids; the served-domain inventory was not reconciled"
-            );
-            return;
-        }
-    };
-
     let (names, sources) = collect_served_server_names();
     let roots = derive_served_domains(names);
     if roots.is_empty() {
@@ -512,9 +458,16 @@ pub async fn reconcile_served_domains_at_startup() {
         return;
     }
 
-    match reconcile_served_domains(&pool, &id_generator, tenant_id, &roots).await {
+    match reconcile_served_domains(
+        &context.pool,
+        &context.id_generator,
+        context.tenant_id,
+        &roots,
+    )
+    .await
+    {
         Ok(summary) => tracing::info!(
-            tenant_id,
+            tenant_id = context.tenant_id,
             sidecar = ?sources.sidecar,
             sidecar_names = sources.sidecar_names,
             import_names = sources.import_names,
@@ -640,15 +593,5 @@ mod tests {
         assert_eq!(folded[0].0, "example.cn");
         assert_eq!(folded[1].0, "example.com");
         assert_eq!(folded[1].1, vec!["a.example.com", "api.example.com"]);
-    }
-
-    #[test]
-    fn the_reconcile_switch_accepts_the_usual_spellings_of_off() {
-        for value in ["0", "false", "FALSE", " off ", "no", "disabled", ""] {
-            assert!(reconcile_disabled_value(value), "{value:?} should disable");
-        }
-        for value in ["1", "true", "on", "yes", "enabled"] {
-            assert!(!reconcile_disabled_value(value), "{value:?} should enable");
-        }
     }
 }

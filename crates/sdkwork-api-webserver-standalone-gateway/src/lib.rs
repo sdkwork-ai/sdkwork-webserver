@@ -5,6 +5,8 @@ mod admin_reset;
 #[cfg(feature = "management")]
 mod app_shell;
 #[cfg(feature = "management")]
+mod application_registry;
+#[cfg(feature = "management")]
 mod bootstrap;
 #[cfg(feature = "management")]
 mod credential_entry_bootstrap;
@@ -23,6 +25,8 @@ mod packaged_runtime;
 mod profile;
 mod provider_event_ingress;
 #[cfg(feature = "management")]
+mod reconcile_support;
+#[cfg(feature = "management")]
 mod served_domains;
 mod tunnel_bridge;
 mod usage_metering;
@@ -37,6 +41,12 @@ pub use admin_reset::{
 };
 #[cfg(feature = "management")]
 pub use app_shell::validate_adaptive_app_shell_from_env;
+#[cfg(feature = "management")]
+pub use application_registry::{
+    reconcile_application_registry, reconcile_application_registry_at_startup,
+    application_from_import, derive_applications, ApplicationRegistrySummary, ObservedApplication,
+    ObservedHost, APPLICATION_REGISTRY_RECONCILE_ENV,
+};
 #[cfg(feature = "management")]
 pub use bootstrap::{build_router, run_database_migrate_only};
 #[cfg(feature = "management")]
