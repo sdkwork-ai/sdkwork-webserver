@@ -964,6 +964,9 @@ impl WebAppApi for WebService {
         Self::validate_app_kind(&request.app_kind)?;
         Self::validate_store_listing(request.store_listing.as_ref(), false)?;
         let capacity = max_applications_per_tenant();
+        // Fast path: the same quota conflict the store would raise, returned
+        // before any work. The store re-checks under the per-tenant lock, so
+        // the decision is race-free either way.
         let current = self.repository.count_tenant_applications(tenant_id).await?;
         if current >= capacity {
             return Err(WebServiceError::conflict(&format!(
@@ -972,7 +975,13 @@ impl WebAppApi for WebService {
         }
         let site = self
             .repository
-            .create_application(tenant_id, context.organization_id, owner_id, request)
+            .create_application(
+                tenant_id,
+                context.organization_id,
+                owner_id,
+                capacity,
+                request,
+            )
             .await?;
         self.audit_site_action(context, "applications.create", &site.id)
             .await;

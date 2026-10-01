@@ -5,6 +5,7 @@ pub mod cluster;
 pub mod dto;
 pub mod internal_ports;
 pub mod metrics;
+pub mod observability;
 pub mod problem;
 pub mod provider;
 pub mod usage;

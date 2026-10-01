@@ -113,10 +113,10 @@ impl WebRepository {
         })
     }
 
-    /// Live application count for one tenant: the per-tenant capacity quota
-    /// (PRD section 8.3) is checked against this before a create is accepted.
-    /// Advisory under concurrency - two simultaneous creates can both observe
-    /// room - but it bounds unattended growth.
+    /// Live application count for one tenant: the service-level fast path of
+    /// the per-tenant capacity quota (PRD section 8.3). The authoritative
+    /// check happens inside the create transaction
+    /// ([`Self::create_application_repo`]) under a per-tenant advisory lock.
     pub(super) async fn count_tenant_applications_repo(
         &self,
         tenant_id: i64,
@@ -134,11 +134,20 @@ impl WebRepository {
 
     /// Creates the application resource together with its backing site
     /// carrier row in one transaction, then links `webserver_application.site_id`.
+    ///
+    /// `capacity` is the per-tenant application quota (PRD section 8.3). The
+    /// capacity decision is made inside the transaction under a per-tenant
+    /// advisory lock, so two concurrent creates cannot both observe room: the
+    /// transaction that would push the tenant over the quota aborts with the
+    /// quota conflict instead of either succeeding past the cap or failing
+    /// with a raw constraint error. The service-level pre-check stays as the
+    /// fast path that returns the same error before any work is done.
     pub(super) async fn create_application_repo(
         &self,
         tenant_id: i64,
         organization_id: Option<i64>,
         owner_id: Option<i64>,
+        capacity: i64,
         request: &CreateApplicationRequest,
     ) -> WebServiceResult<ApplicationResponse> {
         let site_id = next_id(self.id_generator())?;
@@ -193,6 +202,32 @@ impl WebRepository {
             .begin()
             .await
             .map_err(|error| store_error("begin create webserver_application transaction", error))?;
+
+        // Serialize this tenant's capacity decision: the lock lives for the
+        // transaction only and is keyed by tenant, so concurrent creates
+        // queue here and the count below is authoritative at insert time.
+        sqlx::query(
+            "SELECT pg_advisory_xact_lock(
+                 hashtext('webserver:tenant-application-capacity:' || $1::text)
+             )",
+        )
+        .bind(tenant_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|error| store_error("lock tenant application capacity", error))?;
+        let live_applications: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM webserver_application
+             WHERE tenant_id = $1 AND deleted_at IS NULL",
+        )
+        .bind(tenant_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|error| store_error("count tenant webserver_application", error))?;
+        if live_applications >= capacity {
+            return Err(WebServiceError::conflict(&format!(
+                "tenant already owns {live_applications} applications; the per-tenant capacity is {capacity}"
+            )));
+        }
 
         sqlx::query(audited_sql(&insert_site_sql))
             .bind(site_id)

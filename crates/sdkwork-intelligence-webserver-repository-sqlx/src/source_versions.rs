@@ -12,6 +12,10 @@ use super::support::{
     store_error,
 };
 
+/// Rows rewritten per retention-prune batch, so a large backlog prunes in
+/// bounded statement slices instead of one transaction-wide rewrite.
+const SOURCE_VERSION_PRUNE_BATCH: i64 = 500;
+
 impl WebRepository {
     pub(super) async fn list_source_versions_repo(
         &self,
@@ -213,30 +217,45 @@ impl WebRepository {
             .await
             .map_err(|error| store_error("insert webserver_source_version", error))?;
 
-        sqlx::query(
-            "WITH retained AS (
-                 SELECT id
-                 FROM webserver_source_version
-                 WHERE tenant_id = $1 AND site_id = $2 AND status = 1
-                 ORDER BY created_at DESC, id DESC
-                 OFFSET $3
-             )
-             UPDATE webserver_source_version AS source_version
-             SET status = 3, pruned_at = CAST($5 AS TIMESTAMPTZ), pruned_by = $4,
-                 updated_at = CAST($5 AS TIMESTAMPTZ), version = source_version.version + 1
-             FROM retained
-             WHERE source_version.tenant_id = $1
-               AND source_version.id = retained.id
-               AND source_version.status = 1",
-        )
-        .bind(tenant_id)
-        .bind(site_internal_id)
-        .bind(retention_limit)
-        .bind(actor_id)
-        .bind(&now)
-        .execute(&mut *transaction)
-        .await
-        .map_err(|error| store_error("prune webserver_source_version", error))?;
+        // Prune in bounded batches. After a long outage or a bulk import the
+        // retention window can hold thousands of rows, and one statement
+        // rewriting all of them would hold every row lock and emit every WAL
+        // record inside one transaction slice — then hit statement_timeout and
+        // retry the whole thing forever. Each batch is its own statement in
+        // the same transaction; marked rows leave the eligible set, so every
+        // iteration makes progress and the loop terminates on a short batch.
+        loop {
+            let pruned = sqlx::query(
+                "WITH retained AS (
+                     SELECT id
+                     FROM webserver_source_version
+                     WHERE tenant_id = $1 AND site_id = $2 AND status = 1
+                     ORDER BY created_at DESC, id DESC
+                     OFFSET $3
+                     LIMIT $4
+                 )
+                 UPDATE webserver_source_version AS source_version
+                 SET status = 3, pruned_at = CAST($6 AS TIMESTAMPTZ), pruned_by = $5,
+                     updated_at = CAST($6 AS TIMESTAMPTZ), version = source_version.version + 1
+                 FROM retained
+                 WHERE source_version.tenant_id = $1
+                   AND source_version.id = retained.id
+                   AND source_version.status = 1",
+            )
+            .bind(tenant_id)
+            .bind(site_internal_id)
+            .bind(retention_limit)
+            .bind(SOURCE_VERSION_PRUNE_BATCH)
+            .bind(actor_id)
+            .bind(&now)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|error| store_error("prune webserver_source_version", error))?
+            .rows_affected();
+            if (pruned as i64) < SOURCE_VERSION_PRUNE_BATCH {
+                break;
+            }
+        }
 
         let row = sqlx::query(
             "SELECT uuid, version_tag, source_type, source_ref, commit_hash, artifact_path,

@@ -8,9 +8,8 @@ use sdkwork_utils_rust::{
 use sdkwork_webserver_contract::{
     ApplicationPage, AuditLogPage, CertificateDistributionPage, CertificatePage, ClusterEventPage,
     ClusterHeartbeatSamplePage, ClusterHostPage, ClusterInstancePage, ClusterPage, DeploymentPage,
-    DnsAccountPage, DomainPage, EnvVariablePage, HealthCheckPage, ListenerCertificateBindingPage,
-    NginxConfigPage, PlatformTargetPage, RootDomainPage, ServerPage, SourceVersionPage,
-    WebServiceResult,
+    DnsAccountPage, DomainPage, ListenerCertificateBindingPage, NginxConfigPage,
+    PlatformTargetPage, RootDomainPage, ServerPage, SourceVersionPage, WebServiceResult,
 };
 use serde::Serialize;
 
@@ -224,28 +223,11 @@ pub fn ok_root_domain_page(
     }
 }
 
-/// Bounded-by-design collections (`envVariables.list`, `healthChecks.list`) are
-/// transactionally capped at 100 items (PAGINATION_SPEC §11) and are served as a
-/// single page with the collection capacity as `page_size`, so `pageInfo` truthfully
-/// reports one page, `hasMore=false`, and `total` matching the returned items.
-const BOUNDED_COLLECTION_MAXIMUM_PAGE_SIZE: i32 = 100;
-
-pub fn ok_env_variable_page(
-    result: WebServiceResult<EnvVariablePage>,
-) -> Result<Response, WebApiError> {
-    match result {
-        Ok(page) => Ok(envelope(
-            StatusCode::OK,
-            build_page_data(
-                page.items,
-                1,
-                BOUNDED_COLLECTION_MAXIMUM_PAGE_SIZE,
-                page.total,
-            ),
-        )),
-        Err(error) => Err(error.into()),
-    }
-}
+/// Bounded-by-design collections are transactionally capped at 100 items
+/// (PAGINATION_SPEC §11) and are served as a single page with the collection
+/// capacity as `page_size`, so `pageInfo` truthfully reports one page,
+/// `hasMore=false`, and `total` matching the returned items.
+pub const BOUNDED_COLLECTION_MAXIMUM_PAGE_SIZE: i32 = 100;
 
 pub fn ok_certificate_page(
     result: WebServiceResult<CertificatePage>,
@@ -336,23 +318,6 @@ pub fn ok_platform_target_page(
         Ok(page_data) => Ok(envelope(
             StatusCode::OK,
             build_page_data(page_data.items, page, page_size, page_data.total),
-        )),
-        Err(error) => Err(error.into()),
-    }
-}
-
-pub fn ok_health_check_page(
-    result: WebServiceResult<HealthCheckPage>,
-) -> Result<Response, WebApiError> {
-    match result {
-        Ok(page) => Ok(envelope(
-            StatusCode::OK,
-            build_page_data(
-                page.items,
-                1,
-                BOUNDED_COLLECTION_MAXIMUM_PAGE_SIZE,
-                page.total,
-            ),
         )),
         Err(error) => Err(error.into()),
     }

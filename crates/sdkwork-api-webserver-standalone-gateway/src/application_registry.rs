@@ -163,8 +163,7 @@ fn access_surfaces_and_kind(app: &WebServerAppConfig) -> (Vec<String>, &'static 
         if spa_fallback.is_some() {
             has_spa_fallback = true;
         }
-        if !root.trim().is_empty() && !surfaces.iter().any(|surface| surface == ACCESS_SURFACE_PC)
-        {
+        if !root.trim().is_empty() && !surfaces.iter().any(|surface| surface == ACCESS_SURFACE_PC) {
             surfaces.push(ACCESS_SURFACE_PC.to_owned());
         }
         if h5_root
@@ -249,9 +248,7 @@ pub fn application_from_import(
 /// name (the universal import plane commissions every environment's sidecar in
 /// one process); a layout v3 TOML import resolves them from the process
 /// configuration exactly as the import loader does.
-fn import_profile_environment(
-    import: &WebserverModuleImport,
-) -> Result<(String, String), String> {
+fn import_profile_environment(import: &WebserverModuleImport) -> Result<(String, String), String> {
     if is_nginx_conf_path(&import.path) {
         return sidecar_profile_environment(&import.path)
             .map(|(profile, environment)| (profile.to_owned(), environment.to_owned()))
@@ -278,10 +275,14 @@ pub fn derive_applications(
 ) -> Result<Vec<ObservedApplication>, String> {
     let mut applications = Vec::new();
     for import in imports.iter().filter(|import| import.enabled) {
-        let app =
-            load_module_import_app_config(import).map_err(|error| error.to_string())?;
+        let app = load_module_import_app_config(import).map_err(|error| error.to_string())?;
         let (profile, environment) = import_profile_environment(import)?;
-        applications.push(application_from_import(import, &app, &profile, &environment));
+        applications.push(application_from_import(
+            import,
+            &app,
+            &profile,
+            &environment,
+        ));
     }
     applications.sort_by(|left, right| left.slug.cmp(&right.slug));
     Ok(applications)
@@ -555,10 +556,9 @@ pub async fn reconcile_application_registry_at_startup() {
         );
         return;
     }
-    let Some(context) = crate::reconcile_support::startup_reconcile_context(
-        "the application surface registry",
-    )
-    .await
+    let Some(context) =
+        crate::reconcile_support::startup_reconcile_context("the application surface registry")
+            .await
     else {
         return;
     };

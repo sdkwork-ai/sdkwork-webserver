@@ -11,6 +11,11 @@ use std::sync::{Arc, RwLock};
 
 use sdkwork_webserver_tunnel_core::{Result, RouteId, SessionId, TunnelError, TunnelRoute};
 
+/// Upper bound on routes one session may keep registered. A worker only ever
+/// needs a handful of public surfaces; the cap turns "a session leaks route
+/// registrations" from unbounded registry growth into a refused request.
+pub const MAX_ROUTES_PER_SESSION: usize = 256;
+
 /// One registered route with its owning session.
 #[derive(Debug, Clone)]
 pub struct RegisteredRoute {
@@ -34,6 +39,9 @@ pub struct RouteRegistry {
 
 #[derive(Debug, Default)]
 struct RegistryInner {
+    /// Id-keyed index: O(1) lookup for `get`, and the ownership anchor that
+    /// makes replace/remove decisions O(1) instead of three linear scans.
+    by_id: HashMap<RouteId, Arc<RegisteredRoute>>,
     by_domain: HashMap<String, Arc<RegisteredRoute>>,
     /// Wildcard domain routes keyed by their suffix (`*.a.b` is stored under
     /// `a.b`).
@@ -41,6 +49,8 @@ struct RegistryInner {
     /// Port-keyed index: TCP and UDP port namespaces are independent, so the
     /// same port number may legitimately host one route of each protocol.
     by_port: HashMap<(bool, u16), Arc<RegisteredRoute>>,
+    /// Live route count per owning session — O(1) budget checks on register.
+    routes_per_session: HashMap<SessionId, usize>,
 }
 
 impl RouteRegistry {
@@ -97,10 +107,26 @@ impl RouteRegistry {
                 }
             }
         }
-        // Replacing an existing registration with the same id keeps counts
-        // stable.
-        let id = route.id.clone();
-        if let Some(existing) = find_by_id(&inner, &id) {
+        // A route id belongs to whoever registered it first: a different
+        // session may not take a surface over by reusing the id, even with a
+        // matcher that collides with nothing.
+        let replaced = inner.by_id.get(&route.id).cloned();
+        if let Some(existing) = &replaced {
+            if existing.session() != Some(&owner) {
+                return Err(TunnelError::RouteConflict(format!(
+                    "route {} is already registered by another device",
+                    route.id
+                )));
+            }
+        }
+        if replaced.is_none()
+            && inner.routes_per_session.get(&owner).copied().unwrap_or(0) >= MAX_ROUTES_PER_SESSION
+        {
+            return Err(TunnelError::InvalidRoute(format!(
+                "session route budget exhausted ({MAX_ROUTES_PER_SESSION} live routes)"
+            )));
+        }
+        if let Some(existing) = replaced {
             if let Some(domain) = domain_key(&existing.route) {
                 inner.by_domain.remove(domain);
             }
@@ -111,8 +137,12 @@ impl RouteRegistry {
                 let key = (is_datagram(&existing.route), port);
                 inner.by_port.remove(&key);
             }
+            decrement_session_count(&mut inner.routes_per_session, existing.session());
         }
         let registered = Arc::new(RegisteredRoute { route });
+        inner
+            .by_id
+            .insert(registered.route.id.clone(), registered.clone());
         if let Some(suffix) = wildcard_key(&registered.route) {
             inner.by_wildcard.insert(suffix, registered.clone());
         } else if let Some(domain) = domain_key(&registered.route) {
@@ -124,6 +154,7 @@ impl RouteRegistry {
             let key = (datagram, port);
             inner.by_port.insert(key, registered.clone());
         }
+        *inner.routes_per_session.entry(owner).or_insert(0) += 1;
         self.version.fetch_add(1, Ordering::Relaxed);
         Ok(registered)
     }
@@ -148,40 +179,19 @@ impl RouteRegistry {
             .inner
             .write()
             .expect("route registry lock is never held across awaits");
-        let domain_ids: Vec<RouteId> = inner
-            .by_domain
+        let ids: Vec<RouteId> = inner
+            .by_id
             .values()
             .filter(|route| route.session() == Some(session))
             .map(|route| route.route.id.clone())
             .collect();
-        for id in &domain_ids {
+        for id in &ids {
             remove_by_id(&mut inner, id);
         }
-        let wildcard_ids: Vec<RouteId> = inner
-            .by_wildcard
-            .values()
-            .filter(|route| route.session() == Some(session))
-            .map(|route| route.route.id.clone())
-            .collect();
-        for id in &wildcard_ids {
-            remove_by_id(&mut inner, id);
-        }
-        let port_ids: Vec<RouteId> = inner
-            .by_port
-            .values()
-            .filter(|route| route.session() == Some(session))
-            .map(|route| route.route.id.clone())
-            .collect();
-        for id in &port_ids {
-            remove_by_id(&mut inner, id);
-        }
-        let mut removed = domain_ids;
-        removed.extend(wildcard_ids);
-        removed.extend(port_ids);
-        if !removed.is_empty() {
+        if !ids.is_empty() {
             self.version.fetch_add(1, Ordering::Relaxed);
         }
-        removed
+        ids
     }
 
     /// Looks up one registered route by id.
@@ -190,13 +200,7 @@ impl RouteRegistry {
             .inner
             .read()
             .expect("route registry lock is never held across awaits");
-        inner
-            .by_domain
-            .values()
-            .chain(inner.by_wildcard.values())
-            .chain(inner.by_port.values())
-            .find(|route| &route.route.id == id)
-            .cloned()
+        inner.by_id.get(id).cloned()
     }
 
     /// Matches a visitor host (lowercase, port-less) to a live route. Exact
@@ -211,10 +215,12 @@ impl RouteRegistry {
         if let Some(exact) = inner.by_domain.get(host) {
             return Some(exact.clone());
         }
+        // Longest suffix wins; the cover test builds no per-request string, so
+        // the scan stays cheap under the read lock even with many wildcards.
         inner
             .by_wildcard
             .iter()
-            .filter(|(suffix, _)| host.ends_with(&format!(".{suffix}")))
+            .filter(|(suffix, _)| host_covers_wildcard_suffix(host, suffix))
             .max_by_key(|(suffix, _)| suffix.len())
             .map(|(_, route)| route.clone())
     }
@@ -244,14 +250,11 @@ impl RouteRegistry {
             .read()
             .expect("route registry lock is never held across awaits");
         let mut routes: Vec<TunnelRoute> = inner
-            .by_domain
+            .by_id
             .values()
-            .chain(inner.by_wildcard.values())
-            .chain(inner.by_port.values())
             .map(|route| route.route.clone())
             .collect();
         routes.sort_by(|left, right| left.id.cmp(&right.id));
-        routes.dedup_by(|left, right| left.id == right.id);
         routes
     }
 
@@ -261,7 +264,7 @@ impl RouteRegistry {
             .inner
             .read()
             .expect("route registry lock is never held across awaits");
-        inner.by_domain.len() + inner.by_wildcard.len() + inner.by_port.len()
+        inner.by_id.len()
     }
 }
 
@@ -288,42 +291,42 @@ fn port_key(route: &TunnelRoute) -> Option<u16> {
     route.matcher.as_port()
 }
 
-fn find_by_id(inner: &RegistryInner, id: &RouteId) -> Option<RegisteredRoute> {
-    inner
-        .by_domain
-        .values()
-        .chain(inner.by_wildcard.values())
-        .chain(inner.by_port.values())
-        .find(|route| &route.route.id == id)
-        .map(|route| (**route).clone())
+/// Whether `*.{suffix}` covers `host` (the host ends with the suffix preceded
+/// by a dot), computed without building the joined string — this runs for
+/// every wildcard on every relayed request.
+fn host_covers_wildcard_suffix(host: &str, suffix: &str) -> bool {
+    let host = host.as_bytes();
+    let suffix = suffix.as_bytes();
+    host.len() > suffix.len() + 1
+        && host[host.len() - suffix.len() - 1] == b'.'
+        && host.ends_with(suffix)
+}
+
+fn decrement_session_count(counts: &mut HashMap<SessionId, usize>, session: Option<&SessionId>) {
+    if let Some(session) = session {
+        if let Some(count) = counts.get_mut(session) {
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                counts.remove(session);
+            }
+        }
+    }
 }
 
 fn remove_by_id(inner: &mut RegistryInner, id: &RouteId) -> Option<Arc<RegisteredRoute>> {
-    let domain_removed = inner
-        .by_domain
-        .iter()
-        .find(|(_, route)| &route.route.id == id)
-        .map(|(key, _)| key.clone());
-    if let Some(key) = domain_removed {
-        return inner.by_domain.remove(&key);
+    let registered = inner.by_id.remove(id)?;
+    if let Some(domain) = domain_key(&registered.route) {
+        inner.by_domain.remove(domain);
     }
-    let wildcard_removed = inner
-        .by_wildcard
-        .iter()
-        .find(|(_, route)| &route.route.id == id)
-        .map(|(key, _)| key.clone());
-    if let Some(key) = wildcard_removed {
-        return inner.by_wildcard.remove(&key);
+    if let Some(suffix) = wildcard_key(&registered.route) {
+        inner.by_wildcard.remove(&suffix);
     }
-    let port_removed = inner
-        .by_port
-        .iter()
-        .find(|(_, route)| &route.route.id == id)
-        .map(|(key, _)| *key);
-    if let Some(key) = port_removed {
-        return inner.by_port.remove(&key);
+    if let Some(port) = port_key(&registered.route) {
+        let key = (is_datagram(&registered.route), port);
+        inner.by_port.remove(&key);
     }
-    None
+    decrement_session_count(&mut inner.routes_per_session, registered.session());
+    Some(registered)
 }
 
 #[cfg(test)]
@@ -725,5 +728,89 @@ mod tests {
         );
         assert!(registry.match_port(7022).is_some());
         assert_eq!(registry.count(), 1, "a hot update never duplicates");
+    }
+
+    #[test]
+    fn a_route_id_cannot_be_taken_over_by_another_session() {
+        // The route id is owned by whoever registered it first: a different
+        // session reusing the id — even with an unrelated matcher — must be
+        // refused instead of silently replacing the live entry.
+        let registry = RouteRegistry::new();
+        registry
+            .register(sample_route("route_x", "demo.sdkwork.link", "session_a"))
+            .expect("register");
+        let error = registry
+            .register(sample_port_route("route_x", 7999, "session_b"))
+            .expect_err("cross-session id reuse");
+        assert!(matches!(error, TunnelError::RouteConflict(_)));
+        // The original route is untouched and still answers.
+        assert!(registry.match_domain("demo.sdkwork.link").is_some());
+        assert!(registry.match_port(7999).is_none());
+    }
+
+    #[test]
+    fn a_session_route_budget_bounds_registration_fan_out() {
+        // One session leaking registrations must hit the budget instead of
+        // growing the registry without bound; the next session is unaffected.
+        let registry = RouteRegistry::new();
+        for index in 0..MAX_ROUTES_PER_SESSION {
+            registry
+                .register(sample_route(
+                    &format!("route_{index}"),
+                    &format!("app{index}.sdkwork.link"),
+                    "session_a",
+                ))
+                .expect("register inside the budget");
+        }
+        let error = registry
+            .register(sample_route("route_over", "over.sdkwork.link", "session_a"))
+            .expect_err("budget exhausted");
+        assert!(matches!(error, TunnelError::InvalidRoute(_)));
+        // A hot update of a live route is not a new registration and must
+        // still succeed at the cap.
+        registry
+            .register(sample_route(
+                "route_0",
+                "renamed0.sdkwork.link",
+                "session_a",
+            ))
+            .expect("hot update at the cap");
+        // And the budget is per session.
+        registry
+            .register(sample_route(
+                "route_other",
+                "other.sdkwork.link",
+                "session_b",
+            ))
+            .expect("the next session has its own budget");
+        // Teardown releases budget.
+        registry.remove_session(&SessionId::parse("session_a").expect("valid id"));
+        registry
+            .register(sample_route(
+                "route_again",
+                "again.sdkwork.link",
+                "session_a",
+            ))
+            .expect("budget released by teardown");
+    }
+
+    #[test]
+    fn the_wildcard_cover_test_demands_a_dot_label_boundary() {
+        // `*.suffix` covers `<label>.suffix` only: a host that merely *ends
+        // with* the suffix characters is not covered.
+        assert!(host_covers_wildcard_suffix(
+            "app.sdkwork.link",
+            "sdkwork.link"
+        ));
+        assert!(host_covers_wildcard_suffix(
+            "deep.app.sdkwork.link",
+            "sdkwork.link"
+        ));
+        assert!(!host_covers_wildcard_suffix("sdkwork.link", "sdkwork.link"));
+        assert!(!host_covers_wildcard_suffix(
+            "notsdkwork.link",
+            "sdkwork.link"
+        ));
+        assert!(!host_covers_wildcard_suffix("link", "sdkwork.link"));
     }
 }

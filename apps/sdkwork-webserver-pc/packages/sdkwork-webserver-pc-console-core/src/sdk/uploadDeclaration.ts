@@ -30,7 +30,7 @@ export const WEBSERVER_PC_UPLOAD_SOURCE = 'sdkwork-webserver-pc' as const;
 export const WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD = {
   appResourceIdKind: 'application',
   appResourceType: 'web.plugin.package',
-  purpose: 'Plugin package archive uploaded from the web console.',
+  purpose: 'Web console plugin package uploaded so the plugin can be installed into the running webserver.',
   retention: 'long_term',
   scene: 'plugin-package',
   source: WEBSERVER_PC_UPLOAD_SOURCE,

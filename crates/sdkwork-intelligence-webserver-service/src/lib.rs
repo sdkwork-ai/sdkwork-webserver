@@ -35,7 +35,6 @@ pub use source_import::{
 };
 pub use tls_material_distribution::TlsMaterialDistributionConfig;
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use sdkwork_webserver_acme_service::CertificateIssuer;
@@ -65,9 +64,6 @@ pub struct WebService {
     /// capability rather than a row of zeros, which would read as "this
     /// installation has no users" rather than "not wired".
     pub(crate) metrics_summary: Option<Arc<dyn MetricsSummaryReadPort>>,
-    /// Count of audit log persistence failures so the audit gap stays
-    /// observable through health/readiness surfaces instead of being silent.
-    audit_persistence_failures: AtomicU64,
 }
 
 impl WebService {
@@ -114,7 +110,6 @@ impl WebService {
             domain_ownership_verifier,
             traffic_usage: None,
             metrics_summary: None,
-            audit_persistence_failures: AtomicU64::new(0),
         }
     }
 
@@ -144,16 +139,17 @@ impl WebService {
         self.repository.ready_check().await
     }
 
-    /// Persists an audit log entry. A persistence failure is counted and
-    /// surfaced through [`Self::audit_persistence_failures`] so the audit
-    /// gap is observable; business operations do not fail after their
-    /// durable effect has already been committed.
+    /// Persists an audit log entry. A persistence failure is counted on the
+    /// process-global counter (exported on the operations `/metrics` scrape
+    /// as `sdkwork_webserver_audit_persistence_failures_total` and alerted on
+    /// by the shipped Prometheus rules) so the audit gap is observable;
+    /// business operations do not fail after their durable effect has already
+    /// been committed.
     pub async fn record_audit_log(&self, entry: AuditLogWrite<'_>) -> WebServiceResult<()> {
         match self.repository.insert_audit_log(entry).await {
             Ok(()) => Ok(()),
             Err(error) => {
-                self.audit_persistence_failures
-                    .fetch_add(1, Ordering::Relaxed);
+                sdkwork_webserver_contract::observability::record_audit_persistence_failure();
                 tracing::error!(
                     error = ?error,
                     "failed to persist audit log entry; audit persistence failures now {}",
@@ -168,6 +164,6 @@ impl WebService {
     /// must alert on a nonzero value; a silent audit gap violates the
     /// commercial audit contract.
     pub fn audit_persistence_failures(&self) -> u64 {
-        self.audit_persistence_failures.load(Ordering::Relaxed)
+        sdkwork_webserver_contract::observability::audit_persistence_failures_total()
     }
 }

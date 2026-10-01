@@ -1,10 +1,10 @@
-# Observability (first slice: alert rules)
+# Observability (alert rules)
 
-`prometheus-rules.yml` holds the first alert-rule group for the Web Server.
-Every expression is grounded in a series the fixed data-plane operations
-registry (REQ-2026-0033/0034) actually exports — no rule references a series
-that does not exist, because an alert that can never fire is a fake control
-(PRD §12).
+`prometheus-rules.yml` holds the alert-rule group for the Web Server. Every
+expression is grounded in a series the shipped exporters actually publish —
+the fixed data-plane operations registry (REQ-2026-0033/0034), the
+certificate-expiry sampler gauges, and the audit-persistence counter — because
+an alert that can never fire is a fake control (PRD §12).
 
 ## Wiring
 
@@ -18,27 +18,32 @@ that does not exist, because an alert that can never fire is a fake control
 3. Alert routing/severity policy lives with the monitoring stack owner; the
    `runbook_url` annotations point into `docs/runbooks/`.
 
+## Exported series
+
+- Data-plane operations registry (`sdkwork_web_data_plane_*`): scrape health,
+  resource pressure, upstream failure/timeout ratios, request rejection,
+  protocol errors, WebSocket drain timeouts (REQ-2026-0033/0034).
+- Certificate expiry: `sdkwork_webserver_certificate_expiry_seconds_min`
+  (gauge; -1 = no observation yet) and `sdkwork_webserver_certificate_expiring_soon`
+  are sampled by the `data-plane` command: a supervised, shutdown-aware task
+  (`SDKWORK_WEBSERVER_CERT_METRICS_INTERVAL_SECS`, default 300 s, clamped
+  30..3600) reads the minimum seconds-to-expiry over active, non-revoked
+  certificates plus the 30-day expiring count through the shared database
+  pool and records them into the snapshot the operations `/metrics` handler
+  renders. Sampling is best effort by design — an edge without a
+  control-plane database simply reports "no observation" (PRD-FR-015); a
+  failed sample leaves the last value and logs.
+- Audit persistence:
+  `sdkwork_webserver_audit_persistence_failures_total` (counter) — audit rows
+  that could not be persisted since process start. The audit insert is
+  post-commit by design, so a nonzero increase is a permanent audit gap for
+  the affected operations; the `SdkworkWebAuditPersistenceFailure` rule pages
+  on it.
+
 ## Deliberately absent rules
 
-Certificate expiry, node divergence, and rollout-state alerts need series the
-registry does not carry yet (`sdkwork_web_data_plane_*` has no certificate or
-cluster-plane series). Shipping rules against nonexistent series would be the
-fake-control failure mode this file exists to avoid; they land together with
-the corresponding metric series (tracked in TECH_ARCHITECTURE.md and the
-troubleshooting runbook). Until then, certificate-expiry detection runs
-through `bin/doctor.sh` and the certificate-incident runbook's SQL checks.
-
-## Certificate expiry series (implemented)
-
-`sdkwork_webserver_certificate_expiry_seconds_min` (gauge; -1 = no
-observation yet) and `sdkwork_webserver_certificate_expiring_soon` are
-sampled by the `data-plane` command: a supervised, shutdown-aware task
-(`SDKWORK_WEBSERVER_CERT_METRICS_INTERVAL_SECS`, default 300 s, clamped
-30..3600) reads the minimum seconds-to-expiry over active, non-revoked
-certificates plus the 30-day expiring count through the shared database
-pool and records them into the snapshot the operations `/metrics` handler
-renders. Sampling is best effort by design — an edge without a
-control-plane database simply reports "no observation" (PRD-FR-015); a
-failed sample leaves the last value and logs. The two certificate alerts
-in `prometheus-rules.yml` consume these series; node-divergence and
-rollout-state alerts remain absent until their series exist.
+Node-divergence and rollout-state alerts need series no exporter carries yet
+(`sdkwork_web_data_plane_*` has no cluster-plane series). Shipping rules
+against nonexistent series would be the fake-control failure mode this file
+exists to avoid; they land together with the corresponding metric series
+(tracked in TECH_ARCHITECTURE.md and the troubleshooting runbook).

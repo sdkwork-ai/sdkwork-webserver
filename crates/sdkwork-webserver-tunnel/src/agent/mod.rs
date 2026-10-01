@@ -28,6 +28,12 @@ use sdkwork_webserver_tunnel_transport::{
 
 use crate::metrics::TunnelMetrics;
 
+/// Deadline for writing one heartbeat control frame. Must stay far below the
+/// transport idle timeout (300s): a heartbeat write that stalls this long
+/// means the control stream is wedged, and the session loop must end and
+/// reconnect rather than park every other select arm behind it.
+const HEARTBEAT_WRITE_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// Lifecycle events an agent reports to its supervisor (CLI or webserver
 /// integration).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -463,8 +469,24 @@ async fn serve(
                 break SessionOutcome::Ended("local stream accept loop ended".to_owned());
             }
             _ = ticker.tick() => {
-                if let Err(error) = write_message(&mut *control, &ControlMessage::Heartbeat).await {
-                    break SessionOutcome::Ended(format!("heartbeat write failed: {error}"));
+                // A heartbeat frame is ~20 bytes; a write that outlives this
+                // deadline means the control stream is flow-control stalled.
+                // The session must end (and reconnect) instead of parking the
+                // whole select loop — no reads, no route refresh, no local
+                // proxy teardown — until the QUIC idle timeout notices.
+                let heartbeat_write = async {
+                    write_message(&mut *control, &ControlMessage::Heartbeat).await
+                };
+                match tokio::time::timeout(HEARTBEAT_WRITE_TIMEOUT, heartbeat_write).await {
+                    Ok(Ok(())) => {}
+                    Ok(Err(error)) => {
+                        break SessionOutcome::Ended(format!("heartbeat write failed: {error}"));
+                    }
+                    Err(_) => {
+                        break SessionOutcome::Ended(
+                            "heartbeat write timed out (control stream stalled)".to_owned(),
+                        );
+                    }
                 }
             }
             message = read_message(&mut *control, &mut scratch) => {

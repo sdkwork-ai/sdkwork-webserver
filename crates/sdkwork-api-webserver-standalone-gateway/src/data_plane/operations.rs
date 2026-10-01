@@ -214,6 +214,16 @@ pub(crate) async fn serve_operations_listener(
                     text.push_str(&tunnel.metrics.render_prometheus());
                 }
                 text.push_str(&super::certificates_metrics::render_prometheus());
+                // The audit-persistence counter lives on the shared contract
+                // plane because the management service writes it while this
+                // scrape reads it: a nonzero value is a permanent audit gap
+                // for the affected operations and is alerted on.
+                text.push_str("# HELP sdkwork_webserver_audit_persistence_failures_total Audit rows that could not be persisted since process start; nonzero is a permanent audit gap.\n");
+                text.push_str("# TYPE sdkwork_webserver_audit_persistence_failures_total counter\n");
+                text.push_str(&format!(
+                    "sdkwork_webserver_audit_persistence_failures_total {}\n",
+                    sdkwork_webserver_contract::observability::audit_persistence_failures_total()
+                ));
                 (
                     StatusCode::OK,
                     [(

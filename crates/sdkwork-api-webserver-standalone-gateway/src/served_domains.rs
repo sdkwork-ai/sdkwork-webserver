@@ -35,8 +35,8 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use sdkwork_database_id::{uuid_v4, SnowflakeIdGenerator};
 use sdkwork_webserver_core::{
-    merged_imports_app_config, normalize_tls_server_name, resolve_nginx_sidecar_path,
-    ConfigFormat, ConfigLoadOptions, VirtualHostConfig, WebServerAppConfig, WebServerConfigLoader,
+    merged_imports_app_config, normalize_tls_server_name, resolve_nginx_sidecar_path, ConfigFormat,
+    ConfigLoadOptions, VirtualHostConfig, WebServerAppConfig, WebServerConfigLoader,
 };
 use sqlx::PgPool;
 

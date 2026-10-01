@@ -313,6 +313,7 @@ tables:
       - { name: idx_webserver_certificate_renewal, columns: [tenant_id, renewal_status, updated_at, id], predicate: "auto_renew = true AND status IN (1, 2) AND deleted_at IS NULL" }
       - { name: idx_webserver_certificate_tenant_updated, columns: [tenant_id, updated_at, id], predicate: "deleted_at IS NULL" }
       - { name: idx_webserver_certificate_user_updated, columns: [tenant_id, user_id, updated_at, id], predicate: "user_id IS NOT NULL AND deleted_at IS NULL" }
+      - { name: idx_webserver_certificate_expiry_summary, columns: [not_after], predicate: "deleted_at IS NULL AND status = 1" }
   - name: webserver_certificate_identifier
     lifecycle_status: active
     owner: web-platform
@@ -858,6 +859,81 @@ tables:
   - name: webserver_application
     lifecycle_status: active
     owner: web-platform
+    columns:
+      id: { type: int64, required: true }
+      uuid: { type: string, required: true }
+      tenant_id: { type: int64, required: true }
+      organization_id: { type: int64, required: true }
+      data_scope: { type: int32, required: true }
+      user_id: { type: int64, required: false }
+      name: { type: string, required: true }
+      slug: { type: string, required: true }
+      description: { type: string, required: false }
+      application_kind: { type: string, required: true }
+      status: { type: int32, required: true }
+      site_id: { type: int64, required: false }
+      default_environment: { type: string, required: true }
+      access_surfaces: { type: json, required: true }
+      metadata: { type: json, required: true }
+      created_at: { type: instant, required: true }
+      updated_at: { type: instant, required: true }
+      version: { type: int64, required: true }
+      deleted_at: { type: instant, required: false }
+    constraints:
+      - { name: webserver_application_pkey, type: primary_key, columns: [id] }
+      - { name: uk_webserver_application_uuid, type: unique, columns: [uuid] }
+      - { name: uk_webserver_application_tenant_id, type: unique, columns: [tenant_id, id] }
+      - { name: uk_webserver_application_slug, type: unique, columns: [tenant_id, slug] }
+      - name: fk_webserver_application_site
+        type: foreign_key
+        columns: [tenant_id, site_id]
+        references_table: webserver_site
+        references_columns: [tenant_id, id]
+      - { name: chk_webserver_application_kind, type: check }
+      - { name: chk_webserver_application_status, type: check }
+      - { name: chk_webserver_application_access_surfaces, type: check }
+    indexes:
+      - { name: idx_webserver_application_tenant_status_updated, columns: [tenant_id, status, "updated_at DESC"] }
+      - { name: idx_webserver_application_user_updated, columns: [user_id, "updated_at DESC"], predicate: "user_id IS NOT NULL" }
+      - { name: idx_webserver_application_tenant_updated_id, columns: [tenant_id, "updated_at DESC", "id DESC"], predicate: "deleted_at IS NULL" }
+  - name: webserver_application_host
+    lifecycle_status: active
+    owner: web-platform
+    columns:
+      id: { type: int64, required: true }
+      uuid: { type: string, required: true }
+      tenant_id: { type: int64, required: true }
+      organization_id: { type: int64, required: true }
+      data_scope: { type: int32, required: true }
+      user_id: { type: int64, required: false }
+      app_id: { type: int64, required: true }
+      hostname: { type: string, required: true }
+      hostname_type: { type: string, required: true }
+      environment: { type: string, required: true }
+      vhost_id: { type: string, required: true }
+      path_prefix: { type: string, required: true }
+      status: { type: int32, required: true }
+      metadata: { type: json, required: true }
+      created_at: { type: instant, required: true }
+      updated_at: { type: instant, required: true }
+      version: { type: int64, required: true }
+      deleted_at: { type: instant, required: false }
+    constraints:
+      - { name: webserver_application_host_pkey, type: primary_key, columns: [id] }
+      - { name: uk_webserver_application_host_uuid, type: unique, columns: [uuid] }
+      - { name: uk_webserver_application_host_tenant_id, type: unique, columns: [tenant_id, id] }
+      - name: fk_webserver_application_host_application
+        type: foreign_key
+        columns: [tenant_id, app_id]
+        references_table: webserver_application
+        references_columns: [tenant_id, id]
+      - { name: chk_webserver_application_host_hostname_type, type: check }
+      - { name: chk_webserver_application_host_environment, type: check }
+      - { name: chk_webserver_application_host_status, type: check }
+    indexes:
+      - { name: uk_webserver_application_host_active_hostname, columns: [tenant_id, app_id, environment, hostname], unique: true, predicate: "deleted_at IS NULL" }
+      - { name: idx_webserver_application_host_hostname, columns: [tenant_id, hostname], predicate: "deleted_at IS NULL" }
+      - { name: idx_webserver_application_host_app, columns: [tenant_id, app_id, environment, id], predicate: "deleted_at IS NULL" }
   - name: webserver_app_platform_target
     lifecycle_status: active
     owner: web-platform
@@ -877,6 +953,8 @@ tables:
       status: { type: int32, required: true }
       heartbeat_interval_seconds: { type: int32, required: true }
       offline_threshold_seconds: { type: int32, required: true }
+      lb_strategy: { type: string, required: true }
+      served_domains: { type: json, required: true }
       metadata: { type: json, required: true }
       created_at: { type: instant, required: true }
       updated_at: { type: instant, required: true }
@@ -892,6 +970,33 @@ tables:
     indexes:
       - { name: uk_webserver_cluster_code, columns: [tenant_id, code], unique: true, predicate: "deleted_at IS NULL" }
       - { name: idx_webserver_cluster_tenant_status_updated, columns: [tenant_id, status, updated_at, id] }
+  - name: webserver_cluster_sync_revision
+    lifecycle_status: active
+    owner: web-platform
+    columns:
+      id: { type: int64, required: true }
+      uuid: { type: string, required: true }
+      tenant_id: { type: int64, required: true }
+      cluster_id: { type: int64, required: true }
+      kind: { type: int32, required: true }
+      revision: { type: string, required: true }
+      sha256: { type: string, required: true }
+      payload: { type: json, required: true }
+      size_bytes: { type: int64, required: true }
+      created_by: { type: string, required: false }
+      created_at: { type: instant, required: true }
+    constraints:
+      - { name: webserver_cluster_sync_revision_pkey, type: primary_key, columns: [id] }
+      - { name: uk_webserver_cluster_sync_uuid, type: unique, columns: [uuid] }
+      - { name: uk_webserver_cluster_sync_revision, type: unique, columns: [tenant_id, cluster_id, kind, revision] }
+      - name: fk_webserver_cluster_sync_cluster
+        type: foreign_key
+        columns: [tenant_id, cluster_id]
+        references_table: webserver_cluster
+        references_columns: [tenant_id, id]
+      - { name: chk_webserver_cluster_sync_kind, type: check }
+    indexes:
+      - { name: idx_webserver_cluster_sync_cluster_kind_created, columns: [tenant_id, cluster_id, kind, "created_at DESC"] }
   - name: webserver_cluster_host
     lifecycle_status: active
     owner: web-platform
@@ -915,6 +1020,9 @@ tables:
       mac_addresses: { type: json, required: true }
       daemon_version: { type: string, required: false }
       status: { type: int32, required: true }
+      join_mode: { type: int32, required: true }
+      tunnel_route_domain: { type: string, required: false }
+      tunnel_endpoint: { type: string, required: false }
       last_heartbeat_at: { type: instant, required: false }
       metadata: { type: json, required: true }
       created_at: { type: instant, required: true }
@@ -931,9 +1039,11 @@ tables:
         references_table: webserver_cluster
         references_columns: [tenant_id, id]
       - { name: chk_webserver_cluster_host_status, type: check }
+      - { name: chk_webserver_cluster_host_join_mode, type: check }
     indexes:
       - { name: uk_webserver_cluster_host_machine_code, columns: [tenant_id, machine_code], unique: true, predicate: "deleted_at IS NULL" }
       - { name: idx_webserver_cluster_host_cluster_status_updated, columns: [tenant_id, cluster_id, status, updated_at, id], predicate: "deleted_at IS NULL" }
+      - { name: idx_webserver_cluster_host_cluster_join_mode, columns: [tenant_id, cluster_id, join_mode], predicate: "deleted_at IS NULL" }
   - name: webserver_cluster_instance
     lifecycle_status: active
     owner: web-platform
@@ -957,6 +1067,26 @@ tables:
       last_heartbeat_at: { type: instant, required: false }
       last_online_at: { type: instant, required: false }
       uptime_seconds: { type: int64, required: true }
+      join_mode: { type: int32, required: true }
+      tunnel_route_domain: { type: string, required: false }
+      quality_score: { type: int32, required: false }
+      desired_config_revision: { type: string, required: false }
+      applied_config_revision: { type: string, required: false }
+      desired_applications_revision: { type: string, required: false }
+      applied_applications_revision: { type: string, required: false }
+      sync_status: { type: int32, required: true }
+      routing_enabled: { type: boolean, required: true }
+      draining: { type: boolean, required: true }
+      drain_started_at: { type: instant, required: false }
+      restart_count: { type: int32, required: true }
+      last_restarted_at: { type: instant, required: false }
+      ejected_at: { type: instant, required: false }
+      probe_failures: { type: int32, required: true }
+      probe_url: { type: string, required: false }
+      labels: { type: json, required: true }
+      routing_weight: { type: int32, required: true }
+      maintenance_note: { type: string, required: false }
+      instance_key: { type: string, required: false }
       metrics: { type: json, required: true }
       metadata: { type: json, required: true }
       created_at: { type: instant, required: true }
@@ -981,11 +1111,18 @@ tables:
       - { name: chk_webserver_cluster_instance_environment, type: check }
       - { name: chk_webserver_cluster_instance_status, type: check }
       - { name: chk_webserver_cluster_instance_health_state, type: check }
+      - { name: chk_webserver_cluster_instance_join_mode, type: check }
+      - { name: chk_webserver_cluster_instance_quality_score, type: check }
+      - { name: chk_webserver_cluster_instance_sync_status, type: check }
+      - { name: chk_webserver_cluster_instance_routing_weight, type: check }
     indexes:
-      - { name: uk_webserver_cluster_instance_process, columns: [tenant_id, host_id, process_pid], unique: true, predicate: "deleted_at IS NULL AND process_pid IS NOT NULL" }
+      - { name: uk_webserver_cluster_instance_slot, columns: [tenant_id, host_id, instance_key], unique: true, predicate: "deleted_at IS NULL AND instance_key IS NOT NULL" }
       - { name: idx_webserver_cluster_instance_metadata_gin, columns: [metadata], type: gin }
       - { name: idx_webserver_cluster_instance_cluster_status_updated, columns: [tenant_id, cluster_id, status, updated_at, id], predicate: "deleted_at IS NULL" }
       - { name: idx_webserver_cluster_instance_host_status_updated, columns: [tenant_id, host_id, status, updated_at, id], predicate: "deleted_at IS NULL" }
+      - { name: idx_webserver_cluster_instance_cluster_join_mode, columns: [tenant_id, cluster_id, join_mode, status], predicate: "deleted_at IS NULL" }
+      - { name: idx_webserver_cluster_instance_sync_status, columns: [tenant_id, cluster_id, sync_status], predicate: "deleted_at IS NULL" }
+      - { name: idx_webserver_cluster_instance_routing, columns: [tenant_id, cluster_id, routing_enabled, draining], predicate: "deleted_at IS NULL" }
   - name: webserver_cluster_event
     lifecycle_status: active
     owner: web-platform

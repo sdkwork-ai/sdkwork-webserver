@@ -17,9 +17,17 @@ pub enum WebAppResourceScope {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WebAppRequestContext {
+    // Transport-internal today (axum Extension, framework-resolved), but the
+    // serde derives mean any future wire exposure would emit raw JSON numbers
+    // for snowflake-scale ids — pinned to the shared int64-string helpers so
+    // that can never happen silently (API_SPEC §13.6).
+    #[serde(with = "sdkwork_utils_rust::serde_int64")]
     pub tenant_id: i64,
+    #[serde(with = "sdkwork_utils_rust::serde_int64::option")]
     pub actor_id: Option<i64>,
+    #[serde(with = "sdkwork_utils_rust::serde_int64::option")]
     pub organization_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idempotency_key: Option<String>,
@@ -29,7 +37,9 @@ pub struct WebAppRequestContext {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WebBackendRequestContext {
+    #[serde(with = "sdkwork_utils_rust::serde_int64::option")]
     pub operator_id: Option<i64>,
+    #[serde(with = "sdkwork_utils_rust::serde_int64::option")]
     pub tenant_id: Option<i64>,
     /// Raw principal subject identifier (server UUID for agent-token routes, user_id string for dual-token).
     /// Present when the framework resolves a principal; absent for anonymous/public contexts.

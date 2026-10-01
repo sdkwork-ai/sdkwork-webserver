@@ -2141,6 +2141,11 @@ paths:
     get:
       operationId: serverFiles.nodes.list
       summary: List Server Files deployment nodes
+      description: >-
+        Bounded-by-design collection (pagination exception, PAGINATION_SPEC
+        section 11): the inventory is the managed deployment topology and is
+        enforced to at most 100 nodes, so the list is served as one
+        pagination-less page.
       tags:
       - serverFile
       security:

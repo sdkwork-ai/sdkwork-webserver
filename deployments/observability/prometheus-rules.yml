@@ -1,12 +1,14 @@
-# SDKWork Web Server — Prometheus alert rules (first slice)
+# SDKWork Web Server — Prometheus alert rules
 #
-# Grounded exclusively in the series the fixed data-plane operations registry
-# actually exports (REQ-2026-0033/0034): every expression below names a series
-# and a label value that exists in `sdkwork_web_data_plane_*`. Alerts that need
-# series the registry does not carry yet — certificate expiry, node
-# convergence, rollout state — are deliberately absent and tracked in
-# docs/runbooks/troubleshooting.md; adding a rule before its series exists
-# would produce an alert that can never fire, which is a fake control.
+# Grounded exclusively in the series the shipped exporters actually publish:
+# the fixed data-plane operations registry (REQ-2026-0033/0034, series
+# `sdkwork_web_data_plane_*`), the certificate-expiry sampler gauges
+# (`sdkwork_webserver_certificate_expiry_*`), and the audit-persistence
+# counter (`sdkwork_webserver_audit_persistence_failures_total`). Alerts that
+# need series no exporter carries yet — node convergence, rollout state — are
+# deliberately absent and tracked in docs/runbooks/troubleshooting.md; adding
+# a rule before its series exists would produce an alert that can never fire,
+# which is a fake control.
 #
 # Scrape target: the loopback-only host-operations listener `/metrics`
 # (default port 3811; see deployments/observability/README.md).
@@ -96,6 +98,15 @@ groups:
           summary: "An active certificate is inside its final 48 hours"
           description: "The smallest seconds-to-expiry over served certificates dropped below 48h; issuance or renewal is not keeping up and a public hostname will fail TLS handshakes soon. (The -1 unknown state is excluded: it means no observation, not an imminent expiry.)"
           runbook_url: "docs/runbooks/certificate-incident.md"
+
+      - alert: SdkworkWebAuditPersistenceFailure
+        expr: increase(sdkwork_webserver_audit_persistence_failures_total[15m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "An audit row could not be persisted"
+          description: "At least one business operation committed without its audit entry in the last 15 minutes. The audit insert is post-commit by design, so this is a permanent audit gap for the affected operations — investigate the database and the audit trail immediately."
+          runbook_url: "docs/runbooks/troubleshooting.md"
 
       - alert: SdkworkWebSocketDrainTimeouts
         expr: increase(sdkwork_web_data_plane_websocket_drain_timeouts_total[15m]) > 0

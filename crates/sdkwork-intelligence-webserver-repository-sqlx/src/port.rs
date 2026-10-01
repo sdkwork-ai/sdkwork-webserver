@@ -68,9 +68,10 @@ impl WebRepositoryPort for WebRepository {
         tenant_id: i64,
         organization_id: Option<i64>,
         owner_id: Option<i64>,
+        capacity: i64,
         request: &CreateApplicationRequest,
     ) -> WebServiceResult<ApplicationResponse> {
-        self.create_application_repo(tenant_id, organization_id, owner_id, request)
+        self.create_application_repo(tenant_id, organization_id, owner_id, capacity, request)
             .await
     }
 

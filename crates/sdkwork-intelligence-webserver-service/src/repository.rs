@@ -437,11 +437,15 @@ pub trait WebRepositoryPort: Send + Sync {
         query: &ListApplicationsQuery,
     ) -> WebServiceResult<ApplicationPage>;
 
+    /// `capacity` is the per-tenant application quota; the store enforces it
+    /// inside the create transaction under a per-tenant lock, so the decision
+    /// is authoritative under concurrency.
     async fn create_application(
         &self,
         tenant_id: i64,
         organization_id: Option<i64>,
         owner_id: Option<i64>,
+        capacity: i64,
         request: &CreateApplicationRequest,
     ) -> WebServiceResult<ApplicationResponse>;
 

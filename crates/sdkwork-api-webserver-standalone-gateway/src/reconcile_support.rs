@@ -54,9 +54,7 @@ pub(crate) struct StartupReconcileContext {
 /// whose inventory cannot be reconciled must still serve, and refusing to boot
 /// over a bookkeeping row would turn a missing inventory into an outage.
 #[cfg(feature = "management")]
-pub(crate) async fn startup_reconcile_context(
-    operation: &str,
-) -> Option<StartupReconcileContext> {
+pub(crate) async fn startup_reconcile_context(operation: &str) -> Option<StartupReconcileContext> {
     let pool = match sdkwork_database_sqlx::process_shared_database_pool() {
         Some(sdkwork_database_sqlx::DatabasePool::Postgres(pool, _)) => pool,
         None => {

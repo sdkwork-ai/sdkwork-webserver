@@ -206,6 +206,7 @@ async fn verify_certificate_revocation_ari_and_tls_projection(context: &TestCont
             TENANT_A,
             Some(31),
             Some(91),
+            i64::MAX,
             &CreateApplicationRequest {
                 name: "Parity Revocation Site".to_string(),
                 slug: Some("parity-revocation".to_string()),
@@ -502,6 +503,7 @@ async fn verify_certificate_activation_compensation(context: &TestContext) {
             TENANT_A,
             Some(31),
             Some(93),
+            i64::MAX,
             &CreateApplicationRequest {
                 name: "Certificate Compensation Site".to_string(),
                 slug: Some("certificate-compensation".to_string()),
@@ -675,6 +677,7 @@ async fn verify_repository_contract(context: &TestContext) {
                     TENANT_A,
                     Some(31),
                     Some(91),
+                    i64::MAX,
                     &CreateApplicationRequest {
                         name: format!("Alpha Site {index}"),
                         slug: Some(format!("alpha-{index}")),
@@ -693,6 +696,7 @@ async fn verify_repository_contract(context: &TestContext) {
             TENANT_A,
             Some(31),
             Some(91),
+            i64::MAX,
             &CreateApplicationRequest {
                 name: "Alpha API".to_owned(),
                 slug: Some("alpha-api".to_owned()),
@@ -768,6 +772,7 @@ async fn verify_repository_contract(context: &TestContext) {
             TENANT_B,
             None,
             None,
+            i64::MAX,
             &CreateApplicationRequest {
                 name: "Tenant B".to_owned(),
                 slug: Some("alpha-0".to_owned()),
@@ -786,6 +791,7 @@ async fn verify_repository_contract(context: &TestContext) {
             TENANT_A,
             None,
             None,
+            i64::MAX,
             &CreateApplicationRequest {
                 name: "Duplicate".to_owned(),
                 slug: Some("alpha-0".to_owned()),
@@ -2342,6 +2348,7 @@ async fn verify_certificate_keyset_pagination(context: &TestContext) {
             TENANT_A,
             Some(31),
             Some(91),
+            i64::MAX,
             &CreateApplicationRequest {
                 name: "keyset-certificates".to_string(),
                 slug: Some("keyset-certificates".to_string()),

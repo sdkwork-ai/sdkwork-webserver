@@ -31,6 +31,14 @@ use super::{dispatch, GatewayShared};
 
 const UDP_SESSION_IDLE: Duration = Duration::from_secs(60);
 const UDP_REAP_INTERVAL: Duration = Duration::from_secs(5);
+/// How long a pending (setup in flight) marker lives. Deliberately above the
+/// stream-open budget so a normal slow open survives; the reap clears it so a
+/// lost setup report cannot wedge a visitor into "pending" forever.
+const UDP_SETUP_TTL: Duration = Duration::from_secs(15);
+/// Upper bound on concurrent session setups per port. Each pending visitor has
+/// exactly one spawned setup task, so this bounds the spawn fan-out a
+/// spoofed-source flood can create; visitors beyond it are dropped and retry.
+const UDP_PENDING_SETUP_CEILING: usize = 1024;
 const UDP_DATAGRAM_CEILING: usize =
     sdkwork_webserver_tunnel_protocol::packet_frame::MAX_PACKET_PAYLOAD
         + sdkwork_webserver_tunnel_protocol::packet_frame::PACKET_LENGTH_BYTES;
@@ -150,10 +158,17 @@ struct VisitorSession {
     _permit: tokio::sync::OwnedSemaphorePermit,
 }
 
-/// Events the per-session reader tasks report back to the port loop.
+/// Events the per-session tasks report back to the port loop.
 enum SessionEvent {
     /// The session's tunnel read half ended; reap the session.
     Ended(SocketAddr),
+    /// An off-loop setup finished successfully; admit the session.
+    Established {
+        visitor: SocketAddr,
+        session: VisitorSession,
+    },
+    /// An off-loop setup was refused; clear the pending marker.
+    Refused(SocketAddr),
 }
 
 impl Drop for VisitorSession {
@@ -168,6 +183,11 @@ impl Drop for VisitorSession {
 
 async fn udp_port_loop(shared: Arc<GatewayShared>, port: u16, listener: Arc<UdpSocket>) {
     let mut sessions: HashMap<SocketAddr, VisitorSession> = HashMap::new();
+    // Setups in flight, keyed by visitor. The setup runs off the port loop so
+    // one slow stream-open cannot head-of-line block every other visitor on
+    // the port; until it reports, retransmits from the same visitor are
+    // dropped (the client retransmits — standard UDP semantics).
+    let mut pending: HashMap<SocketAddr, std::time::Instant> = HashMap::new();
     let (events_tx, mut events_rx) = mpsc::channel::<SessionEvent>(64);
     let mut visitor_buffer = vec![0_u8; UDP_DATAGRAM_CEILING];
     let mut reap = tokio::time::interval(UDP_REAP_INTERVAL);
@@ -179,6 +199,21 @@ async fn udp_port_loop(shared: Arc<GatewayShared>, port: u16, listener: Arc<UdpS
                 match event {
                     Some(SessionEvent::Ended(visitor)) => {
                         if sessions.remove(&visitor).is_some() {
+                            shared.metrics.record_stream_close();
+                        }
+                    }
+                    Some(SessionEvent::Established { visitor, session }) => {
+                        pending.remove(&visitor);
+                        if sessions.contains_key(&visitor) {
+                            // A live session already exists (the setup raced
+                            // the idle reap); dropping the newcomer aborts its
+                            // reader through VisitorSession::drop.
+                        } else {
+                            sessions.insert(visitor, session);
+                        }
+                    }
+                    Some(SessionEvent::Refused(visitor)) => {
+                        if pending.remove(&visitor).is_some() {
                             shared.metrics.record_stream_close();
                         }
                     }
@@ -194,6 +229,7 @@ async fn udp_port_loop(shared: Arc<GatewayShared>, port: u16, listener: Arc<UdpS
                     }
                     alive
                 });
+                pending.retain(|_, started| started.elapsed() < UDP_SETUP_TTL);
             }
             read = listener.recv_from(&mut visitor_buffer) => {
                 match read {
@@ -214,23 +250,24 @@ async fn udp_port_loop(shared: Arc<GatewayShared>, port: u16, listener: Arc<UdpS
                                 }
                             }
                             None => {
-                                shared.metrics.record_stream_open();
-                                match open_session(
-                                    &shared, port, &listener, visitor, payload, &events_tx,
-                                )
-                                .await
+                                if pending.contains_key(&visitor)
+                                    || pending.len() >= UDP_PENDING_SETUP_CEILING
                                 {
-                                    Ok(session) => {
-                                        sessions.insert(visitor, session);
-                                    }
-                                    Err(error) => {
-                                        shared.metrics.record_stream_close();
-                                        tracing::debug!(
-                                            %visitor, port, error = %error,
-                                            "udp session refused"
-                                        );
-                                    }
+                                    // Setup already in flight (the client
+                                    // retransmits), or the per-port setup
+                                    // budget is exhausted.
+                                    continue;
                                 }
+                                pending.insert(visitor, std::time::Instant::now());
+                                shared.metrics.record_stream_open();
+                                tokio::spawn(establish_visitor_session(
+                                    shared.clone(),
+                                    port,
+                                    Arc::clone(&listener),
+                                    visitor,
+                                    payload,
+                                    events_tx.clone(),
+                                ));
                             }
                         }
                     }
@@ -245,6 +282,34 @@ async fn udp_port_loop(shared: Arc<GatewayShared>, port: u16, listener: Arc<UdpS
     // Dropping the map drops every session; each session's Drop aborts its
     // reader task, so no explicit per-session cleanup is required here.
     drop(sessions);
+}
+
+/// Off-loop session setup: admission, tunnel stream open, and the first
+/// datagram forward, with the outcome reported back to the port loop.
+///
+/// Spawned per new visitor so a slow stream open (an upstream dial, a
+/// flow-control stall) stalls only its own visitor — never the port loop that
+/// every other visitor on the port shares. The node-side datagram proxy
+/// received the same shape in the same hardening round.
+async fn establish_visitor_session(
+    shared: Arc<GatewayShared>,
+    port: u16,
+    listener: Arc<UdpSocket>,
+    visitor: SocketAddr,
+    first_payload: Bytes,
+    events: mpsc::Sender<SessionEvent>,
+) {
+    match open_session(&shared, port, &listener, visitor, first_payload, &events).await {
+        Ok(session) => {
+            let _ = events
+                .send(SessionEvent::Established { visitor, session })
+                .await;
+        }
+        Err(error) => {
+            tracing::debug!(%visitor, port, error = %error, "udp session refused");
+            let _ = events.send(SessionEvent::Refused(visitor)).await;
+        }
+    }
 }
 
 async fn forward_to_session(

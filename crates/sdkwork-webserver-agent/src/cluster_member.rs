@@ -31,6 +31,11 @@ use sdkwork_webserver_contract::{
 use sdkwork_webserver_tunnel::gateway::GatewayShared;
 use tokio::sync::watch;
 
+/// Ceiling on one member-exchange response body accumulation. The exchange is
+/// deadline-bounded already; this keeps a peer that streams inside the
+/// deadline window from growing the buffer without limit.
+const MAX_MEMBER_RESPONSE_BYTES: usize = 1024 * 1024;
+
 /// Admin API transport for one cluster member.
 #[derive(Clone)]
 pub enum ClusterTransport {
@@ -640,6 +645,15 @@ where
                 .map_err(|error| MemberError::Transient(format!("read: {error}")))?;
             if read == 0 {
                 break;
+            }
+            // The exchange is already deadline-bounded; this ceiling keeps the
+            // accumulated response itself bounded so a misbehaving peer that
+            // never closes the stream cannot grow the buffer without limit
+            // inside the deadline window.
+            if raw.len() + read > MAX_MEMBER_RESPONSE_BYTES {
+                return Err(MemberError::Transient(format!(
+                    "member response exceeded {MAX_MEMBER_RESPONSE_BYTES} bytes"
+                )));
             }
             raw.extend_from_slice(&buffer[..read]);
         }

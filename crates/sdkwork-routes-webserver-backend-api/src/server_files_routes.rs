@@ -68,6 +68,13 @@ pub struct ServerFilesNodeRegistry {
     nodes: Arc<HashMap<String, ServerFilesNode>>,
 }
 
+/// `serverFiles.nodes.list` is a bounded-by-design collection
+/// (PAGINATION_SPEC §11): the inventory is the managed deployment topology,
+/// and the pagination-less list contract documents and enforces the shared
+/// collection capacity instead of growing with fleet size.
+const NODE_LIST_CAPACITY: usize =
+    sdkwork_routes_webserver_common::BOUNDED_COLLECTION_MAXIMUM_PAGE_SIZE as usize;
+
 impl ServerFilesNodeRegistry {
     pub fn new(nodes: Vec<ServerFilesNode>) -> Self {
         Self {
@@ -87,6 +94,7 @@ impl ServerFilesNodeRegistry {
     fn all(&self) -> Vec<ServerFilesNode> {
         let mut nodes: Vec<ServerFilesNode> = self.nodes.values().cloned().collect();
         nodes.sort_by(|left, right| left.id.cmp(&right.id));
+        nodes.truncate(NODE_LIST_CAPACITY);
         nodes
     }
 }

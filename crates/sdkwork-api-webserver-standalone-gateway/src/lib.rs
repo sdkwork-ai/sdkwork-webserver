@@ -43,8 +43,8 @@ pub use admin_reset::{
 pub use app_shell::validate_adaptive_app_shell_from_env;
 #[cfg(feature = "management")]
 pub use application_registry::{
-    reconcile_application_registry, reconcile_application_registry_at_startup,
-    application_from_import, derive_applications, ApplicationRegistrySummary, ObservedApplication,
+    application_from_import, derive_applications, reconcile_application_registry,
+    reconcile_application_registry_at_startup, ApplicationRegistrySummary, ObservedApplication,
     ObservedHost, APPLICATION_REGISTRY_RECONCILE_ENV,
 };
 #[cfg(feature = "management")]

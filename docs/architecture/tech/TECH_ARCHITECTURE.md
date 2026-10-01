@@ -248,6 +248,51 @@ the cross-repo sandbox
 contract test now pins the restructured sibling surface (machine-only
 routes, menu codes grantable) instead of reading the retired app-api crate.
 
+2026-10 hardening round 6 (audit remediation over the admin-IAM/surface-registry
+commits): the imported-application surface registry is now implemented
+end to end instead of schema-only — a startup reconciler
+(`application_registry.rs`, sibling of the served-domain pass and sharing one
+bootstrap with it) derives one application per materialized module import
+(access surfaces `PC`/`H5` from declared static resources, kind
+`SPA_WEB`/`STATIC_WEB`/`API` from the declared SPA fallback, deterministic
+`imported-<importId>` slug) and upserts `webserver_application` plus its
+per-server-block `webserver_application_host` inventory in one transaction,
+retiring only rows it created (`metadata.source = "served-config"`), refusing
+to adopt foreign rows, never writing on an incomplete or empty observation;
+the migration gained idempotency guards (a fresh baseline install plus
+autoMigrate replays it safely), and the schema contract now documents the
+application, application-host, cluster, cluster-host, cluster-instance and
+sync-revision tables in full. The baseline drift this exposed is closed: the
+`0011` covering index and the whole `0014`–`0018` cluster-era schema (columns,
+constraints, indexes, the `webserver_cluster_sync_revision` table, the slot
+uniqueness that replaced the process-pid index) are folded into the baseline,
+so a baseline-only install matches a migrated one. Concurrency and memory:
+the tunnel gateway's UDP session setup moved off the port loop (one slow
+stream open no longer head-of-line blocks every visitor on the port; pending
+markers are TTL-reaped and capped per port), the tunnel route registry gained
+a per-session route budget (256), O(1) id lookup/removal, an allocation-free
+wildcard cover test on the per-request match path, and a same-owner rule that
+stops one session taking over another's route id; the agent's heartbeat write
+carries a deadline (a flow-control-stalled control stream ends the session
+instead of parking the select loop until the QUIC idle timeout); the cluster
+member exchange bounds its response accumulation (1 MiB); source-version
+retention prunes in bounded batches instead of one transaction-wide rewrite;
+and the per-tenant application capacity is now enforced inside the create
+transaction under a per-tenant advisory lock — the losing concurrent create
+gets the quota conflict, never a raw constraint error. Contract hygiene: the
+certificate-expiry sampler aggregate has its covering partial index
+(`0021`); `serverFiles.nodes.list` documents and enforces its 100-item
+collection bound (PAGINATION_SPEC §11); the request-context port structs pin
+their id fields to the shared int64-string serialization helpers; the dead
+`envVariables`/`healthChecks` page-envelope helpers are removed; and the
+upload declaration constants are pinned to `specs/upload.declaration.json`
+by a conformance suite (with an honest extension-derived content type).
+Observability: the audit-persistence counter moved to the shared contract
+plane and is exported on the operations `/metrics` scrape
+(`sdkwork_webserver_audit_persistence_failures_total`) with a critical alert;
+the observability README and the standards-alignment packaging section were
+rewritten to match what actually ships.
+
 The host synchronization process is named **Web Node Daemon** in all new
 runtime and operational surfaces. The canonical packaged/development entry
 point is `sdkwork-webserver-node-daemon`; `sdkwork-webserver-agent` is retained only as a

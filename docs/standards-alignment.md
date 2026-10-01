@@ -261,11 +261,19 @@ profile with digest-bound templates, a bounded migration Job, StatefulSet identi
 PodDisruptionBudget, non-root execution, read-only root filesystem, dropped capabilities, and
 secret-manager references.
 
-The four Linux server package declarations in `sdkwork.app.config.json` are disabled and carry
-`releaseBuildDeferred: true`. Archive packaging, checksum, Sigstore, CycloneDX, x64/arm64 smoke,
-database recovery, and HA workflow steps are implemented, but no container registry publication
-authority or production release approval is declared. Docker/Kubernetes files are deployment
-templates, not evidence that an image has been published or deployed.
+The host-native `.deb`/`.rpm` server package declarations (test + production,
+Ubuntu and RHEL) in `sdkwork.app.config.json` are `enabled: true` with pinned
+SHA-256 checksums; the two archive declarations (x64/arm64 `.tar.gz`) remain
+disabled with `releaseBuildDeferred: true`. Archive packaging, checksum,
+Sigstore, CycloneDX, x64/arm64 smoke, database recovery, and HA workflow steps
+are implemented; note the supply-chain asymmetry — the enabled `.deb`/`.rpm`
+targets carry checksums only, while the SBOM (`scripts/webserver-sbom.mjs`,
+CycloneDX 1.6) and signing (`scripts/webserver-sign.mjs`, Sigstore) output is
+wired to the disabled archive targets. Extending SBOM/signature coverage to
+the enabled installers is a declared gap on the commercial-release gate list.
+No container registry publication authority or production release approval is
+declared. Docker/Kubernetes files are deployment templates, not evidence that
+an image has been published or deployed.
 
 ## Verification
 

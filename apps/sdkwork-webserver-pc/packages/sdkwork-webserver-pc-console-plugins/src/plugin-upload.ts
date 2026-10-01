@@ -27,6 +27,24 @@ async function calculateSha256(file: File): Promise<string> {
   return hexEncode(hasher.digest());
 }
 
+/**
+ * The honest content type for an accepted plugin archive, derived from the
+ * file extension. `file.type` is a browser guess that is frequently empty and
+ * mislabels `.tar` as `application/zip`; the upload declaration contract
+ * (DRIVE_SPEC §18) requires the declared statistic dimensions to be truthful,
+ * and the content type is one of them.
+ */
+export function pluginArchiveContentType(file: File): string {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".tar.gz") || name.endsWith(".tgz") || name.endsWith(".gz")) {
+    return "application/gzip";
+  }
+  if (name.endsWith(".tar")) {
+    return "application/x-tar";
+  }
+  return "application/zip";
+}
+
 export async function uploadPluginArchive(
   drive: SdkworkDriveAppClient,
   file: File,
@@ -39,7 +57,7 @@ export async function uploadPluginArchive(
     scene: WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD.scene,
     source: WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD.source,
     originalFileName: file.name,
-    contentType: file.type || "application/zip",
+    contentType: pluginArchiveContentType(file),
     checksumSha256Hex: `sha256:${checksumSha256}`,
     fileFingerprint: checksumSha256,
   });
