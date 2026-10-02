@@ -172,18 +172,31 @@ impl WebRepository {
     /// fetches `page_size + 1` rows so `has_more` is exact and no COUNT runs
     /// against the per-issuance-growing certificate collection.
     /// Cluster-wide certificate health for the operations metrics sampler:
-    /// the smallest seconds-to-expiry over active, non-revoked certificates
-    /// (-1 when none exist) and how many expire within 30 days. Fixed shape,
-    /// one row, no tenant scoping on purpose - the sampler runs inside the
-    /// edge process and reports the whole served set, the same scope the TLS
-    /// material publisher distributes.
+    /// the smallest seconds-to-expiry over the ACTIVE current versions of
+    /// issued, non-deleted certificates (-1 when none exist) and how many
+    /// expire within 30 days. Fixed shape, one row, no tenant scoping on
+    /// purpose - the sampler runs inside the edge process and reports the
+    /// whole served set, the same scope the TLS material publisher
+    /// distributes. `not_after` lives on the certificate version; the EXISTS
+    /// probe pins each candidate to its certificate's current pointer so the
+    /// aggregate covers exactly the served set, while the `status` filter
+    /// keeps the scan inside the leading ACTIVE band of
+    /// `idx_webserver_certificate_expiry_summary` and the per-row probe on
+    /// the certificate primary key.
     pub(super) async fn certificate_expiry_summary_repo(&self) -> WebServiceResult<(i64, i64)> {
         let row = sqlx::query(
-            "SELECT COALESCE(MIN(EXTRACT(EPOCH FROM (not_after - NOW())))::BIGINT, -1)
+            "SELECT COALESCE(MIN(EXTRACT(EPOCH FROM (v.not_after - NOW())))::BIGINT, -1)
                     AS min_seconds,
-                    COUNT(*) FILTER (WHERE not_after < NOW() + INTERVAL '30 days') AS expiring_soon
-             FROM webserver_certificate
-             WHERE deleted_at IS NULL AND status = 1",
+                    COUNT(*) FILTER (WHERE v.not_after < NOW() + INTERVAL '30 days')
+                    AS expiring_soon
+             FROM webserver_certificate_version v
+             WHERE v.status = 'ACTIVE'
+               AND EXISTS (
+                   SELECT 1 FROM webserver_certificate c
+                   WHERE c.id = v.certificate_id
+                     AND c.current_version_id = v.id
+                     AND c.deleted_at IS NULL AND c.status = 1
+               )",
         )
         .fetch_one(&self.pool)
         .await

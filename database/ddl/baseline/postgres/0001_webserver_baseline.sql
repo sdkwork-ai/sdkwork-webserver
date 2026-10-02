@@ -2438,23 +2438,30 @@ CREATE INDEX IF NOT EXISTS idx_webserver_application_host_app
     WHERE deleted_at IS NULL;
 
 -- folded migration: migrations/postgres/0021_webserver_certificate_expiry_summary_index.up.sql
+--   (superseded in place by 0022_webserver_certificate_expiry_summary_index_shape.up.sql)
 -- sdkwork:migration
--- id: 0021_webserver_certificate_expiry_summary_index
+-- id: 0022_webserver_certificate_expiry_summary_index_shape
 -- engine: postgres
 -- module: web
--- description: Covering partial index for the certificate-expiry sampler
---   aggregate (certificate_expiry_summary_repo): both the MIN
---   seconds-to-expiry and the 30-day FILTER count scan only `not_after` over
---   active, non-deleted certificates. Without it the sampler aggregates the
---   whole table on every interval; with it the aggregate is an index-only
---   scan whose cost no longer grows with the retained certificate history.
+-- description: Covering index for the certificate-expiry sampler aggregate
+--   (certificate_expiry_summary_repo): both the MIN seconds-to-expiry and the
+--   30-day FILTER count scan `not_after` over the ACTIVE current versions of
+--   issued, non-deleted certificates. `not_after` lives on
+--   webserver_certificate_version (the certificate row only points at its
+--   current version through current_version_id), so the index sits there with
+--   `status` leading: the sampler drives an index-only scan over the
+--   contiguous ACTIVE band, with a primary-key EXISTS probe per candidate
+--   into webserver_certificate, so the scan cost grows with the served set,
+--   never with the retained certificate history. 0021 shipped a partial
+--   `(not_after) WHERE status = 'ACTIVE'` shape; 0022 dropped the predicate
+--   because stored predicates round-trip through pg_get_expr in a cast form
+--   schema-drift comparison cannot reconcile with the authored form.
 -- reversible: true
--- rollback: down-migration drops the index
+-- rollback: down-migration restores the 0021 partial index
 -- transactional: true
 -- lock: lightweight
 -- lock_timeout: 2s
 -- statement_timeout: 30s
 
 CREATE INDEX IF NOT EXISTS idx_webserver_certificate_expiry_summary
-    ON webserver_certificate (not_after)
-    WHERE deleted_at IS NULL AND status = 1;
+    ON webserver_certificate_version (status, not_after);

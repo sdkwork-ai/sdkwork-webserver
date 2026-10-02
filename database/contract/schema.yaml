@@ -313,7 +313,6 @@ tables:
       - { name: idx_webserver_certificate_renewal, columns: [tenant_id, renewal_status, updated_at, id], predicate: "auto_renew = true AND status IN (1, 2) AND deleted_at IS NULL" }
       - { name: idx_webserver_certificate_tenant_updated, columns: [tenant_id, updated_at, id], predicate: "deleted_at IS NULL" }
       - { name: idx_webserver_certificate_user_updated, columns: [tenant_id, user_id, updated_at, id], predicate: "user_id IS NOT NULL AND deleted_at IS NULL" }
-      - { name: idx_webserver_certificate_expiry_summary, columns: [not_after], predicate: "deleted_at IS NULL AND status = 1" }
   - name: webserver_certificate_identifier
     lifecycle_status: active
     owner: web-platform
@@ -397,6 +396,7 @@ tables:
       - { name: uk_webserver_certificate_version_no, columns: [certificate_id, version_no], unique: true }
       - { name: uk_webserver_certificate_version_fingerprint, columns: [tenant_id, fingerprint_sha256], unique: true }
       - { name: idx_webserver_certificate_version_lifecycle, columns: [tenant_id, status, not_after, id] }
+      - { name: idx_webserver_certificate_expiry_summary, columns: [status, not_after] }
   - name: webserver_certificate_secret_bundle
     lifecycle_status: active
     owner: web-platform
@@ -893,9 +893,9 @@ tables:
       - { name: chk_webserver_application_status, type: check }
       - { name: chk_webserver_application_access_surfaces, type: check }
     indexes:
-      - { name: idx_webserver_application_tenant_status_updated, columns: [tenant_id, status, "updated_at DESC"] }
-      - { name: idx_webserver_application_user_updated, columns: [user_id, "updated_at DESC"], predicate: "user_id IS NOT NULL" }
-      - { name: idx_webserver_application_tenant_updated_id, columns: [tenant_id, "updated_at DESC", "id DESC"], predicate: "deleted_at IS NULL" }
+      - { name: idx_webserver_application_tenant_status_updated, columns: [tenant_id, status, updated_at] }
+      - { name: idx_webserver_application_user_updated, columns: [user_id, updated_at], predicate: "user_id IS NOT NULL" }
+      - { name: idx_webserver_application_tenant_updated_id, columns: [tenant_id, updated_at, id], predicate: "deleted_at IS NULL" }
   - name: webserver_application_host
     lifecycle_status: active
     owner: web-platform
@@ -996,7 +996,7 @@ tables:
         references_columns: [tenant_id, id]
       - { name: chk_webserver_cluster_sync_kind, type: check }
     indexes:
-      - { name: idx_webserver_cluster_sync_cluster_kind_created, columns: [tenant_id, cluster_id, kind, "created_at DESC"] }
+      - { name: idx_webserver_cluster_sync_cluster_kind_created, columns: [tenant_id, cluster_id, kind, created_at] }
   - name: webserver_cluster_host
     lifecycle_status: active
     owner: web-platform
