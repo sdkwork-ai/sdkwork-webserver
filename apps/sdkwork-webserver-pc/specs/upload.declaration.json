@@ -10,6 +10,15 @@
       "uploadProfileCode": "archive",
       "retention": "long_term",
       "purpose": "Web console plugin package uploaded so the plugin can be installed into the running webserver."
+    },
+    {
+      "appResourceType": "profile.avatar",
+      "appResourceIdKind": "entity",
+      "scene": "avatar",
+      "source": "sdkwork-webserver-pc",
+      "uploadProfileCode": "avatar",
+      "retention": "long_term",
+      "purpose": "IAM admin console user avatar uploaded to Drive and attached to the user directory record."
     }
   ]
 }

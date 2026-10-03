@@ -38,6 +38,25 @@ export const WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD = {
 } as const satisfies WebserverPcUploadDeclarationEntry;
 
 /**
+ * A user directory avatar uploaded from the IAM admin console.
+ *
+ * `appResourceIdKind` is `entity`: the avatar belongs to the user directory
+ * record, so `appResourceId` at call time is that user's id. The create flow
+ * therefore persists the user first, uploads against the new id, and attaches
+ * the returned media resource with a follow-up update (`DRIVE_SPEC.md`
+ * section 18.3: persist first, upload second).
+ */
+export const WEBSERVER_PC_ADMIN_USER_AVATAR_UPLOAD = {
+  appResourceIdKind: 'entity',
+  appResourceType: 'profile.avatar',
+  purpose: 'IAM admin console user avatar uploaded to Drive and attached to the user directory record.',
+  retention: 'long_term',
+  scene: 'avatar',
+  source: WEBSERVER_PC_UPLOAD_SOURCE,
+  uploadProfileCode: 'avatar',
+} as const satisfies WebserverPcUploadDeclarationEntry;
+
+/**
  * Stable application-scope resource id sent as `appResourceId` for plugin archives.
  *
  * The create flow uploads the archive before any plugin entity exists, so the id must not be
@@ -50,4 +69,5 @@ export const WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD_RESOURCE_ID = 'plugin-package-ar
 /** Every declared upload purpose for this application. */
 export const WEBSERVER_PC_UPLOAD_DECLARATIONS: readonly WebserverPcUploadDeclarationEntry[] = [
   WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD,
+  WEBSERVER_PC_ADMIN_USER_AVATAR_UPLOAD,
 ];

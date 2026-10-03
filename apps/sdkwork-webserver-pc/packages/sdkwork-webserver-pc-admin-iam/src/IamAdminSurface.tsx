@@ -3,6 +3,7 @@ import { LoaderCircle } from "lucide-react";
 import { lazy, Suspense, useMemo, type ComponentType } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { translateWebserver, type WebserverLocale } from "@sdkwork/webserver-pc-commons";
+import { createSdkworkIamUserAvatarService } from "./avatar-upload.ts";
 import { useWebserverConsoleSdk } from "@sdkwork/webserver-pc-console-core";
 
 /**
@@ -81,11 +82,13 @@ const LazyIamUsersAdmin = lazy(async () => {
     await import("@sdkwork/iam-pc-admin-user");
   return {
     default: function IamUsersAdminContent({ locale, permissionScope }: IamAdminContentProps) {
-      const service = useIamAdminService();
+      const { drive, iam } = useWebserverConsoleSdk();
       const can = useIamAdminPermission(permissionScope);
-      const controller = useMemo(() => createSdkworkIamUserAdminController(service), [service]);
+      const controller = useMemo(() => createSdkworkIamUserAdminController(iam.service), [iam.service]);
+      const avatarService = useMemo(() => createSdkworkIamUserAvatarService(drive), [drive]);
       return (
         <SdkworkIamUserAdminWorkspace
+          avatarService={avatarService}
           controller={controller}
           locale={locale}
           permissions={{
