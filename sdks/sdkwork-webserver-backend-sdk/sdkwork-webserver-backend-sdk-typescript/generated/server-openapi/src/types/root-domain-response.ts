@@ -9,6 +9,8 @@ export interface RootDomainResponse {
   dnsProvider?: string;
   /** Provider-side zone identifier. */
   providerZoneRef?: string;
+  /** The cloud account whose DNS automation this root domain publishes through; absent when it is bound to none and resolves the account per operation. */
+  cloudAccountId?: string;
   status: number;
   subdomainCount: Int64String;
   boundSubdomainCount: Int64String;

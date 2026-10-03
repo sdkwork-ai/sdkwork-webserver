@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 
 import { WebserverAdminSdkProvider, type WebserverAdminSdkClient } from "@sdkwork/webserver-pc-admin-core";
-import { ServedCertificateAdminSurface, ServedDomainAdminSurface } from "@sdkwork/webserver-pc-admin-delivery";
+import {
+  ServedCertificateAdminSurface,
+  ServedDomainAdminSurface,
+  type CloudAccountOption,
+} from "@sdkwork/webserver-pc-admin-delivery";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -45,6 +49,9 @@ const ROOTS = [
   {
     activeDeploymentCount: "0",
     boundSubdomainCount: "0",
+    // Bound to an account the account center still names, so the row's label and
+    // the filter's option are exercised through the same lookup.
+    cloudAccountId: "aliyun-prod",
     createdAt: "2026-09-23T02:23:21.936919Z",
     hostname: "sdkwork.com",
     httpsSubdomainCount: "3",
@@ -57,6 +64,10 @@ const ROOTS = [
   {
     activeDeploymentCount: "0",
     boundSubdomainCount: "0",
+    // Deliberately absent rather than null: an unbound root domain is one whose
+    // member the server omits, which is the state the filter's "unassigned"
+    // option selects and the state the row has to render as a word rather than
+    // as a blank cell.
     createdAt: "2026-09-23T02:23:21.936919Z",
     hostname: "zowalk.com",
     httpsSubdomainCount: "0",
@@ -156,6 +167,45 @@ const DNS_ACCOUNTS = [
   { accountId: "cloudflare-mirror", provider: "CLOUDFLARE", zoneApex: "zowalk.com" },
 ];
 
+/**
+ * The account center's inventory, as the host injects it.
+ *
+ * Two rows rather than one, and the two are deliberately *different* accounts. A
+ * single-row fixture cannot tell "the filter offered the account bound to the row"
+ * apart from "the filter rendered, and the one binding happened to be the only
+ * thing there"; the second row is what makes choosing one an assertion rather than
+ * a coincidence. The ids are the ids the bindings in `ROOTS` name.
+ */
+const CLOUD_ACCOUNTS: readonly CloudAccountOption[] = [
+  { id: "aliyun-prod", label: "Aliyun production" },
+  { id: "cf-mirror", label: "Cloudflare mirror" },
+];
+
+/**
+ * The Domains page as the host mounts it.
+ *
+ * The cloud-account labels are the ones the host reads from the IAM account center
+ * and injects, so the fixture injects them the same way instead of standing up an
+ * IAM transport: what is under test is what the page does with the list, and the
+ * read itself belongs to `src/surfaces/cloudAccounts.ts`.
+ */
+function ServedDomainPage({ cloudAccounts = CLOUD_ACCOUNTS }: { cloudAccounts?: readonly CloudAccountOption[] }) {
+  return <ServedDomainAdminSurface cloudAccounts={cloudAccounts} locale="en-US" resource="domains" />;
+}
+
+/**
+ * A control inside the open dialog, by its visible label.
+ *
+ * Scoped to the dialog on purpose. `Cloud account` names two different controls on
+ * this page — the toolbar's filter and the form's picker — so an unscoped
+ * `getByLabelText` finds both and fails with "found multiple elements", a message
+ * that reads like a duplicate label rather than like a lookup that forgot which
+ * surface it was aiming at.
+ */
+function openDialogField(label: string): HTMLElement {
+  return within(screen.getByRole("dialog")).getByLabelText(label);
+}
+
 interface Stubs {
   client: WebserverAdminSdkClient;
   createRootDomain: ReturnType<typeof vi.fn>;
@@ -166,6 +216,7 @@ interface Stubs {
   dnsAccounts: ReturnType<typeof vi.fn>;
   issue: ReturnType<typeof vi.fn>;
   listCertificates: ReturnType<typeof vi.fn>;
+  listRootDomains: ReturnType<typeof vi.fn>;
   listSubdomains: ReturnType<typeof vi.fn>;
   renewCertificate: ReturnType<typeof vi.fn>;
   retrieveRootDomain: ReturnType<typeof vi.fn>;
@@ -178,6 +229,7 @@ interface Stubs {
 function stubClient(): Stubs {
   const page = hostnamePage;
   const listSubdomains = vi.fn().mockResolvedValue(page(SUBDOMAINS));
+  const listRootDomains = vi.fn().mockResolvedValue(page(ROOTS));
   const createRootDomain = vi.fn().mockResolvedValue(ROOTS[0]);
   const createSubdomain = vi.fn().mockResolvedValue(SUBDOMAINS[0]);
   const deleteRootDomain = vi.fn().mockResolvedValue(undefined);
@@ -222,7 +274,7 @@ function stubClient(): Stubs {
       rootDomains: {
         create: createRootDomain,
         delete: deleteRootDomain,
-        list: vi.fn().mockResolvedValue(page(ROOTS)),
+        list: listRootDomains,
         retrieve: retrieveRootDomain,
         subdomains: { create: createSubdomain, list: listSubdomains },
         update: updateRootDomain,
@@ -239,6 +291,7 @@ function stubClient(): Stubs {
     dnsAccounts,
     issue,
     listCertificates,
+    listRootDomains,
     listSubdomains,
     renewCertificate,
     retrieveRootDomain,
@@ -333,7 +386,7 @@ function chosenHostnames(picker: HTMLElement): string[] {
 describe("served domain admin surface", () => {
   it("renders each reconciled root domain with its subdomain counters", async () => {
     const { client } = stubClient();
-    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+    renderInProvider(<ServedDomainPage />, client, "/admin/domains");
 
     expect(await screen.findByText("sdkwork.com")).toBeTruthy();
     expect(screen.getByText("zowalk.com")).toBeTruthy();
@@ -345,7 +398,7 @@ describe("served domain admin surface", () => {
 
   it("reads subdomains from the root-scoped route once a root is opened", async () => {
     const { client, listSubdomains, retrieveRootDomain } = stubClient();
-    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+    renderInProvider(<ServedDomainPage />, client, "/admin/domains");
 
     // Nothing is read under a root until one is opened.
     expect(listSubdomains).not.toHaveBeenCalled();
@@ -360,7 +413,7 @@ describe("served domain admin surface", () => {
 
   it("deletes a root only after its own confirmation, without opening that root", async () => {
     const { client, deleteRootDomain, listSubdomains } = stubClient();
-    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+    renderInProvider(<ServedDomainPage />, client, "/admin/domains");
 
     // `zowalk.com` is the root that owns no subdomain, so it is the one whose
     // delete is offered at all — see the availability case below.
@@ -388,7 +441,7 @@ describe("served domain admin surface", () => {
    */
   it("dismisses the delete confirmation on Escape without deleting", async () => {
     const { client, deleteRootDomain } = stubClient();
-    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+    renderInProvider(<ServedDomainPage />, client, "/admin/domains");
 
     fireEvent.click(await screen.findByRole("button", { name: "Delete zowalk.com" }));
     expect(screen.getByRole("dialog")).toBeTruthy();
@@ -407,7 +460,7 @@ describe("served domain admin surface", () => {
    */
   it("offers the console's five zone actions, in the console's order", async () => {
     const { client } = stubClient();
-    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+    renderInProvider(<ServedDomainPage />, client, "/admin/domains");
 
     const row = (await screen.findByText("sdkwork.com")).closest("tr");
     const actions = Array.from(row?.querySelectorAll(".row-actions > *") ?? []);
@@ -428,7 +481,7 @@ describe("served domain admin surface", () => {
 
   it("links the request-certificate action at the certificate ledger, scoped to that root", async () => {
     const { client } = stubClient();
-    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+    renderInProvider(<ServedDomainPage />, client, "/admin/domains");
 
     const link = await screen.findByRole("link", { name: "Certificates · sdkwork.com" });
     expect(link.getAttribute("href")).toBe(
@@ -444,7 +497,7 @@ describe("served domain admin surface", () => {
    */
   it("offers the delete only for a root that owns no subdomain", async () => {
     const { client } = stubClient();
-    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+    renderInProvider(<ServedDomainPage />, client, "/admin/domains");
 
     const blocked = await screen.findByRole("button", { name: "Delete sdkwork.com" });
     expect((blocked as HTMLButtonElement).disabled).toBe(true);
@@ -454,7 +507,7 @@ describe("served domain admin surface", () => {
 
   it("pauses an active root through the one partial-edit call", async () => {
     const { client, updateRootDomain } = stubClient();
-    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+    renderInProvider(<ServedDomainPage />, client, "/admin/domains");
 
     fireEvent.click(await screen.findByRole("button", { name: "Pause sdkwork.com" }));
     fireEvent.click(screen.getByRole("button", { name: "Pause" }));
@@ -468,7 +521,7 @@ describe("served domain admin surface", () => {
 
   it("sends only the fields the edit form changed", async () => {
     const { client, updateRootDomain } = stubClient();
-    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+    renderInProvider(<ServedDomainPage />, client, "/admin/domains");
 
     fireEvent.click(await screen.findByRole("button", { name: "Edit sdkwork.com" }));
     // Nothing changed yet, so there is nothing to send.
@@ -484,9 +537,181 @@ describe("served domain admin surface", () => {
     );
   });
 
+  /**
+   * The Domains page's cloud-account filter: "all" is an omission, a named account
+   * is a real query member, and "unassigned" is the reserved literal the contract
+   * defines for "bound to no account".
+   *
+   * All three states are pinned on the same fixture, because a test that only sent
+   * a named account would pass against a page that never omitted the parameter —
+   * and the unfiltered case is the one an operator opens the page on.
+   */
+  it("filters the ledger by cloud account, sending nothing for the unfiltered state", async () => {
+    const { client, listRootDomains } = stubClient();
+    renderInProvider(<ServedDomainPage />, client, "/admin/domains");
+    await screen.findByText("sdkwork.com");
+
+    // The unfiltered state omits the member: the wire has no wildcard for it, and
+    // `cloudAccountId=ALL` would be an account nobody has.
+    expect(listRootDomains).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cloudAccountId: undefined, page: 1 }),
+    );
+
+    fireEvent.change(screen.getByLabelText("Cloud account"), { target: { value: "cf-mirror" } });
+    await waitFor(() =>
+      expect(listRootDomains).toHaveBeenLastCalledWith(
+        expect.objectContaining({ cloudAccountId: "cf-mirror", page: 1 }),
+      ),
+    );
+
+    fireEvent.change(screen.getByLabelText("Cloud account"), { target: { value: "UNASSIGNED" } });
+    await waitFor(() =>
+      expect(listRootDomains).toHaveBeenLastCalledWith(
+        expect.objectContaining({ cloudAccountId: "UNASSIGNED", page: 1 }),
+      ),
+    );
+  });
+
+  /**
+   * An account the center does not return — deleted there, or invisible to a caller
+   * without `iam.provider_accounts.read` — must still be offered and still be named.
+   *
+   * The fixture injects an empty inventory, which is the reachable form of that
+   * state: the host reads nothing and the row's own binding is the only account the
+   * page knows about. Both readings are pinned, because they fail separately — a
+   * filter that dropped the unknown option leaves the `<select>` rendering its first
+   * entry while the ledger shows one account's Zones, and a row that dropped the
+   * unknown label shows a blank cell where the binding is.
+   *
+   * The filter is deliberately not *driven* here. A `<select>` whose value matches
+   * no option has no value to assign, so `fireEvent.change` on this exact state
+   * exercises jsdom's fallback rather than an operator's gesture: in the browser the
+   * option is on screen before it is picked. What this case pins is that the option
+   * *is* on screen — built from the loaded rows, which is where the page learns
+   * about an account the center did not return.
+   */
+  it("offers and names a binding the account center does not return", async () => {
+    const { client, listRootDomains } = stubClient();
+    renderInProvider(<ServedDomainPage cloudAccounts={[]} />, client, "/admin/domains");
+    await screen.findByText("sdkwork.com");
+
+    const filter = screen.getByLabelText("Cloud account") as HTMLSelectElement;
+    const option = within(filter).getByRole("option", { name: "aliyun-prod" }) as HTMLOptionElement;
+    expect(option.value).toBe("aliyun-prod");
+    // "All" and "unassigned" are the page's own states, so an empty inventory still
+    // leaves a usable filter rather than an empty control.
+    expect([...filter.options].map((entry) => entry.value)).toEqual(["ALL", "UNASSIGNED", "aliyun-prod"]);
+
+    // And the row reads the id, which is the honest name for a binding the account
+    // center did not name, and the value an operator can look up there.
+    expect(screen.getByText("sdkwork.com").closest("tr")?.textContent).toContain("aliyun-prod");
+    // The unbound root says so rather than rendering a blank cell.
+    expect(screen.getByText("zowalk.com").closest("tr")?.textContent).toContain("Unassigned");
+
+    // And filtering on it is a real request, because the option exists to pick.
+    fireEvent.change(filter, { target: { value: "aliyun-prod" } });
+    await waitFor(() =>
+      expect(listRootDomains).toHaveBeenLastCalledWith(
+        expect.objectContaining({ cloudAccountId: "aliyun-prod" }),
+      ),
+    );
+  });
+
+  /**
+   * Binding an account from the row's own dialog is the write side of the filter,
+   * and it is the one member of this form that can also be *cleared*: the
+   * descriptive fields read a blank as "leave it alone", while the account reads an
+   * empty choice as an explicit unbind on an edit — sent as `null`, which is what
+   * the contract defines for it.
+   */
+  it("binds and unbinds the cloud account through the partial edit", async () => {
+    const { client, updateRootDomain } = stubClient();
+    renderInProvider(<ServedDomainPage />, client, "/admin/domains");
+
+    // Rebinding the already-bound root to another account.
+    fireEvent.click(await screen.findByRole("button", { name: "Edit sdkwork.com" }));
+    const editor = openDialogField("Cloud account");
+    expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(editor, { target: { value: "cf-mirror" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(updateRootDomain).toHaveBeenCalledWith(
+      ROOT_ID,
+      { cloudAccountId: "cf-mirror" },
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    // Clearing it: an empty choice is a change even though no text field moved,
+    // and the dialog offers it as "No cloud account" rather than as a blank row.
+    fireEvent.click(screen.getByRole("button", { name: "Edit sdkwork.com" }));
+    fireEvent.change(openDialogField("Cloud account"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(updateRootDomain).toHaveBeenLastCalledWith(
+      ROOT_ID,
+      { cloudAccountId: null },
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
+  });
+
+  /**
+   * The unassigned root has nothing to clear, so its own dialog must open with
+   * Save disabled and stay disabled while the account choice returns to where it
+   * started. Without the second assertion a form that treated "no account" as a
+   * perpetual change would send an empty partial edit on every open.
+   */
+  it("treats an unchanged empty binding as nothing to save", async () => {
+    const { client, updateRootDomain } = stubClient();
+    renderInProvider(<ServedDomainPage />, client, "/admin/domains");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit zowalk.com" }));
+    const editor = openDialogField("Cloud account") as HTMLSelectElement;
+    expect(editor.value).toBe("");
+    expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(editor, { target: { value: "cf-mirror" } });
+    expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.change(editor, { target: { value: "" } });
+    expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(updateRootDomain).not.toHaveBeenCalled();
+  });
+
+  it("names the cloud account on creation, and omits the member when none is chosen", async () => {
+    const { client, createRootDomain } = stubClient();
+    renderInProvider(<ServedDomainPage />, client, "/admin/domains");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Define root domain" }));
+    // The picker always offers "no account" first, so a create that names nothing
+    // is a reachable state rather than one an operator has to back out of.
+    const accountPicker = openDialogField("Cloud account") as HTMLSelectElement;
+    expect([...accountPicker.options].map((option) => option.value)).toEqual(["", "aliyun-prod", "cf-mirror"]);
+    fireEvent.change(openDialogField("Root domain"), { target: { value: "example.com" } });
+    fireEvent.change(accountPicker, { target: { value: "aliyun-prod" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    // The create contract has no unbind, so "no account" is an omission rather
+    // than an explicit null.
+    expect(createRootDomain).toHaveBeenCalledWith(
+      { cloudAccountId: "aliyun-prod", hostname: "example.com" },
+      { idempotencyKey: expect.any(String) },
+    );
+
+    // Dismissed before reopening: the dialog is one mounted component, so its
+    // field state survives a close that leaves it mounted, and a second "create"
+    // would otherwise be asserted against the first one's selections.
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Define root domain" }));
+    fireEvent.change(openDialogField("Root domain"), { target: { value: "example.org" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    expect(createRootDomain).toHaveBeenLastCalledWith(
+      { hostname: "example.org" },
+      { idempotencyKey: expect.any(String) },
+    );
+  });
+
   it("registers a new root domain with an idempotency key the server can dedupe on", async () => {
     const { client, createRootDomain } = stubClient();
-    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+    renderInProvider(<ServedDomainPage />, client, "/admin/domains");
 
     fireEvent.click(await screen.findByRole("button", { name: "Define root domain" }));
     fireEvent.change(screen.getByLabelText("Root domain"), { target: { value: "example.com" } });
@@ -500,7 +725,7 @@ describe("served domain admin surface", () => {
 
   it("registers a subdomain under the opened root using its relative record name", async () => {
     const { client, createSubdomain } = stubClient();
-    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+    renderInProvider(<ServedDomainPage />, client, "/admin/domains");
 
     fireEvent.click(await screen.findByText("sdkwork.com"));
     await screen.findByText("server-dev.sdkwork.com");
@@ -528,7 +753,7 @@ describe("served domain admin surface", () => {
    */
   it("declares the wildcard form of the root domain when the wildcard box is ticked", async () => {
     const { client, createSubdomain } = stubClient();
-    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+    renderInProvider(<ServedDomainPage />, client, "/admin/domains");
 
     fireEvent.click(await screen.findByText("sdkwork.com"));
     await screen.findByText("server-dev.sdkwork.com");
@@ -565,7 +790,7 @@ describe("served domain admin surface", () => {
     listSubdomains.mockResolvedValue(
       hostnamePage([{ ...SUBDOMAINS[0], isVerified: false }, SUBDOMAINS[1]]),
     );
-    renderInProvider(<ServedDomainAdminSurface locale="en-US" resource="domains" />, client, "/admin/domains");
+    renderInProvider(<ServedDomainPage />, client, "/admin/domains");
 
     fireEvent.click(await screen.findByText("sdkwork.com"));
     await screen.findByText("server-dev.sdkwork.com");

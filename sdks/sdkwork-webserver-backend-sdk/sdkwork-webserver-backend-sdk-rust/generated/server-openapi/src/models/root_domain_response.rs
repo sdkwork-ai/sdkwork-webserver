@@ -21,6 +21,11 @@ pub struct RootDomainResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_zone_ref: Option<String>,
 
+    /// The cloud account whose DNS automation this root domain publishes through; absent when it is bound to none and resolves the account per operation.
+    #[serde(rename = "cloudAccountId")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloud_account_id: Option<String>,
+
     pub status: i64,
 
     #[serde(rename = "subdomainCount")]

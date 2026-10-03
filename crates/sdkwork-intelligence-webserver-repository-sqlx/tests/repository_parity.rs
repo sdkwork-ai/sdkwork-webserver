@@ -19,7 +19,8 @@ use sdkwork_webserver_contract::{
     ListApplicationsQuery, ListAuditLogsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
     MediaResource, RevokeCertificateRequest, RuntimeObservationState, SourceVersionConfigSnapshot,
     UpdateApplicationRequest, UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest,
-    WebServiceErrorKind, WebsiteRuntimeSetSnapshot,
+    UpdateRootDomainRequest, WebServiceErrorKind, WebsiteRuntimeSetSnapshot,
+    ROOT_DOMAIN_CLOUD_ACCOUNT_UNASSIGNED,
 };
 use sdkwork_webserver_core::web_platform_operator_tenant_id;
 use sdkwork_webserver_core::website_runtime::website_runtime_set_snapshot_sha256;
@@ -939,6 +940,7 @@ async fn verify_root_domain_zone_contract(context: &TestContext, site_id: &str) 
             TENANT_A,
             &CreateRootDomainRequest {
                 hostname: "zone-contract.example".to_string(),
+                cloud_account_id: None,
             },
         )
         .await
@@ -954,6 +956,7 @@ async fn verify_root_domain_zone_contract(context: &TestContext, site_id: &str) 
             TENANT_A,
             &CreateRootDomainRequest {
                 hostname: "zone-contract.example".to_string(),
+                cloud_account_id: None,
             },
         )
         .await
@@ -1050,6 +1053,7 @@ async fn verify_root_domain_zone_contract(context: &TestContext, site_id: &str) 
                 page_size: 20,
                 status: Some(1),
                 keyword: Some("ZONE-CONTRACT".to_string()),
+                cloud_account_id: None,
             },
         )
         .await
@@ -1067,6 +1071,8 @@ async fn verify_root_domain_zone_contract(context: &TestContext, site_id: &str) 
         .expect_err("non-empty root-domain Zone must not be deleted");
     assert_eq!(non_empty_delete.kind(), WebServiceErrorKind::Conflict);
 
+    verify_root_domain_cloud_account_binding(context, &root_domain.id).await;
+
     repository
         .unbind_managed_domain(TENANT_A, &apex.id)
         .await
@@ -1083,6 +1089,125 @@ async fn verify_root_domain_zone_contract(context: &TestContext, site_id: &str) 
         .delete_root_domain(TENANT_A, &root_domain.id)
         .await
         .expect("delete empty root-domain Zone");
+}
+
+/// The cloud-account binding: write, read back, filter, and unbind.
+///
+/// The Domains page's cloud-account filter is only honest if the reference it
+/// filters on is the one the store actually holds, so each of the three states the
+/// filter can be in is exercised against rows whose bindings differ. A test that
+/// only pinned "the id comes back" would pass against a filter that ignored its
+/// own parameter and returned the whole tenant, because on a single-row tenant the
+/// two answers look the same.
+async fn verify_root_domain_cloud_account_binding(context: &TestContext, bound_root_id: &str) {
+    let repository = &context.repository;
+    repository
+        .update_root_domain(
+            TENANT_A,
+            bound_root_id,
+            &UpdateRootDomainRequest {
+                cloud_account_id: Some(Some("aliyun-prod".to_string())),
+                ..UpdateRootDomainRequest::default()
+            },
+        )
+        .await
+        .expect("bind a cloud account to the root-domain Zone");
+    let bound = repository
+        .retrieve_root_domain(TENANT_A, bound_root_id)
+        .await
+        .expect("retrieve the bound root-domain Zone");
+    assert_eq!(bound.cloud_account_id.as_deref(), Some("aliyun-prod"));
+
+    // A second Zone under a *different* account, and a third under none, so every
+    // filter arm has a row it must exclude as well as one it must return.
+    let other = repository
+        .create_root_domain(
+            TENANT_A,
+            &CreateRootDomainRequest {
+                hostname: "zone-other-account.example".to_string(),
+                cloud_account_id: Some("cloudflare-mirror".to_string()),
+            },
+        )
+        .await
+        .expect("create a root-domain Zone bound to a second cloud account");
+    assert_eq!(other.cloud_account_id.as_deref(), Some("cloudflare-mirror"));
+    let unbound = repository
+        .create_root_domain(
+            TENANT_A,
+            &CreateRootDomainRequest {
+                hostname: "zone-unbound.example".to_string(),
+                cloud_account_id: None,
+            },
+        )
+        .await
+        .expect("create a root-domain Zone bound to no cloud account");
+    assert_eq!(unbound.cloud_account_id, None);
+
+    let bound_page = list_root_domains_by_account(repository, Some("aliyun-prod")).await;
+    assert_eq!(bound_page.total, 1);
+    assert_eq!(bound_page.items[0].id, bound.id);
+
+    let other_page = list_root_domains_by_account(repository, Some("cloudflare-mirror")).await;
+    assert_eq!(other_page.total, 1);
+    assert_eq!(other_page.items[0].id, other.id);
+
+    let unassigned_page =
+        list_root_domains_by_account(repository, Some(ROOT_DOMAIN_CLOUD_ACCOUNT_UNASSIGNED)).await;
+    assert_eq!(unassigned_page.total, 1);
+    assert_eq!(unassigned_page.items[0].id, unbound.id);
+
+    // An absent filter is every Zone in the tenant, which is also what the ALL
+    // segment of the page's control means.
+    let any_page = list_root_domains_by_account(repository, None).await;
+    assert_eq!(any_page.total, 3);
+
+    // Management asks for every Zone of one account, filtered means filtered.
+    let unknown_page = list_root_domains_by_account(repository, Some("dnspod-staging")).await;
+    assert_eq!(unknown_page.total, 0);
+    assert!(unknown_page.items.is_empty());
+
+    // Rebinding replaces the reference rather than accumulating one, and an
+    // explicit null is the unbind the form's "no account" choice submits.
+    let rebound = repository
+        .update_root_domain(
+            TENANT_A,
+            bound_root_id,
+            &UpdateRootDomainRequest {
+                cloud_account_id: Some(None),
+                ..UpdateRootDomainRequest::default()
+            },
+        )
+        .await
+        .expect("unbind the cloud account from the root-domain Zone");
+    assert_eq!(rebound.cloud_account_id, None);
+    let after_unbind = list_root_domains_by_account(repository, Some("aliyun-prod")).await;
+    assert_eq!(after_unbind.total, 0);
+
+    for root_id in [&other.id, &unbound.id] {
+        repository
+            .delete_root_domain(TENANT_A, root_id)
+            .await
+            .expect("delete the filter fixture root-domain Zone");
+    }
+}
+
+async fn list_root_domains_by_account(
+    repository: &Arc<dyn WebRepositoryPort>,
+    cloud_account_id: Option<&str>,
+) -> sdkwork_webserver_contract::RootDomainPage {
+    repository
+        .list_root_domains(
+            TENANT_A,
+            &ListRootDomainsQuery {
+                page: 1,
+                page_size: 50,
+                status: None,
+                keyword: None,
+                cloud_account_id: cloud_account_id.map(str::to_string),
+            },
+        )
+        .await
+        .expect("filter root-domain Zones by cloud account")
 }
 
 async fn verify_bounded_config_collections(
@@ -1279,6 +1404,7 @@ async fn verify_public_repository_surface(
             TENANT_A,
             &CreateRootDomainRequest {
                 hostname: "example.test".to_string(),
+                cloud_account_id: None,
             },
         )
         .await

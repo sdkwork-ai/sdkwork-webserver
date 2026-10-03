@@ -15,10 +15,12 @@
     "@sdkwork/sdk-common": "workspace:*",
     "@sdkwork/webserver-pc-commons": "workspace:*",
     "sdkwork-drive-pc-admin-core": "workspace:*",
+    "sdkwork-drive-pc-admin-storage-buckets": "workspace:*",
     "sdkwork-drive-pc-admin-storage-providers": "workspace:*",
     "sdkwork-drive-pc-commons": "workspace:*",
     "sdkwork-drive-pc-core": "workspace:*",
-    "react": "catalog:"
+    "react": "catalog:",
+    "react-router-dom": "catalog:"
   },
   "sdkwork": {
     "applicationCode": "webserver",

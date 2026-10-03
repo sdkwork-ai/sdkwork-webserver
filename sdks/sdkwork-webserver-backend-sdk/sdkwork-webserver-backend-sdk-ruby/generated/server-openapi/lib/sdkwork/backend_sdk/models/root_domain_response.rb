@@ -2,7 +2,7 @@ module Sdkwork
   module BackendSdk
     module Models
       class RootDomainResponse
-              attr_accessor :id, :hostname, :display_name, :dns_provider, :provider_zone_ref, :status, :subdomain_count, :bound_subdomain_count, :verified_subdomain_count, :https_subdomain_count, :active_deployment_count, :created_at, :updated_at
+              attr_accessor :id, :hostname, :display_name, :dns_provider, :provider_zone_ref, :cloud_account_id, :status, :subdomain_count, :bound_subdomain_count, :verified_subdomain_count, :https_subdomain_count, :active_deployment_count, :created_at, :updated_at
 
               def initialize(attributes = {})
                 attributes = (attributes || {}).transform_keys(&:to_s)
@@ -11,6 +11,7 @@ module Sdkwork
                 @display_name = attributes['displayName']
                 @dns_provider = attributes['dnsProvider']
                 @provider_zone_ref = attributes['providerZoneRef']
+                @cloud_account_id = attributes['cloudAccountId']
                 @status = attributes['status']
                 @subdomain_count = attributes['subdomainCount']
                 @bound_subdomain_count = attributes['boundSubdomainCount']
@@ -34,6 +35,7 @@ module Sdkwork
                   'displayName' => @display_name,
                   'dnsProvider' => @dns_provider,
                   'providerZoneRef' => @provider_zone_ref,
+                  'cloudAccountId' => @cloud_account_id,
                   'status' => @status,
                   'subdomainCount' => @subdomain_count,
                   'boundSubdomainCount' => @bound_subdomain_count,

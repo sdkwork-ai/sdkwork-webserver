@@ -305,6 +305,13 @@ export const webserverWorkspaceZhCn = {
   "resource.domains.displayName": "显示名称",
   "resource.domains.dnsProvider": "DNS 服务商",
   "resource.domains.providerZoneRef": "服务商 Zone 标识",
+  // 根域名 DNS 自动化所使用的云账号。它是 IAM 侧的引用，不是本平面自造的字段，
+  // 因此文案说的是「账号」而不是「凭据」。
+  "resource.domains.cloudAccount": "云账号",
+  "resource.domains.cloudAccountAll": "全部云账号",
+  "resource.domains.cloudAccountNone": "不指定云账号",
+  "resource.domains.cloudAccountUnassigned": "未关联",
+  "resource.domains.cloudAccountHint": "该 Zone 的 DNS 由哪个账号解析。保持「不指定云账号」即由每次操作自行解析。",
   "resource.domains.save": "保存",
   "resource.domains.pause": "暂停",
   "resource.domains.resume": "恢复",

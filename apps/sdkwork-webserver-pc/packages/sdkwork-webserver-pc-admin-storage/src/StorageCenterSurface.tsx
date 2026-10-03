@@ -1,10 +1,11 @@
 import type { AuthTokenManager } from "@sdkwork/sdk-common";
 import type { WebserverLocale, WebserverResourceKey } from "@sdkwork/webserver-pc-commons";
 import { useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { createDriveAdminStorageHostClient } from "sdkwork-drive-pc-admin-core";
+import { StorageBucketsAdminPage } from "sdkwork-drive-pc-admin-storage-buckets";
 import {
   StorageBindingsAdminPage,
-  StorageBucketsAdminPage,
   StorageProviderKindsAdminPage,
   StorageProvidersAdminPage,
 } from "sdkwork-drive-pc-admin-storage-providers";
@@ -34,6 +35,13 @@ export interface StorageCenterSurfaceProps {
    * with the hosting page.
    */
   adminStorageApiBaseUrl: string;
+  /**
+   * Console path prefix the Storage Center is mounted under (for example
+   * `/admin/storage`). Used to hand the operator over to the sibling provider
+   * resource when a bucket page has nothing configured yet; omitted means the
+   * cross-resource links are not rendered.
+   */
+  basePath?: string;
   locale: WebserverLocale;
   /** Operator (actor) the storage mutations are attributed to. */
   operatorId: string;
@@ -67,12 +75,14 @@ export interface StorageCenterSurfaceProps {
  */
 export function StorageCenterSurface({
   adminStorageApiBaseUrl,
+  basePath,
   locale,
   operatorId,
   resource,
   tenantId,
   tokenManager,
 }: StorageCenterSurfaceProps) {
+  const navigate = useNavigate();
   const adminStorageSdkClient = useMemo(
     () =>
       createDriveAdminStorageHostClient({
@@ -91,6 +101,20 @@ export function StorageCenterSurface({
   const getSession = useCallback<() => SessionSnapshot>(
     () => ({ context: { actorId: operatorId, tenantId, userId: operatorId } }),
     [operatorId, tenantId],
+  );
+
+  /**
+   * Hand-off to the sibling provider resource.
+   *
+   * The bucket page's "no active providers" state used to be a dead end: the
+   * page can render a call to action, but only the host knows the surface's
+   * route prefix. Passing the path as a plain string keeps the package free of
+   * a router dependency; the host navigates.
+   */
+  const providerSettingsPath = basePath ? `${basePath}/providers` : undefined;
+  const openProviderSettings = useMemo(
+    () => (providerSettingsPath ? () => navigate(providerSettingsPath) : undefined),
+    [navigate, providerSettingsPath],
   );
 
   return (
@@ -116,6 +140,9 @@ export function StorageCenterSurface({
           <StorageBucketsAdminPage
             adminStorageSdkClient={adminStorageSdkClient}
             getSession={getSession}
+            {...(openProviderSettings
+              ? { onConfigureProviders: openProviderSettings, onCreateProvider: openProviderSettings }
+              : {})}
           />
         ) : (
           <StorageBindingsAdminPage

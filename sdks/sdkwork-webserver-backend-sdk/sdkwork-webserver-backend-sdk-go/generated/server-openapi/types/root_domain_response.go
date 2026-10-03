@@ -7,6 +7,7 @@ type RootDomainResponse struct {
 	DisplayName string `json:"displayName"`
 	DnsProvider string `json:"dnsProvider"`
 	ProviderZoneRef string `json:"providerZoneRef"`
+	CloudAccountId string `json:"cloudAccountId"`
 	Status int `json:"status"`
 	SubdomainCount Int64String `json:"subdomainCount"`
 	BoundSubdomainCount Int64String `json:"boundSubdomainCount"`

@@ -327,9 +327,34 @@ fn proxy_protocol_schema_and_semantics_reject_unsafe_or_ambiguous_policy() {
     }));
 }
 
+/// 请求体上限必须容得下"以 base64 传输的合法对象"。
+///
+/// 网关以明文 413 拒绝超限请求体，框架再把它归一化成一句没有业务细节的
+/// `Payload too large`（code 41301），因此这个上限与模块业务上限的关系必须是显式的：
+/// drive 管理端对象内容接口的业务上限是 8 MiB，内容以 base64 装在 JSON 里，网线体积约
+/// 11.2 MB。默认值 10 MiB 时，7.8 MB 以上的文件在客户端通过校验、却被边缘拒绝——这正
+/// 是"有的文件就是传不上去"的根因。
 #[test]
-fn resource_pressure_defaults_are_finite_and_compile() {
+fn default_request_body_limit_covers_a_base64_encoded_object_payload() {
     let directory = TempDir::new().expect("create temp directory");
+    let path = write_config(directory.path(), &base_config());
+
+    let compiled = load_and_compile_webserver_config(path).expect("compile default limits");
+    let limit = compiled.config().limits.max_request_body_bytes;
+
+    // 与 drive `storageProviders.objects.content.update` 的 8 MiB 业务上限保持同一换算。
+    const MAX_OBJECT_CONTENT_BYTES: u64 = 8 * 1024 * 1024;
+    let wire_bytes = MAX_OBJECT_CONTENT_BYTES.div_ceil(3) * 4 + 1024;
+    assert!(
+        limit >= wire_bytes,
+        "default maxRequestBodyBytes {limit} must cover the base64 wire size {wire_bytes} of a legal 8 MiB object",
+    );
+    // 也不能顺手放开成无界：仍然要有明确上限，并且低于配置校验的硬顶。
+    assert!(limit <= 64 * 1024 * 1024, "default limit {limit} is unexpectedly large");
+}
+
+#[test]
+fn resource_pressure_defaults_are_finite_and_compile() {    let directory = TempDir::new().expect("create temp directory");
     let mut config = base_config();
     config["deployment"] = json!({"resourcePressure": {}});
     let path = write_config(directory.path(), &config);

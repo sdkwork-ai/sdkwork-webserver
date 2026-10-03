@@ -7,6 +7,7 @@ public class RootDomainResponse {
     private String displayName;
     private String dnsProvider;
     private String providerZoneRef;
+    private String cloudAccountId;
     private Integer status;
     private String subdomainCount;
     private String boundSubdomainCount;
@@ -54,6 +55,14 @@ public class RootDomainResponse {
 
     public void setProviderZoneRef(String providerZoneRef) {
         this.providerZoneRef = providerZoneRef;
+    }
+
+    public String getCloudAccountId() {
+        return this.cloudAccountId;
+    }
+
+    public void setCloudAccountId(String cloudAccountId) {
+        this.cloudAccountId = cloudAccountId;
     }
 
     public Integer getStatus() {

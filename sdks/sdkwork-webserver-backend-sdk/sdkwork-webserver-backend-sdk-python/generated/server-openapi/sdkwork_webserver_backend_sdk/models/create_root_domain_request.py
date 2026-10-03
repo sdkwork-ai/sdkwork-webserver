@@ -6,3 +6,4 @@ from typing import TYPE_CHECKING, Optional, List, Dict, Any
 @dataclass
 class CreateRootDomainRequest:
     hostname: str
+    cloud_account_id: Optional[str] = None

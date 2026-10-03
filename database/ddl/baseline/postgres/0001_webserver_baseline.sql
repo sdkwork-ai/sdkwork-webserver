@@ -81,6 +81,18 @@ CREATE TABLE IF NOT EXISTS webserver_root_domain (
     display_name    VARCHAR(200),
     dns_provider    VARCHAR(64),
     provider_zone_ref VARCHAR(512),
+    -- The cloud account whose DNS automation this Zone is bound to.
+    --
+    -- NULL is the pre-existing behaviour: the account resolves per operation,
+    -- which is what every root domain reconciled from the edge's own
+    -- configuration does. An installation that never pins an account therefore
+    -- behaves exactly as it did before this column existed.
+    --
+    -- A reference, not a foreign key: the account is `iam_provider_account`,
+    -- owned by sdkwork-iam (DATABASE_FRAMEWORK_SPEC cross-module ownership), and
+    -- a hard FK would make this module's schema depend on another module's table
+    -- lifecycle. Liveness is enforced on write by the service layer.
+    cloud_account_id VARCHAR(128),
     status          INTEGER      NOT NULL DEFAULT 1,
     metadata        JSONB        NOT NULL DEFAULT '{}',
     created_at      TIMESTAMPTZ  NOT NULL,
@@ -90,11 +102,18 @@ CREATE TABLE IF NOT EXISTS webserver_root_domain (
     PRIMARY KEY (id),
     CONSTRAINT uk_webserver_root_domain_uuid UNIQUE (uuid),
     CONSTRAINT uk_webserver_root_domain_tenant_id UNIQUE (tenant_id, id),
-    CONSTRAINT chk_webserver_root_domain_status CHECK (status BETWEEN 0 AND 2)
+    CONSTRAINT chk_webserver_root_domain_status CHECK (status BETWEEN 0 AND 2),
+    -- Same shape rule the deployments DNS Zone and the drive storage provider
+    -- use, so an account id that is valid in one module is valid in all of them.
+    CONSTRAINT chk_webserver_root_domain_cloud_account CHECK (
+        cloud_account_id IS NULL
+        OR cloud_account_id ~ '^[A-Za-z0-9][A-Za-z0-9_.:-]{1,127}$'
+    )
 );
 
 COMMENT ON TABLE webserver_root_domain IS 'Tenant-owned root-domain Zone';
 COMMENT ON COLUMN webserver_root_domain.hostname IS 'Explicit normalized root domain';
+COMMENT ON COLUMN webserver_root_domain.cloud_account_id IS 'Cloud account whose DNS automation this root domain is bound to; NULL resolves the account per operation';
 COMMENT ON COLUMN webserver_root_domain.status IS 'Status: 0=pending, 1=active, 2=disabled';
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_webserver_root_domain_active_hostname
@@ -103,6 +122,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_webserver_root_domain_active_hostname
 
 CREATE INDEX IF NOT EXISTS idx_webserver_root_domain_tenant_updated
     ON webserver_root_domain (tenant_id, updated_at DESC, id DESC);
+
+-- Partial on purpose: the column is NULL for every root domain that resolves its
+-- account per operation, so a full index would be mostly empty.
+CREATE INDEX IF NOT EXISTS idx_webserver_root_domain_cloud_account
+    ON webserver_root_domain (tenant_id, cloud_account_id)
+    WHERE cloud_account_id IS NOT NULL AND deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS webserver_domain (
     id              BIGINT       NOT NULL,

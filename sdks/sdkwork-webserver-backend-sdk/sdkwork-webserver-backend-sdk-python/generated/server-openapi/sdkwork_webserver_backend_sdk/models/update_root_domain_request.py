@@ -10,3 +10,4 @@ class UpdateRootDomainRequest:
     dns_provider: Optional[str] = None
     provider_zone_ref: Optional[str] = None
     status: Optional[int] = None
+    cloud_account_id: Optional[str] = None

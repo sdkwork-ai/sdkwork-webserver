@@ -23,7 +23,7 @@ use SDKWork\Webserver\BackendSdk\Models\UpdateRootDomainRequest;
 final class DomainApi extends BaseApi
 {
     /** List tenant root-domain Zones */
-    public function rootDomainsList(?int $page = null, ?int $pageSize = null, ?int $status = null, ?string $q = null): ?RootDomainsListResponse
+    public function rootDomainsList(?int $page = null, ?int $pageSize = null, ?int $status = null, ?string $q = null, ?string $cloudAccountId = null): ?RootDomainsListResponse
     {
         $path = '/backend/v3/api/root_domains';
         $query = $this->buildQueryString([
@@ -31,6 +31,7 @@ final class DomainApi extends BaseApi
             new QueryParameterSpec('page_size', $pageSize, 'form', true, false, null),
             new QueryParameterSpec('status', $status, 'form', true, false, null),
             new QueryParameterSpec('q', $q, 'form', true, false, null),
+            new QueryParameterSpec('cloud_account_id', $cloudAccountId, 'form', true, false, null),
         ]);
         $path = $this->appendQueryString($path, $query);
         $result = $this->client->request('GET', $path, []);

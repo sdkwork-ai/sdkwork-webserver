@@ -135,6 +135,93 @@ pub struct ListRootDomainsQuery {
     /// Generic free-text search on the wire is `q` (API_SPEC §16.4).
     #[serde(rename = "q")]
     pub keyword: Option<String>,
+    /// Restrict the inventory to the root domains bound to one cloud account.
+    ///
+    /// Three states, which is why this is a single optional string rather than an
+    /// id plus a flag: an absent member filters nothing, a named account id
+    /// returns the Zones bound to that account, and the literal
+    /// [`ROOT_DOMAIN_CLOUD_ACCOUNT_UNASSIGNED`] returns the Zones bound to no
+    /// account at all — the ones whose account resolves per operation. The
+    /// literal cannot collide with a real account id, because
+    /// [`crate::dto::cloud_account_id_shape_error`] refuses whitespace and admits
+    /// only ASCII alphanumerics and `_.:-`, so the word is unreachable as an id.
+    ///
+    /// A parameter object rather than two query members keeps the one question
+    /// ("which binding?") in one value, so a caller cannot send an account id and
+    /// "unassigned" at the same time and get an empty list with no explanation.
+    ///
+    /// The wire name is snake_case like every other query member on this surface
+    /// (`page_size`), while the member the SDK exposes is camelCase: the
+    /// generated client maps one to the other, so the rename here is what keeps
+    /// the contract's own naming rule rather than a second spelling of it.
+    #[serde(
+        rename = "cloud_account_id",
+        default,
+        deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_string"
+    )]
+    pub cloud_account_id: Option<String>,
+}
+
+/// The wire value that asks for root domains bound to no cloud account.
+///
+/// See [`RootDomainCloudAccountFilter::from_query`] for why this is a reserved
+/// literal rather than a second boolean parameter.
+pub const ROOT_DOMAIN_CLOUD_ACCOUNT_UNASSIGNED: &str = "UNASSIGNED";
+
+/// The cloud-account binding a root-domain list is restricted to.
+///
+/// The three states are mutually exclusive by construction rather than by
+/// convention, which is what keeps "no filter", "bound to no account" and "bound
+/// to this account" from being expressible as contradictory pairs.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RootDomainCloudAccountFilter {
+    /// Return every root domain in the tenant, whatever it is bound to.
+    Any,
+    /// Return only the root domains bound to no account.
+    Unassigned,
+    /// Return only the root domains bound to this account.
+    Assigned(String),
+}
+
+impl RootDomainCloudAccountFilter {
+    /// Reads the filter off the raw query value.
+    ///
+    /// A blank value is an omission, matching every other optional query string
+    /// on this surface: `?cloudAccountId=` is what a cleared form field submits,
+    /// and reading it as "the account whose id is the empty string" would turn a
+    /// cleared filter into an empty list.
+    ///
+    /// The reserved literal is matched case-sensitively on purpose. Account ids
+    /// are case-sensitive (the shape rule admits both cases), so folding case here
+    /// would make `unassigned` mean something the caller's own account id
+    /// `unassigned` does not.
+    pub fn from_query(value: Option<&str>) -> Self {
+        match value.map(str::trim) {
+            None | Some("") => Self::Any,
+            Some(ROOT_DOMAIN_CLOUD_ACCOUNT_UNASSIGNED) => Self::Unassigned,
+            Some(account_id) => Self::Assigned(account_id.to_owned()),
+        }
+    }
+
+    /// The account id to match, or `None` when this filter is not an assignment.
+    pub fn assigned_account_id(&self) -> Option<&str> {
+        match self {
+            Self::Assigned(account_id) => Some(account_id),
+            Self::Any | Self::Unassigned => None,
+        }
+    }
+}
+
+impl ListRootDomainsQuery {
+    /// Resolves the query's cloud-account member into the filter the store reads.
+    ///
+    /// A method rather than a field on the query so the wire shape stays a plain
+    /// optional string — the three states exist for the store's benefit, and
+    /// putting them on the deserialized struct would mean the query could hold a
+    /// state the wire cannot express.
+    pub fn cloud_account_filter(&self) -> RootDomainCloudAccountFilter {
+        RootDomainCloudAccountFilter::from_query(self.cloud_account_id.as_deref())
+    }
 }
 
 #[async_trait]

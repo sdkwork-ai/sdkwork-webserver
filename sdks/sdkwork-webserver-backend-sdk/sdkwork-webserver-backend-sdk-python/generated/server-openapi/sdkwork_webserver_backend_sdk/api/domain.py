@@ -292,13 +292,14 @@ class DomainRootDomainsApi:
         self.subdomains = DomainRootDomainsSubdomainsApi(client)
 
 
-    def list(self, page: Optional[int] = None, page_size: Optional[int] = None, status: Optional[int] = None, q: Optional[str] = None) -> RootDomainsListResponse:
+    def list(self, page: Optional[int] = None, page_size: Optional[int] = None, status: Optional[int] = None, q: Optional[str] = None, cloud_account_id: Optional[str] = None) -> RootDomainsListResponse:
         """List tenant root-domain Zones"""
         query = build_query_string([
             {'name': 'page', 'value': page, 'style': 'form', 'explode': True, 'allow_reserved': False},
             {'name': 'page_size', 'value': page_size, 'style': 'form', 'explode': True, 'allow_reserved': False},
             {'name': 'status', 'value': status, 'style': 'form', 'explode': True, 'allow_reserved': False},
             {'name': 'q', 'value': q, 'style': 'form', 'explode': True, 'allow_reserved': False},
+            {'name': 'cloud_account_id', 'value': cloud_account_id, 'style': 'form', 'explode': True, 'allow_reserved': False},
         ])
         return self._client.get(_append_query_string(f"/backend/v3/api/root_domains", query))
 

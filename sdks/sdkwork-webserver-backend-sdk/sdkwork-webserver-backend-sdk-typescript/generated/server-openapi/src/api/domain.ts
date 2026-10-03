@@ -86,6 +86,7 @@ export interface DomainRootDomainsListParams {
   pageSize?: number;
   status?: number;
   q?: string;
+  cloudAccountId?: string;
 }
 
 export interface DomainRootDomainsCreateParams {
@@ -117,6 +118,7 @@ export class DomainRootDomainsApi {
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
       { name: 'status', value: params?.status, style: 'form', explode: true, allowReserved: false },
       { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
+      { name: 'cloud_account_id', value: params?.cloudAccountId, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: RootDomainResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/root_domains`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }

@@ -10,5 +10,6 @@ namespace SDKWork.WebserverBackendSdk.Models
         public string? DnsProvider { get; set; }
         public string? ProviderZoneRef { get; set; }
         public int? Status { get; set; }
+        public string? CloudAccountId { get; set; }
     }
 }

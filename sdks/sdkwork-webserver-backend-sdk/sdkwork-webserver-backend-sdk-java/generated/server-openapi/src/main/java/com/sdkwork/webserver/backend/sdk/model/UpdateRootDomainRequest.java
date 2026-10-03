@@ -6,6 +6,7 @@ public class UpdateRootDomainRequest {
     private String dnsProvider;
     private String providerZoneRef;
     private Integer status;
+    private String cloudAccountId;
 
     public String getDisplayName() {
         return this.displayName;
@@ -37,5 +38,13 @@ public class UpdateRootDomainRequest {
 
     public void setStatus(Integer status) {
         this.status = status;
+    }
+
+    public String getCloudAccountId() {
+        return this.cloudAccountId;
+    }
+
+    public void setCloudAccountId(String cloudAccountId) {
+        this.cloudAccountId = cloudAccountId;
     }
 }

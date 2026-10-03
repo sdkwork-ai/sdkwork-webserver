@@ -29,8 +29,17 @@ fn default_provider_timeout_ms() -> u64 {
     30_000
 }
 
+/// Default ceiling for a proxied request body.
+///
+/// 16 MiB, not 10 MiB: the drive admin storage API carries object content as
+/// **base64 inside JSON** (`storageProviders.objects.content.update`), and its
+/// documented object ceiling is 8 MiB. Base64 inflates by 4/3, so the wire body
+/// for a legal 8 MiB object is ≈11.2 MB plus the JSON envelope. A 10 MiB limit
+/// silently rejected everything above ≈7.8 MB with a bare 413 — the client's own
+/// guard allowed 8 MiB, so the last megabyte always failed. 16 MiB also matches
+/// the web framework's own default body limit, so edge and module agree.
 fn default_max_request_body_bytes() -> u64 {
-    10 * 1024 * 1024
+    16 * 1024 * 1024
 }
 
 /// Hard ceiling on a proxied upstream response body. Streaming is preserved,

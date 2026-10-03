@@ -12,12 +12,13 @@ class DomainApi {
   DomainApi(this._client);
 
   /// List tenant root-domain Zones
-  Future<RootDomainsListResponse?> rootDomainsList([int? page, int? pageSize, int? status, String? q]) async {
+  Future<RootDomainsListResponse?> rootDomainsList([int? page, int? pageSize, int? status, String? q, String? cloudAccountId]) async {
     final query = buildQueryString([
       QueryParameterSpec('page', page, 'form', true, false, null),
       QueryParameterSpec('page_size', pageSize, 'form', true, false, null),
       QueryParameterSpec('status', status, 'form', true, false, null),
-      QueryParameterSpec('q', q, 'form', true, false, null)
+      QueryParameterSpec('q', q, 'form', true, false, null),
+      QueryParameterSpec('cloud_account_id', cloudAccountId, 'form', true, false, null)
     ]);
     final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.backendPath('/root_domains'), query));
     return (() {

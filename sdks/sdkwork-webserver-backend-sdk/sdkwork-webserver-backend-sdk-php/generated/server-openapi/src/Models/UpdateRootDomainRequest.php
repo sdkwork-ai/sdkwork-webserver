@@ -18,6 +18,9 @@ final class UpdateRootDomainRequest
     /** 0=pending, 1=active, 2=disabled. */
     public ?int $status = null;
 
+    /** The cloud account to bind, or `null` to unbind. The **only** member of this request that distinguishes "leave it alone" from "clear it": an omitted member keeps the stored account and an explicit `null` removes it. This is the one place the surface's "a blank value is an omission" reading does not apply, because the member names an association rather than describing the row. */
+    public ?string $cloudAccountId = null;
+
     public function __construct(array $data = [])
     {
         $this->displayName = array_key_exists('displayName', $data)
@@ -31,6 +34,9 @@ final class UpdateRootDomainRequest
             : null;
         $this->status = array_key_exists('status', $data)
             ? $data['status']
+            : null;
+        $this->cloudAccountId = array_key_exists('cloudAccountId', $data)
+            ? $data['cloudAccountId']
             : null;
     }
 
@@ -46,6 +52,7 @@ final class UpdateRootDomainRequest
             'dnsProvider' => $this->dnsProvider,
             'providerZoneRef' => $this->providerZoneRef,
             'status' => $this->status,
+            'cloudAccountId' => $this->cloudAccountId,
         ];
     }
 }

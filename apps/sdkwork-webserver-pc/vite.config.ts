@@ -165,6 +165,12 @@ export default defineConfig(({ command, mode }) => {
         "react-router-dom",
         "@sdkwork/utils",
         "@sdkwork/sdk-common",
+        // The shared drive preview package brings its own Monaco while the
+        // Server Config page pins another range. Without dedupe a host that
+        // mounts both would bundle two editor cores, and the last
+        // `MonacoEnvironment` writer would win for both surfaces.
+        "monaco-editor",
+        "@monaco-editor/react",
       ],
     },
     server: developmentServer ? {

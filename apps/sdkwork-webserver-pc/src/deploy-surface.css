@@ -815,3 +815,25 @@
 .deploy-surface .apps-avatar-gradient-8{background:linear-gradient(135deg,#64748b,#94a3b8)}
 .deploy-surface .apps-avatar-gradient-9{background:linear-gradient(135deg,#ea580c,#fb923c)}
 @media(prefers-reduced-motion:reduce){.deploy-surface .apps-avatar-image{transition:none}}
+
+/* The Domains page's cloud-account filter.
+   A select rather than a second segmented control beside the status one: the
+   accounts are tenant data, so the number of choices is not fixed and a segment
+   row would grow without bound, while the status row's four values are the
+   column's own vocabulary. The geometry is the toolbar's — 38px, the same
+   panel/border tokens `.search-box` uses — so the two controls read as one row
+   and the page does not grow a second control height.
+
+   The idle `label > span` carries the control's name as a visible caption. That
+   is deliberately not the `aria-label`'s job here: the select's accessible name is
+   its own label text, which is what makes the caption and the name the same
+   string rather than two that can drift. */
+.deploy-surface .cloud-account-filter{display:inline-flex;align-items:center;gap:8px;color:var(--sdk-color-text-secondary);font-size:12px}
+.deploy-surface .cloud-account-filter select{height:38px;max-width:240px;padding:0 9px;border:1px solid var(--sdk-color-border-default);border-radius:5px;background:var(--sdk-color-surface-panel);color:var(--sdk-color-text-primary)}
+.deploy-surface .cloud-account-filter select:focus-visible{outline:2px solid var(--sdk-color-border-focus);outline-offset:1px}
+@media(max-width:760px){.deploy-surface .cloud-account-filter{flex:1 1 100%}.deploy-surface .cloud-account-filter select{flex:1 1 auto;max-width:none;min-width:0}}
+
+/* The dialog's account picker, matching the zone selector the certificate form
+   already uses so the two account choices in this product look like one control. */
+.deploy-surface .delivery-dialog select[name="cloudAccountId"]{height:38px;border:1px solid var(--sdk-color-border-default);border-radius:5px;padding:0 9px;background:var(--sdk-color-surface-panel);color:var(--sdk-color-text-primary)}
+.deploy-surface .delivery-dialog select[name="cloudAccountId"]:focus-visible{outline:2px solid var(--sdk-color-border-focus);outline-offset:1px}

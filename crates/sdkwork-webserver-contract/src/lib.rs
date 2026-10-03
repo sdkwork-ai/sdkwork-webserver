@@ -11,8 +11,9 @@ pub mod provider;
 pub mod usage;
 
 pub use app_ports::{
-    ListApplicationsQuery, ListAuditLogsQuery, ListRootDomainsQuery, WebAppApi,
-    WebAppRequestContext, WebAppResourceScope, WebBackendApi, WebBackendRequestContext,
+    ListApplicationsQuery, ListAuditLogsQuery, ListRootDomainsQuery,
+    RootDomainCloudAccountFilter, WebAppApi, WebAppRequestContext, WebAppResourceScope,
+    WebBackendApi, WebBackendRequestContext, ROOT_DOMAIN_CLOUD_ACCOUNT_UNASSIGNED,
 };
 pub use cluster::*;
 pub use dto::*;

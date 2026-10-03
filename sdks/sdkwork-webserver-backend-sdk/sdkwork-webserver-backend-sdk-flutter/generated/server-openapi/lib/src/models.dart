@@ -1184,9 +1184,11 @@ class CreateManagedDomainRequest {
 
 class CreateRootDomainRequest {
   final String hostname;
+  final String? cloudAccountId;
 
   CreateRootDomainRequest({
-    required this.hostname
+    required this.hostname,
+    this.cloudAccountId
   });
 
   factory CreateRootDomainRequest.fromJson(Map<String, dynamic> json) {
@@ -1197,13 +1199,15 @@ class CreateRootDomainRequest {
           throw FormatException('CreateRootDomainRequest.hostname is required');
         }
         return value;
-      })()
+      })(),
+      cloudAccountId: json['cloudAccountId']?.toString()
     );
   }
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'hostname': hostname,
+      'cloudAccountId': cloudAccountId,
     };
   }
 }
@@ -1213,12 +1217,14 @@ class UpdateRootDomainRequest {
   final String? dnsProvider;
   final String? providerZoneRef;
   final int? status;
+  final String? cloudAccountId;
 
   UpdateRootDomainRequest({
     this.displayName,
     this.dnsProvider,
     this.providerZoneRef,
-    this.status
+    this.status,
+    this.cloudAccountId
   });
 
   factory UpdateRootDomainRequest.fromJson(Map<String, dynamic> json) {
@@ -1226,7 +1232,8 @@ class UpdateRootDomainRequest {
       displayName: json['displayName']?.toString(),
       dnsProvider: json['dnsProvider']?.toString(),
       providerZoneRef: json['providerZoneRef']?.toString(),
-      status: json['status'] is int ? json['status'] : null
+      status: json['status'] is int ? json['status'] : null,
+      cloudAccountId: json['cloudAccountId']?.toString()
     );
   }
 
@@ -1236,6 +1243,7 @@ class UpdateRootDomainRequest {
       'dnsProvider': dnsProvider,
       'providerZoneRef': providerZoneRef,
       'status': status,
+      'cloudAccountId': cloudAccountId,
     };
   }
 }
@@ -1288,6 +1296,7 @@ class RootDomainResponse {
   final String? displayName;
   final String? dnsProvider;
   final String? providerZoneRef;
+  final String? cloudAccountId;
   final int status;
   final String subdomainCount;
   final String boundSubdomainCount;
@@ -1303,6 +1312,7 @@ class RootDomainResponse {
     this.displayName,
     this.dnsProvider,
     this.providerZoneRef,
+    this.cloudAccountId,
     required this.status,
     required this.subdomainCount,
     required this.boundSubdomainCount,
@@ -1332,6 +1342,7 @@ class RootDomainResponse {
       displayName: json['displayName']?.toString(),
       dnsProvider: json['dnsProvider']?.toString(),
       providerZoneRef: json['providerZoneRef']?.toString(),
+      cloudAccountId: json['cloudAccountId']?.toString(),
       status: (() {
         final value = json['status'];
         if (value is! int) {
@@ -1398,6 +1409,7 @@ class RootDomainResponse {
       'displayName': displayName,
       'dnsProvider': dnsProvider,
       'providerZoneRef': providerZoneRef,
+      'cloudAccountId': cloudAccountId,
       'status': status,
       'subdomainCount': subdomainCount,
       'boundSubdomainCount': boundSubdomainCount,

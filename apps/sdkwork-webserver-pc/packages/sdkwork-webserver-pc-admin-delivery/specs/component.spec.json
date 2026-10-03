@@ -72,8 +72,8 @@
   },
   "integration": {
     "authority": "Root SDKWork specs remain authoritative.",
-    "dependencyPolicy": "Host adapter only. The pages are authored here because the root-domain/subdomain relationship and the certificate lifecycle are Web Server-owned planes with no shared upstream implementation; the SDK client and its wire types are consumed from admin-core.",
-    "sdkPolicy": "This package consumes the backend admin SDK exclusively through @sdkwork/webserver-pc-admin-core public exports (useWebserverAdminSdk and wire types); raw HTTP and direct generated-SDK imports are forbidden in authored UI code."
+    "dependencyPolicy": "Host adapter only. The pages are authored here because the root-domain/subdomain relationship and the certificate lifecycle are Web Server-owned planes with no shared upstream implementation; the SDK client and its wire types are consumed from admin-core, and the cloud-account labels arrive as an injected prop.",
+    "sdkPolicy": "This package consumes the backend admin SDK exclusively through @sdkwork/webserver-pc-admin-core public exports (useWebserverAdminSdk and wire types); raw HTTP and direct generated-SDK imports are forbidden in authored UI code. The cloud-account inventory a root domain may be bound to is an IAM-owned resource, so the host reads it through its IAM facade and injects the labels as a prop; this package owns no transport for it."
   },
   "verification": {
     "commands": [

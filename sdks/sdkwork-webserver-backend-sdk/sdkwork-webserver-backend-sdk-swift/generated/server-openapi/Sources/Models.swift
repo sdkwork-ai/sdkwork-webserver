@@ -390,10 +390,12 @@ public struct CreateManagedDomainRequest: Codable {
 
 public struct CreateRootDomainRequest: Codable {
     public let hostname: String?
+    public let cloudAccountId: String?
 
 
-    public init(hostname: String? = nil) {
+    public init(hostname: String? = nil, cloudAccountId: String? = nil) {
         self.hostname = hostname
+        self.cloudAccountId = cloudAccountId
     }
 }
 
@@ -402,13 +404,15 @@ public struct UpdateRootDomainRequest: Codable {
     public let dnsProvider: String?
     public let providerZoneRef: String?
     public let status: Int?
+    public let cloudAccountId: String?
 
 
-    public init(displayName: String? = nil, dnsProvider: String? = nil, providerZoneRef: String? = nil, status: Int? = nil) {
+    public init(displayName: String? = nil, dnsProvider: String? = nil, providerZoneRef: String? = nil, status: Int? = nil, cloudAccountId: String? = nil) {
         self.displayName = displayName
         self.dnsProvider = dnsProvider
         self.providerZoneRef = providerZoneRef
         self.status = status
+        self.cloudAccountId = cloudAccountId
     }
 }
 
@@ -435,6 +439,7 @@ public struct RootDomainResponse: Codable {
     public let displayName: String?
     public let dnsProvider: String?
     public let providerZoneRef: String?
+    public let cloudAccountId: String?
     public let status: Int?
     public let subdomainCount: String?
     public let boundSubdomainCount: String?
@@ -445,12 +450,13 @@ public struct RootDomainResponse: Codable {
     public let updatedAt: String?
 
 
-    public init(id: String? = nil, hostname: String? = nil, displayName: String? = nil, dnsProvider: String? = nil, providerZoneRef: String? = nil, status: Int? = nil, subdomainCount: String? = nil, boundSubdomainCount: String? = nil, verifiedSubdomainCount: String? = nil, httpsSubdomainCount: String? = nil, activeDeploymentCount: String? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
+    public init(id: String? = nil, hostname: String? = nil, displayName: String? = nil, dnsProvider: String? = nil, providerZoneRef: String? = nil, cloudAccountId: String? = nil, status: Int? = nil, subdomainCount: String? = nil, boundSubdomainCount: String? = nil, verifiedSubdomainCount: String? = nil, httpsSubdomainCount: String? = nil, activeDeploymentCount: String? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
         self.id = id
         self.hostname = hostname
         self.displayName = displayName
         self.dnsProvider = dnsProvider
         self.providerZoneRef = providerZoneRef
+        self.cloudAccountId = cloudAccountId
         self.status = status
         self.subdomainCount = subdomainCount
         self.boundSubdomainCount = boundSubdomainCount

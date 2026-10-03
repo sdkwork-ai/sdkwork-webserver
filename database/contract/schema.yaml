@@ -60,6 +60,7 @@ tables:
       display_name: { type: string, required: false }
       dns_provider: { type: string, required: false }
       provider_zone_ref: { type: string, required: false }
+      cloud_account_id: { type: string, required: false }
       status: { type: enum_int32, required: true }
       metadata: { type: json, required: true }
       created_at: { type: instant, required: true }
@@ -71,11 +72,13 @@ tables:
       - { name: uk_webserver_root_domain_uuid, type: unique, columns: [uuid] }
       - { name: uk_webserver_root_domain_tenant_id, type: unique, columns: [tenant_id, id] }
       - { name: chk_webserver_root_domain_status, type: check }
+      - { name: chk_webserver_root_domain_cloud_account, type: check }
     indexes:
       - { name: uk_webserver_root_domain_uuid, columns: [uuid], unique: true }
       - { name: uk_webserver_root_domain_tenant_id, columns: [tenant_id, id], unique: true }
       - { name: uk_webserver_root_domain_active_hostname, columns: [hostname], unique: true, predicate: "deleted_at IS NULL" }
       - { name: idx_webserver_root_domain_tenant_updated, columns: [tenant_id, updated_at, id] }
+      - { name: idx_webserver_root_domain_cloud_account, columns: [tenant_id, cloud_account_id], predicate: "cloud_account_id IS NOT NULL AND deleted_at IS NULL" }
   - name: webserver_domain
     lifecycle_status: active
     owner: web-platform

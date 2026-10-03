@@ -18,3 +18,4 @@ class RootDomainResponse:
     display_name: Optional[str] = None
     dns_provider: Optional[str] = None
     provider_zone_ref: Optional[str] = None
+    cloud_account_id: Optional[str] = None

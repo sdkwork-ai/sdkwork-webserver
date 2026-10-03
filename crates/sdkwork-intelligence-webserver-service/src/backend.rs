@@ -3,7 +3,8 @@
 use async_trait::async_trait;
 use chrono::{Datelike, Duration, NaiveDate, Utc};
 use sdkwork_webserver_contract::{
-    web_is_platform_operator_tenant, ClusterEventPage, ClusterHeartbeatSamplePage, ClusterHostPage,
+    web_is_platform_operator_tenant, cloud_account_id_shape_error, ClusterEventPage,
+    ClusterHeartbeatSamplePage, ClusterHostPage,
     ClusterHostResponse, ClusterInstancePage, ClusterInstanceResponse, ClusterOverviewResponse,
     ClusterPage, ClusterResponse, ClusterSyncManifest, CreateApplicationRequest,
     CreateClusterRequest, CreateDomainRequest, CreateListenerCertificateBindingRequest,
@@ -107,7 +108,39 @@ impl WebService {
                 "root domain must contain at least two DNS labels",
             ));
         }
-        Ok(CreateRootDomainRequest { hostname })
+        // A blank member is an omission rather than an account named "": the
+        // create form always sends the field, and an operator who left it empty
+        // asked for no binding, not for a binding to nothing.
+        let cloud_account_id = Self::normalize_cloud_account_id(request.cloud_account_id.as_deref())?;
+        Ok(CreateRootDomainRequest {
+            hostname,
+            cloud_account_id,
+        })
+    }
+
+    /// Canonicalise and check a cloud-account reference.
+    ///
+    /// Blank folds to `None` — "no account named" and "no account" are the same
+    /// request on this surface, because the forms that send the member always send
+    /// it. A non-blank value is checked against the shared shape rule rather than a
+    /// local copy, so this boundary and the durability boundary cannot drift into
+    /// accepting different references.
+    ///
+    /// Case is preserved. An account id is a stable reference into the account
+    /// center, not a vocabulary this module owns, so folding it here would rewrite
+    /// another module's identifier on the way to the store.
+    fn normalize_cloud_account_id(value: Option<&str>) -> WebServiceResult<Option<String>> {
+        let Some(value) = value else {
+            return Ok(None);
+        };
+        let value = value.trim();
+        if value.is_empty() {
+            return Ok(None);
+        }
+        if let Some(reason) = cloud_account_id_shape_error(value) {
+            return Err(WebServiceError::validation(reason));
+        }
+        Ok(Some(value.to_owned()))
     }
 
     /// Validate and canonicalise a partial root-domain edit.
@@ -122,6 +155,12 @@ impl WebService {
     /// `provider_zone_ref` 512). Rejecting over-length here keeps a too-long
     /// value a validation problem at the edge instead of a store error after
     /// the fact.
+    ///
+    /// `cloudAccountId` is the one member that is *not* read this way. It names an
+    /// association rather than describing the row, so an absent member keeps the
+    /// stored account and an explicit `null` removes it; a blank string is read as
+    /// the same request as `null`, because the form's "no account" choice submits
+    /// an empty value and both spellings mean "unbind".
     fn normalize_root_domain_update_request(
         request: &UpdateRootDomainRequest,
     ) -> WebServiceResult<UpdateRootDomainRequest> {
@@ -158,14 +197,22 @@ impl WebService {
             .map(|value| value.to_ascii_lowercase());
         let provider_zone_ref =
             optional_text(request.provider_zone_ref.as_ref(), 512, "providerZoneRef")?;
+        let cloud_account_id = match request.cloud_account_id.as_ref() {
+            // Absent: leave the stored binding alone.
+            None => None,
+            // Present: `null` (or a blank string) unbinds, anything else binds.
+            Some(value) => Some(Self::normalize_cloud_account_id(value.as_deref())?),
+        };
 
         if display_name.is_none()
             && dns_provider.is_none()
             && provider_zone_ref.is_none()
+            && cloud_account_id.is_none()
             && request.status.is_none()
         {
             return Err(WebServiceError::validation(
-                "at least one of displayName, dnsProvider, providerZoneRef or status is required",
+                "at least one of displayName, dnsProvider, providerZoneRef, cloudAccountId or \
+                 status is required",
             ));
         }
 
@@ -174,6 +221,7 @@ impl WebService {
             dns_provider,
             provider_zone_ref,
             status: request.status,
+            cloud_account_id,
         })
     }
 

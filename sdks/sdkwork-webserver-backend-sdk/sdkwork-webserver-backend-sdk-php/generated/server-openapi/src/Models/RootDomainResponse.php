@@ -19,6 +19,9 @@ final class RootDomainResponse
     /** Provider-side zone identifier. */
     public ?string $providerZoneRef = null;
 
+    /** The cloud account whose DNS automation this root domain publishes through; absent when it is bound to none and resolves the account per operation. */
+    public ?string $cloudAccountId = null;
+
     public ?int $status = null;
 
     public ?string $subdomainCount = null;
@@ -51,6 +54,9 @@ final class RootDomainResponse
             : null;
         $this->providerZoneRef = array_key_exists('providerZoneRef', $data)
             ? $data['providerZoneRef']
+            : null;
+        $this->cloudAccountId = array_key_exists('cloudAccountId', $data)
+            ? $data['cloudAccountId']
             : null;
         $this->status = array_key_exists('status', $data)
             ? $data['status']
@@ -91,6 +97,7 @@ final class RootDomainResponse
             'displayName' => $this->displayName,
             'dnsProvider' => $this->dnsProvider,
             'providerZoneRef' => $this->providerZoneRef,
+            'cloudAccountId' => $this->cloudAccountId,
             'status' => $this->status,
             'subdomainCount' => $this->subdomainCount,
             'boundSubdomainCount' => $this->boundSubdomainCount,

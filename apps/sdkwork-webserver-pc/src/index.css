@@ -19,9 +19,19 @@
 @source "../packages/sdkwork-webserver-pc-admin-plugins/src";
 /* Storage Center embeds the drive-owned admin storage pages, which live outside
    this app root: Tailwind v4 only scans the project root by default, so the
-   shared package's source must be declared explicitly or its utilities would be
-   missing from the emitted stylesheet. */
+   shared packages' sources must be declared explicitly or their utilities would
+   be missing from the emitted stylesheet. A missing entry fails silently — the
+   utility simply is not emitted, so an element keeps the light-mode surface
+   another scanned source happened to emit while its `dark:` counterpart has no
+   rule at all. Every drive package reachable from the mounted surface is
+   declared here (the surface itself, its bucket browser, the preview/editor
+   package the browser opens, and the shared dictionary they all build on);
+   `tests/theme-style-contract.test.ts` walks the import graph and keeps the list
+   complete. */
 @source "../../../../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-admin-storage-providers/src";
+@source "../../../../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-admin-storage-buckets/src";
+@source "../../../../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-file-preview/src";
+@source "../../../../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-commons/src";
 
 /* Shared packages use explicit dark: utilities driven by the theme provider. */
 @variant dark (&:is(.dark *));

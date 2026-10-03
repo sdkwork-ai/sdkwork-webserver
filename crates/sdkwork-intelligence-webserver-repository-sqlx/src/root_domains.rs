@@ -2,8 +2,8 @@ use crate::audited_sql;
 use super::{EngineRow, WebRepository};
 use sdkwork_webserver_contract::{
     CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainDeploymentResponse, DomainPage,
-    DomainResponse, ListRootDomainsQuery, RootDomainPage, RootDomainResponse, UpdateRootDomainRequest,
-    WebServiceError, WebServiceResult,
+    DomainResponse, ListRootDomainsQuery, RootDomainCloudAccountFilter, RootDomainPage,
+    RootDomainResponse, UpdateRootDomainRequest, WebServiceError, WebServiceResult,
 };
 use sqlx::Row;
 
@@ -26,16 +26,31 @@ impl WebRepository {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(|value| like_contains_pattern(&value.to_ascii_lowercase()));
+        // One parameter carries all three states, so the two statements below
+        // cannot drift in what "any", "unassigned" and "this account" mean. The
+        // filter is applied in SQL rather than after the read because it has to
+        // bound `total` as well as the page: filtering in Rust would report a
+        // count the caller can never page through.
+        let (cloud_account_scoped, cloud_account_id) = match query.cloud_account_filter() {
+            RootDomainCloudAccountFilter::Any => (false, None),
+            RootDomainCloudAccountFilter::Unassigned => (true, None),
+            RootDomainCloudAccountFilter::Assigned(account_id) => {
+                (true, Some(account_id))
+            }
+        };
 
         let total: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM webserver_root_domain r
              WHERE r.tenant_id = $1 AND r.deleted_at IS NULL
                AND ($2 IS NULL OR r.status = $2)
-               AND ($3 IS NULL OR LOWER(r.hostname) LIKE $3 ESCAPE '\')",
+               AND ($3 IS NULL OR LOWER(r.hostname) LIKE $3 ESCAPE '\')
+               AND (NOT $4 OR (r.cloud_account_id IS NOT DISTINCT FROM $5))",
         )
         .bind(tenant_id)
         .bind(query.status)
         .bind(keyword.as_deref())
+        .bind(cloud_account_scoped)
+        .bind(cloud_account_id.as_deref())
         .fetch_one(&self.pool)
         .await
         .map_err(|error| store_error("count webserver_root_domain", error))?;
@@ -46,8 +61,13 @@ impl WebRepository {
             // domain ids so the site-binding/listener joins cannot multiply
             // the counts; only the active-deployment filter keeps a per-row
             // latest-deployment lookup, indexed by (tenant_id, site_id).
+            //
+            // `IS NOT DISTINCT FROM` rather than `=` on the account: it is the
+            // form that reads the same for `NULL` (the unassigned arm) as for a
+            // value, so the two arms share one predicate instead of an `=` that
+            // would silently match nothing when the parameter is NULL.
             "SELECT r.uuid, r.hostname, r.display_name, r.dns_provider, r.provider_zone_ref,
-                    r.status,
+                    r.cloud_account_id, r.status,
                     COALESCE(agg.subdomain_count, 0) AS subdomain_count,
                     COALESCE(agg.bound_subdomain_count, 0) AS bound_subdomain_count,
                     COALESCE(agg.verified_subdomain_count, 0) AS verified_subdomain_count,
@@ -82,11 +102,14 @@ impl WebRepository {
              WHERE r.tenant_id = $1 AND r.deleted_at IS NULL
                AND ($2 IS NULL OR r.status = $2)
                AND ($3 IS NULL OR LOWER(r.hostname) LIKE $3 ESCAPE '\')
-             ORDER BY r.updated_at DESC, r.id DESC LIMIT $4 OFFSET $5",
+               AND (NOT $4 OR (r.cloud_account_id IS NOT DISTINCT FROM $5))
+             ORDER BY r.updated_at DESC, r.id DESC LIMIT $6 OFFSET $7",
         )
         .bind(tenant_id)
         .bind(query.status)
         .bind(keyword.as_deref())
+        .bind(cloud_account_scoped)
+        .bind(cloud_account_id.as_deref())
         .bind(page_size)
         .bind(offset)
         .fetch_all(&self.pool)
@@ -113,17 +136,19 @@ impl WebRepository {
         let uuid = new_uuid();
         let now = now_rfc3339();
 
-        let now_expression = instant_write_expression("$6");
+        let now_expression = instant_write_expression("$7");
         let sql = format!(
             "INSERT INTO webserver_root_domain (
-                id, uuid, tenant_id, hostname, status, metadata, created_at, updated_at, version
-             ) VALUES ($1, $2, $3, $4, $5, '{{}}', {now_expression}, {now_expression}, 0)"
+                id, uuid, tenant_id, hostname, cloud_account_id, status, metadata,
+                created_at, updated_at, version
+             ) VALUES ($1, $2, $3, $4, $5, $6, '{{}}', {now_expression}, {now_expression}, 0)"
         );
         sqlx::query(audited_sql(&sql))
             .bind(id)
             .bind(&uuid)
             .bind(tenant_id)
             .bind(&request.hostname)
+            .bind(request.cloud_account_id.as_deref())
             .bind(1_i32)
             .bind(&now)
             .execute(&self.pool)
@@ -140,7 +165,7 @@ impl WebRepository {
     ) -> WebServiceResult<RootDomainResponse> {
         let row = sqlx::query(
             "SELECT r.uuid, r.hostname, r.display_name, r.dns_provider, r.provider_zone_ref,
-                    r.status,
+                    r.cloud_account_id, r.status,
                     (SELECT COUNT(*) FROM webserver_domain d
                      WHERE d.tenant_id = r.tenant_id AND d.root_domain_id = r.id
                        AND d.deleted_at IS NULL) AS subdomain_count,
@@ -264,6 +289,14 @@ impl WebRepository {
     /// `hostname` is not in the `SET` list: the apex is the row's identity, and
     /// the tenant-level uniqueness index is built on it. Renaming a root domain
     /// is a delete-and-recreate, not an edit.
+    ///
+    /// `cloud_account_id` is the one member `COALESCE` cannot express, because
+    /// `NULL` is itself a value it may be set to (unbind). The `$8` flag is "the
+    /// caller named this member at all", so the `CASE` reads: when the member was
+    /// named, take `$7` — which may be the account id or `NULL` — and when it was
+    /// not, keep the stored column. Spelling it this way rather than as a second
+    /// statement keeps the whole edit one atomic write, so the form's four fields
+    /// and the lifecycle action's one cannot land in different orders.
     pub(super) async fn update_root_domain_repo(
         &self,
         tenant_id: i64,
@@ -271,13 +304,24 @@ impl WebRepository {
         request: &UpdateRootDomainRequest,
     ) -> WebServiceResult<RootDomainResponse> {
         let now = now_rfc3339();
-        let now_expression = instant_write_expression("$7");
+        let now_expression = instant_write_expression("$9");
+        // `Some(inner)` means the member was named; `inner` is the binding to
+        // store, where `None` unbinds. See the contract's reading of the member.
+        let cloud_account_named = request.cloud_account_id.is_some();
+        let cloud_account_id = request
+            .cloud_account_id
+            .as_ref()
+            .and_then(|value| value.as_deref());
         let sql = format!(
             "UPDATE webserver_root_domain
              SET display_name = COALESCE($3, display_name),
                  dns_provider = COALESCE($4, dns_provider),
                  provider_zone_ref = COALESCE($5, provider_zone_ref),
                  status = COALESCE($6, status),
+                 cloud_account_id = CASE
+                     WHEN CAST($8 AS BOOLEAN) THEN CAST($7 AS TEXT)
+                     ELSE cloud_account_id
+                 END,
                  updated_at = {now_expression}, version = version + 1
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL"
         );
@@ -288,6 +332,8 @@ impl WebRepository {
             .bind(request.dns_provider.as_deref())
             .bind(request.provider_zone_ref.as_deref())
             .bind(request.status)
+            .bind(cloud_account_id)
+            .bind(cloud_account_named)
             .bind(&now)
             .execute(&self.pool)
             .await
@@ -619,6 +665,7 @@ fn map_root_domain_row(row: &EngineRow) -> Result<RootDomainResponse, sqlx::Erro
         display_name: row.try_get("display_name")?,
         dns_provider: row.try_get("dns_provider")?,
         provider_zone_ref: row.try_get("provider_zone_ref")?,
+        cloud_account_id: row.try_get("cloud_account_id")?,
         status: row.try_get("status")?,
         subdomain_count: row.try_get("subdomain_count")?,
         bound_subdomain_count: row.try_get("bound_subdomain_count")?,

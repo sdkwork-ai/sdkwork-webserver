@@ -318,6 +318,15 @@ export const webserverWorkspaceEnUs = {
   "resource.domains.displayName": "Display name",
   "resource.domains.dnsProvider": "DNS provider",
   "resource.domains.providerZoneRef": "Provider zone reference",
+  // The cloud account a root domain's DNS automation publishes through. It is an
+  // IAM-owned reference, not a field this plane invents, so the wording names the
+  // account rather than the credential.
+  "resource.domains.cloudAccount": "Cloud account",
+  "resource.domains.cloudAccountAll": "All cloud accounts",
+  "resource.domains.cloudAccountNone": "No cloud account",
+  "resource.domains.cloudAccountUnassigned": "Unassigned",
+  "resource.domains.cloudAccountHint":
+    "Which account resolves this zone's DNS. Leave it as “no cloud account” to let each operation resolve one.",
   "resource.domains.save": "Save",
   "resource.domains.pause": "Pause",
   "resource.domains.resume": "Resume",

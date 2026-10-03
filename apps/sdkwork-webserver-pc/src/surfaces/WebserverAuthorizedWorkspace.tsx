@@ -10,7 +10,7 @@ import { IamAdminSurface, webserverModule as iamAdminModule, type IamAdminResour
 import { webserverModule as mcpAdminModule, McpAdminSurface, type McpAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-mcp";
 import { webserverModule as pluginsAdminModule, PluginsAdminSurface, type PluginsAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-plugins";
 import { webserverModule as skillsAdminModule, SkillsAdminSurface, type SkillsAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-skills";
-import { StorageCenterSurface, webserverModule as storageModule, type StorageCenterResource } from "@sdkwork/webserver-pc-admin-storage";
+import { webserverModule as storageModule, type StorageCenterResource } from "@sdkwork/webserver-pc-admin-storage";
 import { hasWebserverAdminAccess, type WebserverPcModuleDefinition, type WebserverPcSurface, type WebserverResourceKey } from "@sdkwork/webserver-pc-commons";
 import type { WebserverLocale } from "@sdkwork/webserver-pc-core";
 import { CloudAccountManagementSurface, webserverModule as cloudAccountModule } from "@sdkwork/webserver-pc-console-cloud-account";
@@ -27,6 +27,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import type { BootstrappedWebserverPcRuntime } from "../bootstrap/runtime.ts";
 import { webserverApplicationCatalog } from "../i18n/index.ts";
 import { useSdkworkModuleMessages } from "@sdkwork/i18n-pc-react";
+import { useCloudAccountOptions } from "./cloudAccounts.ts";
 
 // Applications, domains, and certificates all render the canonical
 // sdkwork-deployments pages over `deploy_app`, `deploy_domain_zone`, and the
@@ -65,6 +66,26 @@ export const consoleModules = [deliveryModule, pluginsModule, skillsModule, mcpM
 // the removal is meant to end.
 export const adminModules = [appsAdminModule, deliveryAdminModule, cloudAccountAdminModule, iamAdminModule, clusterModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule, storageModule, dataStatisticsAdminModule] satisfies readonly WebserverPcModuleDefinition[];
 const LazyAdminSurface = lazy(() => import("./WebserverAdminSurface.tsx").then((module) => ({ default: module.WebserverAdminSurface })));
+
+/**
+ * Storage Center is split out of the workspace chunk.
+ *
+ * It carries a whole cross-repository plane — the drive admin storage pages, the
+ * shared preview/editor package and its OOXML parsers, the drive dictionary —
+ * and only the four storage resources ever need it. Loading it eagerly put that
+ * plane in front of every console page (including per-user pages that never
+ * touch storage). The route element is already inside the admin surface's
+ * `Suspense`, so a lazy surface only costs a spinner on first visit to one of
+ * the storage resources.
+ *
+ * `webserverModule` stays a static import on purpose: menu metadata is a plain
+ * object and must be available synchronously to build the sidebar.
+ */
+const LazyStorageCenterSurface = lazy(() =>
+  import("@sdkwork/webserver-pc-admin-storage").then((module) => ({
+    default: module.StorageCenterSurface,
+  })),
+);
 
 export interface TrafficPageRendererInput {
   backendApiBaseUrl: string;
@@ -167,6 +188,11 @@ export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: Webs
   // manager. There is no local re-implementation on either side of the console.
   const deployBaseUrl = runtime.config.deployAppApiBaseUrl;
   const driveBaseUrl = runtime.config.driveAppApiBaseUrl;
+  // Read once for the whole workspace: the Domains page is the only consumer today,
+  // and a page-scoped read would re-ask the account center on every navigation into
+  // it. The read is the host's because the account center is IAM's, and the labels
+  // are handed to the page as data.
+  const cloudAccountOptions = useCloudAccountOptions();
   const resourceRenderers = {
     apps: <DeployAppsManagementSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={driveBaseUrl} locale={locale} tokenManager={runtime.tokenManager} />,
     domains: <DeployDomainManagementSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={driveBaseUrl} locale={locale} resource="domains" tokenManager={runtime.tokenManager} />,
@@ -203,8 +229,12 @@ export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: Webs
   // picks the page from `resource`, so the host owns the menu entry and the
   // route while the pages stay the shared implementation.
   const storageCenterSurface = (resource: StorageCenterResource) => (
-    <StorageCenterSurface
+    <LazyStorageCenterSurface
       adminStorageApiBaseUrl={driveBaseUrl}
+      // The bucket page's "nothing configured yet" state hands the operator to
+      // the sibling provider resource; the route prefix is host knowledge
+      // (`/admin` for the backend-admin surface, matching the menu targets).
+      basePath={`${landingPath}/storage`}
       locale={locale}
       operatorId={operatorId}
       resource={resource}
@@ -218,7 +248,10 @@ export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: Webs
     // their pages are authored in the delivery capability package. They take no
     // client prop: both render inside `WebserverAdminSdkProvider` (mounted by
     // `WebserverAdminSurface`), which is where the admin SDK client comes from.
-    domains: <ServedDomainAdminSurface locale={locale} resource="domains" />,
+    // The Domains page additionally takes the cloud-account labels, because the
+    // accounts it may bind a root domain to are an IAM-owned resource and IAM's
+    // clients are this host's to drive, not a capability package's.
+    domains: <ServedDomainAdminSurface cloudAccounts={cloudAccountOptions} locale={locale} resource="domains" />,
     certificates: <ServedCertificateAdminSurface locale={locale} resource="certificates" />,
     // Cloud accounts are one IAM-owned resource with one route set, so the admin
     // tab renders the same page the console does and only marks itself `admin`.

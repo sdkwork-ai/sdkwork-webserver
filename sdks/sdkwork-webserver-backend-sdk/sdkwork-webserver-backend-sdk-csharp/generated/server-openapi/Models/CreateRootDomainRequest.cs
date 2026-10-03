@@ -7,5 +7,6 @@ namespace SDKWork.WebserverBackendSdk.Models
     public class CreateRootDomainRequest
     {
         public string Hostname { get; set; }
+        public string? CloudAccountId { get; set; }
     }
 }

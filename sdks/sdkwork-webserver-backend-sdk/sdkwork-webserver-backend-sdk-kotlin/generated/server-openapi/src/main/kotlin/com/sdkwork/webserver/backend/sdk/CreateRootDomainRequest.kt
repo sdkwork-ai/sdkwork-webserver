@@ -1,5 +1,6 @@
 package com.sdkwork.webserver.backend.sdk
 
 data class CreateRootDomainRequest(
-    val hostname: String? = null
+    val hostname: String? = null,
+    val cloudAccountId: String? = null
 )

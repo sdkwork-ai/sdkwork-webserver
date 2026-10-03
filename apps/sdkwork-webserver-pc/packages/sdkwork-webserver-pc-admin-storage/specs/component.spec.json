@@ -72,7 +72,7 @@
   },
   "integration": {
     "authority": "Root SDKWork specs remain authoritative.",
-    "dependencyPolicy": "Host adapter only. Pages, components, service, types, and i18n are consumed from the shared sdkwork-drive-pc-admin-storage-providers package, and the drive session snapshot is adapted from host session primitives at the surface boundary; no drive page is copied or re-implemented here.",
+    "dependencyPolicy": "Host adapter only. Pages, components, service, types, and i18n are consumed from the shared sdkwork-drive-pc-admin-storage-providers and sdkwork-drive-pc-admin-storage-buckets packages, and the drive session snapshot is adapted from host session primitives at the surface boundary; no drive page is copied or re-implemented here.",
     "sdkPolicy": "The drive-owned admin storage SDK is composed through createDriveAdminStorageHostClient from sdkwork-drive-pc-admin-core, which accepts the host API base URL directly; raw HTTP and direct generated-SDK imports are forbidden in authored UI code."
   },
   "verification": {

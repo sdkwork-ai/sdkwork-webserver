@@ -1096,6 +1096,17 @@
               "type": "string",
               "maxLength": 253
             }
+          },
+          {
+            "name": "cloud_account_id",
+            "in": "query",
+            "description": "Restrict the inventory to the root domains bound to one cloud account. Omitted filters nothing. The literal `UNASSIGNED` selects the root domains bound to no account — the ones whose account resolves per operation. The literal cannot collide with a real account id, because the id shape admits only ASCII alphanumerics and `_.:-`, so whitespace and lower-case words like this one are unreachable as an id.",
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,126}[A-Za-z0-9]$|^UNASSIGNED$"
+            }
           }
         ],
         "responses": {
@@ -7720,6 +7731,13 @@
             "type": "string",
             "minLength": 3,
             "maxLength": 253
+          },
+          "cloudAccountId": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 128,
+            "description": "Cloud account whose DNS automation this root domain is bound to. Omitted leaves the Zone resolving its account per operation, which is the state every root domain reconciled from the edge's own configuration is in.",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,126}[A-Za-z0-9]$"
           }
         }
       },
@@ -7748,6 +7766,14 @@
             "minimum": 0,
             "maximum": 2,
             "description": "0=pending, 1=active, 2=disabled."
+          },
+          "cloudAccountId": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 2,
+            "maxLength": 128,
+            "description": "The cloud account to bind, or `null` to unbind. The **only** member of this request that distinguishes \"leave it alone\" from \"clear it\": an omitted member keeps the stored account and an explicit `null` removes it. This is the one place the surface's \"a blank value is an omission\" reading does not apply, because the member names an association rather than describing the row.",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,126}[A-Za-z0-9]$"
           }
         }
       },
@@ -7826,6 +7852,12 @@
             "minLength": 1,
             "maxLength": 512,
             "description": "Provider-side zone identifier."
+          },
+          "cloudAccountId": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 128,
+            "description": "The cloud account whose DNS automation this root domain publishes through; absent when it is bound to none and resolves the account per operation."
           },
           "status": {
             "type": "integer",

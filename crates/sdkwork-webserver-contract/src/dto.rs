@@ -441,6 +441,14 @@ pub struct RootDomainResponse {
     /// Provider-side zone identifier, up to 512 characters.
     #[serde(rename = "providerZoneRef", skip_serializing_if = "Option::is_none")]
     pub provider_zone_ref: Option<String>,
+    /// The cloud account whose DNS automation this Zone publishes through.
+    ///
+    /// Absent means the account resolves per operation, which is the state every
+    /// root domain reconciled from the edge's own configuration is in. The value
+    /// is an account-center id (`iam_provider_account`), held as a reference
+    /// rather than a join because that table belongs to sdkwork-iam.
+    #[serde(rename = "cloudAccountId", skip_serializing_if = "Option::is_none")]
+    pub cloud_account_id: Option<String>,
     pub status: i32,
     #[serde(rename = "subdomainCount", with = "sdkwork_utils_rust::serde_int64")]
     pub subdomain_count: i64,
@@ -477,10 +485,15 @@ pub struct RootDomainPage {
     pub total: i64,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CreateRootDomainRequest {
     pub hostname: String,
+    /// The cloud account to bind at creation. Omitted leaves the Zone resolving
+    /// its account per operation, exactly as a root domain reconciled from the
+    /// edge's configuration does.
+    #[serde(rename = "cloudAccountId", default)]
+    pub cloud_account_id: Option<String>,
 }
 
 /// Partial edit of a tenant root-domain Zone.
@@ -506,6 +519,80 @@ pub struct UpdateRootDomainRequest {
     pub provider_zone_ref: Option<String>,
     #[serde(default)]
     pub status: Option<i32>,
+    /// The cloud account to bind, or `null` to unbind.
+    ///
+    /// The **only** member of this request that distinguishes "leave it alone"
+    /// from "clear it", because it names an association rather than describing
+    /// the row: an absent member keeps the stored account and an explicit `null`
+    /// removes it. That is the difference between the outer `Option` (was the
+    /// member present at all?) and the inner one (is the association set?), and
+    /// it is why this field cannot share the "a blank value is an omission"
+    /// reading the descriptive fields use.
+    #[serde(
+        rename = "cloudAccountId",
+        default,
+        deserialize_with = "deserialize_explicit_nullable"
+    )]
+    pub cloud_account_id: Option<Option<String>>,
+}
+
+/// Longest cloud-account id a root-domain request may name.
+///
+/// The account center's ids are unbounded; this bounds only what travels on the
+/// wire and what `webserver_root_domain.cloud_account_id` stores (VARCHAR(128)),
+/// which is the same ceiling the deployments DNS Zone already applies to the same
+/// reference.
+pub const CLOUD_ACCOUNT_ID_MAX_CHARS: usize = 128;
+
+/// The shape rule for a cloud-account reference, in one place.
+///
+/// Shared rather than duplicated because the reference is validated twice: once
+/// where the request is received, so a malformed value never reaches the store,
+/// and again where it is persisted, so the durability boundary does not have to
+/// trust its caller. Two copies of this rule would eventually disagree, and the
+/// failure mode of that is a value one layer accepts under one meaning and
+/// another stores under a different one.
+///
+/// Shape only. Whether the account center actually holds this id is a runtime
+/// fact owned by sdkwork-iam; answering it here would be a second, weaker copy of
+/// another module's rule.
+///
+/// Returns the reason the value is unacceptable, or `None` when it is fine.
+pub fn cloud_account_id_shape_error(account_id: &str) -> Option<String> {
+    let valid = !account_id.is_empty()
+        && account_id.chars().count() <= CLOUD_ACCOUNT_ID_MAX_CHARS
+        && account_id
+            .chars()
+            .all(|character| !character.is_whitespace() && !character.is_control())
+        && account_id
+            .chars()
+            .next()
+            .is_some_and(|first| first.is_ascii_alphanumeric());
+    if valid {
+        return None;
+    }
+    Some(format!(
+        "cloudAccountId must be 1..{CLOUD_ACCOUNT_ID_MAX_CHARS} characters, start with an \
+         alphanumeric, and contain no whitespace or control characters"
+    ))
+}
+
+/// Reads a member that may be absent, `null`, or a string.
+///
+/// `serde`'s own `Option<Option<T>>` collapses `null` and an absent member into
+/// the same `None`, which is exactly the distinction the root-domain edit needs:
+/// absent is "leave the stored account alone" and `null` is "unbind it". Wrapping
+/// the *inner* value instead of the outer one keeps the two apart — an absent
+/// member never reaches this function (the `default` supplies its `None`), a
+/// present `null` deserializes to `Some(None)`, and a string to `Some(Some(_))`.
+/// That is what lets the repository express the second as a real
+/// `SET cloud_account_id = NULL` rather than a no-op the operator cannot see the
+/// difference of.
+fn deserialize_explicit_nullable<'de, D>(deserializer: D) -> Result<Option<Option<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<String>::deserialize(deserializer).map(Some)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

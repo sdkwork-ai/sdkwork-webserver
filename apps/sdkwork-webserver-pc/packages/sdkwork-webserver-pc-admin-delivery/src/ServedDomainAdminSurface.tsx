@@ -6,7 +6,7 @@ import type {
 } from "@sdkwork/webserver-pc-admin-core";
 import type { WebserverLocale } from "@sdkwork/webserver-pc-commons";
 import { ArrowLeft, CirclePause, CirclePlay, FileKey2, Globe2, Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2 } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, Route, Routes, useParams } from "react-router-dom";
 
 import {
@@ -23,6 +23,7 @@ import {
   translator,
   type Translator,
 } from "./AdminSurfaceAtoms.tsx";
+import type { CloudAccountOption } from "./cloudAccounts.ts";
 
 /**
  * The served-domain inventory: which root domains this edge answers for, and
@@ -84,33 +85,79 @@ const ALL_STATUSES = "ALL";
 const STATUS_FILTERS = [ALL_STATUSES, 1, 0, 2] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
 
+/**
+ * The cloud-account filter's three states, as one value.
+ *
+ * `ALL` is the page's own "no filter" and is never sent — an absent query member
+ * is what the wire reads as "every root domain", exactly as the status segment
+ * omits `status` for ALL. The other two states *are* sent, because each is a real
+ * restriction the server has to apply; `UNASSIGNED` is the reserved literal the
+ * contract defines for "bound to no account", chosen so it cannot collide with an
+ * account id. Everything else is an account id.
+ */
+const ALL_CLOUD_ACCOUNTS = "ALL";
+
+/** The literal the backend reads as "bound to no cloud account". */
+const UNASSIGNED_CLOUD_ACCOUNT = "UNASSIGNED";
+
+/** An account id, or one of the two reserved members above. */
+type CloudAccountFilter = string;
+
+/**
+ * The account a row is bound to, as one value.
+ *
+ * A binding is either present or absent, and `""` is the absent state — which is
+ * what a `<select>` already submits for its empty option, so the form needs no
+ * second representation of "none".
+ */
+type CloudAccountBinding = string;
+
 export interface ServedDomainAdminSurfaceProps {
   locale: WebserverLocale;
   resource: "domains";
+  /**
+   * The cloud accounts this page may offer, read by the host from the IAM provider
+   * account center.
+   *
+   * Injected rather than fetched here because the account center is an IAM-owned
+   * resource and IAM's generated clients may only be driven by a host core package.
+   * Absent means "none known", which the page degrades to without losing anything
+   * structural: the filter keeps its "all" and "unassigned" states — both are the
+   * page's own and need no inventory — and a row's stored binding is still shown
+   * from the row itself, labelled by its id.
+   */
+  cloudAccounts?: readonly CloudAccountOption[];
 }
 
-export function ServedDomainAdminSurface({ locale, resource }: ServedDomainAdminSurfaceProps) {
+export function ServedDomainAdminSurface({ cloudAccounts = [], locale, resource }: ServedDomainAdminSurfaceProps) {
   return (
     <div className="deploy-surface" data-resource={resource}>
       {/* Two levels, two routes — the shape the console uses, so opening a root
           domain is a navigation an operator can link to and come back from. An
           unparsable tail renders the root ledger rather than a blank pane. */}
       <Routes>
-        <Route element={<RootDomainLedger locale={locale} />} index />
+        <Route element={<RootDomainLedger cloudAccounts={cloudAccounts} locale={locale} />} index />
         <Route element={<RootDomainHostnames locale={locale} />} path=":rootDomainId" />
-        <Route element={<RootDomainLedger locale={locale} />} path="*" />
+        <Route element={<RootDomainLedger cloudAccounts={cloudAccounts} locale={locale} />} path="*" />
       </Routes>
     </div>
   );
 }
 
-function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
+function RootDomainLedger({
+  cloudAccounts,
+  locale,
+}: {
+  cloudAccounts: readonly CloudAccountOption[];
+  locale: WebserverLocale;
+}) {
   const client = useWebserverAdminSdk();
   const t = translator(locale);
   const [roots, setRoots] = useState<RootDomainResponse[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<StatusFilter>(ALL_STATUSES);
+  const [cloudAccount, setCloudAccount] = useState<CloudAccountFilter>(ALL_CLOUD_ACCOUNTS);
   const [searchDraft, setSearchDraft] = useState("");
   const [keyword, setKeyword] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -119,6 +166,42 @@ function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
   const [statusTarget, setStatusTarget] = useState<RootDomainResponse>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+
+  /**
+   * The accounts this filter may offer, which is not always the accounts the
+   * account center returned.
+   *
+   * Two sources beyond the injected inventory, and both are needed for the control
+   * to be usable rather than merely populated:
+   *
+   * - Every `cloudAccountId` the loaded rows carry. An account the center no longer
+   *   returns — deleted there, or invisible to a caller without
+   *   `iam.provider_accounts.read`, in which case the host injects nothing — is
+   *   still bound to rows on screen, and the question "show me the Zones of *that*
+   *   account" is asked by pointing at one of them. Offering only the center's
+   *   inventory would leave that account unreachable from the filter.
+   * - The filter's own current value, so a filter restored from a link can render
+   *   the state it names. A `<select>` whose value matches no option silently shows
+   *   its first entry instead, and "All" sitting in the control while the list shows
+   *   one account's Zones is the state an operator reads as the filter being broken.
+   *
+   * Keyed by id so an account that appears in two of those sources is listed once,
+   * and sorted by label so a picker with more than a handful is scannable.
+   */
+  const cloudAccountOptions = useMemo<CloudAccountOption[]>(() => {
+    const byId = new Map(cloudAccounts.map((account) => [account.id, account]));
+    const bindings = [
+      cloudAccount,
+      ...(roots ?? []).map((root) => root.cloudAccountId ?? ""),
+    ].filter(
+      (accountId) => accountId !== "" && accountId !== ALL_CLOUD_ACCOUNTS && accountId !== UNASSIGNED_CLOUD_ACCOUNT,
+    );
+    for (const accountId of bindings) {
+      if (!byId.has(accountId)) byId.set(accountId, { id: accountId, label: accountId });
+    }
+    // The comparison is locale-aware because the labels are operator-facing names.
+    return [...byId.values()].sort((left, right) => left.label.localeCompare(right.label, locale));
+  }, [cloudAccount, cloudAccounts, locale, roots]);
 
   useEffect(() => {
     let active = true;
@@ -133,6 +216,11 @@ function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
         // no value for.
         status: status === ALL_STATUSES ? undefined : status,
         q: keyword || undefined,
+        // Same reading for the account: ALL is an omission. The other two states
+        // are sent, because each is a restriction the server applies — filtering
+        // here in Rust after the read would leave `total` describing the
+        // unfiltered inventory.
+        cloudAccountId: cloudAccount === ALL_CLOUD_ACCOUNTS ? undefined : cloudAccount,
       })
       .then((result) => {
         if (!active) return;
@@ -150,7 +238,7 @@ function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
     return () => {
       active = false;
     };
-  }, [client, keyword, page, status]);
+  }, [client, cloudAccount, keyword, page, status]);
 
   const removeRoot = (root: RootDomainResponse) => {
     setBusy(true);
@@ -181,7 +269,13 @@ function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
    */
   const patchRoot = (
     root: RootDomainResponse,
-    body: { displayName?: string; dnsProvider?: string; providerZoneRef?: string; status?: number },
+    body: {
+      displayName?: string;
+      dnsProvider?: string;
+      providerZoneRef?: string;
+      status?: number;
+      cloudAccountId?: string | null;
+    },
     done: () => void,
   ) => {
     setBusy(true);
@@ -239,6 +333,32 @@ function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
               </button>
             ))}
           </div>
+          {/* The cloud-account filter is a single-choice list rather than a second
+              segmented control: the accounts are tenant data, so the number of
+              choices is not fixed and a segment row would grow without bound.
+              "All" and "unassigned" are always offered — they are the page's own
+              states and need no inventory — while the accounts themselves appear
+              once the account center has answered. */}
+          <label className="cloud-account-filter">
+            <span>{t("resource.domains.cloudAccount")}</span>
+            <select
+              onChange={(event) => {
+                setPage(1);
+                setCloudAccount(event.target.value);
+              }}
+              value={cloudAccount}
+            >
+              <option value={ALL_CLOUD_ACCOUNTS}>{t("resource.domains.cloudAccountAll")}</option>
+              <option value={UNASSIGNED_CLOUD_ACCOUNT}>
+                {t("resource.domains.cloudAccountUnassigned")}
+              </option>
+              {cloudAccountOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <div className="actions">
           <button
@@ -278,6 +398,7 @@ function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
               <thead>
                 <tr>
                   <th>{t("resource.domains.rootHostname")}</th>
+                  <th>{t("resource.domains.cloudAccount")}</th>
                   <th>{t("resource.domains.status")}</th>
                   <th>{t("resource.domains.subdomainCount")}</th>
                   <th>{t("resource.domains.httpsCount")}</th>
@@ -310,6 +431,17 @@ function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
                           <strong>{root.hostname}</strong>
                         </span>
                       </Link>
+                    </td>
+                    <td>
+                      {/* The label the picker offers, so a row and the filter
+                          read the same; the id is shown when the account center
+                          has not named this binding, which is what an operator
+                          needs to look it up there. */}
+                      {root.cloudAccountId === undefined ? (
+                        <small className="cell-subtitle">{t("resource.domains.cloudAccountUnassigned")}</small>
+                      ) : (
+                        accountLabel(cloudAccountOptions, root.cloudAccountId)
+                      )}
                     </td>
                     <td>
                       <StatusBadge t={t} value={rootStatusLabel(root.status)} />
@@ -410,31 +542,28 @@ function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
       )}
 
       {createOpen ? (
-        <FormDialog
+        <RootDomainFormDialog
+          accounts={cloudAccountOptions}
           close={() => setCreateOpen(false)}
-          submit={async (hostname) => {
-            await client.domain.rootDomains.create({ hostname }, { idempotencyKey: newIdempotencyKey() });
+          mode="create"
+          submit={async (body) => {
+            await client.domain.rootDomains.create(
+              {
+                hostname: body.hostname ?? "",
+                // A blank selection is an omission rather than a binding to the
+                // empty string: the create contract has no "unbind", so the only
+                // two meaningful bodies are "bind this account" and "do not name
+                // one".
+                ...(body.cloudAccountId ? { cloudAccountId: body.cloudAccountId } : {}),
+              },
+              { idempotencyKey: newIdempotencyKey() },
+            );
             setCreateOpen(false);
             setRoots(null);
             setPage(1);
           }}
-          submitLabel={t("resource.domains.create")}
           t={t}
-          title={t("resource.domains.defineRoot")}
-        >
-          {(disabled) => (
-            <label>
-              {t("resource.domains.rootHostname")}
-              <input
-                disabled={disabled}
-                name="hostname"
-                placeholder={t("resource.domains.addRootPlaceholder")}
-                required
-                type="text"
-              />
-            </label>
-          )}
-        </FormDialog>
+        />
       ) : null}
 
       {deleteTarget ? (
@@ -450,8 +579,10 @@ function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
       ) : null}
 
       {editTarget ? (
-        <EditRootDomainDialog
+        <RootDomainFormDialog
+          accounts={cloudAccountOptions}
           close={() => setEditTarget(undefined)}
+          mode="edit"
           onError={setError}
           root={editTarget}
           submit={(body) => patchRoot(editTarget, body, () => setEditTarget(undefined))}
@@ -494,60 +625,102 @@ function RootDomainLedger({ locale }: { locale: WebserverLocale }) {
 }
 
 /**
- * Root-domain edit form.
+ * The root-domain form, in the console's dialog chrome.
  *
- * The three fields the plane stores, in the console's dialog chrome. The apex is
- * shown read-only rather than as a disabled input: it is the row's identity — a
- * wildcard or a subdomain here would break the uniqueness index every hostname
- * under it resolves against — so it is a value being shown, not a field being
- * edited.
+ * One component for both dialogs because they edit the same row through requests
+ * that differ in exactly one way: an edit is a partial body whose omitted members
+ * mean "leave it as it is", and a create is a full body whose omitted members mean
+ * "none". Two components would be two copies of the field list and the validation
+ * around it, and the copy that drifts is always the one that keeps offering a
+ * field the contract stopped accepting.
  *
- * A field left blank is omitted from the request, which the contract reads as
- * "leave it as it is". That is the same reading the console's zone form has, and
- * it is why saving with nothing changed is refused here instead of being sent as
- * a request that would come back 422: there is no member to send.
+ * The four descriptive fields keep the console's reading: a field left blank is
+ * *omitted*, which the contract reads as "leave it as it is". That is why saving
+ * an edit with nothing changed is refused here instead of being sent as a request
+ * that would come back 422 — there is no member to send.
+ *
+ * `cloudAccountId` is the exception, and deliberately so: it names an association
+ * rather than describing the row, so an explicit "no account" is a value the
+ * operator can choose. The select's empty option therefore means *unbind* on an
+ * edit (sent as `null`) and *no account named* on a create (omitted entirely,
+ * because the create contract has no unbind to express).
+ *
+ * The apex is shown read-only on an edit rather than as a disabled input: it is the
+ * row's identity — a wildcard or a subdomain here would break the uniqueness index
+ * every hostname under it resolves against — so it is a value being shown, not a
+ * field being edited. On a create it is the one field that is typed.
  */
-function EditRootDomainDialog({
+function RootDomainFormDialog({
+  accounts,
   close,
+  mode,
   onError,
   root,
   submit,
   t,
 }: {
+  accounts: readonly CloudAccountOption[];
   close(): void;
-  onError(message: string | undefined): void;
-  root: RootDomainResponse;
-  submit(body: { displayName?: string; dnsProvider?: string; providerZoneRef?: string }): void;
+  mode: "create" | "edit";
+  onError?(message: string | undefined): void;
+  root?: RootDomainResponse;
+  submit(body: {
+    hostname?: string;
+    displayName?: string;
+    dnsProvider?: string;
+    providerZoneRef?: string;
+    cloudAccountId?: string | null;
+  }): void;
   t: Translator;
 }) {
-  const [displayName, setDisplayName] = useState(root.displayName ?? "");
-  const [dnsProvider, setDnsProvider] = useState(root.dnsProvider ?? "");
-  const [providerZoneRef, setProviderZoneRef] = useState(root.providerZoneRef ?? "");
+  const creating = mode === "create";
+  const [hostname, setHostname] = useState("");
+  const [displayName, setDisplayName] = useState(root?.displayName ?? "");
+  const [dnsProvider, setDnsProvider] = useState(root?.dnsProvider ?? "");
+  const [providerZoneRef, setProviderZoneRef] = useState(root?.providerZoneRef ?? "");
+  const [cloudAccount, setCloudAccount] = useState<CloudAccountBinding>(root?.cloudAccountId ?? "");
 
   const fields = { displayName, dnsProvider, providerZoneRef };
   const current = {
-    displayName: root.displayName ?? "",
-    dnsProvider: root.dnsProvider ?? "",
-    providerZoneRef: root.providerZoneRef ?? "",
+    displayName: root?.displayName ?? "",
+    dnsProvider: root?.dnsProvider ?? "",
+    providerZoneRef: root?.providerZoneRef ?? "",
   };
   const changed = (Object.keys(fields) as (keyof typeof fields)[]).filter(
     (key) => fields[key].trim() !== current[key],
   );
+  // The account is compared as a binding, so "still no account" is not a change
+  // and "now no account" is one — the difference the descriptive fields cannot
+  // express and this control has to.
+  const accountChanged = cloudAccount !== (root?.cloudAccountId ?? "");
+  const dirty = creating ? hostname.trim() !== "" : changed.length > 0 || accountChanged;
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (changed.length === 0) return;
-    onError(undefined);
-    const body: { displayName?: string; dnsProvider?: string; providerZoneRef?: string } = {};
+    if (!dirty) return;
+    onError?.(undefined);
+    const body: {
+      hostname?: string;
+      displayName?: string;
+      dnsProvider?: string;
+      providerZoneRef?: string;
+      cloudAccountId?: string | null;
+    } = {};
+    if (creating) body.hostname = hostname.trim();
     for (const key of changed) {
       const value = fields[key].trim();
-      // Blank means "left alone", so it is dropped rather than sent: the wire
-      // has no "clear this" for these three, and sending an empty string would
-      // be rejected by `minLength: 1` even though it reads as the same intent.
+      // Blank means "left alone", so it is dropped rather than sent: the wire has
+      // no "clear this" for these three, and sending an empty string would be
+      // rejected by `minLength: 1` even though it reads as the same intent.
       if (value !== "") body[key] = value;
     }
-    if (Object.keys(body).length === 0) {
-      onError(t("resource.domains.editNeedsAValue"));
+    if (accountChanged || creating) {
+      // `null` on an edit is the unbind; on a create the member is simply not
+      // named, because there is no stored binding to remove.
+      body.cloudAccountId = cloudAccount === "" ? (creating ? undefined : null) : cloudAccount;
+    }
+    if (!creating && Object.keys(body).length === 0) {
+      onError?.(t("resource.domains.editNeedsAValue"));
       return;
     }
     submit(body);
@@ -562,57 +735,101 @@ function EditRootDomainDialog({
       role="presentation"
     >
       <form
-        aria-labelledby="served-domain-edit-title"
+        aria-labelledby="served-domain-form-title"
         aria-modal="true"
         className="dialog delivery-dialog"
         onSubmit={onSubmit}
         role="dialog"
       >
         <header>
-          <h2 id="served-domain-edit-title">{t("resource.domains.editRoot")}</h2>
+          <h2 id="served-domain-form-title">
+            {creating ? t("resource.domains.defineRoot") : t("resource.domains.editRoot")}
+          </h2>
         </header>
         <div className="form-grid">
           <label className="form-field-wide">
             <span>{t("resource.domains.rootHostname")}</span>
-            <input readOnly value={root.hostname} />
+            {creating ? (
+              <input
+                name="hostname"
+                onChange={(event) => setHostname(event.target.value)}
+                placeholder={t("resource.domains.addRootPlaceholder")}
+                required
+                type="text"
+                value={hostname}
+              />
+            ) : (
+              <input readOnly value={root?.hostname ?? ""} />
+            )}
           </label>
-          <label>
-            <span>{t("resource.domains.displayName")}</span>
-            <input
-              name="displayName"
-              onChange={(event) => setDisplayName(event.target.value)}
-              placeholder={root.hostname}
-              value={displayName}
-            />
-          </label>
-          <label>
-            <span>{t("resource.domains.dnsProvider")}</span>
-            <input
-              name="dnsProvider"
-              onChange={(event) => setDnsProvider(event.target.value)}
-              value={dnsProvider}
-            />
-          </label>
+          {creating ? null : (
+            <>
+              <label>
+                <span>{t("resource.domains.displayName")}</span>
+                <input
+                  name="displayName"
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  placeholder={root?.hostname ?? ""}
+                  value={displayName}
+                />
+              </label>
+              <label>
+                <span>{t("resource.domains.dnsProvider")}</span>
+                <input
+                  name="dnsProvider"
+                  onChange={(event) => setDnsProvider(event.target.value)}
+                  value={dnsProvider}
+                />
+              </label>
+              <label className="form-field-wide">
+                <span>{t("resource.domains.providerZoneRef")}</span>
+                <input
+                  name="providerZoneRef"
+                  onChange={(event) => setProviderZoneRef(event.target.value)}
+                  value={providerZoneRef}
+                />
+              </label>
+            </>
+          )}
           <label className="form-field-wide">
-            <span>{t("resource.domains.providerZoneRef")}</span>
-            <input
-              name="providerZoneRef"
-              onChange={(event) => setProviderZoneRef(event.target.value)}
-              value={providerZoneRef}
-            />
+            <span>{t("resource.domains.cloudAccount")}</span>
+            <select
+              name="cloudAccountId"
+              onChange={(event) => setCloudAccount(event.target.value)}
+              value={cloudAccount}
+            >
+              <option value="">{t("resource.domains.cloudAccountNone")}</option>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.label}
+                </option>
+              ))}
+            </select>
           </label>
+          <small className="form-hint">{t("resource.domains.cloudAccountHint")}</small>
         </div>
         <footer className="dialog-footer">
           <button className="secondary-button" onClick={close} type="button">
             {t("resource.domains.cancel")}
           </button>
-          <button className="command-button" disabled={changed.length === 0} type="submit">
-            {t("resource.domains.save")}
+          <button className="command-button" disabled={!dirty} type="submit">
+            {creating ? t("resource.domains.create") : t("resource.domains.save")}
           </button>
         </footer>
       </form>
     </div>
   );
+}
+
+/**
+ * The label a binding is shown under.
+ *
+ * The picker's label when the account center named it, and the raw id otherwise —
+ * an id is still the honest name for a binding whose account the center no longer
+ * returns, and showing the id is what lets an operator go and look it up.
+ */
+function accountLabel(accounts: readonly CloudAccountOption[], accountId: string): string {
+  return accounts.find((account) => account.id === accountId)?.label ?? accountId;
 }
 
 function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {

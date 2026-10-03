@@ -8,7 +8,7 @@
   },
   "limits": {
     "providerTimeoutMs": 30000,
-    "maxRequestBodyBytes": 10485760,
+    "maxRequestBodyBytes": 16777216,
     "requestTimeoutMs": 30000,
     "requestBodyStartTimeoutMs": 30000,
     "requestBodyIdleTimeoutMs": 30000,

@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -7,6 +7,30 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const stylesheet = readFileSync(resolve(root, "src/index.css"), "utf8");
 const authStylesStart = stylesheet.indexOf(".webserver-auth-page {");
 const workspaceStyles = stylesheet.slice(0, authStylesStart);
+
+/** Every `.ts`/`.tsx` file under the given directories (node_modules excluded). */
+function workspaceSourceFiles(...directories: string[]): string[] {
+  const files: string[] = [];
+  const walk = (directory: string) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entry.name === "node_modules" || entry.name === "dist") {
+        continue;
+      }
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        walk(path);
+      } else if (/\.tsx?$/.test(entry.name)) {
+        files.push(path);
+      }
+    }
+  };
+  for (const directory of directories) {
+    if (existsSync(directory)) {
+      walk(directory);
+    }
+  }
+  return files;
+}
 
 describe("webserver workspace theme styles", () => {
   it("does not mix theme text colors with fixed white surfaces", () => {
@@ -224,8 +248,7 @@ describe("webserver workspace theme styles", () => {
     );
   });
 
-  it("only ever paints the scrim token behind a surface, never under a word", () => {
-    // `--sdk-color-surface-overlay` is a scrim, not a surface: the theme defines
+  it("only ever paints the scrim token behind a surface, never under a word", () => {    // `--sdk-color-surface-overlay` is a scrim, not a surface: the theme defines
     // it as `rgba(9, 9, 11, 0.45)` in *both* modes (sdkwork-ui
     // `src/styles/sdkwork-ui.css`), because its one job is to darken whatever is
     // behind a dialog. So it is right behind a full-viewport backdrop and wrong
@@ -259,5 +282,81 @@ describe("webserver workspace theme styles", () => {
     // and the delivery drawer, so a rename that emptied this loop must fail
     // here rather than let the assertion above go quietly vacuous.
     expect(backdrops).toHaveLength(3);
+  });
+
+  it("declares a Tailwind source for every out-of-root package the console mounts", () => {
+    // Tailwind v4 scans the project root, so a page or dialog that lives in
+    // another repository is invisible to the scanner unless it is declared with
+    // `@source`. The failure is silent and partial, which is what makes it worth a
+    // gate: the element keeps whichever utilities another scanned source happened
+    // to emit (`bg-neutral-50` exists all over the console) while its `dark:`
+    // counterpart is never emitted at all — measured on the storage bucket file
+    // manager, whose category rail stayed white with near-white labels inside a
+    // dark dialog because `dark:bg-neutral-900/60` had no rule.
+    //
+    // The walk is transitive on purpose: the console mounts the bucket browser,
+    // which mounts the preview/editor package. Scanning only the console's own
+    // imports would have left the preview package — and every utility its rows,
+    // media chrome and Office views use — out of the stylesheet.
+    const declaredSources = new Set(
+      Array.from(stylesheet.matchAll(/@source\s+"([^"]+)"/g), (match) => match[1]),
+    );
+    expect(declaredSources.size).toBeGreaterThan(0);
+
+    // `src/index.css` spells the checkout relative to itself; this file sits one
+    // directory higher, so the check on disk walks up one level fewer than the
+    // literal compared against the stylesheet.
+    const sourceLiteralFor = (packageName: string) =>
+      `../../../../sdkwork-drive/apps/sdkwork-drive-pc/packages/${packageName}/src`;
+    const drivePackagesRoot = resolve(
+      root,
+      "../../../sdkwork-drive/apps/sdkwork-drive-pc/packages",
+    );
+    const rendersMarkup = (packageName: string) =>
+      workspaceSourceFiles(resolve(drivePackagesRoot, packageName, "src")).some((file) =>
+        readFileSync(file, "utf8").includes("className"),
+      );
+
+    const reachable = new Set<string>();
+    const pending: string[] = [resolve(root, "src"), resolve(root, "packages")];
+    // Only real module specifiers count. A package *name* also appears as data —
+    // `sdkwork-drive-pc-core`'s composition registry lists `sdkwork-drive-pc-file`
+    // as a `packageName` string — and following those would drag unrelated
+    // packages (and their `@source` demands) into this gate.
+    const importPatterns = [
+      /\bfrom\s+["'](sdkwork-drive-pc-[\w-]+)["']/g,
+      /\bimport\s*\(\s*["'](sdkwork-drive-pc-[\w-]+)["']/g,
+      /\bimport\s+["'](sdkwork-drive-pc-[\w-]+)["']/g,
+    ];
+    while (pending.length > 0) {
+      const directory = pending.shift() as string;
+      for (const file of workspaceSourceFiles(directory)) {
+        const source = readFileSync(file, "utf8");
+        for (const pattern of importPatterns) {
+          for (const [, specifier] of source.matchAll(pattern)) {
+            if (reachable.has(specifier)) {
+              continue;
+            }
+            reachable.add(specifier);
+            pending.push(resolve(drivePackagesRoot, specifier, "src"));
+          }
+        }
+      }
+    }
+
+    const mountedUiPackages = [...reachable].filter(rendersMarkup);
+    expect(mountedUiPackages).toEqual(
+      expect.arrayContaining([
+        "sdkwork-drive-pc-admin-storage-providers",
+        "sdkwork-drive-pc-admin-storage-buckets",
+        "sdkwork-drive-pc-file-preview",
+      ]),
+    );
+
+    const missing = mountedUiPackages
+      .map(sourceLiteralFor)
+      .filter((source) => !declaredSources.has(source));
+
+    expect(missing).toEqual([]);
   });
 });

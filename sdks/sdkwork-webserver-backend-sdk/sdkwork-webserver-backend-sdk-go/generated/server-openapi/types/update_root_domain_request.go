@@ -6,4 +6,5 @@ type UpdateRootDomainRequest struct {
 	DnsProvider string `json:"dnsProvider"`
 	ProviderZoneRef string `json:"providerZoneRef"`
 	Status int `json:"status"`
+	CloudAccountId string `json:"cloudAccountId"`
 }
