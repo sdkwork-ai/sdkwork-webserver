@@ -12,6 +12,7 @@
     }
   },
   "dependencies": {
+    "@sdkwork/drive-upload-image-core": "workspace:*",
     "@sdkwork/iam-contracts": "workspace:*",
     "@sdkwork/iam-pc-admin-account-binding": "workspace:*",
     "@sdkwork/iam-pc-admin-audit": "workspace:*",

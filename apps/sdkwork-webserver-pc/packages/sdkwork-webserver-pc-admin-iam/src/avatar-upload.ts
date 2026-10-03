@@ -1,24 +1,41 @@
 import {
+  createDriveNodesImagePreviewReader,
+  createDriveUploadImageService,
+  type DriveUploadImageService,
+} from "@sdkwork/drive-upload-image-core";
+import type { SdkworkIamAdminUserAvatarResource } from "@sdkwork/iam-pc-admin-user";
+import {
   WEBSERVER_PC_ADMIN_USER_AVATAR_UPLOAD,
   type SdkworkDriveAppClient,
 } from "@sdkwork/webserver-pc-console-core";
-import type { SdkworkIamAdminUserAvatarResource } from "@sdkwork/iam-pc-admin-user";
 
 /**
  * Host-side avatar capability for the IAM admin user directory.
  *
- * Uploads go through the composed `drive.uploader.uploadAvatar()` surface with
- * this application's declared intent constants (`DRIVE_SPEC.md` §18) — no
- * ambient identity fields, which Drive derives from the authenticated runtime.
- * Previews of drive-backed avatars are read back through the generated
- * `drive.nodes.content.retrieve` bounded same-origin read (§8) and surfaced as
- * a transient data URL; plain external avatars resolve to their delivery URL.
+ * A thin facade over the shared `@sdkwork/drive-upload-image-core` factory:
+ * the service binds this application's declared avatar intent constant
+ * (`DRIVE_SPEC.md` §18 — the service layer, not the UI, supplies declared
+ * values) to the composed `drive.uploader.uploadAvatar()` surface, and previews
+ * of drive-backed avatars go through the shared bounded same-origin preview
+ * reader over `drive.nodes.content.retrieve` (§8). Plain external avatars keep
+ * resolving to their own delivery URL.
  */
 
-/** Preview read ceiling; avatars are small, larger content degrades to the placeholder. */
-const AVATAR_PREVIEW_MAX_BYTES = 2 * 1024 * 1024;
-
-const DRIVE_URI_NODE_PATTERN = /^drive:\/\/spaces\/([^/]+)\/nodes\/([^/?#]+)/;
+/**
+ * Builds the shared `DriveUploadImageService` for this application's declared
+ * user-avatar upload intent. Also handed to the IAM user workspace as
+ * `driveUploadImageService` so the shared `DriveUploadImage` component can
+ * render the avatar field end to end.
+ */
+export function createSdkworkIamUserDriveUploadImageService(
+  drive: SdkworkDriveAppClient,
+): DriveUploadImageService {
+  return createDriveUploadImageService({
+    uploader: drive.uploader,
+    declaration: WEBSERVER_PC_ADMIN_USER_AVATAR_UPLOAD,
+    previewReader: createDriveNodesImagePreviewReader(drive.drive.nodes),
+  });
+}
 
 export interface SdkworkIamUserAvatarService {
   resolveAvatarUrl(avatar: SdkworkIamAdminUserAvatarResource): Promise<string | undefined>;
@@ -43,34 +60,32 @@ export async function uploadUserAvatar(
   userId: string,
   file: File,
 ): Promise<SdkworkIamAdminUserAvatarResource> {
-  const uploaded = await drive.uploader.uploadAvatar({
+  const uploaded = await createSdkworkIamUserDriveUploadImageService(drive).upload({
     appResourceId: userId,
-    appResourceType: WEBSERVER_PC_ADMIN_USER_AVATAR_UPLOAD.appResourceType,
     file,
-    scene: WEBSERVER_PC_ADMIN_USER_AVATAR_UPLOAD.scene,
-    source: WEBSERVER_PC_ADMIN_USER_AVATAR_UPLOAD.source,
   });
-  const spaceId = uploaded.uploadItem.spaceId;
-  const nodeId = uploaded.uploadItem.nodeId;
+  const driveMetadata = uploaded.metadata?.drive;
+  const spaceId = driveMetadata?.spaceId;
+  const nodeId = driveMetadata?.nodeId;
   if (!spaceId || !nodeId) {
     throw new Error("Drive did not return the uploaded avatar identity");
   }
   return {
-    fileName: uploaded.uploadItem.originalFileName || file.name,
+    fileName: driveMetadata.originalFileName || file.name,
     id: nodeId,
     kind: "image",
     metadata: { drive: { nodeId, spaceId } },
-    mimeType: uploaded.uploadItem.contentType || file.type || undefined,
-    sizeBytes: uploaded.uploadItem.contentLength || String(file.size),
+    mimeType: driveMetadata.contentType || file.type || undefined,
+    sizeBytes: driveMetadata.contentLength || String(file.size),
     source: "drive",
-    uri: `drive://spaces/${spaceId}/nodes/${nodeId}`,
+    uri: uploaded.uri,
   };
 }
 
 /**
  * Transient display URL for a stored avatar resource. Drive-backed resources
- * read through the SDK (bounded, same-origin); other sources use their own
- * delivery URL. The result is presentation-only state and never persisted.
+ * resolve through the shared bounded preview reader; other sources keep their
+ * own delivery URL. The result is presentation-only state and never persisted.
  */
 export async function resolveUserAvatarUrl(
   drive: SdkworkDriveAppClient,
@@ -78,19 +93,13 @@ export async function resolveUserAvatarUrl(
 ): Promise<string | undefined> {
   const directUrl = avatar.publicUrl || avatar.url;
   if (avatar.source !== "drive") {
-    return directUrl || avatar.uri;
+    return directUrl || avatar.uri || undefined;
   }
-  const nodeId = avatar.metadata?.drive?.nodeId
-    ?? DRIVE_URI_NODE_PATTERN.exec(avatar.uri ?? "")?.[2];
-  if (!nodeId) {
-    return directUrl;
+  if (!avatar.uri) {
+    return directUrl || undefined;
   }
-  const content = await drive.drive.nodes.content.retrieve(nodeId, {
-    encoding: "base64",
-    maxBytes: AVATAR_PREVIEW_MAX_BYTES,
+  const previewUrl = await createSdkworkIamUserDriveUploadImageService(drive).resolvePreview({
+    uri: avatar.uri,
   });
-  if (content.hasMore) {
-    return undefined;
-  }
-  return `data:${content.contentType || avatar.mimeType || "image/png"};base64,${content.content}`;
+  return previewUrl ?? undefined;
 }
