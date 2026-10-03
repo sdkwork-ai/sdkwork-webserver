@@ -1,0 +1,3 @@
+# app-templates
+
+This package owns the app-template catalog capability on the backend-admin surface. It is a thin host adapter over the deployments-owned template catalog plane: the category taxonomy, the moderated listings, and the per-listing version history render through the shared registry table driven by `createDeploymentsAdminRegistry`, whose transport (`createDeploymentsAdminClient`) is composed by the sibling's `@sdkwork/deployments-pc-admin-core` from the injected backend API base URL and the shared IAM token manager. The adapter contributes the menu entries, the resource keys, and the base-URL wiring; moderation transitions run server-side over the same permission codes the deployments application declares.

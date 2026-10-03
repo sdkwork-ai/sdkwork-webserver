@@ -1,5 +1,6 @@
 import { useSdkworkAuthControllerState } from "@sdkwork/auth-pc-react";
 import type { AuthTokenManager } from "@sdkwork/sdk-common";
+import { AppTemplatesAdminSurface, webserverModule as appTemplatesAdminModule } from "@sdkwork/webserver-pc-admin-app-templates";
 import { DeployAppsAdminSurface, webserverModule as appsAdminModule } from "@sdkwork/webserver-pc-admin-apps";
 import { webserverModule as auditModule } from "@sdkwork/webserver-pc-admin-audit";
 import { CloudAccountAdminSurface, webserverModule as cloudAccountAdminModule } from "@sdkwork/webserver-pc-admin-cloud-account";
@@ -17,6 +18,7 @@ import { CloudAccountManagementSurface, webserverModule as cloudAccountModule } 
 import { DashboardSurface, TrafficStatisticsSurface, webserverModule as dataStatisticsModule } from "@sdkwork/webserver-pc-console-data-statistics";
 import { WebserverConsoleSdkProvider } from "@sdkwork/webserver-pc-console-core";
 import { DeployAppsManagementSurface, DeployDomainManagementSurface, webserverModule as deliveryModule } from "@sdkwork/webserver-pc-console-delivery";
+import { MarketplaceConsoleSurface, webserverModule as marketplaceModule } from "@sdkwork/webserver-pc-console-marketplace";
 import { webserverModule as mcpModule, McpConsoleSurface, type McpConsoleSurfaceProps } from "@sdkwork/webserver-pc-console-mcp";
 import { webserverModule as pluginsModule, PluginsConsoleSurface, type PluginsConsoleSurfaceProps } from "@sdkwork/webserver-pc-console-plugins";
 import { webserverModule as sandboxModule, SandboxInstancesConsoleSurface, type SandboxInstancesConsoleSurfaceProps } from "@sdkwork/webserver-pc-console-sandbox";
@@ -46,7 +48,7 @@ import { useCloudAccountOptions } from "./cloudAccounts.ts";
 // it, or retires it. It is console-only — the tenant-wide inventory needs a
 // different authorization argument — and its transport is composed by
 // console-core, so the capability package holds no request shape of its own.
-export const consoleModules = [deliveryModule, pluginsModule, skillsModule, mcpModule, sandboxModule, cloudAccountModule, dataStatisticsModule] satisfies readonly WebserverPcModuleDefinition[];
+export const consoleModules = [deliveryModule, marketplaceModule, pluginsModule, skillsModule, mcpModule, sandboxModule, cloudAccountModule, dataStatisticsModule] satisfies readonly WebserverPcModuleDefinition[];
 // Domains and Certificates reappear here at the *tenant* level: the served root
 // domains / subdomains this edge answers for (reconciled from its configuration
 // at startup) and the TLS certificates over them. That is a different plane from
@@ -64,7 +66,7 @@ export const consoleModules = [deliveryModule, pluginsModule, skillsModule, mcpM
 // operator actually remediates. Re-adding any of the four here would reintroduce
 // a single-node control surface next to the cluster one, which is the duplicate
 // the removal is meant to end.
-export const adminModules = [appsAdminModule, deliveryAdminModule, cloudAccountAdminModule, iamAdminModule, clusterModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule, storageModule, dataStatisticsAdminModule] satisfies readonly WebserverPcModuleDefinition[];
+export const adminModules = [appsAdminModule, appTemplatesAdminModule, deliveryAdminModule, cloudAccountAdminModule, iamAdminModule, clusterModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule, storageModule, dataStatisticsAdminModule] satisfies readonly WebserverPcModuleDefinition[];
 const LazyAdminSurface = lazy(() => import("./WebserverAdminSurface.tsx").then((module) => ({ default: module.WebserverAdminSurface })));
 
 /**
@@ -168,9 +170,21 @@ export function iamAdminResourceRenderers({ locale, permissionScope, tenantId }:
 }
 
 export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: WebserverLocale; runtime: BootstrappedWebserverPcRuntime }) {
+  // The workspace body reads the console SDK context (the cloud-account read in
+  // `WebserverAuthorizedWorkspaceSurface`), and a component cannot see the
+  // context its own JSX provides — only its descendants can. The body therefore
+  // renders as a child of the provider rather than beside it.
+  const consoleClients = use(runtime.loadConsoleClients());
+  return (
+    <WebserverConsoleSdkProvider clients={consoleClients}>
+      <WebserverAuthorizedWorkspaceSurface locale={locale} runtime={runtime} />
+    </WebserverConsoleSdkProvider>
+  );
+}
+
+function WebserverAuthorizedWorkspaceSurface({ locale, runtime }: { locale: WebserverLocale; runtime: BootstrappedWebserverPcRuntime }) {
   const messages = useSdkworkModuleMessages(webserverApplicationCatalog);
   const authState = useSdkworkAuthControllerState(runtime.authController);
-  const consoleClients = use(runtime.loadConsoleClients());
   const permissionScope = authState.session?.context?.permissionScope ?? [];
   // Storage Center is a tenant-scoped drive plane: the shared pages take the
   // tenant they administer and the operator their mutations are attributed to,
@@ -197,6 +211,12 @@ export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: Webs
     apps: <DeployAppsManagementSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={driveBaseUrl} locale={locale} tokenManager={runtime.tokenManager} />,
     domains: <DeployDomainManagementSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={driveBaseUrl} locale={locale} resource="domains" tokenManager={runtime.tokenManager} />,
     certificates: <DeployDomainManagementSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={driveBaseUrl} locale={locale} resource="certificates" tokenManager={runtime.tokenManager} />,
+    // The app-template marketplace is the second bridged deployments surface:
+    // the storefront and the author workbench are the canonical pages, the two
+    // clients (deploy + order) come from the sibling's own factory, and the
+    // host injects only base URLs plus the shared session.
+    marketplace: <MarketplaceConsoleSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={driveBaseUrl} locale={locale} resource="marketplace" tokenManager={runtime.tokenManager} />,
+    "my-templates": <MarketplaceConsoleSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={driveBaseUrl} locale={locale} resource="my-templates" tokenManager={runtime.tokenManager} />,
     // Plugins / Skills / MCP are module self-service surfaces; menu entries stay
     // in the host while pages share the IAM dual-token session via tokenManager.
     // Plugins additionally receive the IAM subject so each user reads/writes
@@ -244,6 +264,13 @@ export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: Webs
   );
   const adminResourceRenderers = {
     apps: <DeployAppsAdminSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={driveBaseUrl} locale={locale} tokenManager={runtime.tokenManager} />,
+    // The app-template catalog moderates the deployments backend plane, so its
+    // three entries render the shared registry table over the sibling's admin
+    // registry — the same shape the Storage Center bridge uses (transport
+    // composed inside the sibling's admin core, never by this host).
+    "template-categories": <AppTemplatesAdminSurface backendApiBaseUrl={runtime.config.backendApiBaseUrl} locale={locale} resource="template-categories" tokenManager={runtime.tokenManager} />,
+    "app-templates": <AppTemplatesAdminSurface backendApiBaseUrl={runtime.config.backendApiBaseUrl} locale={locale} resource="app-templates" tokenManager={runtime.tokenManager} />,
+    "app-template-versions": <AppTemplatesAdminSurface backendApiBaseUrl={runtime.config.backendApiBaseUrl} locale={locale} resource="app-template-versions" tokenManager={runtime.tokenManager} />,
     // Domains and Certificates read the Web Server's own tenant-level planes, so
     // their pages are authored in the delivery capability package. They take no
     // client prop: both render inside `WebserverAdminSdkProvider` (mounted by
@@ -287,42 +314,40 @@ export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: Webs
   };
 
   return (
-    <WebserverConsoleSdkProvider clients={consoleClients}>
-      <Routes>
-        <Route
-          path="/console/*"
-          element={(
-            <WebserverConsoleShell
+    <Routes>
+      <Route
+        path="/console/*"
+        element={(
+          <WebserverConsoleShell
+            locale={locale}
+            modules={consoleModules}
+            notificationsHref={runtime.config.messagingPcUrl}
+            onSignOut={signOut}
+            permissionScope={permissionScope}
+            portalHref="/"
+            resourceRenderers={resourceRenderers}
+            userLabel={userLabel}
+          />
+        )}
+      />
+      <Route
+        path="/admin/*"
+        element={adminAccess ? (
+          <Suspense fallback={<div className="bootstrap-state" role="status">{messages["shell.status.loadingWorkspace"]}</div>}>
+            <LazyAdminSurface
+              backendApiBaseUrl={runtime.config.backendApiBaseUrl}
               locale={locale}
-              modules={consoleModules}
-              notificationsHref={runtime.config.messagingPcUrl}
+              modules={adminModules}
               onSignOut={signOut}
               permissionScope={permissionScope}
-              portalHref="/"
-              resourceRenderers={resourceRenderers}
+              resourceRenderers={adminResourceRenderers}
+              tokenManager={runtime.tokenManager}
               userLabel={userLabel}
             />
-          )}
-        />
-        <Route
-          path="/admin/*"
-          element={adminAccess ? (
-            <Suspense fallback={<div className="bootstrap-state" role="status">{messages["shell.status.loadingWorkspace"]}</div>}>
-              <LazyAdminSurface
-                backendApiBaseUrl={runtime.config.backendApiBaseUrl}
-                locale={locale}
-                modules={adminModules}
-                onSignOut={signOut}
-                permissionScope={permissionScope}
-                resourceRenderers={adminResourceRenderers}
-                tokenManager={runtime.tokenManager}
-                userLabel={userLabel}
-              />
-            </Suspense>
-          ) : <Navigate to="/console" replace />}
-        />
-        <Route path="*" element={<Navigate to={landingPath} replace />} />
-      </Routes>
-    </WebserverConsoleSdkProvider>
+          </Suspense>
+        ) : <Navigate to="/console" replace />}
+      />
+      <Route path="*" element={<Navigate to={landingPath} replace />} />
+    </Routes>
   );
 }

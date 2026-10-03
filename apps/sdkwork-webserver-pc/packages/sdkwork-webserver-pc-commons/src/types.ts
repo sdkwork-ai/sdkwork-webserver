@@ -33,6 +33,18 @@ export type WebserverResourceKey =
   | "apps"
   | "domains"
   | "certificates"
+  // The app-template marketplace, bridged from sdkwork-deployments like the
+  // applications ledger above: the console browses and acquires
+  // (`marketplace`) and publishes its own listings (`my-templates`); the
+  // operations surface moderates the catalog (`template-categories`,
+  // `app-templates`, `app-template-versions`) over the deployments backend
+  // plane. Acquire is an `app_template_orders` command on the platform order
+  // center — the deployments module owns no purchase table of its own.
+  | "marketplace"
+  | "my-templates"
+  | "template-categories"
+  | "app-templates"
+  | "app-template-versions"
   | "cloud-accounts"
   | "nginx"
   | "servers"

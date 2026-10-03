@@ -6,6 +6,10 @@ export const webserverWorkspaceZhCn = {
   "nav.workspace": "工作区",
   "nav.modules": "运维模块",
   "menuSection.delivery": "交付",
+  // 应用模板市场分区：控制台的市场/我的模板与运维侧的目录三件套同属一组。
+  // 分组标题必须与所持条目名不同（侧栏同时画标题与链接），中文用「模板中心」
+  // 对「模板市场」条目，避免相邻两行打出同一个词。
+  "menuSection.templateMarket": "模板中心",
   "menuSection.aiEcosystem": "AI 生态",
   "menuSection.cloudAccess": "云接入",
   "menuSection.dataStatistics": "数据统计",
@@ -223,6 +227,24 @@ export const webserverWorkspaceZhCn = {
   "resource.apps.description": "发布并运营由 SDKWork Deployments 管理的应用",
   "resource.apps.admin.label": "应用管理",
   "resource.apps.admin.description": "发布并运营由 SDKWork Deployments 管理的应用",
+  // 应用模板市场：控制台侧浏览/获取并发布自己的模板；运维侧管理目录。文案
+  // 与被桥接的 sdkwork-deployments 规范页面保持一致。
+  "resource.marketplace.label": "模板市场",
+  "resource.marketplace.description": "浏览并获取已发布的应用模板",
+  "resource.my-templates.label": "我的模板",
+  "resource.my-templates.description": "把自己的应用发布为模板并管理版本",
+  "resource.template-categories.label": "模板分类",
+  "resource.template-categories.description": "应用模板市场的分类体系",
+  "resource.template-categories.admin.label": "模板分类",
+  "resource.template-categories.admin.description": "应用模板市场的分类体系",
+  "resource.app-templates.label": "应用模板",
+  "resource.app-templates.description": "作者发布的模板与内容审核",
+  "resource.app-templates.admin.label": "应用模板",
+  "resource.app-templates.admin.description": "作者发布的模板与内容审核",
+  "resource.app-template-versions.label": "模板版本",
+  "resource.app-template-versions.description": "单个模板已发布的版本快照",
+  "resource.app-template-versions.admin.label": "模板版本",
+  "resource.app-template-versions.admin.description": "单个模板已发布的版本快照",
   "resource.domains.label": "域名",
   "resource.domains.description": "由 SDKWork Deployments 管理的根域名、DNS 归属与 TLS 覆盖",
   "resource.domains.admin.label": "域名管理",

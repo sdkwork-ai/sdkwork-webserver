@@ -71,6 +71,19 @@ const packages = [
   // `webserver_root_domain` / `webserver_domain`). Same two menus, two ownership
   // levels; neither surface is a copy of the other.
   { id: "console-delivery", surface: "app-console", capability: "delivery", deps: { "@sdkwork/deployments-pc-commons": "workspace:*", "@sdkwork/deployments-pc-console-core": "workspace:*", "@sdkwork/deployments-pc-console-delivery": "workspace:*", "@sdkwork/deployments-pc-console-publishing": "workspace:*", "@sdkwork/sdk-common": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", react: "catalog:" }, module: [["apps", "Applications", "Publish and operate deploy_app applications", "deploy.apps.read"], ["domains", "Domains", "Your own domain ownership and routing", "deploy.domainZones.read"], ["certificates", "Certificates", "TLS certificates over the domains you own", "deploy.certificates.read"]], extraIndexExports: ['export * from "./DeployAppsManagementSurface.tsx";', 'export * from "./DeployDomainManagementSurface.tsx";'] },
+  // The app-template marketplace is the second bridged deployments console
+  // surface. The storefront (`MarketplacePage`) and the author workbench
+  // (`MyTemplatesPage`) are canonical sdkwork-deployments pages whose two
+  // clients arrive as props: the deploy app client owns the catalog and the
+  // order app client owns trade (`app_template_orders` — the deployments
+  // module owns no purchase of its own), and both come from the sibling's own
+  // `createDeploymentsConsoleClients` factory, exactly like console-delivery.
+  // Acquire is an order-center command: a FREE listing settles inside order
+  // creation and a PAID one hands back the cashier the order center returned.
+  // This package is a host adapter: menu entries, resource keys, and the
+  // base-URLs-plus-token-manager bridge; no page, form, or request shape of
+  // its own.
+  { id: "console-marketplace", surface: "app-console", capability: "marketplace", deps: { "@sdkwork/deployments-pc-commons": "workspace:*", "@sdkwork/deployments-pc-console-core": "workspace:*", "@sdkwork/deployments-pc-console-marketplace": "workspace:*", "@sdkwork/sdk-common": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", react: "catalog:" }, module: [["marketplace", "Marketplace", "Browse and acquire published app templates", "deploy.marketplaceTemplates.read"], ["my-templates", "My Templates", "Publish your apps as templates and manage versions", "deploy.appTemplates.read"]], extraIndexExports: ['export * from "./MarketplaceConsoleSurface.tsx";'] },
   { id: "console-skills", surface: "app-console", capability: "skills", deps: { "@sdkwork/skills-pc-core": "workspace:*", "@sdkwork/skills-pc-console-skills": "workspace:*", "@sdkwork/sdk-common": "workspace:*", react: "catalog:", "react-router-dom": "^7.15.0" }, module: [["skills", "My Skills", "Skill packages owned by the authenticated user", "skills.marketplace.read"]], extraIndexExports: ['export * from "./SkillsConsoleSurface.tsx";'] },
   { id: "console-mcp", surface: "app-console", capability: "mcp", deps: { "@sdkwork/mcp-pc-core": "workspace:*", "@sdkwork/mcp-pc-console-mcp": "workspace:*", "@sdkwork/sdk-common": "workspace:*", react: "catalog:", "react-router-dom": "^7.15.0" }, module: [["mcp", "My MCP Servers", "MCP servers registered by the authenticated user", "mcp.marketplace.read"]], extraIndexExports: ['export * from "./McpConsoleSurface.tsx";'] },
   // VM instances are the per-user half of sdkwork-sandbox: one row per virtual
@@ -151,6 +164,20 @@ const packages = [
   // nothing — `architecture-boundary.test.ts` asserts it stays that way, so a
   // second bridge cannot creep in behind the marker.
   { id: "admin-apps", surface: "backend-admin", capability: "apps", deps: { "@sdkwork/webserver-pc-commons": "workspace:*", "@sdkwork/webserver-pc-console-delivery": "workspace:*" }, module: [["apps", "Applications", "Publish and operate deploy_app applications", "deploy.apps.read"]], extraIndexExports: ['export * from "./DeployAppsAdminSurface.tsx";'] },
+  // The app-template catalog is the operations half of the deployments
+  // template marketplace: the category taxonomy, the moderated listings
+  // (approve / reject / feature / disable / delete transitions), and the
+  // per-listing version history. Unlike `admin-apps` — which renders the
+  // host-agnostic console publishing page over the app plane — these three
+  // resources are registry-driven tables over the deployments **backend**
+  // plane, so the page is the shared generic registry table
+  // (`DeploymentsResourceTable` from `@sdkwork/deployments-pc-commons`) driven
+  // by `createDeploymentsAdminRegistry` from the sibling's `admin-core`. The
+  // admin storage bridge set the shape: the generated transport is composed
+  // only inside the sibling's admin core (`createDeploymentsAdminClient`),
+  // never by an authored page. Trade administration (refunds, settlements)
+  // belongs to the order center's own operations surface, not this module.
+  { id: "admin-app-templates", surface: "backend-admin", capability: "app-templates", deps: { "@sdkwork/deployments-pc-admin-core": "workspace:*", "@sdkwork/deployments-pc-commons": "workspace:*", "@sdkwork/sdk-common": "workspace:*", "@sdkwork/webserver-pc-commons": "workspace:*", react: "catalog:" }, sdkPolicy: "The deployments backend admin SDK is composed through createDeploymentsAdminClient from @sdkwork/deployments-pc-admin-core, which accepts the host API base URL directly; raw HTTP and direct generated-SDK imports are forbidden in authored UI code.", dependencyPolicy: "Host adapter only. The registry table is consumed from @sdkwork/deployments-pc-commons and the admin registry (data sources and moderation actions) from @sdkwork/deployments-pc-admin-core; no page, table, or request shape is re-implemented here.", readme: "This package owns the app-template catalog capability on the backend-admin surface. It is a thin host adapter over the deployments-owned template catalog plane: the category taxonomy, the moderated listings, and the per-listing version history render through the shared registry table driven by `createDeploymentsAdminRegistry`, whose transport (`createDeploymentsAdminClient`) is composed by the sibling's `@sdkwork/deployments-pc-admin-core` from the injected backend API base URL and the shared IAM token manager. The adapter contributes the menu entries, the resource keys, and the base-URL wiring; moderation transitions run server-side over the same permission codes the deployments application declares.", module: [["template-categories", "Template Categories", "Marketplace taxonomy for app templates", "deploy.templateCategories.read"], ["app-templates", "App Templates", "Author-published listings and moderation", "deploy.appTemplates.read"], ["app-template-versions", "Template Versions", "Published version snapshots of one listing", "deploy.appTemplateVersions.read"]], extraIndexExports: ['export * from "./AppTemplatesAdminSurface.tsx";'] },
   // Domains and Certificates here are the *tenant-level* half of the domain
   // story: the hostnames this edge actually answers for (`webserver_root_domain`
   // / `webserver_domain`, reconciled from the effective sidecar and module
@@ -238,7 +265,7 @@ const packages = [
       ["iam-account-binding", "Account Binding", "Account binding policy", "iam.account_binding_policy.read", "iam/account-binding"],
       ["iam-audit", "Audit Logs", "IAM audit event trail", "iam.audit_events.read", "iam/audit"],
     ],
-    extraIndexExports: ['export * from "./IamAdminSurface.tsx";'],
+    extraIndexExports: ['export * from "./avatar-upload.ts";', 'export * from "./IamAdminSurface.tsx";'],
   },
   // Storage Center hosts the drive-owned admin storage plane (providers, kinds,
   // buckets, bindings) inside the Web Server edge. The surface is a thin host
@@ -259,6 +286,7 @@ const packages = [
       "sdkwork-drive-pc-commons": "workspace:*",
       "sdkwork-drive-pc-core": "workspace:*",
       react: "catalog:",
+      "react-router-dom": "catalog:",
     },
     sdkPolicy: "The drive-owned admin storage SDK is composed through createDriveAdminStorageHostClient from sdkwork-drive-pc-admin-core, which accepts the host API base URL directly; raw HTTP and direct generated-SDK imports are forbidden in authored UI code.",
     dependencyPolicy: "Host adapter only. Pages, components, service, types, and i18n are consumed from the shared sdkwork-drive-pc-admin-storage-providers and sdkwork-drive-pc-admin-storage-buckets packages, and the drive session snapshot is adapted from host session primitives at the surface boundary; no drive page is copied or re-implemented here.",
@@ -266,7 +294,7 @@ const packages = [
     module: [
       ["storage-providers", "Storage Providers", "Configure and manage the object storage backends Drive writes to", "drive.storage.admin", "storage/providers"],
       ["storage-kinds", "Provider Catalog", "Enable or disable the storage provider kinds operators may choose", "drive.storage.admin", "storage/kinds"],
-      ["storage-buckets", "Buckets", "Browse every bucket of a provider account and manage its files", "drive.storage.admin", "storage/buckets"],
+      ["storage-buckets", "Buckets", "Inspect and create the bucket behind each storage provider", "drive.storage.admin", "storage/buckets"],
       ["storage-bindings", "Bindings", "Route each space type to a default storage provider", "drive.storage.admin", "storage/bindings"],
     ],
     extraIndexExports: ['export * from "./StorageCenterSurface.tsx";'],

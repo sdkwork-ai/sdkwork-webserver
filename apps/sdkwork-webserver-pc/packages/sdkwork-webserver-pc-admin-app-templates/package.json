@@ -1,0 +1,28 @@
+{
+  "name": "@sdkwork/webserver-pc-admin-app-templates",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@sdkwork/deployments-pc-admin-core": "workspace:*",
+    "@sdkwork/deployments-pc-commons": "workspace:*",
+    "@sdkwork/sdk-common": "workspace:*",
+    "@sdkwork/webserver-pc-commons": "workspace:*",
+    "react": "catalog:"
+  },
+  "sdkwork": {
+    "applicationCode": "webserver",
+    "architecture": "pc-react",
+    "capability": "app-templates",
+    "surface": "backend-admin",
+    "managedBy": "tools/materialize_webserver_pc.mjs"
+  }
+}

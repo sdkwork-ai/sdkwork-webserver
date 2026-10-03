@@ -46,6 +46,14 @@ const WEBSERVER_ADMIN_PERMISSIONS = [
   "iam.oauth.read",
   "iam.account_binding_policy.read",
   "iam.audit_events.read",
+  // The app-template catalog is a deployments-owned operations capability: a
+  // template moderator must be able to open the backend-admin surface or the
+  // module is permanently filtered out of their menu. These are the entry-gate
+  // codes the `app-templates` module's menu checks — the write codes the
+  // moderation transitions perform stay on the entries' own checks.
+  "deploy.templateCategories.read",
+  "deploy.appTemplates.read",
+  "deploy.appTemplateVersions.read",
 ] as const;
 
 const WEBSERVER_SUPER_ADMIN_PERMISSIONS = [

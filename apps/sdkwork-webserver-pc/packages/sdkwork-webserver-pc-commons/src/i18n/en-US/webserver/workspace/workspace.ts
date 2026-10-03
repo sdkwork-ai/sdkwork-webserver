@@ -6,6 +6,11 @@ export const webserverWorkspaceEnUs = {
   "nav.workspace": "Workspace",
   "nav.modules": "Admin modules",
   "menuSection.delivery": "Delivery",
+  // The app-template marketplace section: the console storefront/author pair
+  // and the operations catalog trio render under one heading. The heading must
+  // differ from every entry label it holds (the sidebar draws heading *and*
+  // links), hence "Template Market" next to a "Marketplace" entry.
+  "menuSection.templateMarket": "Template Market",
   "menuSection.aiEcosystem": "AI Ecosystem",
   "menuSection.cloudAccess": "Cloud Access",
   "menuSection.dataStatistics": "Data Statistics",
@@ -232,6 +237,25 @@ export const webserverWorkspaceEnUs = {
   "resource.apps.description": "Publish and operate the applications owned by SDKWork Deployments",
   "resource.apps.admin.label": "Applications",
   "resource.apps.admin.description": "Publish and operate the applications owned by SDKWork Deployments",
+  // The app-template marketplace: console browses/acquires and authors its own
+  // listings; operations moderates the catalog. Copy mirrors the canonical
+  // sdkwork-deployments pages these resources bridge.
+  "resource.marketplace.label": "Marketplace",
+  "resource.marketplace.description": "Browse and acquire published app templates",
+  "resource.my-templates.label": "My Templates",
+  "resource.my-templates.description": "Publish your apps as templates and manage versions",
+  "resource.template-categories.label": "Template Categories",
+  "resource.template-categories.description": "Marketplace taxonomy for app templates",
+  "resource.template-categories.admin.label": "Template Categories",
+  "resource.template-categories.admin.description": "Marketplace taxonomy for app templates",
+  "resource.app-templates.label": "App Templates",
+  "resource.app-templates.description": "Author-published listings and moderation",
+  "resource.app-templates.admin.label": "App Templates",
+  "resource.app-templates.admin.description": "Author-published listings and moderation",
+  "resource.app-template-versions.label": "Template Versions",
+  "resource.app-template-versions.description": "Published version snapshots of one listing",
+  "resource.app-template-versions.admin.label": "Template Versions",
+  "resource.app-template-versions.admin.description": "Published version snapshots of one listing",
   "resource.domains.label": "Domains",
   "resource.domains.description": "Root domains, DNS ownership, and TLS coverage managed by SDKWork Deployments",
   "resource.domains.admin.label": "Domains",

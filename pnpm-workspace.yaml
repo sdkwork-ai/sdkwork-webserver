@@ -48,6 +48,24 @@ packages:
   # `@sdkwork/webserver-pc-console-delivery` and
   # `@sdkwork/webserver-pc-admin-apps`.
   - "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-publishing"
+  # The app-template marketplace rides the same rule: the storefront and the
+  # author workbench are canonical `deploy_app_template` pages whose two
+  # clients (deploy + order) arrive as props from
+  # `createDeploymentsConsoleClients`, and the admin template catalog renders
+  # the shared registry table over `createDeploymentsAdminRegistry`. Both are
+  # `workspace:*` deps of `@sdkwork/webserver-pc-console-marketplace` and
+  # `@sdkwork/webserver-pc-admin-app-templates`; the deployments backend SDK
+  # is the generated transport `sdkwork-deployments-pc-admin-core` composes.
+  - "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-marketplace"
+  - "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-admin-core"
+  - "../sdkwork-deployments/sdks/sdkwork-deployments-backend-sdk/sdkwork-deployments-backend-sdk-typescript"
+  # Platform order center: the marketplace acquire flow is an `app_template_orders`
+  # command on the order center's app API (the deployments module owns no
+  # purchase of its own), and the deployments console-core factory that bridges
+  # it declares the generated client with `workspace:*`, so the SDK must be a
+  # member here for resolution — with the matching sdkwork-order entry in
+  # sdkwork.workflow.json.
+  - "../sdkwork-order/sdks/sdkwork-order-app-sdk/sdkwork-order-app-sdk-typescript"
   - "../sdkwork-deployments/sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-typescript"
   - "../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-commons"
   - "../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-core"
@@ -166,6 +184,12 @@ catalog:
   jsdom: 29.1.1
   "@types/node": ^25.9.2
   "@types/express": ^4.17.21
+  # The drive bucket manager (sdkwork-drive-pc-admin-storage-buckets, bridged
+  # by the Storage Center) talks to S3-compatible stores directly and pins the
+  # client through its own workspace catalog; the same catalog entries are
+  # mirrored here so the bridged member resolves in this workspace too.
+  "@aws-sdk/client-s3": ^3.1145.0
+  "@aws-sdk/s3-request-presigner": ^3.1145.0
   "@tauri-apps/api": ~2.11.0
   "@tauri-apps/cli": ~2.11.0
   "@tauri-apps/plugin-clipboard-manager": ^2.3.2

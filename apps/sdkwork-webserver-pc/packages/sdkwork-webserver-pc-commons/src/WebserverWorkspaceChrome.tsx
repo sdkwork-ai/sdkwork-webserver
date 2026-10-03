@@ -12,23 +12,27 @@ import {
   House,
   KeyRound,
   KeySquare,
-  LayoutDashboard,
   Layers3,
+  LayoutDashboard,
   Link2,
+  ListTree,
   LogOut,
   MessageCircle,
   Network,
-  Puzzle,
+  PackageOpen,
   Plug,
+  Puzzle,
   QrCode,
   Rocket,
   ScrollText,
   Server,
   Settings2,
+  Shapes,
   ShieldAlert,
   ShieldCheck,
   Smartphone,
   Sparkles,
+  Store,
   UserCog,
   Users,
 } from "lucide-react";
@@ -241,6 +245,19 @@ function ResourceIcon({ resource }: { resource: WebserverResourceKey }): ReactNo
   switch (resource) {
     case "apps":
       return <AppWindow {...iconProps} />;
+    // App-template marketplace family: the storefront, the author workbench,
+    // and the operations catalog trio. The icons mirror the ones the
+    // sdkwork-deployments workspace draws for the same resources.
+    case "marketplace":
+      return <Store {...iconProps} />;
+    case "my-templates":
+      return <PackageOpen {...iconProps} />;
+    case "template-categories":
+      return <ListTree {...iconProps} />;
+    case "app-templates":
+      return <Shapes {...iconProps} />;
+    case "app-template-versions":
+      return <Boxes {...iconProps} />;
     case "domains":
       return <Globe2 {...iconProps} />;
     case "certificates":

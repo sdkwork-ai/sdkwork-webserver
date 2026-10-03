@@ -23,6 +23,7 @@ export interface WebserverMenuSectionDefinition {
 
 export type WebserverMenuSectionId =
   | "delivery"
+  | "templateMarket"
   | "aiEcosystem"
   | "cloudAccess"
   | "dataStatistics"
@@ -50,6 +51,19 @@ export const MENU_SECTIONS: readonly WebserverMenuSectionDefinition[] = [
     // Declared before `aiEcosystem` because this one leads the list and every
     // other section is an asset group that renders below it.
     resources: ["apps", "domains", "certificates"],
+  },
+  {
+    id: "templateMarket",
+    labelKey: "menuSection.templateMarket",
+    // The app-template marketplace, the second deployments-bridged family:
+    // the console storefront and author workbench (`marketplace`,
+    // `my-templates`) and the operations catalog trio (`template-categories`,
+    // `app-templates`, `app-template-versions`) are one commercial story, so
+    // they group under one heading instead of scattering across the sidebar.
+    // Declared right after `delivery` because it sells what delivery
+    // publishes. The heading differs from every entry label it holds — the
+    // sidebar draws the heading *and* the links.
+    resources: ["marketplace", "my-templates", "template-categories", "app-templates", "app-template-versions"],
   },
   {
     id: "aiEcosystem",
