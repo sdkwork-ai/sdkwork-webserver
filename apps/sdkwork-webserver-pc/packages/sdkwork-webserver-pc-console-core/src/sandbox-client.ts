@@ -4,13 +4,18 @@ import { createBaseHttpClient, type AuthTokenManager, type BaseHttpClient } from
  * VM instance transport.
  *
  * `sandbox_instance` is the per-user virtual machine (VM) registry owned by
- * sdkwork-sandbox and served by that module's app-api face:
+ * sdkwork-sandbox and served by that module's app-api console face
+ * (`REQ-2026-0030`, `ADR-20261004`):
  *
  *   GET    {base}/app/v3/api/sandbox/sandbox_instances
  *   POST   {base}/app/v3/api/sandbox/sandbox_instances
  *   GET    {base}/app/v3/api/sandbox/sandbox_instances/{sandboxInstanceId}
  *   PATCH  {base}/app/v3/api/sandbox/sandbox_instances/{sandboxInstanceId}
  *   DELETE {base}/app/v3/api/sandbox/sandbox_instances/{sandboxInstanceId}
+ *
+ * The listing is always narrowed server-side to the verified caller — there is
+ * no owner parameter on the face — so this client cannot ask for another
+ * account's rows even by accident.
  *
  * This is the one place in the console allowed to own a transport
  * (`verify-repo` forbids a capability package from constructing one, and the
@@ -22,10 +27,12 @@ import { createBaseHttpClient, type AuthTokenManager, type BaseHttpClient } from
  * declares its SDK family inactive for Phase 0 (`sdks/README.md`: "Verification:
  * inactive in Phase 0; activate only after `apis/` authority and generation
  * ownership are approved"), so there is no `@sdkwork/sandbox-app-sdk` to compose
- * against. The four operations are small, fully specified by the route crate's
- * payloads, and exercised end-to-end; generating a family for them would activate
- * a machinery the owning repository has deliberately not switched on yet. When
- * that family is activated, this client is the single call site to swap.
+ * against. The four operations are small, fully specified by the app-api
+ * authority (`apis/app-api/sandbox/sandbox-app-api-authority.openapi.json` in
+ * the owning repository), and exercised end-to-end; generating a family for
+ * them would activate machinery the owning repository has deliberately not
+ * switched on yet. When that family is activated, this client is the single
+ * call site to swap.
  *
  * `createBaseHttpClient` is the shared platform transport: it speaks the
  * SDKWork response envelope (`{ code, data, traceId }` — it unwraps `data` and
@@ -34,6 +41,10 @@ import { createBaseHttpClient, type AuthTokenManager, type BaseHttpClient } from
  * identity headers before sending (`API_SPEC.md` section 10.2: tenant and user
  * are derived server-side from the authenticated principal, never from a
  * request header).
+ *
+ * Query vocabulary is `lower_snake_case` (`PAGINATION_SPEC.md` section 0):
+ * `page` / `page_size` are the only pagination parameters, and `pageSize` as a
+ * GET query alias is a contract violation.
  */
 
 /** Route collection path, relative to the injected app-api base URL. */
@@ -157,12 +168,10 @@ export interface SandboxInstancePage {
 
 /** Query accepted by the collection listing. */
 export interface SandboxInstanceListQuery {
-  /** 1-based; the server clamps to `>= 1`. */
+  /** 1-based; the server rejects — never clamps — values above 10000. */
   page?: number;
-  /** The server clamps to `1..200`. */
+  /** GET wire name is `page_size`; the server rejects outside `1..200`. */
   pageSize?: number;
-  /** Narrows the tenant-wide listing to one owner. */
-  sandboxInstanceOwnerId?: string;
   sandboxInstanceState?: SandboxInstanceState;
 }
 
@@ -238,9 +247,10 @@ export class SandboxAppClient {
   async list(query: SandboxInstanceListQuery = {}): Promise<SandboxInstancePage> {
     const params: Record<string, string> = {};
     if (query.page !== undefined) params.page = String(query.page);
-    if (query.pageSize !== undefined) params.pageSize = String(query.pageSize);
-    if (query.sandboxInstanceOwnerId) params.sandboxInstanceOwnerId = query.sandboxInstanceOwnerId;
-    if (query.sandboxInstanceState) params.sandboxInstanceState = query.sandboxInstanceState;
+    if (query.pageSize !== undefined) params.page_size = String(query.pageSize);
+    if (query.sandboxInstanceState) {
+      params.sandbox_instance_state = query.sandboxInstanceState;
+    }
     return this.http.get<SandboxInstancePage>(SANDBOX_INSTANCES_PATH, params);
   }
 

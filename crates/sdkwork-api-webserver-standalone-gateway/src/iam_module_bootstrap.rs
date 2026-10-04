@@ -3,19 +3,21 @@ use std::path::{Path, PathBuf};
 const WEB_IAM_MODULE_MANIFEST: &str = "specs/iam.module.manifest.json";
 const SKILLS_IAM_MODULE_MANIFEST: &str = "specs/iam.module.manifest.json";
 const MCP_IAM_MODULE_MANIFEST: &str = "specs/iam.module.manifest.json";
+const SANDBOX_IAM_MODULE_MANIFEST: &str = "specs/iam.module.manifest.json";
 
 /// Resolves consumer IAM module manifests that the standalone gateway must
 /// materialize into the shared IAM catalog.
 ///
 /// Web always federates from `specs/iam.module.manifest.json` (not an IAM
-/// registry enabled module). Skills/MCP are federated only when a consumer app
-/// root exposes its own `specs/iam.module.manifest.json` *and* that module is
-/// not already listed in the packaged IAM registry `enabledModules`. Falling
-/// back to `iam/modules/{skills,mcp}` duplicates `moduleId` and crashes
-/// bootstrap with `additional module manifest duplicates moduleId skills`.
+/// registry enabled module). Skills/MCP/Sandbox are federated only when a
+/// consumer app root exposes its own `specs/iam.module.manifest.json` *and*
+/// that module is not already listed in the packaged IAM registry
+/// `enabledModules`. Falling back to `iam/modules/{skills,mcp,sandbox}`
+/// duplicates `moduleId` and crashes bootstrap with `additional module
+/// manifest duplicates moduleId skills`.
 pub(crate) fn federated_iam_module_manifest_paths() -> Result<Vec<PathBuf>, String> {
     let enabled = iam_registry_enabled_modules();
-    let mut manifests = Vec::with_capacity(3);
+    let mut manifests = Vec::with_capacity(4);
     manifests.push(web_iam_module_manifest_path()?);
     if !enabled.contains("skills") {
         if let Some(path) = optional_module_manifest_path(
@@ -37,6 +39,18 @@ pub(crate) fn federated_iam_module_manifest_paths() -> Result<Vec<PathBuf>, Stri
                 Some(sibling_app_root("sdkwork-mcp")),
             ],
             MCP_IAM_MODULE_MANIFEST,
+        ) {
+            manifests.push(path);
+        }
+    }
+    if !enabled.contains("sandbox") {
+        if let Some(path) = optional_module_manifest_path(
+            "sandbox",
+            &[
+                env_app_root("SDKWORK_SANDBOX_APP_ROOT"),
+                Some(sibling_app_root("sdkwork-sandbox")),
+            ],
+            SANDBOX_IAM_MODULE_MANIFEST,
         ) {
             manifests.push(path);
         }
@@ -216,5 +230,51 @@ mod tests {
                 "mcp must not be federated when already enabled in IAM registry: {manifests:?}"
             );
         }
+        if enabled.contains("sandbox") {
+            let sandbox = sibling_app_root("sdkwork-sandbox").join(SANDBOX_IAM_MODULE_MANIFEST);
+            assert!(
+                manifests.iter().all(|path| path != &sandbox),
+                "sandbox must not be federated when already enabled in IAM registry: {manifests:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn sibling_sandbox_manifest_declares_the_route_manifest_permissions() {
+        // The sandbox app-api routes carry exactly the four
+        // `sandbox.instances.*` codes (`REQ-2026-0030`); the federated catalog
+        // must declare the same set, or a grantable code would exist that no
+        // route enforces against (or the reverse).
+        let manifest_path = sibling_app_root("sdkwork-sandbox").join(SANDBOX_IAM_MODULE_MANIFEST);
+        let Ok(raw) = std::fs::read_to_string(&manifest_path) else {
+            // The sibling checkout is optional in packaged layouts; the
+            // federation function already tolerates its absence.
+            return;
+        };
+        let manifest: serde_json::Value =
+            serde_json::from_str(&raw).expect("parse sandbox IAM manifest");
+        assert_eq!("sandbox", manifest["moduleId"], "moduleId must be sandbox");
+        let codes: Vec<&str> = manifest["permissions"]["catalog"]
+            .as_array()
+            .expect("permission catalog")
+            .iter()
+            .filter_map(|entry| entry["code"].as_str())
+            .collect();
+        for expected in [
+            "sandbox.instances.read",
+            "sandbox.instances.create",
+            "sandbox.instances.update",
+            "sandbox.instances.delete",
+        ] {
+            assert!(
+                codes.contains(&expected),
+                "sandbox catalog must declare {expected}: {codes:?}"
+            );
+        }
+        assert_eq!(
+            4,
+            codes.len(),
+            "sandbox catalog must declare exactly the four route codes: {codes:?}"
+        );
     }
 }

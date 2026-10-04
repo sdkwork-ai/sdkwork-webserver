@@ -121,15 +121,19 @@ async fn mcp_module() -> Result<WebModule, StandaloneProfileError> {
         .map_err(|detail| unavailable(MCP_OWNER, detail))
 }
 
-/// Sandbox App API (`/app/v3/api/sandbox/*`) — the per-user Sandbox Instance
-/// registry the console's "Sandbox Instances" page reads and writes.
+/// Sandbox console App API (`/app/v3/api/sandbox/*`, IAM dual token, the
+/// per-user instance registry the console's "Sandbox Instances" page reads and
+/// writes) and the operator-trusted internal-api face
+/// (`/internal/v3/api/intelligence/sandbox/*`), handed over as one
+/// already-composed contribution.
 ///
-/// One surface, one owner, handed over as a host-neutral contribution, so this
-/// edge's single Web Framework layer authenticates it like every composed
-/// surface. The Sandbox repository is standalone-only
-/// (`SDKWORK_WEBSERVER_SPEC.md` section 17.4), and the Web Server edge is the
-/// only public reverse-proxy in front of it, which is why the console reaches
-/// these routes on the same origin as every other capability.
+/// One surface set, one owner, one surface-branching domain context injector,
+/// so this edge's single Web Framework layer authenticates each face by its
+/// own contract (`REQ-2026-0030`, `ADR-20261004`). The Sandbox repository is
+/// standalone-only (`SDKWORK_WEBSERVER_SPEC.md` section 17.4), and the Web
+/// Server edge is the only public reverse-proxy in front of it, which is why
+/// the console reaches these routes on the same origin as every other
+/// capability.
 async fn sandbox_module() -> Result<WebModule, StandaloneProfileError> {
     let pool = shared_pool(SANDBOX_OWNER)?;
     sdkwork_api_sandbox_assembly::web_module_with_pool(pool)
