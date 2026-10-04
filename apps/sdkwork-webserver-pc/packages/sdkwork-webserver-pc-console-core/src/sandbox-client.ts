@@ -126,8 +126,10 @@ export const SANDBOX_TERMINAL_STATES: readonly SandboxInstanceState[] = ["termin
  * `sandboxVersion` is a `string` on purpose: it is an `int64` on the wire
  * (`API_SPEC.md` section 13.6) and a JavaScript number would round it, which
  * would either lose the optimistic-concurrency comparison or, worse, win it by
- * accident. It is carried through the console untouched and returned on update
- * so the server can reject a stale write.
+ * accident. The version is read-only on this face: the server pairs every
+ * update with its own read of the current row and CAS-writes the expected
+ * version, so two concurrent patches cannot lose an update — the loser
+ * receives `409` and this console re-reads and re-applies.
  */
 export interface SandboxInstance {
   sandboxInstanceId: string;
