@@ -283,10 +283,12 @@ export class SandboxAppClient {
   }
 
   async remove(sandboxInstanceId: string): Promise<DeletedSandboxInstance> {
-    const deleted = await this.http.delete<SandboxItemEnvelope<DeletedSandboxInstance>>(
-      sandboxInstancePath(sandboxInstanceId),
-    );
-    return deleted.item;
+    // The app-api face answers `204` with no JSON body (`API_SPEC.md`
+    // section 15.4), and the transport maps that to `undefined`. A refusal
+    // (404 absent/foreign row, 409 live instance) raises instead, so reaching
+    // here *is* the deletion report.
+    await this.http.delete<void>(sandboxInstancePath(sandboxInstanceId));
+    return { sandboxInstanceId, deleted: true };
   }
 }
 

@@ -155,6 +155,23 @@ describe("sandbox app client wire contract", () => {
     expect(deleted.init.method).toBe("DELETE");
   });
 
+  it("maps a 204 delete to a deletion report without unwrapping a body", async () => {
+    // The app-api face answers DELETE with `204` and no JSON body
+    // (`API_SPEC.md` section 15.4); the transport resolves `undefined`. The
+    // client must not unwrap `.item` from an empty body — the refusal path
+    // (404/409) raises instead of reporting `deleted: false`.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push({ url: String(input), init: init ?? {} });
+        return new Response(null, { status: 204 });
+      }),
+    );
+    const report = await client().remove("sbi-1");
+    expect(report).toEqual({ sandboxInstanceId: "sbi-1", deleted: true });
+    expect(requests.at(-1)?.init.method).toBe("DELETE");
+  });
+
   it("unwraps the success envelope and raises on a failure code", async () => {
     const listed = await client().list();
     expect(listed.items).toEqual([INSTANCE]);
