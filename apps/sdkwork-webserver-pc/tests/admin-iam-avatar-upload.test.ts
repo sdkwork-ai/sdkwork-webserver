@@ -1,6 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createSdkworkIamUserAvatarService, resolveUserAvatarUrl, uploadUserAvatar } from "@sdkwork/webserver-pc-admin-iam";
+import { createSdkworkIamUserDriveUploadImageService } from "@sdkwork/webserver-pc-admin-iam";
+
+/**
+ * Host avatar capability contract for the IAM admin user directory.
+ *
+ * The webserver owns exactly one thing: the declared upload intent bound into
+ * the shared `DriveUploadImageService` (`DRIVE_SPEC.md` §18 — the service
+ * layer, not the UI, supplies declared values) and the bounded same-origin
+ * preview reader. Picking, parking, and uploading live in the shared
+ * `DriveUploadImage` component (pinned by the iam workspace tests).
+ */
 
 function fakeAvatarFile(): File {
   return new File(["avatar-bytes"], "avatar.png", { type: "image/png" });
@@ -31,13 +41,15 @@ function fakeDriveClient() {
         },
       }),
     },
-  } as unknown as Parameters<typeof createSdkworkIamUserAvatarService>[0];
+  } as unknown as Parameters<typeof createSdkworkIamUserDriveUploadImageService>[0];
 }
 
 describe("webserver-pc IAM admin user avatar upload", () => {
-  it("uploads through the declared avatar intent and returns the drive-backed resource", async () => {
+  it("binds the declared avatar intent and returns the persist-safe drive value", async () => {
     const drive = fakeDriveClient();
-    const resource = await uploadUserAvatar(drive, "user-1", fakeAvatarFile());
+    const service = createSdkworkIamUserDriveUploadImageService(drive);
+
+    const value = await service.upload({ file: fakeAvatarFile(), appResourceId: "user-1" });
 
     expect(drive.uploader.uploadAvatar).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -48,27 +60,29 @@ describe("webserver-pc IAM admin user avatar upload", () => {
         source: "sdkwork-webserver-pc",
       }),
     );
-    expect(resource).toMatchObject({
-      // DRIVE_SPEC §10 drive-backed mapping.
-      fileName: "avatar.png",
-      id: "node_1",
-      kind: "image",
+    expect(value).toMatchObject({
+      // Persist-safe reference only: stable uri, source tag, drive identity.
       metadata: { drive: { nodeId: "node_1", spaceId: "space_1" } },
-      mimeType: "image/png",
-      sizeBytes: "12",
       source: "drive",
       uri: "drive://spaces/space_1/nodes/node_1",
     });
   });
 
+  it("refuses to upload without an entity anchor (persist-first guard)", async () => {
+    const drive = fakeDriveClient();
+    const service = createSdkworkIamUserDriveUploadImageService(drive);
+
+    await expect(
+      service.upload({ file: fakeAvatarFile(), appResourceId: "" }),
+    ).rejects.toMatchObject({ code: "missing-app-resource-id" });
+    expect(drive.uploader.uploadAvatar).not.toHaveBeenCalled();
+  });
+
   it("resolves a drive-backed avatar through the bounded same-origin content read", async () => {
     const drive = fakeDriveClient();
-    const service = createSdkworkIamUserAvatarService(drive);
+    const service = createSdkworkIamUserDriveUploadImageService(drive);
 
-    const url = await service.resolveAvatarUrl({
-      kind: "image",
-      metadata: { drive: { nodeId: "node_1", spaceId: "space_1" } },
-      source: "drive",
+    const url = await service.resolvePreview({
       uri: "drive://spaces/space_1/nodes/node_1",
     });
 
@@ -79,26 +93,11 @@ describe("webserver-pc IAM admin user avatar upload", () => {
     expect(url).toBe("data:image/png;base64,YXZhdGFyLWJ5dGVz");
   });
 
-  it("parses the node id from the drive uri when the metadata block is missing", async () => {
+  it("passes external avatar URLs through without touching the content API", async () => {
     const drive = fakeDriveClient();
+    const service = createSdkworkIamUserDriveUploadImageService(drive);
 
-    await resolveUserAvatarUrl(drive, {
-      kind: "image",
-      source: "drive",
-      uri: "drive://spaces/space_9/nodes/node_9",
-    });
-
-    expect(drive.drive.nodes.content.retrieve).toHaveBeenCalledWith("node_9", expect.anything());
-  });
-
-  it("returns the delivery URL for non-drive avatars without touching the content API", async () => {
-    const drive = fakeDriveClient();
-
-    const url = await resolveUserAvatarUrl(drive, {
-      kind: "image",
-      publicUrl: "https://cdn.example.com/a.png",
-      source: "external_url",
-    });
+    const url = await service.resolvePreview({ uri: "https://cdn.example.com/a.png" });
 
     expect(url).toBe("https://cdn.example.com/a.png");
     expect(drive.drive.nodes.content.retrieve).not.toHaveBeenCalled();
@@ -112,13 +111,12 @@ describe("webserver-pc IAM admin user avatar upload", () => {
       hasMore: true,
       nodeId: "node_1",
     });
+    const service = createSdkworkIamUserDriveUploadImageService(drive);
 
-    const url = await resolveUserAvatarUrl(drive, {
-      kind: "image",
-      metadata: { drive: { nodeId: "node_1" } },
-      source: "drive",
+    const url = await service.resolvePreview({
+      uri: "drive://spaces/space_1/nodes/node_1",
     });
 
-    expect(url).toBeUndefined();
+    expect(url).toBeNull();
   });
 });

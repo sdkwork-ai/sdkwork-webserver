@@ -3,7 +3,7 @@ import { LoaderCircle } from "lucide-react";
 import { lazy, Suspense, useMemo, type ComponentType } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { translateWebserver, type WebserverLocale } from "@sdkwork/webserver-pc-commons";
-import { createSdkworkIamUserAvatarService, createSdkworkIamUserDriveUploadImageService } from "./avatar-upload.ts";
+import { createSdkworkIamUserDriveUploadImageService } from "./avatar-upload.ts";
 import { useWebserverConsoleSdk } from "@sdkwork/webserver-pc-console-core";
 
 /**
@@ -85,14 +85,12 @@ const LazyIamUsersAdmin = lazy(async () => {
       const { drive, iam } = useWebserverConsoleSdk();
       const can = useIamAdminPermission(permissionScope);
       const controller = useMemo(() => createSdkworkIamUserAdminController(iam.service), [iam.service]);
-      const avatarService = useMemo(() => createSdkworkIamUserAvatarService(drive), [drive]);
       const driveUploadImageService = useMemo(
         () => createSdkworkIamUserDriveUploadImageService(drive),
         [drive],
       );
       return (
         <SdkworkIamUserAdminWorkspace
-          avatarService={avatarService}
           controller={controller}
           driveUploadImageService={driveUploadImageService}
           locale={locale}

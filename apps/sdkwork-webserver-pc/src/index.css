@@ -8,6 +8,13 @@
    this the page's own classes are emitted only when some scanned source happens
    to use the same class, which is how a utility can go missing silently. */
 @source "../../../../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-console-cloud-account/src";
+/* The user admin workspace lives in the IAM repo (mounted by the admin-iam
+   adapter) and renders the shared Drive upload-image placeholder package, both
+   out of scanner root. The user page's own layout utilities and the avatar
+   field's placeholder/hover/dark chrome are otherwise emitted only when some
+   scanned source happens to use the same class. */
+@source "../../../../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-user/src";
+@source "../../../../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-upload-image/src";
 @source "../../../../sdkwork-ui/sdkwork-ui-pc-react/src";
 @source "../../../../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-console-skills/src";
 @source "../../../../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-commons/src";
