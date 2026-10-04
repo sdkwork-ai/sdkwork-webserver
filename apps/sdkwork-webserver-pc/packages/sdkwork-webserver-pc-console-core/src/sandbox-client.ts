@@ -213,12 +213,6 @@ export interface UpdateSandboxInstanceInput {
   sandboxInstanceState?: SandboxInstanceState;
 }
 
-/** Result of a delete: the module reports the identity it retired. */
-export interface DeletedSandboxInstance {
-  sandboxInstanceId: string;
-  deleted: boolean;
-}
-
 /** One resource as the envelope wraps it. */
 interface SandboxItemEnvelope<T> {
   item: T;
@@ -282,13 +276,16 @@ export class SandboxAppClient {
     return updated.item;
   }
 
-  async remove(sandboxInstanceId: string): Promise<DeletedSandboxInstance> {
-    // The app-api face answers `204` with no JSON body (`API_SPEC.md`
-    // section 15.4), and the transport maps that to `undefined`. A refusal
-    // (404 absent/foreign row, 409 live instance) raises instead, so reaching
-    // here *is* the deletion report.
+  /**
+   * Retires one of the caller's instances.
+   *
+   * The face answers `204` with no JSON body (`API_SPEC.md` section 15.4),
+   * so there is nothing to unwrap and no report to fabricate: a resolved
+   * promise *is* the deletion, and a refusal (404 absent row, 409 live
+   * instance) raises instead.
+   */
+  async remove(sandboxInstanceId: string): Promise<void> {
     await this.http.delete<void>(sandboxInstancePath(sandboxInstanceId));
-    return { sandboxInstanceId, deleted: true };
   }
 }
 

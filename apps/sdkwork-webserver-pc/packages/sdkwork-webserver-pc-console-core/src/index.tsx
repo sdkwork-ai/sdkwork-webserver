@@ -55,7 +55,6 @@ export {
 } from "./sandbox-client.ts";
 export type {
   CreateSandboxInstanceInput,
-  DeletedSandboxInstance,
   SandboxInstance,
   SandboxInstanceListQuery,
   SandboxInstancePage,
@@ -67,6 +66,8 @@ export type {
   UpdateSandboxInstanceInput,
 } from "./sandbox-client.ts";
 export {
+  WEBSERVER_PC_ADMIN_OAUTH_ACCOUNT_LOGO_UPLOAD,
+  WEBSERVER_PC_ADMIN_ORGANIZATION_LOGO_UPLOAD,
   WEBSERVER_PC_ADMIN_USER_AVATAR_UPLOAD,
   WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD,
   WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD_RESOURCE_ID,

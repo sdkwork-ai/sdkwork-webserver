@@ -97,7 +97,7 @@ beforeEach(() => {
   stub.list.mockResolvedValue(pageOf([REQUESTED]));
   stub.create.mockResolvedValue(REQUESTED);
   stub.update.mockResolvedValue(REQUESTED);
-  stub.remove.mockResolvedValue({ sandboxInstanceId: "sbi-1", deleted: true });
+  stub.remove.mockResolvedValue(undefined);
   stub.holder.client = {
     create: stub.create,
     http: {},

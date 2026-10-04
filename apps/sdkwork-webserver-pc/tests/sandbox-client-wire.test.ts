@@ -155,11 +155,12 @@ describe("sandbox app client wire contract", () => {
     expect(deleted.init.method).toBe("DELETE");
   });
 
-  it("maps a 204 delete to a deletion report without unwrapping a body", async () => {
+  it("maps a 204 delete to a void resolution without unwrapping a body", async () => {
     // The app-api face answers DELETE with `204` and no JSON body
-    // (`API_SPEC.md` section 15.4); the transport resolves `undefined`. The
-    // client must not unwrap `.item` from an empty body — the refusal path
-    // (404/409) raises instead of reporting `deleted: false`.
+    // (`API_SPEC.md` section 15.4); the transport resolves `undefined` and
+    // the client adds nothing to it. A refusal (404/409) raises instead, so
+    // a resolved `remove()` *is* the deletion — there is no `deleted: false`
+    // shape to assert.
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -167,8 +168,7 @@ describe("sandbox app client wire contract", () => {
         return new Response(null, { status: 204 });
       }),
     );
-    const report = await client().remove("sbi-1");
-    expect(report).toEqual({ sandboxInstanceId: "sbi-1", deleted: true });
+    expect(await client().remove("sbi-1")).toBeUndefined();
     expect(requests.at(-1)?.init.method).toBe("DELETE");
   });
 
