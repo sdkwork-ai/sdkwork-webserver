@@ -329,7 +329,19 @@ impl WebsiteDeliveryExecutor {
             return Ok(None);
         }
         let expected_bytes = content.metadata.content_length;
-        let permit = self.acquire_buffered_content(route.maximum_object_bytes)?;
+        // Admit on the size the provider declared: a route configured for
+        // 64 MiB objects would otherwise admit only four concurrent bodies
+        // no matter how small they are. An undeclared length (0) keeps the
+        // route maximum, so an unknown-size body can never overcommit the
+        // buffered pool; `enforce_content_policy` still rejects oversize
+        // content after the open.
+        let declared = content.metadata.content_length;
+        let reserved = if declared > 0 && declared < route.maximum_object_bytes {
+            declared
+        } else {
+            route.maximum_object_bytes
+        };
+        let permit = self.acquire_buffered_content(reserved)?;
         context.deadline_ms = deadline.remaining_ms()?;
         let open_request = OpenWebsiteContentRequest {
             context,
@@ -430,7 +442,19 @@ impl WebsiteDeliveryExecutor {
         let opened = if request.method == WebsiteDeliveryMethod::Head {
             None
         } else {
-            let permit = self.acquire_buffered_content(route.maximum_object_bytes)?;
+            // Admit on the size the provider declared: a route configured for
+        // 64 MiB objects would otherwise admit only four concurrent bodies
+        // no matter how small they are. An undeclared length (0) keeps the
+        // route maximum, so an unknown-size body can never overcommit the
+        // buffered pool; `enforce_content_policy` still rejects oversize
+        // content after the open.
+        let declared = content.metadata.content_length;
+        let reserved = if declared > 0 && declared < route.maximum_object_bytes {
+            declared
+        } else {
+            route.maximum_object_bytes
+        };
+        let permit = self.acquire_buffered_content(reserved)?;
             context.deadline_ms = deadline.remaining_ms()?;
             let open_request = OpenWebsiteContentRequest {
                 context,

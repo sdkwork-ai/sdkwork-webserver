@@ -158,6 +158,9 @@ struct FakeStaticProvider {
     files: HashMap<String, Vec<u8>>,
     resolve_paths: Mutex<Vec<String>>,
     open_requests: Mutex<Vec<OpenWebsiteContentRequest>>,
+    /// Overrides the declared `content_length` the resolve reports; `0`
+    /// encodes "provider could not declare a length".
+    declared_content_length: Option<u64>,
 }
 
 #[async_trait]
@@ -197,7 +200,10 @@ impl WebsiteStaticContentProvider for FakeStaticProvider {
                 request.provider_relative_path.clone(),
             )
             .unwrap(),
-            metadata: content_metadata(content.len() as u64, true),
+            metadata: content_metadata(
+                self.declared_content_length.unwrap_or(content.len() as u64),
+                true,
+            ),
         }))
     }
 
@@ -382,6 +388,7 @@ async fn static_index_and_spa_fallback_are_provider_relative_and_explicit() {
         files: HashMap::from([("/web/index.html".to_owned(), b"shell".to_vec())]),
         resolve_paths: Mutex::new(Vec::new()),
         open_requests: Mutex::new(Vec::new()),
+        declared_content_length: None,
     });
     let mut providers = WebsiteProviderRegistry::new();
     providers
@@ -426,6 +433,7 @@ async fn buffered_content_budget_rejects_without_queueing_and_recovers_on_drop()
         files: HashMap::from([("/web/index.html".to_owned(), b"shell".to_vec())]),
         resolve_paths: Mutex::new(Vec::new()),
         open_requests: Mutex::new(Vec::new()),
+        declared_content_length: None,
     });
     let mut providers = WebsiteProviderRegistry::new();
     providers
@@ -469,12 +477,66 @@ async fn buffered_content_budget_rejects_without_queueing_and_recovers_on_drop()
 }
 
 #[tokio::test]
-async fn buffered_content_budget_reserves_the_compiled_object_ceiling() {
+async fn buffered_content_budget_admits_declared_bodies_at_their_own_size() {
     let runtime = active_runtime(FixtureHandler::Spa);
     let static_provider = Arc::new(FakeStaticProvider {
         files: HashMap::from([("/web/index.html".to_owned(), b"shell".to_vec())]),
         resolve_paths: Mutex::new(Vec::new()),
         open_requests: Mutex::new(Vec::new()),
+        declared_content_length: None,
+    });
+    let mut providers = WebsiteProviderRegistry::new();
+    providers
+        .register_static(WebsiteProviderType::Drive, static_provider.clone())
+        .unwrap();
+    let executor =
+        WebsiteDeliveryExecutor::with_buffered_content_budget(runtime, Arc::new(providers), 5)
+            .unwrap();
+
+    // The provider declares a 5-byte body, so admission follows the declared
+    // size, not the route's far larger object ceiling.
+    let first = executor
+        .execute(delivery_request("/", WebsiteDeliveryMethod::Get))
+        .await
+        .unwrap();
+    let WebsiteDeliveryOutcome::Content(first) = first else {
+        panic!("expected first content")
+    };
+
+    let saturated = match executor
+        .execute(delivery_request("/", WebsiteDeliveryMethod::Get))
+        .await
+    {
+        Ok(_) => panic!("held response must own the declared body's budget share"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        saturated,
+        WebsiteDeliveryError::Provider(WebsiteProviderError {
+            kind: WebsiteProviderErrorKind::Unavailable,
+            retry_after_ms: Some(100),
+        })
+    ));
+
+    drop(first);
+    let recovered = executor
+        .execute(delivery_request("/", WebsiteDeliveryMethod::Get))
+        .await
+        .expect("dropping a response releases its buffered-content permit");
+    assert!(matches!(recovered, WebsiteDeliveryOutcome::Content(_)));
+}
+
+#[tokio::test]
+async fn buffered_content_budget_rejects_unknown_size_at_the_object_ceiling() {
+    let runtime = active_runtime(FixtureHandler::Spa);
+    let static_provider = Arc::new(FakeStaticProvider {
+        files: HashMap::from([("/web/index.html".to_owned(), b"shell".to_vec())]),
+        resolve_paths: Mutex::new(Vec::new()),
+        open_requests: Mutex::new(Vec::new()),
+        // A provider that cannot declare a length must not be admitted at a
+        // made-up small size: the route's object ceiling is the reserve, so
+        // a ceiling above the process budget stays rejected (fail-closed).
+        declared_content_length: Some(0),
     });
     let mut providers = WebsiteProviderRegistry::new();
     providers
@@ -488,7 +550,7 @@ async fn buffered_content_budget_reserves_the_compiled_object_ceiling() {
         .execute(delivery_request("/", WebsiteDeliveryMethod::Get))
         .await
     {
-        Ok(_) => panic!("object ceiling above the process budget must be rejected"),
+        Ok(_) => panic!("unknown-size body above the budget must be rejected"),
         Err(error) => error,
     };
     assert!(matches!(
@@ -576,6 +638,7 @@ async fn preserves_valid_static_range_evidence_and_bounded_bytes() {
         files: HashMap::from([("/web/range.bin".to_owned(), b"0123456789".to_vec())]),
         resolve_paths: Mutex::new(Vec::new()),
         open_requests: Mutex::new(Vec::new()),
+        declared_content_length: None,
     });
     let mut providers = WebsiteProviderRegistry::new();
     providers
@@ -614,6 +677,7 @@ async fn accepts_full_static_content_when_if_range_does_not_match() {
         files: HashMap::from([("/web/range.bin".to_owned(), b"0123456789".to_vec())]),
         resolve_paths: Mutex::new(Vec::new()),
         open_requests: Mutex::new(Vec::new()),
+        declared_content_length: None,
     });
     let mut providers = WebsiteProviderRegistry::new();
     providers
