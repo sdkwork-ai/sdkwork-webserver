@@ -837,3 +837,26 @@
    already uses so the two account choices in this product look like one control. */
 .deploy-surface .delivery-dialog select[name="cloudAccountId"]{height:38px;border:1px solid var(--sdk-color-border-default);border-radius:5px;padding:0 9px;background:var(--sdk-color-surface-panel);color:var(--sdk-color-text-primary)}
 .deploy-surface .delivery-dialog select[name="cloudAccountId"]:focus-visible{outline:2px solid var(--sdk-color-border-focus);outline-offset:1px}
+
+/* The app-template marketplace pages (console storefront + author workbench)
+   and the shared registry table behind the operations catalog style their
+   filter rows, ledgers and dialogs with a class set the earlier deployments
+   bridges never needed. Without the host-side half the toolbar renders as
+   stacked full-width blocks, row names lose their link affordance, and the
+   author workbench's version panel is a bare borderless run. These mirror the
+   canonical rules in the deployments workspace's styles.css, re-tokened onto
+   this host's color variables; `.fact-grid` has no upstream definition at all
+   (the detail dialog renders it as a bare dl there too), so it is authored
+   here as a labeled fact grid for the listing's metadata pairs. */
+.deploy-surface .toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:18px 0 12px}
+.deploy-surface .scope-input select{min-width:0;width:100%;border:0;outline:none;background:transparent;color:inherit}
+.deploy-surface .link-button{border:0;background:none;padding:0;color:var(--sdk-color-text-primary);font-weight:650;text-decoration:underline;text-underline-offset:3px}
+.deploy-surface .link-button:hover{color:var(--sdk-color-brand-primary)}
+.deploy-surface .section-title{margin:26px 0 10px;font-size:16px;line-height:1.3;letter-spacing:0}
+.deploy-surface .version-panel{border:1px solid var(--sdk-color-border-default);border-radius:7px;background:var(--sdk-color-surface-panel);padding:14px 16px;margin:16px 0}
+.deploy-surface .version-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.deploy-surface .version-list li{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:8px 10px;border:1px solid var(--sdk-color-border-subtle);border-radius:5px}
+.deploy-surface .version-list li span:last-child{color:var(--sdk-color-text-muted)}
+.deploy-surface .fact-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px 18px;margin:16px 0}
+.deploy-surface .fact-grid dt{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:var(--sdk-color-text-muted)}
+.deploy-surface .fact-grid dd{margin:2px 0 0;font-size:13px;color:var(--sdk-color-text-primary);overflow-wrap:anywhere}
