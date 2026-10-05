@@ -25,6 +25,27 @@ use sdkwork_webserver_tunnel_transport::{TunnelConnection, TunnelStream};
 
 use super::GatewayShared;
 
+/// Write deadline for control-plane replies. A flow-control-stalled agent
+/// (not reading) would otherwise park the whole `steady_state` loop on one
+/// `write_message` — no reads, no route updates, no heartbeats — until the
+/// QUIC idle timeout (minutes) tore the session down. The agent bounds the
+/// mirrored operation at 10s; the gateway uses the same budget and ends the
+/// session on expiry, which the agent treats as any other transport loss.
+const CONTROL_WRITE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// One bounded control-plane write; see [`CONTROL_WRITE_TIMEOUT`].
+async fn write_message_bounded(
+    control: &mut Box<dyn TunnelStream>,
+    message: &sdkwork_webserver_tunnel_protocol::ControlMessage,
+) -> Result<()> {
+    let write = write_message(control, message);
+    tokio::time::timeout(CONTROL_WRITE_TIMEOUT, write)
+        .await
+        .map_err(|_| {
+            TunnelError::ConnectionFailed("control stream write timed out (flow-control stalled)".to_owned())
+        })?
+}
+
 /// Serves one agent connection until the control stream closes, the
 /// connection drops, the gateway stops, or the session is expired by the
 /// sweeper.
@@ -281,15 +302,15 @@ async fn steady_state(
                 match message {
                     ControlMessage::RegisterRoute(request) => {
                         let reply = handle_register(shared, session_id, &request).await;
-                        write_message(control, &reply).await?;
+                        write_message_bounded(control, &reply).await?;
                     }
                     ControlMessage::UnregisterRoute(request) => {
                         let reply = handle_unregister(shared, session_id, &request);
-                        write_message(control, &reply).await?;
+                        write_message_bounded(control, &reply).await?;
                     }
                     ControlMessage::Heartbeat => {
                         shared.sessions.touch(session_id)?;
-                        write_message(control, &ControlMessage::HeartbeatAck).await?;
+                        write_message_bounded(control, &ControlMessage::HeartbeatAck).await?;
                     }
                     ControlMessage::Error(error) => {
                         tracing::warn!(

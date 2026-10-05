@@ -165,12 +165,24 @@ fn transport_config(options: TransportOptions) -> quinn::TransportConfig {
 
 /// Resolves a remote endpoint host to a UDP socket address, preferring the
 /// literal form and falling back to system DNS.
+///
+/// The lookup is bounded: a wedged system resolver (NSS plugin hang) must not
+/// park `connect_session` indefinitely — the agent loop can only observe its
+/// stop signal between attempts, so an unbounded resolution also blocks
+/// shutdown. The budget mirrors the QUIC handshake's own.
 async fn resolve_endpoint(endpoint: &RemoteEndpoint) -> Result<SocketAddr> {
     if let Ok(address) = endpoint.authority().parse::<SocketAddr>() {
         return Ok(address);
     }
-    tokio::net::lookup_host((endpoint.host.as_str(), endpoint.port))
+    let lookup = tokio::net::lookup_host((endpoint.host.as_str(), endpoint.port));
+    tokio::time::timeout(Duration::from_secs(10), lookup)
         .await
+        .map_err(|_| {
+            TunnelError::ConnectionFailed(format!(
+                "resolving tunnel gateway {} timed out after 10s",
+                endpoint.authority()
+            ))
+        })?
         .map_err(|error| {
             TunnelError::ConnectionFailed(format!(
                 "cannot resolve tunnel gateway {}: {error}",

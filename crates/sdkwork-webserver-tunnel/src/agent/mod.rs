@@ -190,13 +190,27 @@ async fn run_loop(
             endpoint: options.endpoint.authority(),
         });
         match connect_session(&options, &routes, &stop, &events).await {
-            SessionOutcome::GracefulStop => {
+            SessionAttempt {
+                outcome: SessionOutcome::GracefulStop,
+                ..
+            } => {
                 let _ = events.try_send(AgentEvent::Stopped);
                 return;
             }
-            SessionOutcome::Ended(reason) => {
-                backoff.reset_on_success();
-                tracing::info!(endpoint = %options.endpoint, reason, "tunnel session ended");
+            SessionAttempt {
+                outcome: SessionOutcome::Ended(reason),
+                established,
+                uptime,
+            } => {
+                // Only a session that actually served resets the curve
+                // (PRD §27). A dial or handshake failure returns `Ended`
+                // within milliseconds; resetting there would pin the retry
+                // rate at the initial delay and turn a gateway outage into
+                // a fleet-wide ~1 Hz reconnect storm.
+                if should_reset_backoff(established, uptime, stable_uptime_threshold(&options.network)) {
+                    backoff.reset_on_success();
+                }
+                tracing::info!(endpoint = %options.endpoint, reason, established, "tunnel session ended");
                 let _ = events.try_send(AgentEvent::Disconnected { reason });
                 if !options.network.reconnect {
                     let _ = events.try_send(AgentEvent::Stopped);
@@ -223,6 +237,26 @@ async fn run_loop(
 enum SessionOutcome {
     GracefulStop,
     Ended(String),
+}
+
+/// One connect/serve attempt plus what the reconnect backoff needs to know
+/// about it: whether the session ever reached the ready state and how long
+/// it stayed up. A session that never got there must not reset the
+/// exponential curve.
+struct SessionAttempt {
+    outcome: SessionOutcome,
+    established: bool,
+    uptime: Duration,
+}
+
+impl SessionAttempt {
+    fn failed(reason: String) -> Self {
+        Self {
+            outcome: SessionOutcome::Ended(reason),
+            established: false,
+            uptime: Duration::ZERO,
+        }
+    }
 }
 
 /// Route table the agent enforces locally: gateway-registered ids → local
@@ -263,15 +297,15 @@ async fn connect_session(
     routes: &Arc<RouteTable>,
     stop: &watch::Receiver<bool>,
     events: &mpsc::Sender<AgentEvent>,
-) -> SessionOutcome {
+) -> SessionAttempt {
     let transport = match QuicClientTransport::new(&options.tls, transport_options(options)) {
         Ok(transport) => transport,
-        Err(error) => return SessionOutcome::Ended(error.to_string()),
+        Err(error) => return SessionAttempt::failed(error.to_string()),
     };
     let server_name = tls::server_name_for(&options.endpoint);
     let connection = match transport.connect(&options.endpoint, &server_name).await {
         Ok(connection) => connection,
-        Err(error) => return SessionOutcome::Ended(error.to_string()),
+        Err(error) => return SessionAttempt::failed(error.to_string()),
     };
     options.metrics.record_connection_open();
 
@@ -281,7 +315,7 @@ async fn connect_session(
         Err(error) => {
             options.metrics.record_error();
             options.metrics.record_connection_close();
-            return SessionOutcome::Ended(format!("control stream open failed: {error}"));
+            return SessionAttempt::failed(format!("control stream open failed: {error}"));
         }
     };
     // One scratch per session: a single read may slurp several control
@@ -292,7 +326,7 @@ async fn connect_session(
         Ok(session_id) => session_id,
         Err(error) => {
             options.metrics.record_connection_close();
-            return SessionOutcome::Ended(error);
+            return SessionAttempt::failed(error);
         }
     };
     let _ = events.try_send(AgentEvent::Connected {
@@ -304,7 +338,7 @@ async fn connect_session(
             Ok(outcome) => outcome,
             Err(error) => {
                 options.metrics.record_connection_close();
-                return SessionOutcome::Ended(error);
+                return SessionAttempt::failed(error);
             }
         };
     let _ = events.try_send(AgentEvent::Ready {
@@ -312,9 +346,14 @@ async fn connect_session(
         rejected,
     });
 
+    let serve_started = std::time::Instant::now();
     let outcome = serve(options, routes, connection, control, scratch, stop, events).await;
     options.metrics.record_connection_close();
-    outcome
+    SessionAttempt {
+        uptime: serve_started.elapsed(),
+        established: true,
+        outcome,
+    }
 }
 
 async fn authenticate(
@@ -946,6 +985,19 @@ fn transport_options(options: &AgentRuntimeOptions) -> TransportOptions {
     }
 }
 
+/// A session that never reached the ready state (dial, handshake, or route
+/// registration failure) never resets the backoff; a session that did must
+/// stay up at least one initial-delay interval before its end counts as a
+/// success, so a flapping ready-then-die session cannot pin the retry rate
+/// at the floor either.
+fn should_reset_backoff(established: bool, uptime: Duration, stable_after: Duration) -> bool {
+    established && uptime >= stable_after
+}
+
+fn stable_uptime_threshold(network: &sdkwork_webserver_tunnel_core::TunnelNetworkConfig) -> Duration {
+    Duration::from_secs(network.initial_backoff_secs.max(1))
+}
+
 /// Jittered exponential backoff: 1s → 2s → 4s … capped, ±20% jitter
 /// (PRD §27).
 struct Backoff {
@@ -1016,5 +1068,36 @@ mod tests {
         assert_eq!(table.by_id.len(), 1);
         assert!(table.by_name.contains_key("web"));
         assert!(!table.by_name.contains_key("broken"));
+    }
+
+    #[test]
+    fn failed_dial_never_resets_backoff() {
+        // A gateway outage ends every attempt within milliseconds and
+        // `established` stays false; the curve must keep climbing instead
+        // of being pinned at the initial delay (PRD §27).
+        let network = sdkwork_webserver_tunnel_core::TunnelNetworkConfig::default();
+        let stable_after = stable_uptime_threshold(&network);
+        let dial_failure = SessionAttempt::failed("connect failed".to_owned());
+        assert!(matches!(dial_failure.outcome, SessionOutcome::Ended(_)));
+        assert!(!should_reset_backoff(
+            dial_failure.established,
+            dial_failure.uptime,
+            stable_after
+        ));
+        // Even a long-lived attempt that never reached ready must not
+        // reset: only `established` sessions count as success.
+        assert!(!should_reset_backoff(false, Duration::from_secs(3600), stable_after));
+    }
+
+    #[test]
+    fn established_session_resets_backoff_only_after_stable_uptime() {
+        let network = sdkwork_webserver_tunnel_core::TunnelNetworkConfig::default();
+        let stable_after = stable_uptime_threshold(&network);
+        // Ready-then-instantly-die sessions flap below the threshold and
+        // must not reset the curve either.
+        assert!(!should_reset_backoff(true, Duration::from_millis(50), stable_after));
+        // A session that served at least one initial-delay interval is a
+        // real success and may reset.
+        assert!(should_reset_backoff(true, stable_after, stable_after));
     }
 }

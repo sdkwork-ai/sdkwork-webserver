@@ -490,7 +490,6 @@ mod tests {
 
     #[test]
     fn touch_rejects_an_unknown_session() {
-        let metrics = TunnelMetrics::new();
         let table = SessionTable::new(4);
         assert!(matches!(
             table.touch(&SessionId::parse("session_ghost").expect("valid id")),
