@@ -717,7 +717,7 @@ fn hostname() -> String {
 
 fn random_label(length: usize) -> String {
     const ALPHABET: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
-    use rand::Rng;
+    use rand::RngExt;
     let mut rng = rand::rng();
     (0..length)
         .map(|_| ALPHABET[rng.random_range(0..ALPHABET.len())] as char)

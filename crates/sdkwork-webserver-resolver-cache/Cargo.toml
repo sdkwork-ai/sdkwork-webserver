@@ -24,7 +24,7 @@ redis = ["dep:redis"]
 database = []
 
 [dependencies.redis]
-version = "0.28"
+version = "1.7"
 features = ["tokio-comp", "connection-manager"]
 optional = true
 

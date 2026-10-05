@@ -17,7 +17,7 @@
 //!   reports success has already proven that the credential row in the database
 //!   accepts the new password.
 
-use argon2::password_hash::{rand_core::OsRng, PasswordHasher, SaltString};
+use argon2::password_hash::PasswordHasher;
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use sdkwork_iam_bootstrap::{
     DEFAULT_BOOTSTRAP_ADMIN_USERNAME, DEFAULT_BOOTSTRAP_ADMIN_USER_ID, DEFAULT_IAM_TENANT_ID,
@@ -381,7 +381,7 @@ async fn select_optional_string(
 
 fn hash_password(password: &str) -> Result<String, String> {
     Argon2::default()
-        .hash_password(password.as_bytes(), &SaltString::generate(&mut OsRng))
+        .hash_password(password.as_bytes())
         .map(|hash| hash.to_string())
         .map_err(|error| format!("failed to hash the admin password: {error}"))
 }

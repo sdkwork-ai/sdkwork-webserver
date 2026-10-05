@@ -28,9 +28,13 @@ an alert that can never fire is a fake control (PRD §12).
   are sampled by the `data-plane` command: a supervised, shutdown-aware task
   (`SDKWORK_WEBSERVER_CERT_METRICS_INTERVAL_SECS`, default 300 s, clamped
   30..3600) reads the minimum seconds-to-expiry over active, non-revoked
-  certificates plus the 30-day expiring count through the shared database
-  pool and records them into the snapshot the operations `/metrics` handler
-  renders. Sampling is best effort by design — an edge without a
+  certificates plus the expiring count through the shared database pool and
+  records them into the snapshot the operations `/metrics` handler
+  renders. The "expiring soon" window is
+  `SDKWORK_WEBSERVER_CERT_EXPIRY_WINDOW_DAYS` (days, default 30, clamped
+  1..365) — retune it together with the alert thresholds in
+  `prometheus-rules.yml`, which are expressed against the same window.
+  Sampling is best effort by design — an edge without a
   control-plane database simply reports "no observation" (PRD-FR-015); a
   failed sample leaves the last value and logs.
 - Audit persistence:

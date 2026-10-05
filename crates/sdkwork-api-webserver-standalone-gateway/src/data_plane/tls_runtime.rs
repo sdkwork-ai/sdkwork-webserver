@@ -1370,7 +1370,7 @@ mod tests {
         params.not_after = date_time_ymd(2040, 1, 1);
         let key = KeyPair::generate().unwrap();
         let certificate = params.self_signed(&key).unwrap();
-        let fingerprint = format!("{:x}", Sha256::digest(certificate.der().as_ref()));
+        let fingerprint = sdkwork_utils_rust::hex_encode(Sha256::digest(certificate.der().as_ref()).as_slice());
         (
             certificate.pem(),
             key.serialize_pem(),

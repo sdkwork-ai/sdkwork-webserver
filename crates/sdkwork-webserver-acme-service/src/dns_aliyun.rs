@@ -10,6 +10,7 @@ use std::fmt;
 
 use async_trait::async_trait;
 use base64::Engine as _;
+use hmac::digest::KeyInit;
 use hmac::{Hmac, Mac};
 use http::Method;
 use serde::Deserialize;

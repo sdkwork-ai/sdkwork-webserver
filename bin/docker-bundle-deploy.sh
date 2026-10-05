@@ -475,6 +475,36 @@ wait_container_healthy() {
   done
 }
 
+# Best-effort restore after a failed readiness: re-`up` every instance on the
+# image the stack ran before this apply and wait for it to become healthy.
+# A rollback that itself fails is reported, never retried here — the operator
+# has the logs and the previous tag. First deployments have nothing to roll
+# back to and fail the same way they always did.
+rollback_to_previous() {
+  local previous_tag="$1" index
+  [ "${DRY_RUN}" = "1" ] && return 1
+  if [ -z "${previous_tag}" ]; then
+    warn "no previously running image to roll back to (first deployment?)"
+    return 1
+  fi
+  warn "rolling back to the previously running image ${previous_tag}"
+  for index in $(seq 1 "${REPLICAS}"); do
+    set_instance_env_file_args "${index}"
+    SDKWORK_WEBSERVER_IMAGE_TAG="${previous_tag}" start_instance "${index}" || {
+      warn "rollback: instance ${index} failed to start on ${previous_tag}"
+      return 1
+    }
+  done
+  for index in $(seq 1 "${REPLICAS}"); do
+    if ! wait_container_healthy "sdkwork-webserver-${ENVIRONMENT}-i${index}" webserver "${HEALTH_TIMEOUT}"; then
+      warn "rollback: instance ${index} did not become healthy on ${previous_tag}"
+      return 1
+    fi
+  done
+  warn "rollback complete: the environment is serving on ${previous_tag}; the failed release is NOT running"
+  return 0
+}
+
 apply() {
   # Persist CLI --host-port/--edge-*/--domain overrides first so the env file
   # (and thus compose interpolation and later doctor/config/status) agrees with
@@ -487,11 +517,20 @@ apply() {
   # Instance 1 first: it owns the 80/443 edge and performs database migration
   # before the remaining instances start (DEPLOYMENT_SPEC.md §6).
   local index
+  # The tag the stack runs right now, captured before anything is replaced:
+  # a failed readiness rolls the environment back to it instead of leaving
+  # the broken release as the active one.
+  local previous_tag
+  previous_tag="$(docker inspect --format '{{.Config.Image}}' "sdkwork-webserver-${ENVIRONMENT}-i1" 2>/dev/null || true)"
   for index in $(seq 1 "${REPLICAS}"); do
     set_instance_env_file_args "${index}"
     start_instance "${index}"
-    wait_container_healthy "sdkwork-webserver-${ENVIRONMENT}-i${index}" webserver "${HEALTH_TIMEOUT}" \
-      || die "webserver instance ${index} failed readiness"
+    if ! wait_container_healthy "sdkwork-webserver-${ENVIRONMENT}-i${index}" webserver "${HEALTH_TIMEOUT}"; then
+      if rollback_to_previous "${previous_tag}"; then
+        die "webserver instance ${index} failed readiness; the environment was rolled back to ${previous_tag}"
+      fi
+      die "webserver instance ${index} failed readiness and the rollback to ${previous_tag:-<none>} did not succeed"
+    fi
   done
   start_worker
   info "environment ${ENVIRONMENT}: ${REPLICAS} instance(s) applied"

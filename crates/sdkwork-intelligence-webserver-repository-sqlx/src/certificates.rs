@@ -174,7 +174,8 @@ impl WebRepository {
     /// Cluster-wide certificate health for the operations metrics sampler:
     /// the smallest seconds-to-expiry over the ACTIVE current versions of
     /// issued, non-deleted certificates (-1 when none exist) and how many
-    /// expire within 30 days. Fixed shape, one row, no tenant scoping on
+    /// expire within the operator's warning window. Fixed shape, one row, no
+    /// tenant scoping on
     /// purpose - the sampler runs inside the edge process and reports the
     /// whole served set, the same scope the TLS material publisher
     /// distributes. `not_after` lives on the certificate version; the EXISTS
@@ -183,11 +184,14 @@ impl WebRepository {
     /// keeps the scan inside the leading ACTIVE band of
     /// `idx_webserver_certificate_expiry_summary` and the per-row probe on
     /// the certificate primary key.
-    pub(super) async fn certificate_expiry_summary_repo(&self) -> WebServiceResult<(i64, i64)> {
+    pub(super) async fn certificate_expiry_summary_repo(
+        &self,
+        expiring_window_days: i32,
+    ) -> WebServiceResult<(i64, i64)> {
         let row = sqlx::query(
             "SELECT COALESCE(MIN(EXTRACT(EPOCH FROM (v.not_after - NOW())))::BIGINT, -1)
                     AS min_seconds,
-                    COUNT(*) FILTER (WHERE v.not_after < NOW() + INTERVAL '30 days')
+                    COUNT(*) FILTER (WHERE v.not_after < NOW() + ($2 * INTERVAL '1 day'))
                     AS expiring_soon
              FROM webserver_certificate_version v
              WHERE v.status = 'ACTIVE'
@@ -198,6 +202,7 @@ impl WebRepository {
                      AND c.deleted_at IS NULL AND c.status = 1
                )",
         )
+        .bind(expiring_window_days)
         .fetch_one(&self.pool)
         .await
         .map_err(|error| store_error("summarize webserver_certificate expiry", error))?;

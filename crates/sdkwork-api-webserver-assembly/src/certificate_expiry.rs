@@ -24,9 +24,26 @@ pub(crate) fn share_certificate_expiry_service(service: Arc<WebService>) {
     let _ = SHARED_EXPIRY_SERVICE.set(service);
 }
 
+/// The operator's certificate-expiry warning window in days: what
+/// "expiring soon" means for the gauges and the alert rule. Read once per
+/// sample from `SDKWORK_WEBSERVER_CERT_EXPIRY_WINDOW_DAYS`
+/// (1..=365, default 30 - the window the Prometheus rule was sized to).
+pub fn certificate_expiry_window_days() -> i32 {
+    const DEFAULT_WINDOW_DAYS: i32 = 30;
+    std::env::var("SDKWORK_WEBSERVER_CERT_EXPIRY_WINDOW_DAYS")
+        .ok()
+        .and_then(|value| value.trim().parse::<i32>().ok())
+        .map(|days| days.clamp(1, 365))
+        .unwrap_or(DEFAULT_WINDOW_DAYS)
+}
+
 /// One expiry-summary sample from the shared control-plane service; `None`
 /// when no management plane has been assembled in this process.
 pub async fn certificate_expiry_summary() -> Option<WebServiceResult<(i64, i64)>> {
     let service = SHARED_EXPIRY_SERVICE.get()?.clone();
-    Some(service.certificate_expiry_summary().await)
+    Some(
+        service
+            .certificate_expiry_summary(certificate_expiry_window_days())
+            .await,
+    )
 }

@@ -295,7 +295,7 @@ fn validate_leaf_certificate(
         }
     }
     Ok(LeafCertificateEvidence {
-        fingerprint_sha256: format!("{:x}", Sha256::digest(certificate_der)),
+        fingerprint_sha256: sdkwork_utils_rust::hex_encode(Sha256::digest(certificate_der).as_slice()),
         not_before_unix_seconds: certificate.validity().not_before.timestamp(),
         not_after_unix_seconds: certificate.validity().not_after.timestamp(),
     })
