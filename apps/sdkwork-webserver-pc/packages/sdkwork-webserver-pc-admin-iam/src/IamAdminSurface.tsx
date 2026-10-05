@@ -429,10 +429,16 @@ const LazyIamAccountBindingAdmin = lazy(async () => {
   const { createSdkworkIamAccountBindingController, SdkworkIamAccountBindingSettings } =
     await import("@sdkwork/iam-pc-admin-account-binding");
   return {
-    default: function IamAccountBindingAdminContent() {
+    default: function IamAccountBindingAdminContent({ permissionScope }: IamAdminContentProps) {
       const service = useIamAdminService();
+      const can = useIamAdminPermission(permissionScope);
       const controller = useMemo(() => createSdkworkIamAccountBindingController(service), [service]);
-      return <SdkworkIamAccountBindingSettings controller={controller} />;
+      return (
+        <SdkworkIamAccountBindingSettings
+          canUpdate={can("iam.account_binding_policy.update")}
+          controller={controller}
+        />
+      );
     } satisfies ComponentType<IamAdminContentProps>,
   };
 });
