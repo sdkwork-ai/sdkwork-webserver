@@ -109,11 +109,16 @@ services:
       SDKWORK_DRIVE_WEBSITE_CACHE_MAX_ENTRIES: ${SDKWORK_DRIVE_WEBSITE_CACHE_MAX_ENTRIES:-100000}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # SIGTERM drain: the gateway spends up to 30s draining in-flight requests
+    # and tunnel sessions (drainTimeoutMs); docker's 10s default SIGKILLs
+    # mid-drain, which is exactly what the WebSocketDrainTimeouts alert pages
+    # on. Sized to match the systemd unit's TimeoutStopSec=45.
+    stop_grace_period: 45s
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "curl -fsS http://127.0.0.1:$${SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT:-3800}/healthz || exit 1",
+          "curl -fsS http://127.0.0.1:$${SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT:-3800}/readyz || exit 1",
         ]
       interval: 15s
       timeout: 5s

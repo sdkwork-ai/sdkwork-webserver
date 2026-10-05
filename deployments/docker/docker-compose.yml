@@ -78,11 +78,16 @@ x-webserver-common: &webserver-common
     - ${SDKWORK_MODULE_API_GATEWAY_CHECKOUT_HOST_PATH:-../../../sdkwork-api-cloud-gateway}:/opt/deploy/sdkwork-space/sdkwork-api-cloud-gateway:ro
     - ${SDKWORK_DRIVE_CACHE_HOST_PATH:-/opt/deploy/drive}:/opt/deploy/drive:rw
     - ../../bin/container/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
+  # SIGTERM drain: the gateway spends up to 30s draining in-flight requests
+  # and tunnel sessions (drainTimeoutMs); docker's 10s default SIGKILLs
+  # mid-drain, which is exactly what the WebSocketDrainTimeouts alert pages
+  # on. Sized to match the systemd unit's TimeoutStopSec=45.
+  stop_grace_period: 45s
   healthcheck:
     test:
       [
         "CMD-SHELL",
-        "curl -fsS http://127.0.0.1:$${SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT:-3800}/healthz || exit 1",
+        "curl -fsS http://127.0.0.1:$${SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT:-3800}/readyz || exit 1",
       ]
     interval: 15s
     timeout: 5s
@@ -99,6 +104,22 @@ x-certificate-worker-common: &certificate-worker-common
   # runs one worker replica (claims are SKIP LOCKED + lease fenced, so extra
   # replicas are safe but unnecessary).
   command: ["certificate-worker"]
+  # Liveness heartbeat: the worker loop touches this file once per iteration;
+  # the healthcheck fails when it goes stale (600s ceiling, matching the
+  # Kubernetes exec probe — one operation cycle may legitimately run for
+  # minutes under the cycle watchdog).
+  environment:
+    SDKWORK_WEBSERVER_CERT_WORKER_HEARTBEAT_PATH: /tmp/sdkwork-certificate-worker-heartbeat
+  healthcheck:
+    test:
+      [
+        "CMD-SHELL",
+        "f=/tmp/sdkwork-certificate-worker-heartbeat; [ -f \"$f\" ] && [ $(( $(date +%s) - $(stat -c %Y \"$f\") )) -lt 600 ]",
+      ]
+    interval: 60s
+    timeout: 5s
+    retries: 3
+    start_period: 120s
   volumes:
     - ../../bin/container/entrypoint-standalone.sh:/usr/local/bin/sdkwork-webserver-entrypoint:ro
 
@@ -342,6 +363,8 @@ services:
       webserver-development:
         condition: service_healthy
     environment:
+      # Liveness heartbeat for the anchor healthcheck above.
+      SDKWORK_WEBSERVER_CERT_WORKER_HEARTBEAT_PATH: /tmp/sdkwork-certificate-worker-heartbeat
       SDKWORK_WEBSERVER_ENVIRONMENT: development
       SDKWORK_WEBSERVER_PROFILE_ID: standalone.development
       SDKWORK_DATABASE_ENGINE: postgresql
@@ -379,6 +402,8 @@ services:
       webserver-test:
         condition: service_healthy
     environment:
+      # Liveness heartbeat for the anchor healthcheck above.
+      SDKWORK_WEBSERVER_CERT_WORKER_HEARTBEAT_PATH: /tmp/sdkwork-certificate-worker-heartbeat
       SDKWORK_WEBSERVER_ENVIRONMENT: test
       SDKWORK_WEBSERVER_PROFILE_ID: standalone.test
       SDKWORK_DATABASE_ENGINE: postgresql
@@ -416,6 +441,8 @@ services:
       webserver-staging:
         condition: service_healthy
     environment:
+      # Liveness heartbeat for the anchor healthcheck above.
+      SDKWORK_WEBSERVER_CERT_WORKER_HEARTBEAT_PATH: /tmp/sdkwork-certificate-worker-heartbeat
       SDKWORK_WEBSERVER_ENVIRONMENT: staging
       SDKWORK_WEBSERVER_PROFILE_ID: standalone.staging
       SDKWORK_DATABASE_ENGINE: postgresql
@@ -453,6 +480,8 @@ services:
       webserver-production:
         condition: service_healthy
     environment:
+      # Liveness heartbeat for the anchor healthcheck above.
+      SDKWORK_WEBSERVER_CERT_WORKER_HEARTBEAT_PATH: /tmp/sdkwork-certificate-worker-heartbeat
       SDKWORK_WEBSERVER_ENVIRONMENT: production
       SDKWORK_WEBSERVER_PROFILE_ID: standalone.production
       SDKWORK_DATABASE_ENGINE: postgresql

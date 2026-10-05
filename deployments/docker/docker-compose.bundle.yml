@@ -162,11 +162,16 @@ x-webserver-common: &webserver-common
     - ${SDKWORK_DRIVE_CACHE_HOST_PATH:-/opt/deploy/drive}:/opt/deploy/drive:rw
     - webserver-secrets:/etc/sdkwork/webserver/secrets
     - webserver-data:/var/lib/sdkwork/webserver
+  # SIGTERM drain: the gateway spends up to 30s draining in-flight requests
+  # and tunnel sessions (drainTimeoutMs); docker's 10s default SIGKILLs
+  # mid-drain, which is exactly what the WebSocketDrainTimeouts alert pages
+  # on. Sized to match the systemd unit's TimeoutStopSec=45.
+  stop_grace_period: 45s
   healthcheck:
     test:
       [
         "CMD-SHELL",
-        "curl -fsS http://127.0.0.1:$${SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT:-3800}/healthz || exit 1",
+        "curl -fsS http://127.0.0.1:$${SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT:-3800}/readyz || exit 1",
       ]
     interval: 15s
     timeout: 5s
@@ -305,10 +310,24 @@ services:
         reservations:
           cpus: "0.25"
           memory: 256m
-    # The worker has no HTTP surface; deploy.sh liveness falls back to the
-    # container process state.
+    # The worker has no HTTP surface; liveness is the heartbeat file the loop
+    # touches once per iteration (SDKWORK_WEBSERVER_CERT_WORKER_HEARTBEAT_PATH,
+    # set in the environment block below). A reactor wedged below the timer
+    # layer keeps `running` forever otherwise, and renewals then stall silently
+    # until certificates expire. The 600s staleness ceiling matches the
+    # Kubernetes exec probe: one operation cycle may legitimately run for
+    # minutes under the cycle watchdog, so a shorter window would flap during
+    # large ACME work.
     healthcheck:
-      disable: true
+      test:
+        [
+          "CMD-SHELL",
+          "f=/tmp/sdkwork-certificate-worker-heartbeat; [ -f \"$f\" ] && [ $(( $(date +%s) - $(stat -c %Y \"$f\") )) -lt 600 ]",
+        ]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 240s
     # Overridden from *webserver-common: the space checkouts and drive cache
     # bind mounts are gateway concerns the worker never touches. The shared
     # secrets volume carries the encryption keys the worker decrypts material
@@ -317,6 +336,8 @@ services:
       - webserver-secrets:/etc/sdkwork/webserver/secrets
       - webserver-data:/var/lib/sdkwork/webserver
     environment:
+      # Liveness heartbeat for the worker's own healthcheck above.
+      SDKWORK_WEBSERVER_CERT_WORKER_HEARTBEAT_PATH: /tmp/sdkwork-certificate-worker-heartbeat
       SDKWORK_WEBSERVER_CONTAINER_HEALTH_PORT: "3800"
       SDKWORK_WEBSERVER_ENVIRONMENT: ${SDKWORK_WEBSERVER_ENVIRONMENT:?required}
       SDKWORK_WEBSERVER_PROFILE_ID: ${SDKWORK_WEBSERVER_PROFILE_ID:-standalone.${SDKWORK_WEBSERVER_ENVIRONMENT}}

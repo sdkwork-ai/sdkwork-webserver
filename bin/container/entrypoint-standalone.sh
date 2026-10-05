@@ -2250,9 +2250,36 @@ run_as_service_user() {
 
 exec_as_service_user() {
   if [ "$(id -u)" -eq 0 ]; then
+    if command -v setpriv >/dev/null 2>&1; then
+      # setpriv execs the target directly, so the gateway binary becomes the
+      # process `docker stop` signals. The previous `exec runuser` made
+      # runuser itself PID 1, and runuser does not forward SIGTERM to its
+      # child — every container stop therefore degraded to the grace-period
+      # SIGKILL and the gateway's connection/tunnel drain never ran. HOME,
+      # USER, and LOGNAME mirror what runuser would have exported so binary
+      # behavior is unchanged.
+      user_home="$(getent passwd "${SERVICE_USER}" | cut -d: -f6)"
+      export HOME="${user_home:-/home/${SERVICE_USER}}" USER="${SERVICE_USER}" LOGNAME="${SERVICE_USER}"
+      exec setpriv --reuid="$(id -u "${SERVICE_USER}")" --regid="$(id -g "${SERVICE_USER}")" --init-groups -- "$@"
+    fi
     exec runuser -u "${SERVICE_USER}" -- "$@"
   fi
   exec "$@"
+}
+
+# Terminate every listed pid with one signal, skipping the empty placeholders
+# the optional background children leave unset (never `kill 0`: that would
+# signal the whole process group, including this shell).
+terminate_together() {
+  local signal="$1"
+  shift
+  local pid
+  for pid in "$@"; do
+    case "${pid}" in
+      ""|0) continue ;;
+    esac
+    kill -"${signal}" "${pid}" 2>/dev/null || true
+  done
 }
 
 resolve_gateway_binary() {
@@ -2362,8 +2389,29 @@ main() {
         run_as_service_user "${GATEWAY_BINARY}" serve-management \
           > "${MANAGEMENT_LOG_FILE:-/var/lib/sdkwork/webserver/management.log}" 2>&1 &
         MANAGEMENT_PID=$!
-        trap 'kill "${MANAGEMENT_PID}" 2>/dev/null || true; kill "${PLATFORM_GATEWAY_PID:-}" 2>/dev/null || true; kill "${PLATFORM_KB_RPC_PID:-}" 2>/dev/null || true' EXIT
-        exec_as_service_user "${GATEWAY_BINARY}" serve-imports
+        # This shell stays the container's PID 1 and forwards the stop signal
+        # to every child. The previous `exec` replaced the shell, so the EXIT
+        # trap could never fire: the management process and the bundled
+        # platform children only ever died with the PID namespace, dropping
+        # in-flight management requests without a drain.
+        run_as_service_user "${GATEWAY_BINARY}" serve-imports &
+        IMPORTS_PID=$!
+        trap 'terminate_together TERM "${IMPORTS_PID}" "${MANAGEMENT_PID}" "${PLATFORM_GATEWAY_PID:-}" "${PLATFORM_KB_RPC_PID:-}"' TERM INT HUP
+        # `wait` returns early when a trapped signal fires while the data
+        # plane is still draining; re-join until it has really exited.
+        set +e
+        wait "${IMPORTS_PID}"
+        IMPORTS_STATUS=$?
+        while kill -0 "${IMPORTS_PID}" 2>/dev/null; do
+          wait "${IMPORTS_PID}"
+          IMPORTS_STATUS=$?
+        done
+        terminate_together TERM "${MANAGEMENT_PID}" "${PLATFORM_GATEWAY_PID:-}" "${PLATFORM_KB_RPC_PID:-}"
+        wait "${MANAGEMENT_PID}" 2>/dev/null
+        [ -n "${PLATFORM_GATEWAY_PID:-}" ] && wait "${PLATFORM_GATEWAY_PID}" 2>/dev/null
+        [ -n "${PLATFORM_KB_RPC_PID:-}" ] && wait "${PLATFORM_KB_RPC_PID}" 2>/dev/null
+        set -e
+        exit "${IMPORTS_STATUS}"
       fi
       log "starting management listener on ${SDKWORK_WEBSERVER_APPLICATION_PUBLIC_INGRESS_BIND:-127.0.0.1:3800}"
       exec_as_service_user "${GATEWAY_BINARY}" serve-management

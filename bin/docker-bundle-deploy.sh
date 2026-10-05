@@ -699,16 +699,23 @@ run_preflight() {
   fi
   if [ "${ENVIRONMENT}" = "production" ]; then
     prod_db_password="$(env_key SDKWORK_DATABASE_PASSWORD)"
-    if [ "${prod_db_password}" = "sdkworkdev123" ]; then
-      info "MISSING: production still uses the development default database password"
-      info "  fix 1 (recommended): $0 --environment production --force-set SDKWORK_DATABASE_PASSWORD '<production-password>'"
-      info "  fix 2: edit ${ENV_FILE} and change SDKWORK_DATABASE_PASSWORD"
-      PREFLIGHT_FAIL="1"
-    fi
+    # Any `sdkwork*123` value is a template default (compose ships
+    # sdkworkdev123/sdkworktest123/sdkworkstaging123/sdkworkprod123); a
+    # production stack deployed with one of those keeps a committed password
+    # while --check-config reports green. Match the family, not one member.
+    prod_db_password="$(env_key SDKWORK_DATABASE_PASSWORD)"
+    case "${prod_db_password}" in
+      sdkwork*123)
+        info "MISSING: production still uses a template default database password (${prod_db_password})"
+        info "  fix 1 (recommended): $0 --environment production --force-set SDKWORK_DATABASE_PASSWORD '<production-password>'"
+        info "  fix 2: edit ${ENV_FILE} and change SDKWORK_DATABASE_PASSWORD"
+        PREFLIGHT_FAIL="1"
+        ;;
+    esac
     case "$(env_key WEBSERVER_POSTGRES_PROD_PASSWORD)" in
       ""|"<CHANGE_ME>") : ;; # only relevant for embedded production; checked there
-      "sdkworkdev123")
-        info "MISSING: production embedded PostgreSQL still uses the development default password"
+      sdkwork*123)
+        info "MISSING: production embedded PostgreSQL still uses a template default password ($(env_key WEBSERVER_POSTGRES_PROD_PASSWORD))"
         info "  fix: $0 --environment production --force-set WEBSERVER_POSTGRES_PROD_PASSWORD '<production-password>'"
         PREFLIGHT_FAIL="1"
         ;;
