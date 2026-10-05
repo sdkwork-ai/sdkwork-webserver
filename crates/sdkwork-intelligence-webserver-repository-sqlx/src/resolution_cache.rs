@@ -79,4 +79,14 @@ impl ResolutionDatabase for SqlxResolutionCache {
         .execute(pool)
         .await;
     }
+
+    async fn remove(&self, domain: &str) {
+        let Some(pool) = self.pool.as_postgres() else {
+            return;
+        };
+        let _ = sqlx::query("DELETE FROM webserver_resolution_cache WHERE domain = $1")
+            .bind(domain)
+            .execute(pool)
+            .await;
+    }
 }

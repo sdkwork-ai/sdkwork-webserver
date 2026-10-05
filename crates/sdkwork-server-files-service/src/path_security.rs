@@ -222,6 +222,7 @@ pub fn is_sensitive_file_name(file_name: &str) -> bool {
     let name = file_name.to_ascii_lowercase();
     let sensitive_extensions = [
         "pem", "key", "p12", "pfx", "ppk", "kdbx", "keystore", "jks", "gpg",
+        "tfvars",
     ];
     let sensitive_names = [
         "id_rsa",
@@ -235,11 +236,20 @@ pub fn is_sensitive_file_name(file_name: &str) -> bool {
         ".my.cnf",
         ".npmrc",
         ".dockercfg",
+        // Prefix-matched below, so these also cover `credentials.json`,
+        // `authorized_keys2`, and `secrets.yaml`-shaped names.
+        "credentials",
+        "authorized_keys",
+        "secrets",
     ];
     if name.starts_with(".env") {
         return true;
     }
     if sensitive_names.contains(&name.as_str()) {
+        return true;
+    }
+    // Cloud platform service-account key files (`*-service-account.json`).
+    if name.ends_with("-service-account.json") {
         return true;
     }
     name.rsplit_once('.')

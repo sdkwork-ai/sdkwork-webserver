@@ -138,7 +138,13 @@ impl ResolutionChain {
                     self.ttl_seconds,
                     now_unix(),
                 );
-                self.backfill(record.clone()).await;
+                // The file is the local source of truth, so a hit only
+                // refreshes the in-process layer: pushing the same immutable
+                // record to Redis and the database on every resolution adds a
+                // network round-trip and a write to connection setup for a
+                // value that never changes. The remote layers refresh on
+                // their own misses.
+                self.memory.set(record);
                 return ResolutionOutcome::Resolved(addresses);
             }
         }
@@ -324,6 +330,9 @@ impl ResolutionChain {
         self.memory.remove(&domain);
         if let Some(redis) = &self.redis {
             redis.remove(&domain).await;
+        }
+        if let Some(database) = &self.database {
+            database.remove(&domain).await;
         }
     }
 }

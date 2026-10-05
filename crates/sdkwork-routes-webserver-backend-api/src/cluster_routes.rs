@@ -511,10 +511,24 @@ pub(crate) async fn probe_cluster_instance(
         .trim_start_matches("http://")
         .trim_end_matches('/')
         .to_owned();
+    // The path is interpolated into a raw HTTP/1.0 request line, so CR or LF
+    // would smuggle extra headers into the probe (`GET /x HTTP/1.0
+    // X-Attack: …`). Reject anything that is not a plain absolute path.
     let probe_path = if body.path.is_empty() {
         "/".to_owned()
     } else {
-        body.path
+        let path = body.path;
+        if !path.starts_with('/')
+            || path
+                .bytes()
+                .any(|byte| byte.is_ascii_control() || byte == b' ')
+        {
+            return Err(WebApiError::new(
+                sdkwork_utils_rust::SdkWorkResultCode::InvalidParameter,
+                "probe path must be an absolute URL path without control characters",
+            ));
+        }
+        path
     };
     let timeout = Duration::from_millis(body.timeout_ms.clamp(100, 10_000));
 

@@ -14,4 +14,10 @@ pub trait ResolutionDatabase: Send + Sync {
     /// Persist a record with its TTL (`expires_at_unix`). Deploy and data
     /// plane callers share this table, so writes are idempotent upserts.
     async fn save(&self, record: ResolvedRecord);
+
+    /// Drop any stored record for `domain` (cache invalidation). A no-op
+    /// default so backends without delete support can opt out; without this,
+    /// `ResolutionChain::invalidate` clears memory and Redis but the database
+    /// layer keeps serving the stale row until its own `expires_at_unix`.
+    async fn remove(&self, _domain: &str) {}
 }

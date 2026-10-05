@@ -162,6 +162,24 @@
         "replacementCode": null
       },
       {
+        "code": "web.sites.read",
+        "name": "Read served sites, applications, and source versions",
+        "resource": "sites",
+        "action": "read",
+        "status": "active",
+        "since": "1.0.0",
+        "replacementCode": null
+      },
+      {
+        "code": "web.sites.write",
+        "name": "Manage served sites, applications, and source versions",
+        "resource": "sites",
+        "action": "write",
+        "status": "active",
+        "since": "1.0.0",
+        "replacementCode": null
+      },
+      {
         "code": "web.sandbox.read",
         "name": "Read the caller's VM instances",
         "resource": "sandbox",

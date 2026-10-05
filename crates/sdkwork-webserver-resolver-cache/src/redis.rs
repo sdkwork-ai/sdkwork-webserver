@@ -135,6 +135,13 @@ impl ResolverCacheBackend for RedisResolverCache {
         let ttl = record
             .expires_at_unix
             .saturating_sub(crate::memory::now_unix());
+        // Redis rejects `EX 0`, and `bounded_query` swallows the error: a
+        // record that expires between creation and this write would silently
+        // miss the distributed layer. Skip it instead — the memory layer
+        // has already dropped it, so there is nothing worth caching.
+        if ttl == 0 {
+            return;
+        }
         let mut command = redis::cmd("SET");
         command.arg(&key).arg(&value).arg("EX").arg(ttl);
         let _: Option<()> = self.bounded_query(&mut command).await;

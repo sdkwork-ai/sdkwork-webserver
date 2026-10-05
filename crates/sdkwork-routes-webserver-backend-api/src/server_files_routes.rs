@@ -242,7 +242,7 @@ async fn run_node_operation(
             let outcome = run_foreground(&command.program, &command.args, &cwd)
                 .await
                 .map_err(operation_run_error)?;
-            Ok(ok_json(&serde_json::json!({
+            Ok(created_json(&serde_json::json!({
                 "operationId": operation.id,
                 "exitCode": outcome.exit_code,
                 "timedOut": outcome.timed_out,
@@ -258,7 +258,7 @@ async fn run_node_operation(
                 start_managed(MANAGED_PROCESS_SLOT, &command.program, &command.args, &cwd)
                     .await
                     .map_err(operation_run_error)?;
-            Ok(ok_json(&serde_json::json!({
+            Ok(created_json(&serde_json::json!({
                 "operationId": operation.id,
                 "pid": outcome.pid,
                 "pidFile": outcome.pid_file,
@@ -270,7 +270,7 @@ async fn run_node_operation(
             let outcome = stop_managed(MANAGED_PROCESS_SLOT, &resolved)
                 .await
                 .map_err(operation_run_error)?;
-            Ok(ok_json(&serde_json::json!({
+            Ok(created_json(&serde_json::json!({
                 "operationId": operation.id,
                 "stopped": outcome.stopped,
                 "pid": outcome.pid,
@@ -293,7 +293,7 @@ async fn run_node_operation(
             )
             .await
             .map_err(operation_run_error)?;
-            Ok(ok_json(&serde_json::json!({
+            Ok(created_json(&serde_json::json!({
                 "operationId": operation.id,
                 "stopped": stopped.stopped,
                 "pid": started.pid,
@@ -352,6 +352,16 @@ fn entry_names(path: &std::path::Path) -> Vec<String> {
 
 /// Wrap a serializable value in the canonical success envelope.
 pub(crate) fn ok_json<T: Serialize>(data: &T) -> Response {
+    status_json(StatusCode::OK, data)
+}
+
+/// The same envelope at `201 Created`, for the one create operation this
+/// surface exposes (`serverFiles.node.operations.create`).
+fn created_json<T: Serialize>(data: &T) -> Response {
+    status_json(StatusCode::CREATED, data)
+}
+
+fn status_json<T: Serialize>(status: StatusCode, data: &T) -> Response {
     // The OpenAPI authority declares these payloads as `data: <T>` (no
     // `{item}` resource wrapper) with a generated trace id, matching the
     // canonical SDKWork success envelope.
@@ -360,7 +370,7 @@ pub(crate) fn ok_json<T: Serialize>(data: &T) -> Response {
         sdkwork_routes_webserver_common::correlation::resolved_trace_id(),
     );
     (
-        StatusCode::OK,
+        status,
         [(header::CONTENT_TYPE, "application/json")],
         Json(body),
     )
