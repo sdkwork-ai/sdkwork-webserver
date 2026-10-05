@@ -299,9 +299,12 @@ fn classify_client(
     RequestHeaderError,
 > {
     let user_agent = header_value(headers, USER_AGENT, MAXIMUM_USER_AGENT_BYTES)?;
-    if let Some(user_agent) = user_agent {
-        let lower = user_agent.to_ascii_lowercase();
-        let parsed = Parser::new().parse(user_agent);
+    // One lowercase and one parser pass serve every classification below;
+    // the second half of this function used to recompute both per request.
+    let ua_lower = user_agent.as_ref().map(|value| value.to_ascii_lowercase());
+    let ua_parsed = user_agent.as_ref().and_then(|value| Parser::new().parse(value));
+    if let Some(lower) = &ua_lower {
+        let parsed = ua_parsed.as_ref();
         if parsed.is_some_and(|value| value.category == "crawler")
             || lower.contains("bot")
             || lower.contains("crawler")
@@ -333,7 +336,7 @@ fn classify_client(
             _ => return Err(RequestHeaderError::Invalid),
         }
     }
-    let Some(user_agent) = user_agent else {
+    let Some(lower) = ua_lower else {
         // Coarse non-mobile Client Hint without UA defaults to desktop.
         if header_value(headers, SEC_CH_UA_MOBILE, 8)? == Some("?0") {
             return Ok((
@@ -343,7 +346,6 @@ fn classify_client(
         }
         return Ok((None, None));
     };
-    let lower = user_agent.to_ascii_lowercase();
     // Tablet before the shared mobile UA regex so iPad stays on the PC surface
     // (SDKWORK_DEPLOY_SPEC.md §8 / NGINX_SPEC.md §7.1).
     if lower.contains("ipad") || lower.contains("tablet") {
@@ -353,13 +355,13 @@ fn classify_client(
         ));
     }
     // Shared Adaptive Web mobile UA regex (SDKWORK_DEPLOY_SPEC.md §8).
-    if matches_adaptive_mobile_user_agent(user_agent) {
+    if user_agent.as_deref().is_some_and(matches_adaptive_mobile_user_agent) {
         return Ok((
             Some(WebsiteClientClass::Mobile),
             Some(WebsiteClientClassificationSource::UserAgent),
         ));
     }
-    let class = match Parser::new().parse(user_agent).map(|value| value.category) {
+    let class = match ua_parsed.map(|value| value.category) {
         Some("pc") => WebsiteClientClass::Desktop,
         Some("smartphone" | "mobilephone" | "appliance") => WebsiteClientClass::Mobile,
         _ => WebsiteClientClass::Other,

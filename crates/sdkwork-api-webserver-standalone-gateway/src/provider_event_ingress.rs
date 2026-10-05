@@ -5,6 +5,7 @@ use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
     sync::Arc,
+    time::Duration,
 };
 
 use axum::{
@@ -41,6 +42,13 @@ const DEFAULT_MAXIMUM_CONCURRENT_DELIVERIES: usize = 32;
 const MINIMUM_CLOCK_SKEW_SECONDS: u64 = 30;
 const MAXIMUM_CLOCK_SKEW_SECONDS: u64 = 3600;
 const MAXIMUM_CONCURRENT_DELIVERIES: usize = 256;
+/// Whole-event processing deadline. `process_event` awaits the shard
+/// semaphore and the reconciler's provider-backed validation, and one wedged
+/// provider call must not hold one of the bounded ingress slots forever —
+/// every later delivery for that stream queues behind it until the slot cap
+/// turns the endpoint into a constant 429. Expiry answers 503 so the provider
+/// redelivers; the processor's checkpoint design is cancellation-safe.
+const MAXIMUM_EVENT_PROCESSING: Duration = Duration::from_secs(60);
 const EVENT_ID_HEADER: &str = "x-sdkwork-event-id";
 const DRIVE_EVENT_TIMESTAMP_HEADER: &str = "x-sdkwork-event-timestamp";
 const KNOWLEDGEBASE_EVENT_TIME_HEADER: &str = "x-sdkwork-event-time";
@@ -430,16 +438,25 @@ async fn receive_event(
     if !delivery_matches_event(subscription, &headers, &event) {
         return StatusCode::BAD_REQUEST;
     }
-    match state.processor.process_event(event).await {
-        Ok(_) => StatusCode::NO_CONTENT,
-        Err(WebsiteProviderEventProcessError::Parse(_)) => StatusCode::BAD_REQUEST,
-        Err(
+    match tokio::time::timeout(MAXIMUM_EVENT_PROCESSING, state.processor.process_event(event)).await
+    {
+        Ok(Ok(_)) => StatusCode::NO_CONTENT,
+        Ok(Err(WebsiteProviderEventProcessError::Parse(_))) => StatusCode::BAD_REQUEST,
+        Ok(Err(
             WebsiteProviderEventProcessError::Checkpoint(_)
             | WebsiteProviderEventProcessError::ContractConflict
             | WebsiteProviderEventProcessError::Uncertainty(_)
             | WebsiteProviderEventProcessError::Reconciliation(_)
             | WebsiteProviderEventProcessError::Invalidation(_),
-        ) => StatusCode::SERVICE_UNAVAILABLE,
+        )) => StatusCode::SERVICE_UNAVAILABLE,
+        Err(_) => {
+            tracing::warn!(
+                subscription_id = %subscription_id,
+                deadline_secs = MAXIMUM_EVENT_PROCESSING.as_secs(),
+                "provider event processing exceeded its deadline; answering 503 for redelivery"
+            );
+            StatusCode::SERVICE_UNAVAILABLE
+        }
     }
 }
 

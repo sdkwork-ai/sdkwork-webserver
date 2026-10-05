@@ -177,11 +177,28 @@ async fn serve_spa_index_with_credential_entry_bootstrap(
         .unwrap_or(&file.path_hint);
     let path = root.join(anchored);
     // The read runs on the blocking pool: an index.html is operator-deployed
-    // and small, but a slow disk must never stall the runtime worker.
-    let html = tokio::task::spawn_blocking(move || std::fs::read(path))
-        .await
-        .ok()?
-        .ok()?;
+    // and small, but a slow disk must never stall the runtime worker. The cap
+    // mirrors the shell's `read_bounded_index`: an oversized mis-deploy would
+    // otherwise be materialized in full — twice, once more for the token
+    // injection copy — on every fallback request.
+    let html = tokio::task::spawn_blocking(move || {
+        use std::io::Read;
+        let mut handle = std::fs::File::open(path)?;
+        let mut buffer = Vec::new();
+        handle
+            .by_ref()
+            .take(crate::app_shell::MAX_BOOTSTRAP_FILE_BYTES + 1)
+            .read_to_end(&mut buffer)?;
+        if buffer.len() as u64 > crate::app_shell::MAX_BOOTSTRAP_FILE_BYTES {
+            return Err(std::io::Error::other(
+                "SPA fallback index exceeds the bootstrap file cap",
+            ));
+        }
+        Ok(buffer)
+    })
+    .await
+    .ok()?
+    .ok()?;
     let html = inject_bootstrap_token(&html, token);
     let builder = Response::builder()
         .status(StatusCode::OK)

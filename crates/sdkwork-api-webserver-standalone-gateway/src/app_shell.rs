@@ -35,7 +35,10 @@ const CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN_ENV: &str =
 const INDEX_FILE: &str = "index.html";
 const RUNTIME_ENV_FILE: &str = "runtime-env.json";
 const RUNTIME_ENV_PATH: &str = "/runtime-env.json";
-const MAX_BOOTSTRAP_FILE_BYTES: u64 = 4 * 1024 * 1024;
+/// Upper bound for any `index.html` the process reads for token injection:
+/// the shell preflight, and the SPA data-plane fallback read in
+/// `data_plane::static_files`, which used to materialize an uncapped file.
+pub(crate) const MAX_BOOTSTRAP_FILE_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_STATIC_FILES: usize = 2048;
 const X_CONTENT_TYPE_OPTIONS: HeaderName = HeaderName::from_static("x-content-type-options");
 const VARY: HeaderName = HeaderName::from_static("vary");

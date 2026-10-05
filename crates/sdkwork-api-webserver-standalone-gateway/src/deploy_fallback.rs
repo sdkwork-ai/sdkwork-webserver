@@ -172,6 +172,7 @@ pub fn classify_host(hostname: &str, suffixes: &[String]) -> HostClass {
     }
 }
 
+#[derive(Clone)]
 struct CacheEntry {
     descriptor: Option<Value>,
     descriptor_sha256: Option<String>,
@@ -206,11 +207,11 @@ const MAXIMUM_NGINX_APPLICATION_LEDGER_ENTRIES: usize = 4096;
 /// 抽成自由函数以便对"清扫 + 驱逐"行为直接做单元测试（与
 /// `data_plane::wechat_verify` 的缓存同款约束）。
 fn remember_resolution(
-    mut cache: HashMap<String, CacheEntry>,
+    mut cache: HashMap<String, Arc<CacheEntry>>,
     hostname: String,
-    entry: CacheEntry,
+    entry: Arc<CacheEntry>,
     now: Instant,
-) -> HashMap<String, CacheEntry> {
+) -> HashMap<String, Arc<CacheEntry>> {
     cache.retain(|_, cached| cached.expires_at > now);
     if cache.len() >= MAXIMUM_FALLBACK_CACHE_ENTRIES && !cache.contains_key(&hostname) {
         let mut by_expiry: Vec<(String, Instant)> = cache
@@ -227,17 +228,6 @@ fn remember_resolution(
     cache
 }
 
-impl Clone for CacheEntry {
-    fn clone(&self) -> Self {
-        Self {
-            descriptor: self.descriptor.clone(),
-            descriptor_sha256: self.descriptor_sha256.clone(),
-            attribution: self.attribution.clone(),
-            nginx_conf: self.nginx_conf.clone(),
-            expires_at: self.expires_at,
-        }
-    }
-}
 
 /// Resolves unmatched hosts through the Deploy control plane and serves the
 /// resolved site with a dedicated website delivery executor. Built by the
@@ -247,7 +237,7 @@ pub struct DeployFallbackResolver {
     config: Arc<AppDomainFallbackConfig>,
     lookup: Arc<dyn DeployServerLookup>,
     environment: WebsiteRuntimeEnvironment,
-    cache: ArcSwap<HashMap<String, CacheEntry>>,
+    cache: ArcSwap<HashMap<String, Arc<CacheEntry>>>,
     /// Compiled sites keyed by descriptor SHA-256 (LRU, bounded). This is
     /// both the recompilation fast path and the per-request correctness
     /// anchor: requests execute against the pinned compiled set, so a
@@ -508,11 +498,14 @@ impl DeployFallbackResolver {
                     class = %class_label(&class),
                     "app-domain fallback cache expired; re-resolving"
                 );
+                // The entry is shared through an Arc, so the re-resolve takes
+                // clones rather than moving out; this path runs once per TTL
+                // per hostname, not per request.
                 (
-                    expired.descriptor,
-                    expired.descriptor_sha256,
-                    expired.attribution,
-                    expired.nginx_conf,
+                    expired.descriptor.clone(),
+                    expired.descriptor_sha256.clone(),
+                    expired.attribution.clone(),
+                    expired.nginx_conf.clone(),
                 )
             }
             None => (None, None, None, None),
@@ -572,7 +565,7 @@ impl DeployFallbackResolver {
                     self.cache.store(Arc::new(remember_resolution(
                         (**self.cache.load()).clone(),
                         hostname.clone(),
-                        CacheEntry {
+                        Arc::new(CacheEntry {
                             descriptor: descriptor.clone(),
                             descriptor_sha256: descriptor_sha256.clone(),
                             attribution: attribution.clone(),
@@ -582,7 +575,7 @@ impl DeployFallbackResolver {
                             } else {
                                 now + Duration::from_millis(self.config.negative_cache_ttl_ms)
                             },
-                        },
+                        }),
                         now,
                     )));
                     (descriptor, descriptor_sha256, attribution, nginx_conf)
@@ -625,7 +618,11 @@ impl DeployFallbackResolver {
                 Some(compiled) => compiled,
                 None => {
                     let compiled = match self
-                        .compile_site(descriptor, Some(descriptor_sha256.as_str()))
+                        .compile_site_async(
+                            descriptor.clone(),
+                            Some(descriptor_sha256.clone()),
+                        )
+                        .await
                     {
                         Ok(compiled) => compiled,
                         Err(error) => {
@@ -678,46 +675,34 @@ impl DeployFallbackResolver {
         descriptor_json: Value,
         expected_sha256: Option<&str>,
     ) -> Result<Arc<CompiledWebsiteRuntimeSet>, WebsiteDeliveryError> {
-        let mut descriptor_json = descriptor_json;
-        let parsed: WebsiteRuntimeDescriptor = serde_json::from_value(descriptor_json.clone())
-            .map_err(|_| contract_error("app-domain fallback descriptor is invalid"))?;
-        let calculated = website_runtime_descriptor_sha256(&parsed)
-            .map_err(|_| contract_error("app-domain fallback descriptor hash failed"))?;
-        if let Some(expected) = expected_sha256 {
-            if expected != calculated {
-                return Err(contract_error(
-                    "app-domain fallback descriptor hash mismatch",
-                ));
-            }
-        }
-        descriptor_json["descriptorSha256"] = Value::String(calculated);
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
-        let generated_at = time::OffsetDateTime::now_utc()
-            .format(&time::format_description::well_known::Rfc3339)
-            .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
-        let mut snapshot = json!({
-            "schemaVersion": WEBSITE_RUNTIME_SET_SCHEMA_VERSION,
-            "kind": WEBSITE_RUNTIME_SET_KIND,
-            "snapshotUuid": format!("app-domain-fallback-{generation}"),
-            "nodeUuid": self.runtime_registry_node_uuid(),
-            "environment": self.environment.as_str(),
-            "generation": generation,
-            "generatedAt": generated_at,
-            "compilerVersion": "sdkwork-webserver-app-domain-fallback/1",
-            "snapshotSha256": "0".repeat(64),
-            "maximumSites": 1,
-            "descriptors": [descriptor_json]
-        });
-        let parsed: WebsiteRuntimeSetSnapshot = serde_json::from_value(snapshot.clone())
-            .map_err(|_| contract_error("app-domain fallback runtime set is invalid"))?;
-        let snapshot_sha256 = website_runtime_set_snapshot_sha256(&parsed)
-            .map_err(|_| contract_error("app-domain fallback runtime set hash failed"))?;
-        snapshot["snapshotSha256"] = Value::String(snapshot_sha256);
-        let bytes = serde_json::to_vec(&snapshot)
-            .map_err(|_| contract_error("app-domain fallback runtime set serialization failed"))?;
-        let compiled = compile_website_runtime_set_snapshot(&bytes)
-            .map_err(|_| contract_error("app-domain fallback runtime set compile failed"))?;
-        Ok(Arc::new(compiled))
+        compile_site_snapshot(
+            generation,
+            self.runtime_registry_node_uuid(),
+            self.environment,
+            descriptor_json,
+            expected_sha256.map(str::to_owned),
+        )
+    }
+
+    /// [`DeployFallbackResolver::compile_site`] off the async worker: the
+    /// descriptor parse, canonical hashing, and route-index build are pure CPU
+    /// work. The website path already compiles the same shape on the blocking
+    /// pool; running this inline under the activation mutex parks an async
+    /// worker for the whole compile and convoys every cold host behind it.
+    async fn compile_site_async(
+        &self,
+        descriptor_json: Value,
+        expected_sha256: Option<String>,
+    ) -> Result<Arc<CompiledWebsiteRuntimeSet>, WebsiteDeliveryError> {
+        let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let node_uuid = self.runtime_registry_node_uuid();
+        let environment = self.environment;
+        tokio::task::spawn_blocking(move || {
+            compile_site_snapshot(generation, node_uuid, environment, descriptor_json, expected_sha256)
+        })
+        .await
+        .map_err(|_| contract_error("app-domain fallback compile task failed"))?
     }
 
     fn runtime_registry_node_uuid(&self) -> String {
@@ -744,6 +729,57 @@ impl DeployFallbackResolver {
         })?;
         Ok(())
     }
+}
+
+/// Pure descriptor→runtime-set compile. Extracted from the resolver method so
+/// both the synchronous wrapper and the `spawn_blocking` offload run exactly
+/// the same body; the generation counter and node uuid are fetched by the
+/// caller because they live on shared state the blocking thread cannot own.
+fn compile_site_snapshot(
+    generation: u64,
+    node_uuid: String,
+    environment: WebsiteRuntimeEnvironment,
+    mut descriptor_json: Value,
+    expected_sha256: Option<String>,
+) -> Result<Arc<CompiledWebsiteRuntimeSet>, WebsiteDeliveryError> {
+    let parsed: WebsiteRuntimeDescriptor = serde_json::from_value(descriptor_json.clone())
+        .map_err(|_| contract_error("app-domain fallback descriptor is invalid"))?;
+    let calculated = website_runtime_descriptor_sha256(&parsed)
+        .map_err(|_| contract_error("app-domain fallback descriptor hash failed"))?;
+    if let Some(expected) = expected_sha256 {
+        if expected != calculated {
+            return Err(contract_error(
+                "app-domain fallback descriptor hash mismatch",
+            ));
+        }
+    }
+    descriptor_json["descriptorSha256"] = Value::String(calculated);
+    let generated_at = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
+    let mut snapshot = json!({
+        "schemaVersion": WEBSITE_RUNTIME_SET_SCHEMA_VERSION,
+        "kind": WEBSITE_RUNTIME_SET_KIND,
+        "snapshotUuid": format!("app-domain-fallback-{generation}"),
+        "nodeUuid": node_uuid,
+        "environment": environment.as_str(),
+        "generation": generation,
+        "generatedAt": generated_at,
+        "compilerVersion": "sdkwork-webserver-app-domain-fallback/1",
+        "snapshotSha256": "0".repeat(64),
+        "maximumSites": 1,
+        "descriptors": [descriptor_json]
+    });
+    let parsed: WebsiteRuntimeSetSnapshot = serde_json::from_value(snapshot.clone())
+        .map_err(|_| contract_error("app-domain fallback runtime set is invalid"))?;
+    let snapshot_sha256 = website_runtime_set_snapshot_sha256(&parsed)
+        .map_err(|_| contract_error("app-domain fallback runtime set hash failed"))?;
+    snapshot["snapshotSha256"] = Value::String(snapshot_sha256);
+    let bytes = serde_json::to_vec(&snapshot)
+        .map_err(|_| contract_error("app-domain fallback runtime set serialization failed"))?;
+    let compiled = compile_website_runtime_set_snapshot(&bytes)
+        .map_err(|_| contract_error("app-domain fallback runtime set compile failed"))?;
+    Ok(Arc::new(compiled))
 }
 
 fn contract_error(detail: &'static str) -> WebsiteDeliveryError {
@@ -837,7 +873,7 @@ mod tests {
             cache = remember_resolution(
                 cache,
                 format!("host-{index}.example.com"),
-                entry(now + Duration::from_secs(60)),
+                Arc::new(entry(now + Duration::from_secs(60))),
                 now,
             );
         }
@@ -852,15 +888,15 @@ mod tests {
     fn expired_entries_are_swept_and_still_live_ones_kept() {
         let now = Instant::now();
         let mut cache = HashMap::new();
-        cache.insert("expired.example.com".to_owned(), entry(now));
+        cache.insert("expired.example.com".to_owned(), Arc::new(entry(now)));
         cache.insert(
             "live.example.com".to_owned(),
-            entry(now + Duration::from_secs(60)),
+            Arc::new(entry(now + Duration::from_secs(60))),
         );
         let cache = remember_resolution(
             cache,
             "fresh.example.com".to_owned(),
-            entry(now + Duration::from_secs(60)),
+            Arc::new(entry(now + Duration::from_secs(60))),
             now + Duration::from_secs(1),
         );
         assert!(!cache.contains_key("expired.example.com"));

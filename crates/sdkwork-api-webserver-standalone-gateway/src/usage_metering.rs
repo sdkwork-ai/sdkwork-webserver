@@ -588,10 +588,39 @@ impl UsageIngestChannel for HttpUsageIngestChannel {
             .await
             .map_err(|error| format!("usage ingest request failed: {error}"))?;
         let status = response.status();
-        let body = response
-            .text()
-            .await
-            .unwrap_or_else(|_| "<unreadable>".to_owned());
+        // The body only ever feeds a truncated error message, so read it
+        // bounded: a misbehaving ingest endpoint streaming an endless body
+        // must not grow the flush task without limit. 4 KiB is far past the
+        // 300-char diagnostic tail.
+        const MAXIMUM_INGEST_ERROR_BODY_BYTES: usize = 4 * 1024;
+        let body = match response
+            .content_length()
+            .filter(|length| *length as usize <= MAXIMUM_INGEST_ERROR_BODY_BYTES)
+        {
+            Some(_) => response.text().await.unwrap_or_default(),
+            None => {
+                let mut bounded = Vec::new();
+                let mut response = response;
+                loop {
+                    match response.chunk().await {
+                        Ok(Some(chunk)) => {
+                            bounded.extend_from_slice(&chunk);
+                            if bounded.len() > MAXIMUM_INGEST_ERROR_BODY_BYTES {
+                                break;
+                            }
+                        }
+                        Ok(None) => break,
+                        // A hard read failure maps to the same "unreadable"
+                        // wording the unbounded path used.
+                        Err(_) => {
+                            bounded.clear();
+                            break;
+                        }
+                    }
+                }
+                String::from_utf8_lossy(&bounded).into_owned()
+            }
+        };
         if !status.is_success() {
             return Err(format!(
                 "usage ingest endpoint returned {status}: {}",

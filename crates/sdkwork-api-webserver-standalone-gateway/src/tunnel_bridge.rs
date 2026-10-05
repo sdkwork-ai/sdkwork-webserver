@@ -261,6 +261,21 @@ fn strip_hop_by_hop_headers(headers: &mut axum::http::HeaderMap, keep_upgrade: b
     const KEEP_ALIVE: &str = "keep-alive";
     const PROXY_AUTHENTICATE: &str = "proxy-authenticate";
     const PROXY_AUTHORIZATION: &str = "proxy-authorization";
+    // RFC 9110 §7.6.1: the Connection header's token list names additional
+    // hop-by-hop members that must not be relayed. The main proxy path honors
+    // it (`hop_by_hop_headers` in data_plane/proxy.rs); the relay used to
+    // strip only the fixed set, so `Connection: X-Custom` let X-Custom cross
+    // to the agent/upstream.
+    let mut declared: Vec<axum::http::HeaderName> = Vec::new();
+    for value in headers.get_all(axum::http::header::CONNECTION) {
+        if let Ok(value) = value.to_str() {
+            for token in value.split(',').map(str::trim) {
+                if let Ok(name) = axum::http::HeaderName::from_bytes(token.as_bytes()) {
+                    declared.push(name);
+                }
+            }
+        }
+    }
     for name in [
         axum::http::header::CONNECTION,
         axum::http::header::PROXY_AUTHORIZATION,
@@ -280,6 +295,12 @@ fn strip_hop_by_hop_headers(headers: &mut axum::http::HeaderMap, keep_upgrade: b
         if let Ok(parsed) = axum::http::HeaderName::from_lowercase(name.as_bytes()) {
             headers.remove(parsed);
         }
+    }
+    for name in declared {
+        if keep_upgrade && name == axum::http::header::UPGRADE {
+            continue;
+        }
+        headers.remove(name);
     }
 }
 
