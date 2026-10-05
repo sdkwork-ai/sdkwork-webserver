@@ -447,7 +447,7 @@ const LazyIamAuditAdmin = lazy(async () => {
       return <SdkworkIamAuditAdminWorkspace controller={controller} />;
     } satisfies ComponentType<IamAdminContentProps>,
   };
-})
+});
 
 /**
  * Page registry behind the flat resource routes. Keyed by `IamAdminResource`

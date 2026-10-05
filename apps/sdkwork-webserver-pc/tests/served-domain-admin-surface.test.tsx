@@ -434,6 +434,42 @@ describe("served domain admin surface", () => {
   });
 
   /**
+   * A mutation re-reads the ledger by bumping a reload counter, not by
+   * clearing the rows: `setPage(1)` alone is an `Object.is` bail-out when the
+   * table already sits on page one, and a cleared list whose effect never
+   * re-ran is the permanent "Loading" state an operator cannot leave. Both
+   * tests below failed against exactly that bug.
+   */
+  it("refetches the ledger after a successful pause", async () => {
+    const { client, listRootDomains, updateRootDomain } = stubClient();
+    renderInProvider(<ServedDomainPage />, client, "/admin/domains");
+
+    await screen.findByText("sdkwork.com");
+    expect(listRootDomains).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Pause sdkwork.com" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+
+    await waitFor(() => expect(updateRootDomain).toHaveBeenCalled());
+    await waitFor(() => expect(listRootDomains).toHaveBeenCalledTimes(2));
+    // The rows come back rendered rather than a spinner stuck over a
+    // cleared list.
+    expect(screen.getByText("sdkwork.com")).toBeTruthy();
+  });
+
+  it("refetches the ledger after a successful delete", async () => {
+    const { client, deleteRootDomain, listRootDomains } = stubClient();
+    renderInProvider(<ServedDomainPage />, client, "/admin/domains");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete zowalk.com" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => expect(deleteRootDomain).toHaveBeenCalled());
+    await waitFor(() => expect(listRootDomains).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("sdkwork.com")).toBeTruthy();
+  });
+
+  /**
    * Every dialog on this plane shares one overlay contract (focus on open,
    * Escape to dismiss, scroll lock, focus restore). Escape is pinned here so
    * the shared backdrop keeps honouring the keyboard: a confirmation that

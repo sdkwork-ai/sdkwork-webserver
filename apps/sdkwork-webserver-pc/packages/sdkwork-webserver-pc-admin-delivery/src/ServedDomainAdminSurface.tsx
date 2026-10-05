@@ -152,10 +152,17 @@ function RootDomainLedger({
   locale: WebserverLocale;
 }) {
   const client = useWebserverAdminSdk();
-  const t = translator(locale);
+  // Memoized per locale: a fresh translator closure every render sat in the
+  // list effect's dependency array below and refetched the ledger forever.
+  const t = useMemo(() => translator(locale), [locale]);
   const [roots, setRoots] = useState<RootDomainResponse[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
+  // Mutations request a re-read by bumping this counter rather than by
+  // clearing the rows: `setPage(1)` alone is an `Object.is` bail-out when the
+  // ledger already sits on page one, and a cleared list with no effect run is
+  // the permanent "Loading" state.
+  const [build, setBuild] = useState(0);
   const [status, setStatus] = useState<StatusFilter>(ALL_STATUSES);
   const [cloudAccount, setCloudAccount] = useState<CloudAccountFilter>(ALL_CLOUD_ACCOUNTS);
   const [searchDraft, setSearchDraft] = useState("");
@@ -238,7 +245,7 @@ function RootDomainLedger({
     return () => {
       active = false;
     };
-  }, [client, cloudAccount, keyword, page, status]);
+  }, [build, client, cloudAccount, keyword, page, status, t]);
 
   const removeRoot = (root: RootDomainResponse) => {
     setBusy(true);
@@ -249,7 +256,7 @@ function RootDomainLedger({
         // Re-read rather than splice in place: the delete only succeeds on an
         // empty root, and a refused delete has to leave the row and its
         // counters exactly as the server still reports them.
-        setRoots(null);
+        setBuild((value) => value + 1);
         setPage(1);
       })
       .catch((cause) => {
@@ -283,7 +290,7 @@ function RootDomainLedger({
       .update(root.id, body, { idempotencyKey: newIdempotencyKey() })
       .then(() => {
         done();
-        setRoots(null);
+        setBuild((value) => value + 1);
       })
       .catch((cause) => {
         done();
@@ -365,7 +372,7 @@ function RootDomainLedger({
             className="icon-button"
             disabled={busy}
             onClick={() => {
-              setRoots(null);
+              setBuild((value) => value + 1);
               setPage(1);
             }}
             aria-label={t("resource.domains.refresh")}
@@ -559,7 +566,7 @@ function RootDomainLedger({
               { idempotencyKey: newIdempotencyKey() },
             );
             setCreateOpen(false);
-            setRoots(null);
+            setBuild((value) => value + 1);
             setPage(1);
           }}
           t={t}
@@ -834,12 +841,19 @@ function accountLabel(accounts: readonly CloudAccountOption[], accountId: string
 
 function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
   const client = useWebserverAdminSdk();
-  const t = translator(locale);
+  // Memoized per locale: a fresh translator closure every render sat in the
+  // list effect's dependency array below and refetched the ledger forever.
+  const t = useMemo(() => translator(locale), [locale]);
   const { rootDomainId = "" } = useParams();
   const [root, setRoot] = useState<RootDomainResponse>();
   const [hostnames, setHostnames] = useState<ApplicationDomainResponse[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
+  // Mutations request a re-read by bumping this counter rather than by
+  // clearing the rows: `setPage(1)` alone is an `Object.is` bail-out when the
+  // ledger already sits on page one, and a cleared list with no effect run is
+  // the permanent "Loading" state.
+  const [build, setBuild] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ApplicationDomainResponse>();
   // Ownership verification for one declared hostname. The challenge and the
@@ -860,29 +874,35 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
     let active = true;
     setBusy(true);
     setError(undefined);
-    // Both reads in one pass: the heading is the root's own hostname, and a
-    // hostname ledger titled "-" because its zone read had not landed yet is the
-    // one state an operator would read as a failure.
-    void Promise.all([
+    // Both reads in one pass, but each settles on its own: the heading is the
+    // root's own hostname, and a hostname ledger titled "-" because its zone
+    // read had not landed yet is the one state an operator would read as a
+    // failure. Coupling the two verdicts into one would let a failed zone
+    // read blank a table the server answered — and, on a racy delete of the
+    // root, hide rows that still exist.
+    void Promise.allSettled([
       client.domain.rootDomains.retrieve(rootDomainId),
       client.domain.rootDomains.subdomains.list(rootDomainId, { page, pageSize: PAGE_SIZE }),
-    ])
-      .then(([rootResult, hostnameResult]) => {
-        if (!active) return;
-        setRoot(rootResult);
-        setHostnames(hostnameResult.items);
-        setHasMore(hostnameResult.pageInfo.hasMore === true);
-      })
-      .catch((cause) => {
-        if (active) setError(errorText(cause, t));
-      })
-      .finally(() => {
-        if (active) setBusy(false);
-      });
+    ]).then(([rootOutcome, hostnameOutcome]) => {
+      if (!active) return;
+      if (rootOutcome.status === "fulfilled") {
+        setRoot(rootOutcome.value);
+      }
+      if (hostnameOutcome.status === "fulfilled") {
+        setHostnames(hostnameOutcome.value.items);
+        // `PageInfo.hasMore` is optional on the wire; an absent flag means
+        // "no continuation", never "unknown".
+        setHasMore(hostnameOutcome.value.pageInfo.hasMore === true);
+        setError(undefined);
+      } else {
+        setError(errorText(hostnameOutcome.reason, t));
+      }
+      setBusy(false);
+    });
     return () => {
       active = false;
     };
-  }, [client, page, rootDomainId]);
+  }, [build, client, page, rootDomainId, t]);
 
   const removeHostname = (hostname: ApplicationDomainResponse) => {
     setBusy(true);
@@ -890,7 +910,7 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
       .delete(hostname.id, { idempotencyKey: newIdempotencyKey() })
       .then(() => {
         setDeleteTarget(undefined);
-        setHostnames(null);
+        setBuild((value) => value + 1);
         setPage(1);
       })
       .catch((cause) => {
@@ -923,7 +943,7 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
       .then((result) => {
         setChallenge(result);
         if (result.verified) {
-          setHostnames(null);
+          setBuild((value) => value + 1);
           setPage(1);
         }
       })
@@ -952,7 +972,7 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
             className="icon-button"
             disabled={busy}
             onClick={() => {
-              setHostnames(null);
+              setBuild((value) => value + 1);
               setPage(1);
             }}
             aria-label={t("resource.domains.refresh")}
@@ -1096,7 +1116,7 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
             setCreateOpen(false);
             setWildcardRecord(false);
             setRecordNameDraft("");
-            setHostnames(null);
+            setBuild((value) => value + 1);
             setPage(1);
           }}
           submitLabel={t("resource.domains.create")}

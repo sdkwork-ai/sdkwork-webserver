@@ -1,6 +1,6 @@
 import { cloudAccountOptions, type CloudAccountOption } from "@sdkwork/webserver-pc-admin-delivery";
 import { useWebserverConsoleSdk } from "@sdkwork/webserver-pc-console-core";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 /**
  * The cloud accounts the Domains page may offer, read from the IAM account center.
@@ -43,10 +43,27 @@ interface ProviderAccountListPort {
  * cannot grow without bound.
  */
 export function useCloudAccountOptions(): CloudAccountOption[] {
-  const { iam } = useWebserverConsoleSdk();
+  const clients = useWebserverConsoleSdk();
+  // Resolving the IAM face can throw — the composition validates the generated
+  // IAM clients against IAM's own registry and fails whenever that registry
+  // declares an operation the generated SDK does not carry yet. This hook
+  // renders at workspace level, above the route-level error boundaries, so an
+  // unguarded throw here would blank the console *and* the admin surface over
+  // one optional capability. A missing face therefore degrades to "no account
+  // suggestions" — the same contract the failed read below already has — and
+  // the IAM-owned pages, which sit inside the boundaries, keep surfacing the
+  // real error where it belongs.
+  const iam = useMemo(() => {
+    try {
+      return clients.iam;
+    } catch {
+      return undefined;
+    }
+  }, [clients]);
   const [accounts, setAccounts] = useState<CloudAccountOption[]>([]);
 
   useEffect(() => {
+    if (!iam) return undefined;
     let active = true;
     const port = (iam.backend.iam as unknown as { providerAccounts: ProviderAccountListPort })
       .providerAccounts;
