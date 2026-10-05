@@ -106,7 +106,7 @@
       "apiAuthority": "sdkwork-skills-app-api",
       "sdkFamily": "sdkwork-skills-app-sdk",
       "prefix": "/app/v3/api",
-      "executableAssemblyExport": "sdkwork_api_skills_assembly::assemble_app_api_contribution",
+      "executableAssemblyExport": "sdkwork_api_skills_assembly::web_module_with_pool",
       "profileCoverage": [
         "standalone.development",
         "standalone.test",
@@ -125,7 +125,7 @@
       "apiAuthority": "sdkwork-skills-backend-api",
       "sdkFamily": "sdkwork-skills-backend-sdk",
       "prefix": "/backend/v3/api",
-      "executableAssemblyExport": "sdkwork_api_skills_assembly::assemble_backend_api_contribution",
+      "executableAssemblyExport": "sdkwork_api_skills_assembly::web_module_with_pool",
       "profileCoverage": [
         "standalone.development",
         "standalone.test",
@@ -144,7 +144,7 @@
       "apiAuthority": "sdkwork-mcp-app-api",
       "sdkFamily": "sdkwork-mcp-app-sdk",
       "prefix": "/app/v3/api",
-      "executableAssemblyExport": "sdkwork_api_mcp_assembly::assemble_app_api_contribution",
+      "executableAssemblyExport": "sdkwork_api_mcp_assembly::web_module_with_pool",
       "profileCoverage": [
         "standalone.development",
         "standalone.test",
@@ -163,7 +163,45 @@
       "apiAuthority": "sdkwork-mcp-backend-api",
       "sdkFamily": "sdkwork-mcp-backend-sdk",
       "prefix": "/backend/v3/api",
-      "executableAssemblyExport": "sdkwork_api_mcp_assembly::assemble_backend_api_contribution",
+      "executableAssemblyExport": "sdkwork_api_mcp_assembly::web_module_with_pool",
+      "profileCoverage": [
+        "standalone.development",
+        "standalone.test",
+        "standalone.staging",
+        "standalone.production"
+      ]
+    },
+    "dependency.sandbox-app-api": {
+      "connectivityPlane": "dependency",
+      "protocols": [
+        "http"
+      ],
+      "runtimeMode": "same-origin",
+      "sameOriginAllowed": true,
+      "optional": true,
+      "apiAuthority": "sdkwork-sandbox-app-api",
+      "sdkFamily": "sdkwork-sandbox-app-sdk",
+      "prefix": "/app/v3/api/sandbox",
+      "executableAssemblyExport": "sdkwork_api_sandbox_assembly::web_module_with_pool",
+      "profileCoverage": [
+        "standalone.development",
+        "standalone.test",
+        "standalone.staging",
+        "standalone.production"
+      ]
+    },
+    "dependency.sandbox-internal-api": {
+      "connectivityPlane": "dependency",
+      "protocols": [
+        "http"
+      ],
+      "runtimeMode": "same-origin",
+      "sameOriginAllowed": true,
+      "optional": true,
+      "apiAuthority": "sdkwork-sandbox-internal-api",
+      "sdkFamily": "sdkwork-sandbox-internal-sdk",
+      "prefix": "/internal/v3/api/intelligence/sandbox",
+      "executableAssemblyExport": "sdkwork_api_sandbox_assembly::web_module_with_pool",
       "profileCoverage": [
         "standalone.development",
         "standalone.test",
@@ -683,21 +721,6 @@
   },
   "packaging": {
     "cloudConfigFiles": [],
-    "targets": [
-      {
-        "id": "container-noarch-cloud-container-config-bundle-tar-gz",
-        "profile": "container",
-        "platform": "container",
-        "architecture": "noarch",
-        "formats": [
-          "tar.gz"
-        ],
-        "runner": "ubuntu-24.04",
-        "outputGlob": "dist/cloud-config/sdkwork-web-api-gateway-config-*.tar.gz",
-        "deploymentProfile": "cloud",
-        "runtimeTarget": "container",
-        "variant": "config-bundle"
-      }
-    ]
+    "targets": []
   }
 }

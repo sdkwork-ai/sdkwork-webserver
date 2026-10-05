@@ -2,7 +2,7 @@
 
 Status: active
 Owner: SDKWork maintainers
-Updated: 2026-07-31
+Updated: 2026-10-06
 Specs: ARCHITECTURE_DECISION_SPEC.md, DOCUMENTATION_SPEC.md, RUST_CODE_SPEC.md, WEB_FRAMEWORK_SPEC.md, WEB_BACKEND_SPEC.md, DATABASE_FRAMEWORK_SPEC.md, CONFIG_SPEC.md, SECURITY_SPEC.md, DEPLOYMENT_SPEC.md, NGINX_SPEC.md
 
 ## Document Map
@@ -285,7 +285,7 @@ certificate-expiry sampler aggregate has its covering partial index
 collection bound (PAGINATION_SPEC §11); the request-context port structs pin
 their id fields to the shared int64-string serialization helpers; the dead
 `envVariables`/`healthChecks` page-envelope helpers are removed; and the
-upload declaration constants are pinned to `specs/upload.declaration.json`
+upload declaration constants are pinned to `apps/sdkwork-webserver-pc/specs/upload.declaration.json`
 by a conformance suite (with an honest extension-derived content type).
 Observability: the audit-persistence counter moved to the shared contract
 plane and is exported on the operations `/metrics` scrape

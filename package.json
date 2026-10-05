@@ -186,6 +186,7 @@
     "_sdkwork:release:package:standalone": "node scripts/webserver-release.mjs package --deployment-profile standalone",
     "_sdkwork:release:validate:standalone": "node scripts/webserver-release.mjs validate --deployment-profile standalone",
     "import:switch:standalone": "node scripts/webserver-import-profile.mjs standalone",
+    "import:switch:cloud": "node scripts/webserver-import-profile.mjs cloud",
     "import:status": "node scripts/webserver-import-profile.mjs status",
     "build:pc:demo": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture pc --environment demo",
     "build:h5:demo": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture h5 --environment demo",

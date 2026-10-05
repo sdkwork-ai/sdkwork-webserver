@@ -2682,6 +2682,13 @@
           "maximum": 3600000,
           "default": 30000
         },
+        "maxBuckets": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4194304,
+          "default": 65536,
+          "description": "Hard cap on live aggregation buckets. Hostname is client influenceable input, so an adversarial traffic pattern must hit bounded rejection (facts for new bucket keys are dropped and counted) instead of unbounded memory growth."
+        },
         "channel": {
           "type": "object",
           "additionalProperties": false,
