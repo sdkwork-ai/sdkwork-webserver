@@ -488,6 +488,37 @@ impl WebRepository {
                 "reaped expired certificate operations after their retry budget was exhausted"
             );
         }
+        // Operations queued against a revoked or deleted certificate must
+        // never execute: an issued/renewed version would resurrect an
+        // aggregate the operator retired. Close them as terminal failures
+        // before claiming so they neither run nor linger PENDING forever.
+        let revoked_swept = sqlx::query_scalar::<_, i64>(
+            "WITH closed AS (
+                UPDATE webserver_certificate_operation operation
+                SET status = 'FAILED',
+                    failure_code = 'CERTIFICATE_REVOKED',
+                    failure_detail = 'certificate is revoked or deleted; operation closed without execution',
+                    completed_at = NOW(), lease_owner = NULL, lease_expires_at = NULL,
+                    updated_at = NOW()
+                FROM webserver_certificate certificate
+                WHERE operation.tenant_id = certificate.tenant_id
+                  AND operation.certificate_id = certificate.id
+                  AND operation.status IN ('PENDING', 'RUNNING')
+                  AND (certificate.status = 3 OR certificate.deleted_at IS NOT NULL)
+                RETURNING operation.id
+             )
+             SELECT COUNT(*) FROM closed",
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|error| store_error("close operations of revoked certificates", error))?;
+        if revoked_swept > 0 {
+            tracing::warn!(
+                revoked_swept,
+                failure_code = "CERTIFICATE_REVOKED",
+                "closed certificate operations whose certificate was revoked or deleted"
+            );
+        }
         let claimed_rows = sqlx::query(
             "WITH candidates AS (
                 SELECT id FROM webserver_certificate_operation

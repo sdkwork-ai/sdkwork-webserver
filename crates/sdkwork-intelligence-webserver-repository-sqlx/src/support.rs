@@ -189,6 +189,18 @@ pub(crate) fn json_from_row(
         .transpose()
 }
 
+/// Reads an optional JSON text column as a JSON object: SQL NULL becomes an
+/// empty object, while a non-null value that fails to parse is a decode
+/// error. Corrupted stored payloads must surface to the caller instead of
+/// silently vanishing into `{}`.
+pub(crate) fn optional_json_object_from_row(
+    row: &EngineRow,
+    column: &str,
+) -> Result<serde_json::Value, SqlxError> {
+    Ok(json_from_row(row, column)?
+        .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new())))
+}
+
 /// PostgreSQL-only JSONB write expression. The repository is instantiated
 /// exclusively with the PostgreSQL engine (PRD: PostgreSQL is the only
 /// authoritative server database), so no engine branching exists.

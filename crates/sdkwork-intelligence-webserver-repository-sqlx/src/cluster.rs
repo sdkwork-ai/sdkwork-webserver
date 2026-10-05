@@ -20,7 +20,7 @@ use super::support::{
     like_contains_pattern,
     cursor_instant_from_row, decode_keyset_cursor, encode_keyset_cursor, instant_from_row,
     instant_write_expression, json_write_expression, new_uuid, next_id, now_rfc3339,
-    optional_instant_from_row, pagination, sha256_hex, store_error,
+    optional_instant_from_row, optional_json_object_from_row, pagination, sha256_hex, store_error,
 };
 
 /// Internal id/uuid pair for a resolved parent row.
@@ -887,11 +887,7 @@ impl WebRepository {
                 id: row.try_get("uuid").map_err(store_map_error)?,
                 status: row.try_get("status").map_err(store_map_error)?,
                 latency_ms: row.try_get("latency_ms").map_err(store_map_error)?,
-                metrics: row
-                    .try_get::<Option<String>, _>("metrics")
-                    .map_err(store_map_error)?
-                    .and_then(|raw| serde_json::from_str(&raw).ok())
-                    .unwrap_or_else(|| json!({})),
+                metrics: optional_json_object_from_row(row, "metrics").map_err(store_map_error)?,
                 reported_at: instant_from_row(row, "reported_at")
                     .map_err(|error| store_error("map webserver_cluster_heartbeat instant", error))?,
             });
@@ -1668,11 +1664,7 @@ impl WebRepository {
                 message_type: row.try_get("message_type").map_err(store_map_error)?,
                 from_instance_id: row.try_get("from_uuid").map_err(store_map_error)?,
                 to_instance_id: row.try_get("to_uuid").map_err(store_map_error)?,
-                payload: row
-                    .try_get::<Option<String>, _>("payload")
-                    .map_err(store_map_error)?
-                    .and_then(|raw| serde_json::from_str(&raw).ok())
-                    .unwrap_or_else(|| json!({})),
+                payload: optional_json_object_from_row(row, "payload").map_err(store_map_error)?,
                 created_at: row.try_get("created_at").map_err(store_map_error)?,
             });
         }
@@ -2156,6 +2148,39 @@ impl WebRepository {
             .execute(&mut *tx)
             .await
             .map_err(|error| store_error("insert webserver_cluster_sync_revision", error))?;
+        // A revision id that already exists means two processes generated the
+        // same id (shared snowflake node id or a clock regression). DO NOTHING
+        // must not silently proceed: the flip below would point every instance
+        // at a revision whose stored payload is the other writer's, and this
+        // caller would receipt its own payload/sha256 against it. Fail closed.
+        {
+            let stored = sqlx::query(
+                "SELECT sha256 FROM webserver_cluster_sync_revision
+                 WHERE tenant_id = $1 AND cluster_id = $2 AND kind = $3 AND revision = $4",
+            )
+            .bind(write.tenant_id)
+            .bind(write.cluster_id)
+            .bind(write.kind)
+            .bind(&write.revision)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|error| store_error("load webserver_cluster_sync_revision", error))?;
+            let stored_sha256: String = match stored {
+                Some(row) => row
+                    .try_get("sha256")
+                    .map_err(|error| store_error("map stored cluster sync revision sha256", error))?,
+                None => {
+                    return Err(WebServiceError::Internal(
+                        "cluster sync revision insert stored no row".to_string(),
+                    ));
+                }
+            };
+            if stored_sha256 != write.sha256 {
+                return Err(WebServiceError::conflict(
+                    "cluster sync revision id collision: a different payload already occupies this revision",
+                ));
+            }
+        }
         // Flip the cluster to the new desired revision (per-kind column).
         // An instance that already reports the new revision as applied
         // (re-registration) stays IN_SYNC; everything else goes PENDING.
@@ -2333,10 +2358,7 @@ fn map_cluster_host_row(row: &EngineRow) -> Result<ClusterHostResponse, sqlx::Er
 }
 
 fn map_cluster_instance_row(row: &EngineRow) -> Result<ClusterInstanceResponse, sqlx::Error> {
-    let metrics = row
-        .try_get::<Option<String>, _>("metrics")?
-        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
-        .unwrap_or_else(|| json!({}));
+    let metrics = optional_json_object_from_row(row, "metrics")?;
     Ok(ClusterInstanceResponse {
         id: row.try_get("uuid")?,
         cluster_id: row.try_get("cluster_uuid")?,
@@ -2394,10 +2416,7 @@ fn map_cluster_instance_row(row: &EngineRow) -> Result<ClusterInstanceResponse, 
 }
 
 fn map_cluster_event_row(row: &EngineRow) -> Result<ClusterEventResponse, sqlx::Error> {
-    let detail = row
-        .try_get::<Option<String>, _>("detail")?
-        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
-        .unwrap_or_else(|| json!({}));
+    let detail = optional_json_object_from_row(row, "detail")?;
     Ok(ClusterEventResponse {
         id: row.try_get("uuid")?,
         cluster_id: row.try_get("cluster_uuid")?,

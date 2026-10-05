@@ -527,11 +527,26 @@ impl WebRepository {
                 "revokedAt": chrono::Utc::now().to_rfc3339()
             }
         });
+        // The guard mirrors `delete_certificate_repo`: an aggregate with an
+        // in-flight issuance or renewal must not be revoked, because the
+        // renewal worker's lease may outlive this transaction and its
+        // finalization would flip a revoked aggregate back to active. The
+        // revocation material loader already rejects in-flight work, but its
+        // lock is released before the CA call completes — this predicate
+        // re-checks the state at the moment the revocation lands. The
+        // operation rows are the authority for "in flight": `renewal_status`
+        // 3 (terminal renewal failure) is a parked state with no active
+        // operation and must stay revocable.
         let updated = sqlx::query(
-            "UPDATE webserver_certificate
+            "UPDATE webserver_certificate AS c
              SET status = 3, auto_renew = FALSE, renewal_status = 0,
                  metadata = metadata || CAST($3 AS JSONB), updated_at = NOW(), version = version + 1
-             WHERE tenant_id = $1 AND uuid = $2 AND status = 1 AND deleted_at IS NULL",
+             WHERE c.tenant_id = $1 AND c.uuid = $2 AND c.status = 1 AND c.deleted_at IS NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM webserver_certificate_operation o
+                   WHERE o.tenant_id = c.tenant_id AND o.certificate_id = c.id
+                     AND o.status IN ('PENDING', 'RUNNING')
+               )",
         )
         .bind(tenant_id)
         .bind(certificate_uuid)
@@ -540,9 +555,39 @@ impl WebRepository {
         .await
         .map_err(|error| store_error("mark certificate revoked", error))?;
         if updated.rows_affected() == 0 {
-            return Err(WebServiceError::conflict(
-                "certificate is not in an active state; nothing was revoked",
-            ));
+            let state = sqlx::query(
+                "SELECT (SELECT COUNT(*) FROM webserver_certificate_operation o
+                         WHERE o.tenant_id = webserver_certificate.tenant_id
+                           AND o.certificate_id = webserver_certificate.id
+                           AND o.status IN ('PENDING', 'RUNNING')) AS active_operations
+                 FROM webserver_certificate
+                 WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
+            )
+            .bind(tenant_id)
+            .bind(certificate_uuid)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|error| store_error("inspect unrevoked certificate state", error))?;
+            tx.commit()
+                .await
+                .map_err(|error| store_error("commit certificate revocation", error))?;
+            return match state {
+                None => Err(WebServiceError::not_found("certificate not found")),
+                Some(row) => {
+                    let active_operations: i64 = row
+                        .try_get("active_operations")
+                        .map_err(|error| store_error("map revocation active operations", error))?;
+                    if active_operations > 0 {
+                        Err(WebServiceError::conflict(
+                            "certificate issuance or renewal is in progress; wait for it to finish",
+                        ))
+                    } else {
+                        Err(WebServiceError::conflict(
+                            "certificate is not in an active state; nothing was revoked",
+                        ))
+                    }
+                }
+            };
         }
         let certificate_internal_id: i64 = sqlx::query_scalar(
             "SELECT id FROM webserver_certificate WHERE tenant_id = $1 AND uuid = $2",
@@ -742,7 +787,7 @@ impl WebRepository {
                   auto_renew = $6, renewal_status = 0, status = 1,
                   current_version_id = $7,
                  metadata = metadata - 'certificateOperationFailureCode', updated_at = NOW(), version = version + 1
-             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
+             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL AND status <> 3",
         )
         .bind(lease.tenant_id)
         .bind(&lease.certificate_id)
