@@ -57,6 +57,42 @@ export const WEBSERVER_PC_ADMIN_USER_AVATAR_UPLOAD = {
 } as const satisfies WebserverPcUploadDeclarationEntry;
 
 /**
+ * An organization logo uploaded from the IAM admin console.
+ *
+ * Same shape and flow rules as the user avatar: `entity`-kind id (the
+ * organization directory record), persisted first and attached second on
+ * create (`DRIVE_SPEC.md` section 18.3), and bound to the same `avatar`
+ * upload profile the IAM snapshot columns were sized around.
+ */
+export const WEBSERVER_PC_ADMIN_ORGANIZATION_LOGO_UPLOAD = {
+  appResourceIdKind: 'entity',
+  appResourceType: 'organization.logo',
+  purpose: 'IAM admin console organization logo uploaded to Drive and attached to the organization directory record.',
+  retention: 'long_term',
+  scene: 'organization-logo',
+  source: WEBSERVER_PC_UPLOAD_SOURCE,
+  uploadProfileCode: 'avatar',
+} as const satisfies WebserverPcUploadDeclarationEntry;
+
+/**
+ * An OAuth resource-account logo (mini program / official account) uploaded
+ * from the IAM admin console.
+ *
+ * Same shape and flow rules as the organization logo: `entity`-kind id (the
+ * resource account), persisted first and attached second on create
+ * (`DRIVE_SPEC.md` section 18.3), bound to the `avatar` upload profile.
+ */
+export const WEBSERVER_PC_ADMIN_OAUTH_ACCOUNT_LOGO_UPLOAD = {
+  appResourceIdKind: 'entity',
+  appResourceType: 'oauth.account_logo',
+  purpose: 'IAM admin console OAuth account logo uploaded to Drive and referenced by the account configuration.',
+  retention: 'long_term',
+  scene: 'oauth-account-logo',
+  source: WEBSERVER_PC_UPLOAD_SOURCE,
+  uploadProfileCode: 'avatar',
+} as const satisfies WebserverPcUploadDeclarationEntry;
+
+/**
  * Stable application-scope resource id sent as `appResourceId` for plugin archives.
  *
  * The create flow uploads the archive before any plugin entity exists, so the id must not be
@@ -70,4 +106,6 @@ export const WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD_RESOURCE_ID = 'plugin-package-ar
 export const WEBSERVER_PC_UPLOAD_DECLARATIONS: readonly WebserverPcUploadDeclarationEntry[] = [
   WEBSERVER_PC_PLUGIN_PACKAGE_UPLOAD,
   WEBSERVER_PC_ADMIN_USER_AVATAR_UPLOAD,
+  WEBSERVER_PC_ADMIN_ORGANIZATION_LOGO_UPLOAD,
+  WEBSERVER_PC_ADMIN_OAUTH_ACCOUNT_LOGO_UPLOAD,
 ];

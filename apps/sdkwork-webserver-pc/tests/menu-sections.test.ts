@@ -198,6 +198,10 @@ describe("workspace menu sections", () => {
     // active; on any other surface they claim nothing and are dropped.
     expect(MENU_SECTIONS.map((section) => section.id)).toEqual([
       "delivery",
+      // The app-template marketplace rides directly after delivery: it sells
+      // what delivery publishes, and its console pair and operations trio
+      // group under one heading.
+      "templateMarket",
       "aiEcosystem",
       "cloudAccess",
       "dataStatistics",

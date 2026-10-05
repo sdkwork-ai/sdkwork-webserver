@@ -4,6 +4,8 @@ import { lazy, Suspense, useMemo, type ComponentType } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { translateWebserver, type WebserverLocale } from "@sdkwork/webserver-pc-commons";
 import { createSdkworkIamUserDriveUploadImageService } from "./avatar-upload.ts";
+import { createSdkworkIamOrganizationDriveUploadImageService, createSdkworkIamOrganizationLogoService } from "./organization-logo-upload.ts";
+import { createSdkworkIamOauthAccountDriveUploadImageService } from "./oauth-account-logo-upload.ts";
 import { useWebserverConsoleSdk } from "@sdkwork/webserver-pc-console-core";
 
 /**
@@ -164,9 +166,15 @@ const LazyIamOrganizationsAdmin = lazy(async () => {
   } = await import("@sdkwork/iam-pc-admin-organization");
   return {
     default: function IamOrganizationsAdminContent({ permissionScope }: IamAdminContentProps) {
+      const { drive, iam } = useWebserverConsoleSdk();
       const service = useIamAdminService();
       const can = useIamAdminPermission(permissionScope);
       const controller = useMemo(() => createSdkworkIamOrganizationController(service), [service]);
+      const logoService = useMemo(() => createSdkworkIamOrganizationLogoService(drive), [drive]);
+      const driveUploadImageService = useMemo(
+        () => createSdkworkIamOrganizationDriveUploadImageService(drive),
+        [drive],
+      );
       const navigate = useNavigate();
       const structureMatch = ORGANIZATION_STRUCTURE_SPLAT.exec(useParams()["*"] ?? "");
       if (structureMatch) {
@@ -194,6 +202,8 @@ const LazyIamOrganizationsAdmin = lazy(async () => {
       return (
         <SdkworkIamOrganizationAdminWorkspace
           controller={controller}
+          driveUploadImageService={driveUploadImageService}
+          logoService={logoService}
           onOpenStructure={(organization) =>
             navigate(`/admin/iam/organizations/${encodeURIComponent(organization.organizationId)}/structure`)}
           permissions={{
@@ -358,9 +368,14 @@ const LazyIamOauthMiniProgramsAdmin = lazy(async () => {
     await import("@sdkwork/iam-pc-admin-oauth");
   return {
     default: function IamOauthMiniProgramsAdminContent() {
+      const { drive } = useWebserverConsoleSdk();
       const service = useIamAdminService();
       const controller = useMemo(() => createSdkworkIamOauthAdminController(service), [service]);
-      return <SdkworkIamOauthMiniProgramAccountsPage controller={controller} />;
+      const driveUploadImageService = useMemo(
+        () => createSdkworkIamOauthAccountDriveUploadImageService(drive),
+        [drive],
+      );
+      return <SdkworkIamOauthMiniProgramAccountsPage controller={controller} driveUploadImageService={driveUploadImageService} />;
     } satisfies ComponentType<IamAdminContentProps>,
   };
 });
@@ -373,8 +388,13 @@ const LazyIamOauthOfficialAccountsAdmin = lazy(async () => {
   } = await import("@sdkwork/iam-pc-admin-oauth");
   return {
     default: function IamOauthOfficialAccountsAdminContent() {
+      const { drive } = useWebserverConsoleSdk();
       const service = useIamAdminService();
       const controller = useMemo(() => createSdkworkIamOauthAdminController(service), [service]);
+      const driveUploadImageService = useMemo(
+        () => createSdkworkIamOauthAccountDriveUploadImageService(drive),
+        [drive],
+      );
       const navigate = useNavigate();
       const customMenuMatch = OAUTH_CUSTOM_MENU_SPLAT.exec(useParams()["*"] ?? "");
       // The custom menu manager opens as a full-screen view inside the page;
@@ -388,7 +408,7 @@ const LazyIamOauthOfficialAccountsAdmin = lazy(async () => {
           />
         );
       }
-      return <SdkworkIamOauthOfficialAccountsPage controller={controller} />;
+      return <SdkworkIamOauthOfficialAccountsPage controller={controller} driveUploadImageService={driveUploadImageService} />;
     } satisfies ComponentType<IamAdminContentProps>,
   };
 });

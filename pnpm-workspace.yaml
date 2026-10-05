@@ -87,6 +87,8 @@ packages:
   - "../sdkwork-appbase/packages/common/foundation/sdkwork-runtime-bootstrap"
   - "../sdkwork-appbase/packages/pc-react/foundation/sdkwork-appbase-pc-react"
   - "../sdkwork-appbase/packages/pc-react/foundation/sdkwork-i18n-pc-react"
+  - "../sdkwork-appbase/packages/mobile-react/foundation/sdkwork-appbase-mobile-react"
+  - "../sdkwork-appbase/packages/mobile-react/foundation/sdkwork-shell-mobile-react"
   - "../sdkwork-appbase/sdks/sdkwork-base-data-backend-sdk/sdkwork-base-data-backend-sdk-typescript"
   - "../sdkwork-core/sdkwork-core-pc-react"
   - "../sdkwork-ui/sdkwork-ui-pc-react"
@@ -111,6 +113,13 @@ packages:
   - "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-file-preview"
   - "../sdkwork-drive/sdks/sdkwork-drive-admin-storage-sdk/sdkwork-drive-admin-storage-sdk-typescript"
   - "../sdkwork-drive/sdks/sdkwork-drive-backend-sdk/sdkwork-drive-backend-sdk-typescript"
+  # Shared Drive image-upload component family: the IAM user admin avatar field
+  # renders `DriveUploadImage` from the PC shell through the core service that
+  # `@sdkwork/webserver-pc-admin-iam` builds; the shell depends on the core with
+  # `workspace:*` and the core binds `@sdkwork/drive-app-sdk`, so all three stay
+  # resolvable from this workspace.
+  - "../sdkwork-drive/apps/sdkwork-drive-common/packages/sdkwork-drive-upload-image-core"
+  - "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-upload-image"
 
 catalog:
   react: ^19.2.8
@@ -247,6 +256,16 @@ supportedArchitectures:
 # (older) react/react-dom ranges previously resolved a second copy next to the
 # catalog's 19.2.8, splitting hooks state inside one renderer. Pin the exact
 # version for every consumer so tests and the dev server share one instance.
+# Resolve sibling-SDK package ranges to this workspace's checkouts first: the
+# deployments app SDK declares `@sdkwork/drive-app-sdk: "^0.1.1"` for its npm
+# consumers, and without these two settings that range resolves to the registry
+# copy inside this workspace while every bridged page compiles against the
+# checkout copy — two instances of one SDK whose uploader types then collide
+# (the `deploy-app-operations` publishing service is where it surfaces first).
+# This mirrors the sibling repos' `.npmrc` policy.
+linkWorkspacePackages: true
+preferWorkspacePackages: true
+
 overrides:
   react: 19.2.8
   react-dom: 19.2.8

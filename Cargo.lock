@@ -3998,6 +3998,7 @@ dependencies = [
  "sdkwork-web-bootstrap",
  "sdkwork-web-contract",
  "sdkwork-web-core",
+ "serde_json",
  "sqlx",
  "thiserror 2.0.21",
  "tokio",

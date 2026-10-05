@@ -19,6 +19,24 @@
       "uploadProfileCode": "avatar",
       "retention": "long_term",
       "purpose": "IAM admin console user avatar uploaded to Drive and attached to the user directory record."
+    },
+    {
+      "appResourceType": "organization.logo",
+      "appResourceIdKind": "entity",
+      "scene": "organization-logo",
+      "source": "sdkwork-webserver-pc",
+      "uploadProfileCode": "avatar",
+      "retention": "long_term",
+      "purpose": "IAM admin console organization logo uploaded to Drive and attached to the organization directory record."
+    },
+    {
+      "appResourceType": "oauth.account_logo",
+      "appResourceIdKind": "entity",
+      "scene": "oauth-account-logo",
+      "source": "sdkwork-webserver-pc",
+      "uploadProfileCode": "avatar",
+      "retention": "long_term",
+      "purpose": "IAM admin console OAuth account logo uploaded to Drive and referenced by the account configuration."
     }
   ]
 }

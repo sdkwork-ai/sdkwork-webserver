@@ -169,6 +169,48 @@ export function iamAdminResourceRenderers({ locale, permissionScope, tenantId }:
   };
 }
 
+export interface MarketplaceConsoleRendererInput {
+  deployBaseUrl: string;
+  driveBaseUrl: string;
+  locale: WebserverLocale;
+  tokenManager: AuthTokenManager;
+}
+
+/**
+ * The renderer entries for the app-template marketplace, the second bridged
+ * deployments console surface. Both resources render the canonical pages
+ * through one bridge component that switches on `resource`, so the map has an
+ * entry per menu entry and nothing else. Extracted and exported, exactly like
+ * `iamAdminResourceRenderers`, so the acceptance harness mounts this same map
+ * instead of a copy of it.
+ */
+export function marketplaceConsoleResourceRenderers({ deployBaseUrl, driveBaseUrl, locale, tokenManager }: MarketplaceConsoleRendererInput): Partial<Record<WebserverResourceKey, ReactNode>> {
+  return {
+    marketplace: <MarketplaceConsoleSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={driveBaseUrl} locale={locale} resource="marketplace" tokenManager={tokenManager} />,
+    "my-templates": <MarketplaceConsoleSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={driveBaseUrl} locale={locale} resource="my-templates" tokenManager={tokenManager} />,
+  };
+}
+
+export interface AppTemplatesAdminRendererInput {
+  backendApiBaseUrl: string;
+  locale: WebserverLocale;
+  tokenManager: AuthTokenManager;
+}
+
+/**
+ * The renderer entries for the app-template catalog on the operations surface.
+ * All three resources render the shared registry table through one bridge
+ * component that switches on `resource`. Extracted and exported for the same
+ * mount-coverage reason as the console group above.
+ */
+export function appTemplatesAdminResourceRenderers({ backendApiBaseUrl, locale, tokenManager }: AppTemplatesAdminRendererInput): Partial<Record<WebserverResourceKey, ReactNode>> {
+  return {
+    "template-categories": <AppTemplatesAdminSurface backendApiBaseUrl={backendApiBaseUrl} locale={locale} resource="template-categories" tokenManager={tokenManager} />,
+    "app-templates": <AppTemplatesAdminSurface backendApiBaseUrl={backendApiBaseUrl} locale={locale} resource="app-templates" tokenManager={tokenManager} />,
+    "app-template-versions": <AppTemplatesAdminSurface backendApiBaseUrl={backendApiBaseUrl} locale={locale} resource="app-template-versions" tokenManager={tokenManager} />,
+  };
+}
+
 export function WebserverAuthorizedWorkspace({ locale, runtime }: { locale: WebserverLocale; runtime: BootstrappedWebserverPcRuntime }) {
   // The workspace body reads the console SDK context (the cloud-account read in
   // `WebserverAuthorizedWorkspaceSurface`), and a component cannot see the
@@ -215,8 +257,7 @@ function WebserverAuthorizedWorkspaceSurface({ locale, runtime }: { locale: Webs
     // the storefront and the author workbench are the canonical pages, the two
     // clients (deploy + order) come from the sibling's own factory, and the
     // host injects only base URLs plus the shared session.
-    marketplace: <MarketplaceConsoleSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={driveBaseUrl} locale={locale} resource="marketplace" tokenManager={runtime.tokenManager} />,
-    "my-templates": <MarketplaceConsoleSurface deployBaseUrl={deployBaseUrl} driveBaseUrl={driveBaseUrl} locale={locale} resource="my-templates" tokenManager={runtime.tokenManager} />,
+    ...marketplaceConsoleResourceRenderers({ deployBaseUrl, driveBaseUrl, locale, tokenManager: runtime.tokenManager }),
     // Plugins / Skills / MCP are module self-service surfaces; menu entries stay
     // in the host while pages share the IAM dual-token session via tokenManager.
     // Plugins additionally receive the IAM subject so each user reads/writes
@@ -268,9 +309,7 @@ function WebserverAuthorizedWorkspaceSurface({ locale, runtime }: { locale: Webs
     // three entries render the shared registry table over the sibling's admin
     // registry — the same shape the Storage Center bridge uses (transport
     // composed inside the sibling's admin core, never by this host).
-    "template-categories": <AppTemplatesAdminSurface backendApiBaseUrl={runtime.config.backendApiBaseUrl} locale={locale} resource="template-categories" tokenManager={runtime.tokenManager} />,
-    "app-templates": <AppTemplatesAdminSurface backendApiBaseUrl={runtime.config.backendApiBaseUrl} locale={locale} resource="app-templates" tokenManager={runtime.tokenManager} />,
-    "app-template-versions": <AppTemplatesAdminSurface backendApiBaseUrl={runtime.config.backendApiBaseUrl} locale={locale} resource="app-template-versions" tokenManager={runtime.tokenManager} />,
+    ...appTemplatesAdminResourceRenderers({ backendApiBaseUrl: runtime.config.backendApiBaseUrl, locale, tokenManager: runtime.tokenManager }),
     // Domains and Certificates read the Web Server's own tenant-level planes, so
     // their pages are authored in the delivery capability package. They take no
     // client prop: both render inside `WebserverAdminSdkProvider` (mounted by
