@@ -193,6 +193,18 @@ impl EdgeRuntime {
         reload_nginx(&self.config)
     }
 
+    /// [`EdgeRuntime::reload`] off the async worker: the Nginx invocation runs
+    /// a bounded synchronous poll loop (up to `nginxCommandTimeoutMs`), which
+    /// parks a runtime worker for its whole duration if awaited inline.
+    pub async fn reload_async(&self) -> Result<(), EdgeRuntimeError> {
+        let config = self.config.clone();
+        tokio::task::spawn_blocking(move || reload_nginx(&config))
+            .await
+            .map_err(|error| {
+                EdgeRuntimeError::Filesystem(format!("nginx reload task failed: {error}"))
+            })?
+    }
+
     /// Proves the loaded Nginx configuration contains `expected_fragment`
     /// (PRD-FR-020 served-revision evidence for reload convergence).
     ///
@@ -207,6 +219,20 @@ impl EdgeRuntime {
     /// a step that has nothing to validate.
     pub fn validate_active_config(&self) -> Result<(), EdgeRuntimeError> {
         validate_active_nginx_config(&self.config)
+    }
+
+    /// [`EdgeRuntime::validate_active_config`] off the async worker; see
+    /// [`EdgeRuntime::reload_async`] for why the blocking variant must never
+    /// be awaited inline from the node daemon loop.
+    pub async fn validate_active_config_async(&self) -> Result<(), EdgeRuntimeError> {
+        let config = self.config.clone();
+        tokio::task::spawn_blocking(move || validate_active_nginx_config(&config))
+            .await
+            .map_err(|error| {
+                EdgeRuntimeError::Filesystem(format!(
+                    "nginx config validation task failed: {error}"
+                ))
+            })?
     }
 
     pub fn verify_served_certificate(

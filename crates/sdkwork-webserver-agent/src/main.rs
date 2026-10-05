@@ -161,7 +161,10 @@ pub async fn run() -> anyhow::Result<()> {
                 result
                     .map_err(|error| anyhow::anyhow!("node daemon shutdown task failed: {error}"))?
                     .map_err(|error| anyhow::anyhow!("node daemon shutdown listener failed: {error}"))?;
-                info!("sdkwork web node daemon stopped before the next sync cycle");
+                // The select drops an in-flight `sync_once` future here; its
+                // staged nginx writes are RAII-guarded and the next sync
+                // re-converges, but the log must not claim a completed cycle.
+                info!("sdkwork web node daemon stop requested; any in-flight sync cycle was cancelled");
                 break;
             }
             () = tokio::time::sleep(Duration::from_secs(cycle_timeout_secs)) => {
@@ -323,7 +326,7 @@ async fn sync_once(
         }
     }
 
-    if let Err(error) = edge.validate_active_config() {
+    if let Err(error) = edge.validate_active_config_async().await {
         let failure = record_deployment_failure(
             state_path,
             local_state,
@@ -340,7 +343,7 @@ async fn sync_once(
         );
         return Err(rollback_deployment(edge, deployment, false, error).await);
     }
-    if let Err(error) = edge.reload() {
+    if let Err(error) = edge.reload_async().await {
         let failure = record_deployment_failure(
             state_path,
             local_state,
@@ -627,7 +630,7 @@ async fn rollback_deployment(
         error = append_error(
             error,
             "reload restored Nginx configuration",
-            edge.reload().err().map(anyhow::Error::from),
+            edge.reload_async().await.err().map(anyhow::Error::from),
         );
     }
     error

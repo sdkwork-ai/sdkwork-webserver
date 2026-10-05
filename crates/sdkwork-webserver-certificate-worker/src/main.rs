@@ -117,7 +117,7 @@ async fn main() -> anyhow::Result<()> {
                 result
                     .map_err(|error| anyhow::anyhow!("certificate worker shutdown task failed: {error}"))?
                     .map_err(|error| anyhow::anyhow!("certificate worker shutdown listener failed: {error}"))?;
-                info!("certificate operation worker stopped after completing the active cycle");
+                info!("certificate operation worker stopped; the in-flight cycle was cancelled and any lease it held expires");
                 break;
             }
             () = tokio::time::sleep(Duration::from_secs(cycle_timeout_secs)) => {
@@ -182,7 +182,7 @@ async fn main() -> anyhow::Result<()> {
                 result
                     .map_err(|error| anyhow::anyhow!("certificate worker shutdown task failed: {error}"))?
                     .map_err(|error| anyhow::anyhow!("certificate worker shutdown listener failed: {error}"))?;
-                info!("certificate worker stopped after completing the active sweep");
+                info!("certificate worker stopped; the in-flight sweep was cancelled and reruns on the next cycle");
                 break;
             }
             () = tokio::time::sleep(Duration::from_secs(cycle_timeout_secs)) => {
@@ -214,7 +214,7 @@ async fn main() -> anyhow::Result<()> {
                 result
                     .map_err(|error| anyhow::anyhow!("certificate worker shutdown task failed: {error}"))?
                     .map_err(|error| anyhow::anyhow!("certificate worker shutdown listener failed: {error}"))?;
-                info!("certificate operation worker stopped after completing the active cycle");
+                info!("certificate operation worker stopped; the in-flight cycle was cancelled and any lease it held expires");
                 break;
             }
             () = tokio::time::sleep(delay) => {}
