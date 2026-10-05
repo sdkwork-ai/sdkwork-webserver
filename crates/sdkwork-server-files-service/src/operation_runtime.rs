@@ -284,23 +284,116 @@ pub async fn stop_managed(
         });
     };
     let pid = record.pid;
+    let mut stopped = false;
     if managed_process_alive(pid).await {
-        kill_pid_tree(pid)
-            .await
-            .map_err(OperationRunError::ManagedStop)?;
+        if live_process_matches_record(pid, &record).await {
+            kill_pid_tree(pid)
+                .await
+                .map_err(OperationRunError::ManagedStop)?;
+            stopped = true;
+        } else {
+            // The pid was recorded at spawn, but the live process it now
+            // names was created at a different time (and/or runs a different
+            // command line): the OS reused the pid. Killing by number alone
+            // would take down an unrelated process tree, so refuse and drop
+            // only the stale record.
+            tracing::warn!(
+                operation_id = %operation_id,
+                pid = pid,
+                recorded_program = %record.program,
+                "managed pid file names a different live process (pid reuse suspected); refusing to kill"
+            );
+        }
     }
     tokio::fs::remove_file(&pid_file)
         .await
         .map_err(|error| OperationRunError::ManagedState(format!("remove pid file: {error}")))?;
-    tracing::info!(
-        operation_id = %operation_id,
-        pid = pid,
-        "managed project operation stopped"
-    );
+    if stopped {
+        tracing::info!(
+            operation_id = %operation_id,
+            pid = pid,
+            "managed project operation stopped"
+        );
+    }
     Ok(ManagedStopOutcome {
-        stopped: true,
+        stopped,
         pid: Some(pid),
     })
+}
+
+/// True when the live process at `pid` is plausibly the one the record was
+/// written for: its creation time falls in the window around the record's
+/// spawn stamp and its command line names the recorded program. A platform
+/// that cannot answer both questions refuses (returns false) rather than
+/// letting a pid-reuse kill proceed.
+async fn live_process_matches_record(pid: u32, record: &ManagedProcessRecord) -> bool {
+    const CREATION_SKEW_SECONDS: u64 = 5;
+    let now = unix_now();
+    match probe_live_process(pid).await {
+        Some((created_at_unix, command_line)) => {
+            let creation_window = record.started_at_unix.saturating_sub(CREATION_SKEW_SECONDS)
+                ..=now + CREATION_SKEW_SECONDS;
+            creation_window.contains(&created_at_unix) && command_line.contains(&record.program)
+        }
+        // Cannot verify the identity: refuse the kill.
+        None => false,
+    }
+}
+
+/// `(creation unix seconds, command line)` for a live pid, or `None` when the
+/// platform cannot report both.
+async fn probe_live_process(pid: u32) -> Option<(u64, String)> {
+    #[cfg(unix)]
+    {
+        let stat = tokio::fs::read_to_string(format!("/proc/{pid}/stat"))
+            .await
+            .ok()?;
+        // Everything after the final `)` is stable: the comm field may
+        // contain spaces and parentheses itself.
+        let rest = stat.rsplit_once(')')?.1.trim();
+        let fields = rest.split_whitespace().collect::<Vec<_>>();
+        // Field 22 of stat (starttime in clock ticks since boot) is the 20th
+        // entry after `state`.
+        let starttime_ticks: u64 = fields.get(19)?.parse().ok()?;
+        let proc_stat = tokio::fs::read_to_string("/proc/stat").await.ok()?;
+        let btime_line = proc_stat.lines().find(|line| line.starts_with("btime "))?;
+        let boot_epoch: u64 = btime_line.split_whitespace().nth(1)?.parse().ok()?;
+        // The tick rate is `sysconf(_SC_CLK_TCK)`; every mainstream kernel
+        // configures 100.
+        const CLOCK_TICKS_PER_SECOND: u64 = 100;
+        let created_at_unix = boot_epoch + starttime_ticks / CLOCK_TICKS_PER_SECOND;
+        let command_line = tokio::fs::read_to_string(format!("/proc/{pid}/cmdline"))
+            .await
+            .ok()?
+            .replace('\u{0}', " ");
+        Some((created_at_unix, command_line))
+    }
+    #[cfg(windows)]
+    {
+        // Stops are rare operator actions, so the CIM query's cost is fine
+        // next to `taskkill` itself.
+        let script = format!(
+            "$p = Get-CimInstance Win32_Process -Filter \"ProcessId = {pid}\"; \
+             if ($p) {{ \"$($p.CreationDate.ToUnixTimeSeconds()) $($p.CommandLine)\" }}"
+        );
+        let output = tokio::process::Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", script.as_str()])
+            .stdin(Stdio::null())
+            .output()
+            .await
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let text = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        let (created, command_line) = text.split_once(' ')?;
+        Some((created.parse().ok()?, command_line.to_owned()))
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = pid;
+        None
+    }
 }
 
 async fn read_managed_record(

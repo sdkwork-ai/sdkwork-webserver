@@ -21,6 +21,7 @@
 //! The service is intentionally transport-agnostic: HTTP route handlers in
 //! `sdkwork-routes-*` and the frontend `ServerFilesClient` share these types.
 
+mod contained_io;
 mod operation_runtime;
 mod operations;
 mod path_security;

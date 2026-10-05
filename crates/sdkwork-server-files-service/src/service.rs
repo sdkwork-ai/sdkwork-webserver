@@ -3,7 +3,6 @@
 
 use std::path::{Path, PathBuf};
 
-use tokio::io::AsyncReadExt;
 
 use super::operations::{operations_for, ProjectClassification};
 use super::path_security::{
@@ -157,51 +156,99 @@ impl ServerFilesService {
     ) -> Result<DirectoryListing, BrowseDirectoryError> {
         let resolved = self.contained_path(requested_path)?;
         let parent_path = resolved.parent().map(display_path);
-
-        let mut read_dir = tokio::fs::read_dir(&resolved)
-            .await
-            .map_err(|error| BrowseDirectoryError::io(&error))?;
-
-        let mut entries = Vec::new();
-        while let Some(entry) = read_dir
-            .next_entry()
-            .await
-            .map_err(|error| BrowseDirectoryError::io(&error))?
-        {
-            if entries.len() >= self.config.maximum_entries {
-                break;
-            }
-            let name = entry.file_name().to_string_lossy().into_owned();
-            let path = entry.path();
-            let metadata = match entry.metadata().await {
-                Ok(metadata) => metadata,
-                Err(_) => continue,
-            };
-            let kind = if metadata.file_type().is_symlink() {
-                EntryKind::Symlink
-            } else if metadata.is_dir() {
-                EntryKind::Directory
-            } else {
-                EntryKind::File
-            };
-            let path_string = display_path(&path);
-            let mut server_entry = ServerEntry {
-                name,
-                kind,
-                path: path_string,
-                size: metadata
-                    .is_file()
-                    .then(|| i64::try_from(metadata.len()).unwrap_or(i64::MAX)),
-                project_type: None,
-                is_project_root: false,
-            };
-            if kind == EntryKind::Directory {
-                if let Some(classification) = classify_directory(&path) {
-                    server_entry.project_type = Some(classification.project_type);
-                    server_entry.is_project_root = classification.is_project_root;
+        // The listing runs on the blocking pool through the no-follow open:
+        // one component walk from the root with `O_NOFOLLOW` at every step, so
+        // a symlink swapped in after the containment check cannot redirect the
+        // read (the same discipline as the gateway's static server).
+        let root = self.root.clone();
+        let maximum_entries = self.config.maximum_entries;
+        let target_root = resolved.clone();
+        let (listed, listing_io_error) = tokio::task::spawn_blocking(move || {
+            let mut entries = Vec::new();
+            let mut io_error: Option<std::io::Error> = None;
+            match super::contained_io::open_contained(&root, &display_path(&target_root)) {
+                Ok(super::contained_io::ContainedTarget::Directory(directory)) => {
+                    let parent = target_root.clone();
+                    // cap-std's `entries()` is fallible up front (unlike
+                    // `std::fs::read_dir`); iterate the `ReadDir`, not the
+                    // `Result`.
+                    let read_dir = match directory.entries() {
+                        Ok(read_dir) => read_dir,
+                        Err(error) => {
+                            io_error = Some(error);
+                            return (Ok(entries), io_error);
+                        }
+                    };
+                    for entry in read_dir {
+                        if entries.len() >= maximum_entries {
+                            break;
+                        }
+                        let entry = match entry {
+                            Ok(entry) => entry,
+                            Err(error) => {
+                                io_error = Some(error);
+                                break;
+                            }
+                        };
+                        let name = entry.file_name().to_string_lossy().into_owned();
+                        let file_type = match entry.file_type() {
+                            Ok(file_type) => file_type,
+                            Err(_) => continue,
+                        };
+                        let kind = if file_type.is_symlink() {
+                            EntryKind::Symlink
+                        } else if file_type.is_dir() {
+                            EntryKind::Directory
+                        } else {
+                            EntryKind::File
+                        };
+                        let path = parent.join(entry.file_name());
+                        let size = if file_type.is_file() {
+                            entry
+                                .metadata()
+                                .ok()
+                                .map(|metadata| i64::try_from(metadata.len()).unwrap_or(i64::MAX))
+                        } else {
+                            None
+                        };
+                        let mut server_entry = ServerEntry {
+                            name,
+                            kind,
+                            path: display_path(&path),
+                            size,
+                            project_type: None,
+                            is_project_root: false,
+                        };
+                        if kind == EntryKind::Directory {
+                            if let Some(classification) = classify_directory(&path) {
+                                server_entry.project_type = Some(classification.project_type);
+                                server_entry.is_project_root = classification.is_project_root;
+                            }
+                        }
+                        entries.push(server_entry);
+                    }
                 }
+                Ok(super::contained_io::ContainedTarget::File(_, _)) => {
+                    io_error = Some(std::io::Error::new(
+                        std::io::ErrorKind::NotADirectory,
+                        "browse target is not a directory",
+                    ));
+                }
+                Err(error) => return (Err(error), None),
             }
-            entries.push(server_entry);
+            (Ok(entries), io_error)
+        })
+        .await
+        .map_err(|error| BrowseDirectoryError::Io {
+            kind: std::io::ErrorKind::OutOfMemory,
+            detail: format!("browse task failed: {error}"),
+        })?;
+        let entries = match listed {
+            Ok(entries) => entries,
+            Err(containment) => return Err(BrowseDirectoryError::Containment(containment)),
+        };
+        if let Some(error) = listing_io_error {
+            return Err(BrowseDirectoryError::io(&error));
         }
 
         Ok(DirectoryListing {
@@ -227,32 +274,41 @@ impl ServerFilesService {
         ) {
             return Err(ReadFileError::Sensitive);
         }
-        let mut file = tokio::fs::File::open(&resolved)
-            .await
-            .map_err(|error| ReadFileError::Io(error.to_string()))?;
-        let metadata = file
-            .metadata()
-            .await
-            .map_err(|error| ReadFileError::Io(error.to_string()))?;
-        if !metadata.is_file() {
-            return Err(ReadFileError::NotAFile);
-        }
+        // The open, the size check, and the read all happen on the blocking
+        // pool through the no-follow open, so the bytes can only come from the
+        // symlink-free path the containment check approved.
+        let root = self.root.clone();
         let maximum_bytes = self.config.maximum_file_bytes as u64;
-        if metadata.len() > maximum_bytes {
-            return Err(ReadFileError::TooLarge);
-        }
-        // Bound the read itself: a file grown past the limit between the
-        // metadata probe and the read is truncated at the limit + 1 byte and
-        // rejected instead of materialized.
-        let mut limited = (&mut file).take(maximum_bytes.saturating_add(1));
-        let mut bytes = Vec::new();
-        limited
-            .read_to_end(&mut bytes)
-            .await
-            .map_err(|error| ReadFileError::Io(error.to_string()))?;
-        if bytes.len() as u64 > maximum_bytes {
-            return Err(ReadFileError::TooLarge);
-        }
+        let target = resolved.clone();
+        let bytes = tokio::task::spawn_blocking(move || -> Result<Vec<u8>, ReadFileError> {
+            match super::contained_io::open_contained(&root, &display_path(&target))
+                .map_err(ReadFileError::from)?
+            {
+                super::contained_io::ContainedTarget::File(mut file, metadata) => {
+                    if !metadata.is_file() {
+                        return Err(ReadFileError::NotAFile);
+                    }
+                    if metadata.len() > maximum_bytes {
+                        return Err(ReadFileError::TooLarge);
+                    }
+                    use std::io::Read;
+                    let mut limited = (&mut file).take(maximum_bytes.saturating_add(1));
+                    let mut bytes = Vec::new();
+                    limited
+                        .read_to_end(&mut bytes)
+                        .map_err(|error| ReadFileError::Io(error.to_string()))?;
+                    if bytes.len() as u64 > maximum_bytes {
+                        return Err(ReadFileError::TooLarge);
+                    }
+                    Ok(bytes)
+                }
+                super::contained_io::ContainedTarget::Directory(_) => {
+                    Err(ReadFileError::NotAFile)
+                }
+            }
+        })
+        .await
+        .map_err(|error| ReadFileError::Io(format!("read task failed: {error}")))??;
         let content = String::from_utf8_lossy(&bytes).into_owned();
         Ok(FileContent {
             node_id: self.config.node_id.clone(),

@@ -59,6 +59,17 @@ pub fn resolve_contained_path(
     root: &Path,
     requested: &str,
 ) -> Result<PathBuf, PathContainmentError> {
+    resolve_contained_target(root, requested).map(|(_, target)| target)
+}
+
+/// Same containment checks as [`resolve_contained_path`], returning the
+/// canonical root alongside the canonical target so the caller can walk the
+/// relative components itself (the no-follow open in `contained_io`) without
+/// re-canonicalizing.
+pub(crate) fn resolve_contained_target(
+    root: &Path,
+    requested: &str,
+) -> Result<(PathBuf, PathBuf), PathContainmentError> {
     if requested.is_empty() {
         return Err(PathContainmentError::InvalidPath);
     }
@@ -102,7 +113,7 @@ pub fn resolve_contained_path(
         return Err(PathContainmentError::EscapesRoot);
     }
 
-    Ok(canonical)
+    Ok((root_reference, canonical))
 }
 
 fn is_fs_root(path: &Path) -> bool {

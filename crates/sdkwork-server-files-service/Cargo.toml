@@ -12,6 +12,8 @@ name = "sdkwork_server_files_service"
 [dependencies]
 async-trait.workspace = true
 bytes.workspace = true
+cap-fs-ext.workspace = true
+cap-std.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
