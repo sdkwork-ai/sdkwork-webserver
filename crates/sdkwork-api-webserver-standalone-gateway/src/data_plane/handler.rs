@@ -425,6 +425,9 @@ async fn route_admitted_request(
                     let outcome = crate::tunnel_bridge::relay_cluster_http(
                         lease.endpoint(),
                         client_ip,
+                        crate::tunnel_bridge::RelayBodyLimits::from_config(
+                            generation.app.config().limits.clone(),
+                        ),
                         request,
                     )
                     .await;
@@ -1345,9 +1348,12 @@ async fn relay_registered_tunnel(
         return response;
     }
     let generation = state.runtime.current();
+    let relay_limits =
+        crate::tunnel_bridge::RelayBodyLimits::from_config(generation.app.config().limits.clone());
     match crate::tunnel_bridge::relay_tunnel_http(
         tunnel_shared,
         &tunnel_shared.metrics,
+        relay_limits,
         host,
         client_ip,
         request,

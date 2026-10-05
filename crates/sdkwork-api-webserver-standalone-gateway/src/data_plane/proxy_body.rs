@@ -28,7 +28,7 @@ const BODY_PAUSED: u8 = 2;
 const BODY_CANCELLED: u8 = 3;
 
 #[derive(Clone, Default)]
-pub(super) struct RequestBodyFailure {
+pub(crate) struct RequestBodyFailure {
     state: Arc<AtomicU8>,
 }
 
@@ -60,7 +60,7 @@ impl RequestBodyFailure {
 }
 
 #[derive(Clone, Default)]
-pub(super) struct ProxyRequestBodyControl {
+pub(crate) struct ProxyRequestBodyControl {
     inner: Arc<ProxyRequestBodyControlInner>,
 }
 
@@ -178,7 +178,7 @@ impl ProxyRequestBodyControl {
     }
 }
 
-pub(super) struct ProxyTrailerPolicy {
+pub(crate) struct ProxyTrailerPolicy {
     maximum_bytes: usize,
     maximum_count: usize,
     declared: HashSet<HeaderName>,
@@ -186,7 +186,7 @@ pub(super) struct ProxyTrailerPolicy {
 }
 
 impl ProxyTrailerPolicy {
-    pub(super) fn new(
+    pub(crate) fn new(
         maximum_bytes: usize,
         maximum_count: usize,
         declared: HashSet<HeaderName>,
@@ -201,7 +201,7 @@ impl ProxyTrailerPolicy {
     }
 }
 
-pub(super) struct GuardedProxyBody<B>
+pub(crate) struct GuardedProxyBody<B>
 where
     B: Body + Send + 'static,
 {
@@ -220,7 +220,7 @@ impl<B> GuardedProxyBody<B>
 where
     B: Body + Send + 'static,
 {
-    pub(super) fn request(
+    pub(crate) fn request(
         inner: B,
         maximum_body_bytes: u64,
         trailer_policy: ProxyTrailerPolicy,
@@ -237,7 +237,7 @@ where
         )
     }
 
-    pub(super) fn response(
+    pub(crate) fn response(
         inner: B,
         trailer_policy: ProxyTrailerPolicy,
         maximum_body_bytes: Option<u64>,
@@ -245,7 +245,7 @@ where
         Self::new(inner, maximum_body_bytes, trailer_policy, None, None, None)
     }
 
-    pub(super) fn response_with_request_cancellation(
+    pub(crate) fn response_with_request_cancellation(
         inner: B,
         trailer_policy: ProxyTrailerPolicy,
         request_control: ProxyRequestBodyControl,

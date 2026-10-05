@@ -23,7 +23,7 @@ mod metrics;
 mod operations;
 mod provider_resource;
 mod proxy;
-mod proxy_body;
+pub(crate) mod proxy_body;
 mod proxy_protocol;
 mod real_ip;
 mod request_admission;

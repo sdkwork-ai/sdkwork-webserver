@@ -5,12 +5,17 @@
 //! [`TunnelConfig`] into concrete gateway options. HTTP semantics live
 //! here, on the webserver side; the tunnel crate stays protocol-agnostic.
 
+use std::collections::HashSet;
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::body::Body;
 use hyper_util::rt::TokioIo;
+
+use crate::data_plane::proxy_body::{
+    GuardedProxyBody, ProxyRequestBodyControl, ProxyTrailerPolicy, RequestBodyFailure,
+};
 use sdkwork_webserver_tunnel::gateway::{GatewayShared, RelayVisitor};
 use sdkwork_webserver_tunnel::TunnelGatewayOptions;
 use sdkwork_webserver_tunnel_core::TunnelConfig;
@@ -28,6 +33,55 @@ const CLUSTER_ENDPOINT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// own finite lifetime (aligned with the default `maxConnectionAgeMs`) and
 /// closes the relay when it expires instead of pinning two sockets forever.
 const RELAY_PUMP_MAXIMUM_LIFETIME: Duration = Duration::from_secs(3_600);
+
+/// The HTTP body and trailer ceilings the relays must enforce. The main
+/// proxy path applies the very same `limits` values through
+/// `GuardedProxyBody`; the tunnel and cluster relays forward raw streams, so
+/// without this they were the one path where a visitor could exchange
+/// unbounded bodies past the configured admission limits.
+#[derive(Clone, Copy)]
+pub(crate) struct RelayBodyLimits {
+    pub(crate) maximum_request_body_bytes: u64,
+    pub(crate) maximum_response_body_bytes: u64,
+    pub(crate) maximum_trailer_bytes: usize,
+    pub(crate) maximum_trailers: usize,
+}
+
+impl RelayBodyLimits {
+    pub(crate) fn from_config(limits: sdkwork_webserver_core::config::WebServerLimits) -> Self {
+        Self {
+            maximum_request_body_bytes: limits.max_request_body_bytes,
+            maximum_response_body_bytes: limits.max_response_body_bytes,
+            maximum_trailer_bytes: limits.max_trailer_bytes,
+            maximum_trailers: limits.max_trailers,
+        }
+    }
+}
+
+/// Trailer policy for a relayed message: whatever the message declared in
+/// its `Trailer` header is allowed; everything else is forbidden. The relay
+/// strips `TE` hop-by-hop, so no `TE: trailers` negotiation survives here.
+fn relay_trailer_policy(
+    headers: &axum::http::HeaderMap,
+    limits: &RelayBodyLimits,
+) -> ProxyTrailerPolicy {
+    let mut declared = HashSet::new();
+    for value in headers.get_all(axum::http::header::TRAILER) {
+        if let Ok(value) = value.to_str() {
+            for token in value.split(',').map(str::trim) {
+                if let Ok(name) = axum::http::HeaderName::from_bytes(token.as_bytes()) {
+                    declared.insert(name);
+                }
+            }
+        }
+    }
+    ProxyTrailerPolicy::new(
+        limits.maximum_trailer_bytes,
+        limits.maximum_trailers,
+        declared,
+        HashSet::new(),
+    )
+}
 
 fn cluster_failure(message: String) -> TunnelRelayError {
     TunnelRelayError::Failure(sdkwork_webserver_tunnel_core::TunnelError::ConnectionFailed(message))
@@ -127,6 +181,7 @@ pub(crate) enum TunnelRelayError {
 pub(crate) async fn relay_tunnel_http(
     shared: &Arc<GatewayShared>,
     metrics: &Arc<sdkwork_webserver_tunnel::TunnelMetrics>,
+    limits: RelayBodyLimits,
     host: &str,
     visitor_ip: IpAddr,
     mut request: axum::http::Request<Body>,
@@ -163,7 +218,22 @@ pub(crate) async fn relay_tunnel_http(
     let (mut parts, body) = request.into_parts();
     strip_hop_by_hop_headers(&mut parts.headers, is_websocket);
     inject_forwarded_headers(&mut parts.headers, visitor_ip);
-    let upstream_request = axum::http::Request::from_parts(parts, body);
+    // Enforce the admission limits on the relayed stream: a visitor must not
+    // reach an unbounded body past the edge's configured ceilings just
+    // because this host is served through a tunnel.
+    let request_trailer_policy = relay_trailer_policy(&parts.headers, &limits);
+    let guarded_request_body = if is_websocket {
+        body
+    } else {
+        Body::new(GuardedProxyBody::request(
+            body,
+            limits.maximum_request_body_bytes,
+            request_trailer_policy,
+            RequestBodyFailure::default(),
+            ProxyRequestBodyControl::default(),
+        ))
+    };
+    let upstream_request = axum::http::Request::from_parts(parts, guarded_request_body);
 
     let (mut sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(stream))
         .await
@@ -214,9 +284,14 @@ pub(crate) async fn relay_tunnel_http(
     }
 
     let (parts, response_body) = response.into_parts();
+    let response_trailer_policy = relay_trailer_policy(&parts.headers, &limits);
     Ok(axum::response::Response::from_parts(
         parts,
-        Body::new(response_body),
+        Body::new(GuardedProxyBody::response(
+            response_body,
+            response_trailer_policy,
+            Some(limits.maximum_response_body_bytes),
+        )),
     ))
 }
 
@@ -333,6 +408,7 @@ pub(crate) const CLUSTER_HOP_HEADER: &str = "x-served-by-cluster-hop";
 pub(crate) async fn relay_cluster_http(
     endpoint: &str,
     visitor_ip: IpAddr,
+    limits: RelayBodyLimits,
     mut request: axum::http::Request<Body>,
 ) -> Result<axum::response::Response<Body>, TunnelRelayError> {
     let is_websocket = is_upgrade_request(&request);
@@ -350,7 +426,21 @@ pub(crate) async fn relay_cluster_http(
     parts
         .headers
         .insert(CLUSTER_HOP_HEADER, "1".parse().expect("valid header"));
-    let upstream_request = axum::http::Request::from_parts(parts, body);
+    // Same admission limits as the tunnel relay: the sibling hop must not
+    // become the path around the edge's configured body ceilings.
+    let request_trailer_policy = relay_trailer_policy(&parts.headers, &limits);
+    let guarded_request_body = if is_websocket {
+        body
+    } else {
+        Body::new(GuardedProxyBody::request(
+            body,
+            limits.maximum_request_body_bytes,
+            request_trailer_policy,
+            RequestBodyFailure::default(),
+            ProxyRequestBodyControl::default(),
+        ))
+    };
+    let upstream_request = axum::http::Request::from_parts(parts, guarded_request_body);
 
     // Endpoint form: `host:port` (bind address reported by the instance).
     let authority = endpoint
@@ -430,9 +520,14 @@ pub(crate) async fn relay_cluster_http(
     }
 
     let (parts, response_body) = response.into_parts();
+    let response_trailer_policy = relay_trailer_policy(&parts.headers, &limits);
     Ok(axum::response::Response::from_parts(
         parts,
-        Body::new(response_body),
+        Body::new(GuardedProxyBody::response(
+            response_body,
+            response_trailer_policy,
+            Some(limits.maximum_response_body_bytes),
+        )),
     ))
 }
 
