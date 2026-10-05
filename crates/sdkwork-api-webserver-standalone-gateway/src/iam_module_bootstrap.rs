@@ -242,7 +242,7 @@ mod tests {
     #[test]
     fn sibling_sandbox_manifest_declares_the_route_manifest_permissions() {
         // The sandbox app-api routes carry exactly the four
-        // `sandbox.instances.*` codes (`REQ-2026-0030`); the federated catalog
+        // `sandbox.instances.*` codes (sdkwork-sandbox `REQ-2026-0030`); the federated catalog
         // must declare the same set, or a grantable code would exist that no
         // route enforces against (or the reverse).
         let manifest_path = sibling_app_root("sdkwork-sandbox").join(SANDBOX_IAM_MODULE_MANIFEST);

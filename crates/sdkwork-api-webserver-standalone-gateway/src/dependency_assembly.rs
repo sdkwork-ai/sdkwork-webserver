@@ -129,7 +129,7 @@ async fn mcp_module() -> Result<WebModule, StandaloneProfileError> {
 ///
 /// One surface set, one owner, one surface-branching domain context injector,
 /// so this edge's single Web Framework layer authenticates each face by its
-/// own contract (`REQ-2026-0030`, `ADR-20261004`). The Sandbox repository is
+/// own contract (sdkwork-sandbox `REQ-2026-0030`, `ADR-20261004`). The Sandbox repository is
 /// standalone-only (`SDKWORK_WEBSERVER_SPEC.md` section 17.4), and the Web
 /// Server edge is the only public reverse-proxy in front of it, which is why
 /// the console reaches these routes on the same origin as every other

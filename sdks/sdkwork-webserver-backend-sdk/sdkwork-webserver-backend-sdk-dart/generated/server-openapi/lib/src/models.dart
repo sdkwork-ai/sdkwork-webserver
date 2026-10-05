@@ -138,7 +138,7 @@ class ProbeClusterInstanceRequest {
 
 class ClusterProbeRunResponse {
   final bool? healthy;
-  final int? latencyMs;
+  final String? latencyMs;
   final int? failures;
   final bool? ejected;
   final bool? recovered;
@@ -154,7 +154,7 @@ class ClusterProbeRunResponse {
   factory ClusterProbeRunResponse.fromJson(Map<String, dynamic> json) {
     return ClusterProbeRunResponse(
       healthy: json['healthy'] is bool ? json['healthy'] : null,
-      latencyMs: json['latencyMs'] is int ? json['latencyMs'] : null,
+      latencyMs: json['latencyMs']?.toString(),
       failures: json['failures'] is int ? json['failures'] : null,
       ejected: json['ejected'] is bool ? json['ejected'] : null,
       recovered: json['recovered'] is bool ? json['recovered'] : null

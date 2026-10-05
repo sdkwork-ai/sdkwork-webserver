@@ -311,7 +311,7 @@ mod tests {
             call_applications(TestResolver {
                 tenant_id: "",
                 login_scope: WebLoginScope::Organization,
-                permissions: vec!["web.sites.read".to_owned()],
+                permissions: vec!["web.applications.read".to_owned()],
             })
             .await,
             StatusCode::UNPROCESSABLE_ENTITY
@@ -329,7 +329,7 @@ mod tests {
             call_applications(TestResolver {
                 tenant_id: "42",
                 login_scope: WebLoginScope::Organization,
-                permissions: vec!["web.sites.read".to_owned()],
+                permissions: vec!["web.applications.read".to_owned()],
             })
             .await,
             StatusCode::OK

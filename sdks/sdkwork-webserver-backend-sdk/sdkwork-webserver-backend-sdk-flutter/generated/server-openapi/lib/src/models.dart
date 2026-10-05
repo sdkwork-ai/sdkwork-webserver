@@ -210,7 +210,7 @@ class ProbeClusterInstanceRequest {
 
 class ClusterProbeRunResponse {
   final bool healthy;
-  final int latencyMs;
+  final String latencyMs;
   final int failures;
   final bool ejected;
   final bool recovered;
@@ -233,8 +233,8 @@ class ClusterProbeRunResponse {
         return value;
       })(),
       latencyMs: (() {
-        final value = json['latencyMs'];
-        if (value is! int) {
+        final value = json['latencyMs']?.toString();
+        if (value == null) {
           throw FormatException('ClusterProbeRunResponse.latencyMs is required');
         }
         return value;

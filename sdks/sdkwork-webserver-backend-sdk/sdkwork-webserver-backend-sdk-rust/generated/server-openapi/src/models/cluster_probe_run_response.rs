@@ -5,9 +5,9 @@ pub struct ClusterProbeRunResponse {
     /// Probe reached the instance and got a healthy answer.
     pub healthy: bool,
 
-    /// Round-trip latency of the probe.
+    /// Round-trip latency of the probe in milliseconds.
     #[serde(rename = "latencyMs")]
-    pub latency_ms: i64,
+    pub latency_ms: String,
 
     /// Consecutive probe failures after this run; 0 when healthy.
     pub failures: i64,

@@ -1096,9 +1096,10 @@ pub struct ClusterDrainCompleteResponse {
 pub struct ClusterProbeRunResponse {
     /// Probe reached the instance and got a healthy answer.
     pub healthy: bool,
-    /// Round-trip latency of the probe.
-    #[serde(rename = "latencyMs")]
-    pub latency_ms: u64,
+    /// Round-trip latency of the probe, in milliseconds
+    /// (`API_SPEC.md` section 13.6: int64 travels as a decimal string).
+    #[serde(rename = "latencyMs", with = "sdkwork_utils_rust::serde_int64")]
+    pub latency_ms: i64,
     /// Consecutive probe failures after this run (0 when healthy).
     pub failures: i32,
     /// Auto-eject transition happened on this run.

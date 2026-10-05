@@ -3,7 +3,7 @@ package com.sdkwork.webserver.backend.sdk.model;
 
 public class ClusterProbeRunResponse {
     private Boolean healthy;
-    private Integer latencyMs;
+    private String latencyMs;
     private Integer failures;
     private Boolean ejected;
     private Boolean recovered;
@@ -16,11 +16,11 @@ public class ClusterProbeRunResponse {
         this.healthy = healthy;
     }
 
-    public Integer getLatencyMs() {
+    public String getLatencyMs() {
         return this.latencyMs;
     }
 
-    public void setLatencyMs(Integer latencyMs) {
+    public void setLatencyMs(String latencyMs) {
         this.latencyMs = latencyMs;
     }
 

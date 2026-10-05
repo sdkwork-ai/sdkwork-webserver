@@ -3,25 +3,22 @@
 ```yaml
 id: MIG-2026-0070
 owner: sdkwork-webserver
-status: active
+status: executed
 requirement: REQ-2026-0070
 type: breaking
 scope:
   producers:
-    - apis/app-api/web/openapi.yaml
-    - crates/sdkwork-routes-webserver-app-api
+    - apis/backend-api/web/openapi.yaml
+    - crates/sdkwork-routes-webserver-backend-api
     - crates/sdkwork-webserver-contract
     - crates/sdkwork-intelligence-webserver-service
     - database/webserver_application
     - database/webserver_site
   consumers:
-    - sdkwork-web-app-sdk
-    - sdkwork-web-backend-sdk
+    - sdkwork-webserver-backend-sdk
     - sdkwork-webserver-pc-console-core
-    - sdkwork-webserver-pc-console-sites
-compatibility_window:
-  starts_at: 2026-08-09
-  ends_at: 0.2.0
+    - sdkwork-webserver-pc-admin-delivery
+compatibility_window: none (pre-launch; MIGRATION_SPEC section 4.4)
 strategy: no-compatibility-approved
 rollback:
   supported: false

@@ -60,13 +60,13 @@ public struct ProbeClusterInstanceRequest: Codable {
 
 public struct ClusterProbeRunResponse: Codable {
     public let healthy: Bool?
-    public let latencyMs: Int?
+    public let latencyMs: String?
     public let failures: Int?
     public let ejected: Bool?
     public let recovered: Bool?
 
 
-    public init(healthy: Bool? = nil, latencyMs: Int? = nil, failures: Int? = nil, ejected: Bool? = nil, recovered: Bool? = nil) {
+    public init(healthy: Bool? = nil, latencyMs: String? = nil, failures: Int? = nil, ejected: Bool? = nil, recovered: Bool? = nil) {
         self.healthy = healthy
         self.latencyMs = latencyMs
         self.failures = failures

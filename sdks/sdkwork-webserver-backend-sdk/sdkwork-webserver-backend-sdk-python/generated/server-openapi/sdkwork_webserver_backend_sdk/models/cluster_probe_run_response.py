@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Optional, List, Dict, Any
 @dataclass
 class ClusterProbeRunResponse:
     healthy: bool
-    latency_ms: int
+    latency_ms: str
     failures: int
     ejected: bool
     recovered: bool

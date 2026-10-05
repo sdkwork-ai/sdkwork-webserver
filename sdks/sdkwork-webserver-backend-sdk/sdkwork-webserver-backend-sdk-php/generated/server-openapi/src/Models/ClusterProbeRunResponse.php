@@ -9,8 +9,8 @@ final class ClusterProbeRunResponse
     /** Probe reached the instance and got a healthy answer. */
     public ?bool $healthy = null;
 
-    /** Round-trip latency of the probe. */
-    public ?int $latencyMs = null;
+    /** Round-trip latency of the probe in milliseconds. */
+    public ?string $latencyMs = null;
 
     /** Consecutive probe failures after this run; 0 when healthy. */
     public ?int $failures = null;

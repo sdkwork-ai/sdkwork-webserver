@@ -37,7 +37,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.read",
+      "permission": "web.applications.read",
       "idempotent": false,
       "rateLimitTier": null
     },
@@ -63,7 +63,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": null
     },
@@ -89,7 +89,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.read",
+      "permission": "web.applications.read",
       "idempotent": false,
       "rateLimitTier": null
     },
@@ -115,7 +115,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": null
     },
@@ -141,7 +141,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": "auth-critical"
     },
@@ -167,7 +167,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": "auth-critical"
     },
@@ -193,7 +193,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": "auth-critical"
     },
@@ -219,7 +219,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.read",
+      "permission": "web.applications.read",
       "idempotent": false,
       "rateLimitTier": null
     },
@@ -245,7 +245,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": null
     },
@@ -271,7 +271,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": "auth-critical"
     },
@@ -297,7 +297,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": null
     },
@@ -401,7 +401,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.read",
+      "permission": "web.applications.read",
       "idempotent": false,
       "rateLimitTier": null
     },
@@ -427,7 +427,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": null
     },
@@ -453,7 +453,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.read",
+      "permission": "web.applications.read",
       "idempotent": false,
       "rateLimitTier": null
     },
@@ -479,7 +479,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": null
     },
@@ -505,7 +505,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": "auth-critical"
     },
@@ -531,7 +531,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.read",
+      "permission": "web.applications.read",
       "idempotent": false,
       "rateLimitTier": null
     },
@@ -557,7 +557,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": null
     },
@@ -583,7 +583,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.read",
+      "permission": "web.applications.read",
       "idempotent": false,
       "rateLimitTier": null
     },
@@ -609,7 +609,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": null
     },
@@ -635,7 +635,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": "auth-critical"
     },
@@ -661,7 +661,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": null
     },
@@ -687,7 +687,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": "auth-critical"
     },
@@ -713,7 +713,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": "auth-critical"
     },
@@ -739,7 +739,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.read",
+      "permission": "web.applications.read",
       "idempotent": false,
       "rateLimitTier": null
     },
@@ -765,7 +765,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": null
     },
@@ -791,7 +791,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.write",
+      "permission": "web.applications.write",
       "idempotent": true,
       "rateLimitTier": "auth-critical"
     },
@@ -817,7 +817,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.read",
+      "permission": "web.applications.read",
       "idempotent": false,
       "rateLimitTier": null
     },
@@ -843,7 +843,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "web.sites.read",
+      "permission": "web.applications.read",
       "idempotent": false,
       "rateLimitTier": null
     },

@@ -421,7 +421,7 @@ pub(crate) async fn list_instance_metrics_history(
 /// bounded timeout, exactly the nginx-style active health check. Any valid
 /// HTTP status line counts as healthy; the probe measures round-trip
 /// latency.
-async fn http_probe(authority: &str, path: &str, timeout: Duration) -> Result<u64, String> {
+async fn http_probe(authority: &str, path: &str, timeout: Duration) -> Result<i64, String> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let started = std::time::Instant::now();
     let tcp = tokio::time::timeout(timeout, tokio::net::TcpStream::connect(authority))
@@ -453,7 +453,7 @@ Connection: close
     if !head.starts_with("HTTP") {
         return Err("non-HTTP response".to_owned());
     }
-    Ok(started.elapsed().as_millis() as u64)
+    Ok(started.elapsed().as_millis() as i64)
 }
 
 /// `POST /backend/v3/api/clusters/instances/{instanceId}/probe` — on-demand
@@ -536,7 +536,7 @@ pub(crate) async fn probe_cluster_instance(
     let latency_ms = probe
         .as_ref()
         .copied()
-        .unwrap_or(u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX));
+        .unwrap_or(i64::try_from(timeout.as_millis()).unwrap_or(i64::MAX));
     let outcome = service
         .cluster_instance_probe_outcome(&instance_id, probe.is_ok())
         .await?;

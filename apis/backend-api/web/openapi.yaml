@@ -26,7 +26,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.read
+      x-sdkwork-permission: web.applications.read
       x-sdkwork-owner: sdkwork-webserver
       parameters:
       - $ref: '#/components/parameters/PageParam'
@@ -89,7 +89,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.write
+      x-sdkwork-permission: web.applications.write
       x-sdkwork-idempotent: true
       parameters:
       - $ref: '#/components/parameters/IdempotencyKey'
@@ -132,7 +132,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.read
+      x-sdkwork-permission: web.applications.read
       x-sdkwork-owner: sdkwork-webserver
       responses:
         '200':
@@ -166,7 +166,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.write
+      x-sdkwork-permission: web.applications.write
       x-sdkwork-idempotent: true
       parameters:
       - $ref: '#/components/parameters/IdempotencyKey'
@@ -208,7 +208,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.write
+      x-sdkwork-permission: web.applications.write
       x-sdkwork-idempotent: true
       parameters:
       - $ref: '#/components/parameters/IdempotencyKey'
@@ -234,7 +234,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.write
+      x-sdkwork-permission: web.applications.write
       x-sdkwork-idempotent: true
       parameters:
       - $ref: '#/components/parameters/IdempotencyKey'
@@ -274,7 +274,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.write
+      x-sdkwork-permission: web.applications.write
       x-sdkwork-idempotent: true
       parameters:
       - $ref: '#/components/parameters/IdempotencyKey'
@@ -315,7 +315,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.read
+      x-sdkwork-permission: web.applications.read
       x-sdkwork-owner: sdkwork-webserver
       parameters:
       - $ref: '#/components/parameters/PageParam'
@@ -354,7 +354,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.write
+      x-sdkwork-permission: web.applications.write
       x-sdkwork-idempotent: true
       parameters:
       - $ref: '#/components/parameters/IdempotencyKey'
@@ -398,7 +398,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.write
+      x-sdkwork-permission: web.applications.write
       x-sdkwork-idempotent: true
       parameters:
       - $ref: '#/components/parameters/IdempotencyKey'
@@ -425,7 +425,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.write
+      x-sdkwork-permission: web.applications.write
       x-sdkwork-idempotent: true
       parameters:
       - $ref: '#/components/parameters/IdempotencyKey'
@@ -591,7 +591,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.read
+      x-sdkwork-permission: web.applications.read
       x-sdkwork-owner: sdkwork-webserver
       parameters:
       - $ref: '#/components/parameters/PageParam'
@@ -658,7 +658,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.write
+      x-sdkwork-permission: web.applications.write
       x-sdkwork-idempotent: true
       x-sdkwork-owner: sdkwork-webserver
       parameters:
@@ -705,7 +705,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.read
+      x-sdkwork-permission: web.applications.read
       x-sdkwork-owner: sdkwork-webserver
       responses:
         '200':
@@ -739,7 +739,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.write
+      x-sdkwork-permission: web.applications.write
       x-sdkwork-idempotent: true
       x-sdkwork-owner: sdkwork-webserver
       parameters:
@@ -783,7 +783,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.write
+      x-sdkwork-permission: web.applications.write
       x-sdkwork-idempotent: true
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-webserver
@@ -812,7 +812,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.read
+      x-sdkwork-permission: web.applications.read
       x-sdkwork-owner: sdkwork-webserver
       parameters:
       - $ref: '#/components/parameters/PageParam'
@@ -853,7 +853,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.write
+      x-sdkwork-permission: web.applications.write
       x-sdkwork-idempotent: true
       x-sdkwork-owner: sdkwork-webserver
       parameters:
@@ -901,7 +901,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.read
+      x-sdkwork-permission: web.applications.read
       x-sdkwork-owner: sdkwork-webserver
       parameters:
       - $ref: '#/components/parameters/PageParam'
@@ -940,7 +940,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.write
+      x-sdkwork-permission: web.applications.write
       x-sdkwork-idempotent: true
       x-sdkwork-owner: sdkwork-webserver
       parameters:
@@ -987,7 +987,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.write
+      x-sdkwork-permission: web.applications.write
       x-sdkwork-idempotent: true
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-webserver
@@ -1015,7 +1015,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.write
+      x-sdkwork-permission: web.applications.write
       x-sdkwork-idempotent: true
       x-sdkwork-owner: sdkwork-webserver
       parameters:
@@ -1055,7 +1055,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.write
+      x-sdkwork-permission: web.applications.write
       x-sdkwork-idempotent: true
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-webserver
@@ -1102,7 +1102,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.write
+      x-sdkwork-permission: web.applications.write
       x-sdkwork-idempotent: true
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-webserver
@@ -1129,7 +1129,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.read
+      x-sdkwork-permission: web.applications.read
       x-sdkwork-owner: sdkwork-webserver
       parameters:
       - $ref: '#/components/parameters/PageSizeParam'
@@ -1170,7 +1170,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.write
+      x-sdkwork-permission: web.applications.write
       x-sdkwork-idempotent: true
       x-sdkwork-owner: sdkwork-webserver
       parameters:
@@ -1219,7 +1219,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.write
+      x-sdkwork-permission: web.applications.write
       x-sdkwork-idempotent: true
       x-sdkwork-rate-limit-tier: auth-critical
       x-sdkwork-owner: sdkwork-webserver
@@ -1268,7 +1268,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.read
+      x-sdkwork-permission: web.applications.read
       x-sdkwork-owner: sdkwork-webserver
       responses:
         '200':
@@ -1307,7 +1307,7 @@ paths:
       x-sdkwork-api-authority: sdkwork-webserver-backend-api
       x-sdkwork-request-context: WebRequestContext
       x-sdkwork-auth-mode: dual-token
-      x-sdkwork-permission: web.sites.read
+      x-sdkwork-permission: web.applications.read
       x-sdkwork-owner: sdkwork-webserver
       x-sdkwork-pagination-mode: cursor
       parameters:
@@ -4189,9 +4189,11 @@ components:
           type: boolean
           description: Probe reached the instance and got a healthy answer.
         latencyMs:
-          type: integer
-          minimum: 0
-          description: Round-trip latency of the probe.
+          type: string
+          format: int64
+          pattern: '^-?[0-9]+$'
+          x-sdkwork-int64-string: true
+          description: Round-trip latency of the probe in milliseconds.
         failures:
           type: integer
           minimum: 0
