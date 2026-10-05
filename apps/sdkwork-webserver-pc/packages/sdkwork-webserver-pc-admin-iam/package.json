@@ -25,7 +25,7 @@
     "@sdkwork/webserver-pc-console-core": "workspace:*",
     "lucide-react": "catalog:",
     "react": "catalog:",
-    "react-router-dom": "^7.15.0"
+    "react-router-dom": "^7.18.4"
   },
   "sdkwork": {
     "applicationCode": "webserver",

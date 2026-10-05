@@ -466,27 +466,31 @@ fn spawn_certificate_expiry_sampler() {
         .map(|value| value.clamp(MIN_INTERVAL_SECS, MAX_INTERVAL_SECS))
         .unwrap_or(DEFAULT_INTERVAL_SECS);
     tokio::spawn(async move {
-        sdkwork_database_sqlx::enable_process_shared_database_pool();
-        let runtime =
-            match sdkwork_intelligence_webserver_repository_sqlx::bootstrap_web_runtime_from_env()
-                .await
-            {
-                Ok(runtime) => runtime,
-                Err(error) => {
-                    tracing::info!(
-                        error = %error,
-                        "certificate expiry sampler disabled: no control-plane database is configured for this edge"
-                    );
-                    return;
-                }
-            };
-        tracing::info!(interval_secs, "certificate expiry sampler started");
+        // The reader is the assembly's shared control-plane service: the
+        // sampler schedules and records, the owner owns the repository. An
+        // edge that never assembles a management plane (data-plane-only)
+        // simply never observes a reader and the gauges keep their honest
+        // "no observation" state.
+        let mut announced_absence = false;
         loop {
             tokio::select! {
                 _ = tokio::time::sleep(std::time::Duration::from_secs(interval_secs)) => {}
                 _ = shutdown_signal() => return,
             }
-            match runtime.service.certificate_expiry_summary().await {
+            let Some(summary) =
+                sdkwork_api_webserver_assembly::certificate_expiry_summary()
+                    .await
+            else {
+                if !announced_absence {
+                    announced_absence = true;
+                    tracing::info!(
+                        interval_secs,
+                        "certificate expiry sampler idle: no control-plane service is assembled on this edge"
+                    );
+                }
+                continue;
+            };
+            match summary {
                 Ok((minimum_seconds, expiring_soon)) => {
                     sdkwork_api_webserver_standalone_gateway::record_certificate_expiry(
                         minimum_seconds,

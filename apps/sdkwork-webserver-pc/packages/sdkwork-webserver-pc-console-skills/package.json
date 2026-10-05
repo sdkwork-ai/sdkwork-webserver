@@ -12,11 +12,11 @@
     }
   },
   "dependencies": {
-    "@sdkwork/skills-pc-core": "workspace:*",
-    "@sdkwork/skills-pc-console-skills": "workspace:*",
     "@sdkwork/sdk-common": "workspace:*",
+    "@sdkwork/skills-pc-console-skills": "workspace:*",
+    "@sdkwork/skills-pc-core": "workspace:*",
     "react": "catalog:",
-    "react-router-dom": "^7.15.0"
+    "react-router-dom": "^7.18.4"
   },
   "sdkwork": {
     "applicationCode": "webserver",

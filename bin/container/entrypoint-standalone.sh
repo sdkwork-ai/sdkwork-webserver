@@ -2258,7 +2258,7 @@ exec_as_service_user() {
       # SIGKILL and the gateway's connection/tunnel drain never ran. HOME,
       # USER, and LOGNAME mirror what runuser would have exported so binary
       # behavior is unchanged.
-      user_home="$(getent passwd "${SERVICE_USER}" | cut -d: -f6)"
+      user_home="$(awk -F: -v user="${SERVICE_USER}" '$1 == user { print $6; exit }' /etc/passwd)"
       export HOME="${user_home:-/home/${SERVICE_USER}}" USER="${SERVICE_USER}" LOGNAME="${SERVICE_USER}"
       exec setpriv --reuid="$(id -u "${SERVICE_USER}")" --regid="$(id -g "${SERVICE_USER}")" --init-groups -- "$@"
     fi

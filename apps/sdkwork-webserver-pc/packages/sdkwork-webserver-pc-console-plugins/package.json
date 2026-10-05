@@ -15,10 +15,10 @@
     "@sdkwork/sdk-common": "workspace:*",
     "@sdkwork/ui-pc-react": "workspace:*",
     "@sdkwork/utils": "workspace:*",
-    "@sdkwork/webserver-pc-console-core": "workspace:*",
     "@sdkwork/webserver-pc-commons": "workspace:*",
+    "@sdkwork/webserver-pc-console-core": "workspace:*",
     "react": "catalog:",
-    "react-router-dom": "^7.15.0"
+    "react-router-dom": "^7.18.4"
   },
   "sdkwork": {
     "applicationCode": "webserver",

@@ -18,8 +18,15 @@
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const specsTools = path.resolve(appRoot, '..', 'sdkwork-specs', 'tools', 'webserver');
+// The materializer is module-generic; `--root <dir>` targets a sibling module
+// checkout so one runner repairs every `deployments/webserver` tree the
+// fleet-wide validator scans (validate-all-webserver-toml walks all roots).
+// The specs toolchain stays anchored to THIS checkout; only the target root moves.
+const scriptRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const rootArgIndex = process.argv.indexOf('--root');
+const rootArg = rootArgIndex >= 0 ? process.argv[rootArgIndex + 1] : undefined;
+const appRoot = path.resolve(rootArg ?? scriptRoot);
+const specsTools = path.resolve(scriptRoot, '..', 'sdkwork-specs', 'tools', 'webserver');
 const moduleName = path.basename(appRoot);
 
 const { buildWebserverDocs, writeWebserverLayout } = await import(

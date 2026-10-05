@@ -12,11 +12,11 @@
     }
   },
   "dependencies": {
-    "@sdkwork/mcp-pc-core": "workspace:*",
     "@sdkwork/mcp-pc-admin": "workspace:*",
+    "@sdkwork/mcp-pc-core": "workspace:*",
     "@sdkwork/sdk-common": "workspace:*",
     "react": "catalog:",
-    "react-router-dom": "^7.15.0"
+    "react-router-dom": "^7.18.4"
   },
   "sdkwork": {
     "applicationCode": "webserver",

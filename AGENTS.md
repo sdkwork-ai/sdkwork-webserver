@@ -1,25 +1,16 @@
 # Repository Guidelines
-
 <!-- SDKWORK-AGENTS-GENERATED: v2 -->
-
 ## SDKWORK Soul
-
 Read `../sdkwork-specs/SOUL.md` before executing tasks in this root. Follow specs before memory, dictionary before context, stop on ambiguity, and evidence before completion.
-
 ## SDKWORK Standards
-
 <!-- SDKWORK-PROGRESSIVE-LOADING: v1 -->
 Resolve this standards root once and use it as the global authority for the current task:
-
 - `../sdkwork-specs/README.md`
 - `../sdkwork-specs/SOUL.md`
 - `../sdkwork-specs/AGENTS_SPEC.md`
-
 Read only the relevant README task-matrix row or navigation heading, then load the selected authority sections.
 <!-- /SDKWORK-PROGRESSIVE-LOADING: v1 -->
-
 Canonical SDKWORK specs path from this root:
-
 - `../sdkwork-specs/README.md`
 - `../sdkwork-specs/SOUL.md`
 - `../sdkwork-specs/AGENTS_SPEC.md`
@@ -27,19 +18,12 @@ Canonical SDKWORK specs path from this root:
 - `../sdkwork-specs/GITHUB_WORKFLOW_SPEC.md`
 - `../sdkwork-specs/CODE_STYLE_SPEC.md`
 - `../sdkwork-specs/NAMING_SPEC.md`
-
 Do not copy root standard text into this repository. If these relative paths do not resolve, stop and report the broken workspace layout.
-
 ## Application Identity
-
 Read `sdkwork.app.config.json` for Web Server identity, registration, SDK/API inventory, release metadata, packaging capability, or app-owned capabilities. Read `etc/` for concrete environment, bind, upstream, runtime, and deployment values. The app manifest is not runtime configuration authority.
-
 ## Deployment Profile (Standalone-Only)
-
 > Manual note — keep this section when AGENTS.md is regenerated.
-
 `sdkwork-webserver` is **standalone-only** (`SDKWORK_WEBSERVER_SPEC.md` §17.4) and is the **only** public reverse-proxy edge (`SDKWORK_WEBSERVER_SPEC.md` §0.1, `NGINX_SPEC.md` §0):
-
 - Stock OpenResty/nginx and `/etc/nginx` `MUST NOT` serve SDKWork public domains. Uninstall host nginx (`bin/host/uninstall-wsl-nginx.sh`); `install-wsl-nginx.sh` is retired and only invokes uninstall. Docker development publishes host `:80`/`:443`.
 - `sdkwork.app.config.json` declares `runtime.supportedDeploymentProfiles = ["standalone"]`; there is no cloud build, cloud package, or cloud runtime-env surface in this repository.
 - Its browser applications (`apps/sdkwork-webserver-pc`, `apps/sdkwork-webserver-h5`) build with the canonical runner at `build:pc|h5:<env>` only (no `:cloud` variants). Every SDK API base URL is the same-origin root `/` (`browserOriginMode = same-origin`); the gateway serves the SPAs and the API on one origin.
@@ -47,9 +31,7 @@ Read `sdkwork.app.config.json` for Web Server identity, registration, SDK/API in
 - The nginx-compatible **module import plane** (`imports.d`, `SDKWORK_WEBSERVER_SPEC.md` §17.3) is a separate concept from the webserver's own build mode: it still materializes both `standalone` and `cloud` import sets for the imported sibling modules (default active set `cloud`) so the edge startup mode can switch freely. Sidecars are inputs to the Rust data plane, not a stock nginx process.
 - Import uses **high-cohesion, low-coupling configuration**: the aggregator `imports.d/import.conf` includes each sibling module's own checkout sidecar directly (`/opt/deploy/sdkwork-space/<module>/deployments/webserver/nginx.<profile>.<environment>.conf`); the module's `deployments/webserver/` tree (sidecar + snippets) is the single source of truth and the webserver never copies or rewrites module configs under `/etc`. Switch the active set with `pnpm import:switch:cloud|standalone` (`SDKWORK_WEBSERVER_IMPORT_PROFILE` at container start, default `cloud`), then restart `serve-imports`.
 - All other modules under `sdkwork-space` support both `standalone` (same-origin `/`) and `cloud` (unified `api-dev.<domain>` … `api.<domain>` edge) build modes per `ENVIRONMENT_SPEC.md` §5.1.0.1 and `PNPM_SCRIPT_SPEC.md` §4.2.
-
 ## Local Dictionary Structure
-
 - `AGENTS.md`: repository agent entrypoint and relative SDKWork spec index.
 - `CLAUDE.md`, `GEMINI.md`, `CODEX.md`: compatibility shims that point to `AGENTS.md`.
 - `sdkwork.app.config.json`: Web Server application identity, runtime, release, and capability metadata.
@@ -59,40 +41,31 @@ Read `sdkwork.app.config.json` for Web Server identity, registration, SDK/API in
 - `.sdkwork/`: repository/application AI workspace metadata.
 - `specs/`: local application/component contracts.
 - `apis/`: Web Server-owned API contract sources.
-- `apps/`: browser application roots (`sdkwork-webserver-pc`, `sdkwork-webserver-h5`) served by the webserver process Adaptive Web console; the same webserver process owns public reverse proxy (no stock nginx).
+- `apps/`: browser/application roots (`sdkwork-webserver-pc`, `sdkwork-webserver-h5`, `sdkwork-webserver-mini-program`, `sdkwork-webserver-harmony-mobile`, `sdkwork-webserver-flutter-mobile` — see `apps/README.md`) served by the webserver process Adaptive Web console; the same webserver process owns public reverse proxy (no stock nginx).
 - `crates/`: Rust service, repository, route, and API server crates.
 - `sdks/`: SDK families and generated SDK artifacts.
 - `database/`: database contract, baseline DDL, migrations, seeds, drift policy.
 - `etc/`, `deployments/`, `scripts/`, `tools/`, `docs/`, `tests/`: source configuration, infrastructure descriptors, command entrypoints, validators, documentation, and verification assets.
 - `package.json`, `Cargo.toml`: language/build manifests.
-
 ## Documentation Canon
-
 - [docs/README.md](docs/README.md)
 - [docs/product/prd/PRD.md](docs/product/prd/PRD.md)
 - [docs/architecture/tech/TECH_ARCHITECTURE.md](docs/architecture/tech/TECH_ARCHITECTURE.md)
-
 ## Spec Resolution Order
-
 <!-- SDKWORK-PROGRESSIVE-LOADING: v1 -->
 Use dynamic progressive loading for the current task: resolve the selected root and task category before reading broad source context.
-
 1. Read this `AGENTS.md` routing material and classify the owned surface.
 2. Read `sdkwork.app.config.json`, module `specs/`, repository/application `specs/`, and `.sdkwork/` only when the task reaches the contract each item governs.
 3. Locate only the relevant task-matrix row or navigation heading in `../sdkwork-specs/README.md`; do not load the full catalog.
 4. Read only the task-specific global spec sections selected by that route, then inspect implementation files.
 <!-- /SDKWORK-PROGRESSIVE-LOADING: v1 -->
-
 Use dynamic progressive loading:
-
 1. Read this `AGENTS.md` and any nearer component-level `AGENTS.md`.
 2. Read `sdkwork.app.config.json` only when app behavior, runtime config, SDK wiring, release, packaging, or app-owned capabilities are touched.
 3. Read local `specs/README.md` and `specs/component.spec.json` only when the task touches that local contract.
 4. Read `../sdkwork-specs/README.md`, then only the task-specific root specs.
 5. Inspect implementation files after the dictionary and relevant specs are clear.
-
 ## Required Specs By Task Type
-
 - Agent/workflow changes: `../sdkwork-specs/SOUL.md`, `../sdkwork-specs/AGENTS_SPEC.md`, `../sdkwork-specs/SDKWORK_WORKSPACE_SPEC.md`, `../sdkwork-specs/GITHUB_WORKFLOW_SPEC.md`, `../sdkwork-specs/TEST_SPEC.md`.
 - Any code change: `../sdkwork-specs/CODE_STYLE_SPEC.md`, `../sdkwork-specs/NAMING_SPEC.md`, plus only the touched language/framework spec.
 - Rust code: `../sdkwork-specs/RUST_CODE_SPEC.md`.
@@ -100,9 +73,7 @@ Use dynamic progressive loading:
 - Database changes: `../sdkwork-specs/DATABASE_SPEC.md`, `../sdkwork-specs/DATABASE_FRAMEWORK_SPEC.md`, `../sdkwork-specs/TEST_SPEC.md`.
 - Runtime/deployment/release changes: `../sdkwork-specs/CONFIG_SPEC.md`, `../sdkwork-specs/ENVIRONMENT_SPEC.md`, `../sdkwork-specs/APPLICATION_DEPLOY_LAYOUT_SPEC.md`, `../sdkwork-specs/DEPLOYMENT_SPEC.md`, `../sdkwork-specs/DOCKER_SPEC.md`, `../sdkwork-specs/GITHUB_WORKFLOW_SPEC.md`.
 - Security/auth changes: `../sdkwork-specs/IAM_SPEC.md`, `../sdkwork-specs/SECURITY_SPEC.md`.
-
 ## Int64 Wire Contract (API_SPEC §13.6)
-
 - OpenAPI `int64` fields and parameters `MUST` be `type: string`, `format: int64`,
   a decimal `pattern` such as `^-?[0-9]+$`, and `x-sdkwork-int64-string: true`.
   `type: integer, format: int64` is a contract violation: generated TypeScript
@@ -115,21 +86,15 @@ Use dynamic progressive loading:
   convert ids/snowflake ids/sequence ids to `number` for storage, comparison,
   or submission.
 - Verification: `node <sdkwork-specs>/tools/check-api-operation-patterns.mjs --workspace .`
-
 ## Code Style Rules
-
 Read `../sdkwork-specs/CODE_STYLE_SPEC.md` and `../sdkwork-specs/NAMING_SPEC.md` before code changes. Use `sdkwork-utils-rust` and `sdkwork-id-core` for shared helpers instead of duplicating utility logic locally. Generated SDK output must not be hand-edited.
-
 Build scripts, dev runners, and `pnpm clean` must follow `CODE_STYLE_SPEC.md` §7 (Build Source Integrity And Self-Healing). Git-tracked build-critical source files must be verified before builds and self-healed from git when missing; `clean` must not delete them.
-
 ## Build, Test, and Verification
-
 <!-- SDKWORK-VERIFICATION-ROUTING: v1 -->
 Choose only the narrowest verification selected by the changed surface. This is not a default full-suite command list.
 Run workspace-wide checks only when the change crosses that boundary.
 `bootstrap-*`, `align-*`, `sync-*`, `--write`, and other mutating repair commands are not verification defaults; use them only for an explicitly scoped repair, migration, bootstrap, or alignment task and inspect the resulting diff.
 <!-- /SDKWORK-VERIFICATION-ROUTING: v1 -->
-
 ```powershell
 pnpm dev
 pnpm check
@@ -137,9 +102,7 @@ pnpm verify
 pnpm db:validate
 pnpm topology:validate
 ```
-
 ## Agent Execution Rules
-
 <!-- SDKWORK-PROGRESSIVE-LOADING: v1 -->
 Use dynamic progressive loading for the current task; treat indexes and cross-references as discovery, not as a startup bundle.
 Keep `../sdkwork-specs/SOUL.md` and the task-selected standards authoritative; expand context only when evidence exposes a new contract boundary.
@@ -147,59 +110,19 @@ Language-specific specs are on-demand: only the touched language loads `../sdkwo
 Package command standardization loads `../sdkwork-specs/PNPM_SCRIPT_SPEC.md` only when the current task changes package commands or scripts; GitHub packaging work loads `../sdkwork-specs/GITHUB_WORKFLOW_SPEC.md` only when it reaches that workflow boundary.
 Do not infer a recursive workspace scan or a broad validation suite from the presence of a path alone.
 <!-- /SDKWORK-PROGRESSIVE-LOADING: v1 -->
-
 Do not rely on memory when a relevant SDKWork spec exists. Do not replace generated SDK calls with raw HTTP. Stop when the relative specs path, app identity, component spec, API authority, SDK family, or table prefix is ambiguous. `sdkwork-discovery` is not required until RPC services are introduced.
-
 ## Task-Specific Standards
-
 API work loads `../sdkwork-specs/API_SPEC.md` and its validators. List/search work loads `../sdkwork-specs/PAGINATION_SPEC.md` and `check-pagination.mjs`. Source configuration work loads `../sdkwork-specs/SOURCE_CONFIG_SPEC.md` and `check-source-config-standard.mjs`. Link these authorities instead of copying their normative bodies into `AGENTS.md`.
 
-## HTTP API Response Envelope
-
-All L2+ SDKWork-owned custom HTTP contracts, including `app-api`, `backend-api`, and SDKWork-owned business `open-api`, `MUST` follow `API_SPEC.md` section 4.5, section 14, and section 15:
-
-- **Default classification:** omitted `x-sdkwork-wire-protocol` means SDKWork-owned custom API (`sdkwork-v3`); only operation-level `x-sdkwork-wire-protocol: external` plus `x-sdkwork-external-protocol-id` identifies a third-party compatibility `open-api` operation.
-- **Input:** typed request bodies, section 14.1 list/search/command input, `SdkWorkListQuery`, and `q` for free-text search.
-- **Success output:** `SdkWorkApiResponse` with `{ "code": 0, "data": <payload>, "traceId": "<server-uuid>" }`.
-- **Error output:** HTTP 4xx/5xx `application/problem+json` (`ProblemDetail`) with numeric `code` and `traceId`; SDKWork-owned errors may include `i18nKey` and `locale` presentation metadata.
-- Success `code` is numeric `int32`; HTTP 2xx JSON bodies `MUST` use `0` only. REST semantics remain on HTTP status (`201`, `202`, etc.).
-- Platform error codes are numeric non-zero values per section 15.3 (`40001`, `40101`, `40401`, …).
-- Single resource: `data.item`
-- Lists: `data.items` + `data.pageInfo` (`PageInfo.mode` is `offset` or `cursor`)
-- Commands: `data.accepted` plus optional `resourceId` / `status`
-- Async accept (`202`): `data.operationId`, `data.status`, optional `pollUrl`
-- Operation patterns: retrieve/list/search/create/update/delete/command/async/bulk semantics follow `API_SPEC.md` section 15.4; create uses `201`, delete uses `204` with no JSON body, and `PUT`/`PATCH` use SDK action `update`.
-
-Vendor compatibility `open-api` routes that mirror upstream tool or provider wire (for example OpenAI `/v1/*`, Anthropic/Claude `/anthropic/v1/*`, Google/Gemini `/google/v1beta/*`, Claude Code, or Codex) `MAY` opt out only when every exempt operation declares operation-level `x-sdkwork-wire-protocol: external` and `x-sdkwork-external-protocol-id` per `API_SPEC.md` section 4.5.2. SDKWork-owned business `open-api` operations `MUST NOT` opt out. Mixed OpenAPI documents are validated per operation; one external operation never exempts SDKWork-owned operations in the same document.
-
-Errors `MUST` use HTTP 4xx/5xx with `application/problem+json` (`ProblemDetail`) including required numeric `code` and `traceId`. Optional `i18nKey` and `locale` are display metadata only. Business failures `MUST NOT` use HTTP 2xx with non-zero `code`, string wire codes, `success`, or human `message`.
-
-Forbidden legacy envelopes and fields: `PlusApiResult`, `AppbaseApiResult`, `StoreApiResult`, `SdkWorkResponse`, per-domain `*ApiResult`, wire field `requestId`, bare domain DTOs at the HTTP root, and top-level `{ items, pageInfo, traceId }` without `data`.
-
-Handlers `MUST` serialize success and map errors through `sdkwork-web-framework` response mapping. Generated HTTP SDKs (`--standard-profile sdkwork-v3`) unwrap `data` by default and expose typed numeric `ProblemDetail.code` / `traceId` and returned localization metadata on errors; use `.raw` when the full envelope is required.
-
-Before completing API contract, SDK generation, or frontend service work, run:
-
-```bash
-node <sdkwork-specs>/tools/check-api-operation-patterns.mjs --workspace <workspace-root>
-node <sdkwork-specs>/tools/check-api-response-envelope.mjs --workspace <workspace-root>
-```
-
-Authority: `sdkwork-specs/API_SPEC.md` section 4.5 and sections 14–16, `SDK_SPEC.md` section 4.2, `FRONTEND_SPEC.md`, `MIGRATION_SPEC.md` section 4.2.
-
+HTTP API contract work follows the global authority directly: `../sdkwork-specs/API_SPEC.md` section 4.5 and sections 14-16 (envelope, ProblemDetail, int64 wire, operation patterns), refreshed and verified with `check-api-operation-patterns.mjs` / `check-api-response-envelope.mjs` — the normative body is not copied here.
 ## Human Review Rules
-
 Human review is required for breaking public API changes, schema migrations, privacy/security exceptions, generated SDK ownership changes, and destructive filesystem or data operations.
-
 <!-- SDKWORK-NAMING-STANDARD: v1 -->
 ## Rust Naming And Dependency Declaration
-
 Authority: `../sdkwork-specs/NAMING_SPEC.md` section 3.1 and section 3.2.
-
 Two identifier planes exist in every Rust crate and they MUST NOT be mixed: the package plane
 (Cargo, filesystem, lock file) uses kebab-case, and the crate plane (lib target, modules, source
 imports) uses snake_case.
-
 - `[package].name`, the crate directory, `[features]` keys, and `[[bin]].name` use kebab-case.
 - `[lib].name`, module files, module directories, and Rust imports use snake_case.
 - A crate whose `[package].name` contains a hyphen SHOULD declare `[lib].name` explicitly
@@ -214,21 +137,16 @@ imports) uses snake_case.
   `[dev-dependencies]`, while `src/` still imports it. Verify manifest cleanups with the
   command below before committing them.
 - Regenerate and commit `Cargo.lock` in the same change as any dependency table edit.
-
 Verification:
-
 ```bash
 node ../sdkwork-specs/tools/check-rust-crate-naming-standard.mjs --root .
 ```
 <!-- /SDKWORK-NAMING-STANDARD: v1 -->
-
 <!-- SDKWORK-RUST-CODE-STANDARD: v1 -->
 ## Rust Code Standard
-
 Authority: `../sdkwork-specs/RUST_CODE_SPEC.md` (v2, industry-best baseline); package/crate
 naming and dependency declaration are normative in `../sdkwork-specs/NAMING_SPEC.md` section 3.1
 and 3.2.
-
 - Crates are responsibility-shaped: service, repository-sqlx, routes, service-host, native-host,
   worker, assembly, gateway. No generic `core`/`common`/`backend`/`runtime` suffixes.
 - Errors are typed enums (`thiserror`) implementing `std::error::Error` with a `source` chain.
@@ -242,9 +160,7 @@ and 3.2.
 - Workspace root declares `[workspace.package]` (edition, rust-version) and `[workspace.lints]`
   (RUST_CODE_SPEC.md section 13 baseline); every member inherits both with
   `edition.workspace = true` and `[lints] workspace = true`.
-
 Verification:
-
 ```bash
 node ../sdkwork-specs/tools/check-rust-crate-naming-standard.mjs --root .
 node ../sdkwork-specs/tools/check-rust-manifest-standard.mjs --root .
@@ -252,12 +168,9 @@ node ../sdkwork-specs/tools/check-rust-manifest-standard.mjs --root .
 node ../sdkwork-specs/tools/check-rust-backend-composition.mjs --root .
 ```
 <!-- /SDKWORK-RUST-CODE-STANDARD: v1 -->
-
 <!-- SDKWORK-TYPESCRIPT-CODE-STANDARD: v1 -->
 ## TypeScript Code Standard
-
 Authority: `../sdkwork-specs/TYPESCRIPT_CODE_SPEC.md` (v2, industry-best baseline).
-
 - `tsconfig` runs `strict: true` and the strict family; public APIs are typed and `any`-free.
   `import type` is required for type-only imports (`verbatimModuleSyntax`).
 - Errors are typed at package/service boundaries; no empty catches, no swallowed promise
@@ -268,21 +181,16 @@ Authority: `../sdkwork-specs/TYPESCRIPT_CODE_SPEC.md` (v2, industry-best baselin
 - Discriminated unions model closed variant sets; no `as`/`@ts-ignore` bypasses without a guard.
 - Node/build runners verify build-critical sources and self-heal from git (CODE_STYLE_SPEC §7);
   `pnpm clean` never deletes git-tracked build-critical files.
-
 Verification:
-
 ```bash
 pnpm typecheck && pnpm test && pnpm lint
 node ../sdkwork-specs/tools/check-application-layering.mjs --root .
 ```
 <!-- /SDKWORK-TYPESCRIPT-CODE-STANDARD: v1 -->
-
 <!-- SDKWORK-DART-CODE-STANDARD: v1 -->
 ## Dart Code Standard
-
 Authority: `../sdkwork-specs/DART_CODE_SPEC.md` (v1); Flutter root/UI rules follow
 `../sdkwork-specs/FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md` and `../sdkwork-specs/APP_FLUTTER_UI_SPEC.md`.
-
 - Sound null safety; `lints`/`flutter_lints` baseline; `dart analyze` and `dart format` clean.
 - `lib/<package>.dart` barrel exports only public API; no `src/` imports across packages.
 - Errors are typed exceptions or results; no bare `Exception('...')`, swallowed catches, or
@@ -292,22 +200,17 @@ Authority: `../sdkwork-specs/DART_CODE_SPEC.md` (v1); Flutter root/UI rules foll
 - Null safety discipline: no `!` assertions or `as` casts in public API paths; sealed classes
   for closed variant sets.
 - External awaits have timeouts; blocking work moves to `compute`/isolates; no UI-thread blocking.
-
 Verification:
-
 ```bash
 dart analyze && dart format --output=none --set-exit-if-changed
 flutter test   # or: dart test for pure Dart packages
 node ../sdkwork-specs/tools/check-application-layering.mjs --root .
 ```
 <!-- /SDKWORK-DART-CODE-STANDARD: v1 -->
-
 <!-- SDKWORK-FRONTEND-CODE-STANDARD: v1 -->
 ## Frontend Code Standard
-
 Authority: `../sdkwork-specs/FRONTEND_CODE_SPEC.md` (v2); language rules follow
 `../sdkwork-specs/TYPESCRIPT_CODE_SPEC.md` (React/TS) or `../sdkwork-specs/DART_CODE_SPEC.md` (Flutter).
-
 - UI -> service -> injected SDK flow is preserved; components never construct SDK clients or
   assemble raw HTTP/auth headers.
 - React: hooks rules clean (`react-hooks`), `useEffect` with full deps and cleanup, stable
@@ -318,24 +221,18 @@ Authority: `../sdkwork-specs/FRONTEND_CODE_SPEC.md` (v2); language rules follow
   signal; error states announced.
 - i18n for all user-facing copy in reusable/user-facing packages (I18N_SPEC §6.1).
 - PC/H5 `outDir` uses `dist/{standalone,cloud}/{dev,test,staging,prod}`.
-
 Verification:
-
 ```bash
 pnpm typecheck && pnpm test && pnpm lint
 node ../sdkwork-specs/tools/check-application-layering.mjs --root .
 node ../sdkwork-specs/tools/check-browser-dist-layout.mjs --root .   # PC/H5 apps
 ```
 <!-- /SDKWORK-FRONTEND-CODE-STANDARD: v1 -->
-
 <!-- SDKWORK-PNPM-WORKSPACE-STANDARD: v1 -->
 ## pnpm Workspace Dependency And Package Import
-
 Authority: `../sdkwork-specs/PNPM_WORKSPACE_DEPENDENCY_SPEC.md` (companion to
 `../sdkwork-specs/DEPENDENCY_MANAGEMENT_SPEC.md`).
-
 Sibling SDKWork repositories are consumed through a dual-track model that MUST stay consistent:
-
 - **Local development** (`pnpm dev`, `pnpm build`): pnpm workspace protocol. Each sibling
   package is declared ONCE in this repository root `pnpm-workspace.yaml` `packages:` as a
   `../sdkwork-*` relative path, and consumed with `workspace:*` in `package.json`. Never use
@@ -344,9 +241,7 @@ Sibling SDKWork repositories are consumed through a dual-track model that MUST s
   local workspace MUST have a matching `dependencies[]` entry in `sdkwork.workflow.json` so CI
   clones the sibling into the same `../sdkwork-*` relative layout (`GITHUB_WORKFLOW_SPEC.md`).
   `package.json` is never rewritten for CI.
-
 Import rules for sibling SDKWork packages:
-
 - Import by package name only: `import { X } from "@sdkwork/package-name"`. The specifier MUST
   equal the target package's `package.json` `name` exactly - no shortening, renaming, or alias.
 - Forbidden: relative imports that cross a package boundary into another SDKWork repository or
@@ -358,26 +253,20 @@ Import rules for sibling SDKWork packages:
   resolution error pass, and are allowed only for documented bootstrap/SDK-generation entrypoints.
 - Fix a resolution failure by correcting the workspace declaration or the package `exports`,
   not by adding an alias.
-
 Verification:
-
 ```bash
 node ../sdkwork-specs/tools/verify-repo.mjs --root .
 node ../sdkwork-specs/tools/check-workspace-member-protocol.mjs --root .
 node ../sdkwork-specs/tools/check-dependency-list-completeness.mjs --root .
 ```
 <!-- /SDKWORK-PNPM-WORKSPACE-STANDARD: v1 -->
-
 <!-- SDKWORK-SDK-GENERATION-STANDARD: v1 -->
 ## Generated SDK Output Is Generator-Owned
-
 Authority: `../sdkwork-specs/SDK_SPEC.md` and `../sdkwork-specs/SDK_WORKSPACE_GENERATION_SPEC.md`.
-
 Everything generated under `sdks/` — `generated/server-openapi/` trees, generated language
 workspaces, `dist/` build output, generated `sdkwork-sdk.json`, generated
 `.sdkwork/sdkwork-generator-*` reports, and standardizer-synced OpenAPI snapshots — is produced by
 the canonical SDK generator `../sdkwork-sdk-generator/bin/sdkgen.js` (`@sdkwork/sdk-generator`).
-
 - Do not hand-edit generated SDK files, including type definitions, dist bundles, and generated
   package metadata. Manual edits are overwritten by the next generation run and break
   reproducibility and contract audits.
@@ -389,20 +278,15 @@ the canonical SDK generator `../sdkwork-sdk-generator/bin/sdkgen.js` (`@sdkwork/
   disappeared routes and models; do not hand-prune generated trees.
 - The only approved handwritten surfaces are `custom/` roots inside generated workspaces and
   authored `composed/` facades outside `generated/server-openapi`.
-
 Verification:
-
 ```bash
 node ../sdkwork-specs/tools/sync-agent-sdk-generation-standard.mjs --root . --check
 ```
 <!-- /SDKWORK-SDK-GENERATION-STANDARD: v1 -->
-
 ## Deployment Standard (bin/)
-
 Per `../sdkwork-specs/MODULE_BIN_SPEC.md`, this Rust module ships the
 standardized `bin/` entrypoint family; all build/package/deploy work `MUST`
 go through them (or the repository pnpm scripts they delegate to):
-
 | Entrypoint | Delegates to |
 | --- | --- |
 | `bin/docker-image.sh` | `pnpm build:container:standalone` → `registry.sdkwork.com/apps/sdkwork-webserver-standalone:<version>` |
@@ -411,7 +295,6 @@ go through them (or the repository pnpm scripts they delegate to):
 | `bin/apps-package.sh` | `webserver-deb.mjs` (host-native, `test`/`production` only) / dist archives → `target/bin-packages/` with a sidecar `.sha256` |
 | `bin/apps-deploy.sh` | `server` → `apt-get install` the `.deb` on the Ubuntu target + systemd enable/health probe (`test`/`production` only); `pc`/`h5` report the static-root delivery channel |
 | `bin/apps-pkg-installer.sh` | `server` + `linux` → `webserver-deb.mjs` / `webserver-rpm.mjs` (`--format deb\|rpm`, `test`/`production` only) → `target/bin-installers/`; Windows/macOS server delivery stays on the container channel |
-
 | `bin/config.sh` | `ops-config.sh` — deployed-configuration `list/show/get/set/diff/validate/edit`, secrets redacted, backup + validate before mutation (`OPERATIONS_SPEC.md` §3) |
 | `bin/doctor.sh` | `ops-observe.sh` — read-only environment diagnostics (9 checks, exit 70 on FAIL, `--json`/`--export`) |
 | `bin/backup.sh` | `ops-backup.sh` — backup/list/verify/restore into `/opt/deploy/sdkwork-webserver/backups/` (`OPERATIONS_SPEC.md` §5) |
@@ -437,15 +320,11 @@ go through them (or the repository pnpm scripts they delegate to):
   `--yes`; `--purge` requires `--yes` in every environment; each run appends
   its exit status to `target/bin-evidence/evidence.log`.
 - Validate with: `node ../sdkwork-specs/tools/check-module-bin.mjs --root .`
-
 <!-- SDKWORK-DESTRUCTIVE-OPERATION-STANDARD: v1 -->
 ## Destructive Operation Safety
-
 Authority: `../sdkwork-specs/DESTRUCTIVE_OPERATION_SPEC.md`.
-
 Deletion must be explicit, enumerated, and reviewable. Deleting by pattern instead of by named
 path is forbidden. Wildcards are for read-only commands only.
-
 - `git rm -r`, `git rm` over a directory or pattern, and `git clean -f`/`-fd`/`-fdx` are
   FORBIDDEN. A recursive `git rm` stages many deletions in one index transaction; if the process
   is interrupted (SIGTERM, timeout, sandbox kill, crash) entries are already gone from disk while
@@ -476,21 +355,15 @@ path is forbidden. Wildcards are for read-only commands only.
   and the native tool path space disagree), and run a single
   `git restore --worktree --pathspec-from-file=<repo-relative-list>`. Never loop one
   version-control call per path; the same termination cause interrupts the loop part-way.
-
 Verification (from the repository root):
-
 ```bash
 node ../sdkwork-specs/tools/sync-agent-destructive-operation-standard.mjs --root . --check
 ```
 <!-- /SDKWORK-DESTRUCTIVE-OPERATION-STANDARD: v1 -->
-
 <!-- SDKWORK-ROLLBACK-RESTRICTION-STANDARD: v1 -->
 ## Rollback Restriction And Fix-Forward Discipline
-
 Authority: `../sdkwork-specs/ROLLBACK_RESTRICTION_SPEC.md`.
-
 Errors are fixed forward. Version-control history is never rewound to make an error disappear.
-
 - A rollback is any operation that moves a ref, resets the index or the working tree to an earlier
   state, discards uncommitted or committed work, or rewrites published history. It is FORBIDDEN as
   the remedy for a defect — a build failure, a type error, a lint failure, a failing test, a merge
@@ -530,21 +403,15 @@ Errors are fixed forward. Version-control history is never rewound to make an er
   revision with `git show <ref>:<path>`, not reasoned about. Fix forward. Never un-restore.
 - Never bypass a hook, signature, or gate with `--force`, `--no-verify`, or `--no-gpg-sign` to
   land a repair.
-
 Verification (from the repository root):
-
 ```bash
 node ../sdkwork-specs/tools/sync-agent-rollback-restriction-standard.mjs --root . --check
 ```
 <!-- /SDKWORK-ROLLBACK-RESTRICTION-STANDARD: v1 -->
-
 <!-- SDKWORK-MAIN-BRANCH-STANDARD: v1 -->
 ## Main-Branch Development
-
 Authority: `../sdkwork-specs/REPOSITORY_BASELINE_SPEC.md` section 1.
-
 Development happens on `main`. Everything authored in this repository is committed onto `main`.
-
 - A working tree that receives authored content MUST have `main` checked out as its current branch
   for the whole time that work is in progress. Commit onto `main` directly; do not commit onto a
   branch a later merge is expected to bring in.
@@ -563,14 +430,11 @@ Development happens on `main`. Everything authored in this repository is committ
   branch, the commits, and the state, and let a human decide: moving commits onto `main` and
   discarding work are both governed by `../sdkwork-specs/DESTRUCTIVE_OPERATION_SPEC.md` and
   `../sdkwork-specs/ROLLBACK_RESTRICTION_SPEC.md`.
-
 Verification (from the repository root):
-
 ```bash
 node ../sdkwork-specs/tools/audit-repository-baseline.mjs --root . --only branch-main
 node ../sdkwork-specs/tools/sync-agent-main-branch-standard.mjs --root . --check
 ```
-
 The first fails when the current branch is anything other than `main`, and reports a detached HEAD
 as `detached`. The second fails when this block is out of date.
 <!-- /SDKWORK-MAIN-BRANCH-STANDARD: v1 -->

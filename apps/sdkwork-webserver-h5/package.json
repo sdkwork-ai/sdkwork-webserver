@@ -39,7 +39,7 @@
     "@sdkwork/webserver-h5-shell": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "react-router-dom": "^7.15.0"
+    "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
     "@sdkwork/app-topology": "workspace:*",

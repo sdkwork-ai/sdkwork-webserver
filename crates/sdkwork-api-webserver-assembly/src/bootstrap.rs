@@ -139,6 +139,9 @@ pub async fn assemble_business_routes(
         None => service,
     };
     let service = Arc::new(service);
+    // The gateway's certificate-expiry sampler reads through this service
+    // instead of bootstrapping its own repository beside the owner.
+    crate::certificate_expiry::share_certificate_expiry_service(service.clone());
     let audit_emitter: Arc<dyn AuditEmitter> =
         Arc::new(WebFrameworkAuditEmitter::new(service.clone()));
     let security_event_emitter: Arc<dyn SecurityEventEmitter> =

@@ -13,75 +13,13 @@ packages:
   - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-sdk-adapter"
   - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-service"
   - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-application-bootstrap"
-  # The shared desktop-auth port `sdkwork-auth-pc-react` depends on; the sibling
-  # checkout gained the dependency after this workspace's lockfile was cut, so
-  # `workspace:*` resolution needs the package declared here too.
   - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-desktop-auth"
   - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-auth-pc-react"
   - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-auth-runtime-pc-react"
   - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-react"
-  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-core"
-  # Identity & Access admin capability workspaces. The backend-admin "iam"
-  # module mounts their pages over the shared SdkworkIamService facade (the same
-  # packages sdkwork-cloudrouter consumes), so each must be a workspace member
-  # for `workspace:*` resolution — same rule as the console cloud-account pair
-  # below.
-  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-user"
-  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-tenant"
-  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-organization"
-  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-permission"
-  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-oauth"
-  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-account-binding"
-  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-audit"
-  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-console-core"
-  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-console-cloud-account"
   - "../sdkwork-iam/sdks/sdkwork-iam-app-sdk/sdkwork-iam-app-sdk-typescript"
   - "../sdkwork-iam/sdks/sdkwork-iam-backend-sdk/sdkwork-iam-backend-sdk-typescript"
   - "../sdkwork-iam/sdks/sdkwork-iam-open-sdk/sdkwork-iam-open-sdk-typescript"
-  - "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-commons"
-  - "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-core"
-  - "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-delivery"
-  # Applications: the `deploy_app` publishing page is host-agnostic (its two
-  # generated clients arrive as props), so the Web Server console and backend
-  # admin mount the canonical page instead of re-implementing the application
-  # lifecycle. The package is a `workspace:*` dep of
-  # `@sdkwork/webserver-pc-console-delivery` and
-  # `@sdkwork/webserver-pc-admin-apps`.
-  - "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-publishing"
-  # The app-template marketplace rides the same rule: the storefront and the
-  # author workbench are canonical `deploy_app_template` pages whose two
-  # clients (deploy + order) arrive as props from
-  # `createDeploymentsConsoleClients`, and the admin template catalog renders
-  # the shared registry table over `createDeploymentsAdminRegistry`. Both are
-  # `workspace:*` deps of `@sdkwork/webserver-pc-console-marketplace` and
-  # `@sdkwork/webserver-pc-admin-app-templates`; the deployments backend SDK
-  # is the generated transport `sdkwork-deployments-pc-admin-core` composes.
-  - "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-marketplace"
-  - "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-admin-core"
-  - "../sdkwork-deployments/sdks/sdkwork-deployments-backend-sdk/sdkwork-deployments-backend-sdk-typescript"
-  # Platform order center: the marketplace acquire flow is an `app_template_orders`
-  # command on the order center's app API (the deployments module owns no
-  # purchase of its own), and the deployments console-core factory that bridges
-  # it declares the generated client with `workspace:*`, so the SDK must be a
-  # member here for resolution — with the matching sdkwork-order entry in
-  # sdkwork.workflow.json.
-  - "../sdkwork-order/sdks/sdkwork-order-app-sdk/sdkwork-order-app-sdk-typescript"
-  - "../sdkwork-deployments/sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-typescript"
-  - "../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-commons"
-  - "../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-core"
-  - "../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-admin"
-  - "../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-admin-core"
-  - "../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-console-skills"
-  - "../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-admin-skill"
-  - "../sdkwork-skills/sdks/sdkwork-skills-app-sdk/sdkwork-skills-app-sdk-typescript"
-  - "../sdkwork-skills/sdks/sdkwork-skills-backend-sdk/sdkwork-skills-backend-sdk-typescript"
-  - "../sdkwork-mcp/apps/sdkwork-mcp-pc/packages/sdkwork-mcp-pc-commons"
-  - "../sdkwork-mcp/apps/sdkwork-mcp-pc/packages/sdkwork-mcp-pc-core"
-  - "../sdkwork-mcp/apps/sdkwork-mcp-pc/packages/sdkwork-mcp-pc-admin"
-  - "../sdkwork-mcp/apps/sdkwork-mcp-pc/packages/sdkwork-mcp-pc-admin-core"
-  - "../sdkwork-mcp/apps/sdkwork-mcp-pc/packages/sdkwork-mcp-pc-console-mcp"
-  - "../sdkwork-mcp/sdks/sdkwork-mcp-app-sdk/sdkwork-mcp-app-sdk-typescript"
-  - "../sdkwork-mcp/sdks/sdkwork-mcp-backend-sdk/sdkwork-mcp-backend-sdk-typescript"
   - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-credential-entry"
   - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-user-center-core-pc-react"
   - "../sdkwork-appbase/packages/common/foundation/sdkwork-runtime-bootstrap"
@@ -95,61 +33,58 @@ packages:
   - "../sdkwork-sdk-commons/sdkwork-sdk-common-typescript"
   - "../sdkwork-utils/packages/sdkwork-utils-typescript"
   - "../sdkwork-app-topology"
-  - "../sdkwork-drive/sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-typescript"
-  # Storage Center: the drive-owned admin storage plane is consumed as a shared
-  # module rather than forked. `sdkwork-drive-pc-admin-storage-providers` owns
-  # the provider/service/types/i18n, `sdkwork-drive-pc-admin-storage-buckets`
-  # owns the bucket list and its file manager dialog,
-  # `sdkwork-drive-pc-file-preview` owns the reusable preview/editor components
-  # that dialog opens, and `sdkwork-drive-pc-admin-core` owns the host-agnostic
-  # admin storage SDK client; all are `workspace:*` deps of
-  # `@sdkwork/webserver-pc-admin-storage` (or of each other), so every one of them
-  # must be resolvable from this workspace too.
+  - "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-admin-core"
+  - "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-commons"
+  - "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-core"
+  - "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-delivery"
+  - "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-marketplace"
+  - "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-publishing"
+  - "../sdkwork-deployments/sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-typescript"
+  - "../sdkwork-deployments/sdks/sdkwork-deployments-backend-sdk/sdkwork-deployments-backend-sdk-typescript"
+  - "../sdkwork-drive/apps/sdkwork-drive-common/packages/sdkwork-drive-mobile-react-upload-image"
+  - "../sdkwork-drive/apps/sdkwork-drive-common/packages/sdkwork-drive-upload-image-core"
+  - "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-admin-core"
+  - "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-admin-storage-buckets"
+  - "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-admin-storage-providers"
   - "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-commons"
   - "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-core"
-  - "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-admin-core"
-  - "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-admin-storage-providers"
-  - "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-admin-storage-buckets"
   - "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-file-preview"
-  - "../sdkwork-drive/sdks/sdkwork-drive-admin-storage-sdk/sdkwork-drive-admin-storage-sdk-typescript"
-  - "../sdkwork-drive/sdks/sdkwork-drive-backend-sdk/sdkwork-drive-backend-sdk-typescript"
-  # Shared Drive image-upload component family: the IAM user admin avatar field
-  # renders `DriveUploadImage` from the PC shell through the core service that
-  # `@sdkwork/webserver-pc-admin-iam` builds; the shell depends on the core with
-  # `workspace:*` and the core binds `@sdkwork/drive-app-sdk`, so all three stay
-  # resolvable from this workspace.
-  - "../sdkwork-drive/apps/sdkwork-drive-common/packages/sdkwork-drive-upload-image-core"
   - "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-upload-image"
+  - "../sdkwork-drive/sdks/sdkwork-drive-admin-storage-sdk/sdkwork-drive-admin-storage-sdk-typescript"
+  - "../sdkwork-drive/sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-typescript"
+  - "../sdkwork-drive/sdks/sdkwork-drive-backend-sdk/sdkwork-drive-backend-sdk-typescript"
+  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-account-binding"
+  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-audit"
+  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-core"
+  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-oauth"
+  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-organization"
+  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-permission"
+  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-tenant"
+  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-user"
+  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-console-cloud-account"
+  - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-console-core"
+  - "../sdkwork-mcp/apps/sdkwork-mcp-pc/packages/sdkwork-mcp-pc-admin"
+  - "../sdkwork-mcp/apps/sdkwork-mcp-pc/packages/sdkwork-mcp-pc-admin-core"
+  - "../sdkwork-mcp/apps/sdkwork-mcp-pc/packages/sdkwork-mcp-pc-commons"
+  - "../sdkwork-mcp/apps/sdkwork-mcp-pc/packages/sdkwork-mcp-pc-console-mcp"
+  - "../sdkwork-mcp/apps/sdkwork-mcp-pc/packages/sdkwork-mcp-pc-core"
+  - "../sdkwork-mcp/sdks/sdkwork-mcp-app-sdk/sdkwork-mcp-app-sdk-typescript"
+  - "../sdkwork-mcp/sdks/sdkwork-mcp-backend-sdk/sdkwork-mcp-backend-sdk-typescript"
+  - "../sdkwork-order/sdks/sdkwork-order-app-sdk/sdkwork-order-app-sdk-typescript"
+  - "../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-admin"
+  - "../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-admin-core"
+  - "../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-admin-skill"
+  - "../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-commons"
+  - "../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-console-skills"
+  - "../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-core"
+  - "../sdkwork-skills/sdks/sdkwork-skills-app-sdk/sdkwork-skills-app-sdk-typescript"
+  - "../sdkwork-skills/sdks/sdkwork-skills-backend-sdk/sdkwork-skills-backend-sdk-typescript"
 
 catalog:
-  react: ^19.2.8
-  react-dom: ^19.2.8
-  "@types/react": ^19.2.14
-  "@types/react-dom": ^19.2.3
-  typescript: ^6.0.2
-  vite: ^8.0.3
-  "@vitejs/plugin-react": ^6.0.5
-  vite-plugin-dts: ^5.0.3
-  vitest: ^4.1.10
-  tsup: ^8.5.1
-  tsx: ^4.23.12
-  tailwindcss: ^4.3.3
-  "@tailwindcss/vite": ^4.3.3
-  "@tailwindcss/typography": ^0.5.19
-  autoprefixer: ^10.4.27
-  postcss: ^8.5.8
-  clsx: ^2.1.1
-  tailwind-merge: ^3.6.0
-  tailwindcss-animate: ^1.0.7
-  class-variance-authority: ^0.7.1
-  i18next: ^26.3.6
-  react-i18next: ^17.0.11
-  react-router: ^7.18.2
-  react-router-dom: ^7.18.2
-  react-hook-form: ^7.85.0
-  lucide-react: ^1.31.0
-  qrcode: ^1.5.4
-  "@types/qrcode": ^1.5.6
+  "@aws-sdk/client-s3": ^3.1145.0
+  "@aws-sdk/s3-request-presigner": ^3.1145.0
+  "@monaco-editor/react": ^4.7.0
+  "@playwright/test": ^1.52.0
   "@radix-ui/react-avatar": ^1.1.11
   "@radix-ui/react-checkbox": ^1.3.3
   "@radix-ui/react-context-menu": ^2.2.16
@@ -168,6 +103,27 @@ catalog:
   "@radix-ui/react-switch": ^1.2.6
   "@radix-ui/react-tabs": ^1.1.13
   "@radix-ui/react-tooltip": ^1.2.8
+  "@sdkwork/sdk-common": workspace:*
+  "@tailwindcss/typography": ^0.5.19
+  "@tailwindcss/vite": ^4.3.3
+  "@tanstack/react-query": ^5.96.2
+  "@tauri-apps/api": ~2.11.0
+  "@tauri-apps/cli": ~2.11.0
+  "@tauri-apps/plugin-clipboard-manager": ^2.3.2
+  "@tauri-apps/plugin-dialog": ^2.6.0
+  "@tauri-apps/plugin-fs": ^2.4.5
+  "@tauri-apps/plugin-http": ^2.5.7
+  "@tauri-apps/plugin-notification": ^2.3.3
+  "@tauri-apps/plugin-opener": ^2.5.3
+  "@tauri-apps/plugin-os": ^2.3.2
+  "@tauri-apps/plugin-process": ^2.3.1
+  "@tauri-apps/plugin-shell": ^2.3.5
+  "@tauri-apps/plugin-store": ^2.4.2
+  "@tauri-apps/plugin-updater": ^2.10.0
+  "@tauri-apps/plugin-window-state": ^2.4.1
+  "@testing-library/dom": 10.4.1
+  "@testing-library/jest-dom": ^7.0.1
+  "@testing-library/react": 16.3.2
   "@tiptap/core": ^3.23.4
   "@tiptap/extension-bubble-menu": ^3.23.4
   "@tiptap/extension-character-count": ^3.23.4
@@ -186,48 +142,13 @@ catalog:
   "@tiptap/react": ^3.23.4
   "@tiptap/starter-kit": ^3.23.4
   "@tiptap/suggestion": ^3.23.4
-  "@testing-library/dom": 10.4.1
-  "@testing-library/jest-dom": ^7.0.1
-  "@testing-library/react": 16.3.2
-  "@playwright/test": ^1.52.0
-  jsdom: 29.1.1
-  "@types/node": ^25.9.2
   "@types/express": ^4.17.21
-  # The drive bucket manager (sdkwork-drive-pc-admin-storage-buckets, bridged
-  # by the Storage Center) talks to S3-compatible stores directly and pins the
-  # client through its own workspace catalog; the same catalog entries are
-  # mirrored here so the bridged member resolves in this workspace too.
-  "@aws-sdk/client-s3": ^3.1145.0
-  "@aws-sdk/s3-request-presigner": ^3.1145.0
-  "@tauri-apps/api": ~2.11.0
-  "@tauri-apps/cli": ~2.11.0
-  "@tauri-apps/plugin-clipboard-manager": ^2.3.2
-  "@tauri-apps/plugin-dialog": ^2.6.0
-  "@tauri-apps/plugin-fs": ^2.4.5
-  "@tauri-apps/plugin-http": ^2.5.7
-  "@tauri-apps/plugin-notification": ^2.3.3
-  "@tauri-apps/plugin-opener": ^2.5.3
-  "@tauri-apps/plugin-os": ^2.3.2
-  "@tauri-apps/plugin-process": ^2.3.1
-  "@tauri-apps/plugin-shell": ^2.3.5
-  "@tauri-apps/plugin-store": ^2.4.2
-  "@tauri-apps/plugin-updater": ^2.10.0
-  "@tauri-apps/plugin-window-state": ^2.4.1
-  "@tanstack/react-query": ^5.96.2
-  zustand: ^5.0.12
-  immer: ^11.1.4
-  react-markdown: ^10.1.0
-  markdown-it: ^14.1.1
-  marked: ^18.0.5
-  "@monaco-editor/react": ^4.7.0
-  monaco-editor: ^0.52.2
   "@types/markdown-it": ^14.1.2
-  emoji-picker-react: ^4.18.0
-  framer-motion: ^12.23.24
-  motion: ^12.38.0
-  sonner: ^2.0.7
-  cmdk: ^1.1.1
-  "@xterm/xterm": ^6.0.0
+  "@types/node": ^25.9.2
+  "@types/qrcode": ^1.5.6
+  "@types/react": ^19.2.14
+  "@types/react-dom": ^19.2.3
+  "@vitejs/plugin-react": ^6.0.5
   "@xterm/addon-fit": ^0.11.0
   "@xterm/addon-image": ^0.9.0
   "@xterm/addon-ligatures": ^0.10.0
@@ -236,36 +157,48 @@ catalog:
   "@xterm/addon-unicode11": ^0.9.0
   "@xterm/addon-web-links": ^0.12.0
   "@xterm/addon-webgl": ^0.19.0
-  "@sdkwork/sdk-common": workspace:*
+  "@xterm/xterm": ^6.0.0
+  autoprefixer: ^10.4.27
+  class-variance-authority: ^0.7.1
+  clsx: ^2.1.1
+  cmdk: ^1.1.1
+  emoji-picker-react: ^4.18.0
+  framer-motion: ^12.23.24
+  i18next: ^26.3.6
+  immer: ^11.1.4
+  jsdom: 29.1.1
+  lucide-react: ^1.31.0
+  markdown-it: ^14.1.1
+  marked: ^18.0.5
+  monaco-editor: ^0.52.2
+  motion: ^12.38.0
+  postcss: ^8.5.8
+  qrcode: ^1.5.4
+  react: ^19.2.8
+  react-dom: ^19.2.8
+  react-hook-form: ^7.85.0
+  react-i18next: ^17.0.11
+  react-markdown: ^10.1.0
+  react-router: ^7.18.2
+  react-router-dom: ^7.18.4
+  sonner: ^2.0.7
+  tailwind-merge: ^3.6.0
+  tailwindcss: ^4.3.3
+  tailwindcss-animate: ^1.0.7
+  tsup: ^8.5.1
+  tsx: ^4.23.12
+  typescript: ^6.0.2
+  vite: ^8.0.3
+  vite-plugin-dts: ^5.0.3
+  vitest: ^4.1.10
+  zustand: ^5.0.12
 
-# Dual-platform native bindings: this checkout is built from both Windows
-# (dev) and WSL Ubuntu (container image builds, DEPLOYMENT_SPEC §6). pnpm 10
-# reads these settings from pnpm-workspace.yaml; keep both OS binding sets so
-# vite/rolldown/esbuild resolve native packages on either side.
-supportedArchitectures:
-  os:
-    - win32
-    - linux
-  cpu:
-    - x64
-  libc:
-    - glibc
-    - musl
-
-# Single React runtime singleton: transitive packages that declare their own
-# (older) react/react-dom ranges previously resolved a second copy next to the
-# catalog's 19.2.8, splitting hooks state inside one renderer. Pin the exact
-# version for every consumer so tests and the dev server share one instance.
-# Resolve sibling-SDK package ranges to this workspace's checkouts first: the
-# deployments app SDK declares `@sdkwork/drive-app-sdk: "^0.1.1"` for its npm
-# consumers, and without these two settings that range resolves to the registry
-# copy inside this workspace while every bridged page compiles against the
-# checkout copy — two instances of one SDK whose uploader types then collide
-# (the `deploy-app-operations` publishing service is where it surfaces first).
-# This mirrors the sibling repos' `.npmrc` policy.
 linkWorkspacePackages: true
-preferWorkspacePackages: true
 
 overrides:
-  react: 19.2.8
-  react-dom: 19.2.8
+  react: ^19.2.8
+  react-dom: ^19.2.8
+  react-router: ^7.18.2
+  react-router-dom: ^7.18.2
+
+preferWorkspacePackages: true

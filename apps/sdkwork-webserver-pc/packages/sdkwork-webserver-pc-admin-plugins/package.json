@@ -12,12 +12,12 @@
     }
   },
   "dependencies": {
-    "@sdkwork/webserver-pc-admin-core": "workspace:*",
-    "@sdkwork/webserver-pc-console-plugins": "workspace:*",
-    "@sdkwork/webserver-pc-commons": "workspace:*",
     "@sdkwork/sdk-common": "workspace:*",
+    "@sdkwork/webserver-pc-admin-core": "workspace:*",
+    "@sdkwork/webserver-pc-commons": "workspace:*",
+    "@sdkwork/webserver-pc-console-plugins": "workspace:*",
     "react": "catalog:",
-    "react-router-dom": "^7.15.0"
+    "react-router-dom": "^7.18.4"
   },
   "sdkwork": {
     "applicationCode": "webserver",

@@ -16,9 +16,9 @@
     "@sdkwork/utils": "workspace:*",
     "fflate": "^0.8.2",
     "ignore": "^7.0.6",
+    "lucide-react": "catalog:",
     "react": "catalog:",
-    "react-router-dom": "^7.15.0",
-    "lucide-react": "catalog:"
+    "react-router-dom": "^7.18.4"
   },
   "sdkwork": {
     "applicationCode": "webserver",

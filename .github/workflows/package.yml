@@ -102,6 +102,10 @@ on:
         description: sdkwork-skills commit/ref.
         required: false
         default: main
+      sdkwork_order_ref:
+        description: sdkwork-order commit/ref.
+        required: false
+        default: main
 
 # The packaging surface is one reusable job (GITHUB_WORKFLOW_SPEC): the
 # grants below are what the pinned reusable workflow needs for release
@@ -149,6 +153,7 @@ jobs:
           "SDKWORK_ID_REF": "${{ github.event.inputs.sdkwork_id_ref || vars.SDKWORK_ID_REF }}",
           "SDKWORK_DRIVE_REF": "${{ github.event.inputs.sdkwork_drive_ref || vars.SDKWORK_DRIVE_REF }}",
           "SDKWORK_MCP_REF": "${{ github.event.inputs.sdkwork_mcp_ref || vars.SDKWORK_MCP_REF }}",
-          "SDKWORK_SKILLS_REF": "${{ github.event.inputs.sdkwork_skills_ref || vars.SDKWORK_SKILLS_REF }}"
+          "SDKWORK_SKILLS_REF": "${{ github.event.inputs.sdkwork_skills_ref || vars.SDKWORK_SKILLS_REF }}",
+          "SDKWORK_ORDER_REF": "${{ github.event.inputs.sdkwork_order_ref || vars.SDKWORK_ORDER_REF }}"
         }
     secrets: inherit

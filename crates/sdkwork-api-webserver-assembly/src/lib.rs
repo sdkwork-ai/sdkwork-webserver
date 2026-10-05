@@ -14,6 +14,7 @@
 // `use crate::framework_observability::…`.
 
 mod bootstrap;
+mod certificate_expiry;
 mod cluster_self_report;
 mod framework_observability;
 mod generated;
@@ -39,6 +40,7 @@ pub use bootstrap::{
 // cluster registry asks an instance to drain on the heartbeat response, and the
 // only thing that can stop a gateway's listeners is the data-plane server the
 // gateway binary owns — so the trigger has to cross this boundary.
+pub use certificate_expiry::certificate_expiry_summary;
 pub use runtime_shutdown::{request_shutdown, shutdown_reason, wait_for_shutdown, ShutdownReason};
 
 // SDKWORK-ASSEMBLY-LIB-CUSTOM: the Deploy and WebServer repository surfaces that
