@@ -117,12 +117,12 @@ webserver 集成                       sdkwork-webserver-core（[tunnel] 配置�
 ## 可观测性（PRD §48–§49, §82）
 
 - Prometheus 指标（数据面 operations `/metrics` 追加）：`sdkwork_tunnel_connections[_active]`、`sessions[_active]`、`streams[_active]`、`bytes_in/out`、`reconnects`、`errors`、`auth_failures`、`routes_active`。`status.ports` 聚合 TCP 与 UDP 监听端口。
-- operations REST（回环）：`GET /tunnel/status`、`GET|POST /tunnel/routes`、`DELETE /tunnel/routes/{id}`。
+- operations REST（默认回环）：`GET /tunnel/status`、`GET|POST /tunnel/routes`、`DELETE /tunnel/routes/{id}`。读取在未配置令牌时仅限回环；`POST/DELETE` 一律要求 `SDKWORK_WEBSERVER_OPERATIONS_AUTH_TOKEN_FILE` 配置的 Bearer 令牌（未配置时 403 fail-closed）。
 - CLI：`sdkwork-webserver-tunnel status|list|remove --url <ops-base>`；诊断用 `doctor`（端点 → TLS → QUIC → STP 握手 → 认证 分级检查，PRD §83）。
 
 ## 重连与优雅关闭（PRD §27, §105）
 
-Agent 断线后按 1s→2s→4s…60s 指数退避 + ±20% 抖动自动重连，成功注册后重置；路由热注册/注销经控制面完成，agent 无需重启。网关关闭顺序：停止 accept → 关闭 endpoint/会话 → 注销路由 → 释放 TCP 监听。
+Agent 断线后按 1s→2s→4s…60s 指数退避 + ±20% 抖动自动重连；只有稳定运行过一个初始退避周期的会话才重置曲线——拨号/握手失败不重置，网关宕机时机队不会退化成 ~1Hz 重连风暴；路由热注册/注销经控制面完成，agent 无需重启。网关关闭顺序：停止 accept → 关闭 endpoint/会话 → 注销路由 → 释放 TCP 监听。
 
 ## 测试
 
