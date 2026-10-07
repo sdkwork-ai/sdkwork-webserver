@@ -122,7 +122,7 @@ direct HTTP for `LAN`, tunnel-relayed HTTP for `TUNNEL`.
   `POST /internal/v3/api/web/cluster/sync/ack` (`IN_SYNC`/`FAILED`).
 - The instance row tracks `applied_*_revision` per kind plus an aggregate
   `sync_status` (`unknown / in_sync / pending / failed`) surfaced in the admin API
-  with `joinMode` / `syncStatus` list filters.
+  with `join_mode` / `sync_status` list filters.
 
 ### Node service quality
 
@@ -210,10 +210,10 @@ instances stop receiving new traffic immediately.
 ### Instance list search and filters (list surface)
 
 `GET /backend/v3/api/clusters/instances` accepts, beyond cluster/host/
-status/health/joinMode/syncStatus filters: a label selector
+status/health/join_mode/sync_status filters: a label selector
 (`labels=k1=v1,k2=v2`, JSONB containment — every pair must match), free-text
 `search` over name / public endpoint / hostname (case-insensitive
-substring), and exact `buildVersion` (version-skew management: find every
+substring), and exact `build_version` (version-skew management: find every
 instance not yet running the target build).
 
 ### Instance detail and flexible configuration (detail surface)

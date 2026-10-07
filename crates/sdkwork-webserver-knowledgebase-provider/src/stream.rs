@@ -51,7 +51,7 @@ impl WebsiteProviderContentStream for BoundedWikiContentStream {
         };
         let chunk = tokio::time::timeout(CHUNK_IDLE_TIMEOUT, source.next_chunk())
             .await
-            .map_err(|_| WebsiteProviderError::new(WebsiteProviderErrorKind::ContractMismatch))?
+            .map_err(|_| WebsiteProviderError::new(WebsiteProviderErrorKind::DeadlineExceeded))?
             .map_err(|_| WebsiteProviderError::new(WebsiteProviderErrorKind::ContractMismatch))?;
         match chunk {
             Some(bytes) => {
