@@ -297,4 +297,40 @@ entries:
     path: docs/product/requirements/REQ-2026-0002-instant-acme-letsencrypt.md
     kind: req
     status: draft
+  - id: REQ-2026-0061
+    path: docs/product/requirements/REQ-2026-0061-admin-application-deployment-and-certificate-distribution.md
+    kind: req
+    status: in-progress
+  - id: REQ-2026-0062
+    path: docs/product/requirements/REQ-2026-0062-owner-scoped-console-release-and-tls-workflow.md
+    kind: req
+    status: in-progress
+  - id: REQ-2026-0063
+    path: docs/product/requirements/REQ-2026-0063-tenant-super-admin-control-plane.md
+    kind: req
+    status: in-progress
+  - id: REQ-2026-0066
+    path: docs/product/requirements/REQ-2026-0066-idempotency-contract-closure.md
+    kind: req
+    status: accepted
+  - id: REQ-2026-0068
+    path: docs/product/requirements/REQ-2026-0068-root-domain-zone-management.md
+    kind: req
+    status: in-progress
+  - id: REQ-2026-0069
+    path: docs/product/requirements/REQ-2026-0069-deferred-application-source-and-listing.md
+    kind: req
+    status: implemented
+  - id: REQ-2026-0070
+    path: docs/product/requirements/REQ-2026-0070-layered-certificate-resolution.md
+    kind: req
+    status: implemented
+  - id: REQ-2026-0071
+    path: docs/product/requirements/REQ-2026-0071-conditional-request-cache-policy-differential.md
+    kind: req
+    status: accepted
+  - id: REQ-2026-0072
+    path: docs/product/requirements/REQ-2026-0072-harmony-shell-bootstrap-wiring.md
+    kind: req
+    status: accepted
 domains: []

@@ -361,10 +361,31 @@ assert.doesNotMatch(
   rawHttpPattern,
   "the root entry module must not perform raw HTTP transport either",
 );
+// Runtime config wiring (REQ-2026-0072): the projection script bakes one
+// committed profile into the HAP rawfile, the bootstrap reads exactly that
+// rawfile and fails the launch when it is missing, and the root page mounts
+// the applications capability instead of a placeholder. A silent default
+// host stays forbidden.
+const runtimeSource = mustExist("entry/src/main/ets/bootstrap/Runtime.ets");
 assert.match(
-  mustExist("entry/src/main/ets/bootstrap/Runtime.ets"),
-  /throw new Error\(\s*'Harmony runtime config projection is not wired yet/u,
-  "bootstrap must fail fast instead of silently defaulting the runtime host",
+  runtimeSource,
+  /getRawFileContentSync\(RUNTIME_ENV_RAWFILE\)/u,
+  "bootstrap must read the projected runtime-env rawfile",
+);
+assert.match(
+  runtimeSource,
+  /scripts\/project-runtime\.mjs --profile/u,
+  "the missing-projection error must tell the operator how to fix it",
+);
+assert.match(
+  runtimeSource,
+  /return null;/u,
+  "a failed bootstrap must still fail fast instead of half-composing",
+);
+assert.match(
+  mustExist("scripts/project-runtime.mjs"),
+  /runtime-env\.\$\{profileId\}\.json/u,
+  "the projection script must select from the committed config/app profiles",
 );
 
 const packageManifest = JSON.parse(mustExist("packages/sdkwork-webserver-harmony-mobile-core/package.json"));
