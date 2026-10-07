@@ -8,10 +8,19 @@ an alert that can never fire is a fake control (PRD §12).
 
 ## Wiring
 
-1. Scrape the host-operations listener. It is loopback-only on the host and
-   `ClusterIP`-internal on Kubernetes: port `3811`, path `/metrics`
-   (see `deployments/kubernetes/deployment.yaml`; the NetworkPolicy admits
-   only labeled scraper roles). Recommended job name: `sdkwork-webserver-operations`
+1. Scrape the data-plane operations listener. Its bind comes from
+   `SDKWORK_WEBSERVER_DATA_PLANE_OPERATIONS_BIND` — the variable has **no
+   default**: unset means the listener (and `/metrics` on it) does not exist,
+   and every shipped profile sets `127.0.0.1:3901` (see
+   `etc/topology/standalone.*.env`). Path: `/metrics`. On a host install,
+   Prometheus must run where that loopback bind is reachable (same host, or a
+   node-local exporter/agent). Inside Kubernetes, a loopback bind inside a
+   pod is NOT reachable through a ClusterIP: either bind the operations
+   listener to the pod IP and set
+   `SDKWORK_WEBSERVER_OPERATIONS_EXPOSE_ALLOWED=true` (the fail-closed guard
+   in the gateway requires the explicit opt-out for non-loopback binds), or
+   run a node-local scrape agent in the same pod/network namespace.
+   Recommended job name: `sdkwork-webserver-operations`
    (the `SdkworkWebOperationsScrapeDown` rule keys on it).
 2. Load the rule file into your Prometheus (`rule_files`) or hand it to
    Alertmanager through whatever rule-distribution the monitoring stack uses.

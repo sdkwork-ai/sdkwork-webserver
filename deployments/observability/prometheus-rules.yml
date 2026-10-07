@@ -10,8 +10,10 @@
 # a rule before its series exists would produce an alert that can never fire,
 # which is a fake control.
 #
-# Scrape target: the loopback-only host-operations listener `/metrics`
-# (default port 3811; see deployments/observability/README.md).
+# Scrape target: the data-plane operations listener `/metrics`, bound by
+# SDKWORK_WEBSERVER_DATA_PLANE_OPERATIONS_BIND (every shipped profile uses
+# 127.0.0.1:3901; unset disables the listener entirely — see
+# deployments/observability/README.md).
 
 groups:
   - name: sdkwork-webserver-data-plane
@@ -27,13 +29,18 @@ groups:
           runbook_url: "docs/runbooks/troubleshooting.md"
 
       - alert: SdkworkWebResourcePressureSustained
-        expr: sdkwork_web_data_plane_resource_pressure == 1
+        # The exporter publishes the gauge twice: `{state="enabled"}` is 1
+        # whenever a pressure policy is configured at all, while
+        # `{state="active"}` is 1 only while admission is actually shedding
+        # load. Alerting on the bare series would page forever in every
+        # configured deployment and never fire in an unconfigured one.
+        expr: sdkwork_web_data_plane_resource_pressure{state="active"} == 1
         for: 5m
         labels:
           severity: critical
         annotations:
           summary: "The data plane sheds load under sustained resource pressure"
-          description: "The admission controller is in the pressure state (reason: {{ $labels.reason }}) for 5 minutes. Requests are being refused before task admission; capacity must be added or the pressure source resolved."
+          description: "The admission controller is in the pressure state for 5 minutes (reasons are on the sdkwork_web_data_plane_resource_pressure_reason series). Requests are being refused before task admission; capacity must be added or the pressure source resolved."
           runbook_url: "docs/runbooks/capacity-planning.md"
 
       - alert: SdkworkWebUpstreamTransportFailures
@@ -85,8 +92,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Certificates expiring within 30 days"
-          description: "{{ $value }} active certificate(s) enter their final 30 days. The certificate worker renews them; a value that keeps rising past the renewal window means the worker is stalled."
+          summary: "Certificates inside the renewal-warning window"
+          description: "{{ $value }} active certificate(s) entered the renewal-warning window (SDKWORK_WEBSERVER_CERT_EXPIRY_WINDOW_DAYS, default 30 days). The certificate worker renews them; a value that keeps rising past the renewal window means the worker is stalled."
           runbook_url: "docs/runbooks/certificate-incident.md"
 
       - alert: SdkworkWebCertificateExpiryCritical

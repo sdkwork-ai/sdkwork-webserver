@@ -18,25 +18,28 @@ use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 const UNKNOWN_EXPIRY_SECONDS: i64 = -1;
 
 static MINIMUM_EXPIRY_SECONDS: AtomicI64 = AtomicI64::new(UNKNOWN_EXPIRY_SECONDS);
-static EXPIRING_WITHIN_30_DAYS: AtomicU64 = AtomicU64::new(0);
+// Value of the `..._expiring_soon` gauge. The window behind "soon" is the
+// operator-tunable SDKWORK_WEBSERVER_CERT_EXPIRY_WINDOW_DAYS (default 30),
+// so it is deliberately not part of the metric name or its HELP line.
+static EXPIRING_WITHIN_WINDOW: AtomicU64 = AtomicU64::new(0);
 
 /// Records one sampler observation.
-pub fn record_certificate_expiry(minimum_seconds: i64, expiring_within_30_days: i64) {
+pub fn record_certificate_expiry(minimum_seconds: i64, expiring_within_window: i64) {
     MINIMUM_EXPIRY_SECONDS.store(minimum_seconds, Ordering::Release);
-    EXPIRING_WITHIN_30_DAYS.store(expiring_within_30_days.max(0) as u64, Ordering::Release);
+    EXPIRING_WITHIN_WINDOW.store(expiring_within_window.max(0) as u64, Ordering::Release);
 }
 
 /// Renders the two certificate-health gauges in Prometheus text format.
 pub fn render_prometheus() -> String {
     let minimum = MINIMUM_EXPIRY_SECONDS.load(Ordering::Acquire);
-    let expiring = EXPIRING_WITHIN_30_DAYS.load(Ordering::Acquire);
+    let expiring = EXPIRING_WITHIN_WINDOW.load(Ordering::Acquire);
     let mut text = String::with_capacity(256);
     text.push_str("# HELP sdkwork_webserver_certificate_expiry_seconds_min Smallest seconds to expiry over active, non-revoked certificates; -1 when no observation exists.\n");
     text.push_str("# TYPE sdkwork_webserver_certificate_expiry_seconds_min gauge\n");
     text.push_str(&format!(
         "sdkwork_webserver_certificate_expiry_seconds_min {minimum}\n"
     ));
-    text.push_str("# HELP sdkwork_webserver_certificate_expiring_soon Active, non-revoked certificates expiring within 30 days.\n");
+    text.push_str("# HELP sdkwork_webserver_certificate_expiring_soon Active, non-revoked certificates inside the renewal-warning window (SDKWORK_WEBSERVER_CERT_EXPIRY_WINDOW_DAYS, default 30).\n");
     text.push_str("# TYPE sdkwork_webserver_certificate_expiring_soon gauge\n");
     text.push_str(&format!(
         "sdkwork_webserver_certificate_expiring_soon {expiring}\n"
