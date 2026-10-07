@@ -370,7 +370,7 @@ async fn issue_lets_encrypt_inner(
         let cert_path = format!("{cert_dir}/fullchain.pem");
         let key_path = format!("{cert_dir}/privkey.pem");
 
-        Ok(IssuedCertificateMaterial {
+        let material = IssuedCertificateMaterial {
             cert_name: cert_name.to_string(),
             cert_type: 1,
             issuer: evidence.issuer,
@@ -382,14 +382,30 @@ async fn issue_lets_encrypt_inner(
             chain_sha256: evidence.chain_sha256,
             key_algorithm: evidence.key_algorithm,
             cert_pem: cert_chain_pem.clone(),
-            private_key_pem,
+            private_key_pem: private_key_pem.clone(),
             chain_pem: Some(cert_chain_pem),
             not_before: evidence.not_before,
             not_after: evidence.not_after,
-            cert_path,
-            key_path,
+            cert_path: cert_path.clone(),
+            key_path: key_path.clone(),
             chain_path: None,
-        })
+        };
+        // Make `cert_path`/`key_path` true on disk: single-host edges
+        // (deb/rpm) terminate TLS directly from these canonical paths, so a
+        // renewal is an in-place atomic replace the running edge picks up on
+        // its next reload - no manual material copy. A failed export is
+        // logged and does not fail the issuance (the material is durable in
+        // the database; the edge keeps serving its previous certificate).
+        if let Err(export_error) =
+            crate::material_export::export_material_to_disk(&material).await
+        {
+            tracing::warn!(
+                cert_name = %material.cert_name,
+                error = %export_error,
+                "issued material disk export failed; the canonical certificate paths are stale"
+            );
+        }
+        Ok(material)
     }
     .await;
 

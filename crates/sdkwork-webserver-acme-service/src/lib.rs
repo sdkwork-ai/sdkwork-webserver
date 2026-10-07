@@ -18,6 +18,7 @@ mod error;
 mod http_client;
 mod issue;
 mod lets_encrypt;
+pub mod material_export;
 mod model;
 mod revoke;
 mod self_signed;
