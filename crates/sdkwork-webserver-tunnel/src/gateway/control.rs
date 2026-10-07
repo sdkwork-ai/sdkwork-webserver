@@ -106,7 +106,7 @@ async fn handshake_and_serve(
     let session_id = register_session(shared, connection.clone(), device.clone())?;
     *registered_session = Some(session_id.clone());
 
-    write_message(
+    write_message_bounded(
         &mut control,
         &ControlMessage::AuthResult(AuthResult {
             ok: true,
@@ -157,7 +157,7 @@ async fn handshake(
         .find(|version| version.is_acceptable())
         .cloned()
     else {
-        write_message(
+        write_message_bounded(
             control,
             &ControlMessage::error(
                 ErrorCode::UnsupportedProtocol,
@@ -205,7 +205,12 @@ async fn authenticate_peer(
         detail: &'static str,
     ) -> TunnelError {
         shared.metrics.record_auth_failure();
-        let _ = write_message(
+        // Every rejection is a failed authentication attempt: charge the
+        // failure budget here so successful handshakes (a fleet reconnecting
+        // behind one NAT gateway) never consume it, while repeated bad
+        // credentials still lock the peer out.
+        shared.rate_limiter.record_failure(peer.ip());
+        let _ = write_message_bounded(
             control,
             &ControlMessage::AuthResult(AuthResult {
                 ok: false,
@@ -232,7 +237,7 @@ async fn authenticate_peer(
         )
         .await);
     }
-    if !shared.rate_limiter.record_failure(peer.ip()) {
+    if !shared.rate_limiter.check(peer.ip()) {
         tracing::warn!(%peer, "tunnel authentication rate limit reached");
         return Err(reject(shared, peer, control, "authentication rate limit reached").await);
     }
@@ -250,7 +255,7 @@ async fn authenticate_peer(
             .device_budget_exhausted(shared.limits.max_devices)
     {
         tracing::warn!(device = %device.id, %peer, "tunnel device limit reached");
-        let _ = write_message(
+        let _ = write_message_bounded(
             control,
             &ControlMessage::Error(sdkwork_webserver_tunnel_protocol::ErrorMessage {
                 code: ErrorCode::ResourceLimit,
@@ -510,7 +515,7 @@ async fn flush_pending_declarations(
                         .then(|| policy.allowed_ips.iter().map(ToString::to_string).collect())
                 },
             });
-        if write_message(control, &message).await.is_err() {
+        if write_message_bounded(control, &message).await.is_err() {
             return;
         }
     }
@@ -574,6 +579,17 @@ fn validate_registration(
     };
     if let Some(domain) = matcher.as_domain() {
         validate_domain_suffixes(shared, domain)?;
+    }
+    if let Some(port) = matcher.as_port() {
+        // Ports are the gateway-side registration policy, mirroring the
+        // domain-suffix policy: an authenticated agent must not pre-empt the
+        // edge's own listeners or well-known services.
+        let (min, max) = (shared.route_port_min, shared.route_port_max);
+        if port < min || port > max {
+            return Err(TunnelError::InvalidRoute(format!(
+                "route port {port} is outside the allowed {min}-{max} range"
+            )));
+        }
     }
     let target = TunnelTarget::parse_for_protocol(protocol, &request.target)?;
     let allowed_ips = request

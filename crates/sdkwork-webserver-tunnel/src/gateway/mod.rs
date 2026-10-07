@@ -57,6 +57,11 @@ pub struct GatewayShared {
     pub rate_limiter: AuthRateLimiter,
     /// Required suffixes for agent-registered domain routes.
     pub domain_suffixes: Vec<String>,
+    /// Inclusive public-port range a `tcp`/`udp` route may register; see
+    /// [`TunnelGatewayOptions::route_port_min`].
+    pub route_port_min: u16,
+    /// Inclusive upper bound; see [`Self::route_port_min`].
+    pub route_port_max: u16,
     /// Route declarations queued for devices that are currently offline
     /// (PRD §35 create-route API; memory-only in V1).
     pub pending_declarations: AsyncMutex<HashMap<DeviceId, Vec<TunnelRouteTemplate>>>,
@@ -94,6 +99,8 @@ impl GatewayShared {
                 options.limits.max_connections.max(1) as usize,
             )),
             domain_suffixes: options.domain_suffixes.clone(),
+            route_port_min: options.route_port_min,
+            route_port_max: options.route_port_max,
             pending_declarations: AsyncMutex::new(HashMap::new()),
             tcp: Mutex::new(listeners::TcpListenerSet::default()),
             udp: Mutex::new(udp_listeners::UdpListenerSet::default()),
@@ -161,6 +168,11 @@ pub struct TunnelGatewayOptions {
     pub auth_max_failures: u32,
     /// Authentication rate-limit window seconds.
     pub auth_window_secs: u64,
+    /// Inclusive public-port range a `tcp`/`udp` route may register
+    /// (registration policy, mirroring the gateway `routePortMin`/`Max`).
+    pub route_port_min: u16,
+    /// Inclusive upper bound; see [`Self::route_port_min`].
+    pub route_port_max: u16,
     /// Resource ceilings.
     pub limits: TunnelLimitsConfig,
     /// Timeouts.
@@ -192,6 +204,8 @@ impl TunnelGatewayOptions {
             tls_key_pem_env: gateway.tls_key_pem_env.clone(),
             auth_max_failures: 10,
             auth_window_secs: 60,
+            route_port_min: gateway.route_port_min,
+            route_port_max: gateway.route_port_max,
             limits: config.limits_or_default(),
             timeouts: config.timeout_or_default(),
             network: config.network_or_default(),

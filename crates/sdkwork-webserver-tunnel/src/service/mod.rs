@@ -183,11 +183,25 @@ impl TunnelService for GatewayTunnelService {
             .unregister(id)
             .ok_or(TunnelError::RouteNotFound)?;
         if let Some(port) = removed.route.matcher.as_port() {
-            self.shared
-                .tcp
-                .lock()
-                .expect("tcp listener set lock is never held across awaits")
-                .release(port, id);
+            // Mirror `handle_unregister`: a UDP route owns a listener in the
+            // UDP set, and releasing only the TCP set would leak the socket
+            // and port loop — every later re-registration of the port would
+            // fail to bind until the gateway restarts.
+            let datagram =
+                removed.route.protocol == sdkwork_webserver_tunnel_core::TunnelProtocolKind::Udp;
+            if datagram {
+                self.shared
+                    .udp
+                    .lock()
+                    .expect("udp listener set lock is never held across awaits")
+                    .release(port, id);
+            } else {
+                self.shared
+                    .tcp
+                    .lock()
+                    .expect("tcp listener set lock is never held across awaits")
+                    .release(port, id);
+            }
         }
         self.shared.metrics.record_route_change(-1);
         Ok(())
@@ -250,6 +264,8 @@ mod tests {
             tls_key_pem_env: None,
             auth_max_failures: 10,
             auth_window_secs: 60,
+            route_port_min: 1024,
+            route_port_max: u16::MAX,
             limits: Default::default(),
             timeouts: Default::default(),
             network: Default::default(),

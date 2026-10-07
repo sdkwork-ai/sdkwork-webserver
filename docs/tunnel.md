@@ -51,6 +51,10 @@ enabled = true
 listen = "0.0.0.0:8443"
 domain_suffixes = ["sdkwork.link"]
 # agent_token_env 默认 ["SDKWORK_TUNNEL_GATEWAY_TOKEN"]；token 永不入配置文件
+# tcp/udp 路由可注册的公网端口闭区间（默认 1024..=65535）：网关自身监听与
+# 特权端口默认对 agent 不可达，确需放开时显式放宽
+route_port_min = 1024
+route_port_max = 65535
 [[tunnel.routes]]        # agent 侧模板；gateway 配置里仅为声明
 name = "web"
 protocol = "http"

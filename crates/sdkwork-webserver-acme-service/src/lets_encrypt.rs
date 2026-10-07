@@ -28,6 +28,64 @@ use crate::{AcmeConfig, AcmeServiceError, AcmeServiceResult};
 /// its apex costs two.
 const MAX_AUTHORIZATIONS_PER_ORDER: usize = crate::MAX_CERTIFICATE_IDENTIFIERS;
 
+/// Process-lifetime fallback (directory URL → serialized credentials) for CA
+/// accounts whose durable save failed. The durable store stays the source of
+/// truth; this cache only keeps one process from re-creating the same account
+/// (and burning the CA account-creation quota) while its disk is failing.
+/// Locks are held only for map access, never across awaits.
+static FALLBACK_ACCOUNT_CREDENTIALS: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::HashMap<String, String>>,
+> = std::sync::OnceLock::new();
+
+fn fallback_accounts() -> &'static std::sync::Mutex<std::collections::HashMap<String, String>> {
+    FALLBACK_ACCOUNT_CREDENTIALS.get_or_init(|| std::sync::Mutex::new(Default::default()))
+}
+
+fn cache_fallback_account_credentials(directory_url: &str, credentials: &instant_acme::AccountCredentials) {
+    match serde_json::to_string(credentials) {
+        Ok(json) => {
+            fallback_accounts()
+                .lock()
+                .expect("ACME fallback account map lock is never poisoned across awaits")
+                .insert(directory_url.to_owned(), json);
+        }
+        Err(error) => {
+            tracing::warn!(%error, "cannot serialize ACME credentials for the in-process fallback");
+        }
+    }
+}
+
+fn fallback_account_credentials(directory_url: &str) -> Option<instant_acme::AccountCredentials> {
+    let json = fallback_accounts()
+        .lock()
+        .expect("ACME fallback account map lock is never poisoned across awaits")
+        .get(directory_url)
+        .cloned()?;
+    serde_json::from_str(&json).ok()
+}
+
+/// Persists account credentials with short bounded retries; transient local
+/// I/O hiccups must not cost a freshly created CA account.
+async fn best_effort_save_account(
+    account_store: &dyn AcmeAccountStore,
+    directory_url: &str,
+    credentials: &instant_acme::AccountCredentials,
+) -> AcmeServiceResult<()> {
+    let mut last_error = None;
+    for attempt in 0..3_u32 {
+        if attempt > 0 {
+            tokio::time::sleep(Duration::from_millis(200 * u64::from(attempt))).await;
+        }
+        match account_store.save(directory_url, credentials).await {
+            Ok(()) => return Ok(()),
+            Err(error) => last_error = Some(error),
+        }
+    }
+    Err(last_error.unwrap_or_else(|| {
+        AcmeServiceError::provider("ACME account save failed without an error report")
+    }))
+}
+
 /// How an order proves control of its identifiers.
 #[derive(Clone)]
 pub(crate) enum AcmeChallengeMode<'a> {
@@ -130,7 +188,19 @@ async fn issue_lets_encrypt_inner(
     // Restore the durable CA account when one exists; otherwise create one
     // account and persist it. Reusing one account avoids the CA account
     // creation rate limit and preserves account identity across renewals.
+    // A credentials set whose durable save keeps failing is kept in the
+    // process-lifetime fallback so a broken disk cannot burn the CA's
+    // account-creation quota (Let's Encrypt: 50 accounts per IP per 3h).
     let account = if let Some(credentials) = account_store.load(&config.directory_url).await? {
+        Account::builder_with_http(client_factory.build()?)
+            .from_credentials(credentials)
+            .await
+            .map_err(|error| AcmeServiceError::provider(format!("restore ACME account: {error}")))?
+    } else if let Some(credentials) = fallback_account_credentials(&config.directory_url) {
+        tracing::warn!(
+            directory = %config.directory_url,
+            "durable ACME account store is unreadable or unwritable; reusing the account cached in this process"
+        );
         Account::builder_with_http(client_factory.build()?)
             .from_credentials(credentials)
             .await
@@ -148,9 +218,14 @@ async fn issue_lets_encrypt_inner(
             )
             .await
             .map_err(|error| AcmeServiceError::provider(error.to_string()))?;
-        account_store
-            .save(&config.directory_url, &credentials)
-            .await?;
+        if let Err(error) = best_effort_save_account(account_store, &config.directory_url, &credentials).await {
+            tracing::warn!(
+                directory = %config.directory_url,
+                error = %error,
+                "durable ACME account save failed after retries; caching the credentials in this process to avoid burning the CA account quota"
+            );
+            cache_fallback_account_credentials(&config.directory_url, &credentials);
+        }
         account
     };
 

@@ -95,6 +95,16 @@ impl TunnelConfig {
         if !self.enabled {
             return Ok(());
         }
+        let gateway = self.gateway_or_default();
+        if gateway.route_port_min == 0 || gateway.route_port_min > gateway.route_port_max {
+            return Err(crate::TunnelError::Validation {
+                field: crate::ValidationField::Config,
+                reason: format!(
+                    "gateway routePortMin {} must be non-zero and not exceed routePortMax {}",
+                    gateway.route_port_min, gateway.route_port_max
+                ),
+            });
+        }
         for template in self.routes_or_empty() {
             template.validate()?;
         }
@@ -127,6 +137,14 @@ pub struct TunnelGatewayConfig {
     pub tls_cert_pem_env: Option<String>,
     /// Environment variable holding the TLS private key (PEM).
     pub tls_key_pem_env: Option<String>,
+    /// Inclusive lower bound of the public port a `tcp`/`udp` route may
+    /// register. Ports below the bound are gateway-reserved (the edge's own
+    /// listeners and well-known services); an authenticated agent must not be
+    /// able to pre-empt them. Widen deliberately via configuration only.
+    pub route_port_min: u16,
+    /// Inclusive upper bound of the registrable public port range; see
+    /// [`Self::route_port_min`].
+    pub route_port_max: u16,
 }
 
 impl Default for TunnelGatewayConfig {
@@ -137,6 +155,10 @@ impl Default for TunnelGatewayConfig {
             agent_token_env: vec!["SDKWORK_TUNNEL_GATEWAY_TOKEN".to_owned()],
             tls_cert_pem_env: None,
             tls_key_pem_env: None,
+            // Privileged and edge-reserved ports stay out of agent reach by
+            // default, matching ngrok/rathole remote-port policy.
+            route_port_min: 1024,
+            route_port_max: u16::MAX,
         }
     }
 }
@@ -657,11 +679,14 @@ mod tests {
             "\"deviceIdEnv\"",
             "\"deviceName\"",
             "\"domainSuffix\"",
+            "\"routePortMin\"",
+            "\"routePortMax\"",
         ] {
             assert!(json.contains(key), "missing {key} in {json}");
         }
         // snake_case spellings must never appear on the wire.
         assert!(!json.contains("domain_suffixes"), "{json}");
         assert!(!json.contains("token_env"), "{json}");
+        assert!(!json.contains("route_port_min"), "{json}");
     }
 }

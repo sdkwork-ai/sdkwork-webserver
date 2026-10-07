@@ -666,7 +666,6 @@ where
     let text = String::from_utf8_lossy(&raw);
     let mut parts = text.splitn(2, "\r\n\r\n");
     let head = parts.next().unwrap_or_default();
-    let body_text = parts.next().unwrap_or_default();
     let status = head
         .lines()
         .next()
@@ -679,6 +678,12 @@ where
         }
         return Err(MemberError::Transient(format!("HTTP {status}")));
     }
+    // Framing-aware body extraction: a peer (or an intermediary) answering
+    // with `Content-Length` or chunked framing must not have its body parsed
+    // as raw JSON — that failure mode would read as a permanent membership
+    // outage, not a transient transport error.
+    let body_bytes = member_response_body(&raw)?;
+    let body_text = String::from_utf8_lossy(&body_bytes);
     // Envelope unwrap: the internal surface answers `{"data": ...}`.
     let value: serde_json::Value = serde_json::from_str(body_text.trim())
         .map_err(|error| MemberError::Transient(format!("decode body: {error}")))?;
@@ -687,7 +692,131 @@ where
         .map_err(|error| MemberError::Transient(format!("decode payload: {error}")))
 }
 
+/// Extracts the JSON body bytes from one raw HTTP/1.x response, honoring
+/// `Content-Length` and `Transfer-Encoding: chunked`. A body shorter than
+/// its declared length is a truncated read and fails transiently instead of
+/// parsing a prefix as JSON.
+fn member_response_body(raw: &[u8]) -> Result<std::borrow::Cow<'_, [u8]>, MemberError> {
+    const SEPARATOR: &[u8] = b"\r\n\r\n";
+    let Some(body_start) = raw
+        .windows(SEPARATOR.len())
+        .position(|window| window == SEPARATOR)
+    else {
+        return Err(MemberError::Transient(
+            "malformed HTTP response: no header terminator".to_owned(),
+        ));
+    };
+    let head = std::str::from_utf8(&raw[..body_start])
+        .map_err(|_| MemberError::Transient("malformed HTTP response header".to_owned()))?;
+    let body = &raw[body_start + SEPARATOR.len()..];
+    let mut content_length: Option<usize> = None;
+    let mut chunked = false;
+    for line in head.lines().skip(1) {
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        let name = name.trim().to_ascii_lowercase();
+        let value = value.trim();
+        if name == "content-length" {
+            content_length = value.parse::<usize>().ok();
+        } else if name == "transfer-encoding"
+            && value.to_ascii_lowercase().contains("chunked")
+        {
+            chunked = true;
+        }
+    }
+    if chunked {
+        // Chunked framing wins over Content-Length per RFC 9112 §6.1.
+        let mut decoded = Vec::new();
+        decode_chunked_body(body, &mut decoded)?;
+        return Ok(std::borrow::Cow::Owned(decoded));
+    }
+    match content_length {
+        Some(length) if length <= MAX_MEMBER_RESPONSE_BYTES => {
+            if body.len() < length {
+                return Err(MemberError::Transient(
+                    "truncated member response body".to_owned(),
+                ));
+            }
+            Ok(std::borrow::Cow::Borrowed(&body[..length]))
+        }
+        Some(length) => Err(MemberError::Transient(format!(
+            "member response body exceeded {MAX_MEMBER_RESPONSE_BYTES} bytes: {length}"
+        ))),
+        // No framing headers: tolerate the historical close-delimited body.
+        None => Ok(std::borrow::Cow::Borrowed(body)),
+    }
+}
+
+/// RFC 9112 §7.1 chunked-body decoder. Chunk extensions are skipped, the
+/// terminal zero chunk ends the body (trailers are ignored), and the decoded
+/// output stays under [`MAX_MEMBER_RESPONSE_BYTES`].
+fn decode_chunked_body(mut body: &[u8], out: &mut Vec<u8>) -> Result<(), MemberError> {
+    loop {
+        let Some(line_end) = body.windows(2).position(|window| window == b"\r\n") else {
+            return Err(MemberError::Transient(
+                "malformed chunked body".to_owned(),
+            ));
+        };
+        let size_text = std::str::from_utf8(&body[..line_end])
+            .map_err(|_| MemberError::Transient("malformed chunk size".to_owned()))?;
+        let size = usize::from_str_radix(size_text.trim().split(';').next().unwrap_or(""), 16)
+            .map_err(|_| MemberError::Transient("malformed chunk size".to_owned()))?;
+        body = &body[line_end + 2..];
+        if out.len() + size > MAX_MEMBER_RESPONSE_BYTES {
+            return Err(MemberError::Transient(format!(
+                "member response body exceeded {MAX_MEMBER_RESPONSE_BYTES} bytes"
+            )));
+        }
+        if size == 0 {
+            return Ok(());
+        }
+        if body.len() < size {
+            return Err(MemberError::Transient(
+                "truncated chunked member response".to_owned(),
+            ));
+        }
+        out.extend_from_slice(&body[..size]);
+        body = &body[size..];
+        if body.starts_with(b"\r\n") {
+            body = &body[2..];
+        }
+    }
+}
+
 /// Object-safe supertrait so LAN and tunnel streams share one boxed type.
 trait StreamIo: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send {}
 
 impl<S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send> StreamIo for S {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn content_length_body_is_sliced_to_the_declared_length() {
+        let raw = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 13\r\n\r\n{\"data\":true}extra";
+        let body = member_response_body(raw).unwrap();
+        assert_eq!(&body[..], b"{\"data\":true}");
+    }
+
+    #[test]
+    fn chunked_body_is_decoded_and_wins_over_content_length() {
+        let raw = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Length: 3\r\n\r\n4\r\n{\"da\r\n6\r\nta\":1}\r\n0\r\n\r\n";
+        let body = member_response_body(raw).unwrap();
+        assert_eq!(&body[..], b"{\"data\":1}");
+    }
+
+    #[test]
+    fn truncated_content_length_fails_transiently() {
+        let raw = b"HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\nshort";
+        assert!(member_response_body(raw).is_err());
+    }
+
+    #[test]
+    fn close_delimited_body_without_framing_headers_is_tolerated() {
+        let raw = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"data\":true}";
+        let body = member_response_body(raw).unwrap();
+        assert_eq!(&body[..], b"{\"data\":true}");
+    }
+}

@@ -102,6 +102,24 @@ impl AuthRateLimiter {
         }
     }
 
+    /// Reports whether the peer may attempt authentication now, without
+    /// consuming the failure budget: successful handshakes must never be
+    /// charged (a fleet reconnecting behind one NAT gateway would otherwise
+    /// lock itself out). Failure accounting lives in [`Self::record_failure`].
+    pub fn check(&self, peer: IpAddr) -> bool {
+        let attempts = self
+            .attempts
+            .lock()
+            .expect("auth rate limiter map lock is never poisoned across awaits");
+        match attempts.get(&peer) {
+            Some(entry) if Instant::now().duration_since(entry.started_at) <= self.window => {
+                entry.count < self.max_attempts
+            }
+            // No window, or an expired one: the peer may try again.
+            _ => true,
+        }
+    }
+
     /// Records a failed attempt; returns false when the peer exceeded the
     /// failure budget and must back off.
     pub fn record_failure(&self, peer: IpAddr) -> bool {
@@ -183,14 +201,30 @@ mod tests {
     fn rate_limiter_blocks_after_budget() {
         let limiter = AuthRateLimiter::new(3, Duration::from_secs(60));
         let peer: IpAddr = "10.1.1.1".parse().expect("ip");
+        assert!(limiter.check(peer), "fresh peer may attempt");
         assert!(limiter.record_failure(peer), "first attempt allowed");
         assert!(limiter.record_failure(peer), "second attempt allowed");
         assert!(limiter.record_failure(peer), "third attempt allowed");
         assert!(!limiter.record_failure(peer), "fourth attempt blocked");
+        assert!(!limiter.check(peer), "locked peer is refused before auth");
         // A different peer is unaffected.
         let other: IpAddr = "10.1.1.2".parse().expect("ip");
         assert!(limiter.record_failure(other));
+        assert!(limiter.check(other));
         limiter.sweep();
+    }
+
+    #[test]
+    fn rate_limiter_check_does_not_consume_budget() {
+        let limiter = AuthRateLimiter::new(2, Duration::from_secs(60));
+        let peer: IpAddr = "10.9.9.9".parse().expect("ip");
+        // Any number of checks (successful handshakes) never consumes budget.
+        for _ in 0..10 {
+            assert!(limiter.check(peer));
+        }
+        assert!(limiter.record_failure(peer), "first failure allowed");
+        assert!(limiter.record_failure(peer), "second failure allowed");
+        assert!(!limiter.check(peer), "budget exhausted by failures only");
     }
 
     #[test]

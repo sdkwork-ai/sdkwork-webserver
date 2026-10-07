@@ -42,6 +42,12 @@ const UDP_PENDING_SETUP_CEILING: usize = 1024;
 const UDP_DATAGRAM_CEILING: usize =
     sdkwork_webserver_tunnel_protocol::packet_frame::MAX_PACKET_PAYLOAD
         + sdkwork_webserver_tunnel_protocol::packet_frame::PACKET_LENGTH_BYTES;
+/// Deadline for one datagram forward into a session stream. The port loop is
+/// single-threaded per port: without a deadline, one agent that stops reading
+/// its session parks the whole port (no reaping, no setups, no forwarding for
+/// any other visitor) until the transport idle timeout. Mirrors the 10s
+/// control-write bound.
+const UDP_FORWARD_WRITE_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Default)]
 pub(crate) struct UdpListenerSet {
@@ -207,7 +213,10 @@ async fn udp_port_loop(shared: Arc<GatewayShared>, port: u16, listener: Arc<UdpS
                         if sessions.contains_key(&visitor) {
                             // A live session already exists (the setup raced
                             // the idle reap); dropping the newcomer aborts its
-                            // reader through VisitorSession::drop.
+                            // reader through VisitorSession::drop. The gauge
+                            // opened at spawn time is closed here so the
+                            // setup race cannot leak stream metrics.
+                            shared.metrics.record_stream_close();
                         } else {
                             sessions.insert(visitor, session);
                         }
@@ -280,7 +289,13 @@ async fn udp_port_loop(shared: Arc<GatewayShared>, port: u16, listener: Arc<UdpS
         }
     }
     // Dropping the map drops every session; each session's Drop aborts its
-    // reader task, so no explicit per-session cleanup is required here.
+    // reader task, so no explicit per-session cleanup is required here. The
+    // gauge events for everything still alive (and for setups whose outcome
+    // is never reported) are compensated here so teardown cannot leak the
+    // stream-open count recorded at spawn time.
+    for _ in 0..sessions.len() + pending.len() {
+        shared.metrics.record_stream_close();
+    }
     drop(sessions);
 }
 
@@ -301,13 +316,22 @@ async fn establish_visitor_session(
 ) {
     match open_session(&shared, port, &listener, visitor, first_payload, &events).await {
         Ok(session) => {
-            let _ = events
+            if events
                 .send(SessionEvent::Established { visitor, session })
-                .await;
+                .await
+                .is_err()
+            {
+                // The port loop is gone; the session (and its reader task) is
+                // dropped here without the loop seeing it — compensate the
+                // stream-open gauge recorded at spawn time.
+                shared.metrics.record_stream_close();
+            }
         }
         Err(error) => {
             tracing::debug!(%visitor, port, error = %error, "udp session refused");
-            let _ = events.send(SessionEvent::Refused(visitor)).await;
+            if events.send(SessionEvent::Refused(visitor)).await.is_err() {
+                shared.metrics.record_stream_close();
+            }
         }
     }
 }
@@ -320,16 +344,22 @@ async fn forward_to_session(
         sdkwork_webserver_tunnel_protocol::packet_frame::PACKET_LENGTH_BYTES + payload.len(),
     );
     sdkwork_webserver_tunnel_protocol::packet_frame::encode_packet(&payload, &mut framed)?;
-    session
-        .writer
-        .write_all(&framed)
+    let write = async {
+        session
+            .writer
+            .write_all(&framed)
+            .await
+            .map_err(|error| TunnelError::ConnectionFailed(error.to_string()))?;
+        session
+            .writer
+            .flush()
+            .await
+            .map_err(|error| TunnelError::ConnectionFailed(error.to_string()))
+    };
+    // A stalled stream write must end the session, not freeze the port loop.
+    tokio::time::timeout(UDP_FORWARD_WRITE_TIMEOUT, write)
         .await
-        .map_err(|error| TunnelError::ConnectionFailed(error.to_string()))?;
-    session
-        .writer
-        .flush()
-        .await
-        .map_err(|error| TunnelError::ConnectionFailed(error.to_string()))?;
+        .map_err(|_| TunnelError::Timeout("udp forward write"))??;
     touch(&session.last_activity);
     Ok(())
 }
