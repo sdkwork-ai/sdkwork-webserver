@@ -98,14 +98,19 @@ public class ClusterApi {
     }
 
     /// List webserver process instances with liveness state
-    public func clustersInstancesList(pageSize: Int? = nil, cursor: String? = nil, clusterId: String? = nil, hostId: String? = nil, status: Int? = nil, healthState: String? = nil) async throws -> ClustersInstancesListResponse? {
+    public func clustersInstancesList(pageSize: Int? = nil, cursor: String? = nil, clusterId: String? = nil, hostId: String? = nil, status: Int? = nil, healthState: String? = nil, joinMode: Int? = nil, syncStatus: Int? = nil, labels: String? = nil, search: String? = nil, buildVersion: String? = nil) async throws -> ClustersInstancesListResponse? {
         let query = buildQueryString([
             QueryParameterSpec(name: "page_size", value: pageSize, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "cursor", value: cursor, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "cluster_id", value: clusterId, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "host_id", value: hostId, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "status", value: status, style: "form", explode: true, allowReserved: false, contentType: nil),
-            QueryParameterSpec(name: "health_state", value: healthState, style: "form", explode: true, allowReserved: false, contentType: nil)
+            QueryParameterSpec(name: "health_state", value: healthState, style: "form", explode: true, allowReserved: false, contentType: nil),
+            QueryParameterSpec(name: "join_mode", value: joinMode, style: "form", explode: true, allowReserved: false, contentType: nil),
+            QueryParameterSpec(name: "sync_status", value: syncStatus, style: "form", explode: true, allowReserved: false, contentType: nil),
+            QueryParameterSpec(name: "labels", value: labels, style: "form", explode: true, allowReserved: false, contentType: nil),
+            QueryParameterSpec(name: "search", value: search, style: "form", explode: true, allowReserved: false, contentType: nil),
+            QueryParameterSpec(name: "build_version", value: buildVersion, style: "form", explode: true, allowReserved: false, contentType: nil)
         ])
         return try await client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/clusters/instances"), query), responseType: ClustersInstancesListResponse.self)
     }
@@ -138,12 +143,13 @@ public class ClusterApi {
     }
 
     /// List cluster lifecycle events
-    public func clustersEventsList(pageSize: Int? = nil, cursor: String? = nil, clusterId: String? = nil, severity: String? = nil) async throws -> ClustersEventsListResponse? {
+    public func clustersEventsList(pageSize: Int? = nil, cursor: String? = nil, clusterId: String? = nil, severity: String? = nil, instanceId: String? = nil) async throws -> ClustersEventsListResponse? {
         let query = buildQueryString([
             QueryParameterSpec(name: "page_size", value: pageSize, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "cursor", value: cursor, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "cluster_id", value: clusterId, style: "form", explode: true, allowReserved: false, contentType: nil),
-            QueryParameterSpec(name: "severity", value: severity, style: "form", explode: true, allowReserved: false, contentType: nil)
+            QueryParameterSpec(name: "severity", value: severity, style: "form", explode: true, allowReserved: false, contentType: nil),
+            QueryParameterSpec(name: "instance_id", value: instanceId, style: "form", explode: true, allowReserved: false, contentType: nil)
         ])
         return try await client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/clusters/events"), query), responseType: ClustersEventsListResponse.self)
     }

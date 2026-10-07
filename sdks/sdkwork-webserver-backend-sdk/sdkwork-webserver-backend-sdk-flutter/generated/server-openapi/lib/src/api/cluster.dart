@@ -138,14 +138,19 @@ class ClusterApi {
   }
 
   /// List webserver process instances with liveness state
-  Future<ClustersInstancesListResponse?> clustersInstancesList([int? pageSize, String? cursor, String? clusterId, String? hostId, int? status, String? healthState]) async {
+  Future<ClustersInstancesListResponse?> clustersInstancesList([int? pageSize, String? cursor, String? clusterId, String? hostId, int? status, String? healthState, int? joinMode, int? syncStatus, String? labels, String? search, String? buildVersion]) async {
     final query = buildQueryString([
       QueryParameterSpec('page_size', pageSize, 'form', true, false, null),
       QueryParameterSpec('cursor', cursor, 'form', true, false, null),
       QueryParameterSpec('cluster_id', clusterId, 'form', true, false, null),
       QueryParameterSpec('host_id', hostId, 'form', true, false, null),
       QueryParameterSpec('status', status, 'form', true, false, null),
-      QueryParameterSpec('health_state', healthState, 'form', true, false, null)
+      QueryParameterSpec('health_state', healthState, 'form', true, false, null),
+      QueryParameterSpec('join_mode', joinMode, 'form', true, false, null),
+      QueryParameterSpec('sync_status', syncStatus, 'form', true, false, null),
+      QueryParameterSpec('labels', labels, 'form', true, false, null),
+      QueryParameterSpec('search', search, 'form', true, false, null),
+      QueryParameterSpec('build_version', buildVersion, 'form', true, false, null)
     ]);
     final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.backendPath('/clusters/instances'), query));
     return (() {
@@ -191,12 +196,13 @@ class ClusterApi {
   }
 
   /// List cluster lifecycle events
-  Future<ClustersEventsListResponse?> clustersEventsList([int? pageSize, String? cursor, String? clusterId, String? severity]) async {
+  Future<ClustersEventsListResponse?> clustersEventsList([int? pageSize, String? cursor, String? clusterId, String? severity, String? instanceId]) async {
     final query = buildQueryString([
       QueryParameterSpec('page_size', pageSize, 'form', true, false, null),
       QueryParameterSpec('cursor', cursor, 'form', true, false, null),
       QueryParameterSpec('cluster_id', clusterId, 'form', true, false, null),
-      QueryParameterSpec('severity', severity, 'form', true, false, null)
+      QueryParameterSpec('severity', severity, 'form', true, false, null),
+      QueryParameterSpec('instance_id', instanceId, 'form', true, false, null)
     ]);
     final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.backendPath('/clusters/events'), query));
     return (() {

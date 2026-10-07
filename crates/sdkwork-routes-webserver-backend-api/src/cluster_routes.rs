@@ -56,10 +56,10 @@ pub(crate) struct ClusterInstanceListQuery {
     status: Option<i32>,
     health_state: Option<String>,
     /// `0` = LAN (same-subnet), `1` = TUNNEL (API-only reverse tunnel).
-    #[serde(rename = "joinMode", default)]
+    #[serde(default)]
     join_mode: Option<i32>,
     /// `0` = unknown, `1` = in sync, `2` = pending, `3` = failed.
-    #[serde(rename = "syncStatus", default)]
+    #[serde(default)]
     sync_status: Option<i32>,
     /// Label selector `k1=v1,k2=v2` (every pair must match).
     #[serde(default)]
@@ -68,7 +68,7 @@ pub(crate) struct ClusterInstanceListQuery {
     #[serde(default)]
     search: Option<String>,
     /// Exact build version (version-skew management).
-    #[serde(rename = "buildVersion", default)]
+    #[serde(default)]
     build_version: Option<String>,
 }
 
@@ -87,7 +87,7 @@ pub(crate) struct ClusterEventListQuery {
     cluster_id: Option<String>,
     severity: Option<String>,
     /// Detail-page filter: events recorded for one instance.
-    #[serde(rename = "instanceId", default)]
+    #[serde(default)]
     instance_id: Option<String>,
 }
 
@@ -343,11 +343,29 @@ pub(crate) async fn retrieve_cluster_overview(
 /// `POST /backend/v3/api/clusters/{clusterId}/sync` — publishes one
 /// desired-state revision (config or applications) to every instance of
 /// the cluster (PRD: complete data synchronization).
+/// Desired-state revision kinds the sync publish accepts (authority enum:
+/// `config|applications`).
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct ClusterSyncPublishBody {
-    kind: String,
+    kind: ClusterSyncKind,
     payload: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Copy, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum ClusterSyncKind {
+    Config,
+    Applications,
+}
+
+impl ClusterSyncKind {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Config => "config",
+            Self::Applications => "applications",
+        }
+    }
 }
 
 pub(crate) async fn publish_cluster_sync(
@@ -358,7 +376,7 @@ pub(crate) async fn publish_cluster_sync(
 ) -> Result<Response, WebApiError> {
     let context = require_cluster_context(context)?;
     let manifest = service
-        .cluster_sync_publish(&context, &cluster_id, &body.kind, body.payload)
+        .cluster_sync_publish(&context, &cluster_id, body.kind.as_str(), body.payload)
         .await?;
     ok_resource(Ok(manifest))
 }
@@ -482,7 +500,25 @@ pub(crate) async fn probe_cluster_instance(
     Extension(service): Extension<Arc<WebService>>,
     context: Option<Extension<WebBackendRequestContext>>,
     Path(instance_id): Path<String>,
-    Json(body): Json<InstanceProbeBody>,
+    // The authority declares the probe body optional: a body-less POST probes
+    // the resolved target with the documented defaults.
+    body: Option<Json<InstanceProbeBody>>,
+) -> Result<Response, WebApiError> {
+    let body = match body {
+        Some(Json(body)) => body,
+        None => InstanceProbeBody {
+            path: default_probe_path(),
+            timeout_ms: default_probe_timeout(),
+        },
+    };
+    probe_cluster_instance_target(service, context, instance_id, body).await
+}
+
+async fn probe_cluster_instance_target(
+    service: Arc<WebService>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    instance_id: String,
+    body: InstanceProbeBody,
 ) -> Result<Response, WebApiError> {
     let context = require_cluster_context(context)?;
     let detail = service
@@ -513,12 +549,15 @@ pub(crate) async fn probe_cluster_instance(
         .to_owned();
     // The path is interpolated into a raw HTTP/1.0 request line, so CR or LF
     // would smuggle extra headers into the probe (`GET /x HTTP/1.0
-    // X-Attack: …`). Reject anything that is not a plain absolute path.
+    // X-Attack: …`). Reject anything that is not a plain absolute path within
+    // the authority's declared 2048-byte cap.
+    const MAXIMUM_PROBE_PATH_BYTES: usize = 2048;
     let probe_path = if body.path.is_empty() {
         "/".to_owned()
     } else {
         let path = body.path;
-        if !path.starts_with('/')
+        if path.len() > MAXIMUM_PROBE_PATH_BYTES
+            || !path.starts_with('/')
             || path
                 .bytes()
                 .any(|byte| byte.is_ascii_control() || byte == b' ')

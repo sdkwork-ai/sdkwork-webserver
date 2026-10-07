@@ -148,7 +148,7 @@ func (a *ClusterApi) ClustersHostsDelete(hostId string, idempotencyKey string) (
 }
 
 // List webserver process instances with liveness state
-func (a *ClusterApi) ClustersInstancesList(pageSize *int, cursor *string, clusterId *string, hostId *string, status *int, healthState *string) (sdktypes.ClustersInstancesListResponse, error) {
+func (a *ClusterApi) ClustersInstancesList(pageSize *int, cursor *string, clusterId *string, hostId *string, status *int, healthState *string, joinMode *int, syncStatus *int, labels *string, search *string, buildVersion *string) (sdktypes.ClustersInstancesListResponse, error) {
     query := BuildQueryString([]QueryParameterSpec{
         {Name: "page_size", Value: func() interface{} { if pageSize == nil { return nil }; return *pageSize }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "cursor", Value: func() interface{} { if cursor == nil { return nil }; return *cursor }(), Style: "form", Explode: true, AllowReserved: false},
@@ -156,6 +156,11 @@ func (a *ClusterApi) ClustersInstancesList(pageSize *int, cursor *string, cluste
         {Name: "host_id", Value: func() interface{} { if hostId == nil { return nil }; return *hostId }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "status", Value: func() interface{} { if status == nil { return nil }; return *status }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "health_state", Value: func() interface{} { if healthState == nil { return nil }; return *healthState }(), Style: "form", Explode: true, AllowReserved: false},
+        {Name: "join_mode", Value: func() interface{} { if joinMode == nil { return nil }; return *joinMode }(), Style: "form", Explode: true, AllowReserved: false},
+        {Name: "sync_status", Value: func() interface{} { if syncStatus == nil { return nil }; return *syncStatus }(), Style: "form", Explode: true, AllowReserved: false},
+        {Name: "labels", Value: func() interface{} { if labels == nil { return nil }; return *labels }(), Style: "form", Explode: true, AllowReserved: false},
+        {Name: "search", Value: func() interface{} { if search == nil { return nil }; return *search }(), Style: "form", Explode: true, AllowReserved: false},
+        {Name: "build_version", Value: func() interface{} { if buildVersion == nil { return nil }; return *buildVersion }(), Style: "form", Explode: true, AllowReserved: false},
     })
     raw, err := a.client.Get(AppendQueryString(BackendApiPath("/clusters/instances"), query), nil, nil)
     if err != nil {
@@ -204,12 +209,13 @@ func (a *ClusterApi) ClustersInstancesDelete(instanceId string, idempotencyKey s
 }
 
 // List cluster lifecycle events
-func (a *ClusterApi) ClustersEventsList(pageSize *int, cursor *string, clusterId *string, severity *string) (sdktypes.ClustersEventsListResponse, error) {
+func (a *ClusterApi) ClustersEventsList(pageSize *int, cursor *string, clusterId *string, severity *string, instanceId *string) (sdktypes.ClustersEventsListResponse, error) {
     query := BuildQueryString([]QueryParameterSpec{
         {Name: "page_size", Value: func() interface{} { if pageSize == nil { return nil }; return *pageSize }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "cursor", Value: func() interface{} { if cursor == nil { return nil }; return *cursor }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "cluster_id", Value: func() interface{} { if clusterId == nil { return nil }; return *clusterId }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "severity", Value: func() interface{} { if severity == nil { return nil }; return *severity }(), Style: "form", Explode: true, AllowReserved: false},
+        {Name: "instance_id", Value: func() interface{} { if instanceId == nil { return nil }; return *instanceId }(), Style: "form", Explode: true, AllowReserved: false},
     })
     raw, err := a.client.Get(AppendQueryString(BackendApiPath("/clusters/events"), query), nil, nil)
     if err != nil {

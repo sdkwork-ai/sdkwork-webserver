@@ -177,7 +177,7 @@ final class ClusterApi extends BaseApi
     }
 
     /** List webserver process instances with liveness state */
-    public function clustersInstancesList(?int $pageSize = null, ?string $cursor = null, ?string $clusterId = null, ?string $hostId = null, ?int $status = null, ?string $healthState = null): ?ClustersInstancesListResponse
+    public function clustersInstancesList(?int $pageSize = null, ?string $cursor = null, ?string $clusterId = null, ?string $hostId = null, ?int $status = null, ?string $healthState = null, ?int $joinMode = null, ?int $syncStatus = null, ?string $labels = null, ?string $search = null, ?string $buildVersion = null): ?ClustersInstancesListResponse
     {
         $path = '/backend/v3/api/clusters/instances';
         $query = $this->buildQueryString([
@@ -187,6 +187,11 @@ final class ClusterApi extends BaseApi
             new QueryParameterSpec('host_id', $hostId, 'form', true, false, null),
             new QueryParameterSpec('status', $status, 'form', true, false, null),
             new QueryParameterSpec('health_state', $healthState, 'form', true, false, null),
+            new QueryParameterSpec('join_mode', $joinMode, 'form', true, false, null),
+            new QueryParameterSpec('sync_status', $syncStatus, 'form', true, false, null),
+            new QueryParameterSpec('labels', $labels, 'form', true, false, null),
+            new QueryParameterSpec('search', $search, 'form', true, false, null),
+            new QueryParameterSpec('build_version', $buildVersion, 'form', true, false, null),
         ]);
         $path = $this->appendQueryString($path, $query);
         $result = $this->client->request('GET', $path, []);
@@ -236,7 +241,7 @@ final class ClusterApi extends BaseApi
     }
 
     /** List cluster lifecycle events */
-    public function clustersEventsList(?int $pageSize = null, ?string $cursor = null, ?string $clusterId = null, ?string $severity = null): ?ClustersEventsListResponse
+    public function clustersEventsList(?int $pageSize = null, ?string $cursor = null, ?string $clusterId = null, ?string $severity = null, ?string $instanceId = null): ?ClustersEventsListResponse
     {
         $path = '/backend/v3/api/clusters/events';
         $query = $this->buildQueryString([
@@ -244,6 +249,7 @@ final class ClusterApi extends BaseApi
             new QueryParameterSpec('cursor', $cursor, 'form', true, false, null),
             new QueryParameterSpec('cluster_id', $clusterId, 'form', true, false, null),
             new QueryParameterSpec('severity', $severity, 'form', true, false, null),
+            new QueryParameterSpec('instance_id', $instanceId, 'form', true, false, null),
         ]);
         $path = $this->appendQueryString($path, $query);
         $result = $this->client->request('GET', $path, []);

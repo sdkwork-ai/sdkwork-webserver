@@ -345,7 +345,7 @@ class ClusterInstancesApi:
         self.metrics = ClusterInstancesMetricsApi(client)
 
 
-    def list(self, page_size: Optional[int] = None, cursor: Optional[str] = None, cluster_id: Optional[str] = None, host_id: Optional[str] = None, status: Optional[int] = None, health_state: Optional[str] = None) -> ClustersInstancesListResponse:
+    def list(self, page_size: Optional[int] = None, cursor: Optional[str] = None, cluster_id: Optional[str] = None, host_id: Optional[str] = None, status: Optional[int] = None, health_state: Optional[str] = None, join_mode: Optional[int] = None, sync_status: Optional[int] = None, labels: Optional[str] = None, search: Optional[str] = None, build_version: Optional[str] = None) -> ClustersInstancesListResponse:
         """List webserver process instances with liveness state"""
         query = build_query_string([
             {'name': 'page_size', 'value': page_size, 'style': 'form', 'explode': True, 'allow_reserved': False},
@@ -354,6 +354,11 @@ class ClusterInstancesApi:
             {'name': 'host_id', 'value': host_id, 'style': 'form', 'explode': True, 'allow_reserved': False},
             {'name': 'status', 'value': status, 'style': 'form', 'explode': True, 'allow_reserved': False},
             {'name': 'health_state', 'value': health_state, 'style': 'form', 'explode': True, 'allow_reserved': False},
+            {'name': 'join_mode', 'value': join_mode, 'style': 'form', 'explode': True, 'allow_reserved': False},
+            {'name': 'sync_status', 'value': sync_status, 'style': 'form', 'explode': True, 'allow_reserved': False},
+            {'name': 'labels', 'value': labels, 'style': 'form', 'explode': True, 'allow_reserved': False},
+            {'name': 'search', 'value': search, 'style': 'form', 'explode': True, 'allow_reserved': False},
+            {'name': 'build_version', 'value': build_version, 'style': 'form', 'explode': True, 'allow_reserved': False},
         ])
         return self._client.get(_append_query_string(f"/backend/v3/api/clusters/instances", query))
 
@@ -438,13 +443,14 @@ class ClusterEventsApi:
         self._client = client
 
 
-    def list(self, page_size: Optional[int] = None, cursor: Optional[str] = None, cluster_id: Optional[str] = None, severity: Optional[str] = None) -> ClustersEventsListResponse:
+    def list(self, page_size: Optional[int] = None, cursor: Optional[str] = None, cluster_id: Optional[str] = None, severity: Optional[str] = None, instance_id: Optional[str] = None) -> ClustersEventsListResponse:
         """List cluster lifecycle events"""
         query = build_query_string([
             {'name': 'page_size', 'value': page_size, 'style': 'form', 'explode': True, 'allow_reserved': False},
             {'name': 'cursor', 'value': cursor, 'style': 'form', 'explode': True, 'allow_reserved': False},
             {'name': 'cluster_id', 'value': cluster_id, 'style': 'form', 'explode': True, 'allow_reserved': False},
             {'name': 'severity', 'value': severity, 'style': 'form', 'explode': True, 'allow_reserved': False},
+            {'name': 'instance_id', 'value': instance_id, 'style': 'form', 'explode': True, 'allow_reserved': False},
         ])
         return self._client.get(_append_query_string(f"/backend/v3/api/clusters/events", query))
 

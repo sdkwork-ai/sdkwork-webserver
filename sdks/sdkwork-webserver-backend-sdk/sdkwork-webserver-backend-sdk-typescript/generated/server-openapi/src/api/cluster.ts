@@ -47,6 +47,7 @@ export interface ClusterEventsListParams {
   cursor?: string;
   clusterId?: string;
   severity?: 'INFO' | 'WARNING' | 'ERROR';
+  instanceId?: string;
 }
 
 export class ClusterEventsApi {
@@ -64,6 +65,7 @@ export class ClusterEventsApi {
       { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
       { name: 'cluster_id', value: params?.clusterId, style: 'form', explode: true, allowReserved: false },
       { name: 'severity', value: params?.severity, style: 'form', explode: true, allowReserved: false },
+      { name: 'instance_id', value: params?.instanceId, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: ClusterEventResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/clusters/events`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
@@ -122,6 +124,11 @@ export interface ClusterInstancesListParams {
   hostId?: string;
   status?: number;
   healthState?: 'HEALTHY' | 'DEGRADED' | 'UNHEALTHY' | 'UNKNOWN';
+  joinMode?: number;
+  syncStatus?: number;
+  labels?: string;
+  search?: string;
+  buildVersion?: string;
 }
 
 export interface ClusterInstancesUpdateParams {
@@ -153,6 +160,11 @@ export class ClusterInstancesApi {
       { name: 'host_id', value: params?.hostId, style: 'form', explode: true, allowReserved: false },
       { name: 'status', value: params?.status, style: 'form', explode: true, allowReserved: false },
       { name: 'health_state', value: params?.healthState, style: 'form', explode: true, allowReserved: false },
+      { name: 'join_mode', value: params?.joinMode, style: 'form', explode: true, allowReserved: false },
+      { name: 'sync_status', value: params?.syncStatus, style: 'form', explode: true, allowReserved: false },
+      { name: 'labels', value: params?.labels, style: 'form', explode: true, allowReserved: false },
+      { name: 'search', value: params?.search, style: 'form', explode: true, allowReserved: false },
+      { name: 'build_version', value: params?.buildVersion, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: ClusterInstanceResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/clusters/instances`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }

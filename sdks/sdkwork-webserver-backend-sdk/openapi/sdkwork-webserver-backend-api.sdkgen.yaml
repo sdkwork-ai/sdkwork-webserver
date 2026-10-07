@@ -5456,6 +5456,53 @@
                 "UNKNOWN"
               ]
             }
+          },
+          {
+            "name": "join_mode",
+            "in": "query",
+            "description": "Filter by network join mode: 0=LAN (same-subnet), 1=TUNNEL (API-only reverse tunnel).",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          {
+            "name": "sync_status",
+            "in": "query",
+            "description": "Filter by config sync state: 0=unknown, 1=in sync, 2=pending, 3=failed.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            }
+          },
+          {
+            "name": "labels",
+            "in": "query",
+            "description": "Label selector `k1=v1,k2=v2`; every pair must match.",
+            "schema": {
+              "type": "string",
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Free-text search over name / endpoint / hostname.",
+            "schema": {
+              "type": "string",
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "build_version",
+            "in": "query",
+            "description": "Exact build version (version-skew management).",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
           }
         ],
         "responses": {
@@ -5716,6 +5763,15 @@
                 "WARNING",
                 "ERROR"
               ]
+            }
+          },
+          {
+            "name": "instance_id",
+            "in": "query",
+            "description": "Events recorded for one instance (detail-page filter).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],

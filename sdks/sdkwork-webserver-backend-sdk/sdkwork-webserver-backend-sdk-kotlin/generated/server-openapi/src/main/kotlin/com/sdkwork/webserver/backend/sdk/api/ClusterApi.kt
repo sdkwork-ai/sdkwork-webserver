@@ -107,14 +107,19 @@ class ClusterApi(private val client: HttpClient) {
     }
 
     /** List webserver process instances with liveness state */
-    suspend fun clustersInstancesList(pageSize: Int? = null, cursor: String? = null, clusterId: String? = null, hostId: String? = null, status: Int? = null, healthState: String? = null): ClustersInstancesListResponse? {
+    suspend fun clustersInstancesList(pageSize: Int? = null, cursor: String? = null, clusterId: String? = null, hostId: String? = null, status: Int? = null, healthState: String? = null, joinMode: Int? = null, syncStatus: Int? = null, labels: String? = null, search: String? = null, buildVersion: String? = null): ClustersInstancesListResponse? {
         val query = buildQueryString(listOf(
             QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             QueryParameterSpec("cursor", cursor, "form", true, false, null),
             QueryParameterSpec("cluster_id", clusterId, "form", true, false, null),
             QueryParameterSpec("host_id", hostId, "form", true, false, null),
             QueryParameterSpec("status", status, "form", true, false, null),
-            QueryParameterSpec("health_state", healthState, "form", true, false, null)
+            QueryParameterSpec("health_state", healthState, "form", true, false, null),
+            QueryParameterSpec("join_mode", joinMode, "form", true, false, null),
+            QueryParameterSpec("sync_status", syncStatus, "form", true, false, null),
+            QueryParameterSpec("labels", labels, "form", true, false, null),
+            QueryParameterSpec("search", search, "form", true, false, null),
+            QueryParameterSpec("build_version", buildVersion, "form", true, false, null)
         ))
         val raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/clusters/instances"), query))
         return client.convertValue(raw, object : TypeReference<ClustersInstancesListResponse>() {})
@@ -150,12 +155,13 @@ class ClusterApi(private val client: HttpClient) {
     }
 
     /** List cluster lifecycle events */
-    suspend fun clustersEventsList(pageSize: Int? = null, cursor: String? = null, clusterId: String? = null, severity: String? = null): ClustersEventsListResponse? {
+    suspend fun clustersEventsList(pageSize: Int? = null, cursor: String? = null, clusterId: String? = null, severity: String? = null, instanceId: String? = null): ClustersEventsListResponse? {
         val query = buildQueryString(listOf(
             QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             QueryParameterSpec("cursor", cursor, "form", true, false, null),
             QueryParameterSpec("cluster_id", clusterId, "form", true, false, null),
-            QueryParameterSpec("severity", severity, "form", true, false, null)
+            QueryParameterSpec("severity", severity, "form", true, false, null),
+            QueryParameterSpec("instance_id", instanceId, "form", true, false, null)
         ))
         val raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/clusters/events"), query))
         return client.convertValue(raw, object : TypeReference<ClustersEventsListResponse>() {})

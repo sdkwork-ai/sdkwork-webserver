@@ -172,7 +172,7 @@ module Sdkwork
           end
 
           # List webserver process instances with liveness state
-          def clusters_instances_list(page_size: nil, cursor: nil, cluster_id: nil, host_id: nil, status: nil, health_state: nil)
+          def clusters_instances_list(page_size: nil, cursor: nil, cluster_id: nil, host_id: nil, status: nil, health_state: nil, join_mode: nil, sync_status: nil, labels: nil, search: nil, build_version: nil)
             path = '/backend/v3/api/clusters/instances'
             query = build_query_string([
               QueryParameterSpec.new('page_size', page_size, 'form', true, false, nil),
@@ -181,6 +181,11 @@ module Sdkwork
               QueryParameterSpec.new('host_id', host_id, 'form', true, false, nil),
               QueryParameterSpec.new('status', status, 'form', true, false, nil),
               QueryParameterSpec.new('health_state', health_state, 'form', true, false, nil),
+              QueryParameterSpec.new('join_mode', join_mode, 'form', true, false, nil),
+              QueryParameterSpec.new('sync_status', sync_status, 'form', true, false, nil),
+              QueryParameterSpec.new('labels', labels, 'form', true, false, nil),
+              QueryParameterSpec.new('search', search, 'form', true, false, nil),
+              QueryParameterSpec.new('build_version', build_version, 'form', true, false, nil),
             ])
             path = append_query_string(path, query)
             options = {}
@@ -231,13 +236,14 @@ module Sdkwork
           end
 
           # List cluster lifecycle events
-          def clusters_events_list(page_size: nil, cursor: nil, cluster_id: nil, severity: nil)
+          def clusters_events_list(page_size: nil, cursor: nil, cluster_id: nil, severity: nil, instance_id: nil)
             path = '/backend/v3/api/clusters/events'
             query = build_query_string([
               QueryParameterSpec.new('page_size', page_size, 'form', true, false, nil),
               QueryParameterSpec.new('cursor', cursor, 'form', true, false, nil),
               QueryParameterSpec.new('cluster_id', cluster_id, 'form', true, false, nil),
               QueryParameterSpec.new('severity', severity, 'form', true, false, nil),
+              QueryParameterSpec.new('instance_id', instance_id, 'form', true, false, nil),
             ])
             path = append_query_string(path, query)
             options = {}

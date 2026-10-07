@@ -104,14 +104,19 @@ public class ClusterApi {
     }
 
     /** List webserver process instances with liveness state */
-    public ClustersInstancesListResponse clustersInstancesList(Integer pageSize, String cursor, String clusterId, String hostId, Integer status, String healthState) throws Exception {
+    public ClustersInstancesListResponse clustersInstancesList(Integer pageSize, String cursor, String clusterId, String hostId, Integer status, String healthState, Integer joinMode, Integer syncStatus, String labels, String search, String buildVersion) throws Exception {
         String query = buildQueryString(List.of(
             new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             new QueryParameterSpec("cursor", cursor, "form", true, false, null),
             new QueryParameterSpec("cluster_id", clusterId, "form", true, false, null),
             new QueryParameterSpec("host_id", hostId, "form", true, false, null),
             new QueryParameterSpec("status", status, "form", true, false, null),
-            new QueryParameterSpec("health_state", healthState, "form", true, false, null)
+            new QueryParameterSpec("health_state", healthState, "form", true, false, null),
+            new QueryParameterSpec("join_mode", joinMode, "form", true, false, null),
+            new QueryParameterSpec("sync_status", syncStatus, "form", true, false, null),
+            new QueryParameterSpec("labels", labels, "form", true, false, null),
+            new QueryParameterSpec("search", search, "form", true, false, null),
+            new QueryParameterSpec("build_version", buildVersion, "form", true, false, null)
         ));
         Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/clusters/instances"), query));
         return client.convertValue(raw, new TypeReference<ClustersInstancesListResponse>() {});
@@ -144,12 +149,13 @@ public class ClusterApi {
     }
 
     /** List cluster lifecycle events */
-    public ClustersEventsListResponse clustersEventsList(Integer pageSize, String cursor, String clusterId, String severity) throws Exception {
+    public ClustersEventsListResponse clustersEventsList(Integer pageSize, String cursor, String clusterId, String severity, String instanceId) throws Exception {
         String query = buildQueryString(List.of(
             new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             new QueryParameterSpec("cursor", cursor, "form", true, false, null),
             new QueryParameterSpec("cluster_id", clusterId, "form", true, false, null),
-            new QueryParameterSpec("severity", severity, "form", true, false, null)
+            new QueryParameterSpec("severity", severity, "form", true, false, null),
+            new QueryParameterSpec("instance_id", instanceId, "form", true, false, null)
         ));
         Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/clusters/events"), query));
         return client.convertValue(raw, new TypeReference<ClustersEventsListResponse>() {});

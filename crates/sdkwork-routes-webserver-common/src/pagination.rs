@@ -65,6 +65,13 @@ fn validate_query(query: Option<&str>, path: &str) -> Result<(), String> {
                 if parsed < 1 {
                     return Err("page must be greater than or equal to 1".to_string());
                 }
+                // Handler query structs bind `page` as i32; a value beyond the
+                // i32 range would pass this middleware and then fail serde
+                // binding as a plain-text extractor rejection instead of a
+                // normalized problem. Reject it here with the same wording.
+                if parsed > i32::MAX as i64 {
+                    return Err("page must be an integer greater than or equal to 1".to_string());
+                }
             }
             "page_size" => {
                 if page_size.replace(value.into_owned()).is_some() {

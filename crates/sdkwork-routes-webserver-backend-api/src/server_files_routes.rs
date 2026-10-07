@@ -195,7 +195,7 @@ async fn list_node_operations(
     let resolved = service
         .contained_path(&query.path)
         .map_err(containment_error)?;
-    let classification = classify_entry_names(&entry_names(&resolved));
+    let classification = classify_entry_names(&entry_names_bounded(&resolved).await);
     let operations = service
         .operations_for(&query.path, &classification)
         .map_err(containment_error)?;
@@ -221,7 +221,7 @@ async fn run_node_operation(
     let resolved = service
         .contained_path(&request.path)
         .map_err(containment_error)?;
-    let classification = classify_entry_names(&entry_names(&resolved));
+    let classification = classify_entry_names(&entry_names_bounded(&resolved).await);
     let operations = service
         .operations_for(&request.path, &classification)
         .map_err(containment_error)?;
@@ -339,15 +339,33 @@ fn service_for(state: ServerFilesState, node_id: &str) -> Result<ServerFilesServ
     })
 }
 
-fn entry_names(path: &std::path::Path) -> Vec<String> {
-    std::fs::read_dir(path)
-        .map(|read_dir| {
-            read_dir
-                .filter_map(|result| result.ok())
-                .filter_map(|entry| entry.file_name().into_string().ok())
-                .collect()
-        })
-        .unwrap_or_default()
+/// Entry-name read for operation classification, off the async runtime
+/// thread and bounded: a directory with an enormous entry count must not
+/// stall an executor worker or balloon the response. Entries past the cap
+/// simply do not participate in the classification (the operations list is
+/// derived from well-known names, so truncation only ever removes
+/// duplicates of already-seen names in pathological directories). A failed
+/// read degrades to an empty classification exactly like the historical
+/// `unwrap_or_default` behavior.
+const MAXIMUM_CLASSIFICATION_ENTRIES: usize = 4096;
+
+async fn entry_names_bounded(path: &std::path::Path) -> Vec<String> {
+    let path = path.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        let mut names = Vec::new();
+        let read = std::fs::read_dir(&path);
+        for entry in read.into_iter().flatten().flatten() {
+            if names.len() >= MAXIMUM_CLASSIFICATION_ENTRIES {
+                break;
+            }
+            if let Ok(name) = entry.file_name().into_string() {
+                names.push(name);
+            }
+        }
+        names
+    })
+    .await
+    .unwrap_or_default()
 }
 
 /// Wrap a serializable value in the canonical success envelope.

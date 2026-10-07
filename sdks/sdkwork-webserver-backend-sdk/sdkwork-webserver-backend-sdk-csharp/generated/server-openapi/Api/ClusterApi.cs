@@ -145,7 +145,7 @@ namespace SDKWork.WebserverBackendSdk.Api
         /// <summary>
         /// List webserver process instances with liveness state
         /// </summary>
-        public async Task<SDKWork.WebserverBackendSdk.Models.ClustersInstancesListResponse?> ClustersInstancesListAsync(int? pageSize = null, string? cursor = null, string? clusterId = null, string? hostId = null, int? status = null, string? healthState = null)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ClustersInstancesListResponse?> ClustersInstancesListAsync(int? pageSize = null, string? cursor = null, string? clusterId = null, string? hostId = null, int? status = null, string? healthState = null, int? joinMode = null, int? syncStatus = null, string? labels = null, string? search = null, string? buildVersion = null)
         {
             var queryString = BuildQueryString(new[]
             {
@@ -155,6 +155,11 @@ namespace SDKWork.WebserverBackendSdk.Api
                 new QueryParameterSpec("host_id", hostId, "form", true, false, null),
                 new QueryParameterSpec("status", status, "form", true, false, null),
                 new QueryParameterSpec("health_state", healthState, "form", true, false, null),
+                new QueryParameterSpec("join_mode", joinMode, "form", true, false, null),
+                new QueryParameterSpec("sync_status", syncStatus, "form", true, false, null),
+                new QueryParameterSpec("labels", labels, "form", true, false, null),
+                new QueryParameterSpec("search", search, "form", true, false, null),
+                new QueryParameterSpec("build_version", buildVersion, "form", true, false, null),
             });
             return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ClustersInstancesListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath("/clusters/instances"), queryString));
         }
@@ -200,7 +205,7 @@ namespace SDKWork.WebserverBackendSdk.Api
         /// <summary>
         /// List cluster lifecycle events
         /// </summary>
-        public async Task<SDKWork.WebserverBackendSdk.Models.ClustersEventsListResponse?> ClustersEventsListAsync(int? pageSize = null, string? cursor = null, string? clusterId = null, string? severity = null)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ClustersEventsListResponse?> ClustersEventsListAsync(int? pageSize = null, string? cursor = null, string? clusterId = null, string? severity = null, string? instanceId = null)
         {
             var queryString = BuildQueryString(new[]
             {
@@ -208,6 +213,7 @@ namespace SDKWork.WebserverBackendSdk.Api
                 new QueryParameterSpec("cursor", cursor, "form", true, false, null),
                 new QueryParameterSpec("cluster_id", clusterId, "form", true, false, null),
                 new QueryParameterSpec("severity", severity, "form", true, false, null),
+                new QueryParameterSpec("instance_id", instanceId, "form", true, false, null),
             });
             return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ClustersEventsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath("/clusters/events"), queryString));
         }
