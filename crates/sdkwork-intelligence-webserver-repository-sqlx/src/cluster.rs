@@ -1314,7 +1314,7 @@ impl WebRepository {
              FROM webserver_cluster_instance i
              JOIN webserver_cluster c ON c.id = i.cluster_id
              JOIN webserver_cluster_host ch ON ch.id = i.host_id
-             WHERE i.metadata @> CAST($1 AS JSONB)
+             WHERE i.metadata @> CAST($1 AS JSONB) AND i.deleted_at IS NULL
              LIMIT 1";
         let credential = json!({ "instanceTokenHash": token_hash }).to_string();
         let row = sqlx::query(sql)
@@ -1572,13 +1572,18 @@ impl WebRepository {
         let payload_expression = json_write_expression("$5");
         let deliver_expression = instant_write_expression("$6");
         let expires_expression = instant_write_expression("$7");
+        // created_at/updated_at record the row-creation instant, not the
+        // scheduled delivery instant: a future deliver_at must not falsify
+        // the creation stamp or the cluster_created index ordering.
+        let now = now_rfc3339();
+        let now_expression = instant_write_expression("$10");
         let sql = format!(
             "INSERT INTO webserver_cluster_peer_message (
                 id, uuid, tenant_id, cluster_id, from_instance_id, to_instance_id,
                 message_type, payload, state, deliver_at, expires_at, created_at, updated_at, version
             ) VALUES (
                 $1, $2, 0, $3, $4, $8, $9, {payload_expression}, 'PENDING',
-                {deliver_expression}, {expires_expression}, {deliver_expression}, {deliver_expression}, 0
+                {deliver_expression}, {expires_expression}, {now_expression}, {now_expression}, 0
             )"
         );
         let mut inserted = 0_u64;
@@ -1594,6 +1599,7 @@ impl WebRepository {
                 .bind(write.expires_at)
                 .bind(target)
                 .bind(write.message_type)
+                .bind(&now)
                 .execute(&mut *tx)
                 .await
                 .map_err(|error| store_error("enqueue webserver_cluster_peer_message", error))?;

@@ -134,7 +134,10 @@ export function ApplicationsListView({
         <button
           type="button"
           className={cx("h5-app-list__more")}
-          disabled={appending}
+          // Disabled for any in-flight fetch, not only appends: tapping
+          // "Load more" while a first-page reload is in flight would land the
+          // list on page 2 with page 1 permanently missing.
+          disabled={status === "loading"}
           onClick={loadMore}
         >
           {resolveMessage(

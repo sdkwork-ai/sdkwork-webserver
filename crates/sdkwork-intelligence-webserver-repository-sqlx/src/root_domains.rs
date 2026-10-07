@@ -471,11 +471,14 @@ impl WebRepository {
                 return Err(WebServiceError::not_found("site not found"));
             }
             let clear_time = instant_write_expression("$3");
+            // Same predicate as the domains.rs twin: only the current primary
+            // flips, and archived bindings keep their stamps so recent-update
+            // listings and WAL churn stay untouched by unrelated rows.
             let clear_sql = format!(
                 "UPDATE webserver_site_binding SET is_primary = FALSE, updated_at = {clear_time},
                         version = version + 1
                  WHERE tenant_id = $1 AND site_id = $2 AND environment = 'production'
-                   AND deleted_at IS NULL"
+                   AND deleted_at IS NULL AND status <> 'ARCHIVED' AND is_primary = TRUE"
             );
             sqlx::query(audited_sql(&clear_sql))
                 .bind(tenant_id)

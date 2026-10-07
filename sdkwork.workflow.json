@@ -112,6 +112,12 @@
       "repository": "sdkwork-ai/sdkwork-order",
       "refInput": "SDKWORK_ORDER_REF",
       "tokenSecret": "SDKWORK_RELEASE_TOKEN"
+    },
+    {
+      "id": "sdkwork-sandbox",
+      "repository": "sdkwork-ai/sdkwork-sandbox",
+      "refInput": "SDKWORK_SANDBOX_REF",
+      "tokenSecret": "SDKWORK_RELEASE_TOKEN"
     }
   ],
   "toolchains": {

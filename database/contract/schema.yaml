@@ -940,9 +940,56 @@ tables:
   - name: webserver_app_platform_target
     lifecycle_status: active
     owner: web-platform
+    columns:
+      id: { type: int64, required: true }
+      uuid: { type: string, required: true }
+      tenant_id: { type: int64, required: true }
+      organization_id: { type: int64, required: true }
+      data_scope: { type: int32, required: true }
+      user_id: { type: int64, required: false }
+      app_id: { type: int64, required: true }
+      target_key: { type: string, required: true }
+      platform: { type: string, required: true }
+      tech_stack: { type: string, required: true }
+      architectures_json: { type: json, required: true }
+      bundle_id: { type: string, required: false }
+      package_name: { type: string, required: false }
+      app_id_value: { type: string, required: false }
+      bundle_name: { type: string, required: false }
+      allowed_channels_json: { type: json, required: true }
+      target_status: { type: string, required: true }
+      created_at: { type: instant, required: true }
+      updated_at: { type: instant, required: true }
+      version: { type: int64, required: true }
+      deleted_at: { type: instant, required: false }
+      deleted_by: { type: int64, required: false }
+    constraints:
+      - { name: webserver_app_platform_target_pkey, type: primary_key, columns: [id] }
+      - { name: uk_webserver_app_platform_target_uuid, type: unique, columns: [uuid] }
+      - { name: uk_webserver_app_platform_target_tenant_id, type: unique, columns: [tenant_id, id] }
+      - name: fk_webserver_app_platform_target_application
+        type: foreign_key
+        columns: [tenant_id, app_id]
+        references_table: webserver_application
+        references_columns: [tenant_id, id]
+      - { name: chk_webserver_app_platform_target_status, type: check }
+    indexes:
+      - { name: idx_webserver_app_platform_target_app_id, columns: [tenant_id, app_id, id], predicate: "deleted_at IS NULL" }
+      - { name: uk_webserver_app_platform_target_active_key, columns: [tenant_id, app_id, target_key], unique: true, predicate: "deleted_at IS NULL" }
   - name: webserver_resolution_cache
     lifecycle_status: active
     owner: web-platform
+    columns:
+      domain: { type: string, required: true }
+      addresses: { type: json, required: true }
+      negative: { type: boolean, required: true }
+      expires_at: { type: instant, required: true }
+      created_at: { type: instant, required: true }
+      updated_at: { type: instant, required: true }
+    constraints:
+      - { name: webserver_resolution_cache_pkey, type: primary_key, columns: [domain] }
+    indexes:
+      - { name: idx_webserver_resolution_cache_expires, columns: [expires_at] }
   - name: webserver_cluster
     lifecycle_status: active
     owner: web-platform
@@ -1237,6 +1284,3 @@ tables:
     indexes:
       - { name: idx_webserver_cluster_peer_message_pending, columns: [tenant_id, to_instance_id, deliver_at, id] }
       - { name: idx_webserver_cluster_peer_message_cluster_created, columns: [tenant_id, cluster_id, created_at, id] }
-  - name: webserver_application_host
-    lifecycle_status: active
-    owner: web-platform

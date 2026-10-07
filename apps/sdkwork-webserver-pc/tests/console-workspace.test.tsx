@@ -246,7 +246,16 @@ describe("admin access classification", () => {
   it("recognizes module wildcards without treating a normal app user as an admin", () => {
     expect(hasWebserverAdminAccess(["web.*"])).toBe(true);
     expect(hasWebserverAdminAccess(["*"])).toBe(true);
-    expect(hasWebserverAdminAccess(["web.applications.*"])).toBe(false);
+    // `web.applications.*` is the delivery module's own entry gate since the
+    // web.sites→web.applications rename: the backend routes enforce it with
+    // organization scope, so its holder is an edge-domain operator and must
+    // land on /admin (a wildcard matches the listed read code).
+    expect(hasWebserverAdminAccess(["web.applications.*"])).toBe(true);
+    expect(
+      hasWebserverAdminAccess(["web.applications.read", "web.certificates.read"]),
+    ).toBe(true);
+    // A plain tenant user holding only console-side codes is not an admin.
+    expect(hasWebserverAdminAccess(["drive.files.read"])).toBe(false);
     expect(hasWebserverAdminAccess([])).toBe(false);
   });
 

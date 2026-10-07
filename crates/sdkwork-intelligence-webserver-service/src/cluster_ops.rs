@@ -1288,7 +1288,7 @@ impl WebService {
             ));
         }
         let now = now_rfc3339();
-        let expires = (Utc::now() + Duration::seconds(expires_in_seconds))
+        let expires = (Utc::now() + Duration::seconds(i64::from(expires_in_seconds)))
             .to_rfc3339_opts(chrono::SecondsFormat::Micros, true);
         let enqueued = self
             .repository

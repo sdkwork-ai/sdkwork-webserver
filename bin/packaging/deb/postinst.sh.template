@@ -81,11 +81,15 @@ DB_PASSWORD="$(openssl rand -hex 24)"
 if [ -s "${DB_SECRET_FILE}" ]; then
   DB_PASSWORD="$(tr -d '\r\n' < "${DB_SECRET_FILE}")"
 fi
+# A single quote inside the operator-provisioned secret must be doubled for
+# the SQL string literal below; without this the CREATE/ALTER ROLE breaks the
+# install (or, worse, alters more than the intended literal).
+DB_PASSWORD_SQL="${DB_PASSWORD//\'/\'\'}"
 if ! runuser -u postgres -- psql -tAc "SELECT 1 FROM pg_roles WHERE rolname = '${DB_USER}'" | grep -q 1; then
-  printf "CREATE ROLE \"%s\" LOGIN PASSWORD '%s';\n" "${DB_USER}" "${DB_PASSWORD}" \
+  printf "CREATE ROLE \"%s\" LOGIN PASSWORD '%s';\n" "${DB_USER}" "${DB_PASSWORD_SQL}" \
     | runuser -u postgres -- psql -v ON_ERROR_STOP=1 -q >/dev/null
 else
-  printf "ALTER ROLE \"%s\" WITH LOGIN PASSWORD '%s';\n" "${DB_USER}" "${DB_PASSWORD}" \
+  printf "ALTER ROLE \"%s\" WITH LOGIN PASSWORD '%s';\n" "${DB_USER}" "${DB_PASSWORD_SQL}" \
     | runuser -u postgres -- psql -v ON_ERROR_STOP=1 -q >/dev/null
 fi
 if ! runuser -u postgres -- psql -tAc "SELECT 1 FROM pg_database WHERE datname = '${DB_NAME}'" | grep -q 1; then

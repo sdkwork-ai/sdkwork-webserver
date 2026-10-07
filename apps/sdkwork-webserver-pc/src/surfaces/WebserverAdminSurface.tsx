@@ -17,12 +17,12 @@ export interface WebserverAdminSurfaceProps {
 }
 
 /**
- * Backend-admin host surface. It owns the admin registry for the resources that
- * still render themselves from it (nginx, servers, audit); every
- * capability bridged from another module — Applications from sdkwork-deployments,
- * Plugins / Skills / MCP / Storage Center from their owning packages — arrives
- * pre-built through `resourceRenderers`. No application lifecycle is
- * implemented on this surface any more.
+ * Backend-admin host surface. It owns the admin registry for the cluster
+ * management plane (clusters, hosts, instances, events) and audit; every
+ * other capability bridged from another module — Applications from
+ * sdkwork-deployments, Plugins / Skills / MCP / Storage Center from their
+ * owning packages — arrives pre-built through `resourceRenderers`. No
+ * application lifecycle is implemented on this surface any more.
  */
 export function WebserverAdminSurface({ backendApiBaseUrl, locale, modules, onSignOut, permissionScope, resourceRenderers, tokenManager, userLabel }: WebserverAdminSurfaceProps) {
   const client = useMemo(() => createWebserverAdminSdkClient(backendApiBaseUrl, tokenManager), [backendApiBaseUrl, tokenManager]);

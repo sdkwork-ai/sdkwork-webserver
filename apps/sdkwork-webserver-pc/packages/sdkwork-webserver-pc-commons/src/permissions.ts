@@ -22,6 +22,14 @@ const WEBSERVER_ADMIN_PERMISSIONS = [
   // module is permanently filtered out of their menu.
   "web.cluster.read",
   "web.cluster.write",
+  // Served Domains and Served Certificates are the delivery module's entry
+  // gates (`web.applications.read` / `web.certificates.read`): an operator
+  // granted exactly that pair must be able to open the backend-admin surface,
+  // or both entries are permanently filtered out of their menu and /admin
+  // redirects them to /console with no explanation. Every entry below the
+  // gates keeps its own per-resource check.
+  "web.applications.read",
+  "web.certificates.read",
   // The platform-wide traffic reading is an operations capability of this edge:
   // without it in this list a traffic operator cannot open the backend-admin
   // surface at all, so the module would be permanently filtered out of their

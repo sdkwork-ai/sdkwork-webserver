@@ -4,7 +4,6 @@ export interface WebserverAuthHostMessages {
   metadataUnavailable: string;
   retry: string;
   sessionChecking: string;
-  sessionUnavailable: string;
   switchToDarkMode: string;
   switchToLightMode: string;
 }
@@ -16,7 +15,6 @@ const AUTH_HOST_MESSAGES: Record<"en-US" | "zh-CN", WebserverAuthHostMessages> =
     metadataUnavailable: "The identity service is currently unavailable.",
     retry: "Retry",
     sessionChecking: "Checking your session...",
-    sessionUnavailable: "Your session could not be verified.",
     switchToDarkMode: "Switch to dark mode",
     switchToLightMode: "Switch to light mode",
   },
@@ -26,7 +24,6 @@ const AUTH_HOST_MESSAGES: Record<"en-US" | "zh-CN", WebserverAuthHostMessages> =
     metadataUnavailable: "身份服务暂时不可用。",
     retry: "重试",
     sessionChecking: "正在验证登录状态...",
-    sessionUnavailable: "暂时无法验证登录状态。",
     switchToDarkMode: "切换到深色模式",
     switchToLightMode: "切换到浅色模式",
   },

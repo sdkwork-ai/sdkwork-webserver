@@ -791,7 +791,7 @@ impl WebRepository {
              SET cert_name = $3, cert_type = $4, preferred_key_algorithm = $5,
                   auto_renew = $6, renewal_status = 0, status = 1,
                   current_version_id = $7,
-                 metadata = metadata - 'certificateOperationFailureCode', updated_at = NOW(), version = version + 1
+                 metadata = metadata - 'certificateOperationFailureCode' - 'certificateOperationFailureDetail', updated_at = NOW(), version = version + 1
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL AND status <> 3",
         )
         .bind(lease.tenant_id)

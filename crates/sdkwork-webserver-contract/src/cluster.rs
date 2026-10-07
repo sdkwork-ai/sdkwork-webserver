@@ -167,7 +167,11 @@ pub struct ClusterQualityMetrics {
     pub cpu_percent: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory_percent: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "sdkwork_utils_rust::serde_int64::option"
+    )]
     pub open_connections: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rtt_millis: Option<f64>,
@@ -796,12 +800,15 @@ pub struct EnqueueClusterPeerMessagesRequest {
     pub message_type: String,
     #[serde(default)]
     pub payload: Value,
+    /// Peer-message TTL in seconds. The OpenAPI authority bounds it to
+    /// 1..=86400, so this is a plain `integer` on the wire (not int64) and
+    /// stays a JSON number — mirroring the schema exactly.
     #[serde(
         rename = "expiresInSeconds",
         default,
         skip_serializing_if = "Option::is_none"
     )]
-    pub expires_in_seconds: Option<i64>,
+    pub expires_in_seconds: Option<i32>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

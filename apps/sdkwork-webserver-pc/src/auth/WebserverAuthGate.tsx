@@ -8,7 +8,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { resolveWebserverAuthHostMessages } from "./messages.ts";
 import { WebserverAuthStatus } from "./WebserverAuthStatus.tsx";
 
-type BootstrapStatus = "loading" | "ready" | "unavailable";
+type BootstrapStatus = "loading" | "ready";
 
 export function WebserverAuthGate({
   authRoutes,
@@ -23,7 +23,6 @@ export function WebserverAuthGate({
 }) {
   const location = useLocation();
   const state = useSdkworkAuthControllerState(controller);
-  const [attempt, setAttempt] = useState(0);
   const [bootstrapStatus, setBootstrapStatus] = useState<BootstrapStatus>(
     state.isBootstrapped ? "ready" : "loading",
   );
@@ -57,21 +56,10 @@ export function WebserverAuthGate({
     return () => {
       active = false;
     };
-  }, [attempt, controller, state.isBootstrapped]);
+  }, [controller, state.isBootstrapped]);
 
   if (bootstrapStatus === "loading") {
     return <WebserverAuthStatus message={messages.sessionChecking} />;
-  }
-  if (bootstrapStatus === "unavailable") {
-    return (
-      <WebserverAuthStatus
-        homeHref="/"
-        homeLabel={messages.backToPortal}
-        message={messages.sessionUnavailable}
-        onRetry={() => setAttempt((current) => current + 1)}
-        retryLabel={messages.retry}
-      />
-    );
   }
   if (onAuthRoute && state.isAuthenticated) {
     const redirectTarget = resolveAuthRedirectTarget(

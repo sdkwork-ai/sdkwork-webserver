@@ -2113,18 +2113,9 @@ importers:
       '@sdkwork/webserver-pc-admin-mcp':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-admin-mcp
-      '@sdkwork/webserver-pc-admin-nginx':
-        specifier: workspace:*
-        version: link:packages/sdkwork-webserver-pc-admin-nginx
       '@sdkwork/webserver-pc-admin-plugins':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-admin-plugins
-      '@sdkwork/webserver-pc-admin-servers':
-        specifier: workspace:*
-        version: link:packages/sdkwork-webserver-pc-admin-servers
-      '@sdkwork/webserver-pc-admin-servers-explorer':
-        specifier: workspace:*
-        version: link:packages/sdkwork-webserver-pc-admin-servers-explorer
       '@sdkwork/webserver-pc-admin-shell':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-admin-shell

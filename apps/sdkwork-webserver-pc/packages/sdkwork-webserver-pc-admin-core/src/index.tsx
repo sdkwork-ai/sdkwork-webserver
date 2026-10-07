@@ -4,7 +4,6 @@ import {
   type CreateClusterRequest,
   type SdkworkBackendClient,
   type UpdateClusterInstanceRequest,
-  type UpdateClusterHostRequest,
   type UpdateClusterRequest,
 } from "@sdkwork/webserver-backend-sdk";
 import type { AuthTokenManager } from "@sdkwork/sdk-common";
@@ -208,31 +207,6 @@ function updateClusterRequest(body: Readonly<Record<string, unknown>>): UpdateCl
     request.offlineThresholdSeconds = offlineThresholdSeconds;
   }
   if (Object.keys(request).length === 0) throw new Error("At least one cluster field is required");
-  return request;
-}
-
-function updateClusterHostRequest(body: Readonly<Record<string, unknown>>): UpdateClusterHostRequest {
-  const request: UpdateClusterHostRequest = {};
-  const name = optionalText(body.name, "Host name", 100);
-  if (name !== undefined) request.name = name;
-  const clusterId = optionalText(body.clusterId, "Target cluster", 64);
-  if (clusterId !== undefined) request.clusterId = clusterId;
-  if (Object.keys(request).length === 0) throw new Error("At least one host field is required");
-  return request;
-}
-
-function updateClusterInstanceRequest(body: Readonly<Record<string, unknown>>): UpdateClusterInstanceRequest {
-  const request: UpdateClusterInstanceRequest = {};
-  const name = optionalText(body.name, "Instance name", 100);
-  if (name !== undefined) request.name = name;
-  const publicEndpoint = optionalText(body.publicEndpoint, "Public endpoint", 255);
-  if (publicEndpoint !== undefined) request.publicEndpoint = publicEndpoint;
-  const status = optionalInteger(body.status);
-  if (status !== undefined) {
-    if (status < 0 || status > 5) throw new Error("Instance status must be between 0 and 5");
-    request.status = status;
-  }
-  if (Object.keys(request).length === 0) throw new Error("At least one instance field is required");
   return request;
 }
 

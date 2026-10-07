@@ -1064,8 +1064,13 @@ function ActionDialog({
                         aria-label={t("dialog.copyField")}
                         className="icon-button"
                         onClick={() => {
-                          void navigator.clipboard.writeText(String(result[field] ?? ""));
-                          setCopiedField(field);
+                          // The check mark flips only on success; a rejected
+                          // write (non-secure context, denied permission)
+                          // must not leave an unhandled rejection behind.
+                          navigator.clipboard
+                            .writeText(String(result[field] ?? ""))
+                            .then(() => setCopiedField(field))
+                            .catch(() => undefined);
                         }}
                         title={t("dialog.copyField")}
                         type="button"
