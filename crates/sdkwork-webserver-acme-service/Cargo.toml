@@ -25,7 +25,7 @@ percent-encoding.workspace = true
 rcgen.workspace = true
 rustls-pki-types.workspace = true
 rustls.workspace = true
-rand = "0.8"
+rand.workspace = true
 sha1.workspace = true
 sdkwork_deploy_core = { workspace = true }
 sdkwork-utils-rust.workspace = true

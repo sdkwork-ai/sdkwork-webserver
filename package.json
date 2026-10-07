@@ -8,8 +8,8 @@
     "@sdkwork/app-topology": "workspace:*",
     "@sdkwork/iam-application-bootstrap": "workspace:*",
     "@sdkwork/ui-pc-react": "workspace:*",
-    "sigstore": "4.1.1",
-    "tar": "7.5.21",
+    "sigstore": "5.0.0",
+    "tar": "7.5.22",
     "yaml": "^2.9.1"
   },
   "pnpm": {
