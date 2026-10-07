@@ -332,7 +332,11 @@ impl ResolutionChain {
             redis.remove(&domain).await;
         }
         if let Some(database) = &self.database {
-            database.remove(&domain).await;
+            // Same bound as save: a stalled database connection must not hang
+            // the invalidation caller (the memory layer already dropped the
+            // entry, so a missed DB remove only costs a stale read until the
+            // record expires).
+            let _ = tokio::time::timeout(Duration::from_secs(2), database.remove(&domain)).await;
         }
     }
 }

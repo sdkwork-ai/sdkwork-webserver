@@ -608,12 +608,21 @@ async fn run_self_report_loop(service: Arc<WebService>, config: ClusterSelfRepor
         }
         // Backoff is a FAILURE response only: a healthy tick reports at the
         // configured cadence so members are never swept for slow reporting.
+        // Failure sleeps carry up to +100% jitter so instances that failed
+        // near-simultaneously do not re-synchronize their retries against
+        // the registry database on every failed tick.
         if tick_healthy {
             backoff_multiplier = 1;
         } else {
             backoff_multiplier = (backoff_multiplier * 2).min(MAX_BACKOFF_MULTIPLIER);
         }
-        let sleep = heartbeat_interval * backoff_multiplier;
+        let jitter_nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|since| since.subsec_nanos())
+            .unwrap_or_default();
+        let jitter_percent: u32 = jitter_nanos % 100;
+        let base = heartbeat_interval * backoff_multiplier;
+        let sleep = base + base.saturating_mul(jitter_percent) / 100;
         tokio::time::sleep(sleep).await;
     }
 }

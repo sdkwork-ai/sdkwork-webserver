@@ -6,6 +6,12 @@ use sdkwork_webserver_contract::provider::{
 
 use crate::sdk::DriveContentChunkStream;
 
+/// Idle-chunk deadline: a facade that accepts the request and then stalls
+/// mid-body must fail the stream instead of holding the delivery runtime's
+/// buffered-content permit until TCP-level timeouts. Client-paced downloads
+/// are unaffected — the deadline applies per chunk, not to the whole body.
+const CHUNK_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
+
 /// Forwards the SDK's bounded chunk stream while enforcing the expected
 /// content length: the object must deliver exactly `expected_length` bytes,
 /// otherwise the contract is violated (fail closed, no partial acceptance).
@@ -29,9 +35,9 @@ impl WebsiteProviderContentStream for BoundedDriveContentStream {
         let Some(source) = self.source.as_mut() else {
             return Ok(None);
         };
-        let chunk = source
-            .next_chunk()
+        let chunk = tokio::time::timeout(CHUNK_IDLE_TIMEOUT, source.next_chunk())
             .await
+            .map_err(|_| WebsiteProviderError::new(WebsiteProviderErrorKind::ContractMismatch))?
             .map_err(|_| WebsiteProviderError::new(WebsiteProviderErrorKind::ContractMismatch))?;
         match chunk {
             Some(bytes) => {

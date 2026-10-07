@@ -9,6 +9,11 @@ use sdkwork_web_core::{
 
 const MAX_AUDIT_PATH_BYTES: usize = 2_048;
 const MAX_SECURITY_DETAIL_BYTES: usize = 1_024;
+/// Upper bound on how long the response path may wait for one audit insert.
+/// Audit must never fail the business response and must not stall it either:
+/// a slow audit-table insert degrades to the persistence-unavailable log
+/// after this deadline instead of adding its latency to the request.
+const AUDIT_WRITE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
 
 pub(crate) struct WebFrameworkAuditEmitter {
     service: Arc<WebService>,
@@ -49,9 +54,9 @@ impl AuditEmitter for WebFrameworkAuditEmitter {
             "subjectId": fact.user_id.as_deref(),
         }))
         .map_err(|_| WebFrameworkError::dependency_unavailable("encode Web audit metadata"))?;
-        if let Err(error) = self
-            .service
-            .record_audit_log(AuditLogWrite {
+        if let Err(error) = tokio::time::timeout(
+            AUDIT_WRITE_TIMEOUT,
+            self.service.record_audit_log(AuditLogWrite {
                 tenant_id,
                 organization_id: 0,
                 operator_id: numeric_subject_id(fact.user_id.as_deref()).unwrap_or(0),
@@ -66,8 +71,9 @@ impl AuditEmitter for WebFrameworkAuditEmitter {
                 target_uuid: None,
                 request_id: Some(&fact.request_id),
                 metadata_json: &metadata_json,
-            })
-            .await
+            }),
+        )
+        .await
         {
             tracing::error!(
                 request_id = %fact.request_id,
@@ -108,9 +114,9 @@ impl SecurityEventEmitter for WebFrameworkSecurityEventEmitter {
         }))
         .map_err(|_| WebFrameworkError::dependency_unavailable("encode Web security event"))?;
 
-        if let Err(error) = self
-            .service
-            .record_audit_log(AuditLogWrite {
+        if let Err(error) = tokio::time::timeout(
+            AUDIT_WRITE_TIMEOUT,
+            self.service.record_audit_log(AuditLogWrite {
                 tenant_id,
                 organization_id: 0,
                 operator_id: 0,
@@ -121,8 +127,9 @@ impl SecurityEventEmitter for WebFrameworkSecurityEventEmitter {
                 target_uuid: None,
                 request_id: event.request_id.as_deref(),
                 metadata_json: &metadata_json,
-            })
-            .await
+            }),
+        )
+        .await
         {
             tracing::error!(
                 request_id = event.request_id.as_deref().unwrap_or("unknown"),

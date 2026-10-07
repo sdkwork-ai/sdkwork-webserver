@@ -341,16 +341,38 @@ impl WebserverConfigService {
         // Hold the write lock across digest-check → backup → rename so the
         // optimistic-concurrency check cannot be interleaved.
         let _write_guard = self.write_lock.lock().await;
-        let current_bytes = tokio::fs::read(&absolute)
-            .await
-            .map_err(|_| WebserverConfigError::NotFound)?;
-        let current_sha256 = sha256_hex(&current_bytes);
-        if let Some(expected) = expected_sha256
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
+        // Bounded digest read from an opened handle: a file swapped or grown
+        // between the catalog lookup and this read can never bypass the size
+        // discipline (mirrors `read`).
         {
-            if !expected.eq_ignore_ascii_case(&current_sha256) {
-                return Err(WebserverConfigError::Conflict { current_sha256 });
+            use tokio::io::AsyncReadExt;
+            let handle = tokio::fs::File::open(&absolute)
+                .await
+                .map_err(|_| WebserverConfigError::NotFound)?;
+            let metadata = handle
+                .metadata()
+                .await
+                .map_err(|_| WebserverConfigError::NotFound)?;
+            if !metadata.is_file() || metadata.len() > self.config.maximum_file_bytes as u64 {
+                return Err(WebserverConfigError::TooLarge);
+            }
+            let mut current_bytes = Vec::new();
+            handle
+                .take(self.config.maximum_file_bytes as u64 + 1)
+                .read_to_end(&mut current_bytes)
+                .await
+                .map_err(|error| WebserverConfigError::Io(error.to_string()))?;
+            if current_bytes.len() as u64 > self.config.maximum_file_bytes as u64 {
+                return Err(WebserverConfigError::TooLarge);
+            }
+            let current_sha256 = sha256_hex(&current_bytes);
+            if let Some(expected) = expected_sha256
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                if !expected.eq_ignore_ascii_case(&current_sha256) {
+                    return Err(WebserverConfigError::Conflict { current_sha256 });
+                }
             }
         }
 
@@ -361,9 +383,12 @@ impl WebserverConfigService {
             .map_err(|error| WebserverConfigError::Io(error.to_string()))?;
 
         // Atomic replacement: temp file in the same directory, fsync, rename.
+        // A failure between create and rename removes the temp file — an
+        // ENOSPC mid-sync must not accumulate `.tmp-<pid>` residue in the
+        // live config directory.
         let temporary =
             absolute.with_file_name(format!(".{}.tmp-{}", entry.name, std::process::id()));
-        {
+        let written = async {
             use tokio::io::AsyncWriteExt;
             let mut file = tokio::fs::File::create(&temporary)
                 .await
@@ -374,10 +399,15 @@ impl WebserverConfigService {
             file.sync_all()
                 .await
                 .map_err(|error| WebserverConfigError::Io(error.to_string()))?;
+            tokio::fs::rename(&temporary, &absolute)
+                .await
+                .map_err(|error| WebserverConfigError::Io(format!("atomic replace failed: {error}")))
         }
-        tokio::fs::rename(&temporary, &absolute)
-            .await
-            .map_err(|error| WebserverConfigError::Io(format!("atomic replace failed: {error}")))?;
+        .await;
+        if written.is_err() {
+            let _ = tokio::fs::remove_file(&temporary).await;
+        }
+        written?;
 
         let metadata = tokio::fs::metadata(&absolute)
             .await

@@ -211,8 +211,12 @@ impl WebsiteWikiProvider for KnowledgebaseWikiWebsiteProvider {
         {
             return Err(contract_mismatch());
         }
+        let mut stream = BoundedWikiContentStream::new(opened.stream, maximum_bytes);
+        if let Some(expected) = opened.content_length.filter(|length| *length > 0) {
+            stream = stream.with_expected_length(expected);
+        }
         Ok(OpenedWebsiteContent {
-            stream: Box::new(BoundedWikiContentStream::new(opened.stream, maximum_bytes)),
+            stream: Box::new(stream),
             content_length: opened.content_length.unwrap_or(0),
             content_range: None,
         })

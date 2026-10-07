@@ -523,6 +523,7 @@ impl DriveContentCache {
             file: None,
             written: 0,
             failed: false,
+            settled: false,
         }
     }
 }
@@ -588,6 +589,23 @@ pub struct CachingContentStream {
     file: Option<tokio::fs::File>,
     written: u64,
     failed: bool,
+    /// Set once the stream reached a terminal state that already handled the
+    /// staging file (publish at EOF, remove on error); a plain `Drop` then
+    /// has nothing left to clean.
+    settled: bool,
+}
+
+impl Drop for CachingContentStream {
+    fn drop(&mut self) {
+        // The most common abort path is neither clean EOF nor an upstream
+        // error: the HTTP client disconnects and the runtime drops this body
+        // mid-stream. Without cleanup the staging file (up to the 256 MB cap)
+        // would leak until the next cache open. `publish` at clean EOF sets
+        // `settled`, so a completed fill is never double-removed.
+        if !self.settled && !self.failed {
+            let _ = std::fs::remove_file(&self.staging);
+        }
+    }
 }
 
 impl CachingContentStream {
@@ -630,6 +648,7 @@ impl WebsiteProviderContentStream for CachingContentStream {
                 if !self.failed {
                     self.cache.publish(&self.key, &self.staging);
                 }
+                self.settled = true;
                 Ok(None)
             }
             Err(error) => {
