@@ -152,10 +152,12 @@ pub fn merge_overlay(base: &Value, overlay: &Value) -> Result<Value, WebServerCo
 }
 
 fn parse_toml_file(path: &Path) -> Result<Value, WebServerConfigError> {
-    let text = std::fs::read_to_string(path).map_err(|source| WebServerConfigError::Read {
-        path: path.to_path_buf(),
-        source,
-    })?;
+    let text =
+        crate::fs_bounds::read_text_capped(path, crate::fs_bounds::MAX_IMPORT_SOURCE_BYTES)
+            .map_err(|source| WebServerConfigError::Read {
+                path: path.to_path_buf(),
+                source,
+            })?;
     let value: toml::Value =
         toml::from_str(&text).map_err(|source| WebServerConfigError::Toml {
             path: path.to_path_buf(),
@@ -1078,7 +1080,11 @@ fn materialize_auth_basic(
                     "`secret://` authBasicUserFile resolution is not implemented; use an absolute htpasswd path",
                 ));
             }
-            let contents = std::fs::read_to_string(file).map_err(|error| {
+            let contents = crate::fs_bounds::read_text_capped(
+                Path::new(file),
+                crate::fs_bounds::MAX_IMPORT_SOURCE_BYTES,
+            )
+            .map_err(|error| {
                 materialize_error(
                     &format!("{path}.authBasicUserFile"),
                     format!("failed to read htpasswd file `{file}`: {error}"),
@@ -3047,8 +3053,11 @@ fn load_snippet_directives(
     path: &str,
 ) -> Result<Vec<NginxDirective>, WebServerConfigError> {
     let snippet = resolve_snippet_path(module_dir, pattern)?;
-    let text = std::fs::read_to_string(&snippet)
-        .map_err(|error| materialize_error(path, format!("read snippet `{pattern}`: {error}")))?;
+    let text = crate::fs_bounds::read_text_capped(
+        &snippet,
+        crate::fs_bounds::MAX_IMPORT_SOURCE_BYTES,
+    )
+    .map_err(|error| materialize_error(path, format!("read snippet `{pattern}`: {error}")))?;
     parse_nginx_config(&text, &snippet)
         .map_err(|error| materialize_error(path, format!("parse snippet `{pattern}`: {error}")))
 }

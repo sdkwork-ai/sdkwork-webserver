@@ -1,6 +1,7 @@
 //! Framework-independent Web Server configuration and runtime helpers.
 
 mod canonical_json;
+mod fs_bounds;
 mod json_schema;
 
 pub mod config;

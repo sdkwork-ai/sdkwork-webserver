@@ -436,3 +436,22 @@ fn wiki_route_event(sequence_no: u64, id: &str) -> serde_json::Value {
         }
     })
 }
+
+#[tokio::test]
+async fn checkpoint_store_tolerates_and_cleans_tmp_residue() {
+    // A write cancelled between staging and rename leaves `<digest>.<slot>.tmp`
+    // behind. The loader must clean it instead of failing store startup.
+    let root = tempfile::tempdir().unwrap();
+    let residue = root
+        .path()
+        .join(format!("{}.a.tmp", "0".repeat(64)));
+    std::fs::write(&residue, b"partial write").unwrap();
+
+    let store = FileWebsiteProviderEventCheckpointStore::open(root.path(), 8)
+        .expect("tmp residue must not brick the checkpoint store");
+    assert!(!residue.exists(), "tmp residue is cleaned during load");
+    assert!(store.load("drive:tenant-1:-:space-1").await.unwrap().is_none());
+
+    // The same directory keeps reopening cleanly afterwards.
+    FileWebsiteProviderEventCheckpointStore::open(root.path(), 8).unwrap();
+}

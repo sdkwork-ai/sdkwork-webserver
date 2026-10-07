@@ -680,15 +680,41 @@ fn collect_upstream_targets(config: &WebServerAppConfig) -> Vec<String> {
         .collect()
 }
 
+/// Total budget for one upstream probe, including DNS resolution. The
+/// blocking OS resolver exposes no timeout surface, so the probe runs on a
+/// detached worker thread and the caller gives up after this deadline: a
+/// startup with dead-name upstreams degrades linearly (one abandoned thread
+/// per unreachable target, reclaimed by the OS once the resolver gives up)
+/// instead of stalling for minutes inside `to_socket_addrs`.
+const PROBE_TOTAL_DEADLINE: Duration = Duration::from_secs(8);
+
 fn probe_upstream_target(url: &str) -> bool {
-    let Ok(parsed) = url::Url::parse(url) else {
+    let Some(authority) = probe_authority(url) else {
         return false;
     };
-    let Some(host) = parsed.host_str() else {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let spawn = std::thread::Builder::new()
+        .name("import-upstream-probe".to_owned())
+        .spawn(move || {
+            let reachable = resolve_and_connect(&authority);
+            let _ = sender.send(reachable);
+        });
+    if spawn.is_err() {
         return false;
-    };
+    }
+    receiver
+        .recv_timeout(PROBE_TOTAL_DEADLINE)
+        .unwrap_or(false)
+}
+
+fn probe_authority(url: &str) -> Option<String> {
+    let parsed = url::Url::parse(url).ok()?;
+    let host = parsed.host_str()?;
     let port = parsed.port_or_known_default().unwrap_or(80);
-    let authority = format!("{host}:{port}");
+    Some(format!("{host}:{port}"))
+}
+
+fn resolve_and_connect(authority: &str) -> bool {
     let Ok(mut addrs) = authority.to_socket_addrs() else {
         return false;
     };

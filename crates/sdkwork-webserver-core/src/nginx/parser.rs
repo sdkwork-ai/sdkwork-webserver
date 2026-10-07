@@ -123,11 +123,14 @@ pub fn expand_includes(
                 if stack.contains(&include_path) {
                     return Err(NginxParseError::IncludeCycle { path: include_path });
                 }
-                let text =
-                    fs::read_to_string(&include_path).map_err(|source| NginxParseError::Read {
-                        path: include_path.clone(),
-                        source,
-                    })?;
+                let text = crate::fs_bounds::read_text_capped(
+                    &include_path,
+                    crate::fs_bounds::MAX_IMPORT_SOURCE_BYTES,
+                )
+                .map_err(|source| NginxParseError::Read {
+                    path: include_path.clone(),
+                    source,
+                })?;
                 stack.push(include_path.clone());
                 let parsed = parse_nginx_config(&text, &include_path)?;
                 // Relative includes inside the included file resolve against

@@ -92,7 +92,8 @@ fn load_one_file(
     path: &Path,
     app_key: &str,
 ) -> Result<crate::config::WebServerAppConfig, NginxConfigError> {
-    let text = fs::read_to_string(path).map_err(|source| io_error(path, source))?;
+    let text = crate::fs_bounds::read_text_capped(path, crate::fs_bounds::MAX_IMPORT_SOURCE_BYTES)
+        .map_err(|source| io_error(path, source))?;
     let text = wrap_bare_stream_file(path, text);
     let parsed = parse_nginx_config(&text, path).map_err(NginxConfigError::from)?;
     let base_dir = path.parent().unwrap_or_else(|| Path::new("."));

@@ -59,15 +59,8 @@ pub fn load_runtime_toml_config() -> Result<(), String> {
 }
 
 pub fn parse_runtime_toml_config(path: &Path) -> Result<RuntimeTomlConfig, String> {
-    let text = std::fs::read_to_string(path)
+    let text = crate::fs_bounds::read_text_capped(path, MAX_RUNTIME_CONFIG_BYTES as u64)
         .map_err(|error| format!("read runtime config {}: {error}", path.display()))?;
-    if text.len() > MAX_RUNTIME_CONFIG_BYTES {
-        return Err(format!(
-            "runtime config {} exceeds {} bytes",
-            path.display(),
-            MAX_RUNTIME_CONFIG_BYTES
-        ));
-    }
     toml::from_str(&text)
         .map_err(|error| format!("parse runtime config {}: {error}", path.display()))
 }
@@ -260,8 +253,11 @@ fn module_import_id_from_nginx_sidecar(path: &Path) -> Result<String, String> {
 }
 
 fn expand_import_aggregator_conf(aggregator: &Path) -> Result<Vec<WebserverImportEntry>, String> {
-    let text = std::fs::read_to_string(aggregator)
-        .map_err(|error| format!("read import aggregator {}: {error}", aggregator.display()))?;
+    let text = crate::fs_bounds::read_text_capped(
+        aggregator,
+        crate::fs_bounds::MAX_IMPORT_SOURCE_BYTES,
+    )
+    .map_err(|error| format!("read import aggregator {}: {error}", aggregator.display()))?;
     let parsed = parse_nginx_config(&text, aggregator)
         .map_err(|error| format!("parse import aggregator {}: {error}", aggregator.display()))?;
     let base = aggregator.parent().unwrap_or_else(|| Path::new("/"));

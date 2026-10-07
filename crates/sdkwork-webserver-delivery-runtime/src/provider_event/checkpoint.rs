@@ -18,6 +18,9 @@ use super::{provider_event_stream_shard, PROVIDER_EVENT_STREAM_SHARDS};
 
 const CHECKPOINT_SCHEMA_VERSION: &str = "sdkwork.website-provider-event-checkpoint.v1";
 const MAXIMUM_CHECKPOINT_BYTES: u64 = 256 * 1024;
+/// Suffix of the atomic-commit staging file (`<digest>.<slot>.tmp`); see
+/// [`write_checkpoint`] and the residue tolerance in the directory loader.
+const TMP_FILE_SUFFIX: &str = "tmp";
 const MAXIMUM_CHECKPOINT_STREAMS: usize = 65_536;
 pub(super) const MAXIMUM_RECENT_EVENTS: usize = 256;
 
@@ -307,6 +310,18 @@ fn load_checkpoint_directory(
     let mut total_bytes: u64 = 0;
     for entry in fs::read_dir(directory).map_err(|_| WebsiteProviderEventCheckpointError::Io)? {
         let entry = entry.map_err(|_| WebsiteProviderEventCheckpointError::Io)?;
+        let name = entry
+            .file_name()
+            .into_string()
+            .map_err(|_| WebsiteProviderEventCheckpointError::InvalidDirectory)?;
+        if name.ends_with(TMP_FILE_SUFFIX) {
+            // Atomic-commit residue from a write that crashed or was
+            // cancelled between staging and rename. It never carries state,
+            // so remove it best-effort and keep loading; treating it as a
+            // hard error would permanently brick the store on startup.
+            let _ = fs::remove_file(entry.path());
+            continue;
+        }
         let metadata = fs::symlink_metadata(entry.path())
             .map_err(|_| WebsiteProviderEventCheckpointError::Io)?;
         if !metadata.is_file() || metadata.file_type().is_symlink() {
@@ -319,10 +334,6 @@ fn load_checkpoint_directory(
         if total_bytes > aggregate_budget {
             return Err(WebsiteProviderEventCheckpointError::StreamLimit);
         }
-        let name = entry
-            .file_name()
-            .into_string()
-            .map_err(|_| WebsiteProviderEventCheckpointError::InvalidDirectory)?;
         let digest = checkpoint_file_digest(&name)
             .ok_or(WebsiteProviderEventCheckpointError::InvalidDirectory)?;
         candidates
@@ -444,9 +455,16 @@ async fn write_checkpoint(
         return Err(WebsiteProviderEventCheckpointError::Corrupt);
     }
     // Atomic commit via temporary sibling + rename: a crash never leaves a
-    // truncated checkpoint.
-    let temp_path = path.with_extension("tmp");
-    {
+    // truncated checkpoint. The loader removes `*.tmp` residue instead of
+    // failing, so a cancelled write can never brick the store on startup.
+    let temp_path = path.with_extension(TMP_FILE_SUFFIX);
+    // A planted symlink at the temp path must not be followed on open.
+    if let Ok(metadata) = tokio_fs::symlink_metadata(&temp_path).await {
+        if metadata.file_type().is_symlink() {
+            return Err(WebsiteProviderEventCheckpointError::InvalidDirectory);
+        }
+    }
+    let write = async {
         let mut file = tokio_fs::OpenOptions::new()
             .create(true)
             .truncate(true)
@@ -460,10 +478,16 @@ async fn write_checkpoint(
         file.sync_all()
             .await
             .map_err(|_| WebsiteProviderEventCheckpointError::Io)?;
+        tokio_fs::rename(&temp_path, &path)
+            .await
+            .map_err(|_| WebsiteProviderEventCheckpointError::Io)
+    };
+    if let Err(error) = write.await {
+        // Best-effort residue cleanup on every failure path so the next
+        // start (or the next write to this slot) begins from a clean slate.
+        let _ = tokio_fs::remove_file(&temp_path).await;
+        return Err(error);
     }
-    tokio_fs::rename(&temp_path, &path)
-        .await
-        .map_err(|_| WebsiteProviderEventCheckpointError::Io)?;
     sync_directory(directory).await?;
     Ok(())
 }
