@@ -44,10 +44,18 @@ class _WebserverFlutterAuthGateState extends State<WebserverFlutterAuthGate> {
     if (!runtime.ready || clients == null) {
       return;
     }
+    // Locale negotiation happens once at composition (the gate is the
+    // first-route mount): the shipped zh-CN catalog must engage on zh
+    // devices instead of silently serving en-US copy.
+    final locale = normalizeWebserverFlutterPlatformLocale(
+      View.of(context).platformDispatcher.locale.toString(),
+    );
+    final messages = locale == WebserverFlutterLocale.zhCn
+        ? webserverFlutterApplicationsMessagesZhCn
+        : webserverFlutterApplicationsMessagesEnUs;
     final viewModel = WebserverFlutterApplicationsCatalogViewModel(
       service: createWebserverFlutterApplicationsService(clients),
-      resolveMessage: (key) =>
-          webserverFlutterApplicationsMessagesEnUs[key] ?? key,
+      resolveMessage: (key) => messages[key] ?? key,
       onStateChange: (state) => _state.value = state,
     );
     _viewModel = viewModel;
