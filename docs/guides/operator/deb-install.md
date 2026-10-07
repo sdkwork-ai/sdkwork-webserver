@@ -184,24 +184,35 @@ installed — it MUST NOT serve SDKWork public domains
   (`sdkwork-webserver.service`) listens on the loopback only.
 
 Certificates are issued by the certificate worker
-(`sdkwork-webserver-certificate-worker.service`) into
-`/var/lib/sdkwork/webserver/tls-materials/<uuid>/` as `fullchain.pem` and
-`privkey.pem` (`tls_material_distribution.rs`). Before first issuance,
+(`sdkwork-webserver-certificate-worker.service`). Issued and renewed material
+is exported atomically to the canonical ACME live layout
+(`/etc/sdkwork/certs/letsencrypt/<cert-name>/fullchain.pem` + `privkey.pem`),
+which is exactly the pair the edge reads. Before first issuance,
 `server.sdkwork.com` must resolve to this host and `:80` must be reachable
-from the Internet. The postinst seeds a bootstrap self-signed pair so `:443`
-opens on cold start; after issuance, point `active` at the real issue and
-restart the edge (the nginx-compat configuration materializes once per
-process, so the restart is the material-swap boundary):
+from the Internet. The postinst seeds a bootstrap self-signed pair at the
+same canonical path so `:443` opens on cold start.
+
+Provisioning contract for the single-domain standalone install: **name the
+certificate after the domain** (`server.sdkwork.com`) when requesting it in
+the console. The worker then exports the issued material in place over the
+bootstrap pair, and the edge picks up the refreshed files on its next reload
+(nginx-compat configurations materialize once per process, so
+`systemctl restart sdkwork-webserver-edge` applies a fresh certificate):
 
 ```bash
-sudo ln -sfn /var/lib/sdkwork/webserver/tls-materials/<uuid> \
-  /var/lib/sdkwork/webserver/tls-materials/active
 sudo systemctl restart sdkwork-webserver-edge
 ```
 
-Renewal is automatic (`SDKWORK_WEBSERVER_CERT_RENEW_SCAN_INTERVAL_SECS`);
-each renewal republishes the issue — relink `active` and restart the edge
-once per renewal (~60 days).
+Certificates named differently are still exported under their own
+`/etc/sdkwork/certs/letsencrypt/<cert-name>/` directory; to serve one on the
+edge, point the `ssl_certificate`/`ssl_certificate_key` lines of
+`/etc/sdkwork/webserver/nginx.production.conf` at that directory and rerun
+`validate-nginx` + restart the edge. (If `SDKWORK_CERTS_DIR` overrides the
+certificates root on the host, mirror the override in the rendered edge
+configuration.)
+Renewal is automatic (`SDKWORK_WEBSERVER_CERT_RENEW_SCAN_INTERVAL_SECS`):
+the worker exports each renewal over the same canonical path, so a single
+edge restart (~60 days, during a maintenance window) is the only manual step.
 
 ## 7. Lifecycle
 

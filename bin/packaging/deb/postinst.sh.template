@@ -299,26 +299,26 @@ fi
 #     nginx-compat data plane owns the edge — stock OpenResty/nginx MUST NOT
 #     serve SDKWork public domains (SDKWORK_WEBSERVER_SPEC §0.1). :80 answers
 #     ACME HTTP-01 challenges from the webroot; :443 terminates TLS from the
-#     tls-materials/active pair and proxies to the gateway on
+#     canonical ACME live pair for __DOMAIN__ and proxies to the gateway on
 #     127.0.0.1:__INGRESS_PORT__.
 if [ "${ENVIRONMENT}" = "production" ]; then
-  # Cold start: seed a bootstrap self-signed pair so :443 can open before the
-  # first issuance. The pair lives OUTSIDE tls-materials/ because the
-  # certificate worker prunes material-root directories that its snapshot
-  # does not reference; `active` starts as a symlink to it and is relinked to
-  # the real issue at provisioning time, then the edge is restarted (the
-  # nginx-compat configuration materializes once per process).
-  if [ ! -e "${DATA_ROOT}/tls-materials/active" ]; then
-    install -d -o sdkwork -g sdkwork -m 0700 "${DATA_ROOT}/tls-bootstrap"
+  # Cold start: seed a bootstrap self-signed pair at the exact canonical path
+  # the edge reads, so :443 can open before the first issuance. The
+  # certificate worker exports every issued/renewed material in place under
+  # the same directory (standalone convention: the certificate is named after
+  # the domain), so once a real certificate is issued the edge reads the
+  # refreshed files on its next reload - no manual material copy.
+  LIVE_DOMAIN_DIR="/etc/sdkwork/certs/letsencrypt/${DOMAIN}"
+  if [ ! -s "${LIVE_DOMAIN_DIR}/fullchain.pem" ]; then
+    install -d -o sdkwork -g sdkwork -m 0700 "${LIVE_DOMAIN_DIR}"
     openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
-      -keyout "${DATA_ROOT}/tls-bootstrap/privkey.pem" \
-      -out "${DATA_ROOT}/tls-bootstrap/fullchain.pem" \
+      -keyout "${LIVE_DOMAIN_DIR}/privkey.pem" \
+      -out "${LIVE_DOMAIN_DIR}/fullchain.pem" \
       -days 30 -nodes -subj "/CN=${DOMAIN}" \
       -addext "subjectAltName=DNS:${DOMAIN}" >/dev/null 2>&1
-    chown sdkwork:sdkwork "${DATA_ROOT}/tls-bootstrap/fullchain.pem" \
-      "${DATA_ROOT}/tls-bootstrap/privkey.pem"
-    chmod 0600 "${DATA_ROOT}/tls-bootstrap/privkey.pem"
-    ln -sfn ../tls-bootstrap "${DATA_ROOT}/tls-materials/active"
+    chown sdkwork:sdkwork "${LIVE_DOMAIN_DIR}/fullchain.pem" \
+      "${LIVE_DOMAIN_DIR}/privkey.pem"
+    chmod 0600 "${LIVE_DOMAIN_DIR}/privkey.pem"
   fi
   # Render the edge sidecar configuration (nginx-compat, consumed in-process
   # by the gateway — never by a stock nginx process). __EDGE_*__ placeholders
@@ -327,6 +327,7 @@ if [ "${ENVIRONMENT}" = "production" ]; then
   # __EDGE_*__ patterns survive until this sed runs on the host.
   sed -e "s|__EDGE_DOMAIN__|${DOMAIN}|g" \
       -e "s|__EDGE_DATA_ROOT__|${DATA_ROOT}|g" \
+      -e "s|__EDGE_LIVE_ROOT__|/etc/sdkwork/certs/letsencrypt|g" \
       -e "s|__EDGE_INGRESS_PORT__|__INGRESS_PORT__|g" \
       "${INSTALL_ROOT}/share/nginx.production.conf.template" \
       > "${CONFIG_ROOT}/nginx.production.conf"

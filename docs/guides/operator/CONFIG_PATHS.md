@@ -121,7 +121,7 @@ Validate: `pnpm check:webserver-toml`.
 | Path | Purpose |
 | --- | --- |
 | `/etc/sdkwork/webserver/nginx.production.conf` | Production deb/rpm public-edge sidecar (rendered by postinst, served by `sdkwork-webserver-edge.service`) |
-| `/var/lib/sdkwork/webserver/tls-materials/active/` | TLS material the edge terminates with; `fullchain.pem` + `privkey.pem` |
+| `/etc/sdkwork/certs/letsencrypt/<cert-name>/` | Canonical ACME live pair the edge terminates with (`fullchain.pem` + `privkey.pem`); the worker exports issued/renewed material here in place |
 | `serve-nginx <path>` | Same binary, nginx-compat data plane for an explicit config path or sites directory |
 
 nginx-compat commands:

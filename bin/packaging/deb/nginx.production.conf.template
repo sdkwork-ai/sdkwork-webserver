@@ -31,14 +31,15 @@ server {
     listen [::]:443 ssl;
     server_name __EDGE_DOMAIN__;
 
-    # TLS material swap boundary: the nginx-compat configuration materializes
-    # once per process (multi-file configs have no revision watch), so after
-    # `active` is relinked to a fresh issue run
-    # `systemctl restart sdkwork-webserver-edge`. The postinst seeds a
-    # bootstrap self-signed pair (tls-bootstrap/, outside the worker's
-    # pruned material root) so :443 opens before the first issuance.
-    ssl_certificate __EDGE_DATA_ROOT__/tls-materials/active/fullchain.pem;
-    ssl_certificate_key __EDGE_DATA_ROOT__/tls-materials/active/privkey.pem;
+    # Canonical ACME live layout (W25): the certificate worker exports every
+    # issued/renewed material in place under
+    # /etc/sdkwork/certs/letsencrypt/<cert-name>/, so the operator signs the
+    # domain-named certificate and the edge reads the refreshed files on its
+    # next reload - no manual copy step. The postinst seeds a bootstrap
+    # self-signed pair at this exact path on cold start so :443 opens before
+    # the first issuance.
+    ssl_certificate __EDGE_LIVE_ROOT__/__EDGE_DOMAIN__/fullchain.pem;
+    ssl_certificate_key __EDGE_LIVE_ROOT__/__EDGE_DOMAIN__/privkey.pem;
 
     location / {
         proxy_pass http://127.0.0.1:__EDGE_INGRESS_PORT__;
