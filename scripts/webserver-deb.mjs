@@ -20,8 +20,6 @@
 //
 // dpkg-deb runs natively on Linux; on Windows it is invoked through WSL.
 
-import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import {
   chmodSync,
   existsSync,
@@ -38,6 +36,16 @@ import os from 'node:os';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { extract as extractTar } from 'tar';
+import {
+  appVersion,
+  archiveBaseName,
+  archivePath,
+  renderTemplate,
+  run,
+  runWslTool,
+  sha256File,
+  wslOrNative,
+} from './lib/package-helpers.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RELEASE_OUTPUT_ROOT = path.join(REPO_ROOT, 'dist', 'release');
@@ -120,17 +128,6 @@ const ENVIRONMENTS = Object.freeze({
 
 const DEBIAN_ARCHITECTURES = Object.freeze({ x64: 'amd64', arm64: 'arm64' });
 
-function appVersion() {
-  const manifest = JSON.parse(
-    readFileSync(path.join(REPO_ROOT, 'sdkwork.app.config.json'), 'utf8'),
-  );
-  const version = manifest?.release?.currentVersion;
-  if (typeof version !== 'string' || version.length === 0) {
-    throw new Error('sdkwork.app.config.json release.currentVersion is missing');
-  }
-  return version;
-}
-
 function parseArgs(argv) {
   const settings = {
     operation: argv[0],
@@ -177,60 +174,8 @@ function parseArgs(argv) {
   return settings;
 }
 
-function run(command, args, options = {}) {
-  const result = spawnSync(command, args, {
-    cwd: options.cwd ?? REPO_ROOT,
-    encoding: 'utf8',
-    env: options.env ?? process.env,
-    stdio: options.capture ? 'pipe' : 'inherit',
-    timeout: options.timeoutMs ?? 10 * 60 * 1000,
-    maxBuffer: 8 * 1024 * 1024,
-    windowsHide: true,
-  });
-  if (result.error || result.status !== 0) {
-    const detail = result.error?.message ?? result.stderr?.trim() ?? `exit ${result.status}`;
-    throw new Error(`${command} ${args.join(' ')} failed: ${detail}`);
-  }
-  return result;
-}
-
-function archiveBaseName(settings) {
-  return (
-    `sdkwork-webserver-linux-${settings.architecture}-standalone-server-${settings.version}`
-  );
-}
-
-function archivePath(settings) {
-  return path.join(RELEASE_OUTPUT_ROOT, `${archiveBaseName(settings)}.tar.gz`);
-}
-
-function wslPath(windowsPath) {
-  const match = windowsPath.match(/^([A-Za-z]):\\(.*)$/);
-  if (!match) {
-    throw new Error(`cannot convert Windows path to WSL: ${windowsPath}`);
-  }
-  return `/mnt/${match[1].toLowerCase()}/${match[2].replace(/\\/g, '/')}`;
-}
-
-function wslOrNative(filePath) {
-  return process.platform === 'win32' ? wslPath(filePath) : filePath;
-}
-
 function runDpkgDeb(args, env = {}) {
-  if (process.platform === 'win32') {
-    const shellArgs = args.map((arg) => (arg.includes(' ') ? `'${arg}'` : arg)).join(' ');
-    return run('wsl.exe', ['-d', 'Ubuntu-22.04', '-e', 'bash', '-lc', `dpkg-deb ${shellArgs}`], {
-      capture: true,
-      env: { ...process.env, ...env },
-    });
-  }
-  return run('dpkg-deb', args, { capture: true, env: { ...process.env, ...env } });
-}
-
-function sha256File(filePath) {
-  const hash = createHash('sha256');
-  hash.update(readFileSync(filePath));
-  return hash.digest('hex');
+  return runWslTool('dpkg-deb', args, env);
 }
 
 function copyTree(source, target) {
@@ -262,16 +207,8 @@ function copyTreeIfPresent(source, target, label) {
   return copyTree(source, target);
 }
 
-function renderTemplate(templatePath, values) {
-  let text = readFileSync(templatePath, 'utf8');
-  for (const [key, value] of Object.entries(values)) {
-    text = text.split(`__${key}__`).join(value);
-  }
-  return text;
-}
-
 async function ensureReleaseArchive(settings) {
-  const archive = archivePath(settings);
+  const archive = archivePath(RELEASE_OUTPUT_ROOT, settings);
   if (existsSync(archive)) {
     return archive;
   }
@@ -463,6 +400,15 @@ async function assembleDebStage(settings) {
       { mode: 0o644 },
     );
   }
+  // /run is tmpfs: the tmpfiles entry recreates the runtime directory on
+  // boot so no unit's ReadWritePaths points at a missing path.
+  const tmpfilesRoot = path.join(stageRoot, 'usr', 'lib', 'tmpfiles.d');
+  mkdirSync(tmpfilesRoot, { recursive: true, mode: 0o755 });
+  writeFileSync(
+    path.join(tmpfilesRoot, 'sdkwork-webserver.conf'),
+    readFileSync(path.join(DEB_TEMPLATE_ROOT, '..', 'tmpfiles', 'sdkwork-webserver.conf')),
+    { mode: 0o644 },
+  );
 
   // 5. DEBIAN control metadata and maintainer scripts.
   const debArchitecture = DEBIAN_ARCHITECTURES[settings.architecture];
@@ -631,6 +577,7 @@ function validateDeb(settings) {
   const requiredPaths = [
     './usr/lib/sdkwork/webserver/bin/sdkwork-api-webserver-standalone-gateway',
     `./usr/lib/systemd/system/${environment.serviceName}.service`,
+    './usr/lib/tmpfiles.d/sdkwork-webserver.conf',
     './usr/share/sdkwork/webserver/install-manifest.json',
     './usr/share/sdkwork/webserver/web/pc/index.html',
     './usr/share/sdkwork/webserver/web/h5/index.html',

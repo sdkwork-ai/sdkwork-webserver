@@ -295,32 +295,39 @@ if [ "${ENVIRONMENT}" = "test" ]; then
   fi
 fi
 
-# 10. Production environment: native public edge on :80/:443. The Rust data
-#     plane (sdkwork-webserver-website-delivery-edge-runtime) owns the edge —
-#     stock OpenResty/nginx MUST NOT serve SDKWork public domains
-#     (SDKWORK_WEBSERVER_SPEC §0.1). :80 answers ACME HTTP-01 challenges from
-#     the webroot; :443 terminates TLS with the certificate worker's published
-#     material and proxies to the gateway on 127.0.0.1:__INGRESS_PORT__.
+# 10. Production environment: native public edge on :80/:443. The gateway's
+#     nginx-compat data plane owns the edge — stock OpenResty/nginx MUST NOT
+#     serve SDKWork public domains (SDKWORK_WEBSERVER_SPEC §0.1). :80 answers
+#     ACME HTTP-01 challenges from the webroot; :443 terminates TLS from the
+#     tls-materials/active pair and proxies to the gateway on
+#     127.0.0.1:__INGRESS_PORT__.
 if [ "${ENVIRONMENT}" = "production" ]; then
   # Cold start: seed a bootstrap self-signed pair so :443 can open before the
-  # first issuance. `active` is a symlink the certificate worker replaces with
-  # the real issue; the data-plane TLS runtime hot-reloads the swap.
+  # first issuance. The pair lives OUTSIDE tls-materials/ because the
+  # certificate worker prunes material-root directories that its snapshot
+  # does not reference; `active` starts as a symlink to it and is relinked to
+  # the real issue at provisioning time, then the edge is restarted (the
+  # nginx-compat configuration materializes once per process).
   if [ ! -e "${DATA_ROOT}/tls-materials/active" ]; then
-    install -d -o sdkwork -g sdkwork -m 0700 "${DATA_ROOT}/tls-materials/bootstrap"
+    install -d -o sdkwork -g sdkwork -m 0700 "${DATA_ROOT}/tls-bootstrap"
     openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
-      -keyout "${DATA_ROOT}/tls-materials/bootstrap/privkey.pem" \
-      -out "${DATA_ROOT}/tls-materials/bootstrap/fullchain.pem" \
-      -days 30 -nodes -subj "/CN=${DOMAIN}" >/dev/null 2>&1
-    chown sdkwork:sdkwork "${DATA_ROOT}/tls-materials/bootstrap/fullchain.pem" \
-      "${DATA_ROOT}/tls-materials/bootstrap/privkey.pem"
-    chmod 0600 "${DATA_ROOT}/tls-materials/bootstrap/privkey.pem"
-    ln -s bootstrap "${DATA_ROOT}/tls-materials/active"
+      -keyout "${DATA_ROOT}/tls-bootstrap/privkey.pem" \
+      -out "${DATA_ROOT}/tls-bootstrap/fullchain.pem" \
+      -days 30 -nodes -subj "/CN=${DOMAIN}" \
+      -addext "subjectAltName=DNS:${DOMAIN}" >/dev/null 2>&1
+    chown sdkwork:sdkwork "${DATA_ROOT}/tls-bootstrap/fullchain.pem" \
+      "${DATA_ROOT}/tls-bootstrap/privkey.pem"
+    chmod 0600 "${DATA_ROOT}/tls-bootstrap/privkey.pem"
+    ln -sfn ../tls-bootstrap "${DATA_ROOT}/tls-materials/active"
   fi
   # Render the edge sidecar configuration (nginx-compat, consumed in-process
-  # by the Rust data plane — never by a stock nginx process).
-  sed -e "s|__DOMAIN__|${DOMAIN}|g" \
-      -e "s|__DATA_ROOT__|${DATA_ROOT}|g" \
-      -e "s|__INGRESS_PORT__|__INGRESS_PORT__|g" \
+  # by the gateway — never by a stock nginx process). __EDGE_*__ placeholders
+  # deliberately avoid the pack-time __TOKEN__ vocabulary: the right-hand
+  # __INGRESS_PORT__ below is substituted at pack time, the left-hand
+  # __EDGE_*__ patterns survive until this sed runs on the host.
+  sed -e "s|__EDGE_DOMAIN__|${DOMAIN}|g" \
+      -e "s|__EDGE_DATA_ROOT__|${DATA_ROOT}|g" \
+      -e "s|__EDGE_INGRESS_PORT__|__INGRESS_PORT__|g" \
       "${INSTALL_ROOT}/share/nginx.production.conf.template" \
       > "${CONFIG_ROOT}/nginx.production.conf"
   chown root:sdkwork "${CONFIG_ROOT}/nginx.production.conf"
@@ -333,6 +340,10 @@ if [ "${ENVIRONMENT}" = "production" ]; then
   fi
   systemctl enable sdkwork-webserver-edge >/dev/null 2>&1 || true
   systemctl restart sdkwork-webserver-edge >/dev/null 2>&1 || true
+  if ! systemctl is-active --quiet sdkwork-webserver-edge; then
+    log "edge unit failed to start; inspect: journalctl -u sdkwork-webserver-edge"
+    exit 1
+  fi
   systemctl enable sdkwork-webserver-certificate-worker >/dev/null 2>&1 || true
   systemctl start sdkwork-webserver-certificate-worker || true
 fi

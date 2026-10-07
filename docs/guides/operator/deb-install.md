@@ -13,18 +13,19 @@ Two installer families are produced per architecture (`dist/installers/`):
 `linux-rhel-*-server-rpm` package ids). Both share the same layout, the typed
 TOML runtime configuration, and the environment/database model.
 
-| Package | Environment | Domain | Ingress | Database |
-| --- | --- | --- | --- | --- |
-| `sdkwork-webserver_<version>_amd64.deb` / `sdkwork-webserver-<version>-1.x86_64.rpm` | production | `server.sdkwork.com` (nginx HTTPS) | `0.0.0.0:8080` | `sdkwork_ai_prod` (auto-initialized) |
-| `sdkwork-webserver-test_<version>_amd64.deb` / `sdkwork-webserver-test-<version>-1.x86_64.rpm` | test | `server-test.sdkwork.com` (hosts-bound) | `0.0.0.0:8888` | `sdkwork_ai_test` (auto-initialized) |
+| Package | Environment | Domain | Public Edge | Gateway | Database |
+| --- | --- | --- | --- | --- | --- |
+| `sdkwork-webserver_<version>_amd64.deb` / `sdkwork-webserver-<version>-1.x86_64.rpm` | production | `server.sdkwork.com` (native edge, :80/:443) | `sdkwork-webserver-edge.service` | `127.0.0.1:8080` | `sdkwork_ai_prod` (auto-initialized) |
+| `sdkwork-webserver-test_<version>_amd64.deb` / `sdkwork-webserver-test-<version>-1.x86_64.rpm` | test | `server-test.sdkwork.com` (hosts-bound) | — (plain ingress) | `0.0.0.0:8888` | `sdkwork_ai_test` (auto-initialized) |
 
 The environment differs in the ingress port (test `8888`, production `8080`)
 and in how traffic reaches the gateway: the test package binds the host name
 to `127.0.0.1` through `/etc/hosts` so `http://server-test.sdkwork.com:8888`
 works immediately, while the production package expects
-`server.sdkwork.com` DNS to point at the host and serves HTTPS through nginx
-(`:443` → `127.0.0.1:8080`), configuring ACME certificate issuance (see
-section 6).
+`server.sdkwork.com` DNS to point at the host, keeps the gateway on the
+loopback, and fronts it with the native public edge — the gateway's
+nginx-compat data plane on `:80`/`:443` (`sdkwork-webserver-edge.service`,
+section 6) — configuring ACME certificate issuance (see section 6).
 
 ## 2. Prerequisites
 
@@ -63,7 +64,8 @@ The `postinst` script performs, in order:
    `/etc/sdkwork/database/` directory is only used on multi-application hosts.
 4. Generates the typed runtime configuration
    `/etc/sdkwork/webserver/config.toml` (`0640`) with the profile,
-   ingress (test `0.0.0.0:8888`, production `0.0.0.0:8080`), runtime roots,
+   ingress (test `0.0.0.0:8888`, production `127.0.0.1:8080` behind the edge),
+   runtime roots,
    database settings, and secret file references (`RUNTIME_DIRECTORY_SPEC.md`
    section 4.1 runtime config file). The gateway, `db-migrate`, and the
    certificate worker load this file at startup and materialize it into the
@@ -72,8 +74,9 @@ The `postinst` script performs, in order:
 6. Registers and starts the `sdkwork-webserver` (or `sdkwork-webserver-test`)
    systemd service.
 7. Test package: appends `server-test.sdkwork.com → 127.0.0.1` to
-   `/etc/hosts`. Production package: generates the nginx site for ACME
-   `http-01` and HTTPS (section 6).
+   `/etc/hosts`. Production package: renders the native-edge sidecar for
+   ACME `http-01` and HTTPS (section 6) and starts
+   `sdkwork-webserver-edge`.
 
 ## 4. Installed Layout
 
@@ -104,7 +107,7 @@ startup; no `EnvironmentFile` is used). Sections:
 | Section | Purpose |
 | --- | --- |
 | `[profile]` | deployment profile, environment, profile id, snowflake node id |
-| `[ingress]` | public ingress bind (test `0.0.0.0:8888`, production `0.0.0.0:8080`), expose authorization, URL trio, CORS origins |
+| `[ingress]` | gateway bind (test `0.0.0.0:8888`, production loopback `127.0.0.1:8080` behind the edge), expose authorization, URL trio, CORS origins |
 | `[app_roots]` | `/usr/lib/sdkwork/webserver`, IAM/Drive roots, Adaptive Web PC/H5/static roots |
 | `[deploy]` | Deployments domain profile, Drive facade, internal API URLs + ingress token files |
 | `[database]` | workspace PostgreSQL identity (`sdkwork_ai_test`/`sdkwork_ai_prod`), `password_file` reference, auto-migrate |
@@ -148,12 +151,12 @@ curl -fsS http://server-test.sdkwork.com:8888/      # test package (hosts-bound)
 sudo -u sdkwork psql -h 127.0.0.1 -U sdkwork_ai_test -d sdkwork_ai_test -c '\dt'
 ```
 
-Production package (ingress port `8080`, HTTPS through nginx):
+Production package (gateway on the loopback, native edge on :80/:443):
 
 ```bash
-systemctl status sdkwork-webserver sdkwork-webserver-certificate-worker nginx
+systemctl status sdkwork-webserver sdkwork-webserver-edge sdkwork-webserver-certificate-worker
 curl -fsS http://127.0.0.1:8080/readyz
-curl -fsSk https://server.sdkwork.com/readyz        # nginx :443 -> 127.0.0.1:8080
+curl -fsSk https://server.sdkwork.com/readyz        # edge :443 -> 127.0.0.1:8080
 sudo -u sdkwork psql -h 127.0.0.1 -U sdkwork_ai_prod -d sdkwork_ai_prod -c '\dt'
 ```
 

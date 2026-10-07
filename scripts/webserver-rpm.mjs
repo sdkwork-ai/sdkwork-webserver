@@ -17,8 +17,6 @@
 //
 // rpmbuild runs natively on Linux; on Windows it is invoked through WSL.
 
-import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import {
   chmodSync,
   copyFileSync,
@@ -33,6 +31,16 @@ import {
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import {
+  appVersion,
+  archiveBaseName,
+  archivePath,
+  renderTemplate,
+  run,
+  runWslTool,
+  sha256File,
+  wslOrNative,
+} from './lib/package-helpers.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RELEASE_OUTPUT_ROOT = path.join(REPO_ROOT, 'dist', 'release');
@@ -102,17 +110,6 @@ const RPM_PACKAGE_IDS = Object.freeze({
   production: 'linux-rhel-x64-standalone-server-rpm',
 });
 
-function appVersion() {
-  const manifest = JSON.parse(
-    readFileSync(path.join(REPO_ROOT, 'sdkwork.app.config.json'), 'utf8'),
-  );
-  const version = manifest?.release?.currentVersion;
-  if (typeof version !== 'string' || version.length === 0) {
-    throw new Error('sdkwork.app.config.json release.currentVersion is missing');
-  }
-  return version;
-}
-
 function parseArgs(argv) {
   const settings = {
     operation: argv[0],
@@ -153,82 +150,16 @@ function parseArgs(argv) {
   return settings;
 }
 
-function run(command, args, options = {}) {
-  const result = spawnSync(command, args, {
-    cwd: options.cwd ?? REPO_ROOT,
-    encoding: 'utf8',
-    env: options.env ?? process.env,
-    stdio: options.capture ? 'pipe' : 'inherit',
-    timeout: options.timeoutMs ?? 10 * 60 * 1000,
-    maxBuffer: 16 * 1024 * 1024,
-    windowsHide: true,
-  });
-  if (result.error || result.status !== 0) {
-    const detail = result.error?.message ?? result.stderr?.trim() ?? `exit ${result.status}`;
-    throw new Error(`${command} ${args.join(' ')} failed: ${detail}`);
-  }
-  return result;
-}
-
-function archiveBaseName(settings) {
-  return (
-    `sdkwork-webserver-linux-${settings.architecture}-standalone-server-${settings.version}`
-  );
-}
-
-function archivePath(settings) {
-  return path.join(RELEASE_OUTPUT_ROOT, `${archiveBaseName(settings)}.tar.gz`);
-}
-
-function wslPath(windowsPath) {
-  const match = windowsPath.match(/^([A-Za-z]):\\(.*)$/);
-  if (!match) {
-    throw new Error(`cannot convert Windows path to WSL: ${windowsPath}`);
-  }
-  return `/mnt/${match[1].toLowerCase()}/${match[2].replace(/\\/g, '/')}`;
-}
-
-function wslOrNative(filePath) {
-  return process.platform === 'win32' ? wslPath(filePath) : filePath;
-}
-
 function runRpmBuild(args, env = {}) {
-  if (process.platform === 'win32') {
-    const shellArgs = args.map((arg) => (arg.includes(' ') ? `'${arg}'` : arg)).join(' ');
-    return run('wsl.exe', ['-d', 'Ubuntu-22.04', '-e', 'bash', '-lc', `rpmbuild ${shellArgs}`], {
-      capture: true,
-      env: { ...process.env, ...env },
-    });
-  }
-  return run('rpmbuild', args, { capture: true, env: { ...process.env, ...env } });
+  return runWslTool('rpmbuild', args, env);
 }
 
 function runRpm(args) {
-  if (process.platform === 'win32') {
-    const shellArgs = args.map((arg) => (arg.includes(' ') ? `'${arg}'` : arg)).join(' ');
-    return run('wsl.exe', ['-d', 'Ubuntu-22.04', '-e', 'bash', '-lc', `rpm ${shellArgs}`], {
-      capture: true,
-    });
-  }
-  return run('rpm', args, { capture: true });
-}
-
-function sha256File(filePath) {
-  const hash = createHash('sha256');
-  hash.update(readFileSync(filePath));
-  return hash.digest('hex');
-}
-
-function renderTemplate(templatePath, values) {
-  let text = readFileSync(templatePath, 'utf8');
-  for (const [key, value] of Object.entries(values)) {
-    text = text.split(`__${key}__`).join(value);
-  }
-  return text;
+  return runWslTool('rpm', args);
 }
 
 async function ensureReleaseArchive(settings) {
-  const archive = archivePath(settings);
+  const archive = archivePath(RELEASE_OUTPUT_ROOT, settings);
   if (existsSync(archive)) {
     return archive;
   }
@@ -308,6 +239,12 @@ async function assembleRpmStage(settings) {
       path.join(stageContainer, 'SOURCES', 'nginx.production.conf.template'),
     );
   }
+  // /run is tmpfs: the tmpfiles entry recreates the runtime directory on
+  // boot so no unit's ReadWritePaths points at a missing path.
+  copyFileSync(
+    path.join(DEB_TEMPLATE_ROOT, '..', 'tmpfiles', 'sdkwork-webserver.conf'),
+    path.join(stageContainer, 'SOURCES', 'sdkwork-webserver.tmpfiles.conf'),
+  );
 
   // Test package: PC runtime env override source (the archive is materialized
   // for standalone.production).
@@ -466,6 +403,7 @@ function validateRpm(settings) {
   const requiredPaths = [
     '/usr/lib/sdkwork/webserver/bin/sdkwork-api-webserver-standalone-gateway',
     `/usr/lib/systemd/system/${environment.serviceName}.service`,
+    '/usr/lib/tmpfiles.d/sdkwork-webserver.conf',
     '/usr/share/sdkwork/webserver/web/pc/index.html',
     '/usr/share/sdkwork/webserver/web/h5/index.html',
     '/usr/share/sdkwork/webserver/web/static/index.html',
@@ -489,7 +427,9 @@ function validateRpm(settings) {
         throw new Error(`installer is missing required path ${required}`);
       }
     }
-    if (contents.includes('/etc/nginx')) {
+    // Anchored per line: a bare substring would false-positive on any future
+    // payload path merely containing the sequence (e.g. a doc reference).
+    if (/^\/etc\/nginx(?:\/|$)/mu.test(contents)) {
       throw new Error('installer must not ship or generate stock nginx configuration');
     }
   }

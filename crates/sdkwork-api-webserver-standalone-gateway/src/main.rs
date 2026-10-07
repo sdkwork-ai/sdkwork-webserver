@@ -275,14 +275,27 @@ fn validate_nginx_compat(configured: Option<String>) -> MainResult<()> {
     for (file, error) in &loaded.skipped {
         tracing::warn!(file = %file.display(), error = %error, "nginx site skipped");
     }
+    // Validate exactly what serve runs: `load` materializes, but only
+    // `load_and_compile` applies the semantic validator (upstream URL
+    // parsing, listener invariants) — a conf that passes materialization
+    // alone can still fail compilation and crash-loop the edge at start.
+    // Every diagnostic is printed: an operator running validate must see
+    // WHY a configuration is rejected, not just that it was.
+    let compiled = loader.load_and_compile(&path, &options).map_err(|error| {
+        for diagnostic in error.diagnostics() {
+            eprintln!("diagnostic: {}: {}", diagnostic.path, diagnostic.message);
+        }
+        io::Error::other(format!("nginx compilation failed: {error}"))
+    })?;
+    let compiled_app = compiled.config();
     println!(
         "validated nginx compatibility: appKey={} virtualHosts={} listeners={} resources={} upstreams={} streams={} skipped={}",
-        loaded.app.app_key,
-        loaded.app.virtual_hosts.len(),
-        loaded.app.listeners.len(),
-        loaded.app.resources.len(),
-        loaded.app.upstreams.len(),
-        loaded.app.streams.len(),
+        compiled_app.app_key,
+        compiled_app.virtual_hosts.len(),
+        compiled_app.listeners.len(),
+        compiled_app.resources.len(),
+        compiled_app.upstreams.len(),
+        compiled_app.streams.len(),
         loaded.skipped.len(),
     );
     Ok(())

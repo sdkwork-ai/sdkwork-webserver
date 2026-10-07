@@ -30,7 +30,7 @@ Environment packages (same layout, different ingress/DB):
 | Package | Environment | Domain | Process bind | Host / edge |
 | --- | --- | --- | --- | --- |
 | `sdkwork-webserver-test` | test | `server-test.sdkwork.com` | `0.0.0.0:8888` | direct or `:80` → `8888` |
-| `sdkwork-webserver` | production | `server.sdkwork.com` | `0.0.0.0:8080` | nginx `:443` → `8080` |
+| `sdkwork-webserver` | production | `server.sdkwork.com` | `127.0.0.1:8080` | native edge `sdkwork-webserver-edge.service` on `:80`/`:443` → `8080` |
 
 Guides: [`deb-install.md`](./deb-install.md), [`bare-metal-install.md`](./bare-metal-install.md), [`docker-install.md`](./docker-install.md).
 
