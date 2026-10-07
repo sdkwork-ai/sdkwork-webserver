@@ -13,16 +13,11 @@ ENVIRONMENT="__ENVIRONMENT__"
 if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
   systemctl disable "${SERVICE_NAME}" >/dev/null 2>&1 || true
   systemctl disable sdkwork-webserver-certificate-worker >/dev/null 2>&1 || true
+  systemctl disable sdkwork-webserver-edge >/dev/null 2>&1 || true
   if [ "${ENVIRONMENT}" = "test" ]; then
     if [ -f /etc/hosts ]; then
       sed -i "/^127\.0\.0\.1[[:space:]]\+${DOMAIN}\$/d" /etc/hosts || true
     fi
-  fi
-  if [ -f /etc/nginx/sites-enabled/sdkwork-webserver ]; then
-    rm -f /etc/nginx/sites-enabled/sdkwork-webserver || true
-  fi
-  if [ -f /etc/nginx/sites-available/sdkwork-webserver ]; then
-    rm -f /etc/nginx/sites-available/sdkwork-webserver || true
   fi
 fi
 

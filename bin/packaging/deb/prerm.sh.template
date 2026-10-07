@@ -15,6 +15,9 @@ if [ "$1" = "remove" ] || [ "$1" = "upgrade" ] || [ "$1" = "deconfigure" ]; then
   if systemctl is-active --quiet "${SERVICE_NAME}" 2>/dev/null; then
     systemctl stop "${SERVICE_NAME}" >/dev/null 2>&1 || true
   fi
+  if systemctl is-active --quiet sdkwork-webserver-edge 2>/dev/null; then
+    systemctl stop sdkwork-webserver-edge >/dev/null 2>&1 || true
+  fi
   if systemctl is-active --quiet sdkwork-webserver-certificate-worker 2>/dev/null; then
     systemctl stop sdkwork-webserver-certificate-worker >/dev/null 2>&1 || true
   fi

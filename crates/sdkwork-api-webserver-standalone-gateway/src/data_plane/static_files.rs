@@ -83,6 +83,13 @@ pub async fn serve_static(
 /// never hand one renderer's representation to the other device class.
 const ADAPTIVE_VARY_VALUE: &str = "User-Agent, Sec-CH-UA-Mobile";
 
+/// Upper bound for any `index.html` the process reads for token injection:
+/// the SPA data-plane fallback read here, and the management-gated shell
+/// preflight in `app_shell`, which imports this constant. Lives on the
+/// always-compiled data plane so the gateway lib builds without the
+/// `management` feature.
+pub(crate) const MAX_BOOTSTRAP_FILE_BYTES: u64 = 4 * 1024 * 1024;
+
 fn with_adaptive_vary_if_spa(
     mut response: Response<Body>,
     spa_fallback: Option<&str>,
@@ -187,9 +194,9 @@ async fn serve_spa_index_with_credential_entry_bootstrap(
         let mut buffer = Vec::new();
         handle
             .by_ref()
-            .take(crate::app_shell::MAX_BOOTSTRAP_FILE_BYTES + 1)
+            .take(MAX_BOOTSTRAP_FILE_BYTES + 1)
             .read_to_end(&mut buffer)?;
-        if buffer.len() as u64 > crate::app_shell::MAX_BOOTSTRAP_FILE_BYTES {
+        if buffer.len() as u64 > MAX_BOOTSTRAP_FILE_BYTES {
             return Err(std::io::Error::other(
                 "SPA fallback index exceeds the bootstrap file cap",
             ));

@@ -1,0 +1,36 @@
+[Unit]
+Description=SDKWork Web Server public edge (__ENVIRONMENT__)
+After=network-online.target postgresql.service __SERVICE_NAME__.service
+Wants=network-online.target __SERVICE_NAME__.service
+
+[Service]
+Type=simple
+User=sdkwork
+Group=sdkwork
+# The Rust data plane owns :80/:443 directly (SDKWORK_WEBSERVER_SPEC §0.1:
+# stock OpenResty/nginx MUST NOT serve SDKWork public domains). Binding the
+# privileged ports needs exactly one ambient capability — no root identity.
+# Wants (not Requires): the edge answers 502 while the gateway restarts
+# instead of being torn down with it.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+# The nginx-compat configuration materializes once at start (multi-file
+# configs have no single-file revision watch); a TLS material swap is applied
+# with `systemctl restart sdkwork-webserver-edge` after `active` is relinked.
+ExecStart=/usr/lib/sdkwork/webserver/bin/sdkwork-api-webserver-standalone-gateway serve-nginx /etc/sdkwork/webserver/nginx.production.conf
+Restart=on-failure
+RestartSec=5s
+# Lifecycle budgets mirror the gateway unit: bounded drain on stop, a
+# start budget that covers config materialization plus first TLS load.
+TimeoutStopSec=45
+TimeoutStartSec=90
+LimitNOFILE=65536
+MemoryMax=2G
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/sdkwork/webserver /run/sdkwork/webserver
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

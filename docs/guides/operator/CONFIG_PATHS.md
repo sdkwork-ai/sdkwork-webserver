@@ -10,9 +10,9 @@ Two configuration systems work together:
 | System | Role | Where |
 | --- | --- | --- |
 | **SDKWork process runtime** | Adaptive Web PC/H5, API, secrets, DB, ACME | `/etc/sdkwork/webserver/config.toml` (+ env overrides) |
-| **Nginx / nginx-compat edge** | TLS terminate, reverse-proxy, stream | `deployments/webserver/server.*.toml` → sidecars, or stock `/etc/nginx/sites-enabled/sdkwork/*.conf`, or `serve-nginx` |
+| **Nginx-compat edge (in-process)** | TLS terminate, reverse-proxy, stream | `deployments/webserver/server.*.toml` → sidecars, or `/etc/sdkwork/webserver/nginx.production.conf` (deb/rpm production edge unit), or `serve-nginx` |
 
-Edge stays proxy-only for this product (`expose.mode: api`). Built-in console pages are served by process `AdaptiveAppShell`, not by nginx `root`.
+Edge stays proxy-only for this product (`expose.mode: api`). Built-in console pages are served by process `AdaptiveAppShell`, not by nginx `root`. Stock OpenResty/nginx MUST NOT serve SDKWork public domains — every edge configuration above is consumed in-process by the Rust data plane.
 
 ---
 
@@ -120,17 +120,15 @@ Validate: `pnpm check:webserver-toml`.
 
 | Path | Purpose |
 | --- | --- |
-| `/etc/nginx/sites-available/sdkwork/<domain>.conf` | Generated operator sites |
-| `/etc/nginx/sites-enabled/sdkwork/<domain>.conf` | Enabled sites (symlink) |
-| `/etc/nginx/sites-available/sdkwork-webserver` | Production deb ACME/HTTPS site (postinst) |
-| Stock nginx | `systemctl` nginx, or replaced by |
-| `serve-nginx /etc/nginx/sites-enabled/sdkwork` | Same binary, nginx-compat data plane |
+| `/etc/sdkwork/webserver/nginx.production.conf` | Production deb/rpm public-edge sidecar (rendered by postinst, served by `sdkwork-webserver-edge.service`) |
+| `/var/lib/sdkwork/webserver/tls-materials/active/` | TLS material the edge terminates with; `fullchain.pem` + `privkey.pem` |
+| `serve-nginx <path>` | Same binary, nginx-compat data plane for an explicit config path or sites directory |
 
 nginx-compat commands:
 
 ```bash
-/usr/lib/sdkwork/webserver/bin/sdkwork-api-webserver-standalone-gateway validate-nginx /etc/nginx/sites-enabled/sdkwork
-/usr/lib/sdkwork/webserver/bin/sdkwork-api-webserver-standalone-gateway serve-nginx /etc/nginx/sites-enabled/sdkwork
+…/sdkwork-api-webserver-standalone-gateway validate-nginx /etc/sdkwork/webserver/nginx.production.conf
+…/sdkwork-api-webserver-standalone-gateway serve-nginx /etc/sdkwork/webserver/nginx.production.conf
 ```
 
 Docker WSL site helper (**retired** — host nginx is replaced by the
@@ -209,5 +207,5 @@ curl -fsS http://127.0.0.1:18888/healthz
 curl -fsS http://127.0.0.1:18080/healthz
 
 # nginx-compat
-…/sdkwork-api-webserver-standalone-gateway validate-nginx /etc/nginx/sites-enabled/sdkwork
+…/sdkwork-api-webserver-standalone-gateway validate-nginx /etc/sdkwork/webserver/nginx.production.conf
 ```

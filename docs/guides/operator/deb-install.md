@@ -167,38 +167,45 @@ with `sudo -u sdkwork /usr/lib/sdkwork/webserver/bin/sdkwork-api-webserver-stand
 
 ## 6. Production HTTPS And ACME
 
-The production package configures nginx:
-
-Declarative Web configuration sources are maintained under `deployments/webserver/`;
-installed nginx sites are written to `/etc/nginx/sites-enabled/sdkwork/<domain>.conf`.
+The production package runs the **native public edge**: the gateway's
+nginx-compat data plane (`sdkwork-webserver-edge.service`,
+`sdkwork-api-webserver-standalone-gateway serve-nginx`) binds `:80`/`:443`
+directly from a rendered sidecar at
+`/etc/sdkwork/webserver/nginx.production.conf`. Stock OpenResty/nginx is never
+installed — it MUST NOT serve SDKWork public domains
+(`SDKWORK_WEBSERVER_SPEC.md` §0.1); the webserver process is the only edge.
 
 - `:80` serves the ACME `http-01` webroot
   (`/var/lib/sdkwork/webserver/acme-webroot`) and redirects to HTTPS.
-- `:443` terminates TLS and proxies to `127.0.0.1:8080`.
+- `:443` terminates TLS and proxies to `127.0.0.1:8080`, where the gateway
+  (`sdkwork-webserver.service`) listens on the loopback only.
 
 Certificates are issued by the certificate worker
 (`sdkwork-webserver-certificate-worker.service`) into
 `/var/lib/sdkwork/webserver/tls-materials/<uuid>/` as `fullchain.pem` and
 `privkey.pem` (`tls_material_distribution.rs`). Before first issuance,
 `server.sdkwork.com` must resolve to this host and `:80` must be reachable
-from the Internet. Symlink the active issue so nginx reloads it:
+from the Internet. The postinst seeds a bootstrap self-signed pair so `:443`
+opens on cold start; after issuance, point `active` at the real issue and
+restart the edge (the nginx-compat configuration materializes once per
+process, so the restart is the material-swap boundary):
 
 ```bash
 sudo ln -sfn /var/lib/sdkwork/webserver/tls-materials/<uuid> \
   /var/lib/sdkwork/webserver/tls-materials/active
-sudo systemctl reload nginx
+sudo systemctl restart sdkwork-webserver-edge
 ```
 
 Renewal is automatic (`SDKWORK_WEBSERVER_CERT_RENEW_SCAN_INTERVAL_SECS`);
-after each renewal relink `active` (a future release wires the worker to
-nginx reload).
+each renewal republishes the issue — relink `active` and restart the edge
+once per renewal (~60 days).
 
 ## 7. Lifecycle
 
 - **Upgrade**: `sudo apt install ./sdkwork-webserver_<new>.deb`; `postinst`
   reuses the existing database secret and migrates the schema.
 - **Remove**: `sudo apt remove sdkwork-webserver-test` stops and disables the
-  service and removes the nginx site; `/etc/sdkwork/webserver`,
+  services; `/etc/sdkwork/webserver`,
   `/var/lib/sdkwork/webserver`, and the database are preserved.
 - **Purge**: `sudo apt purge sdkwork-webserver-test` additionally removes
   `/etc/sdkwork/webserver`, `/var/lib/sdkwork/webserver`,

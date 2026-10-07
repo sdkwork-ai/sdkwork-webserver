@@ -83,6 +83,9 @@ const ENVIRONMENTS = Object.freeze({
     serviceName: 'sdkwork-webserver-test',
     domain: 'server-test.sdkwork.com',
     ingressPort: 8888,
+    // Test has no TLS material lifecycle, so the gateway stays directly
+    // reachable on its plain ingress (the native edge unit is production-only).
+    gatewayBind: '0.0.0.0:8888',
     publicUrl: 'http://server-test.sdkwork.com:8888',
     // Canonical unified workspace PostgreSQL identity (ENVIRONMENT_SPEC section 7.1).
     databaseName: 'sdkwork_ai_test',
@@ -90,6 +93,7 @@ const ENVIRONMENTS = Object.freeze({
     acmeProfile: 'staging',
     acmeDirectoryUrl: 'https://acme-staging-v02.api.letsencrypt.org/directory',
     certificateWorker: false,
+    publicEdge: false,
     description: 'SDKWork Web Server standalone gateway installer (test environment)',
   },
   production: {
@@ -97,6 +101,11 @@ const ENVIRONMENTS = Object.freeze({
     serviceName: 'sdkwork-webserver',
     domain: 'server.sdkwork.com',
     ingressPort: 8080,
+    // The native public edge unit (Rust data plane on :80/:443) fronts the
+    // gateway; the gateway itself stays on the loopback so :8080 is never a
+    // second public face (SDKWORK_WEBSERVER_SPEC §0.1: the webserver process
+    // owns the public edge, stock nginx must not).
+    gatewayBind: '127.0.0.1:8080',
     publicUrl: 'https://server.sdkwork.com',
     // Canonical unified workspace PostgreSQL identity (ENVIRONMENT_SPEC section 7.1).
     databaseName: 'sdkwork_ai_prod',
@@ -104,6 +113,7 @@ const ENVIRONMENTS = Object.freeze({
     acmeProfile: 'production',
     acmeDirectoryUrl: 'https://acme-v02.api.letsencrypt.org/directory',
     certificateWorker: true,
+    publicEdge: true,
     description: 'SDKWork Web Server standalone gateway installer (production environment)',
   },
 });
@@ -434,6 +444,25 @@ async function assembleDebStage(settings) {
       { mode: 0o644 },
     );
   }
+  if (environment.publicEdge) {
+    // The native public edge: the Rust data plane binds :80/:443 from a
+    // rendered nginx-compat sidecar; stock nginx is never installed.
+    writeFileSync(
+      path.join(unitRoot, 'sdkwork-webserver-edge.service'),
+      renderTemplate(path.join(DEB_TEMPLATE_ROOT, 'sdkwork-webserver-edge.service.template'), {
+        ...unitValues,
+        SERVICE_NAME: environment.serviceName,
+      }),
+      { mode: 0o644 },
+    );
+    const shareConfRoot = path.join(libRoot, 'share');
+    mkdirSync(shareConfRoot, { recursive: true, mode: 0o755 });
+    writeFileSync(
+      path.join(shareConfRoot, 'nginx.production.conf.template'),
+      readFileSync(path.join(DEB_TEMPLATE_ROOT, 'nginx.production.conf.template')),
+      { mode: 0o644 },
+    );
+  }
 
   // 5. DEBIAN control metadata and maintainer scripts.
   const debArchitecture = DEBIAN_ARCHITECTURES[settings.architecture];
@@ -458,8 +487,8 @@ async function assembleDebStage(settings) {
     ' SDKWork standards-aligned HTTP web server control plane and immutable',
     ' static-site/Wiki delivery data plane.',
     ' .',
-    ` Installs the standalone gateway on 0.0.0.0:${environment.ingressPort} bound to ${environment.domain} with`,
-    ' an auto-initialized PostgreSQL database, systemd service, and runtime',
+    ` Installs the standalone gateway${environment.publicEdge ? ` (loopback :${environment.ingressPort}) behind the native public edge on :80/:443` : ` on ${environment.gatewayBind}`} for ${environment.domain} with`,
+    ' an auto-initialized PostgreSQL database, systemd services, and runtime',
     ' directories per RUNTIME_DIRECTORY_SPEC section 4.1.',
     '',
   ].join('\n');
@@ -475,7 +504,7 @@ async function assembleDebStage(settings) {
     SERVICE_NAME: environment.serviceName,
     VERSION: settings.version,
     PUBLIC_URL: environment.publicUrl,
-    INGRESS_BIND: `0.0.0.0:${environment.ingressPort}`,
+    INGRESS_BIND: environment.gatewayBind,
     INGRESS_PORT: String(environment.ingressPort),
     INTERNAL_API_URL: `http://127.0.0.1:${environment.ingressPort}`,
     ACME_PROFILE: environment.acmeProfile,
@@ -505,7 +534,7 @@ async function assembleDebStage(settings) {
     distribution: 'ubuntu',
     architecture: debArchitecture,
     domain: environment.domain,
-    ingressBind: `0.0.0.0:${environment.ingressPort}`,
+    ingressBind: environment.gatewayBind,
     sourceArchive: `${archiveBaseName(settings)}.tar.gz`,
     content: manifestFiles.sort((left, right) => (left.path < right.path ? -1 : 1)),
   };
@@ -615,6 +644,19 @@ function validateDeb(settings) {
   if (environment.certificateWorker
     && !contents.includes('./usr/lib/systemd/system/sdkwork-webserver-certificate-worker.service')) {
     throw new Error('installer is missing the certificate worker unit');
+  }
+  if (environment.publicEdge) {
+    for (const required of [
+      './usr/lib/systemd/system/sdkwork-webserver-edge.service',
+      './usr/lib/sdkwork/webserver/share/nginx.production.conf.template',
+    ]) {
+      if (!contents.includes(required)) {
+        throw new Error(`installer is missing required path ${required}`);
+      }
+    }
+    if (contents.includes('./etc/nginx')) {
+      throw new Error('installer must not ship or generate stock nginx configuration');
+    }
   }
   console.log(
     `[sdkwork-webserver-deb] validated package=${environment.packageName} version=${settings.version} arch=${debArchitecture} bytes=${statSync(debPath).size}`,

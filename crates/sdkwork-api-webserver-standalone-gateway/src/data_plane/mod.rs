@@ -35,7 +35,7 @@ mod runtime;
 mod server;
 mod smooth_weighted;
 pub(crate) mod static_file_response;
-mod static_files;
+pub(crate) mod static_files;
 pub(crate) mod static_path;
 mod stream_proxy;
 mod sub_filter;

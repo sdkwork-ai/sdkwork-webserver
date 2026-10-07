@@ -1,0 +1,46 @@
+# SDKWork Web Server public edge configuration (__ENVIRONMENT__).
+# Rendered by the postinst from
+# /usr/lib/sdkwork/webserver/share/nginx.production.conf.template and served
+# by the Rust data plane (sdkwork-webserver-website-delivery-edge-runtime).
+# This is an nginx-COMPAT sidecar consumed in-process by the webserver —
+# stock OpenResty/nginx MUST NOT serve SDKWork public domains
+# (SDKWORK_WEBSERVER_SPEC §0.1).
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __DOMAIN__;
+
+    # ACME HTTP-01 webroot: the certificate worker writes challenges here,
+    # and this listener answers them before any certificate exists.
+    location /.well-known/acme-challenge/ {
+        root __DATA_ROOT__/acme-webroot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name __DOMAIN__;
+
+    # Published by the certificate worker under
+    # __DATA_ROOT__/tls-materials/<uuid>/ and swapped into active/ on every
+    # successful (re)issuance; the data-plane TLS runtime polls and hot-reloads
+    # the material without a restart. The postinst seeds a bootstrap
+    # self-signed pair on cold start so :443 opens before the first issuance.
+    ssl_certificate __DATA_ROOT__/tls-materials/active/fullchain.pem;
+    ssl_certificate_key __DATA_ROOT__/tls-materials/active/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:__INGRESS_PORT__;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

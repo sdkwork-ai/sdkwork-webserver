@@ -21,6 +21,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -62,13 +63,16 @@ const ENVIRONMENTS = Object.freeze({
     serviceName: 'sdkwork-webserver-test',
     domain: 'server-test.sdkwork.com',
     ingressPort: 8888,
+    // Test has no TLS material lifecycle, so the gateway stays directly
+    // reachable on its plain ingress (the native edge unit is production-only).
+    gatewayBind: '0.0.0.0:8888',
     publicUrl: 'http://server-test.sdkwork.com:8888',
     databaseName: 'sdkwork_ai_test',
     databaseUser: 'sdkwork_ai_test',
     acmeProfile: 'staging',
     acmeDirectoryUrl: 'https://acme-staging-v02.api.letsencrypt.org/directory',
     certificateWorker: false,
-    nginxRequires: '',
+    publicEdge: false,
     description: 'SDKWork Web Server standalone gateway installer (test environment)',
   },
   production: {
@@ -76,13 +80,18 @@ const ENVIRONMENTS = Object.freeze({
     serviceName: 'sdkwork-webserver',
     domain: 'server.sdkwork.com',
     ingressPort: 8080,
+    // The native public edge unit (Rust data plane on :80/:443) fronts the
+    // gateway; the gateway itself stays on the loopback so :8080 is never a
+    // second public face (SDKWORK_WEBSERVER_SPEC §0.1: the webserver process
+    // owns the public edge, stock nginx must not).
+    gatewayBind: '127.0.0.1:8080',
     publicUrl: 'https://server.sdkwork.com',
     databaseName: 'sdkwork_ai_prod',
     databaseUser: 'sdkwork_ai_prod',
     acmeProfile: 'production',
     acmeDirectoryUrl: 'https://acme-v02.api.letsencrypt.org/directory',
     certificateWorker: true,
-    nginxRequires: 'Requires:       nginx\n',
+    publicEdge: true,
     description: 'SDKWork Web Server standalone gateway installer (production environment)',
   },
 });
@@ -283,6 +292,22 @@ async function assembleRpmStage(settings) {
       { mode: 0o644 },
     );
   }
+  if (environment.publicEdge) {
+    // The native public edge: the Rust data plane binds :80/:443 from a
+    // rendered nginx-compat sidecar; stock nginx is never installed.
+    writeFileSync(
+      path.join(stageContainer, 'SOURCES', 'sdkwork-webserver-edge.service'),
+      renderTemplate(path.join(DEB_TEMPLATE_ROOT, 'sdkwork-webserver-edge.service.template'), {
+        ...unitValues,
+        SERVICE_NAME: environment.serviceName,
+      }),
+      { mode: 0o644 },
+    );
+    copyFileSync(
+      path.join(DEB_TEMPLATE_ROOT, 'nginx.production.conf.template'),
+      path.join(stageContainer, 'SOURCES', 'nginx.production.conf.template'),
+    );
+  }
 
   // Test package: PC runtime env override source (the archive is materialized
   // for standalone.production).
@@ -313,6 +338,22 @@ async function assembleRpmStage(settings) {
   const certWorkerFile = environment.certificateWorker
     ? '/usr/lib/systemd/system/sdkwork-webserver-certificate-worker.service'
     : '';
+  // The native public edge: the Rust data plane binds :80/:443 from a rendered
+  // nginx-compat sidecar; stock nginx is never installed (SDKWORK_WEBSERVER_SPEC
+  // §0.1). Production only — test has no TLS material lifecycle.
+  const edgeUnit = environment.publicEdge
+    ? 'install -m 0644 %{_sourcedir}/sdkwork-webserver-edge.service \\\n'
+      + '  %{buildroot}/usr/lib/systemd/system/sdkwork-webserver-edge.service\n'
+      + 'install -d -m 0755 %{buildroot}/usr/lib/sdkwork/webserver/share\n'
+      + 'install -m 0644 %{_sourcedir}/nginx.production.conf.template \\\n'
+      + '  %{buildroot}/usr/lib/sdkwork/webserver/share/nginx.production.conf.template'
+    : '';
+  const edgeFile = environment.publicEdge
+    ? '/usr/lib/systemd/system/sdkwork-webserver-edge.service'
+    : '';
+  const edgeDescription = environment.publicEdge
+    ? ` (loopback :${environment.ingressPort}) behind the native public edge on :80/:443`
+    : ` on ${environment.gatewayBind}`;
 
   const specValues = {
     RPM_NAME: environment.packageName,
@@ -323,17 +364,19 @@ async function assembleRpmStage(settings) {
     SERVICE_NAME: environment.serviceName,
     VERSION: settings.version,
     PUBLIC_URL: environment.publicUrl,
-    INGRESS_BIND: `0.0.0.0:${environment.ingressPort}`,
+    INGRESS_BIND: environment.gatewayBind,
     INGRESS_PORT: String(environment.ingressPort),
     INTERNAL_API_URL: `http://127.0.0.1:${environment.ingressPort}`,
     ACME_PROFILE: environment.acmeProfile,
     ACME_DIRECTORY_URL: environment.acmeDirectoryUrl,
     CONFLICTS: conflictingPackage,
-    NGINX_REQUIRES: environment.nginxRequires,
     PC_SOURCE1: pcSource1,
     PC_RUNTIME_ENV_OVERRIDE: pcRuntimeEnvOverride,
     CERT_WORKER_UNIT: certWorkerUnit,
     CERT_WORKER_FILE: certWorkerFile,
+    EDGE_UNIT: edgeUnit,
+    EDGE_FILE: edgeFile,
+    EDGE_DESCRIPTION: edgeDescription,
   };
   const specPath = path.join(stageContainer, 'SPECS', `${environment.packageName}.spec`);
   writeFileSync(
@@ -436,6 +479,19 @@ function validateRpm(settings) {
   if (environment.certificateWorker
     && !contents.includes('/usr/lib/systemd/system/sdkwork-webserver-certificate-worker.service')) {
     throw new Error('installer is missing the certificate worker unit');
+  }
+  if (environment.publicEdge) {
+    for (const required of [
+      '/usr/lib/systemd/system/sdkwork-webserver-edge.service',
+      '/usr/lib/sdkwork/webserver/share/nginx.production.conf.template',
+    ]) {
+      if (!contents.includes(required)) {
+        throw new Error(`installer is missing required path ${required}`);
+      }
+    }
+    if (contents.includes('/etc/nginx')) {
+      throw new Error('installer must not ship or generate stock nginx configuration');
+    }
   }
   const scripts = runRpm(['-qp', '--scripts', wslOrNative(rpmPath)]).stdout;
   for (const script of ['postinstall scriptlet', 'preuninstall scriptlet', 'postuninstall scriptlet']) {
