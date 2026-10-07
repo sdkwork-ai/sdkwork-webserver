@@ -2409,12 +2409,6 @@ importers:
         specifier: ^7.18.4
         version: 7.18.4(react-dom@19.3.0(react@19.2.8))(react@19.2.8)
 
-  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-nginx:
-    dependencies:
-      '@sdkwork/webserver-pc-commons':
-        specifier: workspace:*
-        version: link:../sdkwork-webserver-pc-commons
-
   apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-plugins:
     dependencies:
       '@sdkwork/sdk-common':
@@ -2429,36 +2423,6 @@ importers:
       '@sdkwork/webserver-pc-console-plugins':
         specifier: workspace:*
         version: link:../sdkwork-webserver-pc-console-plugins
-      react:
-        specifier: 'catalog:'
-        version: 19.2.8
-      react-router-dom:
-        specifier: ^7.18.4
-        version: 7.18.4(react-dom@19.3.0(react@19.2.8))(react@19.2.8)
-
-  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-servers:
-    dependencies:
-      '@sdkwork/webserver-pc-commons':
-        specifier: workspace:*
-        version: link:../sdkwork-webserver-pc-commons
-
-  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-servers-explorer:
-    dependencies:
-      '@sdkwork/sdk-common':
-        specifier: workspace:*
-        version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
-      '@sdkwork/ui-pc-react':
-        specifier: workspace:*
-        version: link:../../../../../sdkwork-ui/sdkwork-ui-pc-react
-      '@sdkwork/webserver-pc-admin-core':
-        specifier: workspace:*
-        version: link:../sdkwork-webserver-pc-admin-core
-      '@sdkwork/webserver-pc-commons':
-        specifier: workspace:*
-        version: link:../sdkwork-webserver-pc-commons
-      lucide-react:
-        specifier: 'catalog:'
-        version: 1.52.0(@types/react@19.3.0)(react@19.2.8)
       react:
         specifier: 'catalog:'
         version: 19.2.8
