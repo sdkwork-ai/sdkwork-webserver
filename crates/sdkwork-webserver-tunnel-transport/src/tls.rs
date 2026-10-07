@@ -4,26 +4,16 @@
 
 use std::sync::Arc;
 
-use sha2::{Digest, Sha256};
 use std::io::Read;
 
+use sdkwork_utils_rust::crypto::sha256_hash;
 use sdkwork_webserver_tunnel_core::{Result, TunnelError, ValidationField};
 
 use crate::{RemoteEndpoint, TUNNEL_ALPN};
 
 /// SHA-256 hex fingerprint of a DER-encoded certificate.
 pub fn certificate_sha256_hex(der: &[u8]) -> String {
-    let digest = Sha256::digest(der);
-    hex_lower(&digest)
-}
-
-fn hex_lower(bytes: &[u8]) -> String {
-    let mut text = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        text.push(char::from_digit(u32::from(byte >> 4), 16).expect("hex digit"));
-        text.push(char::from_digit(u32::from(byte & 0x0F), 16).expect("hex digit"));
-    }
-    text
+    sha256_hash(der)
 }
 
 /// A self-signed development certificate and its private key, both PEM.
