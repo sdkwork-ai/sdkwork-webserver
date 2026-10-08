@@ -4,12 +4,12 @@ use std::sync::Arc;
 
 use chrono::{Duration, Utc};
 use sdkwork_webserver_acme_service::{
-    contains_wildcard_identifier, AcmeServiceError, CertificateIssuer, ChallengePlan,
-    DeclaredChallengeMethod,
+    AcmeServiceError, CertificateIssuer, ChallengePlan, DeclaredChallengeMethod,
+    contains_wildcard_identifier,
 };
 use sdkwork_webserver_contract::{
-    CertificateIssueUpdate, CertificateOperationCycleReport, CertificateOperationLease,
-    WebServiceResult, CERTIFICATE_SCOPE_SINGLE_DOMAIN, CERTIFICATE_SCOPE_WILDCARD,
+    CERTIFICATE_SCOPE_SINGLE_DOMAIN, CERTIFICATE_SCOPE_WILDCARD, CertificateIssueUpdate,
+    CertificateOperationCycleReport, CertificateOperationLease, WebServiceResult,
 };
 use tokio::task::JoinSet;
 
@@ -485,8 +485,8 @@ fn certificate_issuer_failure_detail(error: &AcmeServiceError) -> Option<String>
 #[cfg(test)]
 mod tests {
     use super::{
-        certificate_issuer_failure_code, certificate_issuer_failure_detail,
-        certificate_retry_deadlines, CERTIFICATE_RETRY_MAX_SECS,
+        CERTIFICATE_RETRY_MAX_SECS, certificate_issuer_failure_code,
+        certificate_issuer_failure_detail, certificate_retry_deadlines,
     };
     use chrono::{DateTime, Utc};
     use sdkwork_webserver_acme_service::AcmeServiceError;

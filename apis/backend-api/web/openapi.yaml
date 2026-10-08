@@ -887,6 +887,117 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /backend/v3/api/root_domains/{rootDomainId}/dns_records:
+    parameters:
+    - $ref: '#/components/parameters/RootDomainIdParam'
+    get:
+      operationId: rootDomains.dnsRecords.list
+      summary: List a root-domain Zone's synced DNS resolution records
+      description: >-
+        Pages the resolution-record snapshot the last cloud-account sync read
+        from the provider: record type and record content (the resolution IP
+        for A/AAAA, the target for CNAME/MX) per owner. The read never
+        contacts the provider — `rootDomains.dnsRecords.sync` does that. A
+        record whose owner matches no registered hostname still shows here at
+        Zone scope; a record matched to a hostname deleted after the sync does
+        not.
+      x-sdkwork-pagination-mode: offset
+      tags:
+      - domain
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.applications.read
+      x-sdkwork-owner: sdkwork-webserver
+      parameters:
+      - $ref: '#/components/parameters/PageParam'
+      - $ref: '#/components/parameters/PageSizeParam'
+      - name: domain_id
+        in: query
+        description: >-
+          Restrict the page to one registered subdomain by id. The sync has
+          already applied the wildcard semantics when it stamped each record
+          with its subdomain — a wildcard declaration's rows are its base
+          owner and every owner beneath it — so the filter is one equality,
+          not a name match.
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Root-domain Zone resolution records returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - items
+                      - pageInfo
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/DomainDnsRecordResponse'
+                        pageInfo:
+                          $ref: '#/components/schemas/PageInfo'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /backend/v3/api/root_domains/{rootDomainId}/dns_records/sync:
+    parameters:
+    - $ref: '#/components/parameters/RootDomainIdParam'
+    post:
+      operationId: rootDomains.dnsRecords.sync
+      summary: Sync a root-domain Zone's resolution records through its cloud account
+      description: >-
+        Re-reads the Zone's record inventory from its DNS provider through the
+        Zone's cloud account — the bound account when one is pinned, otherwise
+        the registered account whose zone covers the apex — and replaces the
+        stored snapshot whole. Two syncs in a row answer with equivalent
+        snapshots, so the operation is idempotent.
+      tags:
+      - domain
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.applications.write
+      x-sdkwork-idempotent: true
+      x-sdkwork-owner: sdkwork-webserver
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Resolution records synced successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/DomainDnsSyncResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /backend/v3/api/domains:
     get:
       operationId: domains.list
@@ -4889,6 +5000,87 @@ components:
         updatedAt:
           type: string
           format: date-time
+    DomainDnsRecordResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - recordName
+      - recordType
+      - recordValue
+      - dnsProvider
+      - cloudAccountId
+      - syncedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        recordName:
+          type: string
+          description: Absolute record owner inside the zone, e.g. `www.example.com`.
+        recordType:
+          type: string
+          maxLength: 16
+          description: Record type as the provider spells it (A, AAAA, CNAME, TXT, MX).
+        recordValue:
+          type: string
+          maxLength: 1024
+          description: Record content — the resolution IP for A/AAAA, the target for CNAME/MX.
+        ttlSeconds:
+          type: integer
+          minimum: 0
+        priority:
+          type: integer
+          minimum: 0
+          description: Priority for the record types that carry one (MX, SRV).
+        recordLine:
+          type: string
+          maxLength: 64
+          description: Provider resolution line, when the provider splits one owner per line.
+        domainId:
+          type: string
+          format: uuid
+          description: The registered subdomain this record resolves; absent when its owner matches none.
+        dnsProvider:
+          type: string
+          maxLength: 32
+          description: Provider family the snapshot was read from.
+        cloudAccountId:
+          type: string
+          maxLength: 128
+          description: The cloud account the snapshot was read through.
+        providerRecordRef:
+          type: string
+          maxLength: 128
+          description: Provider-assigned record identity, when the provider returned one.
+        syncedAt:
+          type: string
+          format: date-time
+          description: When this row was read from the provider.
+    DomainDnsSyncResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - recordCount
+      - syncedAt
+      - zoneApex
+      - dnsProvider
+      - cloudAccountId
+      properties:
+        recordCount:
+          $ref: '#/components/schemas/Int64String'
+        syncedAt:
+          type: string
+          format: date-time
+        zoneApex:
+          type: string
+          description: The zone apex the provider inventory was read for.
+        dnsProvider:
+          type: string
+          maxLength: 32
+        cloudAccountId:
+          type: string
+          maxLength: 128
     DomainDeploymentResponse:
       type: object
       additionalProperties: false

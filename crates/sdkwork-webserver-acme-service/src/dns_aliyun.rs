@@ -17,11 +17,11 @@ use serde::Deserialize;
 use sha1::Sha1;
 
 use crate::dns::{
-    absolute_record_name, normalize_dns_name, Dns01Presenter, Dns01RecordHandle,
-    Dns01RecordRequest, DnsAccountVerification, DnsProviderKind, DnsZoneRecord,
-    ACME_CHALLENGE_LABEL,
+    ACME_CHALLENGE_LABEL, Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest,
+    DnsAccountVerification, DnsProviderKind, DnsZoneRecord, absolute_record_name,
+    normalize_dns_name,
 };
-use crate::dns_http::{json_request, DnsApiClient};
+use crate::dns_http::{DnsApiClient, json_request};
 use crate::{AcmeServiceError, AcmeServiceResult};
 
 pub const ALIYUN_DEFAULT_BASE_URL: &str = "https://alidns.aliyuncs.com";
@@ -309,8 +309,7 @@ impl AliyunDns01Presenter {
                 let Some(value) = record.value.filter(|value| !value.is_empty()) else {
                     continue;
                 };
-                let Some(record_type) = record.record_type.filter(|value| !value.is_empty())
-                else {
+                let Some(record_type) = record.record_type.filter(|value| !value.is_empty()) else {
                     continue;
                 };
                 records.push(DnsZoneRecord {
@@ -595,7 +594,7 @@ mod tests {
     use axum::extract::{Query, State};
     use axum::routing::get;
     use axum::{Json, Router};
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     #[derive(Default)]
     struct StubState {
@@ -796,11 +795,13 @@ mod tests {
         let base_url = spawn_stub(state.clone()).await;
         let presenter = presenter(base_url);
 
-        assert!(presenter
-            .verify_account("example.com")
-            .await
-            .expect("verified")
-            .is_verified());
+        assert!(
+            presenter
+                .verify_account("example.com")
+                .await
+                .expect("verified")
+                .is_verified()
+        );
         let requests = state.requests.lock().expect("lock");
         assert_eq!(requests.len(), 1);
         assert!(
@@ -941,7 +942,7 @@ mod record_inventory_tests {
     use axum::extract::{Query, State};
     use axum::routing::get;
     use axum::{Json, Router};
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     /// Answers two full pages then a short one, so the inventory walk has to
     /// follow its pagination instead of stopping at the first page.
@@ -955,17 +956,17 @@ mod record_inventory_tests {
             State(state): State<Arc<InventoryState>>,
             Query(params): Query<HashMap<String, String>>,
         ) -> Json<Value> {
-            assert_eq!(params.get("Action").map(String::as_str), Some("DescribeDomainRecords"));
+            assert_eq!(
+                params.get("Action").map(String::as_str),
+                Some("DescribeDomainRecords")
+            );
             let page: usize = params
                 .get("PageNumber")
                 .and_then(|value| value.parse().ok())
                 .unwrap_or(1);
             let pages = state.pages.lock().expect("lock");
             let index = page.saturating_sub(1);
-            let records = pages
-                .get(index)
-                .cloned()
-                .unwrap_or_default();
+            let records = pages.get(index).cloned().unwrap_or_default();
             Json(json!({ "DomainRecords": { "Record": records, "TotalCount": 0 } }))
         }
 
@@ -1017,7 +1018,10 @@ mod record_inventory_tests {
         )
         .expect("presenter");
 
-        let records = presenter.zone_records("example.com").await.expect("inventory");
+        let records = presenter
+            .zone_records("example.com")
+            .await
+            .expect("inventory");
         assert_eq!(records.len(), 102);
         // The apex row keeps the absolute apex owner; the wildcard keeps its star.
         let mx = records
@@ -1036,7 +1040,11 @@ mod record_inventory_tests {
         assert_eq!(first_page_row.ttl_seconds, Some(600));
         assert_eq!(first_page_row.record_line.as_deref(), Some("default"));
         assert_eq!(first_page_row.provider_record_ref.as_deref(), Some("rec-0"));
-        assert!(!records.iter().any(|record| record.record_name.contains("broken")));
+        assert!(
+            !records
+                .iter()
+                .any(|record| record.record_name.contains("broken"))
+        );
     }
 }
 

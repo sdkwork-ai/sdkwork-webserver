@@ -12,6 +12,8 @@ use SDKWork\Webserver\BackendSdk\Models\DomainsCreateResponse201;
 use SDKWork\Webserver\BackendSdk\Models\DomainsListResponse;
 use SDKWork\Webserver\BackendSdk\Models\DomainsVerifyResponse;
 use SDKWork\Webserver\BackendSdk\Models\RootDomainsCreateResponse201;
+use SDKWork\Webserver\BackendSdk\Models\RootDomainsDnsRecordsListResponse;
+use SDKWork\Webserver\BackendSdk\Models\RootDomainsDnsRecordsSyncResponse;
 use SDKWork\Webserver\BackendSdk\Models\RootDomainsListResponse;
 use SDKWork\Webserver\BackendSdk\Models\RootDomainsRetrieveResponse;
 use SDKWork\Webserver\BackendSdk\Models\RootDomainsSubdomainsCreateResponse201;
@@ -127,6 +129,36 @@ final class DomainApi extends BaseApi
             'json' => $payload,
         ]);
         return is_array($result) ? RootDomainsSubdomainsCreateResponse201::fromArray($result) : null;
+    }
+
+    /** List a root-domain Zone's synced DNS resolution records */
+    public function rootDomainsDnsRecordsList(string $rootDomainId, ?int $page = null, ?int $pageSize = null, ?string $domainId = null): ?RootDomainsDnsRecordsListResponse
+    {
+        $path = $this->interpolatePath('/backend/v3/api/root_domains/{rootDomainId}/dns_records', ['rootDomainId' => $this->serializePathParameter($rootDomainId, new PathParameterSpec('rootDomainId', 'simple', false))]);
+        $query = $this->buildQueryString([
+            new QueryParameterSpec('page', $page, 'form', true, false, null),
+            new QueryParameterSpec('page_size', $pageSize, 'form', true, false, null),
+            new QueryParameterSpec('domain_id', $domainId, 'form', true, false, null),
+        ]);
+        $path = $this->appendQueryString($path, $query);
+        $result = $this->client->request('GET', $path, []);
+        return is_array($result) ? RootDomainsDnsRecordsListResponse::fromArray($result) : null;
+    }
+
+    /** Sync a root-domain Zone's resolution records through its cloud account */
+    public function rootDomainsDnsRecordsSync(string $rootDomainId, string $idempotencyKey): ?RootDomainsDnsRecordsSyncResponse
+    {
+        $path = $this->interpolatePath('/backend/v3/api/root_domains/{rootDomainId}/dns_records/sync', ['rootDomainId' => $this->serializePathParameter($rootDomainId, new PathParameterSpec('rootDomainId', 'simple', false))]);
+        $requestHeaders = $this->buildRequestHeaders(
+            [
+                'Idempotency-Key' => new HeaderParameterSpec($idempotencyKey, 'simple', false, null),
+            ],
+            []
+        );
+        $result = $this->client->request('POST', $path, [
+            'headers' => $requestHeaders,
+        ]);
+        return is_array($result) ? RootDomainsDnsRecordsSyncResponse::fromArray($result) : null;
     }
 
     /** List tenant custom domain assets */

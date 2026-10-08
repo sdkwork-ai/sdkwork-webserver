@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use tempfile::NamedTempFile;
 use tokio::io::AsyncWriteExt;
@@ -325,9 +325,11 @@ mod tests {
             .register(None, "token-a", "token-a.thumb")
             .expect("register");
         assert_eq!(store.lookup("token-a").as_deref(), Some("token-a.thumb"));
-        assert!(store
-            .register(None, "token-a", "replacement.thumb")
-            .is_err());
+        assert!(
+            store
+                .register(None, "token-a", "replacement.thumb")
+                .is_err()
+        );
     }
 
     #[tokio::test]
@@ -357,9 +359,11 @@ mod tests {
                 .register(None, &token, &format!("{token}.thumb"))
                 .expect("bounded registration");
         }
-        assert!(store
-            .register(None, "one-too-many", "one-too-many.thumb")
-            .is_err());
+        assert!(
+            store
+                .register(None, "one-too-many", "one-too-many.thumb")
+                .is_err()
+        );
     }
 
     #[test]
@@ -368,9 +372,11 @@ mod tests {
         let blocking_file = root.path().join("blocking-file");
         std::fs::write(&blocking_file, "not a directory").expect("write blocker");
         let store = ChallengeStore::default();
-        assert!(store
-            .register(Some(&blocking_file), "token-a", "token-a.thumb")
-            .is_err());
+        assert!(
+            store
+                .register(Some(&blocking_file), "token-a", "token-a.thumb")
+                .is_err()
+        );
         assert!(store.lookup("token-a").is_none());
     }
 }

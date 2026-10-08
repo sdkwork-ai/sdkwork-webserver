@@ -82,6 +82,27 @@ public class DomainApi {
         return client.convertValue(raw, new TypeReference<RootDomainsSubdomainsCreateResponse201>() {});
     }
 
+    /** List a root-domain Zone's synced DNS resolution records */
+    public RootDomainsDnsRecordsListResponse rootDomainsDnsRecordsList(String rootDomainId, Integer page, Integer pageSize, String domainId) throws Exception {
+        String query = buildQueryString(List.of(
+            new QueryParameterSpec("page", page, "form", true, false, null),
+            new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
+            new QueryParameterSpec("domain_id", domainId, "form", true, false, null)
+        ));
+        Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/root_domains/" + serializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false)) + "/dns_records"), query));
+        return client.convertValue(raw, new TypeReference<RootDomainsDnsRecordsListResponse>() {});
+    }
+
+    /** Sync a root-domain Zone's resolution records through its cloud account */
+    public RootDomainsDnsRecordsSyncResponse rootDomainsDnsRecordsSync(String rootDomainId, String idempotencyKey) throws Exception {
+        Map<String, String> requestHeaders = buildRequestHeaders(
+                Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
+                Map.of()
+        );
+        Object raw = client.post(ApiPaths.backendPath("/root_domains/" + serializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false)) + "/dns_records/sync"), null, null, requestHeaders);
+        return client.convertValue(raw, new TypeReference<RootDomainsDnsRecordsSyncResponse>() {});
+    }
+
     /** List tenant custom domain assets */
     public DomainsListResponse domainsList(Integer page, Integer pageSize) throws Exception {
         String query = buildQueryString(List.of(

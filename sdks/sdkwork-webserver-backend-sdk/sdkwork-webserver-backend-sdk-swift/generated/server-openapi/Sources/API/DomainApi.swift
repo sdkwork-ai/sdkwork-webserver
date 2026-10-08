@@ -77,6 +77,27 @@ public class DomainApi {
         return try await client.post(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/subdomains"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: RootDomainsSubdomainsCreateResponse201.self)
     }
 
+    /// List a root-domain Zone's synced DNS resolution records
+    public func rootDomainsDnsRecordsList(rootDomainId: String, page: Int? = nil, pageSize: Int? = nil, domainId: String? = nil) async throws -> RootDomainsDnsRecordsListResponse? {
+        let query = buildQueryString([
+            QueryParameterSpec(name: "page", value: page, style: "form", explode: true, allowReserved: false, contentType: nil),
+            QueryParameterSpec(name: "page_size", value: pageSize, style: "form", explode: true, allowReserved: false, contentType: nil),
+            QueryParameterSpec(name: "domain_id", value: domainId, style: "form", explode: true, allowReserved: false, contentType: nil)
+        ])
+        return try await client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/dns_records"), query), responseType: RootDomainsDnsRecordsListResponse.self)
+    }
+
+    /// Sync a root-domain Zone's resolution records through its cloud account
+    public func rootDomainsDnsRecordsSync(rootDomainId: String, idempotencyKey: String) async throws -> RootDomainsDnsRecordsSyncResponse? {
+        let requestHeaders = buildRequestHeaders(
+            [
+                "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
+            ],
+            [:]
+        )
+        return try await client.post(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/dns_records/sync"), body: nil, params: nil, headers: requestHeaders, responseType: RootDomainsDnsRecordsSyncResponse.self)
+    }
+
     /// List tenant custom domain assets
     public func domainsList(page: Int? = nil, pageSize: Int? = nil) async throws -> DomainsListResponse? {
         let query = buildQueryString([

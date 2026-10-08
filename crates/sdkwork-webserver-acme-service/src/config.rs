@@ -143,21 +143,25 @@ mod tests {
 
     #[test]
     fn rejects_unbounded_or_unsafe_values() {
-        assert!(AcmeConfig::new(
-            "http://acme.invalid/directory".to_string(),
-            "admin@example.com".to_string(),
-            30,
-            None,
-            false,
-        )
-        .is_err());
-        assert!(AcmeConfig::new(
-            "https://acme.example/directory".to_string(),
-            "invalid email".to_string(),
-            0,
-            None,
-            false,
-        )
-        .is_err());
+        assert!(
+            AcmeConfig::new(
+                "http://acme.invalid/directory".to_string(),
+                "admin@example.com".to_string(),
+                30,
+                None,
+                false,
+            )
+            .is_err()
+        );
+        assert!(
+            AcmeConfig::new(
+                "https://acme.example/directory".to_string(),
+                "invalid email".to_string(),
+                0,
+                None,
+                false,
+            )
+            .is_err()
+        );
     }
 }

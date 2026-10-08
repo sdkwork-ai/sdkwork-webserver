@@ -4344,6 +4344,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "sdkwork-deploy-core",
+ "sdkwork-utils-rust",
  "serde",
  "serde_json",
  "thiserror 2.0.21",

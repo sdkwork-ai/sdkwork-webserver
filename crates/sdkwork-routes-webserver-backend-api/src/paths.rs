@@ -11,11 +11,13 @@ pub const APPLICATION_DOMAIN_VERIFY: &str =
     "/backend/v3/api/applications/{applicationId}/domains/{domainId}/verify";
 pub const APPLICATION_DOMAIN_LISTENER_CERTIFICATE_BINDINGS: &str =
     "/backend/v3/api/applications/{applicationId}/domains/{domainId}/listener_certificate_bindings";
-pub const APPLICATION_DOMAIN_LISTENER_CERTIFICATE_BINDING: &str =
-    "/backend/v3/api/applications/{applicationId}/domains/{domainId}/listener_certificate_bindings/{bindingId}";
+pub const APPLICATION_DOMAIN_LISTENER_CERTIFICATE_BINDING: &str = "/backend/v3/api/applications/{applicationId}/domains/{domainId}/listener_certificate_bindings/{bindingId}";
 pub const ROOT_DOMAINS: &str = "/backend/v3/api/root_domains";
 pub const ROOT_DOMAIN: &str = "/backend/v3/api/root_domains/{rootDomainId}";
 pub const ROOT_DOMAIN_SUBDOMAINS: &str = "/backend/v3/api/root_domains/{rootDomainId}/subdomains";
+pub const ROOT_DOMAIN_DNS_RECORDS: &str = "/backend/v3/api/root_domains/{rootDomainId}/dns_records";
+pub const ROOT_DOMAIN_DNS_RECORDS_SYNC: &str =
+    "/backend/v3/api/root_domains/{rootDomainId}/dns_records/sync";
 pub const DOMAINS: &str = "/backend/v3/api/domains";
 pub const DOMAIN: &str = "/backend/v3/api/domains/{domainId}";
 pub const DOMAIN_VERIFY: &str = "/backend/v3/api/domains/{domainId}/verify";

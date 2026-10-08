@@ -14,16 +14,17 @@ use sdkwork_webserver_contract::{
     CreateManagedDomainRequest, CreateNginxConfigRequest, CreatePlatformTargetRequest,
     CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
     CreateServerResponse, CreateSourceVersionRequest, DeploymentPage, DeploymentResponse,
-    DomainPage, DomainResponse, EnvVariablePage, EnvVariableResponse, HealthCheckPage,
-    HealthCheckResponse, IssueCertificateRequest, ListApplicationsQuery, ListAuditLogsQuery,
-    ListNginxConfigsQuery, ListRootDomainsQuery, ListenerCertificateBindingPage,
-    ListenerCertificateBindingResponse, NginxConfigPage, NginxConfigResponse, NginxStatusResponse,
-    PlatformTargetPage, PlatformTargetResponse, RevokeCertificateRequest, RootDomainPage,
-    RootDomainResponse, RuntimeAssignment, RuntimeAssignmentDelivery, RuntimeObservation,
-    RuntimeObservationState, ServerPage, SourceVersionPage, SourceVersionResponse,
-    TlsCertificateAssignmentMaterial, UpdateApplicationRequest, UpdateClusterHostRequest,
-    UpdateClusterInstanceRequest, UpdateClusterRequest, UpdateDomainApplicationBindingRequest,
-    UpdateEnvVariableRequest, UpdateNginxConfigRequest, UpdateRootDomainRequest,
+    DomainDnsRecordPage, DomainPage, DomainResponse, EnvVariablePage, EnvVariableResponse,
+    HealthCheckPage, HealthCheckResponse, IssueCertificateRequest, ListApplicationsQuery,
+    ListAuditLogsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
+    ListenerCertificateBindingPage, ListenerCertificateBindingResponse, NginxConfigPage,
+    NginxConfigResponse, NginxStatusResponse, PlatformTargetPage, PlatformTargetResponse,
+    RevokeCertificateRequest, RootDomainPage, RootDomainResponse, RuntimeAssignment,
+    RuntimeAssignmentDelivery, RuntimeObservation, RuntimeObservationState, ServerPage,
+    SourceVersionPage, SourceVersionResponse, TlsCertificateAssignmentMaterial,
+    UpdateApplicationRequest, UpdateClusterHostRequest, UpdateClusterInstanceRequest,
+    UpdateClusterRequest, UpdateDomainApplicationBindingRequest, UpdateEnvVariableRequest,
+    UpdateNginxConfigRequest, UpdateRootDomainRequest,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -65,6 +66,110 @@ pub struct RuntimeObservationWrite {
     pub node_version: Option<String>,
     pub reason_code: Option<String>,
     pub detail: Option<String>,
+}
+
+/// The Zone a resolution-records sync targets.
+///
+/// The snapshot rows key on the internal id, the provider inventory is read
+/// for the apex, and the account binding decides which credential answers —
+/// the same three facts the sync operation needs, carried once so the store
+/// read and the provider call cannot disagree about which Zone they describe.
+#[derive(Clone, Debug)]
+pub struct RootDomainDnsSyncTarget {
+    pub root_domain_id: i64,
+    pub hostname: String,
+    pub cloud_account_id: Option<String>,
+}
+
+/// One active hostname of a Zone, for the sync's record-to-subdomain match.
+#[derive(Clone, Debug)]
+pub struct DomainHostnameAsset {
+    pub domain_id: i64,
+    pub hostname: String,
+    pub hostname_type: String,
+}
+
+/// One row of a provider inventory read, expressed in store terms.
+///
+/// The service converts the provider adapter's record type into this row so
+/// the repository depends on no DNS adapter: the store writes what it is
+/// given, and the vocabulary of providers stops at the service boundary.
+#[derive(Clone, Debug)]
+pub struct DnsRecordSnapshotRow {
+    pub record_name: String,
+    pub record_type: String,
+    pub record_value: String,
+    pub ttl_seconds: Option<i32>,
+    pub priority: Option<i32>,
+    pub record_line: Option<String>,
+    pub provider_record_ref: Option<String>,
+    /// The subdomain this record resolves, matched by the service before the
+    /// write; `None` for a record whose owner matches no registered hostname.
+    pub domain_id: Option<i64>,
+}
+
+/// One sync run's whole write: the read's metadata plus every row.
+///
+/// The store replaces the Zone's snapshot in one transaction, so this carries
+/// the complete inventory rather than a diff — the truth is "what the provider
+/// answered now", not a merge with a previous answer.
+#[derive(Clone, Debug)]
+pub struct DomainDnsSnapshotWrite {
+    pub dns_provider: String,
+    pub cloud_account_id: String,
+    pub synced_at: String,
+    pub records: Vec<DnsRecordSnapshotRow>,
+}
+
+/// The subdomain restriction of a snapshot read.
+///
+/// The sync has already applied the wildcard semantics (a wildcard
+/// declaration's rows are its base owner and every owner beneath it) when it
+/// stamped `domain_id`, so the read filters on that match directly instead of
+/// re-deriving it from the hostname string.
+#[derive(Clone, Debug, Default)]
+pub struct DomainDnsRecordFilter {
+    pub domain_id: Option<String>,
+}
+
+/// The owner match a snapshot read applies: exact for an EXACT hostname; the
+/// literal star record, the base owner, and every owner exactly one label
+/// beneath the base for a WILDCARD one — the names a single-label DNS
+/// wildcard actually answers for. A two-label descendant has its own name and
+/// is not the wildcard's answer.
+pub fn hostname_matches_record(hostname: &str, record_name: &str) -> bool {
+    match hostname.strip_prefix("*.") {
+        Some(base) => {
+            record_name == hostname
+                || record_name == base
+                || record_name
+                    .strip_suffix(&format!(".{base}"))
+                    .is_some_and(|prefix| !prefix.is_empty() && !prefix.contains('.'))
+        }
+        None => record_name == hostname,
+    }
+}
+
+/// The hostname a record resolves: the exact hostname row that owns the name
+/// outright wins, and a wildcard row answers only what no exact row claims.
+/// The order matters for a zone that registered both `api.example.com` and
+/// `*.example.com` — the record at `api.example.com` is the exact row's
+/// answer, whatever the wildcard would also cover.
+pub fn domain_asset_for_record<'a>(
+    assets: &'a [DomainHostnameAsset],
+    record_name: &str,
+) -> Option<i64> {
+    assets
+        .iter()
+        .find(|asset| asset.hostname == record_name)
+        .or_else(|| {
+            assets.iter().find(|asset| {
+                asset.hostname_type == "WILDCARD"
+                    && asset.hostname != record_name
+                    && hostname_matches_record(&asset.hostname, record_name)
+            })
+        })
+        .map(|asset| asset.domain_id)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -636,6 +741,46 @@ pub trait WebRepositoryPort: Send + Sync {
         request: &CreateRootDomainHostnameRequest,
     ) -> WebServiceResult<DomainResponse>;
 
+    /// The Zone a resolution-records sync targets, or `None` when the id is
+    /// unknown (the sync refuses rather than guessing an apex).
+    async fn root_domain_dns_sync_target(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+    ) -> WebServiceResult<Option<RootDomainDnsSyncTarget>>;
+
+    /// Every active hostname of the Zone, for the sync's record match.
+    /// Bounded by the Zone's hostname inventory, which is why it is a plain
+    /// read rather than a paged one.
+    async fn list_root_domain_hostname_assets(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+    ) -> WebServiceResult<Vec<DomainHostnameAsset>>;
+
+    /// Replaces the Zone's whole resolution-record snapshot in one
+    /// transaction and returns the stored row count. The Zone row is locked
+    /// for the write, so a concurrent delete cannot free the zone under the
+    /// snapshot.
+    async fn replace_root_domain_dns_records(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        snapshot: &DomainDnsSnapshotWrite,
+    ) -> WebServiceResult<i64>;
+
+    /// Pages the stored snapshot, optionally restricted to one subdomain.
+    /// Store-level pagination: the page bounds bound the query, not a
+    /// post-read slice.
+    async fn list_root_domain_dns_records(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        filter: &DomainDnsRecordFilter,
+        page: i32,
+        page_size: i32,
+    ) -> WebServiceResult<DomainDnsRecordPage>;
+
     async fn list_managed_domains(
         &self,
         tenant_id: i64,
@@ -758,8 +903,10 @@ pub trait WebRepositoryPort: Send + Sync {
         variable_id: &str,
     ) -> WebServiceResult<()>;
 
-    async fn certificate_expiry_summary(&self, expiring_window_days: i32)
-    -> WebServiceResult<(i64, i64)>;
+    async fn certificate_expiry_summary(
+        &self,
+        expiring_window_days: i32,
+    ) -> WebServiceResult<(i64, i64)>;
 
     async fn list_certificates(
         &self,
@@ -1272,7 +1419,7 @@ pub trait WebRepositoryPort: Send + Sync {
     async fn expire_cluster_peer_messages(&self, now: &str, limit: i32) -> WebServiceResult<u64>;
 
     async fn purge_cluster_heartbeats(&self, older_than: &str, limit: i32)
-        -> WebServiceResult<u64>;
+    -> WebServiceResult<u64>;
 }
 
 #[cfg(test)]

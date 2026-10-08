@@ -7,8 +7,8 @@ use sdkwork_database_sqlx::enable_process_shared_database_pool;
 use sdkwork_intelligence_webserver_service::{WebRepositoryPort, WebService};
 use sdkwork_utils_rust::derive_aes_256_key;
 use sdkwork_webserver_acme_service::{
-    AcmeAccountStore, AcmeConfig, CertificateIssuer, EncryptedFileAcmeAccountStore,
-    MemoryAcmeAccountStore, DEFAULT_ACME_OPERATION_TIMEOUT_MS,
+    AcmeAccountStore, AcmeConfig, CertificateIssuer, DEFAULT_ACME_OPERATION_TIMEOUT_MS,
+    EncryptedFileAcmeAccountStore, MemoryAcmeAccountStore,
 };
 use sdkwork_webserver_contract::{web_environment_name, web_is_production_like_environment};
 use sdkwork_webserver_database_host::bootstrap_web_database_from_env;
@@ -157,8 +157,8 @@ fn certificate_issuer_from_env(
         }
         Err(_) if !production_like => {
             tracing::warn!(
-                    "SDKWORK_WEBSERVER_ACME_ACCOUNT_ROOT missing; ACME account credentials are kept only in process memory"
-                );
+                "SDKWORK_WEBSERVER_ACME_ACCOUNT_ROOT missing; ACME account credentials are kept only in process memory"
+            );
             Arc::new(MemoryAcmeAccountStore::default())
         }
         Err(_) => {

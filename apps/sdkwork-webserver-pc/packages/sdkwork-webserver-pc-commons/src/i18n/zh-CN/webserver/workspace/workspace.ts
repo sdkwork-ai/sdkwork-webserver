@@ -343,6 +343,22 @@ export const webserverWorkspaceZhCn = {
   "resource.domains.resumeRootConfirm": "该根域名的 DNS 与 TLS 自动化将恢复。",
   "resource.domains.deleteBlocked": "请先移除子域名，再删除根域名。",
   "resource.domains.editNeedsAValue": "请至少填写一项；留空表示保持原值。",
+  // 子域名解析记录（云账号同步的快照）。页面渲染的永远是快照本身，
+  // 不会在渲染时请求服务商——「云账号同步」是唯一触发读取的动作。
+  "resource.domains.backToHostnames": "返回主机名",
+  "resource.domains.dnsRecords": "解析记录",
+  "resource.domains.dnsRecordType": "类型",
+  "resource.domains.dnsRecordValue": "记录值",
+  "resource.domains.dnsRecordLine": "线路",
+  "resource.domains.dnsTtl": "TTL",
+  "resource.domains.dnsSyncedAt": "同步时间",
+  "resource.domains.dnsSync": "云账号同步",
+  "resource.domains.dnsSyncHint":
+    "从该根域名的云账号读取解析记录并更新快照。本页展示的就是这份快照，渲染页面不会请求服务商。",
+  "resource.domains.dnsNoCloudAccount":
+    "没有云账号可以服务该根域名：请为其绑定云账号，或在本边缘配置覆盖该 Zone 的 DNS 云账号。",
+  "resource.domains.dnsNoRecords": "尚无解析记录快照。通过云账号同步即可从服务商读取。",
+  "resource.domains.dnsSyncedSummary": "同步于 {syncedAt} · {provider} · {count} 条记录",
   "resource.certificates.label": "证书",
   "resource.certificates.description": "由 SDKWork Deployments 管理的 TLS 证书生命周期",
   "resource.certificates.admin.label": "证书管理",

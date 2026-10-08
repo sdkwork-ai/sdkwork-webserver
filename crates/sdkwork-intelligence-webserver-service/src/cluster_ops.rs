@@ -13,25 +13,26 @@ use chrono::{Duration, Utc};
 use sdkwork_database_id::uuid_v4;
 use sdkwork_utils_rust::crypto::{secure_compare, sha256_hash};
 use sdkwork_webserver_contract::{
-    cluster_quality_score, web_is_platform_operator_tenant, ClusterEventPage,
-    ClusterHeartbeatRequest, ClusterHeartbeatResponse, ClusterHeartbeatSamplePage, ClusterHostPage,
-    ClusterHostResponse, ClusterInstancePage, ClusterInstanceResponse, ClusterOverviewResponse,
-    ClusterPage, ClusterPeerDirectoryResponse, ClusterQualityMetrics, ClusterRegistrationRequest,
-    ClusterRegistrationResponse, ClusterResponse, ClusterSyncAckRequest, ClusterSyncManifest,
-    ClusterSyncState, CreateClusterRequest, EnqueueClusterPeerMessagesRequest,
-    EnqueueClusterPeerMessagesResponse, UpdateClusterHostRequest, UpdateClusterInstanceRequest,
-    UpdateClusterRequest, WebBackendRequestContext, WebServiceError, WebServiceResult,
     CLUSTER_ENVIRONMENTS, CLUSTER_EVENT_SEVERITIES, CLUSTER_HEALTH_STATES, CLUSTER_INSTANCE_ROLES,
-    CLUSTER_JOIN_MODES, CLUSTER_JOIN_MODE_TUNNEL, CLUSTER_SYNC_KIND_APPLICATIONS,
+    CLUSTER_JOIN_MODE_TUNNEL, CLUSTER_JOIN_MODES, CLUSTER_SYNC_KIND_APPLICATIONS,
     CLUSTER_SYNC_KIND_CONFIG, CLUSTER_SYNC_STATUS_IN_SYNC, CLUSTER_SYNC_STATUS_PENDING,
+    ClusterEventPage, ClusterHeartbeatRequest, ClusterHeartbeatResponse,
+    ClusterHeartbeatSamplePage, ClusterHostPage, ClusterHostResponse, ClusterInstancePage,
+    ClusterInstanceResponse, ClusterOverviewResponse, ClusterPage, ClusterPeerDirectoryResponse,
+    ClusterQualityMetrics, ClusterRegistrationRequest, ClusterRegistrationResponse,
+    ClusterResponse, ClusterSyncAckRequest, ClusterSyncManifest, ClusterSyncState,
+    CreateClusterRequest, EnqueueClusterPeerMessagesRequest, EnqueueClusterPeerMessagesResponse,
+    UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest,
+    WebBackendRequestContext, WebServiceError, WebServiceResult, cluster_quality_score,
+    web_is_platform_operator_tenant,
 };
 
-use crate::repository::{
-    ClusterEventWrite, ClusterHeartbeatWrite, ClusterHostUpsert, ClusterInstanceCredentials,
-    ClusterInstanceUpsert, ClusterPeerMessageEnqueue, ClusterProbeOutcome, ClusterProbeWrite,
-    ClusterSyncAckWrite, ClusterSyncRevisionPublish, CLUSTER_INSTANCE_STATUS_ONLINE,
-};
 use crate::WebService;
+use crate::repository::{
+    CLUSTER_INSTANCE_STATUS_ONLINE, ClusterEventWrite, ClusterHeartbeatWrite, ClusterHostUpsert,
+    ClusterInstanceCredentials, ClusterInstanceUpsert, ClusterPeerMessageEnqueue,
+    ClusterProbeOutcome, ClusterProbeWrite, ClusterSyncAckWrite, ClusterSyncRevisionPublish,
+};
 
 /// Prefix of per-instance heartbeat tokens issued at registration.
 pub const CLUSTER_INSTANCE_TOKEN_PREFIX: &str = "winst_";
@@ -1013,7 +1014,7 @@ impl WebService {
             other => {
                 return Err(WebServiceError::Validation(format!(
                     "invalid sync kind `{other}`; expected config or applications"
-                )))
+                )));
             }
         };
         let credentials: ClusterInstanceCredentials = self
@@ -1062,7 +1063,7 @@ impl WebService {
             other => {
                 return Err(WebServiceError::Validation(format!(
                     "invalid sync kind `{other}`; expected config or applications"
-                )))
+                )));
             }
         };
         let status_value = match request.status.as_str() {
@@ -1071,7 +1072,7 @@ impl WebService {
             other => {
                 return Err(WebServiceError::Validation(format!(
                     "invalid sync status `{other}`; expected IN_SYNC or FAILED"
-                )))
+                )));
             }
         };
         let credentials: ClusterInstanceCredentials = self
@@ -1188,7 +1189,7 @@ impl WebService {
             other => {
                 return Err(WebServiceError::Validation(format!(
                     "invalid sync kind `{other}`; expected config or applications"
-                )))
+                )));
             }
         };
         let cluster = self

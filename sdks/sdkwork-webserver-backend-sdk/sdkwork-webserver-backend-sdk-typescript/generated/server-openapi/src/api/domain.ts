@@ -1,7 +1,7 @@
 import { backendApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { ApplicationDomainResponse, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainVerifyResponse, PageInfo, RootDomainResponse, UpdateDomainApplicationBindingRequest, UpdateRootDomainRequest } from '../types';
+import type { ApplicationDomainResponse, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainDnsRecordResponse, DomainDnsSyncResponse, DomainVerifyResponse, PageInfo, RootDomainResponse, UpdateDomainApplicationBindingRequest, UpdateRootDomainRequest } from '../types';
 
 
 export interface DomainApplicationBindingUpdateParams {
@@ -40,6 +40,46 @@ export class DomainApplicationBindingApi {
       {}
     );
     return this.client.request<void>(backendApiPath(`/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/application_binding`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}) });
+  }
+}
+
+export interface DomainRootDomainsDnsRecordsListParams {
+  page?: number;
+  pageSize?: number;
+  domainId?: string;
+}
+
+export interface DomainRootDomainsDnsRecordsSyncParams {
+  idempotencyKey: string;
+}
+
+export class DomainRootDomainsDnsRecordsApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** List a root-domain Zone's synced DNS resolution records */
+  async list(rootDomainId: string, params?: DomainRootDomainsDnsRecordsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: DomainDnsRecordResponse[]; pageInfo: PageInfo; }> {
+    const query = buildQueryString([
+      { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
+      { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+      { name: 'domain_id', value: params?.domainId, style: 'form', explode: true, allowReserved: false },
+    ]);
+    return this.client.request<{ items: DomainDnsRecordResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}/dns_records`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+  }
+
+/** Sync a root-domain Zone's resolution records through its cloud account */
+  async sync(rootDomainId: string, params: DomainRootDomainsDnsRecordsSyncParams, requestOptions?: ApiRequestOptions): Promise<DomainDnsSyncResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<DomainDnsSyncResponse>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}/dns_records/sync`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 }
 
@@ -104,10 +144,12 @@ export interface DomainRootDomainsDeleteParams {
 export class DomainRootDomainsApi {
   private client: HttpClient;
   public readonly subdomains: DomainRootDomainsSubdomainsApi;
+  public readonly dnsRecords: DomainRootDomainsDnsRecordsApi;
 
   constructor(client: HttpClient) {
     this.client = client;
     this.subdomains = new DomainRootDomainsSubdomainsApi(client);
+    this.dnsRecords = new DomainRootDomainsDnsRecordsApi(client);
   }
 
 

@@ -360,6 +360,22 @@ export const webserverWorkspaceEnUs = {
   "resource.domains.resumeRootConfirm": "DNS and TLS automation for this root domain will resume.",
   "resource.domains.deleteBlocked": "Remove the subdomains before deleting this root domain.",
   "resource.domains.editNeedsAValue": "Fill in at least one field; a blank field keeps its stored value.",
+  // Subdomain resolution records (the synced cloud-account snapshot).
+  "resource.domains.backToHostnames": "Back to hostnames",
+  "resource.domains.dnsRecords": "Resolution records",
+  "resource.domains.dnsRecordType": "Type",
+  "resource.domains.dnsRecordValue": "Record value",
+  "resource.domains.dnsRecordLine": "Line",
+  "resource.domains.dnsTtl": "TTL",
+  "resource.domains.dnsSyncedAt": "Synced",
+  "resource.domains.dnsSync": "Sync via cloud account",
+  "resource.domains.dnsSyncHint":
+    "Reads the zone's resolution records from its cloud account and replaces the stored snapshot. The snapshot is what this page shows — the provider is never queried on a page render.",
+  "resource.domains.dnsNoCloudAccount":
+    "No cloud account can serve this root domain: bind one to it, or configure a DNS cloud account that covers its zone on this edge.",
+  "resource.domains.dnsNoRecords":
+    "No resolution-record snapshot yet. Sync through the cloud account to read one from the provider.",
+  "resource.domains.dnsSyncedSummary": "Synced {syncedAt} · {provider} · {count} records",
   "resource.certificates.label": "Certificates",
   "resource.certificates.description": "TLS certificate lifecycle managed by SDKWork Deployments",
   "resource.certificates.admin.label": "Certificates",

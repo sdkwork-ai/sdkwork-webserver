@@ -131,6 +131,18 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     ).with_required_permission("web.applications.write").with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
+        "/backend/v3/api/root_domains/{rootDomainId}/dns_records",
+        "domain",
+        "rootDomains.dnsRecords.list",
+    ).with_required_permission("web.applications.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/backend/v3/api/root_domains/{rootDomainId}/dns_records/sync",
+        "domain",
+        "rootDomains.dnsRecords.sync",
+    ).with_required_permission("web.applications.write").with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
         "/backend/v3/api/domains",
         "domain",
         "domains.list",

@@ -1,19 +1,20 @@
+use axum::Json;
 use axum::http::{HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use sdkwork_utils_rust::{
-    PageInfo, PageMode, SdkWorkApiResponse, SdkWorkPageData, SdkWorkResourceData,
-    SDKWORK_TRACE_ID_HEADER,
+    PageInfo, PageMode, SDKWORK_TRACE_ID_HEADER, SdkWorkApiResponse, SdkWorkPageData,
+    SdkWorkResourceData,
 };
 use sdkwork_webserver_contract::{
     ApplicationPage, AuditLogPage, CertificateDistributionPage, CertificatePage, ClusterEventPage,
     ClusterHeartbeatSamplePage, ClusterHostPage, ClusterInstancePage, ClusterPage, DeploymentPage,
-    DnsAccountPage, DomainPage, ListenerCertificateBindingPage, NginxConfigPage,
-    PlatformTargetPage, RootDomainPage, ServerPage, SourceVersionPage, WebServiceResult,
+    DnsAccountPage, DomainDnsRecordPage, DomainPage, ListenerCertificateBindingPage,
+    NginxConfigPage, PlatformTargetPage, RootDomainPage, ServerPage, SourceVersionPage,
+    WebServiceResult,
 };
 use serde::Serialize;
 
-use crate::{correlation::resolved_trace_id, WebApiError};
+use crate::{WebApiError, correlation::resolved_trace_id};
 
 fn attach_trace_header(response: &mut Response, trace_id: &str) {
     if let (Ok(name), Ok(value)) = (
@@ -211,6 +212,20 @@ pub fn ok_domain_page(
 
 pub fn ok_root_domain_page(
     result: WebServiceResult<RootDomainPage>,
+    page: i32,
+    page_size: i32,
+) -> Result<Response, WebApiError> {
+    match result {
+        Ok(page_data) => Ok(envelope(
+            StatusCode::OK,
+            build_page_data(page_data.items, page, page_size, page_data.total),
+        )),
+        Err(error) => Err(error.into()),
+    }
+}
+
+pub fn ok_domain_dns_record_page(
+    result: WebServiceResult<DomainDnsRecordPage>,
     page: i32,
     page_size: i32,
 ) -> Result<Response, WebApiError> {
@@ -481,7 +496,7 @@ pub fn no_content(result: WebServiceResult<()>) -> Result<Response, WebApiError>
 mod tests {
     use axum::body::to_bytes;
     use axum::http::StatusCode;
-    use sdkwork_utils_rust::{SdkWorkApiResponse, SdkWorkResourceData, SDKWORK_SUCCESS_CODE};
+    use sdkwork_utils_rust::{SDKWORK_SUCCESS_CODE, SdkWorkApiResponse, SdkWorkResourceData};
     use sdkwork_webserver_contract::{AgentSyncResponse, CertificateOperationAcceptedResponse};
 
     use super::{accepted_async, ok_resource};

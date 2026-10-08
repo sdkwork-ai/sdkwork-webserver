@@ -114,6 +114,35 @@ func (a *DomainApi) RootDomainsSubdomainsCreate(rootDomainId string, body sdktyp
     return decodeResult[sdktypes.RootDomainsSubdomainsCreateResponse201](raw)
 }
 
+// List a root-domain Zone's synced DNS resolution records
+func (a *DomainApi) RootDomainsDnsRecordsList(rootDomainId string, page *int, pageSize *int, domainId *string) (sdktypes.RootDomainsDnsRecordsListResponse, error) {
+    query := BuildQueryString([]QueryParameterSpec{
+        {Name: "page", Value: func() interface{} { if page == nil { return nil }; return *page }(), Style: "form", Explode: true, AllowReserved: false},
+        {Name: "page_size", Value: func() interface{} { if pageSize == nil { return nil }; return *pageSize }(), Style: "form", Explode: true, AllowReserved: false},
+        {Name: "domain_id", Value: func() interface{} { if domainId == nil { return nil }; return *domainId }(), Style: "form", Explode: true, AllowReserved: false},
+    })
+    raw, err := a.client.Get(AppendQueryString(BackendApiPath(fmt.Sprintf("/root_domains/%s/dns_records", SerializePathParameter(rootDomainId, PathParameterSpec{Name: "rootDomainId", Style: "simple", Explode: false}))), query), nil, nil)
+    if err != nil {
+        var zero sdktypes.RootDomainsDnsRecordsListResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.RootDomainsDnsRecordsListResponse](raw)
+}
+
+// Sync a root-domain Zone's resolution records through its cloud account
+func (a *DomainApi) RootDomainsDnsRecordsSync(rootDomainId string, idempotencyKey string) (sdktypes.RootDomainsDnsRecordsSyncResponse, error) {
+    headers := BuildRequestHeaders(
+        map[string]ParameterSpec{"Idempotency-Key": ParameterSpec{Value: idempotencyKey, Style: "simple", Explode: false},},
+        map[string]ParameterSpec{},
+    )
+    raw, err := a.client.Post(BackendApiPath(fmt.Sprintf("/root_domains/%s/dns_records/sync", SerializePathParameter(rootDomainId, PathParameterSpec{Name: "rootDomainId", Style: "simple", Explode: false}))), nil, nil, headers, "")
+    if err != nil {
+        var zero sdktypes.RootDomainsDnsRecordsSyncResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.RootDomainsDnsRecordsSyncResponse](raw)
+}
+
 // List tenant custom domain assets
 func (a *DomainApi) DomainsList(page *int, pageSize *int) (sdktypes.DomainsListResponse, error) {
     query := BuildQueryString([]QueryParameterSpec{

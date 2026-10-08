@@ -3,10 +3,10 @@ use std::time::Duration;
 use sdkwork_webserver_contract::WebServiceError;
 
 use async_trait::async_trait;
+use hickory_resolver::TokioResolver;
 use hickory_resolver::config::ResolverConfig;
 use hickory_resolver::net::runtime::TokioRuntimeProvider;
 use hickory_resolver::proto::rr::RData;
-use hickory_resolver::TokioResolver;
 use sdkwork_utils_rust::crypto::sha256_hash;
 use sdkwork_webserver_contract::{DomainVerifyResponse, WebServiceResult};
 
@@ -85,13 +85,13 @@ impl DomainOwnershipVerifier for DnsTxtDomainOwnershipVerifier {
                 return DomainVerificationObservation {
                     observed_sha256: None,
                     failure_code: Some("DNS_LOOKUP_FAILED".to_string()),
-                }
+                };
             }
             Err(_) => {
                 return DomainVerificationObservation {
                     observed_sha256: None,
                     failure_code: Some("DNS_LOOKUP_TIMEOUT".to_string()),
-                }
+                };
             }
         };
 

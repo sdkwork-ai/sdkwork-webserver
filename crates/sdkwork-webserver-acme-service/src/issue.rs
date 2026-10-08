@@ -9,13 +9,13 @@ use tokio::sync::Semaphore;
 
 use crate::account_store::{AcmeAccountStore, MemoryAcmeAccountStore};
 use crate::challenge_policy::{
-    resolve_challenge_method, ChallengeAvailability, DeclaredChallengeMethod, ResolvedChallenge,
+    ChallengeAvailability, DeclaredChallengeMethod, ResolvedChallenge, resolve_challenge_method,
 };
 use crate::challenge_store::ChallengeStore;
 use crate::config::AcmeConfig;
-use crate::dns::Dns01Presenter;
+use crate::dns::{Dns01Presenter, DnsZoneInventory};
 use crate::http_client::{AcmeHttpClientFactory, PlatformVerifierClientFactory};
-use crate::lets_encrypt::{issue_lets_encrypt, AcmeChallengeMode};
+use crate::lets_encrypt::{AcmeChallengeMode, issue_lets_encrypt};
 use crate::model::IssuedCertificateMaterial;
 use crate::self_signed::{certificate_evidence_from_pem, issue_self_signed};
 use crate::{AcmeServiceError, AcmeServiceResult};
@@ -200,6 +200,50 @@ impl CertificateIssuer {
             .as_ref()
             .map(|registry| registry.describe())
             .unwrap_or_default()
+    }
+
+    /// Reads one cloud account's zone record inventory.
+    ///
+    /// `account_id` pins the account; `None` resolves the covering account by
+    /// hostname — the same per-operation resolution an issuance without a
+    /// pinned account uses, which is what every root domain reconciled from
+    /// the edge's own configuration relies on. The error names which half
+    /// failed: an account the edge does not know is a configuration mistake,
+    /// while the inventory read itself reports the provider's refusal
+    /// verbatim.
+    pub async fn read_zone_records(
+        &self,
+        account_id: Option<&str>,
+        hostname: &str,
+    ) -> AcmeServiceResult<DnsZoneInventory> {
+        let registry = self.dns_accounts.as_ref().ok_or_else(|| {
+            AcmeServiceError::config(
+                "no DNS cloud account is configured on this edge; bind one to the \
+                 root domain or configure the dns accounts file",
+            )
+        })?;
+        let account = match account_id {
+            Some(id) => registry.account(id).ok_or_else(|| {
+                AcmeServiceError::config(format!(
+                    "cloud account `{id}` is not configured on this edge"
+                ))
+            })?,
+            None => registry.resolve(hostname).ok_or_else(|| {
+                AcmeServiceError::config(format!(
+                    "no configured cloud account's zone covers {hostname}"
+                ))
+            })?,
+        };
+        let records = account
+            .presenter
+            .list_zone_records(&account.zone_apex)
+            .await?;
+        Ok(DnsZoneInventory {
+            account_id: account.account_id.clone(),
+            provider: account.provider.as_str().to_owned(),
+            zone_apex: account.zone_apex.clone(),
+            records,
+        })
     }
 
     /// What this deployment can actually do for `hostnames`.
@@ -991,14 +1035,18 @@ mod tests {
         )
         .expect("config");
         let issuer = CertificateIssuer::new(config, "/tmp/certs/live").expect("issuer");
-        assert!(issuer
-            .issue(3, &["../escape".to_string()], "safe-name", "ECDSA")
-            .await
-            .is_err());
-        assert!(issuer
-            .issue(3, &["dev.localhost".to_string()], "../escape", "ECDSA")
-            .await
-            .is_err());
+        assert!(
+            issuer
+                .issue(3, &["../escape".to_string()], "safe-name", "ECDSA")
+                .await
+                .is_err()
+        );
+        assert!(
+            issuer
+                .issue(3, &["dev.localhost".to_string()], "../escape", "ECDSA")
+                .await
+                .is_err()
+        );
     }
 
     #[tokio::test]

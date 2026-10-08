@@ -113,6 +113,35 @@ namespace SDKWork.WebserverBackendSdk.Api
         }
 
         /// <summary>
+        /// List a root-domain Zone's synced DNS resolution records
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.RootDomainsDnsRecordsListResponse?> RootDomainsDnsRecordsListAsync(string rootDomainId, int? page = null, int? pageSize = null, string? domainId = null)
+        {
+            var queryString = BuildQueryString(new[]
+            {
+                new QueryParameterSpec("page", page, "form", true, false, null),
+                new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
+                new QueryParameterSpec("domain_id", domainId, "form", true, false, null),
+            });
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.RootDomainsDnsRecordsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath($"/root_domains/{SerializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false))}/dns_records"), queryString));
+        }
+
+        /// <summary>
+        /// Sync a root-domain Zone's resolution records through its cloud account
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.RootDomainsDnsRecordsSyncResponse?> RootDomainsDnsRecordsSyncAsync(string rootDomainId, string idempotencyKey)
+        {
+            var requestHeaders = BuildRequestHeaders(
+                new Dictionary<string, HeaderParameterSpec>
+                {
+                    ["Idempotency-Key"] = new HeaderParameterSpec(idempotencyKey, "simple", false, null),
+                },
+                new Dictionary<string, HeaderParameterSpec>()
+            );
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.RootDomainsDnsRecordsSyncResponse>(ApiPaths.BackendPath($"/root_domains/{SerializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false))}/dns_records/sync"), null, null, requestHeaders);
+        }
+
+        /// <summary>
         /// List tenant custom domain assets
         /// </summary>
         public async Task<SDKWork.WebserverBackendSdk.Models.DomainsListResponse?> DomainsListAsync(int? page = null, int? pageSize = null)

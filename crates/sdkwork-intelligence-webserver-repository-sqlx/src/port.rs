@@ -5,44 +5,41 @@ use sdkwork_intelligence_webserver_service::{
     AuditLogWrite, CertificateRevocationMaterial, ClusterEventWrite, ClusterHeartbeatTransition,
     ClusterHeartbeatWrite, ClusterHostUpsert, ClusterIdentity, ClusterInstanceCredentials,
     ClusterInstanceUpsert, ClusterPeerMessageEnqueue, ClusterProbeOutcome, ClusterProbeWrite,
-    ClusterRoutingDiscovery, ClusterSyncAckWrite, ClusterSyncDesired,
-    ClusterSyncRevisionPayload, ClusterSyncRevisionPublish, ClusterUpsert,
-    DomainVerificationChallenge, DomainVerificationObservation, ExpiredClusterHost,
-    ExpiredClusterInstance, RuntimeAssignmentTarget, RuntimeAssignmentWrite,
-    RuntimeObservationWrite, WebRepositoryPort,
+    ClusterRoutingDiscovery, ClusterSyncAckWrite, ClusterSyncDesired, ClusterSyncRevisionPayload,
+    ClusterSyncRevisionPublish, ClusterUpsert, DomainDnsRecordFilter, DomainDnsSnapshotWrite,
+    DomainHostnameAsset, DomainVerificationChallenge, DomainVerificationObservation,
+    ExpiredClusterHost, ExpiredClusterInstance, RootDomainDnsSyncTarget, RuntimeAssignmentTarget,
+    RuntimeAssignmentWrite, RuntimeObservationWrite, WebRepositoryPort,
 };
 use sdkwork_webserver_contract::{
-    AgentHeartbeatRequest, AgentHeartbeatResponse, AgentSyncResponse, AuditLogPage,
-    ClusterEventPage, ClusterHeartbeatSamplePage, ClusterHostPage, ClusterHostResponse,
-    ClusterInstancePage, ClusterInstanceResponse, ClusterOverviewResponse, ClusterPage,
-    ClusterPeer, ClusterPeerMessage, ClusterResponse, CreateClusterRequest,
-    UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest,
-    CertificateDistributionPage, CertificateIssueUpdate, CertificateOperationAcceptedResponse,
-    CertificateOperationLease, CertificateOperationResponse, CertificatePage,
-    ListAuditLogsQuery,
-    CertificateResponse, IssueCertificateRequest,
-    CreateDeploymentRequest, CreateDomainRequest, CreateEnvVariableRequest, CreatePlatformTargetRequest,
-    CreateHealthCheckRequest, CreateManagedDomainRequest, CreateNginxConfigRequest,
-    CreateListenerCertificateBindingRequest, ListenerCertificateBindingPage,
-    ListenerCertificateBindingResponse,
+    AgentHeartbeatRequest, AgentHeartbeatResponse, AgentSyncResponse, ApplicationPage,
+    ApplicationResponse, AuditLogPage, CertificateDistributionPage, CertificateIssueUpdate,
+    CertificateOperationAcceptedResponse, CertificateOperationLease, CertificateOperationResponse,
+    CertificatePage, CertificateResponse, ClusterEventPage, ClusterHeartbeatSamplePage,
+    ClusterHostPage, ClusterHostResponse, ClusterInstancePage, ClusterInstanceResponse,
+    ClusterOverviewResponse, ClusterPage, ClusterPeer, ClusterPeerMessage, ClusterResponse,
+    CreateApplicationRequest, CreateClusterRequest, CreateDeploymentRequest, CreateDomainRequest,
+    CreateEnvVariableRequest, CreateHealthCheckRequest, CreateListenerCertificateBindingRequest,
+    CreateManagedDomainRequest, CreateNginxConfigRequest, CreatePlatformTargetRequest,
     CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
-    CreateServerResponse, CreateApplicationRequest, CreateSourceVersionRequest, DeploymentPage,
-    DeploymentResponse, DomainPage, DomainResponse, EnvVariablePage, EnvVariableResponse,
-    UpdateEnvVariableRequest, UpdateRootDomainRequest,
-    HealthCheckPage, HealthCheckResponse, ListNginxConfigsQuery,
-    ListRootDomainsQuery, ListApplicationsQuery, NginxConfigPage, NginxConfigResponse,
-    NginxStatusResponse, RootDomainPage,
-    RootDomainResponse, RuntimeAssignment, RuntimeAssignmentDelivery, RuntimeObservation,
-    ServerPage, ApplicationPage, ApplicationResponse, PlatformTargetPage, PlatformTargetResponse,
-    SourceVersionPage, SourceVersionResponse,
-    TlsCertificateAssignmentMaterial, UpdateDomainApplicationBindingRequest,
-    UpdateNginxConfigRequest, UpdateApplicationRequest, RevokeCertificateRequest,
+    CreateServerResponse, CreateSourceVersionRequest, DeploymentPage, DeploymentResponse,
+    DomainDnsRecordPage, DomainPage, DomainResponse, EnvVariablePage, EnvVariableResponse,
+    HealthCheckPage, HealthCheckResponse, IssueCertificateRequest, ListApplicationsQuery,
+    ListAuditLogsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
+    ListenerCertificateBindingPage, ListenerCertificateBindingResponse, NginxConfigPage,
+    NginxConfigResponse, NginxStatusResponse, PlatformTargetPage, PlatformTargetResponse,
+    RevokeCertificateRequest, RootDomainPage, RootDomainResponse, RuntimeAssignment,
+    RuntimeAssignmentDelivery, RuntimeObservation, ServerPage, SourceVersionPage,
+    SourceVersionResponse, TlsCertificateAssignmentMaterial, UpdateApplicationRequest,
+    UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest,
+    UpdateDomainApplicationBindingRequest, UpdateEnvVariableRequest, UpdateNginxConfigRequest,
+    UpdateRootDomainRequest,
 };
 use sdkwork_webserver_contract::{WebServiceError, WebServiceResult};
 
+use super::WebRepository;
 use super::agents::AuthenticatedAgent;
 use super::support::next_id;
-use super::WebRepository;
 
 #[async_trait]
 impl WebRepositoryPort for WebRepository {
@@ -60,7 +57,8 @@ impl WebRepositoryPort for WebRepository {
         owner_id: Option<i64>,
         query: &ListApplicationsQuery,
     ) -> WebServiceResult<ApplicationPage> {
-        self.list_applications_repo(tenant_id, owner_id, query).await
+        self.list_applications_repo(tenant_id, owner_id, query)
+            .await
     }
 
     async fn create_application(
@@ -85,7 +83,8 @@ impl WebRepositoryPort for WebRepository {
         owner_id: Option<i64>,
         application_id: &str,
     ) -> WebServiceResult<ApplicationResponse> {
-        self.retrieve_application_repo(tenant_id, owner_id, application_id).await
+        self.retrieve_application_repo(tenant_id, owner_id, application_id)
+            .await
     }
 
     async fn update_application(
@@ -94,7 +93,8 @@ impl WebRepositoryPort for WebRepository {
         application_id: &str,
         request: &UpdateApplicationRequest,
     ) -> WebServiceResult<ApplicationResponse> {
-        self.update_application_repo(tenant_id, application_id, request).await
+        self.update_application_repo(tenant_id, application_id, request)
+            .await
     }
 
     async fn delete_application(
@@ -103,7 +103,8 @@ impl WebRepositoryPort for WebRepository {
         application_id: &str,
         actor_id: Option<i64>,
     ) -> WebServiceResult<()> {
-        self.delete_application_repo(tenant_id, application_id, actor_id).await
+        self.delete_application_repo(tenant_id, application_id, actor_id)
+            .await
     }
 
     async fn set_application_status(
@@ -112,7 +113,8 @@ impl WebRepositoryPort for WebRepository {
         application_id: &str,
         status: i32,
     ) -> WebServiceResult<ApplicationResponse> {
-        self.set_application_status_repo(tenant_id, application_id, status).await
+        self.set_application_status_repo(tenant_id, application_id, status)
+            .await
     }
 
     async fn activate_application(
@@ -120,7 +122,8 @@ impl WebRepositoryPort for WebRepository {
         tenant_id: i64,
         application_id: &str,
     ) -> WebServiceResult<ApplicationResponse> {
-        self.activate_application_repo(tenant_id, application_id).await
+        self.activate_application_repo(tenant_id, application_id)
+            .await
     }
 
     async fn resolve_site_id(
@@ -291,6 +294,46 @@ impl WebRepositoryPort for WebRepository {
         request: &CreateRootDomainHostnameRequest,
     ) -> WebServiceResult<DomainResponse> {
         self.create_root_domain_hostname_repo(tenant_id, root_domain_id, request)
+            .await
+    }
+
+    async fn root_domain_dns_sync_target(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+    ) -> WebServiceResult<Option<RootDomainDnsSyncTarget>> {
+        self.root_domain_dns_sync_target_repo(tenant_id, root_domain_id)
+            .await
+    }
+
+    async fn list_root_domain_hostname_assets(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+    ) -> WebServiceResult<Vec<DomainHostnameAsset>> {
+        self.list_root_domain_hostname_assets_repo(tenant_id, root_domain_id)
+            .await
+    }
+
+    async fn replace_root_domain_dns_records(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        snapshot: &DomainDnsSnapshotWrite,
+    ) -> WebServiceResult<i64> {
+        self.replace_root_domain_dns_records_repo(tenant_id, root_domain_id, snapshot)
+            .await
+    }
+
+    async fn list_root_domain_dns_records(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        filter: &DomainDnsRecordFilter,
+        page: i32,
+        page_size: i32,
+    ) -> WebServiceResult<DomainDnsRecordPage> {
+        self.list_root_domain_dns_records_repo(tenant_id, root_domain_id, filter, page, page_size)
             .await
     }
 
@@ -480,7 +523,8 @@ impl WebRepositoryPort for WebRepository {
         &self,
         expiring_window_days: i32,
     ) -> WebServiceResult<(i64, i64)> {
-        self.certificate_expiry_summary_repo(expiring_window_days).await
+        self.certificate_expiry_summary_repo(expiring_window_days)
+            .await
     }
 
     async fn list_certificates(
@@ -589,14 +633,8 @@ impl WebRepositoryPort for WebRepository {
         page: i32,
         page_size: i32,
     ) -> WebServiceResult<ListenerCertificateBindingPage> {
-        self.list_listener_certificate_bindings_repo(
-            tenant_id,
-            site_id,
-            domain_id,
-            page,
-            page_size,
-        )
-        .await
+        self.list_listener_certificate_bindings_repo(tenant_id, site_id, domain_id, page, page_size)
+            .await
     }
 
     async fn bind_listener_certificate(
@@ -929,11 +967,7 @@ impl WebRepositoryPort for WebRepository {
         self.insert_audit_log_repo(entry).await
     }
 
-    async fn list_clusters(
-        &self,
-        page: i32,
-        page_size: i32,
-    ) -> WebServiceResult<ClusterPage> {
+    async fn list_clusters(&self, page: i32, page_size: i32) -> WebServiceResult<ClusterPage> {
         self.list_clusters_repo(page, page_size).await
     }
 
@@ -951,10 +985,7 @@ impl WebRepositoryPort for WebRepository {
                 .lb_strategy
                 .as_deref()
                 .unwrap_or(sdkwork_webserver_contract::CLUSTER_LB_STRATEGIES[0]),
-            request
-                .served_domains
-                .as_deref()
-                .unwrap_or(&[]),
+            request.served_domains.as_deref().unwrap_or(&[]),
         )
         .await
     }
@@ -1044,7 +1075,8 @@ impl WebRepositoryPort for WebRepository {
         instance_id: &str,
         request: &UpdateClusterInstanceRequest,
     ) -> WebServiceResult<ClusterInstanceResponse> {
-        self.update_cluster_instance_repo(instance_id, request).await
+        self.update_cluster_instance_repo(instance_id, request)
+            .await
     }
 
     async fn delete_cluster_instance(&self, instance_id: &str) -> WebServiceResult<()> {
@@ -1329,11 +1361,7 @@ impl WebRepositoryPort for WebRepository {
             .collect())
     }
 
-    async fn expire_cluster_peer_messages(
-        &self,
-        now: &str,
-        limit: i32,
-    ) -> WebServiceResult<u64> {
+    async fn expire_cluster_peer_messages(&self, now: &str, limit: i32) -> WebServiceResult<u64> {
         self.expire_cluster_peer_messages_repo(now, limit).await
     }
 
@@ -1345,4 +1373,3 @@ impl WebRepositoryPort for WebRepository {
         self.purge_cluster_heartbeats_repo(older_than, limit).await
     }
 }
-

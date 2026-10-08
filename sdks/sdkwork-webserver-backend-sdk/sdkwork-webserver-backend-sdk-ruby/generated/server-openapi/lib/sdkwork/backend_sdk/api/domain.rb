@@ -7,6 +7,8 @@ require_relative '../models/domains_create_response201'
 require_relative '../models/domains_list_response'
 require_relative '../models/domains_verify_response'
 require_relative '../models/root_domains_create_response201'
+require_relative '../models/root_domains_dns_records_list_response'
+require_relative '../models/root_domains_dns_records_sync_response'
 require_relative '../models/root_domains_list_response'
 require_relative '../models/root_domains_retrieve_response'
 require_relative '../models/root_domains_subdomains_create_response201'
@@ -123,6 +125,36 @@ module Sdkwork
             options[:json] = payload unless payload.nil?
             result = @client.request('POST', path, **options)
             result.is_a?(Hash) ? Models::RootDomainsSubdomainsCreateResponse201.from_hash(result) : nil
+          end
+
+          # List a root-domain Zone's synced DNS resolution records
+          def root_domains_dns_records_list(root_domain_id, page: nil, page_size: nil, domain_id: nil)
+            path = interpolate_path('/backend/v3/api/root_domains/{rootDomainId}/dns_records', rootDomainId: serialize_path_parameter(root_domain_id, PathParameterSpec.new('rootDomainId', 'simple', false)))
+            query = build_query_string([
+              QueryParameterSpec.new('page', page, 'form', true, false, nil),
+              QueryParameterSpec.new('page_size', page_size, 'form', true, false, nil),
+              QueryParameterSpec.new('domain_id', domain_id, 'form', true, false, nil),
+            ])
+            path = append_query_string(path, query)
+            options = {}
+
+            result = @client.request('GET', path, **options)
+            result.is_a?(Hash) ? Models::RootDomainsDnsRecordsListResponse.from_hash(result) : nil
+          end
+
+          # Sync a root-domain Zone's resolution records through its cloud account
+          def root_domains_dns_records_sync(root_domain_id, idempotency_key)
+            path = interpolate_path('/backend/v3/api/root_domains/{rootDomainId}/dns_records/sync', rootDomainId: serialize_path_parameter(root_domain_id, PathParameterSpec.new('rootDomainId', 'simple', false)))
+            request_headers = build_request_headers(
+              {
+                'Idempotency-Key' => HeaderParameterSpec.new(idempotency_key, 'simple', false, nil),
+              },
+              {}
+            )
+            options = {}
+            options[:headers] = request_headers unless request_headers.empty?
+            result = @client.request('POST', path, **options)
+            result.is_a?(Hash) ? Models::RootDomainsDnsRecordsSyncResponse.from_hash(result) : nil
           end
 
           # List tenant custom domain assets

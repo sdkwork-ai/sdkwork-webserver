@@ -27,6 +27,8 @@ export type { CreateRootDomainRequest } from './create-root-domain-request';
 export type { UpdateRootDomainRequest } from './update-root-domain-request';
 export type { CreateRootDomainHostnameRequest } from './create-root-domain-hostname-request';
 export type { RootDomainResponse } from './root-domain-response';
+export type { DomainDnsRecordResponse } from './domain-dns-record-response';
+export type { DomainDnsSyncResponse } from './domain-dns-sync-response';
 export type { DomainDeploymentResponse } from './domain-deployment-response';
 export type { UpdateDomainApplicationBindingRequest } from './update-domain-application-binding-request';
 export type { ApplicationDomainResponse } from './application-domain-response';
@@ -128,6 +130,8 @@ export type { RootDomainsRetrieveResponse } from './root-domains-retrieve-respon
 export type { RootDomainsUpdateResponse } from './root-domains-update-response';
 export type { RootDomainsSubdomainsListResponse } from './root-domains-subdomains-list-response';
 export type { RootDomainsSubdomainsCreateResponse201 } from './root-domains-subdomains-create-response201';
+export type { RootDomainsDnsRecordsListResponse } from './root-domains-dns-records-list-response';
+export type { RootDomainsDnsRecordsSyncResponse } from './root-domains-dns-records-sync-response';
 export type { DomainsListResponse } from './domains-list-response';
 export type { DomainsCreateResponse201 } from './domains-create-response201';
 export type { DomainsVerifyResponse } from './domains-verify-response';

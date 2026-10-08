@@ -333,6 +333,24 @@ pub fn absolute_record_name(relative: &str, zone_apex: &str) -> String {
     }
 }
 
+/// One inventory read's answer, carried with the account that answered.
+///
+/// The caller learns *which* account and zone the rows describe from the same
+/// value that carries the rows, so a caller cannot pair a snapshot with an
+/// account it did not come from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DnsZoneInventory {
+    /// The account whose credential answered the read.
+    pub account_id: String,
+    /// Provider family, in the wire vocabulary (`ALIYUN_DNS`, `DNSPOD`,
+    /// `CLOUDFLARE`).
+    pub provider: String,
+    /// The zone apex the inventory covers.
+    pub zone_apex: String,
+    /// Every record the provider holds for the zone.
+    pub records: Vec<DnsZoneRecord>,
+}
+
 /// Presents and withdraws DNS-01 TXT records.
 ///
 /// Implementations must be idempotent: [`Dns01Presenter::withdraw`] may be

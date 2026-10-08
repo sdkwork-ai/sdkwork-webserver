@@ -180,7 +180,12 @@ fn listener_certificate_binding_routes_keep_security_contracts() {
 #[test]
 fn root_domain_zone_routes_keep_authorization_and_navigation_contracts() {
     let expected = [
-        (HttpMethod::Get, "rootDomains.list", "web.applications.read", false),
+        (
+            HttpMethod::Get,
+            "rootDomains.list",
+            "web.applications.read",
+            false,
+        ),
         (
             HttpMethod::Post,
             "rootDomains.create",
@@ -214,6 +219,22 @@ fn root_domain_zone_routes_keep_authorization_and_navigation_contracts() {
         (
             HttpMethod::Post,
             "rootDomains.subdomains.create",
+            "web.applications.write",
+            true,
+        ),
+        // The resolution-records read is store-only (it renders the last sync's
+        // snapshot), so it is a plain read; the sync talks to the provider and
+        // replaces the snapshot, which is a write under the same permissions
+        // the rest of the zone plane answers to.
+        (
+            HttpMethod::Get,
+            "rootDomains.dnsRecords.list",
+            "web.applications.read",
+            false,
+        ),
+        (
+            HttpMethod::Post,
+            "rootDomains.dnsRecords.sync",
             "web.applications.write",
             true,
         ),

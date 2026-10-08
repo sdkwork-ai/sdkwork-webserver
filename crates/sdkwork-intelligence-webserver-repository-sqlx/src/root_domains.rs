@@ -1,5 +1,5 @@
-use crate::audited_sql;
 use super::{EngineRow, WebRepository};
+use crate::audited_sql;
 use sdkwork_webserver_contract::{
     CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainDeploymentResponse, DomainPage,
     DomainResponse, ListRootDomainsQuery, RootDomainCloudAccountFilter, RootDomainPage,
@@ -8,8 +8,8 @@ use sdkwork_webserver_contract::{
 use sqlx::Row;
 
 use super::support::{
-    bool_from_row, instant_from_row, instant_write_expression, new_uuid, next_id, now_rfc3339,
-    like_contains_pattern, optional_instant_from_row, pagination, resolve_site_internal_id,
+    bool_from_row, instant_from_row, instant_write_expression, like_contains_pattern, new_uuid,
+    next_id, now_rfc3339, optional_instant_from_row, pagination, resolve_site_internal_id,
     resolve_site_owner_id, store_error,
 };
 
@@ -34,9 +34,7 @@ impl WebRepository {
         let (cloud_account_scoped, cloud_account_id) = match query.cloud_account_filter() {
             RootDomainCloudAccountFilter::Any => (false, None),
             RootDomainCloudAccountFilter::Unassigned => (true, None),
-            RootDomainCloudAccountFilter::Assigned(account_id) => {
-                (true, Some(account_id))
-            }
+            RootDomainCloudAccountFilter::Assigned(account_id) => (true, Some(account_id)),
         };
 
         let total: i64 = sqlx::query_scalar(
@@ -211,8 +209,9 @@ impl WebRepository {
         .map_err(|error| store_error("retrieve webserver_root_domain", error))?
         .ok_or_else(|| WebServiceError::not_found("root domain not found"))?;
 
-        map_root_domain_row(&row)
-            .map_err(|error| WebServiceError::Internal(format!("map webserver_root_domain: {error}")))
+        map_root_domain_row(&row).map_err(|error| {
+            WebServiceError::Internal(format!("map webserver_root_domain: {error}"))
+        })
     }
 
     pub(super) async fn delete_root_domain_repo(
@@ -245,6 +244,9 @@ impl WebRepository {
         .await
         .map_err(|error| store_error("load webserver_root_domain delete state", error))?
         .ok_or_else(|| WebServiceError::not_found("root domain not found"))?;
+        let row_id: i64 = row
+            .try_get("id")
+            .map_err(|error| store_error("map webserver_root_domain id", error))?;
         let subdomain_count: i64 = row
             .try_get("subdomain_count")
             .map_err(|error| store_error("map webserver_root_domain child count", error))?;
@@ -273,6 +275,19 @@ impl WebRepository {
         if result.rows_affected() == 0 {
             return Err(WebServiceError::not_found("root domain not found"));
         }
+        // The synced resolution-record snapshot is disposable derived state:
+        // it hard-deletes with the zone under the same lock rather than
+        // soft-deleting, so a re-created zone with the same id can never
+        // inherit a previous zone's provider answers.
+        sqlx::query(
+            "DELETE FROM webserver_domain_dns_record
+             WHERE tenant_id = $1 AND root_domain_id = $2",
+        )
+        .bind(tenant_id)
+        .bind(row_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|error| store_error("delete webserver_domain_dns_record", error))?;
         tx.commit()
             .await
             .map_err(|error| store_error("commit root domain delete", error))?;
@@ -507,7 +522,11 @@ impl WebRepository {
             .bind(owner_user_id)
             .bind(root_internal_id)
             .bind(&hostname)
-            .bind(if hostname.starts_with("*.") { "WILDCARD" } else { "EXACT" })
+            .bind(if hostname.starts_with("*.") {
+                "WILDCARD"
+            } else {
+                "EXACT"
+            })
             .bind(0_i32)
             .bind(&now)
             .execute(&mut *tx)
@@ -596,7 +615,7 @@ impl WebRepository {
         })
     }
 
-    async fn resolve_root_domain_internal_id(
+    pub(super) async fn resolve_root_domain_internal_id(
         &self,
         tenant_id: i64,
         root_domain_id: &str,

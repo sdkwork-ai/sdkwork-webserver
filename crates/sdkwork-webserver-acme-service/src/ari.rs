@@ -4,7 +4,7 @@
 // plane records it on the certificate aggregate so the due-renewal scheduler
 // prefers the CA window over the fixed `renew_before_days` fallback.
 
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use instant_acme::{CertificateIdentifier, Error as InstantAcmeError};
 use x509_parser::extensions::ParsedExtension;
 use x509_parser::pem::parse_x509_pem;

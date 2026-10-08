@@ -1074,6 +1074,106 @@ class RootDomainResponse {
   }
 }
 
+class DomainDnsRecordResponse {
+  final String? id;
+  final String? recordName;
+  final String? recordType;
+  final String? recordValue;
+  final int? ttlSeconds;
+  final int? priority;
+  final String? recordLine;
+  final String? domainId;
+  final String? dnsProvider;
+  final String? cloudAccountId;
+  final String? providerRecordRef;
+  final String? syncedAt;
+
+  DomainDnsRecordResponse({
+    this.id,
+    this.recordName,
+    this.recordType,
+    this.recordValue,
+    this.ttlSeconds,
+    this.priority,
+    this.recordLine,
+    this.domainId,
+    this.dnsProvider,
+    this.cloudAccountId,
+    this.providerRecordRef,
+    this.syncedAt
+  });
+
+  factory DomainDnsRecordResponse.fromJson(Map<String, dynamic> json) {
+    return DomainDnsRecordResponse(
+      id: json['id']?.toString(),
+      recordName: json['recordName']?.toString(),
+      recordType: json['recordType']?.toString(),
+      recordValue: json['recordValue']?.toString(),
+      ttlSeconds: json['ttlSeconds'] is int ? json['ttlSeconds'] : null,
+      priority: json['priority'] is int ? json['priority'] : null,
+      recordLine: json['recordLine']?.toString(),
+      domainId: json['domainId']?.toString(),
+      dnsProvider: json['dnsProvider']?.toString(),
+      cloudAccountId: json['cloudAccountId']?.toString(),
+      providerRecordRef: json['providerRecordRef']?.toString(),
+      syncedAt: json['syncedAt']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'recordName': recordName,
+      'recordType': recordType,
+      'recordValue': recordValue,
+      'ttlSeconds': ttlSeconds,
+      'priority': priority,
+      'recordLine': recordLine,
+      'domainId': domainId,
+      'dnsProvider': dnsProvider,
+      'cloudAccountId': cloudAccountId,
+      'providerRecordRef': providerRecordRef,
+      'syncedAt': syncedAt,
+    };
+  }
+}
+
+class DomainDnsSyncResponse {
+  final String? recordCount;
+  final String? syncedAt;
+  final String? zoneApex;
+  final String? dnsProvider;
+  final String? cloudAccountId;
+
+  DomainDnsSyncResponse({
+    this.recordCount,
+    this.syncedAt,
+    this.zoneApex,
+    this.dnsProvider,
+    this.cloudAccountId
+  });
+
+  factory DomainDnsSyncResponse.fromJson(Map<String, dynamic> json) {
+    return DomainDnsSyncResponse(
+      recordCount: json['recordCount']?.toString(),
+      syncedAt: json['syncedAt']?.toString(),
+      zoneApex: json['zoneApex']?.toString(),
+      dnsProvider: json['dnsProvider']?.toString(),
+      cloudAccountId: json['cloudAccountId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'recordCount': recordCount,
+      'syncedAt': syncedAt,
+      'zoneApex': zoneApex,
+      'dnsProvider': dnsProvider,
+      'cloudAccountId': cloudAccountId,
+    };
+  }
+}
+
 class DomainDeploymentResponse {
   final String? id;
   final int? status;
@@ -5364,6 +5464,62 @@ class RootDomainsSubdomainsCreateResponse201 {
 
   factory RootDomainsSubdomainsCreateResponse201.fromJson(Map<String, dynamic> json) {
     return RootDomainsSubdomainsCreateResponse201(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class RootDomainsDnsRecordsListResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  RootDomainsDnsRecordsListResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory RootDomainsDnsRecordsListResponse.fromJson(Map<String, dynamic> json) {
+    return RootDomainsDnsRecordsListResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class RootDomainsDnsRecordsSyncResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  RootDomainsDnsRecordsSyncResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory RootDomainsDnsRecordsSyncResponse.fromJson(Map<String, dynamic> json) {
+    return RootDomainsDnsRecordsSyncResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()

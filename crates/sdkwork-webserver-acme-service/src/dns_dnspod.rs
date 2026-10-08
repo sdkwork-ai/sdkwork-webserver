@@ -11,11 +11,11 @@ use http::Method;
 use serde::Deserialize;
 
 use crate::dns::{
-    absolute_record_name, normalize_dns_name, Dns01Presenter, Dns01RecordHandle,
-    Dns01RecordRequest, DnsAccountVerification, DnsProviderKind, DnsZoneRecord,
-    ACME_CHALLENGE_LABEL,
+    ACME_CHALLENGE_LABEL, Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest,
+    DnsAccountVerification, DnsProviderKind, DnsZoneRecord, absolute_record_name,
+    normalize_dns_name,
 };
-use crate::dns_http::{form_request, DnsApiClient};
+use crate::dns_http::{DnsApiClient, form_request};
 use crate::{AcmeServiceError, AcmeServiceResult};
 
 pub const DNSPOD_DEFAULT_BASE_URL: &str = "https://dnsapi.cn";
@@ -192,16 +192,21 @@ impl DnspodDns01Presenter {
                 let Some(value) = record.value.filter(|value| !value.is_empty()) else {
                     continue;
                 };
-                let Some(record_type) = record.record_type.filter(|value| !value.is_empty())
-                else {
+                let Some(record_type) = record.record_type.filter(|value| !value.is_empty()) else {
                     continue;
                 };
                 records.push(DnsZoneRecord {
                     record_name: absolute_record_name(&relative, &zone),
                     record_type,
                     record_value: value,
-                    ttl_seconds: record.ttl.and_then(|ttl| ttl.value()).and_then(|ttl| u32::try_from(ttl).ok()),
-                    priority: record.mx.and_then(|mx| mx.value()).and_then(|value| u32::try_from(value).ok()),
+                    ttl_seconds: record
+                        .ttl
+                        .and_then(|ttl| ttl.value())
+                        .and_then(|ttl| u32::try_from(ttl).ok()),
+                    priority: record
+                        .mx
+                        .and_then(|mx| mx.value())
+                        .and_then(|value| u32::try_from(value).ok()),
                     record_line: record.line.filter(|line| !line.is_empty()),
                     provider_record_ref: record.id.filter(|id| !id.is_empty()),
                 });
@@ -464,7 +469,7 @@ mod tests {
     use axum::extract::State;
     use axum::routing::post;
     use axum::{Form, Json, Router};
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     /// One captured call: the action name and the form fields it carried.
     type CapturedCall = (String, Vec<(String, String)>);
@@ -698,11 +703,13 @@ mod tests {
         let base_url = spawn_stub(state.clone()).await;
         let presenter = presenter(base_url);
 
-        assert!(presenter
-            .verify_account("example.com")
-            .await
-            .expect("verified")
-            .is_verified());
+        assert!(
+            presenter
+                .verify_account("example.com")
+                .await
+                .expect("verified")
+                .is_verified()
+        );
         assert_eq!(state.requests.lock().expect("lock").len(), 1);
     }
 
@@ -768,7 +775,7 @@ mod record_inventory_tests {
     use axum::extract::State;
     use axum::routing::post;
     use axum::{Form, Json, Router};
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     /// Answers one page of mixed rows and verifies the inventory carries the
     /// provider's own spellings with the owner rebuilt against the zone.
@@ -816,7 +823,10 @@ mod record_inventory_tests {
         )
         .expect("presenter");
 
-        let records = presenter.zone_records("example.com").await.expect("inventory");
+        let records = presenter
+            .zone_records("example.com")
+            .await
+            .expect("inventory");
         assert_eq!(records.len(), 3);
         assert_eq!(records[0].record_name, "www.example.com");
         assert_eq!(records[0].record_type, "A");
@@ -849,7 +859,7 @@ mod duplicate_publish_tests {
     use super::*;
     use axum::routing::post;
     use axum::{Json, Router};
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     /// The vendor's duplicate refusal followed by an exact read must come back
     /// as success carrying the existing record's id. A row whose value differs

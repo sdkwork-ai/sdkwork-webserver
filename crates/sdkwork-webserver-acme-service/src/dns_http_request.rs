@@ -82,10 +82,10 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::dns::{
-    dns_relative_record_name, Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest,
-    DnsProviderKind,
+    Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest, DnsProviderKind,
+    dns_relative_record_name,
 };
-use crate::dns_http::{templated_request, DnsApiClient, DnsApiResponse};
+use crate::dns_http::{DnsApiClient, DnsApiResponse, templated_request};
 use crate::{AcmeServiceError, AcmeServiceResult};
 
 /// Ceiling for one account's configuration.
@@ -699,12 +699,12 @@ fn assert_endpoint_is_allowed(
             return Err(AcmeServiceError::config(
                 "a DNS request url must use https; plaintext endpoints are reachable only from \
                  this crate's tests",
-            ))
+            ));
         }
         _ => {
             return Err(AcmeServiceError::config(
                 "a DNS request url must be an http(s) URL",
-            ))
+            ));
         }
     }
     let host = uri

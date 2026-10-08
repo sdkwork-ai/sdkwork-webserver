@@ -3,31 +3,48 @@
 use async_trait::async_trait;
 use chrono::{Datelike, Duration, NaiveDate, Utc};
 use sdkwork_webserver_contract::{
-    web_is_platform_operator_tenant, cloud_account_id_shape_error, ClusterEventPage,
-    ClusterHeartbeatSamplePage, ClusterHostPage,
-    ClusterHostResponse, ClusterInstancePage, ClusterInstanceResponse, ClusterOverviewResponse,
-    ClusterPage, ClusterResponse, ClusterSyncManifest, CreateApplicationRequest,
-    CreateClusterRequest, CreateDomainRequest, CreateListenerCertificateBindingRequest,
-    CreateManagedDomainRequest, CreateNginxConfigRequest, CreateRootDomainHostnameRequest,
-    CreateRootDomainRequest, CreateServerRequest, CreateSourceVersionRequest,
-    EnqueueClusterPeerMessagesRequest, EnqueueClusterPeerMessagesResponse,
-    ImportGitSourceVersionRequest, IssueCertificateRequest, ListApplicationsQuery,
-    ListNginxConfigsQuery, ListRootDomainsQuery, MetricsSeriesWindow, MetricsSummaryQuery,
-    MetricsSummaryResponse, MetricsWindowBounds, MetricsWindowRequest, TrafficUsageStatisticsQuery,
-    TrafficUsageStatisticsResponse, TrafficUsageWindow, UpdateApplicationRequest,
-    UpdateCertificateRequest, UpdateClusterHostRequest, UpdateClusterInstanceRequest,
-    UpdateClusterRequest, UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest,
-    UpdateRootDomainRequest, WebAppApi, WebAppRequestContext, WebAppResourceScope, WebBackendApi,
-    WebBackendRequestContext, WebServiceError, WebServiceResult, DEFAULT_TRAFFIC_USAGE_TOP_APPS,
-    DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS, MAX_TRAFFIC_USAGE_TOP_APPS, MAX_TRAFFIC_USAGE_WINDOW_DAYS,
-    METRICS_ENTITY_TENANTS, METRICS_LAST_SEVEN_DAYS_SPAN, METRICS_WINDOWS,
-    METRICS_WINDOW_CURRENT_MONTH, METRICS_WINDOW_LAST_7_DAYS, METRICS_WINDOW_LIFETIME,
-    METRICS_WINDOW_TODAY,
+    ClusterEventPage, ClusterHeartbeatSamplePage, ClusterHostPage, ClusterHostResponse,
+    ClusterInstancePage, ClusterInstanceResponse, ClusterOverviewResponse, ClusterPage,
+    ClusterResponse, ClusterSyncManifest, CreateApplicationRequest, CreateClusterRequest,
+    CreateDomainRequest, CreateListenerCertificateBindingRequest, CreateManagedDomainRequest,
+    CreateNginxConfigRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest,
+    CreateServerRequest, CreateSourceVersionRequest, DEFAULT_TRAFFIC_USAGE_TOP_APPS,
+    DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS, EnqueueClusterPeerMessagesRequest,
+    EnqueueClusterPeerMessagesResponse, ImportGitSourceVersionRequest, IssueCertificateRequest,
+    ListApplicationsQuery, ListDomainDnsRecordsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
+    MAX_TRAFFIC_USAGE_TOP_APPS, MAX_TRAFFIC_USAGE_WINDOW_DAYS, METRICS_ENTITY_TENANTS,
+    METRICS_LAST_SEVEN_DAYS_SPAN, METRICS_WINDOW_CURRENT_MONTH, METRICS_WINDOW_LAST_7_DAYS,
+    METRICS_WINDOW_LIFETIME, METRICS_WINDOW_TODAY, METRICS_WINDOWS, MetricsSeriesWindow,
+    MetricsSummaryQuery, MetricsSummaryResponse, MetricsWindowBounds, MetricsWindowRequest,
+    TrafficUsageStatisticsQuery, TrafficUsageStatisticsResponse, TrafficUsageWindow,
+    UpdateApplicationRequest, UpdateCertificateRequest, UpdateClusterHostRequest,
+    UpdateClusterInstanceRequest, UpdateClusterRequest, UpdateDomainApplicationBindingRequest,
+    UpdateNginxConfigRequest, UpdateRootDomainRequest, WebAppApi, WebAppRequestContext,
+    WebAppResourceScope, WebBackendApi, WebBackendRequestContext, WebServiceError,
+    WebServiceResult, cloud_account_id_shape_error, web_is_platform_operator_tenant,
 };
 
+use crate::repository::{
+    DnsRecordSnapshotRow, DomainDnsRecordFilter, DomainDnsSnapshotWrite, domain_asset_for_record,
+};
 use crate::{AuditLogWrite, WebService};
 
 const MAX_NGINX_CONFIG_BYTES: usize = 1024 * 1024;
+
+/// Maps an inventory read's failure to the error an operator can act on.
+///
+/// A configuration mistake (no account on the edge, an unconfigured id, an
+/// account that cannot see the zone) is fixed by configuration, so it
+/// surfaces as a validation error naming the fix; a provider refusal or a
+/// vendor outage stays an internal failure carrying the provider's own words.
+fn map_dns_sync_error(error: sdkwork_webserver_acme_service::AcmeServiceError) -> WebServiceError {
+    match &error {
+        sdkwork_webserver_acme_service::AcmeServiceError::Config(detail) => {
+            WebServiceError::validation(format!("dns record sync refused: {detail}"))
+        }
+        other => WebServiceError::Internal(format!("dns record sync failed: {other}")),
+    }
+}
 
 impl WebService {
     /// 统一的 fail-closed 租户上下文校验。
@@ -111,7 +128,8 @@ impl WebService {
         // A blank member is an omission rather than an account named "": the
         // create form always sends the field, and an operator who left it empty
         // asked for no binding, not for a binding to nothing.
-        let cloud_account_id = Self::normalize_cloud_account_id(request.cloud_account_id.as_deref())?;
+        let cloud_account_id =
+            Self::normalize_cloud_account_id(request.cloud_account_id.as_deref())?;
         Ok(CreateRootDomainRequest {
             hostname,
             cloud_account_id,
@@ -491,6 +509,104 @@ impl WebBackendApi for WebService {
         )
         .await;
         Ok(domain)
+    }
+
+    async fn list_root_domain_dns_records(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+        query: &ListDomainDnsRecordsQuery,
+    ) -> WebServiceResult<sdkwork_webserver_contract::DomainDnsRecordPage> {
+        let tenant_id = Self::require_backend_tenant(context)?;
+        self.repository
+            .list_root_domain_dns_records(
+                tenant_id,
+                root_domain_id,
+                &DomainDnsRecordFilter {
+                    domain_id: query.domain_id.clone(),
+                },
+                query.page,
+                query.page_size,
+            )
+            .await
+    }
+
+    /// Re-reads the Zone's record inventory through its cloud account and
+    /// replaces the stored snapshot.
+    ///
+    /// The account resolves the way every DNS operation for this Zone does:
+    /// the bound account when one is pinned, otherwise the registered account
+    /// whose zone covers the apex. A configuration mistake (no account, an
+    /// unconfigured id, an account that cannot see the zone) is a validation
+    /// error the operator can fix; a provider refusal is an internal failure
+    /// carrying the provider's own words.
+    async fn sync_root_domain_dns_records(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+    ) -> WebServiceResult<sdkwork_webserver_contract::DomainDnsSyncResponse> {
+        let tenant_id = Self::require_backend_tenant(context)?;
+        let target = self
+            .repository
+            .root_domain_dns_sync_target(tenant_id, root_domain_id)
+            .await?
+            .ok_or_else(|| WebServiceError::not_found("root domain not found"))?;
+        let inventory = self
+            .certificate_issuer
+            .read_zone_records(target.cloud_account_id.as_deref(), &target.hostname)
+            .await
+            .map_err(map_dns_sync_error)?;
+        let hostname_assets = self
+            .repository
+            .list_root_domain_hostname_assets(tenant_id, root_domain_id)
+            .await?;
+        let synced_at = sdkwork_utils_rust::datetime::format_datetime(
+            sdkwork_utils_rust::datetime::now(),
+            None,
+        );
+        let records: Vec<DnsRecordSnapshotRow> = inventory
+            .records
+            .iter()
+            .map(|record| DnsRecordSnapshotRow {
+                record_name: record.record_name.clone(),
+                record_type: record.record_type.clone(),
+                record_value: record.record_value.clone(),
+                ttl_seconds: record
+                    .ttl_seconds
+                    .and_then(|value| i32::try_from(value).ok()),
+                priority: record.priority.and_then(|value| i32::try_from(value).ok()),
+                record_line: record.record_line.clone(),
+                provider_record_ref: record.provider_record_ref.clone(),
+                domain_id: domain_asset_for_record(&hostname_assets, &record.record_name),
+            })
+            .collect();
+        let record_count = self
+            .repository
+            .replace_root_domain_dns_records(
+                tenant_id,
+                root_domain_id,
+                &DomainDnsSnapshotWrite {
+                    dns_provider: inventory.provider.clone(),
+                    cloud_account_id: inventory.account_id.clone(),
+                    synced_at: synced_at.clone(),
+                    records,
+                },
+            )
+            .await?;
+        self.audit_backend_action(
+            context,
+            "root_domains.dns_records.sync",
+            "root_domain",
+            root_domain_id,
+        )
+        .await;
+        Ok(sdkwork_webserver_contract::DomainDnsSyncResponse {
+            record_count,
+            synced_at,
+            zone_apex: inventory.zone_apex,
+            dns_provider: inventory.provider,
+            cloud_account_id: inventory.account_id,
+        })
     }
 
     async fn list_managed_domains(
@@ -1910,18 +2026,17 @@ fn parse_traffic_usage_date(field: &str, value: &str) -> WebServiceResult<NaiveD
 #[cfg(test)]
 mod tests {
     use super::{
-        require_traffic_usage_platform_operator, resolve_traffic_usage_window,
-        validate_create_nginx_config_request, validate_create_server_request,
-        validate_tenant_scope_hash, validate_update_nginx_config_request, WebService,
-        MAX_NGINX_CONFIG_BYTES,
+        MAX_NGINX_CONFIG_BYTES, WebService, require_traffic_usage_platform_operator,
+        resolve_traffic_usage_window, validate_create_nginx_config_request,
+        validate_create_server_request, validate_tenant_scope_hash,
+        validate_update_nginx_config_request,
     };
     use chrono::{Duration, Utc};
     use sdkwork_webserver_contract::{
-        web_platform_operator_tenant_id, CreateNginxConfigRequest, CreateServerRequest,
-        TrafficUsageStatisticsQuery, UpdateNginxConfigRequest, WebAppResourceScope,
-        WebBackendRequestContext, DEFAULT_TRAFFIC_USAGE_TOP_APPS,
+        CreateNginxConfigRequest, CreateServerRequest, DEFAULT_TRAFFIC_USAGE_TOP_APPS,
         DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS, MAX_TRAFFIC_USAGE_TOP_APPS,
-        MAX_TRAFFIC_USAGE_WINDOW_DAYS,
+        MAX_TRAFFIC_USAGE_WINDOW_DAYS, TrafficUsageStatisticsQuery, UpdateNginxConfigRequest,
+        WebAppResourceScope, WebBackendRequestContext, web_platform_operator_tenant_id,
     };
 
     fn traffic_usage_query(
@@ -2006,13 +2121,15 @@ mod tests {
             MAX_TRAFFIC_USAGE_WINDOW_DAYS
         );
 
-        assert!(resolve_traffic_usage_window(&traffic_usage_query(
-            Some("2026-01-01"),
-            Some("2027-01-03"),
-            None,
-            None,
-        ))
-        .is_err());
+        assert!(
+            resolve_traffic_usage_window(&traffic_usage_query(
+                Some("2026-01-01"),
+                Some("2027-01-03"),
+                None,
+                None,
+            ))
+            .is_err()
+        );
     }
 
     #[test]

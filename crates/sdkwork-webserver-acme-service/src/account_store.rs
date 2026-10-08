@@ -280,11 +280,13 @@ mod tests {
     #[tokio::test]
     async fn memory_store_round_trips_per_directory() {
         let store = MemoryAcmeAccountStore::default();
-        assert!(store
-            .load("https://acme.example/directory")
-            .await
-            .expect("load missing")
-            .is_none());
+        assert!(
+            store
+                .load("https://acme.example/directory")
+                .await
+                .expect("load missing")
+                .is_none()
+        );
         let expected = credentials();
         store
             .save("https://acme.example/directory", &expected)
@@ -300,22 +302,26 @@ mod tests {
             serde_json::to_string(&expected).expect("serialize expected")
         );
         // A different CA directory must never share the account.
-        assert!(store
-            .load("https://other.example/directory")
-            .await
-            .expect("load other")
-            .is_none());
+        assert!(
+            store
+                .load("https://other.example/directory")
+                .await
+                .expect("load other")
+                .is_none()
+        );
     }
 
     #[tokio::test]
     async fn encrypted_file_store_round_trips_atomically() {
         let root = tempfile::tempdir().expect("tempdir");
         let store = EncryptedFileAcmeAccountStore::new(root.path(), b"test-master-key");
-        assert!(store
-            .load("https://acme.example/directory")
-            .await
-            .expect("load missing")
-            .is_none());
+        assert!(
+            store
+                .load("https://acme.example/directory")
+                .await
+                .expect("load missing")
+                .is_none()
+        );
         store
             .save("https://acme.example/directory", &credentials())
             .await

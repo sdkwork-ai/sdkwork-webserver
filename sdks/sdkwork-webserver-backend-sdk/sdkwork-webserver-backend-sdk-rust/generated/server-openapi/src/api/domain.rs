@@ -4,7 +4,7 @@ use crate::api::base::{RequestHeaders};
 use crate::api::paths::backend_path;
 use crate::api::paths::append_query_string;
 use crate::http::{SdkworkError, SdkworkHttpClient};
-use crate::models::{ApplicationDomainResponse, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainVerifyResponse, RootDomainResponse, UpdateDomainApplicationBindingRequest, UpdateRootDomainRequest};
+use crate::models::{ApplicationDomainResponse, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainDnsSyncResponse, DomainVerifyResponse, RootDomainResponse, UpdateDomainApplicationBindingRequest, UpdateRootDomainRequest};
 
 #[derive(Clone)]
 pub struct DomainApi {
@@ -91,6 +91,29 @@ impl DomainApi {
             &[],
         );
         self.client.post(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
+    }
+
+    /// List a root-domain Zone's synced DNS resolution records
+    pub async fn root_domains_dns_records_list(&self, root_domain_id: &str, page: Option<i64>, page_size: Option<i64>, domain_id: Option<&str>) -> Result<serde_json::Value, SdkworkError> {
+        let query = build_query_string(&[
+            QueryParameterSpec::new("page", page, "form", true, false, None),
+            QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
+            QueryParameterSpec::new("domain_id", domain_id, "form", true, false, None),
+        ]);
+        let path = append_query_string(backend_path(&format!("/root_domains/{}/dns_records", serialize_path_parameter(root_domain_id, PathParameterSpec::new("rootDomainId", "simple", false)))), &query);
+        self.client.get(&path, None, None).await
+    }
+
+    /// Sync a root-domain Zone's resolution records through its cloud account
+    pub async fn root_domains_dns_records_sync(&self, root_domain_id: &str, idempotency_key: &str) -> Result<DomainDnsSyncResponse, SdkworkError> {
+        let path = backend_path(&format!("/root_domains/{}/dns_records/sync", serialize_path_parameter(root_domain_id, PathParameterSpec::new("rootDomainId", "simple", false))));
+        let headers = build_request_headers(
+            &[
+                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
+            ],
+            &[],
+        );
+        self.client.post(&path, Option::<&serde_json::Value>::None, None, headers.as_ref(), None).await
     }
 
     /// List tenant custom domain assets

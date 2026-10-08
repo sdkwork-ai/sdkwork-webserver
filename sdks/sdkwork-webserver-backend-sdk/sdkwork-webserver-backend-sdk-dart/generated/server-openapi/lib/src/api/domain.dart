@@ -108,6 +108,35 @@ class DomainApi {
     })();
   }
 
+  /// List a root-domain Zone's synced DNS resolution records
+  Future<RootDomainsDnsRecordsListResponse?> rootDomainsDnsRecordsList(String rootDomainId, [int? page, int? pageSize, String? domainId]) async {
+    final query = buildQueryString([
+      QueryParameterSpec('page', page, 'form', true, false, null),
+      QueryParameterSpec('page_size', pageSize, 'form', true, false, null),
+      QueryParameterSpec('domain_id', domainId, 'form', true, false, null)
+    ]);
+    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.backendPath('/root_domains/${serializePathParameter(rootDomainId, const PathParameterSpec('rootDomainId', 'simple', false))}/dns_records'), query));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : RootDomainsDnsRecordsListResponse.fromJson(map);
+    })();
+  }
+
+  /// Sync a root-domain Zone's resolution records through its cloud account
+  Future<RootDomainsDnsRecordsSyncResponse?> rootDomainsDnsRecordsSync(String rootDomainId, String idempotencyKey) async {
+    final requestHeaders = buildRequestHeaders(
+      <String, HeaderParameterSpec>{
+        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
+      },
+      <String, HeaderParameterSpec>{},
+    );
+    final response = await _client.post(ApiPaths.backendPath('/root_domains/${serializePathParameter(rootDomainId, const PathParameterSpec('rootDomainId', 'simple', false))}/dns_records/sync'), headers: requestHeaders);
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : RootDomainsDnsRecordsSyncResponse.fromJson(map);
+    })();
+  }
+
   /// List tenant custom domain assets
   Future<DomainsListResponse?> domainsList([int? page, int? pageSize]) async {
     final query = buildQueryString([

@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use sdkwork_database_sqlx::{process_shared_database_pool, DatabasePool};
+use sdkwork_database_sqlx::{DatabasePool, process_shared_database_pool};
 use sdkwork_webserver_resolver_cache::{ResolutionDatabase, ResolvedRecord};
 
 /// SQL-backed resolution cache over the process-shared database pool.

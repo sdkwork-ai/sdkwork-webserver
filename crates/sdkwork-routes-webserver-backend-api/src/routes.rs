@@ -1,17 +1,18 @@
 use axum::{
+    Extension, Json, Router,
     extract::{Path, Query, State},
     response::Response,
     routing::{get, post},
-    Extension, Json, Router,
 };
 use sdkwork_webserver_contract::{
     CreateApplicationRequest, CreateDomainRequest, CreateListenerCertificateBindingRequest,
     CreateManagedDomainRequest, CreateNginxConfigRequest, CreateRootDomainHostnameRequest,
     CreateRootDomainRequest, CreateServerRequest, CreateSourceVersionRequest,
     ImportGitSourceVersionRequest, IssueCertificateRequest, ListApplicationsQuery,
-    ListAuditLogsQuery, ListNginxConfigsQuery, ListRootDomainsQuery, RevokeCertificateRequest,
-    UpdateApplicationRequest, UpdateCertificateRequest, UpdateDomainApplicationBindingRequest,
-    UpdateNginxConfigRequest, UpdateRootDomainRequest, WebBackendApi, WebBackendRequestContext,
+    ListAuditLogsQuery, ListDomainDnsRecordsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
+    RevokeCertificateRequest, UpdateApplicationRequest, UpdateCertificateRequest,
+    UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest, UpdateRootDomainRequest,
+    WebBackendApi, WebBackendRequestContext,
 };
 use serde::Deserialize;
 use std::sync::Arc;
@@ -21,11 +22,11 @@ use crate::{
     traffic_usage_routes,
 };
 use sdkwork_routes_webserver_common::{
-    accepted_async, created_resource, no_content, ok_application_page, ok_audit_log_page,
-    ok_certificate_distribution_page, ok_certificate_page, ok_deployment_page, ok_dns_account_page,
-    ok_domain_page, ok_listener_certificate_binding_page, ok_nginx_config_page, ok_resource,
-    ok_root_domain_page, ok_server_page, ok_source_version_page, validate_pagination_query,
-    WebApiError,
+    WebApiError, accepted_async, created_resource, no_content, ok_application_page,
+    ok_audit_log_page, ok_certificate_distribution_page, ok_certificate_page, ok_deployment_page,
+    ok_dns_account_page, ok_domain_dns_record_page, ok_domain_page,
+    ok_listener_certificate_binding_page, ok_nginx_config_page, ok_resource, ok_root_domain_page,
+    ok_server_page, ok_source_version_page, validate_pagination_query,
 };
 
 /// Router state shared by every handler of this surface.
@@ -94,6 +95,14 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn WebBackendApi>) -> Rout
         .route(
             paths::ROOT_DOMAIN_SUBDOMAINS,
             get(list_root_domain_subdomains).post(create_root_domain_subdomain),
+        )
+        .route(
+            paths::ROOT_DOMAIN_DNS_RECORDS,
+            get(list_root_domain_dns_records),
+        )
+        .route(
+            paths::ROOT_DOMAIN_DNS_RECORDS_SYNC,
+            post(sync_root_domain_dns_records),
         )
         .route(
             paths::DOMAINS,
@@ -535,6 +544,44 @@ async fn create_root_domain_subdomain(
         state
             .api
             .create_root_domain_hostname(&context, &root_domain_id, &request)
+            .await,
+    )
+}
+
+/// Reads the Zone's synced resolution records, optionally restricted to one
+/// subdomain. Store-only: the page renders the last sync's snapshot and never
+/// waits on a provider.
+async fn list_root_domain_dns_records(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Path(root_domain_id): Path<String>,
+    Query(query): Query<ListDomainDnsRecordsQuery>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    ok_domain_dns_record_page(
+        state
+            .api
+            .list_root_domain_dns_records(&context, &root_domain_id, &query)
+            .await,
+        query.page,
+        query.page_size,
+    )
+}
+
+/// Re-reads the Zone's inventory through its cloud account and replaces the
+/// stored snapshot. Idempotent in effect — two concurrent syncs replace the
+/// snapshot with equivalent answers — so the route carries the same
+/// idempotency contract as the other write routes.
+async fn sync_root_domain_dns_records(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Path(root_domain_id): Path<String>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    ok_resource(
+        state
+            .api
+            .sync_root_domain_dns_records(&context, &root_domain_id)
             .await,
     )
 }

@@ -1,11 +1,12 @@
 import { useWebserverAdminSdk } from "@sdkwork/webserver-pc-admin-core";
 import type {
   ApplicationDomainResponse,
+  DomainDnsRecordResponse,
   DomainVerifyResponse,
   RootDomainResponse,
 } from "@sdkwork/webserver-pc-admin-core";
 import type { WebserverLocale } from "@sdkwork/webserver-pc-commons";
-import { ArrowLeft, CirclePause, CirclePlay, FileKey2, Globe2, Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowLeft, CirclePause, CirclePlay, FileKey2, Globe2, Network, Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, Route, Routes, useParams } from "react-router-dom";
 
@@ -138,6 +139,14 @@ export function ServedDomainAdminSurface({ cloudAccounts = [], locale, resource 
       <Routes>
         <Route element={<RootDomainLedger cloudAccounts={cloudAccounts} locale={locale} />} index />
         <Route element={<RootDomainHostnames locale={locale} />} path=":rootDomainId" />
+        {/* The third level: one subdomain's own page. It reads the zone's
+            synced resolution records restricted to that subdomain and offers
+            the cloud-account sync that refreshes them, so "how does this name
+            resolve" is answerable where the name is registered. */}
+        <Route
+          element={<RootDomainHostnameDetail locale={locale} />}
+          path=":rootDomainId/hostnames/:hostnameId"
+        />
         <Route element={<RootDomainLedger cloudAccounts={cloudAccounts} locale={locale} />} path="*" />
       </Routes>
     </div>
@@ -1031,13 +1040,18 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
               {(hostnames ?? []).map((hostname) => (
                 <tr key={hostname.id}>
                   <td>
-                    <span className="hostname-cell">
+                    {/* The hostname is the drill-in: its own page carries the
+                        resolution records this list can only summarize. */}
+                    <Link
+                      className="hostname-cell primary-cell-link"
+                      to={`hostnames/${hostname.id}`}
+                    >
                       <Globe2 size={16} />
                       <span>
                         <strong>{hostname.hostname}</strong>
                         {hostname.isPrimary ? <small>{t("resource.domains.primary")}</small> : null}
                       </span>
-                    </span>
+                    </Link>
                   </td>
                   <td>{hostname.recordName || "-"}</td>
                   <td>
@@ -1189,6 +1203,236 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
           title={t("resource.domains.delete")}
         />
       ) : null}
+    </section>
+  );
+}
+
+/**
+ * One subdomain's own page: its synced DNS resolution records.
+ *
+ * The records are a snapshot, never a live lookup: the page renders what the
+ * last cloud-account sync read from the provider, and the sync button is the
+ * only gesture that touches the provider. That keeps a page render a store
+ * read, and it keeps the answer honest about its age — the snapshot instant
+ * sits in every row and in the summary line, so a stale view says so instead
+ * of posing as current.
+ *
+ * The rows shown are the ones the sync matched to *this* subdomain, wildcard
+ * semantics already applied: an exact hostname shows its own owner's records,
+ * and a wildcard hostname shows its base owner plus everything beneath it.
+ * Zone-level records matched to no registered hostname are the Zone page's
+ * business, not this page's.
+ */
+function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
+  const client = useWebserverAdminSdk();
+  // Memoized per locale: a fresh translator closure every render sat in the
+  // list effect's dependency array below and refetched the ledger forever.
+  const t = useMemo(() => translator(locale), [locale]);
+  const { rootDomainId = "", hostnameId = "" } = useParams();
+  const [root, setRoot] = useState<RootDomainResponse>();
+  const [hostname, setHostname] = useState<ApplicationDomainResponse>();
+  const [records, setRecords] = useState<DomainDnsRecordResponse[] | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [page, setPage] = useState(1);
+  // Mutations request a re-read by bumping this counter rather than by
+  // clearing the rows: `setPage(1)` alone is an `Object.is` bail-out when the
+  // list already sits on page one, and a cleared list with no effect run is
+  // the permanent "Loading" state.
+  const [build, setBuild] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+  const [syncSummary, setSyncSummary] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    let active = true;
+    setBusy(true);
+    setError(undefined);
+    // Three reads, each settling on its own: the zone names the header, the
+    // subdomain names the page, and the records are the body. A failed
+    // records read must not blank a header the server answered.
+    void Promise.allSettled([
+      client.domain.rootDomains.retrieve(rootDomainId),
+      client.domain.rootDomains.subdomains.list(rootDomainId, { page: 1, pageSize: PAGE_SIZE }),
+      client.domain.rootDomains.dnsRecords.list(rootDomainId, {
+        page,
+        pageSize: PAGE_SIZE,
+        domainId: hostnameId || undefined,
+      }),
+    ]).then(([rootOutcome, hostnameOutcome, recordsOutcome]) => {
+      if (!active) return;
+      if (rootOutcome.status === "fulfilled") {
+        setRoot(rootOutcome.value);
+      }
+      if (hostnameOutcome.status === "fulfilled") {
+        setHostname(
+          hostnameOutcome.value.items.find((row) => row.id === hostnameId),
+        );
+      }
+      if (recordsOutcome.status === "fulfilled") {
+        setRecords(recordsOutcome.value.items);
+        // `PageInfo.hasMore` is optional on the wire; an absent flag means
+        // "no continuation", never "unknown".
+        setHasMore(recordsOutcome.value.pageInfo.hasMore === true);
+        setError(undefined);
+      } else {
+        setRecords([]);
+        setError(errorText(recordsOutcome.reason, t));
+      }
+      setBusy(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [build, client, hostnameId, page, rootDomainId, t]);
+
+  /**
+   * The one gesture that reaches the provider: re-read the zone's inventory
+   * through its cloud account and replace the snapshot. The zone's account
+   * resolves exactly as its DNS operations do — the bound account when one is
+   * pinned, otherwise the registered account covering the apex — so a zone
+   * bound to no account still syncs when the edge knows such an account.
+   */
+  const runSync = () => {
+    setSyncing(true);
+    setError(undefined);
+    void client.domain.rootDomains.dnsRecords
+      .sync(rootDomainId, { idempotencyKey: newIdempotencyKey() })
+      .then((synced) => {
+        setSyncSummary(
+          t("resource.domains.dnsSyncedSummary", {
+            syncedAt: formatInstant(synced.syncedAt, locale),
+            provider: synced.dnsProvider,
+            count: synced.recordCount,
+          }),
+        );
+        setBuild((value) => value + 1);
+        setPage(1);
+      })
+      .catch((cause) => setError(errorText(cause, t)))
+      .finally(() => setSyncing(false));
+  };
+
+  return (
+    <section className="resource-page domain-page">
+      {/* The ledger and the hostname list hardcode their base paths for the
+          same reason: the mount point belongs to the host workspace. */}
+      <Link className="back-link" to={`/admin/domains/${rootDomainId}`}>
+        <ArrowLeft size={16} />
+        {t("resource.domains.backToHostnames")}
+      </Link>
+      <div className="resource-commandbar">
+        <div className="resource-identity">
+          <h1>{hostname?.hostname ?? hostnameId}</h1>
+        </div>
+        <div className="actions">
+          <button
+            className="icon-button"
+            disabled={busy}
+            onClick={() => {
+              setBuild((value) => value + 1);
+              setPage(1);
+            }}
+            aria-label={t("resource.domains.refresh")}
+            title={t("resource.domains.refresh")}
+            type="button"
+          >
+            <RefreshCw size={17} />
+          </button>
+          <button className="command-button" disabled={syncing} onClick={runSync} type="button">
+            <RefreshCw size={16} />
+            {t("resource.domains.dnsSync")}
+          </button>
+        </div>
+      </div>
+
+      {syncSummary ? <p className="form-hint">{syncSummary}</p> : null}
+
+      <div className="metric-strip">
+        <Metric label={t("resource.domains.verification")} value={hostname?.isVerified ? "VERIFIED" : "PENDING"} />
+        <Metric
+          label={t("resource.domains.ssl")}
+          value={hostname?.sslEnabled ? hostname.sslProvider || t("resource.domains.yes") : t("resource.domains.sslOff")}
+        />
+        <Metric label={t("resource.domains.application")} value={hostname?.applicationName || "-"} />
+      </div>
+
+      {error ? (
+        <div className="error-banner" role="alert">
+          {error}
+        </div>
+      ) : null}
+
+      <p className="form-hint">{t("resource.domains.dnsSyncHint")}</p>
+
+      {records === null && !error ? (
+        <div className="resource-loading" role="status">
+          <p>{t("resource.domains.loading")}</p>
+        </div>
+      ) : (
+        <div aria-busy={busy || syncing} className="table-frame domain-table-frame">
+          <table className="domain-table">
+            <thead>
+              <tr>
+                <th>{t("resource.domains.subdomainHostname")}</th>
+                <th>{t("resource.domains.dnsRecordType")}</th>
+                <th>{t("resource.domains.dnsRecordValue")}</th>
+                <th>{t("resource.domains.dnsRecordLine")}</th>
+                <th>{t("resource.domains.dnsTtl")}</th>
+                <th>{t("resource.domains.dnsSyncedAt")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(records ?? []).map((record) => (
+                <tr key={record.id}>
+                  <td>
+                    <span className="hostname-cell">
+                      <Network size={15} />
+                      <span>{record.recordName}</span>
+                    </span>
+                  </td>
+                  <td>
+                    <StatusBadge t={t} value={record.recordType} />
+                  </td>
+                  {/* The resolution answer itself: the IP for A/AAAA, the
+                      target for CNAME/MX. Mono-spaced by the cell style, so a
+                      value is copyable without quoting mistakes. */}
+                  <td>
+                    <code>{record.recordValue}</code>
+                    {record.priority === undefined ? null : (
+                      <small className="cell-subtitle"> · {record.priority}</small>
+                    )}
+                  </td>
+                  <td>{record.recordLine || "-"}</td>
+                  <td>{record.ttlSeconds ?? "-"}</td>
+                  <td>{formatInstant(record.syncedAt, locale)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!busy && (records ?? []).length === 0 ? (
+            <div className="empty-state">
+              <Network size={24} />
+              {t("resource.domains.dnsNoRecords")}
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      <Pagination
+        busy={busy}
+        hasMore={hasMore}
+        onNext={() => setPage((current) => current + 1)}
+        onPrevious={() => setPage((current) => Math.max(1, current - 1))}
+        page={page}
+        t={t}
+      />
+
+      {root === undefined ? null : (
+        <small className="cell-subtitle">
+          {t("resource.domains.subdomainsOf", { hostname: root.hostname })}
+        </small>
+      )}
     </section>
   );
 }

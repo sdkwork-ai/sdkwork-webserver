@@ -10,10 +10,10 @@ use http::Method;
 use serde::Deserialize;
 
 use crate::dns::{
-    Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest, DnsAccountVerification,
-    DnsProviderKind, DnsZoneRecord, ACME_CHALLENGE_LABEL,
+    ACME_CHALLENGE_LABEL, Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest,
+    DnsAccountVerification, DnsProviderKind, DnsZoneRecord,
 };
-use crate::dns_http::{json_request, DnsApiClient};
+use crate::dns_http::{DnsApiClient, json_request};
 use crate::{AcmeServiceError, AcmeServiceResult};
 
 pub const CLOUDFLARE_DEFAULT_BASE_URL: &str = "https://api.cloudflare.com/client/v4";
@@ -231,8 +231,7 @@ impl CloudflareDns01Presenter {
                 let Some(record_name) = record.name.filter(|value| !value.is_empty()) else {
                     continue;
                 };
-                let Some(record_type) = record.record_type.filter(|value| !value.is_empty())
-                else {
+                let Some(record_type) = record.record_type.filter(|value| !value.is_empty()) else {
                     continue;
                 };
                 let Some(record_value) = record.content.filter(|value| !value.is_empty()) else {
@@ -516,7 +515,7 @@ mod tests {
     use axum::http::StatusCode;
     use axum::routing::{delete, get, post};
     use axum::{Json, Router};
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     #[derive(Default)]
     struct StubState {
@@ -706,11 +705,13 @@ mod tests {
         let base_url = spawn_stub(state.clone()).await;
         let presenter = presenter(base_url, Some("zone-1".to_string()));
 
-        assert!(presenter
-            .verify_account("example.com")
-            .await
-            .expect("verified")
-            .is_verified());
+        assert!(
+            presenter
+                .verify_account("example.com")
+                .await
+                .expect("verified")
+                .is_verified()
+        );
         assert_eq!(
             state.requests.lock().expect("lock").len(),
             1,
@@ -855,7 +856,7 @@ mod record_inventory_tests {
     use axum::response::{IntoResponse, Response};
     use axum::routing::get;
     use axum::{Json, Router};
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     /// Two pages, driven by `result_info.total_pages` rather than the row
     /// count, so the walk must read the page metadata it claims to follow.
@@ -916,7 +917,10 @@ mod record_inventory_tests {
         )
         .expect("presenter");
 
-        let records = presenter.zone_records("example.com").await.expect("inventory");
+        let records = presenter
+            .zone_records("example.com")
+            .await
+            .expect("inventory");
         assert_eq!(records.len(), 3);
         // Cloudflare already answers absolute owners; they are carried as-is.
         assert_eq!(records[0].record_name, "www.example.com");
@@ -935,7 +939,7 @@ mod duplicate_publish_tests {
     use axum::response::{IntoResponse, Response};
     use axum::routing::post;
     use axum::{Json, Router};
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     /// A create the provider answers with "already exists" resolves the record
     /// by an exact read and comes back as success — the trait's "publish for a

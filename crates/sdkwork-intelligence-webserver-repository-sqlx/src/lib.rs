@@ -4,8 +4,8 @@ use sqlx::{Database, Pool};
 mod resolution_cache;
 mod runtime;
 
-pub use resolution_cache::{resolution_cache_from_shared_pool, SqlxResolutionCache};
-pub use runtime::{bootstrap_web_runtime_from_env, WebRuntime};
+pub use resolution_cache::{SqlxResolutionCache, resolution_cache_from_shared_pool};
+pub use runtime::{WebRuntime, bootstrap_web_runtime_from_env};
 
 /// Marks a dynamically assembled SQL statement as audited for sqlx 0.9's
 /// compile-time injection check (`SqlSafeStr`).
@@ -97,6 +97,9 @@ macro_rules! repository_engine {
             }
             mod domains {
                 include!("domains.rs");
+            }
+            mod domain_dns_records {
+                include!("domain_dns_records.rs");
             }
             mod env_variables {
                 include!("env_variables.rs");

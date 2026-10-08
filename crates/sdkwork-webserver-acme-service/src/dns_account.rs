@@ -21,8 +21,8 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::dns::{
-    normalize_dns_name, Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest,
-    DnsAccountVerification, DnsProviderKind,
+    Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest, DnsAccountVerification, DnsProviderKind,
+    normalize_dns_name,
 };
 use crate::{AcmeServiceError, AcmeServiceResult};
 
@@ -267,7 +267,7 @@ impl DnsCloudAccountRegistry {
                 (provider, _) => {
                     return Err(AcmeServiceError::validation(format!(
                         "credentials for {provider} must be an object with provider-specific keys"
-                    )))
+                    )));
                 }
             };
             registry.register(DnsCloudAccount {
@@ -713,9 +713,11 @@ mod tests {
         assert!(!reports[0].is_rejected());
         assert!(reports[0].outcome.as_ref().expect("ok").is_verified());
         assert!(reports[1].is_rejected());
-        assert!(reports[1]
-            .describe()
-            .contains("provider refused the credential"));
+        assert!(
+            reports[1]
+                .describe()
+                .contains("provider refused the credential")
+        );
         // A family with no read-only probe reports "could not check", never
         // "checked and fine".
         assert!(!reports[2].is_rejected());
@@ -812,8 +814,10 @@ mod tests {
         std::fs::write(&path, b"[]").expect("write");
         let configs = load_dns_account_configs(&path).expect("empty list loads");
         assert!(configs.is_empty());
-        assert!(DnsCloudAccountRegistry::from_configs(&configs)
-            .expect("registry")
-            .is_empty());
+        assert!(
+            DnsCloudAccountRegistry::from_configs(&configs)
+                .expect("registry")
+                .is_empty()
+        );
     }
 }

@@ -19,8 +19,8 @@ use sdkwork_webserver_contract::{
 };
 use sdkwork_webserver_core::{
     tls_runtime::{
-        tls_assignment_snapshot_sha256, TlsAssignmentSnapshot, TlsCertificateAssignment,
-        TlsRuntimeLimits, TlsRuntimePolicy, TlsRuntimeVersion, TLS_RUNTIME_SCHEMA_VERSION,
+        TLS_RUNTIME_SCHEMA_VERSION, TlsAssignmentSnapshot, TlsCertificateAssignment,
+        TlsRuntimeLimits, TlsRuntimePolicy, TlsRuntimeVersion, tls_assignment_snapshot_sha256,
     },
     website_runtime::normalize_website_hostname,
 };
@@ -721,15 +721,19 @@ mod tests {
         assert_eq!(snapshot.generation, 7);
         assert_eq!(snapshot.node_uuid, "node-1");
         assert_eq!(snapshot.snapshot_sha256.len(), 64);
-        assert!(snapshot
-            .snapshot_sha256
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit()));
+        assert!(
+            snapshot
+                .snapshot_sha256
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+        );
         assert_eq!(snapshot.assignments.len(), 2);
-        assert!(snapshot
-            .assignments
-            .windows(2)
-            .all(|pair| pair[0].assignment_uuid < pair[1].assignment_uuid));
+        assert!(
+            snapshot
+                .assignments
+                .windows(2)
+                .all(|pair| pair[0].assignment_uuid < pair[1].assignment_uuid)
+        );
         let by_version = snapshot
             .assignments
             .iter()
@@ -751,13 +755,15 @@ mod tests {
         )
         .expect("non-canonical hostnames are normalized");
         assert_eq!(snapshot.assignments[0].server_names, vec!["example.com"]);
-        assert!(build_snapshot(
-            "node-1",
-            &["h2".to_string()],
-            1,
-            vec![material("version-b", &["bad/name"])],
-        )
-        .is_err());
+        assert!(
+            build_snapshot(
+                "node-1",
+                &["h2".to_string()],
+                1,
+                vec![material("version-b", &["bad/name"])],
+            )
+            .is_err()
+        );
     }
 
     #[test]

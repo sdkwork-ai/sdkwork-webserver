@@ -168,6 +168,48 @@ const DNS_ACCOUNTS = [
 ];
 
 /**
+ * The subdomain's synced resolution records, in the shape
+ * `/root_domains/{id}/dns_records` answers with.
+ *
+ * An A record (the resolution IP the page exists to show) plus the TXT row the
+ * challenge flow leaves behind, so the table is visibly *not* filtered to one
+ * type — the snapshot is the provider's whole answer for this owner.
+ */
+const DNS_RECORDS = [
+  {
+    cloudAccountId: "aliyun-prod",
+    dnsProvider: "ALIYUN_DNS",
+    domainId: "d-server-dev",
+    id: "rec-a-1",
+    recordLine: "default",
+    recordName: "server-dev.sdkwork.com",
+    recordType: "A",
+    recordValue: "203.0.113.10",
+    syncedAt: "2026-10-08T08:00:00Z",
+    ttlSeconds: 600,
+  },
+  {
+    cloudAccountId: "aliyun-prod",
+    dnsProvider: "ALIYUN_DNS",
+    domainId: "d-server-dev",
+    id: "rec-txt-1",
+    recordName: "_sdkwork-verification.sdkwork.com",
+    recordType: "TXT",
+    recordValue: "sdkwork-domain-verification=challenge-1",
+    syncedAt: "2026-10-08T08:00:00Z",
+    ttlSeconds: 600,
+  },
+];
+
+const DNS_SYNC_RESULT = {
+  cloudAccountId: "aliyun-prod",
+  dnsProvider: "ALIYUN_DNS",
+  recordCount: "2",
+  syncedAt: "2026-10-08T09:30:00Z",
+  zoneApex: "sdkwork.com",
+};
+
+/**
  * The account center's inventory, as the host injects it.
  *
  * Two rows rather than one, and the two are deliberately *different* accounts. A
@@ -216,11 +258,13 @@ interface Stubs {
   dnsAccounts: ReturnType<typeof vi.fn>;
   issue: ReturnType<typeof vi.fn>;
   listCertificates: ReturnType<typeof vi.fn>;
+  listDnsRecords: ReturnType<typeof vi.fn>;
   listRootDomains: ReturnType<typeof vi.fn>;
   listSubdomains: ReturnType<typeof vi.fn>;
   renewCertificate: ReturnType<typeof vi.fn>;
   retrieveRootDomain: ReturnType<typeof vi.fn>;
   revokeCertificate: ReturnType<typeof vi.fn>;
+  syncDnsRecords: ReturnType<typeof vi.fn>;
   updateCertificate: ReturnType<typeof vi.fn>;
   updateRootDomain: ReturnType<typeof vi.fn>;
   verifyDomain: ReturnType<typeof vi.fn>;
@@ -237,6 +281,8 @@ function stubClient(): Stubs {
   const dnsAccounts = vi.fn().mockResolvedValue(page(DNS_ACCOUNTS));
   const issue = vi.fn().mockResolvedValue(undefined);
   const listCertificates = vi.fn().mockResolvedValue(page(CERTIFICATES));
+  const listDnsRecords = vi.fn().mockResolvedValue(page(DNS_RECORDS));
+  const syncDnsRecords = vi.fn().mockResolvedValue(DNS_SYNC_RESULT);
   const retrieveRootDomain = vi.fn().mockResolvedValue(ROOTS[0]);
   const updateRootDomain = vi.fn().mockResolvedValue(ROOTS[0]);
   const deleteCertificate = vi.fn().mockResolvedValue(undefined);
@@ -274,6 +320,7 @@ function stubClient(): Stubs {
       rootDomains: {
         create: createRootDomain,
         delete: deleteRootDomain,
+        dnsRecords: { list: listDnsRecords, sync: syncDnsRecords },
         list: listRootDomains,
         retrieve: retrieveRootDomain,
         subdomains: { create: createSubdomain, list: listSubdomains },
@@ -291,11 +338,13 @@ function stubClient(): Stubs {
     dnsAccounts,
     issue,
     listCertificates,
+    listDnsRecords,
     listRootDomains,
     listSubdomains,
     renewCertificate,
     retrieveRootDomain,
     revokeCertificate,
+    syncDnsRecords,
     updateCertificate,
     updateRootDomain,
     verifyDomain,
@@ -409,6 +458,49 @@ describe("served domain admin surface", () => {
     expect(screen.getByText("server-admin-dev.sdkwork.com")).toBeTruthy();
     expect(retrieveRootDomain).toHaveBeenCalledWith(ROOT_ID);
     expect(listSubdomains).toHaveBeenCalledWith(ROOT_ID, { page: 1, pageSize: 50 });
+  });
+
+  /**
+   * The subdomain drill-in: the page a hostname row opens. Two properties are
+   * pinned — the records read is restricted to *this* subdomain (the
+   * `domainId` the sync stamped), and the only provider gesture is the sync
+   * button, which re-reads the ledger afterwards rather than trusting the
+   * sync response alone.
+   */
+  it("shows a subdomain's resolution records and syncs them through the cloud account", async () => {
+    const { client, listDnsRecords, syncDnsRecords } = stubClient();
+    // Mounted the way the host mounts the surface: the workspace owns
+    // `/admin/domains`, and the detail page is its third-level route.
+    renderInProvider(
+      <ServedDomainPage />,
+      client,
+      `/admin/domains/${ROOT_ID}/hostnames/d-server-dev`,
+      "/admin/domains",
+    );
+
+    // The page names the subdomain and renders its snapshot: the resolution
+    // IP for the A record beside the TXT row the challenge flow left behind.
+    // The hostname text matches twice on purpose — the header carries it and
+    // so does the A record's owner — hence the all-variant read.
+    expect((await screen.findAllByText("server-dev.sdkwork.com")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("203.0.113.10")).toBeTruthy();
+    expect(screen.getByText("_sdkwork-verification.sdkwork.com")).toBeTruthy();
+    expect(listDnsRecords).toHaveBeenCalledWith(ROOT_ID, {
+      page: 1,
+      pageSize: 50,
+      domainId: "d-server-dev",
+    });
+
+    // The sync is the one provider gesture, and it carries the idempotency
+    // key every write on this plane carries.
+    fireEvent.click(screen.getByRole("button", { name: "Sync via cloud account" }));
+    await waitFor(() => expect(syncDnsRecords).toHaveBeenCalledTimes(1));
+    expect(syncDnsRecords).toHaveBeenCalledWith(
+      ROOT_ID,
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
+    // ...and the snapshot is re-read, not spliced from the sync response.
+    await waitFor(() => expect(listDnsRecords).toHaveBeenCalledTimes(2));
   });
 
   it("deletes a root only after its own confirmation, without opening that root", async () => {

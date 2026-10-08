@@ -84,6 +84,29 @@ class DomainApi(private val client: HttpClient) {
         return client.convertValue(raw, object : TypeReference<RootDomainsSubdomainsCreateResponse201>() {})
     }
 
+    /** List a root-domain Zone's synced DNS resolution records */
+    suspend fun rootDomainsDnsRecordsList(rootDomainId: String, page: Int? = null, pageSize: Int? = null, domainId: String? = null): RootDomainsDnsRecordsListResponse? {
+        val query = buildQueryString(listOf(
+            QueryParameterSpec("page", page, "form", true, false, null),
+            QueryParameterSpec("page_size", pageSize, "form", true, false, null),
+            QueryParameterSpec("domain_id", domainId, "form", true, false, null)
+        ))
+        val raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/root_domains/${serializePathParameter(rootDomainId, PathParameterSpec("rootDomainId", "simple", false))}/dns_records"), query))
+        return client.convertValue(raw, object : TypeReference<RootDomainsDnsRecordsListResponse>() {})
+    }
+
+    /** Sync a root-domain Zone's resolution records through its cloud account */
+    suspend fun rootDomainsDnsRecordsSync(rootDomainId: String, idempotencyKey: String): RootDomainsDnsRecordsSyncResponse? {
+        val requestHeaders = buildRequestHeaders(
+            mapOf(
+                "Idempotency-Key" to HeaderParameterSpec(idempotencyKey, "simple", false, null),
+            ),
+            emptyMap()
+        )
+        val raw = client.post(ApiPaths.backendPath("/root_domains/${serializePathParameter(rootDomainId, PathParameterSpec("rootDomainId", "simple", false))}/dns_records/sync"), null, null, requestHeaders)
+        return client.convertValue(raw, object : TypeReference<RootDomainsDnsRecordsSyncResponse>() {})
+    }
+
     /** List tenant custom domain assets */
     suspend fun domainsList(page: Int? = null, pageSize: Int? = null): DomainsListResponse? {
         val query = buildQueryString(listOf(

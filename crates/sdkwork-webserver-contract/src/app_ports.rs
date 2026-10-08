@@ -224,6 +224,27 @@ impl ListRootDomainsQuery {
     }
 }
 
+/// Query of a root-domain Zone's synced resolution records.
+///
+/// `domain_id` restricts the page to one registered subdomain — the rows the
+/// sync matched to that hostname, wildcard semantics already applied at sync
+/// time (a wildcard declaration's rows are its base owner and every owner
+/// beneath it). An absent member pages the whole Zone snapshot, which is what
+/// the Zone-level read asks for.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ListDomainDnsRecordsQuery {
+    #[serde(default = "crate::dto::default_page")]
+    pub page: i32,
+    #[serde(default = "crate::dto::default_page_size")]
+    pub page_size: i32,
+    #[serde(
+        rename = "domain_id",
+        default,
+        deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_string"
+    )]
+    pub domain_id: Option<String>,
+}
+
 #[async_trait]
 pub trait WebAppApi: Send + Sync {
     async fn list_applications(
@@ -626,6 +647,27 @@ pub trait WebBackendApi: Send + Sync {
         root_domain_id: &str,
         request: &CreateRootDomainHostnameRequest,
     ) -> WebServiceResult<DomainResponse>;
+
+    /// Pages the Zone's synced DNS resolution records, optionally restricted
+    /// to one subdomain. The read is over the last cloud-account sync's
+    /// snapshot: it never contacts the provider, so a page render costs a
+    /// store read and never a vendor round trip.
+    async fn list_root_domain_dns_records(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+        query: &ListDomainDnsRecordsQuery,
+    ) -> WebServiceResult<DomainDnsRecordPage>;
+
+    /// Re-reads the Zone's resolution-record inventory from its cloud account
+    /// and replaces the stored snapshot. The Zone's account resolves the way
+    /// every DNS operation for it does: the bound account when one is pinned,
+    /// otherwise the registered account whose zone covers the apex.
+    async fn sync_root_domain_dns_records(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+    ) -> WebServiceResult<DomainDnsSyncResponse>;
 
     async fn list_managed_domains(
         &self,

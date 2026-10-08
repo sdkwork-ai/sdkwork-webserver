@@ -588,7 +588,9 @@ pub fn cloud_account_id_shape_error(account_id: &str) -> Option<String> {
 /// That is what lets the repository express the second as a real
 /// `SET cloud_account_id = NULL` rather than a no-op the operator cannot see the
 /// difference of.
-fn deserialize_explicit_nullable<'de, D>(deserializer: D) -> Result<Option<Option<String>>, D::Error>
+fn deserialize_explicit_nullable<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<String>>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -677,6 +679,84 @@ pub struct DomainVerifyResponse {
     pub checked_at: Option<String>,
     #[serde(rename = "failureCode", skip_serializing_if = "Option::is_none")]
     pub failure_code: Option<String>,
+}
+
+/// One synced DNS resolution record of a root-domain Zone.
+///
+/// A row of the snapshot the last cloud-account sync read from the provider —
+/// the "how does this subdomain resolve" answer the subdomain page renders:
+/// the record type (解析类型) and the record content (解析 IP for `A`/`AAAA`,
+/// the target for `CNAME`/`MX`). The row is a snapshot, not live DNS: it is
+/// what the provider answered at `syncedAt`, and a later sync replaces it.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DomainDnsRecordResponse {
+    pub id: String,
+    /// Absolute record owner inside the zone, e.g. `www.example.com`.
+    #[serde(rename = "recordName")]
+    pub record_name: String,
+    /// Record type as the provider spells it (`A`, `AAAA`, `CNAME`, `TXT`, `MX`).
+    #[serde(rename = "recordType")]
+    pub record_type: String,
+    /// Record content: the resolution address for `A`/`AAAA`, the target for
+    /// `CNAME`/`MX`/`NS`, the text for `TXT`.
+    #[serde(rename = "recordValue")]
+    pub record_value: String,
+    #[serde(rename = "ttlSeconds", skip_serializing_if = "Option::is_none")]
+    pub ttl_seconds: Option<i32>,
+    /// Priority for the record types that carry one (`MX`, `SRV`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<i32>,
+    /// Provider resolution line, when the provider splits one owner into
+    /// per-line records.
+    #[serde(rename = "recordLine", skip_serializing_if = "Option::is_none")]
+    pub record_line: Option<String>,
+    /// The registered subdomain this record resolves, when its owner matched
+    /// one at sync time; absent when the owner matches none.
+    #[serde(rename = "domainId", skip_serializing_if = "Option::is_none")]
+    pub domain_id: Option<String>,
+    /// Provider family the snapshot was read from (`ALIYUN_DNS`, `DNSPOD`,
+    /// `CLOUDFLARE`).
+    #[serde(rename = "dnsProvider")]
+    pub dns_provider: String,
+    /// The cloud account the snapshot was read through.
+    #[serde(rename = "cloudAccountId")]
+    pub cloud_account_id: String,
+    /// Provider-assigned record identity, when the provider returned one.
+    #[serde(rename = "providerRecordRef", skip_serializing_if = "Option::is_none")]
+    pub provider_record_ref: Option<String>,
+    /// When this row was read from the provider.
+    #[serde(rename = "syncedAt")]
+    pub synced_at: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct DomainDnsRecordPage {
+    pub items: Vec<DomainDnsRecordResponse>,
+    #[serde(with = "sdkwork_utils_rust::serde_int64")]
+    pub total: i64,
+}
+
+/// What one cloud-account sync run established.
+///
+/// Returned by the sync endpoint so the caller can show the run's outcome
+/// without re-reading: how many records the provider answered, when, through
+/// which account and provider. `recordCount` counts the whole Zone snapshot,
+/// not one subdomain's rows — a sync reads the Zone's inventory in one pass.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DomainDnsSyncResponse {
+    #[serde(rename = "recordCount", with = "sdkwork_utils_rust::serde_int64")]
+    pub record_count: i64,
+    #[serde(rename = "syncedAt")]
+    pub synced_at: String,
+    /// The zone apex the provider inventory was read for.
+    #[serde(rename = "zoneApex")]
+    pub zone_apex: String,
+    /// Provider family the inventory was read from.
+    #[serde(rename = "dnsProvider")]
+    pub dns_provider: String,
+    /// The cloud account whose credential answered the inventory read.
+    #[serde(rename = "cloudAccountId")]
+    pub cloud_account_id: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

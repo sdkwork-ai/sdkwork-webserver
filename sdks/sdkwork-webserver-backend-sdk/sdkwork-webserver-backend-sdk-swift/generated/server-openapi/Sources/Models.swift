@@ -468,6 +468,54 @@ public struct RootDomainResponse: Codable {
     }
 }
 
+public struct DomainDnsRecordResponse: Codable {
+    public let id: String?
+    public let recordName: String?
+    public let recordType: String?
+    public let recordValue: String?
+    public let ttlSeconds: Int?
+    public let priority: Int?
+    public let recordLine: String?
+    public let domainId: String?
+    public let dnsProvider: String?
+    public let cloudAccountId: String?
+    public let providerRecordRef: String?
+    public let syncedAt: String?
+
+
+    public init(id: String? = nil, recordName: String? = nil, recordType: String? = nil, recordValue: String? = nil, ttlSeconds: Int? = nil, priority: Int? = nil, recordLine: String? = nil, domainId: String? = nil, dnsProvider: String? = nil, cloudAccountId: String? = nil, providerRecordRef: String? = nil, syncedAt: String? = nil) {
+        self.id = id
+        self.recordName = recordName
+        self.recordType = recordType
+        self.recordValue = recordValue
+        self.ttlSeconds = ttlSeconds
+        self.priority = priority
+        self.recordLine = recordLine
+        self.domainId = domainId
+        self.dnsProvider = dnsProvider
+        self.cloudAccountId = cloudAccountId
+        self.providerRecordRef = providerRecordRef
+        self.syncedAt = syncedAt
+    }
+}
+
+public struct DomainDnsSyncResponse: Codable {
+    public let recordCount: String?
+    public let syncedAt: String?
+    public let zoneApex: String?
+    public let dnsProvider: String?
+    public let cloudAccountId: String?
+
+
+    public init(recordCount: String? = nil, syncedAt: String? = nil, zoneApex: String? = nil, dnsProvider: String? = nil, cloudAccountId: String? = nil) {
+        self.recordCount = recordCount
+        self.syncedAt = syncedAt
+        self.zoneApex = zoneApex
+        self.dnsProvider = dnsProvider
+        self.cloudAccountId = cloudAccountId
+    }
+}
+
 public struct DomainDeploymentResponse: Codable {
     public let id: String?
     public let status: Int?
@@ -2308,6 +2356,32 @@ public struct RootDomainsSubdomainsListResponse: Codable {
 }
 
 public struct RootDomainsSubdomainsCreateResponse201: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct RootDomainsDnsRecordsListResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct RootDomainsDnsRecordsSyncResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?

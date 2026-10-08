@@ -1,9 +1,9 @@
 use axum::{
-    http::{header, HeaderName, HeaderValue, StatusCode},
-    response::{IntoResponse, Response},
     Json,
+    http::{HeaderName, HeaderValue, StatusCode, header},
+    response::{IntoResponse, Response},
 };
-use sdkwork_utils_rust::{SdkWorkProblemDetail, SdkWorkResultCode, SDKWORK_TRACE_ID_HEADER};
+use sdkwork_utils_rust::{SDKWORK_TRACE_ID_HEADER, SdkWorkProblemDetail, SdkWorkResultCode};
 use sdkwork_webserver_contract::WebServiceError;
 
 use crate::correlation::resolved_trace_id;
@@ -92,7 +92,7 @@ impl IntoResponse for WebApiError {
 #[cfg(test)]
 mod tests {
     use axum::{body::to_bytes, response::IntoResponse};
-    use sdkwork_utils_rust::{SdkWorkResultCode, SDKWORK_TRACE_ID_HEADER};
+    use sdkwork_utils_rust::{SDKWORK_TRACE_ID_HEADER, SdkWorkResultCode};
     use sdkwork_webserver_contract::WebServiceError;
 
     use super::WebApiError;

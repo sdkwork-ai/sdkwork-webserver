@@ -133,7 +133,7 @@ fn path_matches_cursor_patterns(path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_query, CURSOR_PAGINATED_PATH_PATTERNS};
+    use super::{CURSOR_PAGINATED_PATH_PATTERNS, validate_query};
 
     #[test]
     fn cursor_patterns_match_the_openapi_authority() {
@@ -187,19 +187,23 @@ mod tests {
         assert!(validate_query(Some("page_size=201"), "/backend/v3/api/audit_logs").is_err());
         assert!(validate_query(Some("page=0"), "/backend/v3/api/audit_logs").is_err());
         assert!(validate_query(Some("page=1&page=2"), "/backend/v3/api/audit_logs").is_err());
-        assert!(validate_query(
-            Some("cursor=opaque-token&page=1"),
-            "/backend/v3/api/audit_logs"
-        )
-        .is_err());
+        assert!(
+            validate_query(
+                Some("cursor=opaque-token&page=1"),
+                "/backend/v3/api/audit_logs"
+            )
+            .is_err()
+        );
         assert!(validate_query(Some("cursor=opaque-token"), "/backend/v3/api/audit_logs").is_ok());
         assert!(validate_query(Some("page_size=20"), "/backend/v3/api/audit_logs").is_ok());
         assert!(validate_query(Some("cursor="), "/backend/v3/api/audit_logs").is_err());
-        assert!(validate_query(
-            Some("cursor=opaque-token"),
-            "/backend/v3/api/applications/app-1/deployments"
-        )
-        .is_ok());
+        assert!(
+            validate_query(
+                Some("cursor=opaque-token"),
+                "/backend/v3/api/applications/app-1/deployments"
+            )
+            .is_ok()
+        );
         // Cursor-paginated growing collections (nodes, revisions) accept
         // cursor after the keyset upgrade; other lists still fail closed.
         assert!(validate_query(Some("cursor=opaque-token"), "/backend/v3/api/servers").is_ok());
@@ -216,34 +220,44 @@ mod tests {
         // The retired `/app/v3/api` surface is owned by sdkwork-deployments
         // and never reaches this middleware; cursor on such a path fails
         // closed here.
-        assert!(validate_query(
-            Some("cursor=opaque-token"),
-            "/app/v3/api/applications/app-1/source_versions"
-        )
-        .is_err());
-        assert!(validate_query(
-            Some("cursor=opaque-token"),
-            "/app/v3/api/applications/app-1/deployments"
-        )
-        .is_err());
-        assert!(validate_query(
-            Some("cursor=opaque-token"),
-            "/backend/v3/api/applications/app-1/source_versions"
-        )
-        .is_ok());
+        assert!(
+            validate_query(
+                Some("cursor=opaque-token"),
+                "/app/v3/api/applications/app-1/source_versions"
+            )
+            .is_err()
+        );
+        assert!(
+            validate_query(
+                Some("cursor=opaque-token"),
+                "/app/v3/api/applications/app-1/deployments"
+            )
+            .is_err()
+        );
+        assert!(
+            validate_query(
+                Some("cursor=opaque-token"),
+                "/backend/v3/api/applications/app-1/source_versions"
+            )
+            .is_ok()
+        );
         assert!(validate_query(Some("cursor=opaque-token"), "/backend/v3/api/sites").is_err());
         // The per-instance metric history is a cursor-paginated growing
         // time-series: `limit` stays a forbidden alias, `page_size`/`cursor`
         // are the only accepted shape, exactly like the heartbeat list.
-        assert!(validate_query(
-            Some("limit=100"),
-            "/backend/v3/api/clusters/instances/i-1/metrics/history"
-        )
-        .is_err());
-        assert!(validate_query(
-            Some("page_size=20&cursor=opaque-token"),
-            "/backend/v3/api/clusters/instances/i-1/metrics/history"
-        )
-        .is_ok());
+        assert!(
+            validate_query(
+                Some("limit=100"),
+                "/backend/v3/api/clusters/instances/i-1/metrics/history"
+            )
+            .is_err()
+        );
+        assert!(
+            validate_query(
+                Some("page_size=20&cursor=opaque-token"),
+                "/backend/v3/api/clusters/instances/i-1/metrics/history"
+            )
+            .is_ok()
+        );
     }
 }

@@ -11,7 +11,7 @@ use rcgen::{CertificateParams, DistinguishedName};
 use crate::account_store::AcmeAccountStore;
 use crate::challenge_store::ChallengeStore;
 use crate::dns::{
-    dns01_record_name, dns01_txt_value, Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest,
+    Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest, dns01_record_name, dns01_txt_value,
 };
 use crate::http_client::AcmeHttpClientFactory;
 use crate::model::IssuedCertificateMaterial;
@@ -41,7 +41,10 @@ fn fallback_accounts() -> &'static std::sync::Mutex<std::collections::HashMap<St
     FALLBACK_ACCOUNT_CREDENTIALS.get_or_init(|| std::sync::Mutex::new(Default::default()))
 }
 
-fn cache_fallback_account_credentials(directory_url: &str, credentials: &instant_acme::AccountCredentials) {
+fn cache_fallback_account_credentials(
+    directory_url: &str,
+    credentials: &instant_acme::AccountCredentials,
+) {
     match serde_json::to_string(credentials) {
         Ok(json) => {
             fallback_accounts()
@@ -218,7 +221,9 @@ async fn issue_lets_encrypt_inner(
             )
             .await
             .map_err(|error| AcmeServiceError::provider(error.to_string()))?;
-        if let Err(error) = best_effort_save_account(account_store, &config.directory_url, &credentials).await {
+        if let Err(error) =
+            best_effort_save_account(account_store, &config.directory_url, &credentials).await
+        {
             tracing::warn!(
                 directory = %config.directory_url,
                 error = %error,
@@ -396,8 +401,7 @@ async fn issue_lets_encrypt_inner(
         // its next reload - no manual material copy. A failed export is
         // logged and does not fail the issuance (the material is durable in
         // the database; the edge keeps serving its previous certificate).
-        if let Err(export_error) =
-            crate::material_export::export_material_to_disk(&material).await
+        if let Err(export_error) = crate::material_export::export_material_to_disk(&material).await
         {
             tracing::warn!(
                 cert_name = %material.cert_name,
