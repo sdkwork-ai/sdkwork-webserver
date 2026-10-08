@@ -1236,10 +1236,11 @@ interface DnsRecordFormValues {
   host: string;
   recordValue: string;
   ttlSeconds: string;
+  recordLine: string;
 }
 
 function DnsRecordFormValues_empty(): DnsRecordFormValues {
-  return { recordType: "A", host: "", recordValue: "", ttlSeconds: String(DNS_DEFAULT_TTL) };
+  return { recordType: "A", host: "", recordValue: "", ttlSeconds: String(DNS_DEFAULT_TTL), recordLine: "" };
 }
 
 function DnsRecordFormValues_typed(recordType: string): DnsRecordType {
@@ -1254,6 +1255,7 @@ function DnsRecordFormValues_from(record: DomainDnsRecordResponse): DnsRecordFor
     host: record.host,
     recordValue: record.recordValue,
     ttlSeconds: record.ttlSeconds === undefined ? "" : String(record.ttlSeconds),
+    recordLine: record.recordLine ?? "",
   };
 }
 
@@ -1371,18 +1373,23 @@ function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
     const ttlSeconds = ttlRaw === "" ? undefined : Number(ttlRaw);
     const validTtl = ttlSeconds !== undefined && !Number.isNaN(ttlSeconds);
     const recordType = DnsRecordFormValues_typed(form.recordType);
+    // An empty line means "the provider default" on the wire.
+    const recordLine = form.recordLine.trim();
+    const lineFields = recordLine === "" ? {} : { recordLine };
     return {
       body: {
         recordType,
         host,
         recordValue,
         ...(validTtl ? { ttlSeconds } : {}),
+        ...lineFields,
       },
       updateBody: {
         recordType,
         host,
         recordValue,
         ...(validTtl ? { ttlSeconds } : {}),
+        ...lineFields,
       },
     };
   };
@@ -1483,6 +1490,16 @@ function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
           onChange={(event) => setForm({ ...form, recordValue: event.target.value })}
           type="text"
           value={form.recordValue}
+        />
+      </td>
+      <td>
+        <input
+          aria-label={t("resource.domains.dnsRecordLine")}
+          disabled={disabled}
+          onChange={(event) => setForm({ ...form, recordLine: event.target.value })}
+          placeholder="default"
+          type="text"
+          value={form.recordLine}
         />
       </td>
       <td>
@@ -1609,6 +1626,11 @@ function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
           </select>
         </label>
       </form>
+
+      {/* 解析设置 helper: states the snapshot contract before the user
+          starts filling the strip, so a refused provider write is never a
+          surprise. */}
+      <p className="form-hint">{t("resource.domains.dnsSyncHint")}</p>
 
       {records === null && !error ? (
         <div className="resource-loading" role="status">
