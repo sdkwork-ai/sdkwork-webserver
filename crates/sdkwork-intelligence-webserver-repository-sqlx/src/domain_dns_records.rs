@@ -238,7 +238,16 @@ impl WebRepository {
                     rec.record_status, rec.dns_provider, rec.cloud_account_id,
                     rec.provider_record_ref, d.uuid AS domain_uuid,
                     CAST(rec.synced_at AS TEXT) AS synced_at
-             {predicate}
+             FROM webserver_domain_dns_record rec
+             INNER JOIN webserver_root_domain r ON r.id = rec.root_domain_id
+                  AND r.tenant_id = rec.tenant_id AND r.deleted_at IS NULL
+             LEFT JOIN webserver_domain d ON d.tenant_id = rec.tenant_id AND d.id = rec.domain_id
+             WHERE rec.tenant_id = $1 AND rec.root_domain_id = $2
+               AND rec.deleted_at IS NULL
+               AND (rec.domain_id IS NULL OR d.deleted_at IS NULL)
+               AND ($3::text IS NULL OR d.uuid = $3)
+               AND ($4::text IS NULL OR LOWER(rec.record_name) LIKE $4 ESCAPE '\\')
+               AND ($5::text IS NULL OR UPPER(rec.record_type) = $5)
              ORDER BY rec.synced_at DESC, rec.id DESC LIMIT $6 OFFSET $7"
         )))
         .bind(tenant_id)
