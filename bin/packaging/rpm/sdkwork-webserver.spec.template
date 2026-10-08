@@ -364,6 +364,11 @@ if [ "${ENVIRONMENT}" = "production" ]; then
   # the domain), so once a real certificate is issued the edge reads the
   # refreshed files on its next reload - no manual material copy.
   LIVE_DOMAIN_DIR="/etc/sdkwork/certs/letsencrypt/${DOMAIN}"
+  # The live root itself must be sdkwork-writable: the certificate worker
+  # (user sdkwork) exports every issued certificate under it, including new
+  # certificate names beyond the deployment domain. `install -d` would create
+  # missing parents as root:root, which would EACCES the worker's export.
+  install -d -o sdkwork -g sdkwork -m 0700 /etc/sdkwork/certs/letsencrypt
   if [ ! -s "${LIVE_DOMAIN_DIR}/fullchain.pem" ]; then
     install -d -o sdkwork -g sdkwork -m 0700 "${LIVE_DOMAIN_DIR}"
     openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
