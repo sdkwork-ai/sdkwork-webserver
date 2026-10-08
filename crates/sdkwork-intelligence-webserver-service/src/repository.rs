@@ -14,7 +14,7 @@ use sdkwork_webserver_contract::{
     CreateManagedDomainRequest, CreateNginxConfigRequest, CreatePlatformTargetRequest,
     CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
     CreateServerResponse, CreateSourceVersionRequest, DeploymentPage, DeploymentResponse,
-    DomainDnsRecordPage, DomainPage, DomainResponse, EnvVariablePage, EnvVariableResponse,
+    DomainDnsRecordPage, DomainDnsRecordResponse, DomainPage, DomainResponse, EnvVariablePage, EnvVariableResponse,
     HealthCheckPage, HealthCheckResponse, IssueCertificateRequest, ListApplicationsQuery,
     ListAuditLogsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
     ListenerCertificateBindingPage, ListenerCertificateBindingResponse, NginxConfigPage,
@@ -121,15 +121,34 @@ pub struct DomainDnsSnapshotWrite {
     pub records: Vec<DnsRecordSnapshotRow>,
 }
 
-/// The subdomain restriction of a snapshot read.
+/// The restrictions of a snapshot read.
 ///
-/// The sync has already applied the wildcard semantics (a wildcard
-/// declaration's rows are its base owner and every owner beneath it) when it
-/// stamped `domain_id`, so the read filters on that match directly instead of
-/// re-deriving it from the hostname string.
+/// `domain_id` selects one subdomain's rows — the sync already applied the
+/// wildcard semantics when it stamped `domain_id`. `host` is the 主机记录
+/// keyword filter (substring, case-insensitive) and `record_type` the exact
+/// type filter — the pair Aliyun's own 解析设置 page offers. Absent members
+/// filter nothing.
 #[derive(Clone, Debug, Default)]
 pub struct DomainDnsRecordFilter {
     pub domain_id: Option<String>,
+    pub host: Option<String>,
+    pub record_type: Option<String>,
+}
+
+/// One resolution-record write, expressed in store terms: the snapshot row
+/// fields a create/update produces, with the subdomain match already applied.
+#[derive(Clone, Debug)]
+pub struct DomainDnsRecordUpsert {
+    pub record_name: String,
+    pub record_type: String,
+    pub record_value: String,
+    pub ttl_seconds: Option<i32>,
+    pub priority: Option<i32>,
+    pub record_line: Option<String>,
+    pub domain_id: Option<i64>,
+    pub dns_provider: String,
+    pub cloud_account_id: String,
+    pub provider_record_ref: Option<String>,
 }
 
 /// The owner match a snapshot read applies: exact for an EXACT hostname; the
@@ -780,6 +799,54 @@ pub trait WebRepositoryPort: Send + Sync {
         page: i32,
         page_size: i32,
     ) -> WebServiceResult<DomainDnsRecordPage>;
+
+    /// Appends one write-through row to the stored snapshot, answered with the
+    /// stored row's uuid. The provider write has already happened; this is the
+    /// join so the page reads one table.
+    async fn insert_root_domain_dns_record(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        record: &DomainDnsRecordUpsert,
+    ) -> WebServiceResult<DomainDnsRecordResponse>;
+
+    /// Replaces one stored row in place after a provider update.
+    async fn update_root_domain_dns_record(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        record_id: &str,
+        record: &DomainDnsRecordUpsert,
+    ) -> WebServiceResult<DomainDnsRecordResponse>;
+
+    /// Flips one stored row's provider-side state after the vendor accepted
+    /// the pause/resume.
+    async fn set_root_domain_dns_record_status(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        record_id: &str,
+        enabled: bool,
+    ) -> WebServiceResult<DomainDnsRecordResponse>;
+
+    /// Removes one stored row after the provider confirmed the delete. The
+    /// provider is the authority: a row whose vendor delete succeeded never
+    /// lingers in the snapshot.
+    async fn delete_root_domain_dns_record(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        record_id: &str,
+    ) -> WebServiceResult<()>;
+
+    /// Loads one stored row's provider record ref, for the write that has to
+    /// address the vendor by its own id.
+    async fn root_domain_dns_record_ref(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        record_id: &str,
+    ) -> WebServiceResult<Option<String>>;
 
     async fn list_managed_domains(
         &self,

@@ -7,8 +7,10 @@ from typing import TYPE_CHECKING, Optional, List, Dict, Any
 class DomainDnsRecordResponse:
     id: str
     record_name: str
+    host: str
     record_type: str
     record_value: str
+    record_status: str
     dns_provider: str
     cloud_account_id: str
     synced_at: str

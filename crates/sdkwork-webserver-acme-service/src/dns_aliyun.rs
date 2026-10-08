@@ -18,7 +18,7 @@ use sha1::Sha1;
 
 use crate::dns::{
     ACME_CHALLENGE_LABEL, Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest,
-    DnsAccountVerification, DnsProviderKind, DnsZoneRecord, absolute_record_name,
+    DnsAccountVerification, DnsProviderKind, DnsRecordChange, DnsZoneRecord, absolute_record_name,
     normalize_dns_name,
 };
 use crate::dns_http::{DnsApiClient, json_request};
@@ -334,6 +334,62 @@ impl AliyunDns01Presenter {
             page_number += 1;
         }
     }
+
+    /// One `AddDomainRecord`/`UpdateDomainRecord` call, answered with the
+    /// vendor's record id. The parameter set is identical between the two
+    /// actions (Aliyun's replace-in-place update takes the same fields a
+    /// create does), which is why both route through here.
+    async fn record_write_call(
+        &self,
+        action: &str,
+        zone: &str,
+        record_ref: Option<&str>,
+        change: &DnsRecordChange,
+    ) -> AcmeServiceResult<String> {
+        let ttl = change.ttl_seconds.map(|value| value.to_string());
+        let priority = change.priority.map(|value| value.to_string());
+        let mut params: Vec<(&str, &str)> = Vec::with_capacity(8);
+        if let Some(record_ref) = record_ref {
+            params.push(("RecordId", record_ref));
+        }
+        params.push(("DomainName", zone));
+        params.push(("RR", change.relative_owner.as_str()));
+        params.push(("Type", change.record_type.as_str()));
+        params.push(("Value", change.record_value.as_str()));
+        if let Some(ttl) = ttl.as_deref() {
+            params.push(("TTL", ttl));
+        }
+        if let Some(priority) = priority.as_deref() {
+            params.push(("Priority", priority));
+        }
+        if let Some(line) = change.record_line.as_deref() {
+            params.push(("Line", line));
+        }
+        let body = self
+            .call(action, &params, &aliyun_timestamp(), &aliyun_signature_nonce())
+            .await?;
+        body.record_id
+            .filter(|id| !id.is_empty())
+            .ok_or_else(|| {
+                AcmeServiceError::provider(format!(
+                    "Aliyun accepted {action} without a RecordId"
+                ))
+            })
+    }
+
+    /// The snapshot row a completed write produces: the owner joined onto the
+    /// zone, the change's own fields, and the vendor's record id.
+    fn change_to_record(zone: &str, change: &DnsRecordChange, record_id: &str) -> DnsZoneRecord {
+        DnsZoneRecord {
+            record_name: change.absolute_record_name(zone),
+            record_type: change.record_type.clone(),
+            record_value: change.record_value.clone(),
+            ttl_seconds: change.ttl_seconds,
+            priority: change.priority,
+            record_line: change.record_line.clone(),
+            provider_record_ref: Some(record_id.to_owned()),
+        }
+    }
 }
 
 #[async_trait]
@@ -467,6 +523,86 @@ impl Dns01Presenter for AliyunDns01Presenter {
     /// bound reports the truncation instead of answering with a partial zone.
     async fn list_zone_records(&self, zone_apex: &str) -> AcmeServiceResult<Vec<DnsZoneRecord>> {
         self.zone_records(zone_apex).await
+    }
+
+    /// `AddDomainRecord` with the change's own fields: the owner stays
+    /// zone-relative (`@` for the apex), the line defaults to Aliyun's default
+    /// when the change does not name one, and the priority travels only for
+    /// `MX`.
+    async fn create_record(
+        &self,
+        zone_apex: &str,
+        change: &DnsRecordChange,
+    ) -> AcmeServiceResult<DnsZoneRecord> {
+        let zone = normalize_dns_name(zone_apex, "zone apex")?;
+        let record_id = self
+            .record_write_call("AddDomainRecord", &zone, None, change)
+            .await?;
+        Ok(Self::change_to_record(&zone, change, &record_id))
+    }
+
+    /// `UpdateDomainRecord` replaces the record in place, addressed by
+    /// Aliyun's own `RecordId`.
+    async fn update_record(
+        &self,
+        zone_apex: &str,
+        record_ref: &str,
+        change: &DnsRecordChange,
+    ) -> AcmeServiceResult<DnsZoneRecord> {
+        let zone = normalize_dns_name(zone_apex, "zone apex")?;
+        let record_id = self
+            .record_write_call("UpdateDomainRecord", &zone, Some(record_ref), change)
+            .await?;
+        Ok(Self::change_to_record(&zone, change, &record_id))
+    }
+
+    /// `DeleteDomainRecord`; a record that is already gone is the end state
+    /// the caller asked for.
+    async fn delete_record(&self, zone_apex: &str, record_ref: &str) -> AcmeServiceResult<()> {
+        let _ = zone_apex;
+        match self
+            .call(
+                "DeleteDomainRecord",
+                &[("RecordId", record_ref)],
+                &aliyun_timestamp(),
+                &aliyun_signature_nonce(),
+            )
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(error) if is_missing_record(&error) => Ok(()),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// `SetDomainRecordStatus` flips one record between `Enable` and
+    /// `Disable` — Aliyun's own paused-resolution semantics.
+    async fn set_record_status(
+        &self,
+        _zone_apex: &str,
+        record_ref: &str,
+        enabled: bool,
+    ) -> AcmeServiceResult<DnsZoneRecord> {
+        let status = if enabled { "Enable" } else { "Disable" };
+        self.call(
+            "SetDomainRecordStatus",
+            &[("RecordId", record_ref), ("Status", status)],
+            &aliyun_timestamp(),
+            &aliyun_signature_nonce(),
+        )
+        .await?;
+        // The status response carries only the record id, not the row; the
+        // caller already holds the row it flipped and knows the status it
+        // asked for, so an identity-only row is enough to report success.
+        Ok(DnsZoneRecord {
+            record_name: String::new(),
+            record_type: String::new(),
+            record_value: String::new(),
+            ttl_seconds: None,
+            priority: None,
+            record_line: None,
+            provider_record_ref: Some(record_ref.to_owned()),
+        })
     }
 }
 
@@ -1114,5 +1250,106 @@ mod duplicate_publish_tests {
             handle.provider_record_ref.as_deref(),
             Some("aliyun-rec-exact")
         );
+    }
+}
+
+#[cfg(test)]
+mod record_write_tests {
+    use super::*;
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+
+    use axum::extract::{Query, State};
+    use axum::routing::get;
+    use axum::{Json, Router};
+    use serde_json::{json, Value};
+
+    #[tokio::test]
+    async fn create_sends_the_relative_owner_ttl_line_and_priority() {
+        async fn handler(
+            State(state): State<Arc<Mutex<Vec<HashMap<String, String>>>>>,
+            Query(params): Query<HashMap<String, String>>,
+        ) -> Json<Value> {
+            state.lock().expect("lock").push(params);
+            Json(json!({ "RecordId": "aliyun-new-1" }))
+        }
+
+        let captured: Arc<Mutex<Vec<HashMap<String, String>>>> = Arc::new(Mutex::new(Vec::new()));
+        let app = Router::new().route("/", get(handler)).with_state(captured.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let address = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        let presenter = AliyunDns01Presenter::with_base_url(
+            DnsApiClient::new_allowing_plaintext().expect("client"),
+            "testid",
+            "testsecret",
+            format!("http://{address}"),
+        )
+        .expect("presenter");
+
+        let change = DnsRecordChange::new("MX", "@", "mail.example.com", Some(600), Some(10), Some("default"))
+            .expect("change");
+        let record = presenter
+            .create_record("example.com", &change)
+            .await
+            .expect("create");
+        assert_eq!(record.record_name, "example.com");
+        assert_eq!(record.provider_record_ref.as_deref(), Some("aliyun-new-1"));
+
+        let requests = captured.lock().expect("lock");
+        assert_eq!(
+            requests[0].get("Action").map(String::as_str),
+            Some("AddDomainRecord")
+        );
+        assert_eq!(requests[0].get("RR").map(String::as_str), Some("@"));
+        assert_eq!(requests[0].get("Type").map(String::as_str), Some("MX"));
+        assert_eq!(requests[0].get("Value").map(String::as_str), Some("mail.example.com"));
+        assert_eq!(requests[0].get("TTL").map(String::as_str), Some("600"));
+        assert_eq!(requests[0].get("Priority").map(String::as_str), Some("10"));
+        assert_eq!(requests[0].get("Line").map(String::as_str), Some("default"));
+    }
+
+    #[tokio::test]
+    async fn status_flip_sends_enable_and_disable() {
+        async fn handler(
+            State(state): State<Arc<Mutex<Vec<HashMap<String, String>>>>>,
+            Query(params): Query<HashMap<String, String>>,
+        ) -> Json<Value> {
+            state.lock().expect("lock").push(params);
+            Json(json!({ "RecordId": "rec-1" }))
+        }
+
+        let captured: Arc<Mutex<Vec<HashMap<String, String>>>> = Arc::new(Mutex::new(Vec::new()));
+        let app = Router::new().route("/", get(handler)).with_state(captured.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let address = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        let presenter = AliyunDns01Presenter::with_base_url(
+            DnsApiClient::new_allowing_plaintext().expect("client"),
+            "testid",
+            "testsecret",
+            format!("http://{address}"),
+        )
+        .expect("presenter");
+
+        presenter
+            .set_record_status("example.com", "rec-1", false)
+            .await
+            .expect("pause");
+        presenter
+            .set_record_status("example.com", "rec-1", true)
+            .await
+            .expect("resume");
+        let requests = captured.lock().expect("lock");
+        assert_eq!(
+            requests[0].get("Action").map(String::as_str),
+            Some("SetDomainRecordStatus")
+        );
+        assert_eq!(requests[0].get("Status").map(String::as_str), Some("Disable"));
+        assert_eq!(requests[1].get("Status").map(String::as_str), Some("Enable"));
     }
 }

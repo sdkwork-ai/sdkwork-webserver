@@ -83,14 +83,56 @@ public class DomainApi {
     }
 
     /** List a root-domain Zone's synced DNS resolution records */
-    public RootDomainsDnsRecordsListResponse rootDomainsDnsRecordsList(String rootDomainId, Integer page, Integer pageSize, String domainId) throws Exception {
+    public RootDomainsDnsRecordsListResponse rootDomainsDnsRecordsList(String rootDomainId, Integer page, Integer pageSize, String domainId, String host, String recordType) throws Exception {
         String query = buildQueryString(List.of(
             new QueryParameterSpec("page", page, "form", true, false, null),
             new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
-            new QueryParameterSpec("domain_id", domainId, "form", true, false, null)
+            new QueryParameterSpec("domain_id", domainId, "form", true, false, null),
+            new QueryParameterSpec("host", host, "form", true, false, null),
+            new QueryParameterSpec("record_type", recordType, "form", true, false, null)
         ));
         Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/root_domains/" + serializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false)) + "/dns_records"), query));
         return client.convertValue(raw, new TypeReference<RootDomainsDnsRecordsListResponse>() {});
+    }
+
+    /** Create a resolution record through the Zone's cloud account */
+    public RootDomainsDnsRecordsCreateResponse201 rootDomainsDnsRecordsCreate(String rootDomainId, CreateDomainDnsRecordRequest body, String idempotencyKey) throws Exception {
+        Map<String, String> requestHeaders = buildRequestHeaders(
+                Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
+                Map.of()
+        );
+        Object raw = client.post(ApiPaths.backendPath("/root_domains/" + serializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false)) + "/dns_records"), body, null, requestHeaders, "application/json");
+        return client.convertValue(raw, new TypeReference<RootDomainsDnsRecordsCreateResponse201>() {});
+    }
+
+    /** Replace a resolution record in place through the Zone's cloud account */
+    public RootDomainsDnsRecordsUpdateResponse rootDomainsDnsRecordsUpdate(String rootDomainId, String recordId, UpdateDomainDnsRecordRequest body, String idempotencyKey) throws Exception {
+        Map<String, String> requestHeaders = buildRequestHeaders(
+                Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
+                Map.of()
+        );
+        Object raw = client.patch(ApiPaths.backendPath("/root_domains/" + serializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false)) + "/dns_records/" + serializePathParameter(recordId, new PathParameterSpec("recordId", "simple", false)) + ""), body, null, requestHeaders, "application/json");
+        return client.convertValue(raw, new TypeReference<RootDomainsDnsRecordsUpdateResponse>() {});
+    }
+
+    /** Delete a resolution record through the Zone's cloud account */
+    public Void rootDomainsDnsRecordsDelete(String rootDomainId, String recordId, String idempotencyKey) throws Exception {
+        Map<String, String> requestHeaders = buildRequestHeaders(
+                Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
+                Map.of()
+        );
+        client.delete(ApiPaths.backendPath("/root_domains/" + serializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false)) + "/dns_records/" + serializePathParameter(recordId, new PathParameterSpec("recordId", "simple", false)) + ""), null, requestHeaders);
+        return null;
+    }
+
+    /** Pause a resolution record or resume it */
+    public RootDomainsDnsRecordsStatusUpdateResponse rootDomainsDnsRecordsStatusUpdate(String rootDomainId, String recordId, DomainDnsRecordStatusRequest body, String idempotencyKey) throws Exception {
+        Map<String, String> requestHeaders = buildRequestHeaders(
+                Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
+                Map.of()
+        );
+        Object raw = client.patch(ApiPaths.backendPath("/root_domains/" + serializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false)) + "/dns_records/" + serializePathParameter(recordId, new PathParameterSpec("recordId", "simple", false)) + "/status"), body, null, requestHeaders, "application/json");
+        return client.convertValue(raw, new TypeReference<RootDomainsDnsRecordsStatusUpdateResponse>() {});
     }
 
     /** Sync a root-domain Zone's resolution records through its cloud account */

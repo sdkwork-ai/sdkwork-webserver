@@ -115,11 +115,13 @@ func (a *DomainApi) RootDomainsSubdomainsCreate(rootDomainId string, body sdktyp
 }
 
 // List a root-domain Zone's synced DNS resolution records
-func (a *DomainApi) RootDomainsDnsRecordsList(rootDomainId string, page *int, pageSize *int, domainId *string) (sdktypes.RootDomainsDnsRecordsListResponse, error) {
+func (a *DomainApi) RootDomainsDnsRecordsList(rootDomainId string, page *int, pageSize *int, domainId *string, host *string, recordType *string) (sdktypes.RootDomainsDnsRecordsListResponse, error) {
     query := BuildQueryString([]QueryParameterSpec{
         {Name: "page", Value: func() interface{} { if page == nil { return nil }; return *page }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "page_size", Value: func() interface{} { if pageSize == nil { return nil }; return *pageSize }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "domain_id", Value: func() interface{} { if domainId == nil { return nil }; return *domainId }(), Style: "form", Explode: true, AllowReserved: false},
+        {Name: "host", Value: func() interface{} { if host == nil { return nil }; return *host }(), Style: "form", Explode: true, AllowReserved: false},
+        {Name: "record_type", Value: func() interface{} { if recordType == nil { return nil }; return *recordType }(), Style: "form", Explode: true, AllowReserved: false},
     })
     raw, err := a.client.Get(AppendQueryString(BackendApiPath(fmt.Sprintf("/root_domains/%s/dns_records", SerializePathParameter(rootDomainId, PathParameterSpec{Name: "rootDomainId", Style: "simple", Explode: false}))), query), nil, nil)
     if err != nil {
@@ -127,6 +129,62 @@ func (a *DomainApi) RootDomainsDnsRecordsList(rootDomainId string, page *int, pa
         return zero, err
     }
     return decodeResult[sdktypes.RootDomainsDnsRecordsListResponse](raw)
+}
+
+// Create a resolution record through the Zone's cloud account
+func (a *DomainApi) RootDomainsDnsRecordsCreate(rootDomainId string, body sdktypes.CreateDomainDnsRecordRequest, idempotencyKey string) (sdktypes.RootDomainsDnsRecordsCreateResponse201, error) {
+    headers := BuildRequestHeaders(
+        map[string]ParameterSpec{"Idempotency-Key": ParameterSpec{Value: idempotencyKey, Style: "simple", Explode: false},},
+        map[string]ParameterSpec{},
+    )
+    raw, err := a.client.Post(BackendApiPath(fmt.Sprintf("/root_domains/%s/dns_records", SerializePathParameter(rootDomainId, PathParameterSpec{Name: "rootDomainId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
+    if err != nil {
+        var zero sdktypes.RootDomainsDnsRecordsCreateResponse201
+        return zero, err
+    }
+    return decodeResult[sdktypes.RootDomainsDnsRecordsCreateResponse201](raw)
+}
+
+// Replace a resolution record in place through the Zone's cloud account
+func (a *DomainApi) RootDomainsDnsRecordsUpdate(rootDomainId string, recordId string, body sdktypes.UpdateDomainDnsRecordRequest, idempotencyKey string) (sdktypes.RootDomainsDnsRecordsUpdateResponse, error) {
+    headers := BuildRequestHeaders(
+        map[string]ParameterSpec{"Idempotency-Key": ParameterSpec{Value: idempotencyKey, Style: "simple", Explode: false},},
+        map[string]ParameterSpec{},
+    )
+    raw, err := a.client.Patch(BackendApiPath(fmt.Sprintf("/root_domains/%s/dns_records/%s", SerializePathParameter(rootDomainId, PathParameterSpec{Name: "rootDomainId", Style: "simple", Explode: false}), SerializePathParameter(recordId, PathParameterSpec{Name: "recordId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
+    if err != nil {
+        var zero sdktypes.RootDomainsDnsRecordsUpdateResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.RootDomainsDnsRecordsUpdateResponse](raw)
+}
+
+// Delete a resolution record through the Zone's cloud account
+func (a *DomainApi) RootDomainsDnsRecordsDelete(rootDomainId string, recordId string, idempotencyKey string) (struct{}, error) {
+    headers := BuildRequestHeaders(
+        map[string]ParameterSpec{"Idempotency-Key": ParameterSpec{Value: idempotencyKey, Style: "simple", Explode: false},},
+        map[string]ParameterSpec{},
+    )
+    raw, err := a.client.Delete(BackendApiPath(fmt.Sprintf("/root_domains/%s/dns_records/%s", SerializePathParameter(rootDomainId, PathParameterSpec{Name: "rootDomainId", Style: "simple", Explode: false}), SerializePathParameter(recordId, PathParameterSpec{Name: "recordId", Style: "simple", Explode: false}))), nil, headers)
+    if err != nil {
+        var zero struct{}
+        return zero, err
+    }
+    return decodeResult[struct{}](raw)
+}
+
+// Pause a resolution record or resume it
+func (a *DomainApi) RootDomainsDnsRecordsStatusUpdate(rootDomainId string, recordId string, body sdktypes.DomainDnsRecordStatusRequest, idempotencyKey string) (sdktypes.RootDomainsDnsRecordsStatusUpdateResponse, error) {
+    headers := BuildRequestHeaders(
+        map[string]ParameterSpec{"Idempotency-Key": ParameterSpec{Value: idempotencyKey, Style: "simple", Explode: false},},
+        map[string]ParameterSpec{},
+    )
+    raw, err := a.client.Patch(BackendApiPath(fmt.Sprintf("/root_domains/%s/dns_records/%s/status", SerializePathParameter(rootDomainId, PathParameterSpec{Name: "rootDomainId", Style: "simple", Explode: false}), SerializePathParameter(recordId, PathParameterSpec{Name: "recordId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
+    if err != nil {
+        var zero sdktypes.RootDomainsDnsRecordsStatusUpdateResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.RootDomainsDnsRecordsStatusUpdateResponse](raw)
 }
 
 // Sync a root-domain Zone's resolution records through its cloud account

@@ -11,7 +11,7 @@ use serde::Deserialize;
 
 use crate::dns::{
     ACME_CHALLENGE_LABEL, Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest,
-    DnsAccountVerification, DnsProviderKind, DnsZoneRecord,
+    DnsAccountVerification, DnsProviderKind, DnsRecordChange, DnsZoneRecord,
 };
 use crate::dns_http::{DnsApiClient, json_request};
 use crate::{AcmeServiceError, AcmeServiceResult};
@@ -263,6 +263,80 @@ impl CloudflareDns01Presenter {
             page += 1;
         }
     }
+
+    /// The JSON body one `dns_records` write carries: Cloudflare's own field
+    /// names, with `ttl: 1` meaning auto when the change names no TTL.
+    fn write_payload(change: &DnsRecordChange) -> serde_json::Value {
+        let mut payload = serde_json::json!({
+            "type": change.record_type,
+            "name": change.relative_owner,
+            "content": change.record_value,
+            "ttl": change.ttl_seconds.unwrap_or(1),
+        });
+        if let Some(priority) = change.priority {
+            payload["priority"] = serde_json::json!(priority);
+        }
+        payload
+    }
+
+    /// One full-record write (create or replace), answered with the row as
+    /// Cloudflare holds it — absolute owner included.
+    async fn record_write(
+        &self,
+        method: Method,
+        zone_id: &str,
+        record_ref: Option<&str>,
+        change: &DnsRecordChange,
+    ) -> AcmeServiceResult<DnsZoneRecord> {
+        let url = match record_ref {
+            Some(record_ref) => format!("{}/zones/{zone_id}/dns_records/{record_ref}", self.base_url),
+            None => format!("{}/zones/{zone_id}/dns_records", self.base_url),
+        };
+        let http_request =
+            self.authorized_request(method, &url, Some(Self::write_payload(change)))?;
+        let response = self.client.send(http_request).await?;
+        response.ensure_success(DnsProviderKind::Cloudflare)?;
+        let body: RecordWriteResponse = response.json(DnsProviderKind::Cloudflare)?;
+        if !body.success {
+            return Err(AcmeServiceError::provider(format!(
+                "Cloudflare refused the record write: {}",
+                body.first_error_message()
+            )));
+        }
+        let entry = body.result.ok_or_else(|| {
+            AcmeServiceError::provider("Cloudflare accepted the record write without a result row")
+        })?;
+        Ok(DnsZoneRecord {
+            record_name: entry
+                .name
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| {
+                    AcmeServiceError::provider(
+                        "Cloudflare answered the record write without an owner name",
+                    )
+                })?,
+            record_type: entry
+                .record_type
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| {
+                    AcmeServiceError::provider(
+                        "Cloudflare answered the record write without a record type",
+                    )
+                })?,
+            record_value: entry
+                .content
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| {
+                    AcmeServiceError::provider(
+                        "Cloudflare answered the record write without a record value",
+                    )
+                })?,
+            ttl_seconds: entry.ttl.and_then(|ttl| u32::try_from(ttl).ok()),
+            priority: entry.priority.and_then(|value| u32::try_from(value).ok()),
+            record_line: None,
+            provider_record_ref: Some(entry.id).filter(|id| !id.is_empty()),
+        })
+    }
 }
 
 #[async_trait]
@@ -356,6 +430,67 @@ impl Dns01Presenter for CloudflareDns01Presenter {
     async fn list_zone_records(&self, zone_apex: &str) -> AcmeServiceResult<Vec<DnsZoneRecord>> {
         self.zone_records(zone_apex).await
     }
+
+    /// `POST /zones/{id}/dns_records`. The owner may be zone-relative
+    /// (`www`, `@`) or absolute — Cloudflare resolves either spelling.
+    async fn create_record(
+        &self,
+        zone_apex: &str,
+        change: &DnsRecordChange,
+    ) -> AcmeServiceResult<DnsZoneRecord> {
+        let zone_id = self.resolve_zone_id(zone_apex).await?;
+        self.record_write(Method::POST, &zone_id, None, change).await
+    }
+
+    /// `PUT /zones/{id}/dns_records/{recordId}` — Cloudflare's replace-in-place
+    /// update.
+    async fn update_record(
+        &self,
+        zone_apex: &str,
+        record_ref: &str,
+        change: &DnsRecordChange,
+    ) -> AcmeServiceResult<DnsZoneRecord> {
+        let zone_id = self.resolve_zone_id(zone_apex).await?;
+        self.record_write(Method::PUT, &zone_id, Some(record_ref), change)
+            .await
+    }
+
+    /// `DELETE /zones/{id}/dns_records/{recordId}`; a record that is already
+    /// gone (`404`, code `81044`) is the end state the caller asked for.
+    async fn delete_record(&self, zone_apex: &str, record_ref: &str) -> AcmeServiceResult<()> {
+        let zone_id = self.resolve_zone_id(zone_apex).await?;
+        let url = format!("{}/zones/{zone_id}/dns_records/{record_ref}", self.base_url);
+        let http_request = self.authorized_request(Method::DELETE, &url, None)?;
+        let response = self.client.send(http_request).await?;
+        if response.status == http::StatusCode::NOT_FOUND {
+            return Ok(());
+        }
+        response.ensure_success(DnsProviderKind::Cloudflare)?;
+        let body: BaseResponse = response.json(DnsProviderKind::Cloudflare)?;
+        if !body.success {
+            return Err(AcmeServiceError::provider(format!(
+                "Cloudflare refused to delete the record: {}",
+                body.first_error_message()
+            )));
+        }
+        Ok(())
+    }
+
+    /// Cloudflare has no per-record pause: a record exists or it does not.
+    /// The refusal is the honest answer — an operator who wants a name out of
+    /// rotation deletes the record, and the control plane says so instead of
+    /// pretending a pause happened.
+    async fn set_record_status(
+        &self,
+        _zone_apex: &str,
+        _record_ref: &str,
+        _enabled: bool,
+    ) -> AcmeServiceResult<DnsZoneRecord> {
+        Err(AcmeServiceError::provider(
+            "Cloudflare does not support pausing individual records; delete the \
+             record to take the name out of resolution"
+        ))
+    }
 }
 
 /// Whether Cloudflare's refusal of a zone lookup proves the token cannot present
@@ -396,6 +531,40 @@ struct RecordResponse {
     result: Option<RecordEntry>,
     #[serde(default)]
     errors: Vec<ApiError>,
+}
+
+/// One full-record write (create/replace), answered with the row as
+/// Cloudflare now holds it. Every field is optional so a vendor shape change
+/// skips the row instead of failing the whole write answer.
+#[derive(Debug, Deserialize)]
+struct RecordWriteResponse {
+    success: bool,
+    #[serde(default)]
+    result: Option<RecordWriteEntry>,
+    #[serde(default)]
+    errors: Vec<ApiError>,
+}
+
+impl FirstErrorMessage for RecordWriteResponse {
+    fn errors(&self) -> &[ApiError] {
+        &self.errors
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct RecordWriteEntry {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(rename = "type", default)]
+    record_type: Option<String>,
+    #[serde(default)]
+    content: Option<String>,
+    #[serde(default)]
+    ttl: Option<i64>,
+    #[serde(default)]
+    priority: Option<i64>,
 }
 
 /// One row of the duplicate-record lookup.
@@ -997,5 +1166,99 @@ mod duplicate_publish_tests {
             .await
             .expect("a duplicate must not fail the publish");
         assert_eq!(handle.provider_record_ref.as_deref(), Some("cf-existing"));
+    }
+}
+
+#[cfg(test)]
+mod record_write_tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    use axum::extract::{RawQuery, State};
+    use axum::response::{IntoResponse, Response};
+    use axum::routing::{delete, get, post};
+    use axum::{Json, Router};
+    use serde_json::{json, Value};
+
+    #[tokio::test]
+    async fn create_posts_the_owner_type_value_and_ttl1_and_delete_tolerates_404() {
+        let captured: Arc<Mutex<Vec<(String, String, Value)>>> = Arc::new(Mutex::new(Vec::new()));
+        async fn create_record(
+            State(state): State<Arc<Mutex<Vec<(String, String, Value)>>>>,
+            Json(body): Json<Value>,
+        ) -> Response {
+            state
+                .lock()
+                .expect("lock")
+                .push(("POST".into(), "/dns_records".into(), body));
+            Json(json!({
+                "success": true,
+                "result": { "id": "cf-new-1", "name": "www.example.com", "type": "A",
+                            "content": "203.0.113.9", "ttl": 600 }
+            }))
+            .into_response()
+        }
+        async fn delete_record(
+            State(state): State<Arc<Mutex<Vec<(String, String, Value)>>>>,
+            RawQuery(raw): RawQuery,
+        ) -> Response {
+            let _ = raw;
+            state
+                .lock()
+                .expect("lock")
+                .push(("DELETE".into(), "404".into(), json!(null)));
+            (
+                axum::http::StatusCode::NOT_FOUND,
+                Json(json!({ "success": false, "errors": [
+                    { "code": 81044, "message": "Record does not exist" }] })),
+            )
+                .into_response()
+        }
+        async fn list_zones() -> Json<Value> {
+            Json(json!({ "success": true, "result": [{ "id": "zone-1", "name": "example.com" }] }))
+        }
+
+        let app = Router::new()
+            .route("/zones", get(list_zones))
+            .route("/zones/{zone}/dns_records", post(create_record))
+            .route("/zones/{zone}/dns_records/{record}", delete(delete_record))
+            .with_state(captured.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let address = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        let presenter = CloudflareDns01Presenter::with_base_url(
+            DnsApiClient::new_allowing_plaintext().expect("client"),
+            "token",
+            None,
+            format!("http://{address}"),
+        )
+        .expect("presenter");
+
+        let change = DnsRecordChange::new("A", "www", "203.0.113.9", None, None, None)
+            .expect("change");
+        let record = presenter
+            .create_record("example.com", &change)
+            .await
+            .expect("create");
+        assert_eq!(record.record_name, "www.example.com");
+        assert_eq!(record.provider_record_ref.as_deref(), Some("cf-new-1"));
+        assert_eq!(record.ttl_seconds, Some(600));
+
+        // The delete that answers 404 (code 81044) is the end state the caller
+        // asked for, not a failure.
+        presenter
+            .delete_record("example.com", "cf-new-1")
+            .await
+            .expect("already gone");
+
+        let requests = captured.lock().expect("lock");
+        assert_eq!(requests[0].0, "POST");
+        assert_eq!(requests[0].2["name"], "www");
+        assert_eq!(requests[0].2["type"], "A");
+        assert_eq!(requests[0].2["content"], "203.0.113.9");
+        assert_eq!(requests[0].2["ttl"], 1, "a change without a TTL writes auto");
+        assert_eq!(requests[1].0, "DELETE");
     }
 }

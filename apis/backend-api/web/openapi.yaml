@@ -927,6 +927,29 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: host
+        in: query
+        description: >-
+          Restrict the page to records whose 主机记录 (zone-relative owner)
+          contains this keyword, case-insensitive — the search Aliyun's own
+          解析设置 page offers.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 253
+      - name: record_type
+        in: query
+        description: Restrict the page to one record type (exact spelling, e.g. `A`).
+        schema:
+          type: string
+          enum:
+          - A
+          - AAAA
+          - CNAME
+          - TXT
+          - MX
+          - NS
+          - CAA
       responses:
         '200':
           description: Root-domain Zone resolution records returned successfully.
@@ -951,6 +974,200 @@ paths:
                           $ref: '#/components/schemas/PageInfo'
         '404':
           $ref: '#/components/responses/NotFound'
+    post:
+      operationId: rootDomains.dnsRecords.create
+      summary: Create a resolution record through the Zone's cloud account
+      description: >-
+        Validates the change (type in the managed set, owner in the DNS label
+        alphabet, value parsed per type) and writes it through the Zone's cloud
+        account, then joins the vendor's answer to the stored snapshot. The
+        owner is the zone-relative 主机记录 (`@`, `www`, `api.eu`, `*`); an
+        owner already carrying the zone suffix is refused before the vendor is
+        asked.
+      tags:
+      - domain
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.applications.write
+      x-sdkwork-idempotent: true
+      x-sdkwork-owner: sdkwork-webserver
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDomainDnsRecordRequest'
+      responses:
+        '201':
+          description: Resolution record created successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/DomainDnsRecordResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /backend/v3/api/root_domains/{rootDomainId}/dns_records/{recordId}:
+    parameters:
+    - $ref: '#/components/parameters/RootDomainIdParam'
+    - name: recordId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    patch:
+      operationId: rootDomains.dnsRecords.update
+      summary: Replace a resolution record in place through the Zone's cloud account
+      description: >-
+        A full replace of owner/type/value/TTL — the update shape every
+        integrated vendor shares — followed by the same replace in the stored
+        snapshot. The provider-side pause state is not touched here; only the
+        status operation flips it.
+      tags:
+      - domain
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.applications.write
+      x-sdkwork-idempotent: true
+      x-sdkwork-owner: sdkwork-webserver
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDomainDnsRecordRequest'
+      responses:
+        '200':
+          description: Resolution record updated successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/DomainDnsRecordResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      operationId: rootDomains.dnsRecords.delete
+      summary: Delete a resolution record through the Zone's cloud account
+      description: >-
+        Deletes on the provider first and removes the stored row second, so a
+        failed vendor delete never leaves a page serving a name the zone does
+        not answer.
+      tags:
+      - domain
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.applications.write
+      x-sdkwork-idempotent: true
+      x-sdkwork-rate-limit-tier: auth-critical
+      x-sdkwork-owner: sdkwork-webserver
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          description: Resolution record deleted successfully.
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /backend/v3/api/root_domains/{rootDomainId}/dns_records/{recordId}/status:
+    parameters:
+    - $ref: '#/components/parameters/RootDomainIdParam'
+    - name: recordId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    patch:
+      operationId: rootDomains.dnsRecords.status.update
+      summary: Pause a resolution record or resume it
+      description: >-
+        The provider is flipped first and the stored row second, so a failed
+        vendor call never leaves the page claiming a state the vendor did not
+        accept. A vendor without a per-record pause (Cloudflare) answers its
+        own refusal.
+      tags:
+      - domain
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.applications.write
+      x-sdkwork-idempotent: true
+      x-sdkwork-owner: sdkwork-webserver
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DomainDnsRecordStatusRequest'
+      responses:
+        '200':
+          description: Resolution record status updated successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/DomainDnsRecordResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /backend/v3/api/root_domains/{rootDomainId}/dns_records/sync:
     parameters:
     - $ref: '#/components/parameters/RootDomainIdParam'
@@ -5006,8 +5223,10 @@ components:
       required:
       - id
       - recordName
+      - host
       - recordType
       - recordValue
+      - recordStatus
       - dnsProvider
       - cloudAccountId
       - syncedAt
@@ -5018,6 +5237,9 @@ components:
         recordName:
           type: string
           description: Absolute record owner inside the zone, e.g. `www.example.com`.
+        host:
+          type: string
+          description: Zone-relative 主机记录 (`@` for the apex, `www`, `*`).
         recordType:
           type: string
           maxLength: 16
@@ -5037,6 +5259,12 @@ components:
           type: string
           maxLength: 64
           description: Provider resolution line, when the provider splits one owner per line.
+        recordStatus:
+          type: string
+          enum:
+          - ENABLED
+          - DISABLED
+          description: Provider-side resolution state; DISABLED is the vendor's paused record.
         domainId:
           type: string
           format: uuid
@@ -5057,6 +5285,90 @@ components:
           type: string
           format: date-time
           description: When this row was read from the provider.
+    CreateDomainDnsRecordRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - recordType
+      - host
+      - recordValue
+      properties:
+        recordType:
+          type: string
+          enum:
+          - A
+          - AAAA
+          - CNAME
+          - TXT
+          - MX
+          - NS
+          - CAA
+        host:
+          type: string
+          minLength: 1
+          maxLength: 253
+          description: Zone-relative 主机记录 (`@` for the apex, `www`, `api.eu`, `*`).
+        recordValue:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        ttlSeconds:
+          type: integer
+          minimum: 1
+          maximum: 604800
+        priority:
+          type: integer
+          minimum: 0
+          description: MX priority; rejected on types that carry none.
+        recordLine:
+          type: string
+          maxLength: 64
+          description: Provider resolution line; omitted = the provider default.
+    UpdateDomainDnsRecordRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - recordType
+      - host
+      - recordValue
+      properties:
+        recordType:
+          type: string
+          enum:
+          - A
+          - AAAA
+          - CNAME
+          - TXT
+          - MX
+          - NS
+          - CAA
+        host:
+          type: string
+          minLength: 1
+          maxLength: 253
+        recordValue:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        ttlSeconds:
+          type: integer
+          minimum: 1
+          maximum: 604800
+        priority:
+          type: integer
+          minimum: 0
+        recordLine:
+          type: string
+          maxLength: 64
+    DomainDnsRecordStatusRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - enabled
+      properties:
+        enabled:
+          type: boolean
+          description: '`true` resumes the record; `false` pauses it (暂停解析).'
     DomainDnsSyncResponse:
       type: object
       additionalProperties: false

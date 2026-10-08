@@ -4,11 +4,13 @@ package com.sdkwork.webserver.backend.sdk.model;
 public class DomainDnsRecordResponse {
     private String id;
     private String recordName;
+    private String host;
     private String recordType;
     private String recordValue;
     private Integer ttlSeconds;
     private Integer priority;
     private String recordLine;
+    private String recordStatus;
     private String domainId;
     private String dnsProvider;
     private String cloudAccountId;
@@ -29,6 +31,14 @@ public class DomainDnsRecordResponse {
 
     public void setRecordName(String recordName) {
         this.recordName = recordName;
+    }
+
+    public String getHost() {
+        return this.host;
+    }
+
+    public void setHost(String host) {
+        this.host = host;
     }
 
     public String getRecordType() {
@@ -69,6 +79,14 @@ public class DomainDnsRecordResponse {
 
     public void setRecordLine(String recordLine) {
         this.recordLine = recordLine;
+    }
+
+    public String getRecordStatus() {
+        return this.recordStatus;
+    }
+
+    public void setRecordStatus(String recordStatus) {
+        this.recordStatus = recordStatus;
     }
 
     public String getDomainId() {

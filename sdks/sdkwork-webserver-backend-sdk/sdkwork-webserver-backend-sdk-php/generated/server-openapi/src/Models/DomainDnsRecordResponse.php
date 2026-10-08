@@ -11,6 +11,9 @@ final class DomainDnsRecordResponse
     /** Absolute record owner inside the zone, e.g. `www.example.com`. */
     public ?string $recordName = null;
 
+    /** Zone-relative 主机记录 (`@` for the apex, `www`, `*`). */
+    public ?string $host = null;
+
     /** Record type as the provider spells it (A, AAAA, CNAME, TXT, MX). */
     public ?string $recordType = null;
 
@@ -24,6 +27,9 @@ final class DomainDnsRecordResponse
 
     /** Provider resolution line, when the provider splits one owner per line. */
     public ?string $recordLine = null;
+
+    /** Provider-side resolution state; DISABLED is the vendor's paused record. */
+    public ?string $recordStatus = null;
 
     /** The registered subdomain this record resolves; absent when its owner matches none. */
     public ?string $domainId = null;
@@ -48,6 +54,9 @@ final class DomainDnsRecordResponse
         $this->recordName = array_key_exists('recordName', $data)
             ? $data['recordName']
             : null;
+        $this->host = array_key_exists('host', $data)
+            ? $data['host']
+            : null;
         $this->recordType = array_key_exists('recordType', $data)
             ? $data['recordType']
             : null;
@@ -62,6 +71,9 @@ final class DomainDnsRecordResponse
             : null;
         $this->recordLine = array_key_exists('recordLine', $data)
             ? $data['recordLine']
+            : null;
+        $this->recordStatus = array_key_exists('recordStatus', $data)
+            ? $data['recordStatus']
             : null;
         $this->domainId = array_key_exists('domainId', $data)
             ? $data['domainId']
@@ -90,11 +102,13 @@ final class DomainDnsRecordResponse
         return [
             'id' => $this->id,
             'recordName' => $this->recordName,
+            'host' => $this->host,
             'recordType' => $this->recordType,
             'recordValue' => $this->recordValue,
             'ttlSeconds' => $this->ttlSeconds,
             'priority' => $this->priority,
             'recordLine' => $this->recordLine,
+            'recordStatus' => $this->recordStatus,
             'domainId' => $this->domainId,
             'dnsProvider' => $this->dnsProvider,
             'cloudAccountId' => $this->cloudAccountId,

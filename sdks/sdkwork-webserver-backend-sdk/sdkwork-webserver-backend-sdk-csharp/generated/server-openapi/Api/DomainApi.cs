@@ -115,15 +115,77 @@ namespace SDKWork.WebserverBackendSdk.Api
         /// <summary>
         /// List a root-domain Zone's synced DNS resolution records
         /// </summary>
-        public async Task<SDKWork.WebserverBackendSdk.Models.RootDomainsDnsRecordsListResponse?> RootDomainsDnsRecordsListAsync(string rootDomainId, int? page = null, int? pageSize = null, string? domainId = null)
+        public async Task<SDKWork.WebserverBackendSdk.Models.RootDomainsDnsRecordsListResponse?> RootDomainsDnsRecordsListAsync(string rootDomainId, int? page = null, int? pageSize = null, string? domainId = null, string? host = null, string? recordType = null)
         {
             var queryString = BuildQueryString(new[]
             {
                 new QueryParameterSpec("page", page, "form", true, false, null),
                 new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
                 new QueryParameterSpec("domain_id", domainId, "form", true, false, null),
+                new QueryParameterSpec("host", host, "form", true, false, null),
+                new QueryParameterSpec("record_type", recordType, "form", true, false, null),
             });
             return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.RootDomainsDnsRecordsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath($"/root_domains/{SerializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false))}/dns_records"), queryString));
+        }
+
+        /// <summary>
+        /// Create a resolution record through the Zone's cloud account
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.RootDomainsDnsRecordsCreateResponse201?> RootDomainsDnsRecordsCreateAsync(string rootDomainId, SDKWork.WebserverBackendSdk.Models.CreateDomainDnsRecordRequest body, string idempotencyKey)
+        {
+            var requestHeaders = BuildRequestHeaders(
+                new Dictionary<string, HeaderParameterSpec>
+                {
+                    ["Idempotency-Key"] = new HeaderParameterSpec(idempotencyKey, "simple", false, null),
+                },
+                new Dictionary<string, HeaderParameterSpec>()
+            );
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.RootDomainsDnsRecordsCreateResponse201>(ApiPaths.BackendPath($"/root_domains/{SerializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false))}/dns_records"), body, null, requestHeaders, "application/json");
+        }
+
+        /// <summary>
+        /// Replace a resolution record in place through the Zone's cloud account
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.RootDomainsDnsRecordsUpdateResponse?> RootDomainsDnsRecordsUpdateAsync(string rootDomainId, string recordId, SDKWork.WebserverBackendSdk.Models.UpdateDomainDnsRecordRequest body, string idempotencyKey)
+        {
+            var requestHeaders = BuildRequestHeaders(
+                new Dictionary<string, HeaderParameterSpec>
+                {
+                    ["Idempotency-Key"] = new HeaderParameterSpec(idempotencyKey, "simple", false, null),
+                },
+                new Dictionary<string, HeaderParameterSpec>()
+            );
+            return await _client.PatchAsync<SDKWork.WebserverBackendSdk.Models.RootDomainsDnsRecordsUpdateResponse>(ApiPaths.BackendPath($"/root_domains/{SerializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false))}/dns_records/{SerializePathParameter(recordId, new PathParameterSpec("recordId", "simple", false))}"), body, null, requestHeaders, "application/json");
+        }
+
+        /// <summary>
+        /// Delete a resolution record through the Zone's cloud account
+        /// </summary>
+        public async Task RootDomainsDnsRecordsDeleteAsync(string rootDomainId, string recordId, string idempotencyKey)
+        {
+            var requestHeaders = BuildRequestHeaders(
+                new Dictionary<string, HeaderParameterSpec>
+                {
+                    ["Idempotency-Key"] = new HeaderParameterSpec(idempotencyKey, "simple", false, null),
+                },
+                new Dictionary<string, HeaderParameterSpec>()
+            );
+            await _client.DeleteAsync<object>(ApiPaths.BackendPath($"/root_domains/{SerializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false))}/dns_records/{SerializePathParameter(recordId, new PathParameterSpec("recordId", "simple", false))}"), null, requestHeaders);
+        }
+
+        /// <summary>
+        /// Pause a resolution record or resume it
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.RootDomainsDnsRecordsStatusUpdateResponse?> RootDomainsDnsRecordsStatusUpdateAsync(string rootDomainId, string recordId, SDKWork.WebserverBackendSdk.Models.DomainDnsRecordStatusRequest body, string idempotencyKey)
+        {
+            var requestHeaders = BuildRequestHeaders(
+                new Dictionary<string, HeaderParameterSpec>
+                {
+                    ["Idempotency-Key"] = new HeaderParameterSpec(idempotencyKey, "simple", false, null),
+                },
+                new Dictionary<string, HeaderParameterSpec>()
+            );
+            return await _client.PatchAsync<SDKWork.WebserverBackendSdk.Models.RootDomainsDnsRecordsStatusUpdateResponse>(ApiPaths.BackendPath($"/root_domains/{SerializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false))}/dns_records/{SerializePathParameter(recordId, new PathParameterSpec("recordId", "simple", false))}/status"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>

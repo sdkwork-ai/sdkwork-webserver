@@ -6,10 +6,11 @@ use sdkwork_webserver_contract::{
     ClusterEventPage, ClusterHeartbeatSamplePage, ClusterHostPage, ClusterHostResponse,
     ClusterInstancePage, ClusterInstanceResponse, ClusterOverviewResponse, ClusterPage,
     ClusterResponse, ClusterSyncManifest, CreateApplicationRequest, CreateClusterRequest,
-    CreateDomainRequest, CreateListenerCertificateBindingRequest, CreateManagedDomainRequest,
-    CreateNginxConfigRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest,
-    CreateServerRequest, CreateSourceVersionRequest, DEFAULT_TRAFFIC_USAGE_TOP_APPS,
-    DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS, EnqueueClusterPeerMessagesRequest,
+    CreateDomainDnsRecordRequest, CreateDomainRequest, CreateListenerCertificateBindingRequest,
+    CreateManagedDomainRequest, CreateNginxConfigRequest, CreateRootDomainHostnameRequest,
+    CreateRootDomainRequest, CreateServerRequest, CreateSourceVersionRequest,
+    DEFAULT_TRAFFIC_USAGE_TOP_APPS, DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS,
+    DomainDnsRecordStatusRequest, EnqueueClusterPeerMessagesRequest,
     EnqueueClusterPeerMessagesResponse, ImportGitSourceVersionRequest, IssueCertificateRequest,
     ListApplicationsQuery, ListDomainDnsRecordsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
     MAX_TRAFFIC_USAGE_TOP_APPS, MAX_TRAFFIC_USAGE_WINDOW_DAYS, METRICS_ENTITY_TENANTS,
@@ -19,17 +20,150 @@ use sdkwork_webserver_contract::{
     TrafficUsageStatisticsQuery, TrafficUsageStatisticsResponse, TrafficUsageWindow,
     UpdateApplicationRequest, UpdateCertificateRequest, UpdateClusterHostRequest,
     UpdateClusterInstanceRequest, UpdateClusterRequest, UpdateDomainApplicationBindingRequest,
-    UpdateNginxConfigRequest, UpdateRootDomainRequest, WebAppApi, WebAppRequestContext,
-    WebAppResourceScope, WebBackendApi, WebBackendRequestContext, WebServiceError,
-    WebServiceResult, cloud_account_id_shape_error, web_is_platform_operator_tenant,
+    UpdateDomainDnsRecordRequest, UpdateNginxConfigRequest, UpdateRootDomainRequest, WebAppApi,
+    WebAppRequestContext, WebAppResourceScope, WebBackendApi, WebBackendRequestContext,
+    WebServiceError, WebServiceResult, cloud_account_id_shape_error,
+    web_is_platform_operator_tenant,
 };
 
 use crate::repository::{
-    DnsRecordSnapshotRow, DomainDnsRecordFilter, DomainDnsSnapshotWrite, domain_asset_for_record,
+    DnsRecordSnapshotRow, DomainDnsRecordFilter, DomainDnsRecordUpsert, DomainDnsSnapshotWrite,
+    RootDomainDnsSyncTarget, domain_asset_for_record,
 };
 use crate::{AuditLogWrite, WebService};
+use sdkwork_webserver_acme_service::DnsRecordChange;
 
 const MAX_NGINX_CONFIG_BYTES: usize = 1024 * 1024;
+
+/// Validates and converts a create/edit request into the adapter's change
+/// shape. Runs before the vendor is asked, so a malformed value is a
+/// validation error naming the field rather than a provider refusal; an owner
+/// that already carries the zone suffix is refused here, where the apex is in
+/// hand — the doubled-name mistake (`www.example.com.<zone>`) every provider
+/// console sees.
+fn normalize_dns_record_change(
+    request: &impl DnsRecordChangeFields,
+    zone_apex: &str,
+) -> WebServiceResult<DnsRecordChange> {
+    let owner = request.host().trim();
+    let lowered = owner.to_ascii_lowercase();
+    if lowered == zone_apex.to_ascii_lowercase()
+        || lowered.ends_with(&format!(".{}", zone_apex.to_ascii_lowercase()))
+    {
+        return Err(WebServiceError::validation(format!(
+            "host must be the zone-relative 主机记录 (for example `@` or `www`), not \
+             the absolute name `{owner}` which would create `{owner}.{zone_apex}`"
+        )));
+    }
+    let ttl_seconds = match request.ttl_seconds() {
+        None => None,
+        Some(value) => Some(u32::try_from(value).map_err(|_| {
+            WebServiceError::validation("ttlSeconds must be a positive number of seconds")
+        })?),
+    };
+    let priority = match request.priority() {
+        None => None,
+        Some(value) => Some(u32::try_from(value).map_err(|_| {
+            WebServiceError::validation("priority must be a non-negative number")
+        })?),
+    };
+    DnsRecordChange::new(
+        request.record_type(),
+        owner,
+        request.record_value(),
+        ttl_seconds,
+        priority,
+        request.record_line().as_deref(),
+    )
+    .map_err(|error| WebServiceError::validation(error.to_string()))
+}
+
+/// The two field sets a create and an edit carry; the trait form lets
+/// [`normalize_dns_record_change`] read either request without duplication.
+trait DnsRecordChangeFields {
+    fn record_type(&self) -> &str;
+    fn host(&self) -> &str;
+    fn record_value(&self) -> &str;
+    fn ttl_seconds(&self) -> Option<i32>;
+    fn priority(&self) -> Option<i32>;
+    fn record_line(&self) -> &Option<String>;
+}
+
+impl DnsRecordChangeFields for CreateDomainDnsRecordRequest {
+    fn record_type(&self) -> &str {
+        &self.record_type
+    }
+    fn host(&self) -> &str {
+        &self.host
+    }
+    fn record_value(&self) -> &str {
+        &self.record_value
+    }
+    fn ttl_seconds(&self) -> Option<i32> {
+        self.ttl_seconds
+    }
+    fn priority(&self) -> Option<i32> {
+        self.priority
+    }
+    fn record_line(&self) -> &Option<String> {
+        &self.record_line
+    }
+}
+
+impl DnsRecordChangeFields for UpdateDomainDnsRecordRequest {
+    fn record_type(&self) -> &str {
+        &self.record_type
+    }
+    fn host(&self) -> &str {
+        &self.host
+    }
+    fn record_value(&self) -> &str {
+        &self.record_value
+    }
+    fn ttl_seconds(&self) -> Option<i32> {
+        self.ttl_seconds
+    }
+    fn priority(&self) -> Option<i32> {
+        self.priority
+    }
+    fn record_line(&self) -> &Option<String> {
+        &self.record_line
+    }
+}
+
+/// The provider family a write was answered by, read off the issuer's own
+/// configured registry rather than restated by the caller.
+fn issuer_provider_name(
+    issuer: &sdkwork_webserver_acme_service::CertificateIssuer,
+) -> String {
+    issuer
+        .dns_accounts()
+        .first()
+        .map(|account| account.provider.clone())
+        .unwrap_or_else(|| "UNKNOWN".to_owned())
+}
+
+/// The account a write answered through: the Zone's pin when one is set.
+/// The registry-backed issuer resolves per operation exactly like this, so
+/// the snapshot metadata repeats the decision rather than inventing one.
+fn issuer_account_id(
+    issuer: &sdkwork_webserver_acme_service::CertificateIssuer,
+    target: &RootDomainDnsSyncTarget,
+) -> String {
+    target
+        .cloud_account_id
+        .clone()
+        .or_else(|| {
+            issuer
+                .dns_accounts()
+                .iter()
+                .find(|account| {
+                    account.zone_apex.eq_ignore_ascii_case(&target.hostname)
+                })
+                .map(|account| account.account_id.clone())
+        })
+        .unwrap_or_else(|| "resolved".to_owned())
+}
 
 /// Maps an inventory read's failure to the error an operator can act on.
 ///
@@ -524,11 +658,232 @@ impl WebBackendApi for WebService {
                 root_domain_id,
                 &DomainDnsRecordFilter {
                     domain_id: query.domain_id.clone(),
+                    host: query.host.clone(),
+                    record_type: query.record_type.clone(),
                 },
                 query.page,
                 query.page_size,
             )
             .await
+    }
+
+    /// Creates one record through the Zone's cloud account and joins it to the
+    /// stored snapshot. The change is validated (type set, owner alphabet,
+    /// per-type value) before the vendor is asked; an owner that already
+    /// carries the zone suffix is refused — the doubled-name mistake every
+    /// provider console sees, caught where the apex is in hand.
+    async fn create_root_domain_dns_record(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+        request: &CreateDomainDnsRecordRequest,
+    ) -> WebServiceResult<sdkwork_webserver_contract::DomainDnsRecordResponse> {
+        let tenant_id = Self::require_backend_tenant(context)?;
+        let target = self
+            .repository
+            .root_domain_dns_sync_target(tenant_id, root_domain_id)
+            .await?
+            .ok_or_else(|| WebServiceError::not_found("root domain not found"))?;
+        let change = normalize_dns_record_change(request, &target.hostname)?;
+        let record = self
+            .certificate_issuer
+            .create_dns_record(
+                target.cloud_account_id.as_deref(),
+                &target.hostname,
+                change,
+            )
+            .await
+            .map_err(map_dns_sync_error)?;
+        let hostname_assets = self
+            .repository
+            .list_root_domain_hostname_assets(tenant_id, root_domain_id)
+            .await?;
+        let stored = self
+            .repository
+            .insert_root_domain_dns_record(
+                tenant_id,
+                root_domain_id,
+                &DomainDnsRecordUpsert {
+                    record_name: record.record_name.clone(),
+                    record_type: record.record_type.clone(),
+                    record_value: record.record_value.clone(),
+                    ttl_seconds: record
+                        .ttl_seconds
+                        .and_then(|value| i32::try_from(value).ok()),
+                    priority: record.priority.and_then(|value| i32::try_from(value).ok()),
+                    record_line: record.record_line.clone(),
+                    domain_id: domain_asset_for_record(&hostname_assets, &record.record_name),
+                    dns_provider: issuer_provider_name(&self.certificate_issuer),
+                    cloud_account_id: issuer_account_id(&self.certificate_issuer, &target),
+                    provider_record_ref: record.provider_record_ref.clone(),
+                },
+            )
+            .await?;
+        self.audit_backend_action(
+            context,
+            "root_domains.dns_records.create",
+            "root_domain",
+            root_domain_id,
+        )
+        .await;
+        Ok(stored)
+    }
+
+    /// Replaces one record on the provider, then in the stored row. The write
+    /// addresses the vendor by the row's own provider record ref — a row
+    /// without one (a sync row the vendor answered without ids) is refused
+    /// rather than guessed.
+    async fn update_root_domain_dns_record(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+        record_id: &str,
+        request: &UpdateDomainDnsRecordRequest,
+    ) -> WebServiceResult<sdkwork_webserver_contract::DomainDnsRecordResponse> {
+        let tenant_id = Self::require_backend_tenant(context)?;
+        let target = self
+            .repository
+            .root_domain_dns_sync_target(tenant_id, root_domain_id)
+            .await?
+            .ok_or_else(|| WebServiceError::not_found("root domain not found"))?;
+        let record_ref = self
+            .repository
+            .root_domain_dns_record_ref(tenant_id, root_domain_id, record_id)
+            .await?
+            .ok_or_else(|| WebServiceError::not_found("dns record not found"))?;
+        let change = normalize_dns_record_change(request, &target.hostname)?;
+        let record = self
+            .certificate_issuer
+            .update_dns_record(
+                target.cloud_account_id.as_deref(),
+                &target.hostname,
+                &record_ref,
+                change,
+            )
+            .await
+            .map_err(map_dns_sync_error)?;
+        let hostname_assets = self
+            .repository
+            .list_root_domain_hostname_assets(tenant_id, root_domain_id)
+            .await?;
+        let stored = self
+            .repository
+            .update_root_domain_dns_record(
+                tenant_id,
+                root_domain_id,
+                record_id,
+                &DomainDnsRecordUpsert {
+                    record_name: record.record_name.clone(),
+                    record_type: record.record_type.clone(),
+                    record_value: record.record_value.clone(),
+                    ttl_seconds: record
+                        .ttl_seconds
+                        .and_then(|value| i32::try_from(value).ok()),
+                    priority: record.priority.and_then(|value| i32::try_from(value).ok()),
+                    record_line: record.record_line.clone(),
+                    domain_id: domain_asset_for_record(&hostname_assets, &record.record_name),
+                    dns_provider: issuer_provider_name(&self.certificate_issuer),
+                    cloud_account_id: issuer_account_id(&self.certificate_issuer, &target),
+                    provider_record_ref: record.provider_record_ref.clone(),
+                },
+            )
+            .await?;
+        self.audit_backend_action(
+            context,
+            "root_domains.dns_records.update",
+            "root_domain",
+            root_domain_id,
+        )
+        .await;
+        Ok(stored)
+    }
+
+    /// Deletes one record on the provider and removes the stored row.
+    async fn delete_root_domain_dns_record(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+        record_id: &str,
+    ) -> WebServiceResult<()> {
+        let tenant_id = Self::require_backend_tenant(context)?;
+        let target = self
+            .repository
+            .root_domain_dns_sync_target(tenant_id, root_domain_id)
+            .await?
+            .ok_or_else(|| WebServiceError::not_found("root domain not found"))?;
+        let record_ref = self
+            .repository
+            .root_domain_dns_record_ref(tenant_id, root_domain_id, record_id)
+            .await?
+            .ok_or_else(|| WebServiceError::not_found("dns record not found"))?;
+        self.certificate_issuer
+            .delete_dns_record(
+                target.cloud_account_id.as_deref(),
+                &target.hostname,
+                &record_ref,
+            )
+            .await
+            .map_err(map_dns_sync_error)?;
+        self.repository
+            .delete_root_domain_dns_record(tenant_id, root_domain_id, record_id)
+            .await?;
+        self.audit_backend_action(
+            context,
+            "root_domains.dns_records.delete",
+            "root_domain",
+            root_domain_id,
+        )
+        .await;
+        Ok(())
+    }
+
+    /// Pauses one record (暂停解析) or resumes it — the provider first, the
+    /// stored row second, so a failed provider call never leaves the page
+    /// claiming a state the vendor did not accept.
+    async fn set_root_domain_dns_record_status(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+        record_id: &str,
+        request: &DomainDnsRecordStatusRequest,
+    ) -> WebServiceResult<sdkwork_webserver_contract::DomainDnsRecordResponse> {
+        let tenant_id = Self::require_backend_tenant(context)?;
+        let target = self
+            .repository
+            .root_domain_dns_sync_target(tenant_id, root_domain_id)
+            .await?
+            .ok_or_else(|| WebServiceError::not_found("root domain not found"))?;
+        let record_ref = self
+            .repository
+            .root_domain_dns_record_ref(tenant_id, root_domain_id, record_id)
+            .await?
+            .ok_or_else(|| WebServiceError::not_found("dns record not found"))?;
+        self.certificate_issuer
+            .set_dns_record_status(
+                target.cloud_account_id.as_deref(),
+                &target.hostname,
+                &record_ref,
+                request.enabled,
+            )
+            .await
+            .map_err(map_dns_sync_error)?;
+        let stored = self
+            .repository
+            .set_root_domain_dns_record_status(
+                tenant_id,
+                root_domain_id,
+                record_id,
+                request.enabled,
+            )
+            .await?;
+        self.audit_backend_action(
+            context,
+            "root_domains.dns_records.status",
+            "root_domain",
+            root_domain_id,
+        )
+        .await;
+        Ok(stored)
     }
 
     /// Re-reads the Zone's record inventory through its cloud account and

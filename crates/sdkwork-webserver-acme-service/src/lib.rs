@@ -38,9 +38,10 @@ pub use config::{
 };
 pub use dns::{
     ACME_CHALLENGE_LABEL, Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest,
-    DnsAccountVerification, DnsProviderKind, DnsZoneInventory, DnsZoneRecord,
-    InMemoryDns01Presenter, ManualDns01Presenter, absolute_record_name, dns_relative_record_name,
-    dns01_record_name, dns01_txt_value, normalize_dns_name,
+    DnsAccountVerification, DnsProviderKind, DnsRecordChange, DnsZoneInventory, DnsZoneRecord,
+    InMemoryDns01Presenter, ManualDns01Presenter, MANAGED_RECORD_TYPES, absolute_record_name,
+    dns_relative_record_name, dns01_record_name, dns01_txt_value, normalize_dns_name,
+    normalize_record_owner,
 };
 pub use dns_account::{
     DispatchingDns01Presenter, DnsAccountDescriptor, DnsAccountVerificationReport, DnsCloudAccount,

@@ -2,17 +2,19 @@ module Sdkwork
   module BackendSdk
     module Models
       class DomainDnsRecordResponse
-              attr_accessor :id, :record_name, :record_type, :record_value, :ttl_seconds, :priority, :record_line, :domain_id, :dns_provider, :cloud_account_id, :provider_record_ref, :synced_at
+              attr_accessor :id, :record_name, :host, :record_type, :record_value, :ttl_seconds, :priority, :record_line, :record_status, :domain_id, :dns_provider, :cloud_account_id, :provider_record_ref, :synced_at
 
               def initialize(attributes = {})
                 attributes = (attributes || {}).transform_keys(&:to_s)
                 @id = attributes['id']
                 @record_name = attributes['recordName']
+                @host = attributes['host']
                 @record_type = attributes['recordType']
                 @record_value = attributes['recordValue']
                 @ttl_seconds = attributes['ttlSeconds']
                 @priority = attributes['priority']
                 @record_line = attributes['recordLine']
+                @record_status = attributes['recordStatus']
                 @domain_id = attributes['domainId']
                 @dns_provider = attributes['dnsProvider']
                 @cloud_account_id = attributes['cloudAccountId']
@@ -30,11 +32,13 @@ module Sdkwork
                 {
                   'id' => @id,
                   'recordName' => @record_name,
+                  'host' => @host,
                   'recordType' => @record_type,
                   'recordValue' => @record_value,
                   'ttlSeconds' => @ttl_seconds,
                   'priority' => @priority,
                   'recordLine' => @record_line,
+                  'recordStatus' => @record_status,
                   'domainId' => @domain_id,
                   'dnsProvider' => @dns_provider,
                   'cloudAccountId' => @cloud_account_id,

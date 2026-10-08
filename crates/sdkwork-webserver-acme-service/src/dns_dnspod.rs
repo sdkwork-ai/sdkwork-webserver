@@ -12,7 +12,7 @@ use serde::Deserialize;
 
 use crate::dns::{
     ACME_CHALLENGE_LABEL, Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest,
-    DnsAccountVerification, DnsProviderKind, DnsZoneRecord, absolute_record_name,
+    DnsAccountVerification, DnsProviderKind, DnsRecordChange, DnsZoneRecord, absolute_record_name,
     normalize_dns_name,
 };
 use crate::dns_http::{DnsApiClient, form_request};
@@ -29,6 +29,10 @@ const DNSPOD_SUCCESS_CODE: &str = "1";
 /// DNSPod line id `0` is the default line and avoids sending a non-ASCII
 /// `record_line` value through the form encoder.
 const DNSPOD_DEFAULT_LINE_ID: &str = "0";
+
+/// TTL a `Record.Create`/`Record.Modify` without an explicit one carries.
+/// DNSPod requires the field; 600 is the vendor console's own default.
+const DNSPOD_DEFAULT_TTL: &str = "600";
 
 /// The parameter DNSPod reads for the language of its own error messages.
 const DNSPOD_ERROR_LANGUAGE_PARAMETER: &str = "lang";
@@ -223,6 +227,62 @@ impl DnspodDns01Presenter {
             offset += fetched;
         }
     }
+
+    /// One `Record.Create`/`Record.Modify` call, answered with the vendor's
+    /// record id. DNSPod's replace-in-place update takes the same fields a
+    /// create does, so both actions route through here.
+    async fn record_write_call(
+        &self,
+        action: &str,
+        zone: &str,
+        record_ref: Option<&str>,
+        change: &DnsRecordChange,
+    ) -> AcmeServiceResult<String> {
+        let ttl = change
+            .ttl_seconds
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| DNSPOD_DEFAULT_TTL.to_string());
+        let mx = change.priority.map(|value| value.to_string());
+        let mut fields: Vec<(&str, &str)> = Vec::with_capacity(9);
+        if let Some(record_ref) = record_ref {
+            fields.push(("record_id", record_ref));
+        }
+        fields.push(("domain", zone));
+        fields.push(("sub_domain", change.relative_owner.as_str()));
+        fields.push(("record_type", change.record_type.as_str()));
+        fields.push(("value", change.record_value.as_str()));
+        fields.push(("ttl", ttl.as_str()));
+        if let Some(line) = change.record_line.as_deref() {
+            fields.push(("record_line", line));
+        } else {
+            fields.push(("record_line_id", DNSPOD_DEFAULT_LINE_ID));
+        }
+        if let Some(mx) = mx.as_deref() {
+            fields.push(("mx", mx));
+        }
+        let body = self.call(action, fields).await?;
+        body.record
+            .map(|record| record.id)
+            .filter(|id| !id.is_empty())
+            .ok_or_else(|| {
+                AcmeServiceError::provider(format!(
+                    "DNSPod accepted {action} without a record id"
+                ))
+            })
+    }
+
+    /// The snapshot row a completed write produces.
+    fn change_to_record(zone: &str, change: &DnsRecordChange, record_id: &str) -> DnsZoneRecord {
+        DnsZoneRecord {
+            record_name: change.absolute_record_name(zone),
+            record_type: change.record_type.clone(),
+            record_value: change.record_value.clone(),
+            ttl_seconds: change.ttl_seconds,
+            priority: change.priority,
+            record_line: change.record_line.clone(),
+            provider_record_ref: Some(record_id.to_owned()),
+        }
+    }
 }
 
 #[async_trait]
@@ -352,6 +412,86 @@ impl Dns01Presenter for DnspodDns01Presenter {
     /// fail-loud bound the Aliyun inventory read applies.
     async fn list_zone_records(&self, zone_apex: &str) -> AcmeServiceResult<Vec<DnsZoneRecord>> {
         self.zone_records(zone_apex).await
+    }
+
+    /// `Record.Create`. The line travels as a line *name* when the change
+    /// names one (`默认`, `电信`, …) and as DNSPod's default line id `0`
+    /// otherwise — the vendor accepts either spelling and only one of the two
+    /// parameters may be sent.
+    async fn create_record(
+        &self,
+        zone_apex: &str,
+        change: &DnsRecordChange,
+    ) -> AcmeServiceResult<DnsZoneRecord> {
+        let zone = normalize_dns_name(zone_apex, "zone apex")?;
+        let record_id = self
+            .record_write_call("Record.Create", &zone, None, change)
+            .await?;
+        Ok(Self::change_to_record(&zone, change, &record_id))
+    }
+
+    /// `Record.Modify`, addressed by DNSPod's own record id.
+    async fn update_record(
+        &self,
+        zone_apex: &str,
+        record_ref: &str,
+        change: &DnsRecordChange,
+    ) -> AcmeServiceResult<DnsZoneRecord> {
+        let zone = normalize_dns_name(zone_apex, "zone apex")?;
+        let record_id = self
+            .record_write_call("Record.Modify", &zone, Some(record_ref), change)
+            .await?;
+        Ok(Self::change_to_record(&zone, change, &record_id))
+    }
+
+    /// `Record.Remove`, keyed on (domain, record_id); a record that is
+    /// already gone is the end state the caller asked for.
+    async fn delete_record(&self, zone_apex: &str, record_ref: &str) -> AcmeServiceResult<()> {
+        match self
+            .call(
+                "Record.Remove",
+                vec![("domain", zone_apex), ("record_id", record_ref)],
+            )
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(error) if is_missing_record(&error) => Ok(()),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// `Record.Status` flips one record between enable and disable — DNSPod's
+    /// paused-record semantics.
+    async fn set_record_status(
+        &self,
+        zone_apex: &str,
+        record_ref: &str,
+        enabled: bool,
+    ) -> AcmeServiceResult<DnsZoneRecord> {
+        let status = if enabled { "enable" } else { "disable" };
+        let body = self
+            .call(
+                "Record.Status",
+                vec![
+                    ("domain", zone_apex),
+                    ("record_id", record_ref),
+                    ("status", status),
+                ],
+            )
+            .await?;
+        let _ = body;
+        // The status response carries only the vendor's acknowledgement; the
+        // caller holds the row it flipped, so an identity-only row reports
+        // success.
+        Ok(DnsZoneRecord {
+            record_name: String::new(),
+            record_type: String::new(),
+            record_value: String::new(),
+            ttl_seconds: None,
+            priority: None,
+            record_line: None,
+            provider_record_ref: Some(record_ref.to_owned()),
+        })
     }
 }
 
@@ -906,5 +1046,101 @@ mod duplicate_publish_tests {
             .await
             .expect("a duplicate must not fail the publish");
         assert_eq!(handle.provider_record_ref.as_deref(), Some("dnspod-exact"));
+    }
+}
+
+#[cfg(test)]
+mod record_write_tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    use axum::extract::State;
+    use axum::routing::post;
+    use axum::{Form, Json, Router};
+    use serde_json::{json, Value};
+
+    #[tokio::test]
+    async fn create_sends_sub_domain_line_and_mx_and_status_flips() {
+        async fn record_create(
+            State(state): State<Arc<Mutex<Vec<(String, Vec<(String, String)>)>>>>,
+            Form(fields): Form<Vec<(String, String)>>,
+        ) -> Json<Value> {
+            state
+                .lock()
+                .expect("lock")
+                .push(("Record.Create".to_owned(), fields));
+            Json(json!({
+                "status": { "code": "1", "message": "ok" },
+                "record": { "id": "dnspod-new-1" }
+            }))
+        }
+
+        async fn record_status(
+            State(state): State<Arc<Mutex<Vec<(String, Vec<(String, String)>)>>>>,
+            Form(fields): Form<Vec<(String, String)>>,
+        ) -> Json<Value> {
+            state
+                .lock()
+                .expect("lock")
+                .push(("Record.Status".to_owned(), fields));
+            Json(json!({
+                "status": { "code": "1", "message": "ok" }
+            }))
+        }
+
+        let captured: Arc<Mutex<Vec<(String, Vec<(String, String)>)>>> =
+            Arc::new(Mutex::new(Vec::new()));
+        let app = Router::new()
+            .route("/Record.Create", post(record_create))
+            .route("/Record.Status", post(record_status))
+            .with_state(captured.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let address = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        let presenter = DnspodDns01Presenter::with_base_url(
+            DnsApiClient::new_allowing_plaintext().expect("client"),
+            "12345",
+            "token",
+            format!("http://{address}"),
+        )
+        .expect("presenter");
+
+        let change = DnsRecordChange::new("MX", "@", "mail.example.com", Some(600), Some(10), None)
+            .expect("change");
+        let record = presenter
+            .create_record("example.com", &change)
+            .await
+            .expect("create");
+        assert_eq!(record.record_name, "example.com");
+        assert_eq!(record.provider_record_ref.as_deref(), Some("dnspod-new-1"));
+
+        presenter
+            .set_record_status("example.com", "dnspod-new-1", false)
+            .await
+            .expect("pause");
+
+        let requests = captured.lock().expect("lock");
+        let (create_action, create_fields) = &requests[0];
+        assert_eq!(create_action, "Record.Create");
+        let get = |fields: &[(String, String)], key: &str| {
+            fields
+                .iter()
+                .find(|(name, _)| name == key)
+                .map(|(_, value)| value.clone())
+        };
+        assert_eq!(get(create_fields, "domain").as_deref(), Some("example.com"));
+        assert_eq!(get(create_fields, "sub_domain").as_deref(), Some("@"));
+        assert_eq!(get(create_fields, "record_type").as_deref(), Some("MX"));
+        assert_eq!(get(create_fields, "value").as_deref(), Some("mail.example.com"));
+        assert_eq!(get(create_fields, "ttl").as_deref(), Some("600"));
+        assert_eq!(get(create_fields, "record_line_id").as_deref(), Some("0"));
+        assert_eq!(get(create_fields, "mx").as_deref(), Some("10"));
+
+        let (status_action, status_fields) = &requests[1];
+        assert_eq!(status_action, "Record.Status");
+        assert_eq!(get(status_fields, "record_id").as_deref(), Some("dnspod-new-1"));
+        assert_eq!(get(status_fields, "status").as_deref(), Some("disable"));
     }
 }

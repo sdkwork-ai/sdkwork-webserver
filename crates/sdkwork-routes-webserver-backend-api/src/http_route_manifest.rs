@@ -137,6 +137,30 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     ).with_required_permission("web.applications.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
+        "/backend/v3/api/root_domains/{rootDomainId}/dns_records",
+        "domain",
+        "rootDomains.dnsRecords.create",
+    ).with_required_permission("web.applications.write").with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Patch,
+        "/backend/v3/api/root_domains/{rootDomainId}/dns_records/{recordId}",
+        "domain",
+        "rootDomains.dnsRecords.update",
+    ).with_required_permission("web.applications.write").with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Delete,
+        "/backend/v3/api/root_domains/{rootDomainId}/dns_records/{recordId}",
+        "domain",
+        "rootDomains.dnsRecords.delete",
+    ).with_required_permission("web.applications.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::AuthCritical),
+    HttpRoute::dual_token(
+        HttpMethod::Patch,
+        "/backend/v3/api/root_domains/{rootDomainId}/dns_records/{recordId}/status",
+        "domain",
+        "rootDomains.dnsRecords.status.update",
+    ).with_required_permission("web.applications.write").with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
         "/backend/v3/api/root_domains/{rootDomainId}/dns_records/sync",
         "domain",
         "rootDomains.dnsRecords.sync",

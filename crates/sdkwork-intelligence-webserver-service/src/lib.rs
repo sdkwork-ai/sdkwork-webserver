@@ -26,10 +26,10 @@ pub use repository::{
     ClusterProbeOutcome, ClusterProbeWrite, ClusterRoutingDiscovery, ClusterRoutingInstance,
     ClusterSyncAckWrite, ClusterSyncDesired, ClusterSyncRevisionPayload,
     ClusterSyncRevisionPublish, ClusterUpsert, DnsRecordSnapshotRow, DomainDnsRecordFilter,
-    DomainDnsSnapshotWrite, DomainHostnameAsset, DomainVerificationChallenge,
-    DomainVerificationObservation, ExpiredClusterHost, ExpiredClusterInstance,
-    RootDomainDnsSyncTarget, RuntimeAssignmentTarget, RuntimeAssignmentWrite,
-    RuntimeObservationWrite, WebRepositoryPort, cluster_operator_owned_status,
+    DomainDnsRecordUpsert, DomainDnsSnapshotWrite, DomainHostnameAsset,
+    DomainVerificationChallenge, DomainVerificationObservation, ExpiredClusterHost,
+    ExpiredClusterInstance, RootDomainDnsSyncTarget, RuntimeAssignmentTarget,
+    RuntimeAssignmentWrite, RuntimeObservationWrite, WebRepositoryPort, cluster_operator_owned_status,
     domain_asset_for_record, hostname_matches_record,
 };
 pub use source_import::{

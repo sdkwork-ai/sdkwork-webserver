@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 from ..http_client import HttpClient
-from ..models import CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainsApplicationBindingUpdateResponse, DomainsCreateResponse201, DomainsListResponse, DomainsVerifyResponse, RootDomainsCreateResponse201, RootDomainsDnsRecordsListResponse, RootDomainsDnsRecordsSyncResponse, RootDomainsListResponse, RootDomainsRetrieveResponse, RootDomainsSubdomainsCreateResponse201, RootDomainsSubdomainsListResponse, RootDomainsUpdateResponse, UpdateDomainApplicationBindingRequest, UpdateRootDomainRequest
+from ..models import CreateDomainDnsRecordRequest, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainDnsRecordStatusRequest, DomainsApplicationBindingUpdateResponse, DomainsCreateResponse201, DomainsListResponse, DomainsVerifyResponse, RootDomainsCreateResponse201, RootDomainsDnsRecordsCreateResponse201, RootDomainsDnsRecordsListResponse, RootDomainsDnsRecordsStatusUpdateResponse, RootDomainsDnsRecordsSyncResponse, RootDomainsDnsRecordsUpdateResponse, RootDomainsListResponse, RootDomainsRetrieveResponse, RootDomainsSubdomainsCreateResponse201, RootDomainsSubdomainsListResponse, RootDomainsUpdateResponse, UpdateDomainApplicationBindingRequest, UpdateDomainDnsRecordRequest, UpdateRootDomainRequest
 
 def _append_query_string(path: str, raw_query_string: str) -> str:
     query = raw_query_string.lstrip('?')
@@ -368,16 +368,49 @@ class DomainRootDomainsDnsRecordsApi:
 
     def __init__(self, client: HttpClient):
         self._client = client
+        self.status = DomainRootDomainsDnsRecordsStatusApi(client)
 
 
-    def list(self, root_domain_id: str, page: Optional[int] = None, page_size: Optional[int] = None, domain_id: Optional[str] = None) -> RootDomainsDnsRecordsListResponse:
+    def list(self, root_domain_id: str, page: Optional[int] = None, page_size: Optional[int] = None, domain_id: Optional[str] = None, host: Optional[str] = None, record_type: Optional[str] = None) -> RootDomainsDnsRecordsListResponse:
         """List a root-domain Zone's synced DNS resolution records"""
         query = build_query_string([
             {'name': 'page', 'value': page, 'style': 'form', 'explode': True, 'allow_reserved': False},
             {'name': 'page_size', 'value': page_size, 'style': 'form', 'explode': True, 'allow_reserved': False},
             {'name': 'domain_id', 'value': domain_id, 'style': 'form', 'explode': True, 'allow_reserved': False},
+            {'name': 'host', 'value': host, 'style': 'form', 'explode': True, 'allow_reserved': False},
+            {'name': 'record_type', 'value': record_type, 'style': 'form', 'explode': True, 'allow_reserved': False},
         ])
         return self._client.get(_append_query_string(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}/dns_records", query))
+
+    def create(self, root_domain_id: str, body: CreateDomainDnsRecordRequest, idempotency_key: str) -> RootDomainsDnsRecordsCreateResponse201:
+        """Create a resolution record through the Zone's cloud account"""
+        request_headers = build_request_headers(
+            {
+                'Idempotency-Key': {'value': idempotency_key, 'style': 'simple', 'explode': False},
+            },
+            {}
+        )
+        return self._client.post(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}/dns_records", json=body, headers=request_headers)
+
+    def update(self, root_domain_id: str, record_id: str, body: UpdateDomainDnsRecordRequest, idempotency_key: str) -> RootDomainsDnsRecordsUpdateResponse:
+        """Replace a resolution record in place through the Zone's cloud account"""
+        request_headers = build_request_headers(
+            {
+                'Idempotency-Key': {'value': idempotency_key, 'style': 'simple', 'explode': False},
+            },
+            {}
+        )
+        return self._client.patch(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}/dns_records/{serialize_path_parameter(record_id, {'name': 'recordId', 'style': 'simple', 'explode': False})}", json=body, headers=request_headers)
+
+    def delete(self, root_domain_id: str, record_id: str, idempotency_key: str) -> None:
+        """Delete a resolution record through the Zone's cloud account"""
+        request_headers = build_request_headers(
+            {
+                'Idempotency-Key': {'value': idempotency_key, 'style': 'simple', 'explode': False},
+            },
+            {}
+        )
+        return self._client.delete(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}/dns_records/{serialize_path_parameter(record_id, {'name': 'recordId', 'style': 'simple', 'explode': False})}", headers=request_headers)
 
     def sync(self, root_domain_id: str, idempotency_key: str) -> RootDomainsDnsRecordsSyncResponse:
         """Sync a root-domain Zone's resolution records through its cloud account"""
@@ -388,6 +421,23 @@ class DomainRootDomainsDnsRecordsApi:
             {}
         )
         return self._client.post(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}/dns_records/sync", headers=request_headers)
+
+class DomainRootDomainsDnsRecordsStatusApi:
+    """domain domain.root_domains.dns_records.status API client."""
+
+    def __init__(self, client: HttpClient):
+        self._client = client
+
+
+    def update(self, root_domain_id: str, record_id: str, body: DomainDnsRecordStatusRequest, idempotency_key: str) -> RootDomainsDnsRecordsStatusUpdateResponse:
+        """Pause a resolution record or resume it"""
+        request_headers = build_request_headers(
+            {
+                'Idempotency-Key': {'value': idempotency_key, 'style': 'simple', 'explode': False},
+            },
+            {}
+        )
+        return self._client.patch(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}/dns_records/{serialize_path_parameter(record_id, {'name': 'recordId', 'style': 'simple', 'explode': False})}/status", json=body, headers=request_headers)
 
 class DomainApplicationBindingApi:
     """domain domains.application_binding API client."""

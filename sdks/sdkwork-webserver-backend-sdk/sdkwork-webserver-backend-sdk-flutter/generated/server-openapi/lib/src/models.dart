@@ -1425,11 +1425,13 @@ class RootDomainResponse {
 class DomainDnsRecordResponse {
   final String id;
   final String recordName;
+  final String host;
   final String recordType;
   final String recordValue;
   final int? ttlSeconds;
   final int? priority;
   final String? recordLine;
+  final String recordStatus;
   final String? domainId;
   final String dnsProvider;
   final String cloudAccountId;
@@ -1439,11 +1441,13 @@ class DomainDnsRecordResponse {
   DomainDnsRecordResponse({
     required this.id,
     required this.recordName,
+    required this.host,
     required this.recordType,
     required this.recordValue,
     this.ttlSeconds,
     this.priority,
     this.recordLine,
+    required this.recordStatus,
     this.domainId,
     required this.dnsProvider,
     required this.cloudAccountId,
@@ -1467,6 +1471,13 @@ class DomainDnsRecordResponse {
         }
         return value;
       })(),
+      host: (() {
+        final value = json['host']?.toString();
+        if (value == null) {
+          throw FormatException('DomainDnsRecordResponse.host is required');
+        }
+        return value;
+      })(),
       recordType: (() {
         final value = json['recordType']?.toString();
         if (value == null) {
@@ -1484,6 +1495,13 @@ class DomainDnsRecordResponse {
       ttlSeconds: json['ttlSeconds'] is int ? json['ttlSeconds'] : null,
       priority: json['priority'] is int ? json['priority'] : null,
       recordLine: json['recordLine']?.toString(),
+      recordStatus: (() {
+        final value = json['recordStatus']?.toString();
+        if (value == null) {
+          throw FormatException('DomainDnsRecordResponse.recordStatus is required');
+        }
+        return value;
+      })(),
       domainId: json['domainId']?.toString(),
       dnsProvider: (() {
         final value = json['dnsProvider']?.toString();
@@ -1514,16 +1532,160 @@ class DomainDnsRecordResponse {
     return <String, dynamic>{
       'id': id,
       'recordName': recordName,
+      'host': host,
       'recordType': recordType,
       'recordValue': recordValue,
       'ttlSeconds': ttlSeconds,
       'priority': priority,
       'recordLine': recordLine,
+      'recordStatus': recordStatus,
       'domainId': domainId,
       'dnsProvider': dnsProvider,
       'cloudAccountId': cloudAccountId,
       'providerRecordRef': providerRecordRef,
       'syncedAt': syncedAt,
+    };
+  }
+}
+
+class CreateDomainDnsRecordRequest {
+  final String recordType;
+  final String host;
+  final String recordValue;
+  final int? ttlSeconds;
+  final int? priority;
+  final String? recordLine;
+
+  CreateDomainDnsRecordRequest({
+    required this.recordType,
+    required this.host,
+    required this.recordValue,
+    this.ttlSeconds,
+    this.priority,
+    this.recordLine
+  });
+
+  factory CreateDomainDnsRecordRequest.fromJson(Map<String, dynamic> json) {
+    return CreateDomainDnsRecordRequest(
+      recordType: (() {
+        final value = json['recordType']?.toString();
+        if (value == null) {
+          throw FormatException('CreateDomainDnsRecordRequest.recordType is required');
+        }
+        return value;
+      })(),
+      host: (() {
+        final value = json['host']?.toString();
+        if (value == null) {
+          throw FormatException('CreateDomainDnsRecordRequest.host is required');
+        }
+        return value;
+      })(),
+      recordValue: (() {
+        final value = json['recordValue']?.toString();
+        if (value == null) {
+          throw FormatException('CreateDomainDnsRecordRequest.recordValue is required');
+        }
+        return value;
+      })(),
+      ttlSeconds: json['ttlSeconds'] is int ? json['ttlSeconds'] : null,
+      priority: json['priority'] is int ? json['priority'] : null,
+      recordLine: json['recordLine']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'recordType': recordType,
+      'host': host,
+      'recordValue': recordValue,
+      'ttlSeconds': ttlSeconds,
+      'priority': priority,
+      'recordLine': recordLine,
+    };
+  }
+}
+
+class UpdateDomainDnsRecordRequest {
+  final String recordType;
+  final String host;
+  final String recordValue;
+  final int? ttlSeconds;
+  final int? priority;
+  final String? recordLine;
+
+  UpdateDomainDnsRecordRequest({
+    required this.recordType,
+    required this.host,
+    required this.recordValue,
+    this.ttlSeconds,
+    this.priority,
+    this.recordLine
+  });
+
+  factory UpdateDomainDnsRecordRequest.fromJson(Map<String, dynamic> json) {
+    return UpdateDomainDnsRecordRequest(
+      recordType: (() {
+        final value = json['recordType']?.toString();
+        if (value == null) {
+          throw FormatException('UpdateDomainDnsRecordRequest.recordType is required');
+        }
+        return value;
+      })(),
+      host: (() {
+        final value = json['host']?.toString();
+        if (value == null) {
+          throw FormatException('UpdateDomainDnsRecordRequest.host is required');
+        }
+        return value;
+      })(),
+      recordValue: (() {
+        final value = json['recordValue']?.toString();
+        if (value == null) {
+          throw FormatException('UpdateDomainDnsRecordRequest.recordValue is required');
+        }
+        return value;
+      })(),
+      ttlSeconds: json['ttlSeconds'] is int ? json['ttlSeconds'] : null,
+      priority: json['priority'] is int ? json['priority'] : null,
+      recordLine: json['recordLine']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'recordType': recordType,
+      'host': host,
+      'recordValue': recordValue,
+      'ttlSeconds': ttlSeconds,
+      'priority': priority,
+      'recordLine': recordLine,
+    };
+  }
+}
+
+class DomainDnsRecordStatusRequest {
+  final bool enabled;
+
+  DomainDnsRecordStatusRequest({
+    required this.enabled
+  });
+
+  factory DomainDnsRecordStatusRequest.fromJson(Map<String, dynamic> json) {
+    return DomainDnsRecordStatusRequest(
+      enabled: (() {
+        final value = json['enabled'];
+        if (value is! bool) {
+          throw FormatException('DomainDnsRecordStatusRequest.enabled is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'enabled': enabled,
     };
   }
 }
@@ -7901,6 +8063,144 @@ class RootDomainsDnsRecordsListResponse {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('RootDomainsDnsRecordsListResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class RootDomainsDnsRecordsCreateResponse201 {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  RootDomainsDnsRecordsCreateResponse201({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory RootDomainsDnsRecordsCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return RootDomainsDnsRecordsCreateResponse201(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('RootDomainsDnsRecordsCreateResponse201.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('RootDomainsDnsRecordsCreateResponse201.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('RootDomainsDnsRecordsCreateResponse201.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class RootDomainsDnsRecordsUpdateResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  RootDomainsDnsRecordsUpdateResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory RootDomainsDnsRecordsUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return RootDomainsDnsRecordsUpdateResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('RootDomainsDnsRecordsUpdateResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('RootDomainsDnsRecordsUpdateResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('RootDomainsDnsRecordsUpdateResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class RootDomainsDnsRecordsStatusUpdateResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  RootDomainsDnsRecordsStatusUpdateResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory RootDomainsDnsRecordsStatusUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return RootDomainsDnsRecordsStatusUpdateResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('RootDomainsDnsRecordsStatusUpdateResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('RootDomainsDnsRecordsStatusUpdateResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('RootDomainsDnsRecordsStatusUpdateResponse.traceId is required');
         }
         return value;
       })()

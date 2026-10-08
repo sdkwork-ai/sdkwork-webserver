@@ -109,16 +109,77 @@ class DomainApi {
   }
 
   /// List a root-domain Zone's synced DNS resolution records
-  Future<RootDomainsDnsRecordsListResponse?> rootDomainsDnsRecordsList(String rootDomainId, [int? page, int? pageSize, String? domainId]) async {
+  Future<RootDomainsDnsRecordsListResponse?> rootDomainsDnsRecordsList(String rootDomainId, [int? page, int? pageSize, String? domainId, String? host, String? recordType]) async {
     final query = buildQueryString([
       QueryParameterSpec('page', page, 'form', true, false, null),
       QueryParameterSpec('page_size', pageSize, 'form', true, false, null),
-      QueryParameterSpec('domain_id', domainId, 'form', true, false, null)
+      QueryParameterSpec('domain_id', domainId, 'form', true, false, null),
+      QueryParameterSpec('host', host, 'form', true, false, null),
+      QueryParameterSpec('record_type', recordType, 'form', true, false, null)
     ]);
     final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.backendPath('/root_domains/${serializePathParameter(rootDomainId, const PathParameterSpec('rootDomainId', 'simple', false))}/dns_records'), query));
     return (() {
       final map = sdkworkResponseAsMap(response);
       return map == null ? null : RootDomainsDnsRecordsListResponse.fromJson(map);
+    })();
+  }
+
+  /// Create a resolution record through the Zone's cloud account
+  Future<RootDomainsDnsRecordsCreateResponse201?> rootDomainsDnsRecordsCreate(String rootDomainId, CreateDomainDnsRecordRequest body, String idempotencyKey) async {
+    final requestHeaders = buildRequestHeaders(
+      <String, HeaderParameterSpec>{
+        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
+      },
+      <String, HeaderParameterSpec>{},
+    );
+    final payload = body.toJson();
+    final response = await _client.post(ApiPaths.backendPath('/root_domains/${serializePathParameter(rootDomainId, const PathParameterSpec('rootDomainId', 'simple', false))}/dns_records'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : RootDomainsDnsRecordsCreateResponse201.fromJson(map);
+    })();
+  }
+
+  /// Replace a resolution record in place through the Zone's cloud account
+  Future<RootDomainsDnsRecordsUpdateResponse?> rootDomainsDnsRecordsUpdate(String rootDomainId, String recordId, UpdateDomainDnsRecordRequest body, String idempotencyKey) async {
+    final requestHeaders = buildRequestHeaders(
+      <String, HeaderParameterSpec>{
+        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
+      },
+      <String, HeaderParameterSpec>{},
+    );
+    final payload = body.toJson();
+    final response = await _client.patch(ApiPaths.backendPath('/root_domains/${serializePathParameter(rootDomainId, const PathParameterSpec('rootDomainId', 'simple', false))}/dns_records/${serializePathParameter(recordId, const PathParameterSpec('recordId', 'simple', false))}'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : RootDomainsDnsRecordsUpdateResponse.fromJson(map);
+    })();
+  }
+
+  /// Delete a resolution record through the Zone's cloud account
+  Future<void> rootDomainsDnsRecordsDelete(String rootDomainId, String recordId, String idempotencyKey) async {
+    final requestHeaders = buildRequestHeaders(
+      <String, HeaderParameterSpec>{
+        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
+      },
+      <String, HeaderParameterSpec>{},
+    );
+    await _client.delete(ApiPaths.backendPath('/root_domains/${serializePathParameter(rootDomainId, const PathParameterSpec('rootDomainId', 'simple', false))}/dns_records/${serializePathParameter(recordId, const PathParameterSpec('recordId', 'simple', false))}'), headers: requestHeaders);
+  }
+
+  /// Pause a resolution record or resume it
+  Future<RootDomainsDnsRecordsStatusUpdateResponse?> rootDomainsDnsRecordsStatusUpdate(String rootDomainId, String recordId, DomainDnsRecordStatusRequest body, String idempotencyKey) async {
+    final requestHeaders = buildRequestHeaders(
+      <String, HeaderParameterSpec>{
+        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
+      },
+      <String, HeaderParameterSpec>{},
+    );
+    final payload = body.toJson();
+    final response = await _client.patch(ApiPaths.backendPath('/root_domains/${serializePathParameter(rootDomainId, const PathParameterSpec('rootDomainId', 'simple', false))}/dns_records/${serializePathParameter(recordId, const PathParameterSpec('recordId', 'simple', false))}/status'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : RootDomainsDnsRecordsStatusUpdateResponse.fromJson(map);
     })();
   }
 

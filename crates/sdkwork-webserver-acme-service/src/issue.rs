@@ -13,7 +13,7 @@ use crate::challenge_policy::{
 };
 use crate::challenge_store::ChallengeStore;
 use crate::config::AcmeConfig;
-use crate::dns::{Dns01Presenter, DnsZoneInventory};
+use crate::dns::{Dns01Presenter, DnsRecordChange, DnsZoneInventory, DnsZoneRecord};
 use crate::http_client::{AcmeHttpClientFactory, PlatformVerifierClientFactory};
 use crate::lets_encrypt::{AcmeChallengeMode, issue_lets_encrypt};
 use crate::model::IssuedCertificateMaterial;
@@ -244,6 +244,94 @@ impl CertificateIssuer {
             zone_apex: account.zone_apex.clone(),
             records,
         })
+    }
+
+    /// Creates one resolution record through the resolved account. The change
+    /// reaches the vendor only after the control plane's own validation, so a
+    /// malformed value is a validation error instead of a vendor refusal.
+    pub async fn create_dns_record(
+        &self,
+        account_id: Option<&str>,
+        hostname: &str,
+        change: DnsRecordChange,
+    ) -> AcmeServiceResult<DnsZoneRecord> {
+        let account = self.resolve_dns_account(account_id, hostname)?;
+        account
+            .presenter
+            .create_record(&account.zone_apex, &change)
+            .await
+    }
+
+    /// Replaces one record in place through the resolved account.
+    pub async fn update_dns_record(
+        &self,
+        account_id: Option<&str>,
+        hostname: &str,
+        record_ref: &str,
+        change: DnsRecordChange,
+    ) -> AcmeServiceResult<DnsZoneRecord> {
+        let account = self.resolve_dns_account(account_id, hostname)?;
+        account
+            .presenter
+            .update_record(&account.zone_apex, record_ref, &change)
+            .await
+    }
+
+    /// Deletes one record through the resolved account.
+    pub async fn delete_dns_record(
+        &self,
+        account_id: Option<&str>,
+        hostname: &str,
+        record_ref: &str,
+    ) -> AcmeServiceResult<()> {
+        let account = self.resolve_dns_account(account_id, hostname)?;
+        account
+            .presenter
+            .delete_record(&account.zone_apex, record_ref)
+            .await
+    }
+
+    /// Pauses or resumes one record through the resolved account.
+    pub async fn set_dns_record_status(
+        &self,
+        account_id: Option<&str>,
+        hostname: &str,
+        record_ref: &str,
+        enabled: bool,
+    ) -> AcmeServiceResult<DnsZoneRecord> {
+        let account = self.resolve_dns_account(account_id, hostname)?;
+        account
+            .presenter
+            .set_record_status(&account.zone_apex, record_ref, enabled)
+            .await
+    }
+
+    /// The account-resolution half of [`Self::read_zone_records`], shared by
+    /// every write: pinned id wins, else the covering account, else a
+    /// configuration error naming the fix.
+    fn resolve_dns_account(
+        &self,
+        account_id: Option<&str>,
+        hostname: &str,
+    ) -> AcmeServiceResult<&crate::dns_account::DnsCloudAccount> {
+        let registry = self.dns_accounts.as_ref().ok_or_else(|| {
+            AcmeServiceError::config(
+                "no DNS cloud account is configured on this edge; bind one to the \
+                 root domain or configure the dns accounts file",
+            )
+        })?;
+        match account_id {
+            Some(id) => registry.account(id).ok_or_else(|| {
+                AcmeServiceError::config(format!(
+                    "cloud account `{id}` is not configured on this edge"
+                ))
+            }),
+            None => registry.resolve(hostname).ok_or_else(|| {
+                AcmeServiceError::config(format!(
+                    "no configured cloud account's zone covers {hostname}"
+                ))
+            }),
+        }
     }
 
     /// What this deployment can actually do for `hostnames`.

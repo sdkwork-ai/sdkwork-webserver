@@ -4,22 +4,28 @@ declare(strict_types=1);
 
 namespace SDKWork\Webserver\BackendSdk\Api;
 
+use SDKWork\Webserver\BackendSdk\Models\CreateDomainDnsRecordRequest;
 use SDKWork\Webserver\BackendSdk\Models\CreateManagedDomainRequest;
 use SDKWork\Webserver\BackendSdk\Models\CreateRootDomainHostnameRequest;
 use SDKWork\Webserver\BackendSdk\Models\CreateRootDomainRequest;
+use SDKWork\Webserver\BackendSdk\Models\DomainDnsRecordStatusRequest;
 use SDKWork\Webserver\BackendSdk\Models\DomainsApplicationBindingUpdateResponse;
 use SDKWork\Webserver\BackendSdk\Models\DomainsCreateResponse201;
 use SDKWork\Webserver\BackendSdk\Models\DomainsListResponse;
 use SDKWork\Webserver\BackendSdk\Models\DomainsVerifyResponse;
 use SDKWork\Webserver\BackendSdk\Models\RootDomainsCreateResponse201;
+use SDKWork\Webserver\BackendSdk\Models\RootDomainsDnsRecordsCreateResponse201;
 use SDKWork\Webserver\BackendSdk\Models\RootDomainsDnsRecordsListResponse;
+use SDKWork\Webserver\BackendSdk\Models\RootDomainsDnsRecordsStatusUpdateResponse;
 use SDKWork\Webserver\BackendSdk\Models\RootDomainsDnsRecordsSyncResponse;
+use SDKWork\Webserver\BackendSdk\Models\RootDomainsDnsRecordsUpdateResponse;
 use SDKWork\Webserver\BackendSdk\Models\RootDomainsListResponse;
 use SDKWork\Webserver\BackendSdk\Models\RootDomainsRetrieveResponse;
 use SDKWork\Webserver\BackendSdk\Models\RootDomainsSubdomainsCreateResponse201;
 use SDKWork\Webserver\BackendSdk\Models\RootDomainsSubdomainsListResponse;
 use SDKWork\Webserver\BackendSdk\Models\RootDomainsUpdateResponse;
 use SDKWork\Webserver\BackendSdk\Models\UpdateDomainApplicationBindingRequest;
+use SDKWork\Webserver\BackendSdk\Models\UpdateDomainDnsRecordRequest;
 use SDKWork\Webserver\BackendSdk\Models\UpdateRootDomainRequest;
 
 final class DomainApi extends BaseApi
@@ -132,17 +138,89 @@ final class DomainApi extends BaseApi
     }
 
     /** List a root-domain Zone's synced DNS resolution records */
-    public function rootDomainsDnsRecordsList(string $rootDomainId, ?int $page = null, ?int $pageSize = null, ?string $domainId = null): ?RootDomainsDnsRecordsListResponse
+    public function rootDomainsDnsRecordsList(string $rootDomainId, ?int $page = null, ?int $pageSize = null, ?string $domainId = null, ?string $host = null, ?string $recordType = null): ?RootDomainsDnsRecordsListResponse
     {
         $path = $this->interpolatePath('/backend/v3/api/root_domains/{rootDomainId}/dns_records', ['rootDomainId' => $this->serializePathParameter($rootDomainId, new PathParameterSpec('rootDomainId', 'simple', false))]);
         $query = $this->buildQueryString([
             new QueryParameterSpec('page', $page, 'form', true, false, null),
             new QueryParameterSpec('page_size', $pageSize, 'form', true, false, null),
             new QueryParameterSpec('domain_id', $domainId, 'form', true, false, null),
+            new QueryParameterSpec('host', $host, 'form', true, false, null),
+            new QueryParameterSpec('record_type', $recordType, 'form', true, false, null),
         ]);
         $path = $this->appendQueryString($path, $query);
         $result = $this->client->request('GET', $path, []);
         return is_array($result) ? RootDomainsDnsRecordsListResponse::fromArray($result) : null;
+    }
+
+    /** Create a resolution record through the Zone's cloud account */
+    public function rootDomainsDnsRecordsCreate(string $rootDomainId, array|CreateDomainDnsRecordRequest $body, string $idempotencyKey): ?RootDomainsDnsRecordsCreateResponse201
+    {
+        $path = $this->interpolatePath('/backend/v3/api/root_domains/{rootDomainId}/dns_records', ['rootDomainId' => $this->serializePathParameter($rootDomainId, new PathParameterSpec('rootDomainId', 'simple', false))]);
+        $payload = $body instanceof CreateDomainDnsRecordRequest ? $body->toArray() : $body;
+        $requestHeaders = $this->buildRequestHeaders(
+            [
+                'Idempotency-Key' => new HeaderParameterSpec($idempotencyKey, 'simple', false, null),
+            ],
+            []
+        );
+        $result = $this->client->request('POST', $path, [
+            'headers' => $requestHeaders,
+            'json' => $payload,
+        ]);
+        return is_array($result) ? RootDomainsDnsRecordsCreateResponse201::fromArray($result) : null;
+    }
+
+    /** Replace a resolution record in place through the Zone's cloud account */
+    public function rootDomainsDnsRecordsUpdate(string $rootDomainId, string $recordId, array|UpdateDomainDnsRecordRequest $body, string $idempotencyKey): ?RootDomainsDnsRecordsUpdateResponse
+    {
+        $path = $this->interpolatePath('/backend/v3/api/root_domains/{rootDomainId}/dns_records/{recordId}', ['rootDomainId' => $this->serializePathParameter($rootDomainId, new PathParameterSpec('rootDomainId', 'simple', false)), 'recordId' => $this->serializePathParameter($recordId, new PathParameterSpec('recordId', 'simple', false))]);
+        $payload = $body instanceof UpdateDomainDnsRecordRequest ? $body->toArray() : $body;
+        $requestHeaders = $this->buildRequestHeaders(
+            [
+                'Idempotency-Key' => new HeaderParameterSpec($idempotencyKey, 'simple', false, null),
+            ],
+            []
+        );
+        $result = $this->client->request('PATCH', $path, [
+            'headers' => $requestHeaders,
+            'json' => $payload,
+        ]);
+        return is_array($result) ? RootDomainsDnsRecordsUpdateResponse::fromArray($result) : null;
+    }
+
+    /** Delete a resolution record through the Zone's cloud account */
+    public function rootDomainsDnsRecordsDelete(string $rootDomainId, string $recordId, string $idempotencyKey): mixed
+    {
+        $path = $this->interpolatePath('/backend/v3/api/root_domains/{rootDomainId}/dns_records/{recordId}', ['rootDomainId' => $this->serializePathParameter($rootDomainId, new PathParameterSpec('rootDomainId', 'simple', false)), 'recordId' => $this->serializePathParameter($recordId, new PathParameterSpec('recordId', 'simple', false))]);
+        $requestHeaders = $this->buildRequestHeaders(
+            [
+                'Idempotency-Key' => new HeaderParameterSpec($idempotencyKey, 'simple', false, null),
+            ],
+            []
+        );
+        $result = $this->client->request('DELETE', $path, [
+            'headers' => $requestHeaders,
+        ]);
+        return $result;
+    }
+
+    /** Pause a resolution record or resume it */
+    public function rootDomainsDnsRecordsStatusUpdate(string $rootDomainId, string $recordId, array|DomainDnsRecordStatusRequest $body, string $idempotencyKey): ?RootDomainsDnsRecordsStatusUpdateResponse
+    {
+        $path = $this->interpolatePath('/backend/v3/api/root_domains/{rootDomainId}/dns_records/{recordId}/status', ['rootDomainId' => $this->serializePathParameter($rootDomainId, new PathParameterSpec('rootDomainId', 'simple', false)), 'recordId' => $this->serializePathParameter($recordId, new PathParameterSpec('recordId', 'simple', false))]);
+        $payload = $body instanceof DomainDnsRecordStatusRequest ? $body->toArray() : $body;
+        $requestHeaders = $this->buildRequestHeaders(
+            [
+                'Idempotency-Key' => new HeaderParameterSpec($idempotencyKey, 'simple', false, null),
+            ],
+            []
+        );
+        $result = $this->client->request('PATCH', $path, [
+            'headers' => $requestHeaders,
+            'json' => $payload,
+        ]);
+        return is_array($result) ? RootDomainsDnsRecordsStatusUpdateResponse::fromArray($result) : null;
     }
 
     /** Sync a root-domain Zone's resolution records through its cloud account */

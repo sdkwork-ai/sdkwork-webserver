@@ -351,6 +351,218 @@ pub struct DnsZoneInventory {
     pub records: Vec<DnsZoneRecord>,
 }
 
+/// Record types the management plane may write through to a provider.
+///
+/// The set is the intersection every integrated vendor drives with the same
+/// three fields (owner, value, TTL — priority for `MX`): the commercial
+/// baseline an operator reaches for. `SRV` needs a four-part value shape and
+/// `URL` redirect records are vendor-proprietary, so both stay out until a
+/// deployment asks for them; the provider's own inventory read still carries
+/// whatever types the zone holds.
+pub const MANAGED_RECORD_TYPES: [&str; 7] = ["A", "AAAA", "CNAME", "TXT", "MX", "NS", "CAA"];
+
+/// One resolution-record write, validated before it reaches a vendor.
+///
+/// The owner is zone-relative — the "主机记录" Aliyun and DNSPod ask for: `@`
+/// for the apex, `www`, a label path such as `api.eu`, or `*` for the
+/// leftmost wildcard label. The absolute owner the snapshot stores is derived
+/// against the zone at write time, so a request that names its owner two ways
+/// cannot disagree with the row it produces.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DnsRecordChange {
+    /// Record type, one of [`MANAGED_RECORD_TYPES`].
+    pub record_type: String,
+    /// Zone-relative owner (`@`, `www`, `api.eu`, `*`).
+    pub relative_owner: String,
+    /// Record content, validated against `record_type`.
+    pub record_value: String,
+    /// Record TTL in seconds; `None` means the provider default (600 on the
+    /// Chinese vendors, auto on Cloudflare).
+    pub ttl_seconds: Option<u32>,
+    /// Priority for `MX`. Rejected on types that do not carry one — a priority
+    /// on an `A` record is a typo the vendor would silently drop.
+    pub priority: Option<u32>,
+    /// Provider resolution line; `None` = the provider's default line.
+    pub record_line: Option<String>,
+}
+
+impl DnsRecordChange {
+    /// Validates one write: type in the managed set, owner in the DNS label
+    /// alphabet (wildcard as the leftmost label only), and a value that parses
+    /// for the type — an `A` value that is not an IPv4 address must be refused
+    /// by the control plane, because every vendor's own refusal names a
+    /// different field and none of them mention the operator's actual mistake.
+    pub fn new(
+        record_type: &str,
+        relative_owner: &str,
+        record_value: &str,
+        ttl_seconds: Option<u32>,
+        priority: Option<u32>,
+        record_line: Option<&str>,
+    ) -> AcmeServiceResult<Self> {
+        let record_type = record_type.trim().to_ascii_uppercase();
+        if !MANAGED_RECORD_TYPES.contains(&record_type.as_str()) {
+            return Err(AcmeServiceError::validation(format!(
+                "record type `{record_type}` is not manageable; manageable types: {}",
+                MANAGED_RECORD_TYPES.join(", ")
+            )));
+        }
+        let owner = normalize_record_owner(relative_owner)?;
+        let record_value = record_value.trim();
+        if record_value.is_empty() {
+            return Err(AcmeServiceError::validation(
+                "record value must not be empty",
+            ));
+        }
+        validate_record_value(&record_type, record_value)?;
+        if let Some(priority) = priority {
+            if record_type != "MX" {
+                return Err(AcmeServiceError::validation(format!(
+                    "record type {record_type} does not carry a priority"
+                )));
+            }
+            let _ = priority;
+        }
+        if let Some(ttl) = ttl_seconds {
+            if !(1..=604_800).contains(&ttl) {
+                return Err(AcmeServiceError::validation(
+                    "record TTL must be between 1 and 604800 seconds",
+                ));
+            }
+        }
+        let record_line = record_line
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .filter(|line| line.len() <= 64)
+            .map(str::to_owned);
+        Ok(Self {
+            record_type,
+            relative_owner: owner,
+            record_value: record_value.to_owned(),
+            ttl_seconds,
+            priority,
+            record_line,
+        })
+    }
+
+    /// The absolute owner this write produces against `zone_apex`.
+    pub fn absolute_record_name(&self, zone_apex: &str) -> String {
+        absolute_record_name(&self.relative_owner, zone_apex)
+    }
+}
+
+/// Validates a zone-relative owner: `@` for the apex, otherwise DNS labels
+/// (`a-z0-9-_`, 1..63 bytes each) joined by dots. A wildcard is a single
+/// leftmost `*` or a `*.` prefix on the owner (`*.dev` = `*.dev.<zone>`, the
+/// shape both Chinese vendors accept for sub-zone wildcards); a `*` anywhere
+/// else is refused. An owner that names the zone itself is *not* refused
+/// here — this helper does not know the zone; the caller holding the apex
+/// refuses the doubled-name mistake.
+pub fn normalize_record_owner(raw: &str) -> AcmeServiceResult<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed == "@" {
+        return Ok("@".to_owned());
+    }
+    let lowered = trimmed.trim_end_matches('.').to_ascii_lowercase();
+    let (wildcard, rest) = match lowered.strip_prefix("*.") {
+        Some(rest) => (true, rest),
+        None => (false, lowered.as_str()),
+    };
+    if rest.is_empty() || rest == "*" {
+        // Either the bare `*` wildcard owner or a `*.` remnant — both spell
+        // "every first-level name under the zone".
+        return Ok("*".to_owned());
+    }
+    if lowered.len() > 253 {
+        return Err(AcmeServiceError::validation(
+            "record owner exceeds 253 bytes",
+        ));
+    }
+    for label in rest.split('.') {
+        if label.is_empty() {
+            return Err(AcmeServiceError::validation(
+                "record owner contains an empty label",
+            ));
+        }
+        if label == "*" {
+            return Err(AcmeServiceError::validation(
+                "record owner must carry at most one wildcard, as the leftmost `*.` prefix",
+            ));
+        }
+        if label.len() > 63 {
+            return Err(AcmeServiceError::validation(
+                "record owner contains a label longer than 63 bytes",
+            ));
+        }
+        if !label
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        {
+            return Err(AcmeServiceError::validation(
+                "record owner contains a character outside the ASCII DNS alphabet",
+            ));
+        }
+    }
+    Ok(if wildcard {
+        format!("*.{rest}")
+    } else {
+        rest.to_owned()
+    })
+}
+
+fn validate_record_value(record_type: &str, value: &str) -> AcmeServiceResult<()> {
+    match record_type {
+        "A" => {
+            if value.parse::<std::net::Ipv4Addr>().is_err() {
+                return Err(AcmeServiceError::validation(
+                    "an A record value must be an IPv4 address",
+                ));
+            }
+        }
+        "AAAA" => {
+            if value.parse::<std::net::Ipv6Addr>().is_err() {
+                return Err(AcmeServiceError::validation(
+                    "an AAAA record value must be an IPv6 address",
+                ));
+            }
+        }
+        "CNAME" | "NS" => {
+            normalize_dns_name(value, &format!("{record_type} record value"))?;
+        }
+        "MX" => {
+            normalize_dns_name(value, "MX record value")?;
+        }
+        "TXT" => {
+            if value.len() > 1024 {
+                return Err(AcmeServiceError::validation(
+                    "a TXT record value must not exceed 1024 bytes",
+                ));
+            }
+        }
+        "CAA" => {
+            // `flags tag "value"`: 0|128, issue|issuewild|iodef, quoted target.
+            let tokens: Vec<&str> = value.split_whitespace().collect();
+            let valid = tokens.len() == 3
+                && (tokens[0] == "0" || tokens[0] == "128")
+                && ["issue", "issuewild", "iodef"].contains(&tokens[1])
+                && tokens[2].starts_with('"')
+                && tokens[2].ends_with('"')
+                && tokens[2].len() >= 3;
+            if !valid {
+                return Err(AcmeServiceError::validation(
+                    "a CAA record value must be `0|128 issue|issuewild|iodef \"target\"`",
+                ));
+            }
+        }
+        other => {
+            return Err(AcmeServiceError::validation(format!(
+                "record type {other} is not manageable"
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Presents and withdraws DNS-01 TXT records.
 ///
 /// Implementations must be idempotent: [`Dns01Presenter::withdraw`] may be
@@ -429,6 +641,62 @@ pub trait Dns01Presenter: Send + Sync {
         let _ = _zone_apex;
         Err(AcmeServiceError::provider(
             "this provider family does not expose a record inventory read",
+        ))
+    }
+
+    /// Creates one resolution record of any managed type through the provider.
+    ///
+    /// The answer is the row as the provider now holds it (absolute owner,
+    /// provider-assigned id), ready to join the stored snapshot. The default is
+    /// the same refusal shape as [`Self::list_zone_records`]: a family without
+    /// a write path must look unwriteable, never succeed silently.
+    async fn create_record(
+        &self,
+        _zone_apex: &str,
+        _change: &DnsRecordChange,
+    ) -> AcmeServiceResult<DnsZoneRecord> {
+        let _ = (_zone_apex, _change);
+        Err(AcmeServiceError::provider(
+            "this provider family does not expose a record write path",
+        ))
+    }
+
+    /// Replaces one record's owner/type/value/TTL in place, addressed by the
+    /// provider's own record id. A full replace (rather than a field patch)
+    /// is the shape every integrated vendor shares.
+    async fn update_record(
+        &self,
+        _zone_apex: &str,
+        _record_ref: &str,
+        _change: &DnsRecordChange,
+    ) -> AcmeServiceResult<DnsZoneRecord> {
+        let _ = (_zone_apex, _record_ref, _change);
+        Err(AcmeServiceError::provider(
+            "this provider family does not expose a record write path",
+        ))
+    }
+
+    /// Deletes one record by the provider's own id. Deleting an already-gone
+    /// record is success — the end state the caller asked for.
+    async fn delete_record(&self, _zone_apex: &str, _record_ref: &str) -> AcmeServiceResult<()> {
+        let _ = (_zone_apex, _record_ref);
+        Err(AcmeServiceError::provider(
+            "this provider family does not expose a record write path",
+        ))
+    }
+
+    /// Pauses one record (它不再参与解析) or resumes it. The answer reports the
+    /// row as the provider holds it after the flip; a vendor without a
+    /// per-record pause refuses rather than pretending.
+    async fn set_record_status(
+        &self,
+        _zone_apex: &str,
+        _record_ref: &str,
+        _enabled: bool,
+    ) -> AcmeServiceResult<DnsZoneRecord> {
+        let _ = (_zone_apex, _record_ref, _enabled);
+        Err(AcmeServiceError::provider(
+            "this provider family does not expose a per-record pause",
         ))
     }
 }
@@ -672,8 +940,7 @@ mod tests {
     }
 
     #[test]
-    fn absolute_record_names_rebuild_the_owner_against_the_queried_zone() {
-        assert_eq!(
+    fn absolute_record_names_rebuild_the_owner_against_the_queried_zone() {        assert_eq!(
             absolute_record_name("www", "example.com"),
             "www.example.com".to_string()
         );
@@ -687,6 +954,149 @@ mod tests {
         assert_eq!(
             absolute_record_name("*", "example.com"),
             "*.example.com".to_string()
+        );
+    }
+}
+
+#[cfg(test)]
+mod record_change_tests {
+    use super::*;
+
+    /// One sample value per managed type, valid for that type.
+    fn sample_value(record_type: &str) -> &'static str {
+        match record_type {
+            "A" => "203.0.113.9",
+            "AAAA" => "2001:db8::1",
+            "CNAME" | "NS" | "MX" => "target.example.com",
+            "TXT" => "some text",
+            "CAA" => "0 issue \"letsencrypt.org\"",
+            other => unreachable!("unmanaged type {other}"),
+        }
+    }
+
+    #[test]
+    fn accepts_the_managed_types_and_normalizes_the_owner() {
+        for record_type in MANAGED_RECORD_TYPES {
+            let change = DnsRecordChange::new(
+                record_type,
+                " www ",
+                sample_value(record_type),
+                Some(600),
+                None,
+                None,
+            )
+            .unwrap_or_else(|error| panic!("{record_type}: {error}"));
+            assert_eq!(change.record_type, *record_type);
+            assert_eq!(change.relative_owner, "www");
+        }
+    }
+
+    #[test]
+    fn the_apex_and_wildcard_owners_are_accepted_and_kept() {
+        assert_eq!(
+            DnsRecordChange::new("TXT", "@", "v", None, None, None)
+                .expect("apex")
+                .relative_owner,
+            "@"
+        );
+        assert_eq!(
+            DnsRecordChange::new("A", "", "203.0.113.9", None, None, None)
+                .expect("blank owner is the apex")
+                .relative_owner,
+            "@"
+        );
+        assert_eq!(
+            DnsRecordChange::new("A", "*", "203.0.113.9", None, None, None)
+                .expect("bare wildcard")
+                .relative_owner,
+            "*"
+        );
+        assert_eq!(
+            DnsRecordChange::new("A", "*.dev", "203.0.113.9", None, None, None)
+                .expect("sub-zone wildcard")
+                .relative_owner,
+            "*.dev"
+        );
+    }
+
+    #[test]
+    fn refuses_owners_outside_the_dns_alphabet() {
+        for owner in ["a.*.b", "a..b", "www..example.com", "a b"] {
+            let error =
+                DnsRecordChange::new("A", owner, "203.0.113.9", None, None, None).expect_err(owner);
+            assert!(
+                error.to_string().contains("record owner"),
+                "{owner}: {error}"
+            );
+        }
+        // A redundant second wildcard (`*.*`) is forgivingly normalized to the
+        // bare first-level wildcard rather than refused: both spell the same
+        // intent, and the vendor would answer the same row set.
+        assert_eq!(
+            DnsRecordChange::new("A", "*.*", "203.0.113.9", None, None, None)
+                .expect("redundant wildcard")
+                .relative_owner,
+            "*"
+        );
+        // A fully-qualified owner (`www.example.com`) is accepted *here* — this
+        // helper does not know the zone — and the caller holding the apex
+        // refuses the doubled-name mistake (`www.example.com.<zone>`).
+        let absolute =
+            DnsRecordChange::new("A", "www.example.com", "203.0.113.9", None, None, None)
+                .expect("FQDN owner passes the shape check");
+        assert_eq!(absolute.relative_owner, "www.example.com");
+    }
+
+    #[test]
+    fn values_are_validated_per_type() {
+        assert!(
+            DnsRecordChange::new("A", "www", "not-an-ip", None, None, None).is_err(),
+            "an A value must be an IPv4 address"
+        );
+        assert!(
+            DnsRecordChange::new("AAAA", "www", "203.0.113.9", None, None, None).is_err(),
+            "an AAAA value must be an IPv6 address"
+        );
+        assert!(
+            DnsRecordChange::new("CNAME", "www", "not a name", None, None, None).is_err(),
+            "a CNAME value must be a DNS name"
+        );
+        assert!(
+            DnsRecordChange::new("TXT", "www", "", None, None, None).is_err(),
+            "an empty TXT value is refused"
+        );
+        assert!(
+            DnsRecordChange::new("CAA", "@", "0 issue wrong", None, None, None).is_err(),
+            "a CAA value must be `flags tag \"target\"`"
+        );
+        assert!(
+            DnsRecordChange::new("CAA", "@", "0 issue \"letsencrypt.org\"", None, None, None)
+                .is_ok(),
+            "a well-formed CAA value passes"
+        );
+        assert!(
+            DnsRecordChange::new("SRV", "@", "something", None, None, None).is_err(),
+            "SRV is deliberately outside the managed set"
+        );
+    }
+
+    #[test]
+    fn priority_is_mx_only_and_ttl_is_bounded() {
+        assert!(
+            DnsRecordChange::new("A", "@", "203.0.113.9", None, Some(10), None).is_err(),
+            "a priority on an A record is a typo, not data"
+        );
+        assert!(
+            DnsRecordChange::new("MX", "@", "mail.example.com", None, Some(10), None).is_ok(),
+            "an MX write carries its priority"
+        );
+        assert!(
+            DnsRecordChange::new("A", "@", "203.0.113.9", Some(0), None, None).is_err(),
+            "TTL 0 is refused"
+        );
+        assert!(
+            DnsRecordChange::new("A", "@", "203.0.113.9", Some(604_801), None, None).is_err(),
+            "TTL beyond a week is refused"
         );
     }
 }

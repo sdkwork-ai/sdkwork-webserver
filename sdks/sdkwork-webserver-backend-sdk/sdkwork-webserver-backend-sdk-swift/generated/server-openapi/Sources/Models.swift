@@ -471,11 +471,13 @@ public struct RootDomainResponse: Codable {
 public struct DomainDnsRecordResponse: Codable {
     public let id: String?
     public let recordName: String?
+    public let host: String?
     public let recordType: String?
     public let recordValue: String?
     public let ttlSeconds: Int?
     public let priority: Int?
     public let recordLine: String?
+    public let recordStatus: String?
     public let domainId: String?
     public let dnsProvider: String?
     public let cloudAccountId: String?
@@ -483,19 +485,68 @@ public struct DomainDnsRecordResponse: Codable {
     public let syncedAt: String?
 
 
-    public init(id: String? = nil, recordName: String? = nil, recordType: String? = nil, recordValue: String? = nil, ttlSeconds: Int? = nil, priority: Int? = nil, recordLine: String? = nil, domainId: String? = nil, dnsProvider: String? = nil, cloudAccountId: String? = nil, providerRecordRef: String? = nil, syncedAt: String? = nil) {
+    public init(id: String? = nil, recordName: String? = nil, host: String? = nil, recordType: String? = nil, recordValue: String? = nil, ttlSeconds: Int? = nil, priority: Int? = nil, recordLine: String? = nil, recordStatus: String? = nil, domainId: String? = nil, dnsProvider: String? = nil, cloudAccountId: String? = nil, providerRecordRef: String? = nil, syncedAt: String? = nil) {
         self.id = id
         self.recordName = recordName
+        self.host = host
         self.recordType = recordType
         self.recordValue = recordValue
         self.ttlSeconds = ttlSeconds
         self.priority = priority
         self.recordLine = recordLine
+        self.recordStatus = recordStatus
         self.domainId = domainId
         self.dnsProvider = dnsProvider
         self.cloudAccountId = cloudAccountId
         self.providerRecordRef = providerRecordRef
         self.syncedAt = syncedAt
+    }
+}
+
+public struct CreateDomainDnsRecordRequest: Codable {
+    public let recordType: String?
+    public let host: String?
+    public let recordValue: String?
+    public let ttlSeconds: Int?
+    public let priority: Int?
+    public let recordLine: String?
+
+
+    public init(recordType: String? = nil, host: String? = nil, recordValue: String? = nil, ttlSeconds: Int? = nil, priority: Int? = nil, recordLine: String? = nil) {
+        self.recordType = recordType
+        self.host = host
+        self.recordValue = recordValue
+        self.ttlSeconds = ttlSeconds
+        self.priority = priority
+        self.recordLine = recordLine
+    }
+}
+
+public struct UpdateDomainDnsRecordRequest: Codable {
+    public let recordType: String?
+    public let host: String?
+    public let recordValue: String?
+    public let ttlSeconds: Int?
+    public let priority: Int?
+    public let recordLine: String?
+
+
+    public init(recordType: String? = nil, host: String? = nil, recordValue: String? = nil, ttlSeconds: Int? = nil, priority: Int? = nil, recordLine: String? = nil) {
+        self.recordType = recordType
+        self.host = host
+        self.recordValue = recordValue
+        self.ttlSeconds = ttlSeconds
+        self.priority = priority
+        self.recordLine = recordLine
+    }
+}
+
+public struct DomainDnsRecordStatusRequest: Codable {
+    public let enabled: Bool?
+
+
+    public init(enabled: Bool? = nil) {
+        self.enabled = enabled
     }
 }
 
@@ -2369,6 +2420,45 @@ public struct RootDomainsSubdomainsCreateResponse201: Codable {
 }
 
 public struct RootDomainsDnsRecordsListResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct RootDomainsDnsRecordsCreateResponse201: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct RootDomainsDnsRecordsUpdateResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct RootDomainsDnsRecordsStatusUpdateResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?

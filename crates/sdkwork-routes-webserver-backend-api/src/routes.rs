@@ -7,11 +7,13 @@ use axum::{
 use sdkwork_webserver_contract::{
     CreateApplicationRequest, CreateDomainRequest, CreateListenerCertificateBindingRequest,
     CreateManagedDomainRequest, CreateNginxConfigRequest, CreateRootDomainHostnameRequest,
-    CreateRootDomainRequest, CreateServerRequest, CreateSourceVersionRequest,
+    CreateDomainDnsRecordRequest, CreateRootDomainRequest, CreateServerRequest,
+    CreateSourceVersionRequest, DomainDnsRecordStatusRequest,
     ImportGitSourceVersionRequest, IssueCertificateRequest, ListApplicationsQuery,
     ListAuditLogsQuery, ListDomainDnsRecordsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
     RevokeCertificateRequest, UpdateApplicationRequest, UpdateCertificateRequest,
-    UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest, UpdateRootDomainRequest,
+    UpdateDomainApplicationBindingRequest, UpdateDomainDnsRecordRequest, UpdateNginxConfigRequest,
+    UpdateRootDomainRequest,
     WebBackendApi, WebBackendRequestContext,
 };
 use serde::Deserialize;
@@ -98,7 +100,16 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn WebBackendApi>) -> Rout
         )
         .route(
             paths::ROOT_DOMAIN_DNS_RECORDS,
-            get(list_root_domain_dns_records),
+            get(list_root_domain_dns_records).post(create_root_domain_dns_record),
+        )
+        .route(
+            paths::ROOT_DOMAIN_DNS_RECORD,
+            axum::routing::patch(update_root_domain_dns_record)
+                .delete(delete_root_domain_dns_record),
+        )
+        .route(
+            paths::ROOT_DOMAIN_DNS_RECORD_STATUS,
+            axum::routing::patch(set_root_domain_dns_record_status),
         )
         .route(
             paths::ROOT_DOMAIN_DNS_RECORDS_SYNC,
@@ -549,8 +560,8 @@ async fn create_root_domain_subdomain(
 }
 
 /// Reads the Zone's synced resolution records, optionally restricted to one
-/// subdomain. Store-only: the page renders the last sync's snapshot and never
-/// waits on a provider.
+/// subdomain, one 主机记录 keyword, or one record type. Store-only: the page
+/// renders the snapshot and never waits on a provider.
 async fn list_root_domain_dns_records(
     State(state): State<BackendState>,
     context: Option<Extension<WebBackendRequestContext>>,
@@ -565,6 +576,72 @@ async fn list_root_domain_dns_records(
             .await,
         query.page,
         query.page_size,
+    )
+}
+
+/// Creates one resolution record of any managed type through the Zone's cloud
+/// account and joins it to the snapshot. The contract idempotency key dedupes
+/// a retried request; two distinct creates produce two vendor records — the
+/// provider consoles' own semantics.
+async fn create_root_domain_dns_record(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Path(root_domain_id): Path<String>,
+    Json(request): Json<CreateDomainDnsRecordRequest>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    created_resource(
+        state
+            .api
+            .create_root_domain_dns_record(&context, &root_domain_id, &request)
+            .await,
+    )
+}
+
+/// Replaces one record in place on the provider, then in the snapshot.
+async fn update_root_domain_dns_record(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Path((root_domain_id, record_id)): Path<(String, String)>,
+    Json(request): Json<UpdateDomainDnsRecordRequest>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    ok_resource(
+        state
+            .api
+            .update_root_domain_dns_record(&context, &root_domain_id, &record_id, &request)
+            .await,
+    )
+}
+
+/// Deletes one record on the provider and removes the stored row.
+async fn delete_root_domain_dns_record(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Path((root_domain_id, record_id)): Path<(String, String)>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    no_content(
+        state
+            .api
+            .delete_root_domain_dns_record(&context, &root_domain_id, &record_id)
+            .await,
+    )
+}
+
+/// Pauses one record (暂停解析) or resumes it.
+async fn set_root_domain_dns_record_status(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Path((root_domain_id, record_id)): Path<(String, String)>,
+    Json(request): Json<DomainDnsRecordStatusRequest>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    ok_resource(
+        state
+            .api
+            .set_root_domain_dns_record_status(&context, &root_domain_id, &record_id, &request)
+            .await,
     )
 }
 

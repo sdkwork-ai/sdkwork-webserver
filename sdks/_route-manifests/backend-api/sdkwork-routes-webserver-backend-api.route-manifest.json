@@ -589,6 +589,110 @@
     },
     {
       "method": "POST",
+      "path": "/backend/v3/api/root_domains/{rootDomainId}/dns_records",
+      "operationId": "rootDomains.dnsRecords.create",
+      "tags": [
+        "domain"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.applications.write",
+      "idempotent": true,
+      "rateLimitTier": null
+    },
+    {
+      "method": "PATCH",
+      "path": "/backend/v3/api/root_domains/{rootDomainId}/dns_records/{recordId}",
+      "operationId": "rootDomains.dnsRecords.update",
+      "tags": [
+        "domain"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.applications.write",
+      "idempotent": true,
+      "rateLimitTier": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/backend/v3/api/root_domains/{rootDomainId}/dns_records/{recordId}",
+      "operationId": "rootDomains.dnsRecords.delete",
+      "tags": [
+        "domain"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.applications.write",
+      "idempotent": true,
+      "rateLimitTier": "auth-critical"
+    },
+    {
+      "method": "PATCH",
+      "path": "/backend/v3/api/root_domains/{rootDomainId}/dns_records/{recordId}/status",
+      "operationId": "rootDomains.dnsRecords.status.update",
+      "tags": [
+        "domain"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.applications.write",
+      "idempotent": true,
+      "rateLimitTier": null
+    },
+    {
+      "method": "POST",
       "path": "/backend/v3/api/root_domains/{rootDomainId}/dns_records/sync",
       "operationId": "rootDomains.dnsRecords.sync",
       "tags": [

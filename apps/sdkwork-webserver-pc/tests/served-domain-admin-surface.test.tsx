@@ -180,9 +180,11 @@ const DNS_RECORDS = [
     cloudAccountId: "aliyun-prod",
     dnsProvider: "ALIYUN_DNS",
     domainId: "d-server-dev",
+    host: "server-dev",
     id: "rec-a-1",
     recordLine: "default",
     recordName: "server-dev.sdkwork.com",
+    recordStatus: "ENABLED",
     recordType: "A",
     recordValue: "203.0.113.10",
     syncedAt: "2026-10-08T08:00:00Z",
@@ -192,8 +194,10 @@ const DNS_RECORDS = [
     cloudAccountId: "aliyun-prod",
     dnsProvider: "ALIYUN_DNS",
     domainId: "d-server-dev",
+    host: "_sdkwork-verification",
     id: "rec-txt-1",
     recordName: "_sdkwork-verification.sdkwork.com",
+    recordStatus: "ENABLED",
     recordType: "TXT",
     recordValue: "sdkwork-domain-verification=challenge-1",
     syncedAt: "2026-10-08T08:00:00Z",
@@ -258,6 +262,8 @@ interface Stubs {
   dnsAccounts: ReturnType<typeof vi.fn>;
   issue: ReturnType<typeof vi.fn>;
   listCertificates: ReturnType<typeof vi.fn>;
+  createDnsRecord: ReturnType<typeof vi.fn>;
+  deleteDnsRecord: ReturnType<typeof vi.fn>;
   listDnsRecords: ReturnType<typeof vi.fn>;
   listRootDomains: ReturnType<typeof vi.fn>;
   listSubdomains: ReturnType<typeof vi.fn>;
@@ -265,6 +271,8 @@ interface Stubs {
   retrieveRootDomain: ReturnType<typeof vi.fn>;
   revokeCertificate: ReturnType<typeof vi.fn>;
   syncDnsRecords: ReturnType<typeof vi.fn>;
+  updateDnsRecord: ReturnType<typeof vi.fn>;
+  updateDnsRecordStatus: ReturnType<typeof vi.fn>;
   updateCertificate: ReturnType<typeof vi.fn>;
   updateRootDomain: ReturnType<typeof vi.fn>;
   verifyDomain: ReturnType<typeof vi.fn>;
@@ -282,6 +290,11 @@ function stubClient(): Stubs {
   const issue = vi.fn().mockResolvedValue(undefined);
   const listCertificates = vi.fn().mockResolvedValue(page(CERTIFICATES));
   const listDnsRecords = vi.fn().mockResolvedValue(page(DNS_RECORDS));
+  const createDnsRecord = vi.fn().mockResolvedValue(DNS_RECORDS[0]);
+  const updateDnsRecord = vi.fn().mockResolvedValue(DNS_RECORDS[0]);
+  const deleteDnsRecord = vi.fn().mockResolvedValue(undefined);
+  const updateDnsRecordStatus = vi.fn().mockImplementation((_zoneId, _recordId, body) =>
+    Promise.resolve({ ...DNS_RECORDS[0], recordStatus: body.enabled ? "ENABLED" : "DISABLED" }));
   const syncDnsRecords = vi.fn().mockResolvedValue(DNS_SYNC_RESULT);
   const retrieveRootDomain = vi.fn().mockResolvedValue(ROOTS[0]);
   const updateRootDomain = vi.fn().mockResolvedValue(ROOTS[0]);
@@ -320,7 +333,14 @@ function stubClient(): Stubs {
       rootDomains: {
         create: createRootDomain,
         delete: deleteRootDomain,
-        dnsRecords: { list: listDnsRecords, sync: syncDnsRecords },
+        dnsRecords: {
+          create: createDnsRecord,
+          delete: deleteDnsRecord,
+          list: listDnsRecords,
+          status: { update: updateDnsRecordStatus },
+          sync: syncDnsRecords,
+          update: updateDnsRecord,
+        },
         list: listRootDomains,
         retrieve: retrieveRootDomain,
         subdomains: { create: createSubdomain, list: listSubdomains },
@@ -338,6 +358,8 @@ function stubClient(): Stubs {
     dnsAccounts,
     issue,
     listCertificates,
+    createDnsRecord,
+    deleteDnsRecord,
     listDnsRecords,
     listRootDomains,
     listSubdomains,
@@ -346,6 +368,8 @@ function stubClient(): Stubs {
     revokeCertificate,
     syncDnsRecords,
     updateCertificate,
+    updateDnsRecord,
+    updateDnsRecordStatus,
     updateRootDomain,
     verifyDomain,
   };
@@ -461,6 +485,76 @@ describe("served domain admin surface", () => {
   });
 
   /**
+   * The Aliyun-style management plane on the same page: the inline add row
+   * writes through to the provider and re-reads, a pause flips the vendor
+   * first, and the delete asks for its own confirmation before the vendor
+   * delete fires.
+   */
+  it("adds, pauses, and deletes a resolution record through the write-through plane", async () => {
+    const { client, createDnsRecord, deleteDnsRecord, listDnsRecords, updateDnsRecordStatus } = stubClient();
+    renderInProvider(
+      <ServedDomainPage />,
+      client,
+      `/admin/domains/${ROOT_ID}/hostnames/d-server-dev`,
+      "/admin/domains",
+    );
+
+    // Open the add row, fill it, and submit: the write carries the idempotency
+    // key and the page re-reads the snapshot afterwards.
+    expect(await screen.findByText("server-dev")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Add record" }));
+    const hostInput = screen.getByLabelText("Host record");
+    fireEvent.change(hostInput, { target: { value: "api" } });
+    fireEvent.change(screen.getByLabelText("Record value"), {
+      target: { value: "203.0.113.20" },
+    });
+    const addButtons = screen.getAllByRole("button").filter((button) => button.textContent === "Add record");
+    fireEvent.click(addButtons[addButtons.length - 1]);
+    await waitFor(() =>
+      expect(createDnsRecord).toHaveBeenCalledWith(
+        ROOT_ID,
+        { recordType: "A", host: "api", recordValue: "203.0.113.20", ttlSeconds: 600 },
+        expect.objectContaining({ idempotencyKey: expect.any(String) }),
+      ),
+    );
+    await waitFor(() => expect(listDnsRecords).toHaveBeenCalledTimes(2));
+
+    // The pause: the vendor flips first, carrying the requested state.
+    fireEvent.click(screen.getByRole("button", { name: "Pause server-dev" }));
+    await waitFor(() =>
+      expect(updateDnsRecordStatus).toHaveBeenCalledWith(
+        ROOT_ID,
+        "rec-a-1",
+        { enabled: false },
+        expect.objectContaining({ idempotencyKey: expect.any(String) }),
+      ),
+    );
+
+    // The delete: confirmation is its own, explicit second click. The
+    // dialog's confirm button carries the same label as the row action, so it
+    // is scoped to the dialog role.
+    // The pause triggered a snapshot re-read; wait for the row actions to
+    // come back enabled before the delete click — a click on a disabled
+    // button is swallowed, and the confirmation would never open.
+    await waitFor(() => {
+      const button = screen.getByRole("button", { name: "Delete server-dev" }) as HTMLButtonElement;
+      if (button.disabled) throw new Error("row actions still busy");
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Delete server-dev" }));
+    expect(deleteDnsRecord).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }),
+    );
+    await waitFor(() =>
+      expect(deleteDnsRecord).toHaveBeenCalledWith(
+        ROOT_ID,
+        "rec-a-1",
+        expect.objectContaining({ idempotencyKey: expect.any(String) }),
+      ),
+    );
+  });
+  /**
    * The subdomain drill-in: the page a hostname row opens. Two properties are
    * pinned — the records read is restricted to *this* subdomain (the
    * `domainId` the sync stamped), and the only provider gesture is the sync
@@ -482,13 +576,15 @@ describe("served domain admin surface", () => {
     // IP for the A record beside the TXT row the challenge flow left behind.
     // The hostname text matches twice on purpose — the header carries it and
     // so does the A record's owner — hence the all-variant read.
-    expect((await screen.findAllByText("server-dev.sdkwork.com")).length).toBeGreaterThan(0);
-    expect(await screen.findByText("203.0.113.10")).toBeTruthy();
-    expect(screen.getByText("_sdkwork-verification.sdkwork.com")).toBeTruthy();
+    expect(await screen.findByText("server-dev")).toBeTruthy();
+    expect(screen.getByText("203.0.113.10")).toBeTruthy();
+    expect(screen.getByText("_sdkwork-verification")).toBeTruthy();
     expect(listDnsRecords).toHaveBeenCalledWith(ROOT_ID, {
       page: 1,
       pageSize: 50,
       domainId: "d-server-dev",
+      host: undefined,
+      recordType: undefined,
     });
 
     // The sync is the one provider gesture, and it carries the idempotency

@@ -238,6 +238,34 @@ fn root_domain_zone_routes_keep_authorization_and_navigation_contracts() {
             "web.applications.write",
             true,
         ),
+        // The write-through management plane: create/update/status carry the
+        // same write permission and idempotency contract the rest of the
+        // plane's writes answer to; the delete is the destructive corner and
+        // keeps the auth-critical rate-limit tier the zone delete already has.
+        (
+            HttpMethod::Post,
+            "rootDomains.dnsRecords.create",
+            "web.applications.write",
+            true,
+        ),
+        (
+            HttpMethod::Patch,
+            "rootDomains.dnsRecords.update",
+            "web.applications.write",
+            true,
+        ),
+        (
+            HttpMethod::Delete,
+            "rootDomains.dnsRecords.delete",
+            "web.applications.write",
+            true,
+        ),
+        (
+            HttpMethod::Patch,
+            "rootDomains.dnsRecords.status.update",
+            "web.applications.write",
+            true,
+        ),
     ];
     let manifest = backend_route_manifest();
 

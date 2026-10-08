@@ -1,7 +1,10 @@
 import { useWebserverAdminSdk } from "@sdkwork/webserver-pc-admin-core";
 import type {
   ApplicationDomainResponse,
+  CreateDomainDnsRecordRequest,
   DomainDnsRecordResponse,
+  DomainDnsRecordStatusRequest,
+  UpdateDomainDnsRecordRequest,
   DomainVerifyResponse,
   RootDomainResponse,
 } from "@sdkwork/webserver-pc-admin-core";
@@ -1208,21 +1211,52 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
 }
 
 /**
- * One subdomain's own page: its synced DNS resolution records.
+ * One subdomain's own page: its DNS resolution records, managed the way the
+ * provider consoles manage them (对齐阿里云解析设置).
  *
- * The records are a snapshot, never a live lookup: the page renders what the
- * last cloud-account sync read from the provider, and the sync button is the
- * only gesture that touches the provider. That keeps a page render a store
- * read, and it keeps the answer honest about its age — the snapshot instant
- * sits in every row and in the summary line, so a stale view says so instead
- * of posing as current.
+ * The page reads the cloud-account snapshot — never a live provider query on
+ * a render — and carries the write-through plane on top of it: an inline add
+ * row, per-row edit, pause/resume (暂停解析), and delete, each writing to the
+ * provider first and then updating the snapshot row. A vendor refusal leaves
+ * the snapshot untouched, so the page never claims a change the provider did
+ * not accept. Cloudflare has no per-record pause; its refusal is the vendor's
+ * own advice (delete the record instead).
  *
- * The rows shown are the ones the sync matched to *this* subdomain, wildcard
- * semantics already applied: an exact hostname shows its own owner's records,
- * and a wildcard hostname shows its base owner plus everything beneath it.
- * Zone-level records matched to no registered hostname are the Zone page's
- * business, not this page's.
+ * The rows shown are the ones matched to *this* subdomain, wildcard semantics
+ * already applied at sync time. The two filters — 主机记录 keyword and record
+ * type — are the pair Aliyun's own 解析设置 page offers, applied on submit.
  */
+const DNS_RECORD_TYPES = ["A", "AAAA", "CNAME", "TXT", "MX", "NS", "CAA"] as const;
+const DNS_DEFAULT_TTL = 600;
+
+type DnsRecordType = "A" | "AAAA" | "CNAME" | "TXT" | "MX" | "NS" | "CAA";
+
+interface DnsRecordFormValues {
+  recordType: DnsRecordType;
+  host: string;
+  recordValue: string;
+  ttlSeconds: string;
+}
+
+function DnsRecordFormValues_empty(): DnsRecordFormValues {
+  return { recordType: "A", host: "", recordValue: "", ttlSeconds: String(DNS_DEFAULT_TTL) };
+}
+
+function DnsRecordFormValues_typed(recordType: string): DnsRecordType {
+  return (DNS_RECORD_TYPES as readonly string[]).includes(recordType)
+    ? (recordType as DnsRecordType)
+    : "A";
+}
+
+function DnsRecordFormValues_from(record: DomainDnsRecordResponse): DnsRecordFormValues {
+  return {
+    recordType: DnsRecordFormValues_typed(record.recordType),
+    host: record.host,
+    recordValue: record.recordValue,
+    ttlSeconds: record.ttlSeconds === undefined ? "" : String(record.ttlSeconds),
+  };
+}
+
 function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
   const client = useWebserverAdminSdk();
   // Memoized per locale: a fresh translator closure every render sat in the
@@ -1243,6 +1277,19 @@ function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
   const [syncSummary, setSyncSummary] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  // The two filters, applied on submit (host keyword) or on selection (type):
+  // a draft in the input must not fire a request per keystroke.
+  const [hostFilterDraft, setHostFilterDraft] = useState("");
+  const [hostFilter, setHostFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  // The Aliyun-shaped management state: an open add row, the row being edited,
+  // and the delete awaiting confirmation. Only one is active at a time.
+  const [addOpen, setAddOpen] = useState(false);
+  const [addForm, setAddForm] = useState<DnsRecordFormValues>(DnsRecordFormValues_empty);
+  const [editId, setEditId] = useState<string>();
+  const [editForm, setEditForm] = useState<DnsRecordFormValues>(DnsRecordFormValues_empty);
+  const [deleteTarget, setDeleteTarget] = useState<DomainDnsRecordResponse>();
+  const [formError, setFormError] = useState<string>();
 
   useEffect(() => {
     let active = true;
@@ -1258,6 +1305,8 @@ function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
         page,
         pageSize: PAGE_SIZE,
         domainId: hostnameId || undefined,
+        host: hostFilter || undefined,
+        recordType: (DnsRecordFormValues_typed(typeFilter), typeFilter) === "" ? undefined : DnsRecordFormValues_typed(typeFilter),
       }),
     ]).then(([rootOutcome, hostnameOutcome, recordsOutcome]) => {
       if (!active) return;
@@ -1284,14 +1333,11 @@ function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
     return () => {
       active = false;
     };
-  }, [build, client, hostnameId, page, rootDomainId, t]);
+  }, [build, client, hostnameId, hostFilter, page, rootDomainId, t, typeFilter]);
 
   /**
-   * The one gesture that reaches the provider: re-read the zone's inventory
-   * through its cloud account and replace the snapshot. The zone's account
-   * resolves exactly as its DNS operations do — the bound account when one is
-   * pinned, otherwise the registered account covering the apex — so a zone
-   * bound to no account still syncs when the edge knows such an account.
+   * The one gesture that reaches the read side of the provider: re-read the
+   * zone's inventory through its cloud account and replace the snapshot.
    */
   const runSync = () => {
     setSyncing(true);
@@ -1313,6 +1359,154 @@ function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
       .finally(() => setSyncing(false));
   };
 
+  /** Reads the editable fields into the wire shape the API contract defines. */
+  const readForm = (
+    form: DnsRecordFormValues,
+  ): { body: CreateDomainDnsRecordRequest; updateBody: UpdateDomainDnsRecordRequest } | { formError: string } => {
+    const host = form.host.trim();
+    if (!host) return { formError: t("resource.domains.dnsHostRequired") };
+    const recordValue = form.recordValue.trim();
+    if (!recordValue) return { formError: t("resource.domains.dnsValueRequired") };
+    const ttlRaw = form.ttlSeconds.trim();
+    const ttlSeconds = ttlRaw === "" ? undefined : Number(ttlRaw);
+    const validTtl = ttlSeconds !== undefined && !Number.isNaN(ttlSeconds);
+    const recordType = DnsRecordFormValues_typed(form.recordType);
+    return {
+      body: {
+        recordType,
+        host,
+        recordValue,
+        ...(validTtl ? { ttlSeconds } : {}),
+      },
+      updateBody: {
+        recordType,
+        host,
+        recordValue,
+        ...(validTtl ? { ttlSeconds } : {}),
+      },
+    };
+  };
+
+  const submitAdd = () => {
+    const read = readForm(addForm);
+    if ("formError" in read) {
+      setFormError(read.formError);
+      return;
+    }
+    setFormError(undefined);
+    void client.domain.rootDomains.dnsRecords
+      .create(rootDomainId, read.body, { idempotencyKey: newIdempotencyKey() })
+      .then(() => {
+        setAddOpen(false);
+        setAddForm(DnsRecordFormValues_empty);
+        setBuild((value) => value + 1);
+      })
+      .catch((cause) => setFormError(errorText(cause, t)));
+  };
+
+  const submitEdit = () => {
+    if (editId === undefined) return;
+    const read = readForm(editForm);
+    if ("formError" in read) {
+      setFormError(read.formError);
+      return;
+    }
+    setFormError(undefined);
+    void client.domain.rootDomains.dnsRecords
+      .update(rootDomainId, editId, read.updateBody, { idempotencyKey: newIdempotencyKey() })
+      .then(() => {
+        setEditId(undefined);
+        setBuild((value) => value + 1);
+      })
+      .catch((cause) => setFormError(errorText(cause, t)));
+  };
+
+  /** Provider first, snapshot row second — the order the backend enforces. */
+  const flipStatus = (record: DomainDnsRecordResponse) => {
+    setFormError(undefined);
+    void client.domain.rootDomains.dnsRecords.status
+      .update(
+        rootDomainId,
+        record.id,
+        { enabled: record.recordStatus !== "ENABLED" },
+        { idempotencyKey: newIdempotencyKey() },
+      )
+      .then(() => setBuild((value) => value + 1))
+      .catch((cause) => setError(errorText(cause, t)));
+  };
+
+  const removeRecord = (record: DomainDnsRecordResponse) => {
+    setFormError(undefined);
+    void client.domain.rootDomains.dnsRecords
+      .delete(rootDomainId, record.id, { idempotencyKey: newIdempotencyKey() })
+      .then(() => {
+        setDeleteTarget(undefined);
+        setBuild((value) => value + 1);
+      })
+      .catch((cause) => {
+        setDeleteTarget(undefined);
+        setError(errorText(cause, t));
+      });
+  };
+
+  /** The editor row and the add row share one field set, Aliyun-style. */
+  const renderFormCells = (form: DnsRecordFormValues, setForm: (next: DnsRecordFormValues) => void, disabled: boolean) => (
+    <>
+      <td>
+        <select
+          aria-label={t("resource.domains.dnsRecordType")}
+          disabled={disabled}
+          onChange={(event) => setForm({ ...form, recordType: DnsRecordFormValues_typed(event.target.value) })}
+          value={form.recordType}
+        >
+          {DNS_RECORD_TYPES.map((recordType) => (
+            <option key={recordType} value={recordType}>
+              {recordType}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td>
+        <input
+          aria-label={t("resource.domains.dnsRecordHost")}
+          disabled={disabled}
+          onChange={(event) => setForm({ ...form, host: event.target.value })}
+          placeholder={t("resource.domains.dnsRecordHostPlaceholder")}
+          type="text"
+          value={form.host}
+        />
+      </td>
+      <td>
+        <input
+          aria-label={t("resource.domains.dnsRecordValue")}
+          disabled={disabled}
+          onChange={(event) => setForm({ ...form, recordValue: event.target.value })}
+          type="text"
+          value={form.recordValue}
+        />
+      </td>
+      <td>
+        <select
+          aria-label={t("resource.domains.dnsTtl")}
+          disabled={disabled}
+          onChange={(event) => setForm({ ...form, ttlSeconds: event.target.value })}
+          value={form.ttlSeconds}
+        >
+          {[600, 1800, 3600, 86400].map((ttl) => (
+            <option key={ttl} value={String(ttl)}>
+              {ttl}
+            </option>
+          ))}
+          {form.ttlSeconds !== "" && ![600, 1800, 3600, 86400].includes(Number(form.ttlSeconds)) ? (
+            <option value={form.ttlSeconds}>{form.ttlSeconds}</option>
+          ) : null}
+        </select>
+      </td>
+    </>
+  );
+
+  const managementDisabled = syncing || busy;
+
   return (
     <section className="resource-page domain-page">
       {/* The ledger and the hostname list hardcode their base paths for the
@@ -1328,7 +1522,7 @@ function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
         <div className="actions">
           <button
             className="icon-button"
-            disabled={busy}
+            disabled={managementDisabled}
             onClick={() => {
               setBuild((value) => value + 1);
               setPage(1);
@@ -1342,6 +1536,20 @@ function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
           <button className="command-button" disabled={syncing} onClick={runSync} type="button">
             <RefreshCw size={16} />
             {t("resource.domains.dnsSync")}
+          </button>
+          <button
+            className="command-button"
+            disabled={managementDisabled || addOpen || editId !== undefined}
+            onClick={() => {
+              setEditId(undefined);
+              setAddForm(DnsRecordFormValues_empty);
+              setFormError(undefined);
+              setAddOpen(true);
+            }}
+            type="button"
+          >
+            <Plus size={16} />
+            {t("resource.domains.dnsAddRecord")}
           </button>
         </div>
       </div>
@@ -1363,54 +1571,217 @@ function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
         </div>
       ) : null}
 
-      <p className="form-hint">{t("resource.domains.dnsSyncHint")}</p>
+      {/* The two 解析设置 filters. The keyword applies on submit (a draft must
+          not fire a request per keystroke); the type select applies on change
+          because a selection is already a complete statement. */}
+      <form
+        className="resource-query"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setPage(1);
+          setHostFilter(hostFilterDraft.trim());
+        }}
+      >
+        <div className="search-box">
+          <Search size={16} />
+          <input
+            aria-label={t("resource.domains.dnsFilterHost")}
+            onChange={(event) => setHostFilterDraft(event.target.value)}
+            placeholder={t("resource.domains.dnsFilterHost")}
+            value={hostFilterDraft}
+          />
+        </div>
+        <label className="cloud-account-filter">
+          <span>{t("resource.domains.dnsRecordType")}</span>
+          <select
+            onChange={(event) => {
+              setPage(1);
+              setTypeFilter(event.target.value);
+            }}
+            value={typeFilter}
+          >
+            <option value="">{t("resource.domains.dnsFilterType")}</option>
+            {DNS_RECORD_TYPES.map((recordType) => (
+              <option key={recordType} value={recordType}>
+                {recordType}
+              </option>
+            ))}
+          </select>
+        </label>
+      </form>
 
       {records === null && !error ? (
         <div className="resource-loading" role="status">
           <p>{t("resource.domains.loading")}</p>
         </div>
       ) : (
-        <div aria-busy={busy || syncing} className="table-frame domain-table-frame">
+        <div aria-busy={managementDisabled} className="table-frame domain-table-frame">
           <table className="domain-table">
             <thead>
               <tr>
-                <th>{t("resource.domains.subdomainHostname")}</th>
                 <th>{t("resource.domains.dnsRecordType")}</th>
+                <th>{t("resource.domains.dnsRecordHost")}</th>
                 <th>{t("resource.domains.dnsRecordValue")}</th>
                 <th>{t("resource.domains.dnsRecordLine")}</th>
                 <th>{t("resource.domains.dnsTtl")}</th>
+                <th>{t("resource.domains.dnsRecordStatus")}</th>
                 <th>{t("resource.domains.dnsSyncedAt")}</th>
+                <th className="operations-column">{t("resource.domains.operations")}</th>
               </tr>
             </thead>
             <tbody>
-              {(records ?? []).map((record) => (
-                <tr key={record.id}>
+              {addOpen ? (
+                <tr aria-label={t("resource.domains.dnsAddRecord")}>
+                  {renderFormCells(addForm, setAddForm, managementDisabled)}
+                  <td>-</td>
+                  <td>-</td>
                   <td>
-                    <span className="hostname-cell">
-                      <Network size={15} />
-                      <span>{record.recordName}</span>
-                    </span>
+                    <div className="row-actions">
+                      <button
+                        className="table-action table-action-text"
+                        disabled={managementDisabled}
+                        onClick={submitAdd}
+                        title={t("resource.domains.dnsAddRecord")}
+                        type="button"
+                      >
+                        {t("resource.domains.dnsAddRecord")}
+                      </button>
+                      <button
+                        className="table-action table-action-text"
+                        disabled={managementDisabled}
+                        onClick={() => {
+                          setAddOpen(false);
+                          setFormError(undefined);
+                        }}
+                        title={t("resource.domains.dnsCancelEdit")}
+                        type="button"
+                      >
+                        {t("resource.domains.dnsCancelEdit")}
+                      </button>
+                    </div>
                   </td>
-                  <td>
-                    <StatusBadge t={t} value={record.recordType} />
-                  </td>
-                  {/* The resolution answer itself: the IP for A/AAAA, the
-                      target for CNAME/MX. Mono-spaced by the cell style, so a
-                      value is copyable without quoting mistakes. */}
-                  <td>
-                    <code>{record.recordValue}</code>
-                    {record.priority === undefined ? null : (
-                      <small className="cell-subtitle"> · {record.priority}</small>
-                    )}
-                  </td>
-                  <td>{record.recordLine || "-"}</td>
-                  <td>{record.ttlSeconds ?? "-"}</td>
-                  <td>{formatInstant(record.syncedAt, locale)}</td>
                 </tr>
-              ))}
+              ) : null}
+              {(records ?? []).map((record) =>
+                editId === record.id ? (
+                  <tr key={record.id} aria-label={t("resource.domains.dnsEditRecord")}>
+                    {renderFormCells(editForm, setEditForm, managementDisabled)}
+                    <td>-</td>
+                    <td>-</td>
+                    <td>
+                      <div className="row-actions">
+                        <button
+                          className="table-action table-action-text"
+                          disabled={managementDisabled}
+                          onClick={submitEdit}
+                          title={t("resource.domains.dnsSaveRecord")}
+                          type="button"
+                        >
+                          {t("resource.domains.dnsSaveRecord")}
+                        </button>
+                        <button
+                          className="table-action table-action-text"
+                          disabled={managementDisabled}
+                          onClick={() => {
+                            setEditId(undefined);
+                            setFormError(undefined);
+                          }}
+                          title={t("resource.domains.dnsCancelEdit")}
+                          type="button"
+                        >
+                          {t("resource.domains.dnsCancelEdit")}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  <tr key={record.id}>
+                    <td>
+                      <StatusBadge t={t} value={record.recordType} />
+                    </td>
+                    <td>
+                      <code>{record.host}</code>
+                    </td>
+                    {/* The resolution answer itself: the IP for A/AAAA, the
+                        target for CNAME/MX. Mono-spaced by the cell style, so a
+                        value is copyable without quoting mistakes. */}
+                    <td>
+                      <code>{record.recordValue}</code>
+                      {record.priority === undefined ? null : (
+                        <small className="cell-subtitle"> · {record.priority}</small>
+                      )}
+                    </td>
+                    <td>{record.recordLine || "-"}</td>
+                    <td>{record.ttlSeconds ?? "-"}</td>
+                    <td>
+                      <StatusBadge
+                        t={t}
+                        value={record.recordStatus === "DISABLED" ? "PAUSED" : "ACTIVE"}
+                      />
+                    </td>
+                    <td>{formatInstant(record.syncedAt, locale)}</td>
+                    <td>
+                      <div className="row-actions">
+                        <button
+                          aria-label={`${t("resource.domains.dnsEditRecord")} ${record.host}`}
+                          className="table-action"
+                          disabled={managementDisabled || addOpen || editId !== undefined}
+                          onClick={() => {
+                            setAddOpen(false);
+                            setEditForm(DnsRecordFormValues_from(record));
+                            setFormError(undefined);
+                            setEditId(record.id);
+                          }}
+                          title={t("resource.domains.dnsEditRecord")}
+                          type="button"
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button
+                          aria-label={`${
+                            record.recordStatus === "DISABLED"
+                              ? t("resource.domains.dnsResumeRecord")
+                              : t("resource.domains.dnsPauseRecord")
+                          } ${record.host}`}
+                          className="table-action"
+                          disabled={managementDisabled || addOpen || editId !== undefined}
+                          onClick={() => flipStatus(record)}
+                          title={
+                            record.recordStatus === "DISABLED"
+                              ? t("resource.domains.dnsResumeRecord")
+                              : t("resource.domains.dnsPauseRecord")
+                          }
+                          type="button"
+                        >
+                          {record.recordStatus === "DISABLED" ? (
+                            <CirclePlay size={16} />
+                          ) : (
+                            <CirclePause size={16} />
+                          )}
+                        </button>
+                        <button
+                          aria-label={`${t("resource.domains.dnsDeleteRecord")} ${record.host}`}
+                          className="table-action danger-action"
+                          disabled={managementDisabled || addOpen || editId !== undefined}
+                          onClick={() => setDeleteTarget(record)}
+                          title={t("resource.domains.dnsDeleteRecord")}
+                          type="button"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ),
+              )}
             </tbody>
           </table>
-          {!busy && (records ?? []).length === 0 ? (
+          {formError ? (
+            <div className="error-banner" role="alert">
+              {formError}
+            </div>
+          ) : null}
+          {!busy && (records ?? []).length === 0 && !addOpen ? (
             <div className="empty-state">
               <Network size={24} />
               {t("resource.domains.dnsNoRecords")}
@@ -1433,6 +1804,21 @@ function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
           {t("resource.domains.subdomainsOf", { hostname: root.hostname })}
         </small>
       )}
+
+      {deleteTarget ? (
+        <ConfirmDialog
+          close={() => setDeleteTarget(undefined)}
+          confirmLabel={t("resource.domains.dnsDeleteRecord")}
+          dangerous
+          message={t("resource.domains.dnsDeleteRecordConfirm", {
+            host: deleteTarget.host,
+            type: deleteTarget.recordType,
+          })}
+          onConfirm={() => removeRecord(deleteTarget)}
+          t={t}
+          title={t("resource.domains.dnsDeleteRecord")}
+        />
+      ) : null}
     </section>
   );
 }

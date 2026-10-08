@@ -229,8 +229,10 @@ impl ListRootDomainsQuery {
 /// `domain_id` restricts the page to one registered subdomain — the rows the
 /// sync matched to that hostname, wildcard semantics already applied at sync
 /// time (a wildcard declaration's rows are its base owner and every owner
-/// beneath it). An absent member pages the whole Zone snapshot, which is what
-/// the Zone-level read asks for.
+/// beneath it). `host` narrows by 主机记录 keyword (substring,
+/// case-insensitive) and `record_type` by exact type spelling — the two
+/// filters Aliyun's own 解析设置 page offers. Absent members page the whole
+/// Zone snapshot, which is what the Zone-level read asks for.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ListDomainDnsRecordsQuery {
     #[serde(default = "crate::dto::default_page")]
@@ -243,6 +245,18 @@ pub struct ListDomainDnsRecordsQuery {
         deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_string"
     )]
     pub domain_id: Option<String>,
+    #[serde(
+        rename = "host",
+        default,
+        deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_string"
+    )]
+    pub host: Option<String>,
+    #[serde(
+        rename = "record_type",
+        default,
+        deserialize_with = "sdkwork_utils_rust::http_api::deserialize_option_query_string"
+    )]
+    pub record_type: Option<String>,
 }
 
 #[async_trait]
@@ -668,6 +682,45 @@ pub trait WebBackendApi: Send + Sync {
         context: &WebBackendRequestContext,
         root_domain_id: &str,
     ) -> WebServiceResult<DomainDnsSyncResponse>;
+
+    /// Creates one resolution record of any managed type through the Zone's
+    /// cloud account and joins it to the stored snapshot. The value is
+    /// validated per type before the vendor is asked; the answer is the row
+    /// as the provider now holds it.
+    async fn create_root_domain_dns_record(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+        request: &CreateDomainDnsRecordRequest,
+    ) -> WebServiceResult<DomainDnsRecordResponse>;
+
+    /// Replaces one record in place through the Zone's cloud account and
+    /// updates the stored row.
+    async fn update_root_domain_dns_record(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+        record_id: &str,
+        request: &UpdateDomainDnsRecordRequest,
+    ) -> WebServiceResult<DomainDnsRecordResponse>;
+
+    /// Deletes one record on the provider and removes the stored row.
+    async fn delete_root_domain_dns_record(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+        record_id: &str,
+    ) -> WebServiceResult<()>;
+
+    /// Pauses one record (暂停解析) or resumes it, on the provider first and
+    /// then in the stored row.
+    async fn set_root_domain_dns_record_status(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+        record_id: &str,
+        request: &DomainDnsRecordStatusRequest,
+    ) -> WebServiceResult<DomainDnsRecordResponse>;
 
     async fn list_managed_domains(
         &self,

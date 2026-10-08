@@ -1,20 +1,26 @@
 require_relative 'base_api'
+require_relative '../models/create_domain_dns_record_request'
 require_relative '../models/create_managed_domain_request'
 require_relative '../models/create_root_domain_hostname_request'
 require_relative '../models/create_root_domain_request'
+require_relative '../models/domain_dns_record_status_request'
 require_relative '../models/domains_application_binding_update_response'
 require_relative '../models/domains_create_response201'
 require_relative '../models/domains_list_response'
 require_relative '../models/domains_verify_response'
 require_relative '../models/root_domains_create_response201'
+require_relative '../models/root_domains_dns_records_create_response201'
 require_relative '../models/root_domains_dns_records_list_response'
+require_relative '../models/root_domains_dns_records_status_update_response'
 require_relative '../models/root_domains_dns_records_sync_response'
+require_relative '../models/root_domains_dns_records_update_response'
 require_relative '../models/root_domains_list_response'
 require_relative '../models/root_domains_retrieve_response'
 require_relative '../models/root_domains_subdomains_create_response201'
 require_relative '../models/root_domains_subdomains_list_response'
 require_relative '../models/root_domains_update_response'
 require_relative '../models/update_domain_application_binding_request'
+require_relative '../models/update_domain_dns_record_request'
 require_relative '../models/update_root_domain_request'
 
 module Sdkwork
@@ -128,18 +134,86 @@ module Sdkwork
           end
 
           # List a root-domain Zone's synced DNS resolution records
-          def root_domains_dns_records_list(root_domain_id, page: nil, page_size: nil, domain_id: nil)
+          def root_domains_dns_records_list(root_domain_id, page: nil, page_size: nil, domain_id: nil, host: nil, record_type: nil)
             path = interpolate_path('/backend/v3/api/root_domains/{rootDomainId}/dns_records', rootDomainId: serialize_path_parameter(root_domain_id, PathParameterSpec.new('rootDomainId', 'simple', false)))
             query = build_query_string([
               QueryParameterSpec.new('page', page, 'form', true, false, nil),
               QueryParameterSpec.new('page_size', page_size, 'form', true, false, nil),
               QueryParameterSpec.new('domain_id', domain_id, 'form', true, false, nil),
+              QueryParameterSpec.new('host', host, 'form', true, false, nil),
+              QueryParameterSpec.new('record_type', record_type, 'form', true, false, nil),
             ])
             path = append_query_string(path, query)
             options = {}
 
             result = @client.request('GET', path, **options)
             result.is_a?(Hash) ? Models::RootDomainsDnsRecordsListResponse.from_hash(result) : nil
+          end
+
+          # Create a resolution record through the Zone's cloud account
+          def root_domains_dns_records_create(root_domain_id, idempotency_key, body: nil)
+            path = interpolate_path('/backend/v3/api/root_domains/{rootDomainId}/dns_records', rootDomainId: serialize_path_parameter(root_domain_id, PathParameterSpec.new('rootDomainId', 'simple', false)))
+            payload = body.respond_to?(:to_hash) ? body.to_hash : body
+            request_headers = build_request_headers(
+              {
+                'Idempotency-Key' => HeaderParameterSpec.new(idempotency_key, 'simple', false, nil),
+              },
+              {}
+            )
+            options = {}
+            options[:headers] = request_headers unless request_headers.empty?
+            options[:json] = payload unless payload.nil?
+            result = @client.request('POST', path, **options)
+            result.is_a?(Hash) ? Models::RootDomainsDnsRecordsCreateResponse201.from_hash(result) : nil
+          end
+
+          # Replace a resolution record in place through the Zone's cloud account
+          def root_domains_dns_records_update(root_domain_id, record_id, idempotency_key, body: nil)
+            path = interpolate_path('/backend/v3/api/root_domains/{rootDomainId}/dns_records/{recordId}', rootDomainId: serialize_path_parameter(root_domain_id, PathParameterSpec.new('rootDomainId', 'simple', false)), recordId: serialize_path_parameter(record_id, PathParameterSpec.new('recordId', 'simple', false)))
+            payload = body.respond_to?(:to_hash) ? body.to_hash : body
+            request_headers = build_request_headers(
+              {
+                'Idempotency-Key' => HeaderParameterSpec.new(idempotency_key, 'simple', false, nil),
+              },
+              {}
+            )
+            options = {}
+            options[:headers] = request_headers unless request_headers.empty?
+            options[:json] = payload unless payload.nil?
+            result = @client.request('PATCH', path, **options)
+            result.is_a?(Hash) ? Models::RootDomainsDnsRecordsUpdateResponse.from_hash(result) : nil
+          end
+
+          # Delete a resolution record through the Zone's cloud account
+          def root_domains_dns_records_delete(root_domain_id, record_id, idempotency_key)
+            path = interpolate_path('/backend/v3/api/root_domains/{rootDomainId}/dns_records/{recordId}', rootDomainId: serialize_path_parameter(root_domain_id, PathParameterSpec.new('rootDomainId', 'simple', false)), recordId: serialize_path_parameter(record_id, PathParameterSpec.new('recordId', 'simple', false)))
+            request_headers = build_request_headers(
+              {
+                'Idempotency-Key' => HeaderParameterSpec.new(idempotency_key, 'simple', false, nil),
+              },
+              {}
+            )
+            options = {}
+            options[:headers] = request_headers unless request_headers.empty?
+            result = @client.request('DELETE', path, **options)
+            result
+          end
+
+          # Pause a resolution record or resume it
+          def root_domains_dns_records_status_update(root_domain_id, record_id, idempotency_key, body: nil)
+            path = interpolate_path('/backend/v3/api/root_domains/{rootDomainId}/dns_records/{recordId}/status', rootDomainId: serialize_path_parameter(root_domain_id, PathParameterSpec.new('rootDomainId', 'simple', false)), recordId: serialize_path_parameter(record_id, PathParameterSpec.new('recordId', 'simple', false)))
+            payload = body.respond_to?(:to_hash) ? body.to_hash : body
+            request_headers = build_request_headers(
+              {
+                'Idempotency-Key' => HeaderParameterSpec.new(idempotency_key, 'simple', false, nil),
+              },
+              {}
+            )
+            options = {}
+            options[:headers] = request_headers unless request_headers.empty?
+            options[:json] = payload unless payload.nil?
+            result = @client.request('PATCH', path, **options)
+            result.is_a?(Hash) ? Models::RootDomainsDnsRecordsStatusUpdateResponse.from_hash(result) : nil
           end
 
           # Sync a root-domain Zone's resolution records through its cloud account

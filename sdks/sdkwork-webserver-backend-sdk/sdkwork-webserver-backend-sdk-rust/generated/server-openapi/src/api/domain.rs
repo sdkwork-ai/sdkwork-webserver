@@ -4,7 +4,7 @@ use crate::api::base::{RequestHeaders};
 use crate::api::paths::backend_path;
 use crate::api::paths::append_query_string;
 use crate::http::{SdkworkError, SdkworkHttpClient};
-use crate::models::{ApplicationDomainResponse, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainDnsSyncResponse, DomainVerifyResponse, RootDomainResponse, UpdateDomainApplicationBindingRequest, UpdateRootDomainRequest};
+use crate::models::{ApplicationDomainResponse, CreateDomainDnsRecordRequest, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainDnsRecordResponse, DomainDnsRecordStatusRequest, DomainDnsSyncResponse, DomainVerifyResponse, RootDomainResponse, UpdateDomainApplicationBindingRequest, UpdateDomainDnsRecordRequest, UpdateRootDomainRequest};
 
 #[derive(Clone)]
 pub struct DomainApi {
@@ -94,14 +94,64 @@ impl DomainApi {
     }
 
     /// List a root-domain Zone's synced DNS resolution records
-    pub async fn root_domains_dns_records_list(&self, root_domain_id: &str, page: Option<i64>, page_size: Option<i64>, domain_id: Option<&str>) -> Result<serde_json::Value, SdkworkError> {
+    pub async fn root_domains_dns_records_list(&self, root_domain_id: &str, page: Option<i64>, page_size: Option<i64>, domain_id: Option<&str>, host: Option<&str>, record_type: Option<&str>) -> Result<serde_json::Value, SdkworkError> {
         let query = build_query_string(&[
             QueryParameterSpec::new("page", page, "form", true, false, None),
             QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
             QueryParameterSpec::new("domain_id", domain_id, "form", true, false, None),
+            QueryParameterSpec::new("host", host, "form", true, false, None),
+            QueryParameterSpec::new("record_type", record_type, "form", true, false, None),
         ]);
         let path = append_query_string(backend_path(&format!("/root_domains/{}/dns_records", serialize_path_parameter(root_domain_id, PathParameterSpec::new("rootDomainId", "simple", false)))), &query);
         self.client.get(&path, None, None).await
+    }
+
+    /// Create a resolution record through the Zone's cloud account
+    pub async fn root_domains_dns_records_create(&self, root_domain_id: &str, body: &CreateDomainDnsRecordRequest, idempotency_key: &str) -> Result<DomainDnsRecordResponse, SdkworkError> {
+        let path = backend_path(&format!("/root_domains/{}/dns_records", serialize_path_parameter(root_domain_id, PathParameterSpec::new("rootDomainId", "simple", false))));
+        let headers = build_request_headers(
+            &[
+                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
+            ],
+            &[],
+        );
+        self.client.post(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
+    }
+
+    /// Replace a resolution record in place through the Zone's cloud account
+    pub async fn root_domains_dns_records_update(&self, root_domain_id: &str, record_id: &str, body: &UpdateDomainDnsRecordRequest, idempotency_key: &str) -> Result<DomainDnsRecordResponse, SdkworkError> {
+        let path = backend_path(&format!("/root_domains/{}/dns_records/{}", serialize_path_parameter(root_domain_id, PathParameterSpec::new("rootDomainId", "simple", false)), serialize_path_parameter(record_id, PathParameterSpec::new("recordId", "simple", false))));
+        let headers = build_request_headers(
+            &[
+                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
+            ],
+            &[],
+        );
+        self.client.patch(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
+    }
+
+    /// Delete a resolution record through the Zone's cloud account
+    pub async fn root_domains_dns_records_delete(&self, root_domain_id: &str, record_id: &str, idempotency_key: &str) -> Result<(), SdkworkError> {
+        let path = backend_path(&format!("/root_domains/{}/dns_records/{}", serialize_path_parameter(root_domain_id, PathParameterSpec::new("rootDomainId", "simple", false)), serialize_path_parameter(record_id, PathParameterSpec::new("recordId", "simple", false))));
+        let headers = build_request_headers(
+            &[
+                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
+            ],
+            &[],
+        );
+        self.client.delete(&path, None, headers.as_ref()).await
+    }
+
+    /// Pause a resolution record or resume it
+    pub async fn root_domains_dns_records_status_update(&self, root_domain_id: &str, record_id: &str, body: &DomainDnsRecordStatusRequest, idempotency_key: &str) -> Result<DomainDnsRecordResponse, SdkworkError> {
+        let path = backend_path(&format!("/root_domains/{}/dns_records/{}/status", serialize_path_parameter(root_domain_id, PathParameterSpec::new("rootDomainId", "simple", false)), serialize_path_parameter(record_id, PathParameterSpec::new("recordId", "simple", false))));
+        let headers = build_request_headers(
+            &[
+                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
+            ],
+            &[],
+        );
+        self.client.patch(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
     }
 
     /// Sync a root-domain Zone's resolution records through its cloud account

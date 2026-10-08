@@ -78,13 +78,59 @@ public class DomainApi {
     }
 
     /// List a root-domain Zone's synced DNS resolution records
-    public func rootDomainsDnsRecordsList(rootDomainId: String, page: Int? = nil, pageSize: Int? = nil, domainId: String? = nil) async throws -> RootDomainsDnsRecordsListResponse? {
+    public func rootDomainsDnsRecordsList(rootDomainId: String, page: Int? = nil, pageSize: Int? = nil, domainId: String? = nil, host: String? = nil, recordType: String? = nil) async throws -> RootDomainsDnsRecordsListResponse? {
         let query = buildQueryString([
             QueryParameterSpec(name: "page", value: page, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "page_size", value: pageSize, style: "form", explode: true, allowReserved: false, contentType: nil),
-            QueryParameterSpec(name: "domain_id", value: domainId, style: "form", explode: true, allowReserved: false, contentType: nil)
+            QueryParameterSpec(name: "domain_id", value: domainId, style: "form", explode: true, allowReserved: false, contentType: nil),
+            QueryParameterSpec(name: "host", value: host, style: "form", explode: true, allowReserved: false, contentType: nil),
+            QueryParameterSpec(name: "record_type", value: recordType, style: "form", explode: true, allowReserved: false, contentType: nil)
         ])
         return try await client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/dns_records"), query), responseType: RootDomainsDnsRecordsListResponse.self)
+    }
+
+    /// Create a resolution record through the Zone's cloud account
+    public func rootDomainsDnsRecordsCreate(rootDomainId: String, body: CreateDomainDnsRecordRequest, idempotencyKey: String) async throws -> RootDomainsDnsRecordsCreateResponse201? {
+        let requestHeaders = buildRequestHeaders(
+            [
+                "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
+            ],
+            [:]
+        )
+        return try await client.post(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/dns_records"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: RootDomainsDnsRecordsCreateResponse201.self)
+    }
+
+    /// Replace a resolution record in place through the Zone's cloud account
+    public func rootDomainsDnsRecordsUpdate(rootDomainId: String, recordId: String, body: UpdateDomainDnsRecordRequest, idempotencyKey: String) async throws -> RootDomainsDnsRecordsUpdateResponse? {
+        let requestHeaders = buildRequestHeaders(
+            [
+                "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
+            ],
+            [:]
+        )
+        return try await client.patch(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/dns_records/\(serializePathParameter(recordId, PathParameterSpec(name: "recordId", style: "simple", explode: false)))"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: RootDomainsDnsRecordsUpdateResponse.self)
+    }
+
+    /// Delete a resolution record through the Zone's cloud account
+    public func rootDomainsDnsRecordsDelete(rootDomainId: String, recordId: String, idempotencyKey: String) async throws -> Void {
+        let requestHeaders = buildRequestHeaders(
+            [
+                "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
+            ],
+            [:]
+        )
+        _ = try await client.delete(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/dns_records/\(serializePathParameter(recordId, PathParameterSpec(name: "recordId", style: "simple", explode: false)))"), params: nil, headers: requestHeaders)
+    }
+
+    /// Pause a resolution record or resume it
+    public func rootDomainsDnsRecordsStatusUpdate(rootDomainId: String, recordId: String, body: DomainDnsRecordStatusRequest, idempotencyKey: String) async throws -> RootDomainsDnsRecordsStatusUpdateResponse? {
+        let requestHeaders = buildRequestHeaders(
+            [
+                "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
+            ],
+            [:]
+        )
+        return try await client.patch(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/dns_records/\(serializePathParameter(recordId, PathParameterSpec(name: "recordId", style: "simple", explode: false)))/status"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: RootDomainsDnsRecordsStatusUpdateResponse.self)
     }
 
     /// Sync a root-domain Zone's resolution records through its cloud account

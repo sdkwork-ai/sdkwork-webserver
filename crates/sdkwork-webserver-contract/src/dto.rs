@@ -683,17 +683,24 @@ pub struct DomainVerifyResponse {
 
 /// One synced DNS resolution record of a root-domain Zone.
 ///
-/// A row of the snapshot the last cloud-account sync read from the provider —
+/// A row of the snapshot the cloud account maintains with the provider —
 /// the "how does this subdomain resolve" answer the subdomain page renders:
 /// the record type (解析类型) and the record content (解析 IP for `A`/`AAAA`,
-/// the target for `CNAME`/`MX`). The row is a snapshot, not live DNS: it is
-/// what the provider answered at `syncedAt`, and a later sync replaces it.
+/// the target for `CNAME`/`MX`). A sync replaces the whole snapshot with the
+/// provider's answer; a write through the management plane
+/// (`dnsRecords.create`/`update`) joins the same table, so the page always
+/// reads one place.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DomainDnsRecordResponse {
     pub id: String,
     /// Absolute record owner inside the zone, e.g. `www.example.com`.
     #[serde(rename = "recordName")]
     pub record_name: String,
+    /// Zone-relative owner — the "主机记录" the provider consoles ask for
+    /// (`@` for the apex, `www`, `api.eu`, `*`). Derived from `recordName`
+    /// against the Zone apex, so the two cannot disagree.
+    #[serde(rename = "host")]
+    pub host: String,
     /// Record type as the provider spells it (`A`, `AAAA`, `CNAME`, `TXT`, `MX`).
     #[serde(rename = "recordType")]
     pub record_type: String,
@@ -710,6 +717,10 @@ pub struct DomainDnsRecordResponse {
     /// per-line records.
     #[serde(rename = "recordLine", skip_serializing_if = "Option::is_none")]
     pub record_line: Option<String>,
+    /// The provider-side resolution state: `ENABLED` answers, `DISABLED` is
+    /// the vendor's paused record (暂停解析).
+    #[serde(rename = "recordStatus")]
+    pub record_status: String,
     /// The registered subdomain this record resolves, when its owner matched
     /// one at sync time; absent when the owner matches none.
     #[serde(rename = "domainId", skip_serializing_if = "Option::is_none")]
@@ -727,6 +738,57 @@ pub struct DomainDnsRecordResponse {
     /// When this row was read from the provider.
     #[serde(rename = "syncedAt")]
     pub synced_at: String,
+}
+
+/// Creates one resolution record of any managed type through the Zone's cloud
+/// account. `host` is the zone-relative 主机记录 (`@`, `www`, `api.eu`, `*`);
+/// the value is validated per type before the vendor is asked.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreateDomainDnsRecordRequest {
+    #[serde(rename = "recordType")]
+    pub record_type: String,
+    #[serde(rename = "host")]
+    pub host: String,
+    #[serde(rename = "recordValue")]
+    pub record_value: String,
+    #[serde(rename = "ttlSeconds", default)]
+    pub ttl_seconds: Option<i32>,
+    #[serde(default)]
+    pub priority: Option<i32>,
+    /// Provider resolution line; omitted = the provider's default line.
+    #[serde(rename = "recordLine", default)]
+    pub record_line: Option<String>,
+}
+
+/// Edits one record in place: a full replace of owner/type/value/TTL (the
+/// shape every integrated vendor's update shares). Absent members mean "leave
+/// as it is" only in the sense that the caller sends the complete row it
+/// edited — the provider update itself is a replace.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateDomainDnsRecordRequest {
+    #[serde(rename = "recordType")]
+    pub record_type: String,
+    #[serde(rename = "host")]
+    pub host: String,
+    #[serde(rename = "recordValue")]
+    pub record_value: String,
+    #[serde(rename = "ttlSeconds", default)]
+    pub ttl_seconds: Option<i32>,
+    #[serde(default)]
+    pub priority: Option<i32>,
+    #[serde(rename = "recordLine", default)]
+    pub record_line: Option<String>,
+}
+
+/// Pauses one record (暂停解析) or resumes it. A vendor without a per-record
+/// pause answers the refusal its own API defines.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DomainDnsRecordStatusRequest {
+    #[serde(rename = "enabled")]
+    pub enabled: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

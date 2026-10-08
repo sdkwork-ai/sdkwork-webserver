@@ -85,14 +85,63 @@ class DomainApi(private val client: HttpClient) {
     }
 
     /** List a root-domain Zone's synced DNS resolution records */
-    suspend fun rootDomainsDnsRecordsList(rootDomainId: String, page: Int? = null, pageSize: Int? = null, domainId: String? = null): RootDomainsDnsRecordsListResponse? {
+    suspend fun rootDomainsDnsRecordsList(rootDomainId: String, page: Int? = null, pageSize: Int? = null, domainId: String? = null, host: String? = null, recordType: String? = null): RootDomainsDnsRecordsListResponse? {
         val query = buildQueryString(listOf(
             QueryParameterSpec("page", page, "form", true, false, null),
             QueryParameterSpec("page_size", pageSize, "form", true, false, null),
-            QueryParameterSpec("domain_id", domainId, "form", true, false, null)
+            QueryParameterSpec("domain_id", domainId, "form", true, false, null),
+            QueryParameterSpec("host", host, "form", true, false, null),
+            QueryParameterSpec("record_type", recordType, "form", true, false, null)
         ))
         val raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/root_domains/${serializePathParameter(rootDomainId, PathParameterSpec("rootDomainId", "simple", false))}/dns_records"), query))
         return client.convertValue(raw, object : TypeReference<RootDomainsDnsRecordsListResponse>() {})
+    }
+
+    /** Create a resolution record through the Zone's cloud account */
+    suspend fun rootDomainsDnsRecordsCreate(rootDomainId: String, body: CreateDomainDnsRecordRequest, idempotencyKey: String): RootDomainsDnsRecordsCreateResponse201? {
+        val requestHeaders = buildRequestHeaders(
+            mapOf(
+                "Idempotency-Key" to HeaderParameterSpec(idempotencyKey, "simple", false, null),
+            ),
+            emptyMap()
+        )
+        val raw = client.post(ApiPaths.backendPath("/root_domains/${serializePathParameter(rootDomainId, PathParameterSpec("rootDomainId", "simple", false))}/dns_records"), body, null, requestHeaders, "application/json")
+        return client.convertValue(raw, object : TypeReference<RootDomainsDnsRecordsCreateResponse201>() {})
+    }
+
+    /** Replace a resolution record in place through the Zone's cloud account */
+    suspend fun rootDomainsDnsRecordsUpdate(rootDomainId: String, recordId: String, body: UpdateDomainDnsRecordRequest, idempotencyKey: String): RootDomainsDnsRecordsUpdateResponse? {
+        val requestHeaders = buildRequestHeaders(
+            mapOf(
+                "Idempotency-Key" to HeaderParameterSpec(idempotencyKey, "simple", false, null),
+            ),
+            emptyMap()
+        )
+        val raw = client.patch(ApiPaths.backendPath("/root_domains/${serializePathParameter(rootDomainId, PathParameterSpec("rootDomainId", "simple", false))}/dns_records/${serializePathParameter(recordId, PathParameterSpec("recordId", "simple", false))}"), body, null, requestHeaders, "application/json")
+        return client.convertValue(raw, object : TypeReference<RootDomainsDnsRecordsUpdateResponse>() {})
+    }
+
+    /** Delete a resolution record through the Zone's cloud account */
+    suspend fun rootDomainsDnsRecordsDelete(rootDomainId: String, recordId: String, idempotencyKey: String): Unit {
+        val requestHeaders = buildRequestHeaders(
+            mapOf(
+                "Idempotency-Key" to HeaderParameterSpec(idempotencyKey, "simple", false, null),
+            ),
+            emptyMap()
+        )
+        client.delete(ApiPaths.backendPath("/root_domains/${serializePathParameter(rootDomainId, PathParameterSpec("rootDomainId", "simple", false))}/dns_records/${serializePathParameter(recordId, PathParameterSpec("recordId", "simple", false))}"), null, requestHeaders)
+    }
+
+    /** Pause a resolution record or resume it */
+    suspend fun rootDomainsDnsRecordsStatusUpdate(rootDomainId: String, recordId: String, body: DomainDnsRecordStatusRequest, idempotencyKey: String): RootDomainsDnsRecordsStatusUpdateResponse? {
+        val requestHeaders = buildRequestHeaders(
+            mapOf(
+                "Idempotency-Key" to HeaderParameterSpec(idempotencyKey, "simple", false, null),
+            ),
+            emptyMap()
+        )
+        val raw = client.patch(ApiPaths.backendPath("/root_domains/${serializePathParameter(rootDomainId, PathParameterSpec("rootDomainId", "simple", false))}/dns_records/${serializePathParameter(recordId, PathParameterSpec("recordId", "simple", false))}/status"), body, null, requestHeaders, "application/json")
+        return client.convertValue(raw, object : TypeReference<RootDomainsDnsRecordsStatusUpdateResponse>() {})
     }
 
     /** Sync a root-domain Zone's resolution records through its cloud account */

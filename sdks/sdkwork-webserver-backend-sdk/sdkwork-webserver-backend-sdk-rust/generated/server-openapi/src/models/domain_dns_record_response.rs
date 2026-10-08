@@ -8,6 +8,9 @@ pub struct DomainDnsRecordResponse {
     #[serde(rename = "recordName")]
     pub record_name: String,
 
+    /// Zone-relative 主机记录 (`@` for the apex, `www`, `*`).
+    pub host: String,
+
     /// Record type as the provider spells it (A, AAAA, CNAME, TXT, MX).
     #[serde(rename = "recordType")]
     pub record_type: String,
@@ -28,6 +31,10 @@ pub struct DomainDnsRecordResponse {
     #[serde(rename = "recordLine")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub record_line: Option<String>,
+
+    /// Provider-side resolution state; DISABLED is the vendor's paused record.
+    #[serde(rename = "recordStatus")]
+    pub record_status: String,
 
     /// The registered subdomain this record resolves; absent when its owner matches none.
     #[serde(rename = "domainId")]

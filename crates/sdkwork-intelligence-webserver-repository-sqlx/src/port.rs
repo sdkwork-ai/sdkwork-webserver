@@ -6,10 +6,11 @@ use sdkwork_intelligence_webserver_service::{
     ClusterHeartbeatWrite, ClusterHostUpsert, ClusterIdentity, ClusterInstanceCredentials,
     ClusterInstanceUpsert, ClusterPeerMessageEnqueue, ClusterProbeOutcome, ClusterProbeWrite,
     ClusterRoutingDiscovery, ClusterSyncAckWrite, ClusterSyncDesired, ClusterSyncRevisionPayload,
-    ClusterSyncRevisionPublish, ClusterUpsert, DomainDnsRecordFilter, DomainDnsSnapshotWrite,
-    DomainHostnameAsset, DomainVerificationChallenge, DomainVerificationObservation,
-    ExpiredClusterHost, ExpiredClusterInstance, RootDomainDnsSyncTarget, RuntimeAssignmentTarget,
-    RuntimeAssignmentWrite, RuntimeObservationWrite, WebRepositoryPort,
+    ClusterSyncRevisionPublish, ClusterUpsert, DomainDnsRecordFilter, DomainDnsRecordUpsert,
+    DomainDnsSnapshotWrite, DomainHostnameAsset, DomainVerificationChallenge,
+    DomainVerificationObservation, ExpiredClusterHost, ExpiredClusterInstance,
+    RootDomainDnsSyncTarget, RuntimeAssignmentTarget, RuntimeAssignmentWrite,
+    RuntimeObservationWrite, WebRepositoryPort,
 };
 use sdkwork_webserver_contract::{
     AgentHeartbeatRequest, AgentHeartbeatResponse, AgentSyncResponse, ApplicationPage,
@@ -23,7 +24,7 @@ use sdkwork_webserver_contract::{
     CreateManagedDomainRequest, CreateNginxConfigRequest, CreatePlatformTargetRequest,
     CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
     CreateServerResponse, CreateSourceVersionRequest, DeploymentPage, DeploymentResponse,
-    DomainDnsRecordPage, DomainPage, DomainResponse, EnvVariablePage, EnvVariableResponse,
+    DomainDnsRecordPage, DomainDnsRecordResponse, DomainPage, DomainResponse, EnvVariablePage, EnvVariableResponse,
     HealthCheckPage, HealthCheckResponse, IssueCertificateRequest, ListApplicationsQuery,
     ListAuditLogsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
     ListenerCertificateBindingPage, ListenerCertificateBindingResponse, NginxConfigPage,
@@ -334,6 +335,58 @@ impl WebRepositoryPort for WebRepository {
         page_size: i32,
     ) -> WebServiceResult<DomainDnsRecordPage> {
         self.list_root_domain_dns_records_repo(tenant_id, root_domain_id, filter, page, page_size)
+            .await
+    }
+
+    async fn insert_root_domain_dns_record(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        record: &DomainDnsRecordUpsert,
+    ) -> WebServiceResult<DomainDnsRecordResponse> {
+        self.insert_root_domain_dns_record_repo(tenant_id, root_domain_id, record)
+            .await
+    }
+
+    async fn update_root_domain_dns_record(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        record_id: &str,
+        record: &DomainDnsRecordUpsert,
+    ) -> WebServiceResult<DomainDnsRecordResponse> {
+        self.update_root_domain_dns_record_repo(tenant_id, root_domain_id, record_id, record)
+            .await
+    }
+
+    async fn set_root_domain_dns_record_status(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        record_id: &str,
+        enabled: bool,
+    ) -> WebServiceResult<DomainDnsRecordResponse> {
+        self.set_root_domain_dns_record_status_repo(tenant_id, root_domain_id, record_id, enabled)
+            .await
+    }
+
+    async fn delete_root_domain_dns_record(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        record_id: &str,
+    ) -> WebServiceResult<()> {
+        self.delete_root_domain_dns_record_repo(tenant_id, root_domain_id, record_id)
+            .await
+    }
+
+    async fn root_domain_dns_record_ref(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        record_id: &str,
+    ) -> WebServiceResult<Option<String>> {
+        self.root_domain_dns_record_ref_repo(tenant_id, root_domain_id, record_id)
             .await
     }
 

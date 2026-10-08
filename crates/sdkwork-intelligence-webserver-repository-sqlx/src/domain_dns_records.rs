@@ -1,13 +1,15 @@
 // The synced DNS resolution-record snapshot of a root-domain Zone.
 //
 // One sync run replaces the Zone's whole snapshot in one transaction, so the
-// table always answers with a single provider answer. Every read here is
-// store-only: the resolution page renders this snapshot, and only the sync
-// operation talks to the provider.
+// table always answers with a single provider answer. Reads here are
+// store-only; the write-through operations append/update/remove rows only
+// after the provider accepted the change, so the snapshot and the vendor
+// never disagree about what a row says.
 
 use crate::audited_sql;
 use sdkwork_intelligence_webserver_service::{
-    DomainDnsRecordFilter, DomainDnsSnapshotWrite, DomainHostnameAsset, RootDomainDnsSyncTarget,
+    DomainDnsRecordFilter, DomainDnsRecordUpsert, DomainDnsSnapshotWrite, DomainHostnameAsset,
+    RootDomainDnsSyncTarget,
 };
 use sdkwork_webserver_contract::{
     DomainDnsRecordPage, DomainDnsRecordResponse, WebServiceError, WebServiceResult,
@@ -15,7 +17,8 @@ use sdkwork_webserver_contract::{
 use sqlx::Row;
 
 use super::support::{
-    instant_from_row, instant_write_expression, new_uuid, next_id, pagination, store_error,
+    instant_from_row, instant_write_expression, new_uuid, next_id, now_rfc3339, pagination,
+    store_error,
 };
 use super::{EngineRow, WebRepository};
 
@@ -183,14 +186,28 @@ impl WebRepository {
         let (_page, page_size, offset) = pagination(page, page_size)?;
 
         // The subdomain restriction is the uuid the sync stamped on the rows,
-        // so the filter is one equality against the joined hostname row — no
+        // so that filter is one equality against the joined hostname row — no
         // owner-string parsing, and the wildcard semantics were already
-        // applied when the match was made.
+        // applied when the match was made. The host keyword and record type
+        // are the two filters the resolution page offers, mirroring the
+        // provider consoles' own 解析设置 filters.
         let domain_uuid = filter
             .domain_id
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty());
+        let host_keyword = filter
+            .host
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| format!("%{}%", value.to_ascii_lowercase().replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")));
+        let record_type = filter
+            .record_type
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_ascii_uppercase);
         // A record matched to a hostname that has since been deleted leaves
         // the Zone view with the hostname: it would resolve nothing the edge
         // registers, so the read hides it rather than showing a stale pairing.
@@ -199,27 +216,36 @@ impl WebRepository {
              WHERE rec.tenant_id = $1 AND rec.root_domain_id = $2
                AND rec.deleted_at IS NULL
                AND (rec.domain_id IS NULL OR d.deleted_at IS NULL)
-               AND ($3::text IS NULL OR d.uuid = $3)";
+               AND ($3::text IS NULL OR d.uuid = $3)
+               AND ($4::text IS NULL OR LOWER(rec.record_name) LIKE $4 ESCAPE '\\')
+               AND ($5::text IS NULL OR UPPER(rec.record_type) = $5)";
 
-        let total: i64 = sqlx::query_scalar(audited_sql(&format!("SELECT COUNT(*) {predicate}")))
-            .bind(tenant_id)
-            .bind(root_internal_id)
-            .bind(domain_uuid)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|error| store_error("count webserver_domain_dns_record", error))?;
-
-        let rows = sqlx::query(audited_sql(&format!(
-            "SELECT rec.uuid, rec.record_name, rec.record_type, rec.record_value,
-                    rec.ttl_seconds, rec.priority, rec.record_line, rec.dns_provider,
-                    rec.cloud_account_id, rec.provider_record_ref, d.uuid AS domain_uuid,
-                    CAST(rec.synced_at AS TEXT) AS synced_at
-             {predicate}
-             ORDER BY rec.synced_at DESC, rec.id DESC LIMIT $4 OFFSET $5"
+        let total: i64 = sqlx::query_scalar(audited_sql(&format!(
+            "SELECT COUNT(*) {predicate}"
         )))
         .bind(tenant_id)
         .bind(root_internal_id)
         .bind(domain_uuid)
+        .bind(host_keyword.as_deref())
+        .bind(record_type.as_deref())
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|error| store_error("count webserver_domain_dns_record", error))?;
+
+        let rows = sqlx::query(audited_sql(&format!(
+            "SELECT rec.uuid, r.hostname AS zone_apex, rec.record_name, rec.record_type,
+                    rec.record_value, rec.ttl_seconds, rec.priority, rec.record_line,
+                    rec.record_status, rec.dns_provider, rec.cloud_account_id,
+                    rec.provider_record_ref, d.uuid AS domain_uuid,
+                    CAST(rec.synced_at AS TEXT) AS synced_at
+             {predicate}
+             ORDER BY rec.synced_at DESC, rec.id DESC LIMIT $6 OFFSET $7"
+        )))
+        .bind(tenant_id)
+        .bind(root_internal_id)
+        .bind(domain_uuid)
+        .bind(host_keyword.as_deref())
+        .bind(record_type.as_deref())
         .bind(page_size)
         .bind(offset)
         .fetch_all(&self.pool)
@@ -235,17 +261,251 @@ impl WebRepository {
             })?;
         Ok(DomainDnsRecordPage { items, total })
     }
+
+    /// Appends one write-through row and reads it back through the same
+    /// projection the page renders, so the response a create returns is the
+    /// row the next read shows.
+    pub(super) async fn insert_root_domain_dns_record_repo(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        record: &DomainDnsRecordUpsert,
+    ) -> WebServiceResult<DomainDnsRecordResponse> {
+        let root_internal_id = self
+            .resolve_root_domain_internal_id(tenant_id, root_domain_id)
+            .await?;
+        let id = next_id(self.id_generator())?;
+        let uuid = new_uuid();
+        let now = now_rfc3339();
+        let now_expression = instant_write_expression("$16");
+        let sql = format!(
+            "INSERT INTO webserver_domain_dns_record (
+                id, uuid, tenant_id, root_domain_id, domain_id,
+                record_name, record_type, record_value, ttl_seconds, priority,
+                record_line, dns_provider, cloud_account_id, provider_record_ref,
+                record_status, synced_at, created_at, updated_at, version
+             ) VALUES (
+                $1, $2, $3, $4, $5,
+                $6, $7, $8, $9, $10,
+                $11, $12, $13, $14,
+                'ENABLED', {now_expression}, {now_expression}, {now_expression}, 0
+             )"
+        );
+        sqlx::query(audited_sql(&sql))
+            .bind(id)
+            .bind(&uuid)
+            .bind(tenant_id)
+            .bind(root_internal_id)
+            .bind(record.domain_id)
+            .bind(&record.record_name)
+            .bind(&record.record_type)
+            .bind(&record.record_value)
+            .bind(record.ttl_seconds)
+            .bind(record.priority)
+            .bind(record.record_line.as_deref())
+            .bind(&record.dns_provider)
+            .bind(&record.cloud_account_id)
+            .bind(record.provider_record_ref.as_deref())
+            .bind(&now)
+            .execute(&self.pool)
+            .await
+            .map_err(|error| store_error("insert webserver_domain_dns_record", error))?;
+        self.retrieve_root_domain_dns_record_repo(tenant_id, root_internal_id, &uuid)
+            .await
+    }
+
+    pub(super) async fn update_root_domain_dns_record_repo(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        record_id: &str,
+        record: &DomainDnsRecordUpsert,
+    ) -> WebServiceResult<DomainDnsRecordResponse> {
+        let root_internal_id = self
+            .resolve_root_domain_internal_id(tenant_id, root_domain_id)
+            .await?;
+        let now = now_rfc3339();
+        let now_expression = instant_write_expression("$12");
+        // `record_status` is deliberately absent: an edit does not touch the
+        // provider-side pause state, which only the status operation flips.
+        let sql = format!(
+            "UPDATE webserver_domain_dns_record
+             SET record_name = $6, record_type = $7, record_value = $8,
+                 ttl_seconds = $9, priority = $10, record_line = $11,
+                 domain_id = $5, dns_provider = $13, cloud_account_id = $14,
+                 provider_record_ref = $15,
+                 updated_at = {now_expression}, version = version + 1
+             WHERE tenant_id = $1 AND root_domain_id = $2 AND uuid = $3
+               AND deleted_at IS NULL"
+        );
+        let result = sqlx::query(audited_sql(&sql))
+            .bind(tenant_id)
+            .bind(root_internal_id)
+            .bind(record_id)
+            .bind(record.domain_id)
+            .bind(&record.record_name)
+            .bind(&record.record_type)
+            .bind(&record.record_value)
+            .bind(record.ttl_seconds)
+            .bind(record.priority)
+            .bind(record.record_line.as_deref())
+            .bind(&now)
+            .bind(&record.dns_provider)
+            .bind(&record.cloud_account_id)
+            .bind(record.provider_record_ref.as_deref())
+            .execute(&self.pool)
+            .await
+            .map_err(|error| store_error("update webserver_domain_dns_record", error))?;
+        if result.rows_affected() == 0 {
+            return Err(WebServiceError::not_found("dns record not found"));
+        }
+        self.retrieve_root_domain_dns_record_repo(tenant_id, root_internal_id, record_id)
+            .await
+    }
+
+    pub(super) async fn set_root_domain_dns_record_status_repo(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        record_id: &str,
+        enabled: bool,
+    ) -> WebServiceResult<DomainDnsRecordResponse> {
+        let root_internal_id = self
+            .resolve_root_domain_internal_id(tenant_id, root_domain_id)
+            .await?;
+        let now = now_rfc3339();
+        let now_expression = instant_write_expression("$5");
+        let status = if enabled { "ENABLED" } else { "DISABLED" };
+        let sql = format!(
+            "UPDATE webserver_domain_dns_record
+             SET record_status = $4, updated_at = {now_expression}, version = version + 1
+             WHERE tenant_id = $1 AND root_domain_id = $2 AND uuid = $3
+               AND deleted_at IS NULL"
+        );
+        let result = sqlx::query(audited_sql(&sql))
+            .bind(tenant_id)
+            .bind(root_internal_id)
+            .bind(record_id)
+            .bind(status)
+            .bind(&now)
+            .execute(&self.pool)
+            .await
+            .map_err(|error| store_error("flip webserver_domain_dns_record status", error))?;
+        if result.rows_affected() == 0 {
+            return Err(WebServiceError::not_found("dns record not found"));
+        }
+        self.retrieve_root_domain_dns_record_repo(tenant_id, root_internal_id, record_id)
+            .await
+    }
+
+    pub(super) async fn delete_root_domain_dns_record_repo(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        record_id: &str,
+    ) -> WebServiceResult<()> {
+        let root_internal_id = self
+            .resolve_root_domain_internal_id(tenant_id, root_domain_id)
+            .await?;
+        // Hard delete: the provider no longer holds the record, so a row left
+        // behind would answer a resolution the zone does not have.
+        let result = sqlx::query(
+            "DELETE FROM webserver_domain_dns_record
+             WHERE tenant_id = $1 AND root_domain_id = $2 AND uuid = $3",
+        )
+        .bind(tenant_id)
+        .bind(root_internal_id)
+        .bind(record_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|error| store_error("delete webserver_domain_dns_record", error))?;
+        if result.rows_affected() == 0 {
+            return Err(WebServiceError::not_found("dns record not found"));
+        }
+        Ok(())
+    }
+
+    pub(super) async fn root_domain_dns_record_ref_repo(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        record_id: &str,
+    ) -> WebServiceResult<Option<String>> {
+        let root_internal_id = self
+            .resolve_root_domain_internal_id(tenant_id, root_domain_id)
+            .await?;
+        let row = sqlx::query(
+            "SELECT provider_record_ref FROM webserver_domain_dns_record
+             WHERE tenant_id = $1 AND root_domain_id = $2 AND uuid = $3
+               AND deleted_at IS NULL",
+        )
+        .bind(tenant_id)
+        .bind(root_internal_id)
+        .bind(record_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("load webserver_domain_dns_record ref", error))?;
+        row.map(|row| {
+            row.try_get("provider_record_ref")
+                .map_err(|error| store_error("map webserver_domain_dns_record ref", error))
+        })
+        .transpose()
+    }
+
+    async fn retrieve_root_domain_dns_record_repo(
+        &self,
+        tenant_id: i64,
+        root_internal_id: i64,
+        record_id: &str,
+    ) -> WebServiceResult<DomainDnsRecordResponse> {
+        let row = sqlx::query(audited_sql(
+            "SELECT rec.uuid, r.hostname AS zone_apex, rec.record_name, rec.record_type,
+                    rec.record_value, rec.ttl_seconds, rec.priority, rec.record_line,
+                    rec.record_status, rec.dns_provider, rec.cloud_account_id,
+                    rec.provider_record_ref, d.uuid AS domain_uuid,
+                    CAST(rec.synced_at AS TEXT) AS synced_at
+             FROM webserver_domain_dns_record rec
+             INNER JOIN webserver_root_domain r ON r.id = rec.root_domain_id
+             LEFT JOIN webserver_domain d ON d.tenant_id = rec.tenant_id AND d.id = rec.domain_id
+             WHERE rec.tenant_id = $1 AND rec.root_domain_id = $2 AND rec.uuid = $3
+               AND rec.deleted_at IS NULL",
+        ))
+        .bind(tenant_id)
+        .bind(root_internal_id)
+        .bind(record_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("retrieve webserver_domain_dns_record", error))?
+        .ok_or_else(|| WebServiceError::not_found("dns record not found"))?;
+        map_dns_record_row(&row)
+            .map_err(|error| WebServiceError::Internal(format!("map dns record: {error}")))
+    }
 }
 
 fn map_dns_record_row(row: &EngineRow) -> Result<DomainDnsRecordResponse, sqlx::Error> {
+    let record_name: String = row.try_get("record_name")?;
+    let zone_apex: String = row.try_get("zone_apex")?;
+    // 主机记录 derived against the zone the row belongs to: `@` for the apex,
+    // the owner minus the zone suffix for everything else — the same fold the
+    // hostname rows apply, so a page never shows two spellings of one name.
+    let host = if record_name == zone_apex {
+        "@".to_owned()
+    } else {
+        record_name
+            .strip_suffix(&format!(".{zone_apex}"))
+            .unwrap_or(&record_name)
+            .to_owned()
+    };
     Ok(DomainDnsRecordResponse {
         id: row.try_get("uuid")?,
-        record_name: row.try_get("record_name")?,
+        record_name,
+        host,
         record_type: row.try_get("record_type")?,
         record_value: row.try_get("record_value")?,
         ttl_seconds: row.try_get("ttl_seconds")?,
         priority: row.try_get("priority")?,
         record_line: row.try_get("record_line")?,
+        record_status: row.try_get("record_status")?,
         domain_id: row.try_get("domain_uuid")?,
         dns_provider: row.try_get("dns_provider")?,
         cloud_account_id: row.try_get("cloud_account_id")?,
