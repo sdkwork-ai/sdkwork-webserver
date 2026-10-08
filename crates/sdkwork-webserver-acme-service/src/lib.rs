@@ -37,9 +37,10 @@ pub use config::{
     MIN_ACME_OPERATION_TIMEOUT_MS,
 };
 pub use dns::{
-    dns01_record_name, dns01_txt_value, dns_relative_record_name, normalize_dns_name,
-    Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest, DnsAccountVerification, DnsProviderKind,
-    InMemoryDns01Presenter, ManualDns01Presenter, ACME_CHALLENGE_LABEL,
+    absolute_record_name, dns01_record_name, dns01_txt_value, dns_relative_record_name,
+    normalize_dns_name, Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest,
+    DnsAccountVerification, DnsProviderKind, DnsZoneRecord, InMemoryDns01Presenter,
+    ManualDns01Presenter, ACME_CHALLENGE_LABEL,
 };
 pub use dns_account::{
     load_dns_account_configs, DispatchingDns01Presenter, DnsAccountDescriptor,

@@ -17,7 +17,8 @@ use serde::Deserialize;
 use sha1::Sha1;
 
 use crate::dns::{
-    Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest, DnsAccountVerification, DnsProviderKind,
+    absolute_record_name, normalize_dns_name, Dns01Presenter, Dns01RecordHandle,
+    Dns01RecordRequest, DnsAccountVerification, DnsProviderKind, DnsZoneRecord,
     ACME_CHALLENGE_LABEL,
 };
 use crate::dns_http::{json_request, DnsApiClient};
@@ -35,6 +36,18 @@ const CHALLENGE_TTL_SECONDS: u32 = 600;
 
 /// Aliyun error code meaning the record id no longer exists.
 const ALIYUN_MISSING_RECORD_CODE: &str = "InvalidRecordId.NotFound";
+
+/// Rows one `DescribeDomainRecords` page may carry. Aliyun's documented page
+/// ceiling for this action is 100; a larger `PageSize` is clamped by the
+/// vendor, and clamping is invisible to a paginator that counts rows, so the
+/// page size the loop assumes must be the documented one.
+const ALIYUN_RECORD_PAGE_ROWS: usize = 100;
+
+/// Completeness bound of one zone's record inventory. A zone that reaches it
+/// has outgrown a single snapshot read; reporting a truncated inventory would
+/// make the resolution page agree with a zone that does not exist, so the read
+/// fails loudly instead.
+const ALIYUN_RECORD_INVENTORY_LIMIT: usize = 5_000;
 
 /// RFC 3986 unreserved set as Aliyun defines it for RPC signature input:
 /// `~` stays literal, and a space becomes `%20` rather than `+`.
@@ -245,6 +258,83 @@ impl AliyunDns01Presenter {
             })
             .find_map(|record| record.record_id.filter(|id| !id.is_empty())))
     }
+
+    /// Reads one page of the zone's resolution-record inventory.
+    ///
+    /// The same `DescribeDomainRecords` action the account probe uses, asked
+    /// for a full page instead of a probe. Aliyun answers every record type it
+    /// holds — the filter on challenge TXT records lives in
+    /// `find_existing_record`, not here, because the inventory read must carry
+    /// the whole zone.
+    async fn record_inventory_page(
+        &self,
+        zone_apex: &str,
+        page_number: usize,
+    ) -> AcmeServiceResult<AliyunRecordsPage> {
+        let page = page_number.to_string();
+        let page_size = ALIYUN_RECORD_PAGE_ROWS.to_string();
+        let body = self
+            .call(
+                "DescribeDomainRecords",
+                &[
+                    ("DomainName", zone_apex),
+                    ("PageNumber", page.as_str()),
+                    ("PageSize", page_size.as_str()),
+                ],
+                &aliyun_timestamp(),
+                &aliyun_signature_nonce(),
+            )
+            .await?;
+        Ok(body.domain_records.unwrap_or_default())
+    }
+
+    /// Reads the zone's complete record inventory, walking pages until Aliyun
+    /// reports the fetch is done (a short page, per the documented page size).
+    ///
+    /// Every mapped row is an owned snapshot of what the provider answers
+    /// right now: owner reduced to its absolute form, type carried through
+    /// with Aliyun's spelling, value as answered. A row missing any of the
+    /// three fields that make it displayable is skipped rather than invented.
+    pub async fn zone_records(&self, zone_apex: &str) -> AcmeServiceResult<Vec<DnsZoneRecord>> {
+        let zone = normalize_dns_name(zone_apex, "zone apex")?;
+        let mut records = Vec::new();
+        let mut page_number = 1_usize;
+        loop {
+            let page = self.record_inventory_page(&zone, page_number).await?;
+            let fetched = page.records.len();
+            for record in page.records {
+                let Some(relative) = record.rr.filter(|value| !value.is_empty()) else {
+                    continue;
+                };
+                let Some(value) = record.value.filter(|value| !value.is_empty()) else {
+                    continue;
+                };
+                let Some(record_type) = record.record_type.filter(|value| !value.is_empty())
+                else {
+                    continue;
+                };
+                records.push(DnsZoneRecord {
+                    record_name: absolute_record_name(&relative, &zone),
+                    record_type,
+                    record_value: value,
+                    ttl_seconds: record.ttl.and_then(|ttl| u32::try_from(ttl).ok()),
+                    priority: record.priority.and_then(|value| u32::try_from(value).ok()),
+                    record_line: record.line.filter(|line| !line.is_empty()),
+                    provider_record_ref: record.record_id.filter(|id| !id.is_empty()),
+                });
+                if records.len() >= ALIYUN_RECORD_INVENTORY_LIMIT {
+                    return Err(AcmeServiceError::provider(format!(
+                        "the zone's record inventory exceeds the \
+                         {ALIYUN_RECORD_INVENTORY_LIMIT}-record snapshot limit"
+                    )));
+                }
+            }
+            if fetched < ALIYUN_RECORD_PAGE_ROWS {
+                return Ok(records);
+            }
+            page_number += 1;
+        }
+    }
 }
 
 #[async_trait]
@@ -369,6 +459,16 @@ impl Dns01Presenter for AliyunDns01Presenter {
             Err(error) => Err(error),
         }
     }
+
+    /// The zone's record inventory, page-walked to completeness.
+    ///
+    /// A read, not a write: the snapshot exists so the control plane can show
+    /// how a hostname resolves without provider console credentials. Aliyun's
+    /// own inventory limit sits well below the snapshot bound, so reaching the
+    /// bound reports the truncation instead of answering with a partial zone.
+    async fn list_zone_records(&self, zone_apex: &str) -> AcmeServiceResult<Vec<DnsZoneRecord>> {
+        self.zone_records(zone_apex).await
+    }
 }
 
 fn is_missing_record(error: &AcmeServiceError) -> bool {
@@ -463,8 +563,19 @@ struct AliyunRecord {
     record_id: Option<String>,
     #[serde(rename = "RR", default)]
     rr: Option<String>,
+    #[serde(rename = "Type", default)]
+    record_type: Option<String>,
     #[serde(rename = "Value", default)]
     value: Option<String>,
+    #[serde(rename = "TTL", default)]
+    ttl: Option<i64>,
+    /// Present only on the record types that carry one (`MX`, `SRV`).
+    #[serde(rename = "Priority", default)]
+    priority: Option<i64>,
+    /// The resolution line the record answers on; Aliyun splits one owner into
+    /// per-line rows and names the default line `default`.
+    #[serde(rename = "Line", default)]
+    line: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -818,6 +929,114 @@ mod tests {
                 "{code} must not be reported as a configuration mistake: {error:?}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod record_inventory_tests {
+    use super::*;
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+
+    use axum::extract::{Query, State};
+    use axum::routing::get;
+    use axum::{Json, Router};
+    use serde_json::{json, Value};
+
+    /// Answers two full pages then a short one, so the inventory walk has to
+    /// follow its pagination instead of stopping at the first page.
+    #[derive(Default)]
+    struct InventoryState {
+        pages: Mutex<Vec<Vec<Value>>>,
+    }
+
+    async fn spawn_inventory_stub(state: Arc<InventoryState>) -> String {
+        async fn handler(
+            State(state): State<Arc<InventoryState>>,
+            Query(params): Query<HashMap<String, String>>,
+        ) -> Json<Value> {
+            assert_eq!(params.get("Action").map(String::as_str), Some("DescribeDomainRecords"));
+            let page: usize = params
+                .get("PageNumber")
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(1);
+            let pages = state.pages.lock().expect("lock");
+            let index = page.saturating_sub(1);
+            let records = pages
+                .get(index)
+                .cloned()
+                .unwrap_or_default();
+            Json(json!({ "DomainRecords": { "Record": records, "TotalCount": 0 } }))
+        }
+
+        let app = Router::new().route("/", get(handler)).with_state(state);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind stub");
+        let address = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        format!("http://{address}")
+    }
+
+    #[tokio::test]
+    async fn the_inventory_walks_pages_and_carries_every_record_type() {
+        let page_rows: Vec<Value> = (0..100)
+            .map(|index| {
+                json!({
+                    "RecordId": format!("rec-{index}"),
+                    "RR": format!("host-{index}"),
+                    "Type": "A",
+                    "Value": "203.0.113.10",
+                    "TTL": 600,
+                    "Line": "default"
+                })
+            })
+            .collect();
+        let state = Arc::new(InventoryState {
+            pages: Mutex::new(vec![
+                page_rows,
+                vec![
+                    json!({ "RecordId": "rec-mx", "RR": "@", "Type": "MX",
+                            "Value": "mail.example.com", "TTL": 600, "Priority": 10 }),
+                    json!({ "RecordId": "rec-star", "RR": "*", "Type": "CNAME",
+                            "Value": "example.com", "TTL": 600, "Line": "default" }),
+                    // A row missing its value is skipped, not invented.
+                    json!({ "RecordId": "rec-empty", "RR": "broken", "Type": "A" }),
+                    // A short page also ends the walk even at one row.
+                ],
+            ]),
+        });
+        let base_url = spawn_inventory_stub(state).await;
+        let presenter = AliyunDns01Presenter::with_base_url(
+            DnsApiClient::new_allowing_plaintext().expect("client"),
+            "testid",
+            "testsecret",
+            base_url,
+        )
+        .expect("presenter");
+
+        let records = presenter.zone_records("example.com").await.expect("inventory");
+        assert_eq!(records.len(), 102);
+        // The apex row keeps the absolute apex owner; the wildcard keeps its star.
+        let mx = records
+            .iter()
+            .find(|record| record.record_type == "MX")
+            .expect("mx row");
+        assert_eq!(mx.record_name, "example.com");
+        assert_eq!(mx.priority, Some(10));
+        let wildcard = records
+            .iter()
+            .find(|record| record.record_type == "CNAME")
+            .expect("cname row");
+        assert_eq!(wildcard.record_name, "*.example.com");
+        let first_page_row = &records[0];
+        assert_eq!(first_page_row.record_name, "host-0.example.com");
+        assert_eq!(first_page_row.ttl_seconds, Some(600));
+        assert_eq!(first_page_row.record_line.as_deref(), Some("default"));
+        assert_eq!(first_page_row.provider_record_ref.as_deref(), Some("rec-0"));
+        assert!(!records.iter().any(|record| record.record_name.contains("broken")));
     }
 }
 

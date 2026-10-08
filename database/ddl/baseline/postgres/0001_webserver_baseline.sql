@@ -222,6 +222,59 @@ CREATE INDEX IF NOT EXISTS idx_webserver_domain_verification_due
     ON webserver_domain_verification (status, next_attempt_at, expires_at, id)
     WHERE status IN ('PENDING', 'CHECKING');
 
+-- The last synced snapshot of one Zone's DNS resolution records, read from the
+-- provider through the Zone's cloud account (`webserver_root_domain` 0023).
+-- One sync run replaces the Zone's whole snapshot in one transaction, so the
+-- table always answers with what the provider answered at `synced_at` -- never
+-- a merge of two runs. `domain_id` is the subdomain the record resolves (matched
+-- at sync time); NULL is the state of a record whose owner matches no
+-- registered hostname, which the resolution page still shows at Zone scope.
+CREATE TABLE IF NOT EXISTS webserver_domain_dns_record (
+    id              BIGINT        NOT NULL,
+    uuid            VARCHAR(64)   NOT NULL,
+    tenant_id       BIGINT        NOT NULL DEFAULT 0,
+    organization_id BIGINT        NOT NULL DEFAULT 0,
+    root_domain_id  BIGINT        NOT NULL,
+    domain_id       BIGINT,
+    record_name     VARCHAR(253)  NOT NULL,
+    record_type     VARCHAR(16)   NOT NULL,
+    record_value    VARCHAR(1024) NOT NULL,
+    ttl_seconds     INTEGER,
+    priority        INTEGER,
+    record_line     VARCHAR(64),
+    dns_provider    VARCHAR(32)   NOT NULL,
+    cloud_account_id VARCHAR(128) NOT NULL,
+    provider_record_ref VARCHAR(128),
+    synced_at       TIMESTAMPTZ   NOT NULL,
+    created_at      TIMESTAMPTZ   NOT NULL,
+    updated_at      TIMESTAMPTZ   NOT NULL,
+    version         BIGINT        NOT NULL DEFAULT 0,
+    deleted_at      TIMESTAMPTZ,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_webserver_domain_dns_record_uuid UNIQUE (uuid),
+    CONSTRAINT uk_webserver_domain_dns_record_tenant_id UNIQUE (tenant_id, id),
+    CONSTRAINT fk_webserver_domain_dns_record_root_domain FOREIGN KEY (tenant_id, root_domain_id)
+        REFERENCES webserver_root_domain(tenant_id, id),
+    CONSTRAINT fk_webserver_domain_dns_record_domain FOREIGN KEY (tenant_id, domain_id)
+        REFERENCES webserver_domain(tenant_id, id),
+    CONSTRAINT chk_webserver_domain_dns_record_owner CHECK (record_name <> ''),
+    CONSTRAINT chk_webserver_domain_dns_record_cloud_account CHECK (
+        cloud_account_id ~ '^[A-Za-z0-9][A-Za-z0-9_.:-]{1,127}$'
+    )
+);
+
+COMMENT ON TABLE webserver_domain_dns_record IS 'Synced snapshot of one root-domain Zone DNS resolution records';
+COMMENT ON COLUMN webserver_domain_dns_record.domain_id IS 'Subdomain the record resolves; NULL when its owner matches no registered hostname';
+COMMENT ON COLUMN webserver_domain_dns_record.synced_at IS 'Instant this snapshot row was read from the provider';
+
+CREATE INDEX IF NOT EXISTS idx_webserver_domain_dns_record_zone
+    ON webserver_domain_dns_record (tenant_id, root_domain_id, synced_at DESC, id DESC)
+    WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_webserver_domain_dns_record_domain
+    ON webserver_domain_dns_record (tenant_id, domain_id)
+    WHERE deleted_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS webserver_site_binding (
     id                BIGINT        NOT NULL,
     uuid              VARCHAR(64)   NOT NULL,

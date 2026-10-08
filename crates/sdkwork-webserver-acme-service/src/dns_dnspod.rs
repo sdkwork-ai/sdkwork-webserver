@@ -11,7 +11,8 @@ use http::Method;
 use serde::Deserialize;
 
 use crate::dns::{
-    Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest, DnsAccountVerification, DnsProviderKind,
+    absolute_record_name, normalize_dns_name, Dns01Presenter, Dns01RecordHandle,
+    Dns01RecordRequest, DnsAccountVerification, DnsProviderKind, DnsZoneRecord,
     ACME_CHALLENGE_LABEL,
 };
 use crate::dns_http::{form_request, DnsApiClient};
@@ -34,6 +35,16 @@ const DNSPOD_ERROR_LANGUAGE_PARAMETER: &str = "lang";
 
 /// The language those messages are asked for in. See `call`.
 const DNSPOD_ERROR_LANGUAGE: &str = "cn";
+
+/// Rows one `Record.List` page may carry. DNSPod's documented `length` ceiling
+/// is 3000; one page covers nearly every hosted zone, and the loop below keeps
+/// walking for the zones that do not fit.
+const DNSPOD_RECORD_PAGE_ROWS: usize = 3000;
+
+/// Completeness bound of one zone's record inventory: the same fail-loud rule
+/// the Aliyun inventory read applies, because a silently truncated snapshot
+/// would make the resolution page agree with a zone that does not exist.
+const DNSPOD_RECORD_INVENTORY_LIMIT: usize = 5_000;
 
 /// DNSPod-backed DNS-01 presenter.
 pub struct DnspodDns01Presenter {
@@ -147,6 +158,65 @@ impl DnspodDns01Presenter {
                     && record.value.as_deref() == Some(value)
             })
             .find_map(|record| record.id.filter(|id| !id.is_empty())))
+    }
+
+    /// Reads the zone's complete resolution-record inventory.
+    ///
+    /// `Record.List` without the challenge filter the duplicate lookup applies:
+    /// every row the provider holds, carried through with DNSPod's own type
+    /// spelling. DNSPod names the apex `@` and a wildcard owner `*`, so the
+    /// absolute owner is rebuilt against the queried zone exactly as the
+    /// publish path builds its challenge name.
+    pub async fn zone_records(&self, zone_apex: &str) -> AcmeServiceResult<Vec<DnsZoneRecord>> {
+        let zone = normalize_dns_name(zone_apex, "zone apex")?;
+        let length = DNSPOD_RECORD_PAGE_ROWS.to_string();
+        let mut records = Vec::new();
+        let mut offset = 0_usize;
+        loop {
+            let offset_value = offset.to_string();
+            let body = self
+                .call(
+                    "Record.List",
+                    vec![
+                        ("domain", zone.as_str()),
+                        ("length", length.as_str()),
+                        ("offset", offset_value.as_str()),
+                    ],
+                )
+                .await?;
+            let fetched = body.records.len();
+            for record in body.records {
+                let Some(relative) = record.name.filter(|value| !value.is_empty()) else {
+                    continue;
+                };
+                let Some(value) = record.value.filter(|value| !value.is_empty()) else {
+                    continue;
+                };
+                let Some(record_type) = record.record_type.filter(|value| !value.is_empty())
+                else {
+                    continue;
+                };
+                records.push(DnsZoneRecord {
+                    record_name: absolute_record_name(&relative, &zone),
+                    record_type,
+                    record_value: value,
+                    ttl_seconds: record.ttl.and_then(|ttl| ttl.value()).and_then(|ttl| u32::try_from(ttl).ok()),
+                    priority: record.mx.and_then(|mx| mx.value()).and_then(|value| u32::try_from(value).ok()),
+                    record_line: record.line.filter(|line| !line.is_empty()),
+                    provider_record_ref: record.id.filter(|id| !id.is_empty()),
+                });
+                if records.len() >= DNSPOD_RECORD_INVENTORY_LIMIT {
+                    return Err(AcmeServiceError::provider(format!(
+                        "the zone's record inventory exceeds the \
+                         {DNSPOD_RECORD_INVENTORY_LIMIT}-record snapshot limit"
+                    )));
+                }
+            }
+            if fetched < DNSPOD_RECORD_PAGE_ROWS {
+                return Ok(records);
+            }
+            offset += fetched;
+        }
     }
 }
 
@@ -272,6 +342,12 @@ impl Dns01Presenter for DnspodDns01Presenter {
             Err(error) => Err(error),
         }
     }
+
+    /// The zone's record inventory, walked to completeness under the same
+    /// fail-loud bound the Aliyun inventory read applies.
+    async fn list_zone_records(&self, zone_apex: &str) -> AcmeServiceResult<Vec<DnsZoneRecord>> {
+        self.zone_records(zone_apex).await
+    }
 }
 
 /// DNSPod error codes that mean the record is already absent.
@@ -339,8 +415,29 @@ struct DnspodRecord {
     id: String,
 }
 
+/// DNSPod answers numbers as JSON strings (`"ttl": "600"`), so the inventory
+/// parse accepts either spelling: a hard `i64` binding would fail the whole
+/// snapshot on the vendor's own documented shape.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum DnspodNumber {
+    Number(i64),
+    Text(String),
+}
+
+impl DnspodNumber {
+    fn value(&self) -> Option<i64> {
+        match self {
+            Self::Number(value) => Some(*value),
+            Self::Text(text) => text.trim().parse().ok(),
+        }
+    }
+}
+
 /// One row of a `Record.List` page. DNSPod names the owner `name` and keeps it
-/// sub-domain relative to the queried zone.
+/// sub-domain relative to the queried zone; `mx` carries the priority of the
+/// record types that have one, and `line` names the resolution line the row
+/// answers on (the default line is spelled in Chinese).
 #[derive(Debug, Deserialize)]
 struct DnspodListRecord {
     #[serde(default)]
@@ -349,6 +446,14 @@ struct DnspodListRecord {
     name: Option<String>,
     #[serde(default)]
     value: Option<String>,
+    #[serde(rename = "type", default)]
+    record_type: Option<String>,
+    #[serde(default)]
+    ttl: Option<DnspodNumber>,
+    #[serde(default)]
+    mx: Option<DnspodNumber>,
+    #[serde(default)]
+    line: Option<String>,
 }
 
 #[cfg(test)]
@@ -652,6 +757,90 @@ mod tests {
                 "{code} must stay a provider fault, not a credential verdict: {error:?}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod record_inventory_tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    use axum::extract::State;
+    use axum::routing::post;
+    use axum::{Form, Json, Router};
+    use serde_json::{json, Value};
+
+    /// Answers one page of mixed rows and verifies the inventory carries the
+    /// provider's own spellings with the owner rebuilt against the zone.
+    #[tokio::test]
+    async fn the_inventory_carries_every_record_type_with_absolute_owners() {
+        async fn record_list(
+            State(state): State<Arc<Mutex<Vec<(String, Vec<(String, String)>)>>>>,
+            Form(fields): Form<Vec<(String, String)>>,
+        ) -> Json<Value> {
+            state
+                .lock()
+                .expect("lock")
+                .push(("Record.List".into(), fields));
+            Json(json!({
+                "status": { "code": "1", "message": "ok" },
+                "info": { "record_total": 3 },
+                "records": [
+                    { "id": "rec-a", "name": "www", "type": "A", "value": "203.0.113.10",
+                      "ttl": "600", "line": "默认" },
+                    { "id": "rec-mx", "name": "@", "type": "MX", "value": "mail.example.com",
+                      "ttl": "600", "mx": "10", "line": "默认" },
+                    { "id": "rec-star", "name": "*", "type": "CNAME", "value": "example.com",
+                      "ttl": "600", "line": "默认" }
+                ]
+            }))
+        }
+
+        let captured: Arc<Mutex<Vec<(String, Vec<(String, String)>)>>> =
+            Arc::new(Mutex::new(Vec::new()));
+        let app = Router::new()
+            .route("/Record.List", post(record_list))
+            .with_state(captured.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind stub");
+        let address = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        let presenter = DnspodDns01Presenter::with_base_url(
+            DnsApiClient::new_allowing_plaintext().expect("client"),
+            "12345",
+            "api-token",
+            format!("http://{address}"),
+        )
+        .expect("presenter");
+
+        let records = presenter.zone_records("example.com").await.expect("inventory");
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[0].record_name, "www.example.com");
+        assert_eq!(records[0].record_type, "A");
+        assert_eq!(records[0].record_value, "203.0.113.10");
+        assert_eq!(records[0].ttl_seconds, Some(600));
+        assert_eq!(records[0].record_line.as_deref(), Some("默认"));
+        // The apex and wildcard rows keep their DNSPod meanings at the
+        // absolute form.
+        assert_eq!(records[1].record_name, "example.com");
+        assert_eq!(records[1].priority, Some(10));
+        assert_eq!(records[2].record_name, "*.example.com");
+
+        let requests = captured.lock().expect("lock");
+        let fields = &requests[0].1;
+        let get = |key: &str| {
+            fields
+                .iter()
+                .find(|(name, _)| name == key)
+                .map(|(_, value)| value.clone())
+        };
+        // No challenge filter on the inventory read: it asks for every row.
+        assert_eq!(get("domain").as_deref(), Some("example.com"));
+        assert_eq!(get("sub_domain"), None);
+        assert!(get("length").is_some());
     }
 }
 

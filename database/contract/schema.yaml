@@ -157,6 +157,51 @@ tables:
       - { name: uk_webserver_domain_verification_uuid, columns: [uuid], unique: true }
       - { name: uk_webserver_domain_verification_active, columns: [domain_id], unique: true, predicate: "((status)::text = ANY ((ARRAY['PENDING'::character varying, 'CHECKING'::character varying])::text[]))" }
       - { name: idx_webserver_domain_verification_due, columns: [status, next_attempt_at, expires_at, id], predicate: "((status)::text = ANY ((ARRAY['PENDING'::character varying, 'CHECKING'::character varying])::text[]))" }
+  - name: webserver_domain_dns_record
+    lifecycle_status: active
+    owner: web-platform
+    columns:
+      id: { type: int64, required: true }
+      uuid: { type: string, required: true }
+      tenant_id: { type: int64, required: true }
+      organization_id: { type: int64, required: true }
+      root_domain_id: { type: int64, required: true }
+      domain_id: { type: int64, required: false }
+      record_name: { type: string, required: true }
+      record_type: { type: string, required: true }
+      record_value: { type: string, required: true }
+      ttl_seconds: { type: int32, required: false }
+      priority: { type: int32, required: false }
+      record_line: { type: string, required: false }
+      dns_provider: { type: string, required: true }
+      cloud_account_id: { type: string, required: true }
+      provider_record_ref: { type: string, required: false }
+      synced_at: { type: instant, required: true }
+      created_at: { type: instant, required: true }
+      updated_at: { type: instant, required: true }
+      version: { type: int64, required: true }
+      deleted_at: { type: instant, required: false }
+    constraints:
+      - { name: webserver_domain_dns_record_pkey, type: primary_key, columns: [id] }
+      - { name: uk_webserver_domain_dns_record_uuid, type: unique, columns: [uuid] }
+      - { name: uk_webserver_domain_dns_record_tenant_id, type: unique, columns: [tenant_id, id] }
+      - name: fk_webserver_domain_dns_record_root_domain
+        type: foreign_key
+        columns: [tenant_id, root_domain_id]
+        references_table: webserver_root_domain
+        references_columns: [tenant_id, id]
+      - name: fk_webserver_domain_dns_record_domain
+        type: foreign_key
+        columns: [tenant_id, domain_id]
+        references_table: webserver_domain
+        references_columns: [tenant_id, id]
+      - { name: chk_webserver_domain_dns_record_owner, type: check }
+      - { name: chk_webserver_domain_dns_record_cloud_account, type: check }
+    indexes:
+      - { name: uk_webserver_domain_dns_record_uuid, columns: [uuid], unique: true }
+      - { name: uk_webserver_domain_dns_record_tenant_id, columns: [tenant_id, id], unique: true }
+      - { name: idx_webserver_domain_dns_record_zone, columns: [tenant_id, root_domain_id, synced_at, id], predicate: "deleted_at IS NULL" }
+      - { name: idx_webserver_domain_dns_record_domain, columns: [tenant_id, domain_id], predicate: "deleted_at IS NULL" }
   - name: webserver_site_binding
     lifecycle_status: active
     owner: web-platform

@@ -10,8 +10,8 @@ use http::Method;
 use serde::Deserialize;
 
 use crate::dns::{
-    Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest, DnsAccountVerification, DnsProviderKind,
-    ACME_CHALLENGE_LABEL,
+    Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest, DnsAccountVerification,
+    DnsProviderKind, DnsZoneRecord, ACME_CHALLENGE_LABEL,
 };
 use crate::dns_http::{json_request, DnsApiClient};
 use crate::{AcmeServiceError, AcmeServiceResult};
@@ -26,6 +26,16 @@ const MAX_ZONE_LIST_ENTRIES: usize = 50;
 // The zone list is always queried with Cloudflare's `name=` filter, which is an
 // exact match, so the per-page cap cannot hide the zone the call is looking for
 // — no matter how many zones the token can see.
+
+/// Rows one `dns_records` page may carry. Cloudflare's documented `per_page`
+/// ceiling for the record list is 100, and its `result_info` answers the page
+/// count, so the inventory loop can walk to the last page without guessing.
+const CLOUDFLARE_RECORD_PAGE_ROWS: usize = 100;
+
+/// Completeness bound of one zone's record inventory: the same fail-loud rule
+/// the other inventory reads apply, because a silently truncated snapshot
+/// would make the resolution page agree with a zone that does not exist.
+const CLOUDFLARE_RECORD_INVENTORY_LIMIT: usize = 5_000;
 
 /// Cloudflare-backed DNS-01 presenter.
 pub struct CloudflareDns01Presenter {
@@ -189,6 +199,71 @@ impl CloudflareDns01Presenter {
             provider_record_ref: Some(record_ref),
         }
     }
+
+    /// Reads the zone's complete resolution-record inventory.
+    ///
+    /// Cloudflare already answers absolute record names, so no owner rebuild is
+    /// needed — unlike the Aliyun and DNSPod reads, which join the relative
+    /// owner onto the queried zone. The walk follows `result_info.total_pages`
+    /// rather than a short-page rule, because a zone whose record count lands
+    /// exactly on the page size would otherwise pay one extra call or, worse,
+    /// be mistaken for complete a page early.
+    pub async fn zone_records(&self, zone_apex: &str) -> AcmeServiceResult<Vec<DnsZoneRecord>> {
+        let zone_id = self.lookup_zone_id(zone_apex).await?;
+        let mut records = Vec::new();
+        let mut page = 1_u32;
+        loop {
+            let url = format!(
+                "{}/zones/{zone_id}/dns_records?per_page={CLOUDFLARE_RECORD_PAGE_ROWS}&page={page}",
+                self.base_url
+            );
+            let http_request = self.authorized_request(Method::GET, &url, None)?;
+            let response = self.client.send(http_request).await?;
+            response.ensure_success(DnsProviderKind::Cloudflare)?;
+            let body: RecordInventoryResponse = response.json(DnsProviderKind::Cloudflare)?;
+            if !body.success {
+                return Err(AcmeServiceError::provider(format!(
+                    "Cloudflare refused the record inventory read: {}",
+                    body.first_error_message()
+                )));
+            }
+            for record in body.result {
+                let Some(record_name) = record.name.filter(|value| !value.is_empty()) else {
+                    continue;
+                };
+                let Some(record_type) = record.record_type.filter(|value| !value.is_empty())
+                else {
+                    continue;
+                };
+                let Some(record_value) = record.content.filter(|value| !value.is_empty()) else {
+                    continue;
+                };
+                records.push(DnsZoneRecord {
+                    record_name,
+                    record_type,
+                    record_value,
+                    ttl_seconds: record.ttl.and_then(|ttl| u32::try_from(ttl).ok()),
+                    priority: record.priority.and_then(|value| u32::try_from(value).ok()),
+                    record_line: None,
+                    provider_record_ref: Some(record.id).filter(|id| !id.is_empty()),
+                });
+                if records.len() >= CLOUDFLARE_RECORD_INVENTORY_LIMIT {
+                    return Err(AcmeServiceError::provider(format!(
+                        "the zone's record inventory exceeds the \
+                         {CLOUDFLARE_RECORD_INVENTORY_LIMIT}-record snapshot limit"
+                    )));
+                }
+            }
+            let total_pages = body
+                .result_info
+                .and_then(|info| info.total_pages)
+                .unwrap_or(page);
+            if page >= total_pages {
+                return Ok(records);
+            }
+            page += 1;
+        }
+    }
 }
 
 #[async_trait]
@@ -276,6 +351,12 @@ impl Dns01Presenter for CloudflareDns01Presenter {
         }
         Ok(())
     }
+
+    /// The zone's record inventory, walked page by page under the same
+    /// fail-loud bound the other inventory reads apply.
+    async fn list_zone_records(&self, zone_apex: &str) -> AcmeServiceResult<Vec<DnsZoneRecord>> {
+        self.zone_records(zone_apex).await
+    }
 }
 
 /// Whether Cloudflare's refusal of a zone lookup proves the token cannot present
@@ -318,6 +399,12 @@ struct RecordResponse {
     errors: Vec<ApiError>,
 }
 
+/// One row of the duplicate-record lookup.
+#[derive(Debug, Deserialize)]
+struct RecordEntry {
+    id: String,
+}
+
 /// One page of the duplicate-record lookup.
 #[derive(Debug, Deserialize)]
 struct RecordListResponse {
@@ -328,9 +415,41 @@ struct RecordListResponse {
     errors: Vec<ApiError>,
 }
 
-#[derive(Debug, Deserialize)]
-struct RecordEntry {
+/// One full `dns_records` page of the inventory read. Cloudflare answers the
+/// owner (`name`), type, content, TTL and — for the record types that carry
+/// one — the priority; every field is optional so a vendor shape change skips
+/// the row instead of failing the whole snapshot.
+#[derive(Debug, Default, Deserialize)]
+struct RecordInventoryEntry {
+    #[serde(default)]
     id: String,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(rename = "type", default)]
+    record_type: Option<String>,
+    #[serde(default)]
+    content: Option<String>,
+    #[serde(default)]
+    ttl: Option<i64>,
+    #[serde(default)]
+    priority: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RecordInventoryResponse {
+    success: bool,
+    #[serde(default)]
+    result: Vec<RecordInventoryEntry>,
+    #[serde(default)]
+    result_info: Option<ResultInfo>,
+    #[serde(default)]
+    errors: Vec<ApiError>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ResultInfo {
+    #[serde(default)]
+    total_pages: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -371,6 +490,12 @@ impl FirstErrorMessage for RecordResponse {
 }
 
 impl FirstErrorMessage for RecordListResponse {
+    fn errors(&self) -> &[ApiError] {
+        &self.errors
+    }
+}
+
+impl FirstErrorMessage for RecordInventoryResponse {
     fn errors(&self) -> &[ApiError] {
         &self.errors
     }
@@ -718,6 +843,88 @@ mod tests {
 
         let error = presenter.publish(&request).await.expect_err("must fail");
         assert!(matches!(error, AcmeServiceError::Provider(_)), "{error:?}");
+    }
+}
+
+#[cfg(test)]
+mod record_inventory_tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    use axum::extract::{RawQuery, State};
+    use axum::response::{IntoResponse, Response};
+    use axum::routing::get;
+    use axum::{Json, Router};
+    use serde_json::{json, Value};
+
+    /// Two pages, driven by `result_info.total_pages` rather than the row
+    /// count, so the walk must read the page metadata it claims to follow.
+    #[tokio::test]
+    async fn the_inventory_walks_to_the_last_page_and_keeps_absolute_owners() {
+        let captured: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        async fn dns_records(
+            State(state): State<Arc<Mutex<Vec<String>>>>,
+            RawQuery(raw): RawQuery,
+        ) -> Response {
+            let query = raw.unwrap_or_default();
+            state.lock().expect("lock").push(query.clone());
+            let page: u32 = query
+                .split('&')
+                .find(|pair| pair.starts_with("page="))
+                .and_then(|pair| pair.trim_start_matches("page=").parse().ok())
+                .unwrap_or(1);
+            if page == 1 {
+                return Json(json!({
+                    "success": true,
+                    "result": [{ "id": "rec-a", "name": "www.example.com", "type": "A",
+                                 "content": "203.0.113.10", "ttl": 300 }],
+                    "result_info": { "page": 1, "total_pages": 2 }
+                }))
+                .into_response();
+            }
+            Json(json!({
+                "success": true,
+                "result": [
+                    { "id": "rec-mx", "name": "example.com", "type": "MX",
+                      "content": "mail.example.com", "ttl": 300, "priority": 10 },
+                    { "id": "rec-txt", "name": "_acme-challenge.example.com", "type": "TXT",
+                      "content": "digest-1", "ttl": 120 }
+                ],
+                "result_info": { "page": 2, "total_pages": 2 }
+            }))
+            .into_response()
+        }
+
+        let app = Router::new()
+            .route("/zones", get(|| async {
+                Json(json!({ "success": true, "result": [{ "id": "zone-1", "name": "example.com" }] }))
+            }))
+            .route("/zones/{zone}/dns_records", get(dns_records))
+            .with_state(captured.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind stub");
+        let address = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        let presenter = CloudflareDns01Presenter::with_base_url(
+            DnsApiClient::new_allowing_plaintext().expect("client"),
+            "token-value",
+            None,
+            format!("http://{address}"),
+        )
+        .expect("presenter");
+
+        let records = presenter.zone_records("example.com").await.expect("inventory");
+        assert_eq!(records.len(), 3);
+        // Cloudflare already answers absolute owners; they are carried as-is.
+        assert_eq!(records[0].record_name, "www.example.com");
+        assert_eq!(records[0].record_value, "203.0.113.10");
+        assert_eq!(records[1].priority, Some(10));
+        assert_eq!(records[2].record_line, None, "Cloudflare has no lines");
+        let queries = captured.lock().expect("lock");
+        assert!(queries.iter().any(|query| query.contains("page=2")));
     }
 }
 

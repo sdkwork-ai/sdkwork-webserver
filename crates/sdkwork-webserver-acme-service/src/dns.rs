@@ -283,6 +283,56 @@ impl DnsAccountVerification {
     }
 }
 
+/// One DNS resolution record as a provider currently holds it for a zone.
+///
+/// This is the read half of the provider contract: where
+/// [`Dns01Presenter::publish`] and [`Dns01Presenter::withdraw`] keep a
+/// challenge's TXT record correct, this reports what the provider already
+/// answers for the whole zone, so the control plane can show how a hostname
+/// actually resolves (record type, record value, resolution line) without
+/// handing out provider console credentials. A provider-relative owner
+/// (`@`, `www`) is never carried here — see [`absolute_record_name`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DnsZoneRecord {
+    /// Absolute record owner inside the zone, e.g. `www.example.com`.
+    pub record_name: String,
+    /// Record type as the provider spells it (`A`, `AAAA`, `CNAME`, `TXT`,
+    /// `MX`, `NS`, `CAA`). Unknown types are carried through with the
+    /// provider's own spelling rather than dropped, so a snapshot can never
+    /// quietly agree with an incomplete zone.
+    pub record_type: String,
+    /// Record content: the address for `A`/`AAAA`, the target for
+    /// `CNAME`/`MX`/`NS`, the text for `TXT`.
+    pub record_value: String,
+    /// Record TTL in seconds, when the provider reports one.
+    pub ttl_seconds: Option<u32>,
+    /// Priority for the record types that carry one (`MX`, `SRV`).
+    pub priority: Option<u32>,
+    /// Provider resolution line (`default`, or a carrier line) when the
+    /// provider splits one owner into per-line records.
+    pub record_line: Option<String>,
+    /// Provider-assigned record identity, when the provider returns one.
+    pub provider_record_ref: Option<String>,
+}
+
+/// Builds the absolute owner name for a provider-relative record owner.
+///
+/// Aliyun and DNSPod both address records relative to the queried zone and
+/// spell the apex `@`; the absolute owner is joined onto the zone the
+/// snapshot was read from — never a guessed public suffix, for the same
+/// reason `dns_relative_record_name` reduces against the configured zone.
+/// Cloudflare answers absolute names already and does not route through this
+/// helper. The wildcard label `*` joins like any other label so a wildcard
+/// record keeps its star at the absolute form.
+pub fn absolute_record_name(relative: &str, zone_apex: &str) -> String {
+    let relative = relative.trim();
+    if relative.is_empty() || relative == "@" {
+        zone_apex.to_string()
+    } else {
+        format!("{relative}.{zone_apex}")
+    }
+}
+
 /// Presents and withdraws DNS-01 TXT records.
 ///
 /// Implementations must be idempotent: [`Dns01Presenter::withdraw`] may be
@@ -342,6 +392,25 @@ pub trait Dns01Presenter: Send + Sync {
         Ok(DnsAccountVerification::Unsupported(
             "this provider family has no read-only call that proves an account; \
              the first certificate order is the first real test",
+        ))
+    }
+
+    /// Reads every record the provider currently holds for `zone_apex`.
+    ///
+    /// The control plane's resolution-records page renders this snapshot, so
+    /// the list must be complete for the zone: a record the adapter cannot map
+    /// is carried through with the provider's own spelling rather than
+    /// dropped, or the page would quietly agree with an incomplete zone.
+    ///
+    /// The default is a refusal, never an empty list: a family without an
+    /// inventory read must *look* unavailable, because "not supported" and "a
+    /// zone with no records" ask an operator entirely different questions —
+    /// the first means configure another account family, the second means the
+    /// hostname does not resolve.
+    async fn list_zone_records(&self, _zone_apex: &str) -> AcmeServiceResult<Vec<DnsZoneRecord>> {
+        let _ = _zone_apex;
+        Err(AcmeServiceError::provider(
+            "this provider family does not expose a record inventory read",
         ))
     }
 }
@@ -582,5 +651,24 @@ mod tests {
             assert_eq!(DnsProviderKind::parse(kind.as_str()), Some(kind));
         }
         assert_eq!(DnsProviderKind::parse("ROUTE53"), None);
+    }
+
+    #[test]
+    fn absolute_record_names_rebuild_the_owner_against_the_queried_zone() {
+        assert_eq!(
+            absolute_record_name("www", "example.com"),
+            "www.example.com".to_string()
+        );
+        // The apex is spelled `@` by Aliyun and DNSPod; the wildcard label `*`
+        // joins like any other label so `*.example.com` stays a wildcard at
+        // the absolute form too.
+        assert_eq!(
+            absolute_record_name("@", "example.com"),
+            "example.com".to_string()
+        );
+        assert_eq!(
+            absolute_record_name("*", "example.com"),
+            "*.example.com".to_string()
+        );
     }
 }
