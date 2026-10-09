@@ -911,6 +911,10 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
   // 解析概要 per hostname row: one zone-wide snapshot read, grouped by the
   // matched subdomain id the snapshot rows carry.
   const [resolutionGroups, setResolutionGroups] = useState<Map<string, DomainDnsRecordResponse[]>>(new Map());
+  // The ledger's own cloud-account sync: the one gesture here that touches
+  // the provider, shared with the hostname detail page.
+  const [syncing, setSyncing] = useState(false);
+  const [syncSummary, setSyncSummary] = useState<string>();
 
   useEffect(() => {
     let active = true;
@@ -971,6 +975,25 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
       active = false;
     };
   }, [build, client, rootDomainId]);
+
+  const runLedgerSync = () => {
+    setSyncing(true);
+    setError(undefined);
+    void client.domain.rootDomains.dnsRecords
+      .sync(rootDomainId, { idempotencyKey: newIdempotencyKey() })
+      .then((synced) => {
+        setSyncSummary(
+          t("resource.domains.dnsSyncedSummary", {
+            syncedAt: formatInstant(synced.syncedAt, locale),
+            provider: synced.dnsProvider,
+            count: synced.recordCount,
+          }),
+        );
+        setBuild((value) => value + 1);
+      })
+      .catch((cause) => setError(errorText(cause, t)))
+      .finally(() => setSyncing(false));
+  };
 
   const removeHostname = (hostname: ApplicationDomainResponse) => {
     setBusy(true);
@@ -1049,6 +1072,10 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
           >
             <RefreshCw size={17} />
           </button>
+          <button className="command-button" disabled={syncing} onClick={runLedgerSync} type="button">
+            <RefreshCw size={16} />
+            {t("resource.domains.dnsSync")}
+          </button>
           <button className="command-button" onClick={() => setCreateOpen(true)} type="button">
             <Plus size={16} />
             {t("resource.domains.addSubdomain")}
@@ -1076,6 +1103,7 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
           {error}
         </div>
       ) : null}
+      {syncSummary ? <p className="form-hint">{syncSummary}</p> : null}
 
       {hostnames === null && !error ? (
         <div className="resource-loading" role="status">
