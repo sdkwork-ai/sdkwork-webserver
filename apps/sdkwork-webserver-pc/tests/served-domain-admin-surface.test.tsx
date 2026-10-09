@@ -682,25 +682,28 @@ describe("served domain admin surface", () => {
    * lifecycle pair, then the destructive one. The order is part of the design,
    * not an accident of how the cell was written, so it is pinned here.
    */
-  it("offers the console's five zone actions, in the console's order", async () => {
+  it("offers the console's six zone actions, in the console's order", async () => {
     const { client } = stubClient();
     renderInProvider(<ServedDomainPage />, client, "/admin/domains");
 
     const row = (await screen.findByText("sdkwork.com")).closest("tr");
     const actions = Array.from(row?.querySelectorAll(".row-actions > *") ?? []);
     expect(actions.map((node) => node.getAttribute("aria-label"))).toEqual([
+      "DNS resolution · sdkwork.com",
       "Hostnames · sdkwork.com",
       "Certificates · sdkwork.com",
       "Edit sdkwork.com",
       "Pause sdkwork.com",
       "Delete sdkwork.com",
     ]);
-    // The first two carry words; the console's rules size the column for four
-    // 32px glyphs plus gaps, and a bare globe/certificate glyph there is exactly
-    // the defect the console's own comment warns about.
+    // The first three carry words; the console's rules size the column for
+    // text actions plus the lifecycle/destructive glyphs, and a bare
+    // globe/certificate glyph there is exactly the defect the console's own
+    // comment warns about.
     expect(actions[0]?.className).toContain("table-action-text");
     expect(actions[1]?.className).toContain("table-action-text");
-    expect(actions[2]?.className).not.toContain("table-action-text");
+    expect(actions[2]?.className).toContain("table-action-text");
+    expect(actions[3]?.className).not.toContain("table-action-text");
   });
 
   it("links the request-certificate action at the certificate ledger, scoped to that root", async () => {

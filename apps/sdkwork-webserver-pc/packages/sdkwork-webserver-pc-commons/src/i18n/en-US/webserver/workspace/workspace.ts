@@ -369,6 +369,7 @@ export const webserverWorkspaceEnUs = {
   "resource.domains.dnsTtl": "TTL",
   "resource.domains.dnsSyncedAt": "Synced",
   "resource.domains.dnsSync": "Sync via cloud account",
+  "resource.domains.dnsResolution": "DNS resolution",
   "resource.domains.dnsSyncHint":
     "Reads the zone's resolution records from its cloud account and replaces the stored snapshot. The snapshot is what this page shows — the provider is never queried on a page render.",
   "resource.domains.dnsNoCloudAccount":

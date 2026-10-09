@@ -10,7 +10,7 @@ import type {
 } from "@sdkwork/webserver-pc-admin-core";
 import type { WebserverLocale } from "@sdkwork/webserver-pc-commons";
 import { ArrowLeft, CirclePause, CirclePlay, FileKey2, Globe2, Network, Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Route, Routes, useParams } from "react-router-dom";
 
 import {
@@ -142,6 +142,10 @@ export function ServedDomainAdminSurface({ cloudAccounts = [], locale, resource 
       <Routes>
         <Route element={<RootDomainLedger cloudAccounts={cloudAccounts} locale={locale} />} index />
         <Route element={<RootDomainHostnames locale={locale} />} path=":rootDomainId" />
+        {/* The standalone 域名解析 page: the whole zone's records, opened
+            straight from the root ledger the way a DNS provider's console
+            does it. */}
+        <Route element={<RootDomainDnsPage locale={locale} />} path=":rootDomainId/dns" />
         {/* The third level: one subdomain's own page. It reads the zone's
             synced resolution records restricted to that subdomain and offers
             the cloud-account sync that refreshes them, so "how does this name
@@ -487,6 +491,15 @@ function RootDomainLedger({
                             table for, and neither is guessable from an icon
                             alone. The literal word stays inside the accessible
                             name so the label still matches what is read out. */}
+                        <Link
+                          aria-label={`${t("resource.domains.dnsResolution")} · ${root.hostname}`}
+                          className="table-action table-action-text"
+                          title={t("resource.domains.dnsResolution")}
+                          to={`${root.id}/dns`}
+                        >
+                          <Network size={15} />
+                          <span>{t("resource.domains.dnsResolution")}</span>
+                        </Link>
                         <Link
                           aria-label={`${t("resource.domains.hostnames")} · ${root.hostname}`}
                           className="table-action table-action-text"
@@ -1347,14 +1360,36 @@ function DnsRecordFormValues_from(record: DomainDnsRecordResponse): DnsRecordFor
   };
 }
 
-function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
+/**
+ * The root domain's 解析设置 ledger, laid out the way a DNS provider's console
+ * does it: the zone's records in one table — add, edit, pause, delete, filter,
+ * and the cloud-account sync — independent of any single subdomain. The
+ * subdomain page embeds it narrowed to one host via `domainId`; the standalone
+ * 域名解析 page mounts it for the whole zone.
+ */
+function RootDomainDnsLedger({
+  aboveTable,
+  backLabel,
+  backTo,
+  domainId,
+  footer,
+  locale,
+  rootDomainId,
+  title,
+}: {
+  aboveTable?: ReactNode;
+  backLabel: string;
+  backTo: string;
+  domainId?: string | undefined;
+  footer?: ReactNode;
+  locale: WebserverLocale;
+  rootDomainId: string;
+  title: string;
+}) {
   const client = useWebserverAdminSdk();
   // Memoized per locale: a fresh translator closure every render sat in the
   // list effect's dependency array below and refetched the ledger forever.
   const t = useMemo(() => translator(locale), [locale]);
-  const { rootDomainId = "", hostnameId = "" } = useParams();
-  const [root, setRoot] = useState<RootDomainResponse>();
-  const [hostname, setHostname] = useState<ApplicationDomainResponse>();
   const [records, setRecords] = useState<DomainDnsRecordResponse[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
@@ -1367,7 +1402,7 @@ function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
   const [syncSummary, setSyncSummary] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  // The two filters, applied on submit (host keyword) or on selection (type):
+  // The two 解析设置 filters, applied on submit (host keyword) or on selection (type):
   // a draft in the input must not fire a request per keystroke.
   const [hostFilterDraft, setHostFilterDraft] = useState("");
   const [hostFilter, setHostFilter] = useState("");
@@ -1385,45 +1420,33 @@ function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
     let active = true;
     setBusy(true);
     setError(undefined);
-    // Three reads, each settling on its own: the zone names the header, the
-    // subdomain names the page, and the records are the body. A failed
-    // records read must not blank a header the server answered.
-    void Promise.allSettled([
-      client.domain.rootDomains.retrieve(rootDomainId),
-      client.domain.rootDomains.subdomains.list(rootDomainId, { page: 1, pageSize: PAGE_SIZE }),
-      client.domain.rootDomains.dnsRecords.list(rootDomainId, {
+    void client.domain.rootDomains.dnsRecords
+      .list(rootDomainId, {
         page,
         pageSize: PAGE_SIZE,
-        domainId: hostnameId || undefined,
+        domainId: domainId || undefined,
         host: hostFilter || undefined,
-        recordType: (DnsRecordFormValues_typed(typeFilter), typeFilter) === "" ? undefined : DnsRecordFormValues_typed(typeFilter),
-      }),
-    ]).then(([rootOutcome, hostnameOutcome, recordsOutcome]) => {
-      if (!active) return;
-      if (rootOutcome.status === "fulfilled") {
-        setRoot(rootOutcome.value);
-      }
-      if (hostnameOutcome.status === "fulfilled") {
-        setHostname(
-          hostnameOutcome.value.items.find((row) => row.id === hostnameId),
-        );
-      }
-      if (recordsOutcome.status === "fulfilled") {
-        setRecords(recordsOutcome.value.items);
+        recordType: typeFilter === "" ? undefined : DnsRecordFormValues_typed(typeFilter),
+      })
+      .then((result) => {
+        if (!active) return;
+        setRecords(result.items);
         // `PageInfo.hasMore` is optional on the wire; an absent flag means
         // "no continuation", never "unknown".
-        setHasMore(recordsOutcome.value.pageInfo.hasMore === true);
+        setHasMore(result.pageInfo.hasMore === true);
         setError(undefined);
-      } else {
+        setBusy(false);
+      })
+      .catch((cause) => {
+        if (!active) return;
         setRecords([]);
-        setError(errorText(recordsOutcome.reason, t));
-      }
-      setBusy(false);
-    });
+        setError(errorText(cause, t));
+        setBusy(false);
+      });
     return () => {
       active = false;
     };
-  }, [build, client, hostnameId, hostFilter, page, rootDomainId, t, typeFilter]);
+  }, [build, client, domainId, hostFilter, page, rootDomainId, t, typeFilter]);
 
   /**
    * The one gesture that reaches the read side of the provider: re-read the
@@ -1616,13 +1639,13 @@ function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
     <section className="resource-page domain-page">
       {/* The ledger and the hostname list hardcode their base paths for the
           same reason: the mount point belongs to the host workspace. */}
-      <Link className="back-link" to={`/admin/domains/${rootDomainId}`}>
+      <Link className="back-link" to={backTo}>
         <ArrowLeft size={16} />
-        {t("resource.domains.backToHostnames")}
+        {backLabel}
       </Link>
       <div className="resource-commandbar">
         <div className="resource-identity">
-          <h1>{hostname?.hostname ?? hostnameId}</h1>
+          <h1>{title}</h1>
         </div>
         <div className="actions">
           <button
@@ -1660,15 +1683,7 @@ function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
       </div>
 
       {syncSummary ? <p className="form-hint">{syncSummary}</p> : null}
-
-      <div className="metric-strip">
-        <Metric label={t("resource.domains.verification")} value={hostname?.isVerified ? "VERIFIED" : "PENDING"} />
-        <Metric
-          label={t("resource.domains.ssl")}
-          value={hostname?.sslEnabled ? hostname.sslProvider || t("resource.domains.yes") : t("resource.domains.sslOff")}
-        />
-        <Metric label={t("resource.domains.application")} value={hostname?.applicationName || "-"} />
-      </div>
+      {aboveTable}
 
       {error ? (
         <div className="error-banner" role="alert">
@@ -1909,11 +1924,7 @@ function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
         t={t}
       />
 
-      {root === undefined ? null : (
-        <small className="cell-subtitle">
-          {t("resource.domains.subdomainsOf", { hostname: root.hostname })}
-        </small>
-      )}
+      {footer}
 
       {deleteTarget ? (
         <ConfirmDialog
@@ -1930,6 +1941,96 @@ function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
         />
       ) : null}
     </section>
+  );
+}
+
+function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
+  const client = useWebserverAdminSdk();
+  // Memoized per locale: a fresh translator closure every render sat in the
+  // list effect's dependency array below and refetched the ledger forever.
+  const t = useMemo(() => translator(locale), [locale]);
+  const { rootDomainId = "", hostnameId = "" } = useParams();
+  const [root, setRoot] = useState<RootDomainResponse>();
+  const [hostname, setHostname] = useState<ApplicationDomainResponse>();
+
+  // Two reads, each settling on its own: the zone names the footer note and
+  // the subdomain names the header. A failed read must not blank the other.
+  useEffect(() => {
+    let active = true;
+    void Promise.allSettled([
+      client.domain.rootDomains.retrieve(rootDomainId),
+      client.domain.rootDomains.subdomains.list(rootDomainId, { page: 1, pageSize: PAGE_SIZE }),
+    ]).then(([rootOutcome, hostnameOutcome]) => {
+      if (!active) return;
+      if (rootOutcome.status === "fulfilled") {
+        setRoot(rootOutcome.value);
+      }
+      if (hostnameOutcome.status === "fulfilled") {
+        setHostname(hostnameOutcome.value.items.find((row) => row.id === hostnameId));
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [client, hostnameId, rootDomainId]);
+
+  return (
+    <RootDomainDnsLedger
+      aboveTable={
+        <div className="metric-strip">
+          <Metric label={t("resource.domains.verification")} value={hostname?.isVerified ? "VERIFIED" : "PENDING"} />
+          <Metric
+            label={t("resource.domains.ssl")}
+            value={hostname?.sslEnabled ? hostname.sslProvider || t("resource.domains.yes") : t("resource.domains.sslOff")}
+          />
+          <Metric label={t("resource.domains.application")} value={hostname?.applicationName || "-"} />
+        </div>
+      }
+      backLabel={t("resource.domains.backToHostnames")}
+      backTo={`/admin/domains/${rootDomainId}`}
+      domainId={hostnameId}
+      footer={
+        root === undefined ? null : (
+          <small className="cell-subtitle">
+            {t("resource.domains.subdomainsOf", { hostname: root.hostname })}
+          </small>
+        )
+      }
+      locale={locale}
+      rootDomainId={rootDomainId}
+      title={hostname?.hostname ?? hostnameId}
+    />
+  );
+}
+
+/** The standalone 域名解析 page for one root domain: the whole zone's records
+ * on their own URL, the way Aliyun's 解析设置 opens from the domain list. */
+function RootDomainDnsPage({ locale }: { locale: WebserverLocale }) {
+  const client = useWebserverAdminSdk();
+  const t = useMemo(() => translator(locale), [locale]);
+  const { rootDomainId = "" } = useParams();
+  const [root, setRoot] = useState<RootDomainResponse>();
+
+  useEffect(() => {
+    let active = true;
+    void client.domain.rootDomains.retrieve(rootDomainId).then((result) => {
+      if (active) setRoot(result);
+    }).catch(() => {
+      if (active) setRoot(undefined);
+    });
+    return () => {
+      active = false;
+    };
+  }, [client, rootDomainId]);
+
+  return (
+    <RootDomainDnsLedger
+      backLabel={t("resource.domains.backToDomains")}
+      backTo="/admin/domains"
+      locale={locale}
+      rootDomainId={rootDomainId}
+      title={root?.hostname ?? rootDomainId}
+    />
   );
 }
 

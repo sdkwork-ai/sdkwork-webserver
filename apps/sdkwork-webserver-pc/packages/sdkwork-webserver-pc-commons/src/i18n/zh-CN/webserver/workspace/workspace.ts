@@ -353,6 +353,7 @@ export const webserverWorkspaceZhCn = {
   "resource.domains.dnsTtl": "TTL",
   "resource.domains.dnsSyncedAt": "同步时间",
   "resource.domains.dnsSync": "云账号同步",
+  "resource.domains.dnsResolution": "域名解析",
   "resource.domains.dnsSyncHint":
     "从该根域名的云账号读取解析记录并更新快照。本页展示的就是这份快照，渲染页面不会请求服务商。",
   "resource.domains.dnsNoCloudAccount":
