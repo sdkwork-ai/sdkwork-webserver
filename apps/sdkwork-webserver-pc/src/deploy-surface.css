@@ -859,3 +859,4 @@
 .deploy-surface .fact-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px 18px;margin:16px 0}
 .deploy-surface .fact-grid dt{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:var(--sdk-color-text-muted)}
 .deploy-surface .fact-grid dd{margin:2px 0 0;font-size:13px;color:var(--sdk-color-text-primary);overflow-wrap:anywhere}
+.deploy-surface .resolution-summary{display:grid;gap:3px;min-width:0}.deploy-surface .resolution-chip{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 6px;background:var(--sdk-color-surface-panel-muted);border:1px solid var(--sdk-color-border-default);border-radius:4px;font-size:12px}.deploy-surface .resolution-chip-disabled{opacity:.62;background:var(--webserver-color-warning-surface);border-color:var(--webserver-color-warning-border);color:var(--webserver-color-warning-text)}

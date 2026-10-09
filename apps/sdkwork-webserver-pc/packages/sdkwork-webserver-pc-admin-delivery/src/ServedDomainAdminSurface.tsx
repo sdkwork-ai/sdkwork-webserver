@@ -851,6 +851,33 @@ function accountLabel(accounts: readonly CloudAccountOption[], accountId: string
   return accounts.find((account) => account.id === accountId)?.label ?? accountId;
 }
 
+/**
+ * Compact per-row resolution summary: `TYPE value` lines with paused ones
+ * marked. The ledger answers "这个子域名解析到哪" without the drill-in; the
+ * editable records table stays on the hostname page.
+ */
+function ResolutionSummary({ records, t }: { records: DomainDnsRecordResponse[]; t: Translator }) {
+  if (records.length === 0) return <small className="cell-subtitle">-</small>;
+  const shown = records.slice(0, 3);
+  return (
+    <span className="resolution-summary">
+      {shown.map((record) => (
+        // One chip per record: the column is the first thing a narrow table
+        // squeezes, so the chip ellipsizes as one unit instead of splitting
+        // the type from its value.
+        <code
+          className={record.recordStatus === "DISABLED" ? "resolution-chip resolution-chip-disabled" : "resolution-chip"}
+          key={record.id}
+          title={record.recordStatus === "DISABLED" ? `${record.recordType} ${record.recordValue} · ${t("resource.domains.dnsStatusDisabled")}` : `${record.recordType} ${record.recordValue}`}
+        >
+          {record.recordType} {record.recordValue}
+        </code>
+      ))}
+      {records.length > shown.length ? <small className="cell-subtitle">+{records.length - shown.length}</small> : null}
+    </span>
+  );
+}
+
 function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
   const client = useWebserverAdminSdk();
   // Memoized per locale: a fresh translator closure every render sat in the
@@ -881,6 +908,9 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
   const [wildcardRecord, setWildcardRecord] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  // 解析概要 per hostname row: one zone-wide snapshot read, grouped by the
+  // matched subdomain id the snapshot rows carry.
+  const [resolutionGroups, setResolutionGroups] = useState<Map<string, DomainDnsRecordResponse[]>>(new Map());
 
   useEffect(() => {
     let active = true;
@@ -915,6 +945,32 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
       active = false;
     };
   }, [build, client, page, rootDomainId, t]);
+
+  // The summary tracks the same refresh gesture as the ledger but not the
+  // pagination, and a failed summary read degrades the column to "-" rather
+  // than blanking rows the server answered.
+  useEffect(() => {
+    let active = true;
+    void client.domain.rootDomains.dnsRecords
+      .list(rootDomainId, { page: 1, pageSize: 200 })
+      .then((result) => {
+        if (!active) return;
+        const groups = new Map<string, DomainDnsRecordResponse[]>();
+        for (const record of result.items) {
+          if (record.domainId === undefined) continue;
+          const bucket = groups.get(record.domainId);
+          if (bucket === undefined) groups.set(record.domainId, [record]);
+          else bucket.push(record);
+        }
+        setResolutionGroups(groups);
+      })
+      .catch(() => {
+        if (active) setResolutionGroups(new Map());
+      });
+    return () => {
+      active = false;
+    };
+  }, [build, client, rootDomainId]);
 
   const removeHostname = (hostname: ApplicationDomainResponse) => {
     setBusy(true);
@@ -1031,6 +1087,7 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
             <thead>
               <tr>
                 <th>{t("resource.domains.subdomainHostname")}</th>
+                <th>{t("resource.domains.dnsRecords")}</th>
                 <th>{t("resource.domains.recordName")}</th>
                 <th>{t("resource.domains.verification")}</th>
                 <th>{t("resource.domains.ssl")}</th>
@@ -1055,6 +1112,9 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
                         {hostname.isPrimary ? <small>{t("resource.domains.primary")}</small> : null}
                       </span>
                     </Link>
+                  </td>
+                  <td>
+                    <ResolutionSummary records={resolutionGroups.get(hostname.id) ?? []} t={t} />
                   </td>
                   <td>{hostname.recordName || "-"}</td>
                   <td>
