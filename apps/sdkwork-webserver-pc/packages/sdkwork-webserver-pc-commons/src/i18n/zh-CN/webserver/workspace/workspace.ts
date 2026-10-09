@@ -354,6 +354,12 @@ export const webserverWorkspaceZhCn = {
   "resource.domains.dnsSyncedAt": "同步时间",
   "resource.domains.dnsSync": "云账号同步",
   "resource.domains.dnsResolution": "域名解析",
+  "resource.domains.dnsTxtVerify": "TXT 认证",
+  "resource.domains.dnsTxtVerifyTitle": "TXT 域名认证",
+  "resource.domains.dnsTxtVerifyHint": "从认证平台(微信公众号 MP、微信支付、QQ 互联等)复制主机记录与记录值,在此保存为 TXT 记录,然后回到平台点击验证。",
+  "resource.domains.dnsTxtVerifyPlatform": "平台预设",
+  "resource.domains.dnsTxtVerifyPresetDnsAuth": "微信支付/腾讯云归属验证(_dnsauth)",
+  "resource.domains.dnsTxtVerifyPresetCustom": "自定义",
   "resource.domains.dnsSyncHint":
     "从该根域名的云账号读取解析记录并更新快照。本页展示的就是这份快照，渲染页面不会请求服务商。",
   "resource.domains.dnsNoCloudAccount":

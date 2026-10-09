@@ -9,7 +9,7 @@ import type {
   RootDomainResponse,
 } from "@sdkwork/webserver-pc-admin-core";
 import type { WebserverLocale } from "@sdkwork/webserver-pc-commons";
-import { ArrowLeft, CirclePause, CirclePlay, FileKey2, Globe2, Network, Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowLeft, BadgeCheck, CirclePause, CirclePlay, FileKey2, Globe2, Network, Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Route, Routes, useParams } from "react-router-dom";
 
@@ -1415,6 +1415,8 @@ function RootDomainDnsLedger({
   const [editForm, setEditForm] = useState<DnsRecordFormValues>(DnsRecordFormValues_empty);
   const [deleteTarget, setDeleteTarget] = useState<DomainDnsRecordResponse>();
   const [formError, setFormError] = useState<string>();
+  // The third-party platform TXT verification assistant (WeChat MP and the like).
+  const [txtOpen, setTxtOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -1679,6 +1681,16 @@ function RootDomainDnsLedger({
             <Plus size={16} />
             {t("resource.domains.dnsAddRecord")}
           </button>
+          <button
+            className="command-button"
+            disabled={managementDisabled || addOpen || editId !== undefined}
+            onClick={() => setTxtOpen(true)}
+            title={t("resource.domains.dnsTxtVerifyHint")}
+            type="button"
+          >
+            <BadgeCheck size={16} />
+            {t("resource.domains.dnsTxtVerify")}
+          </button>
         </div>
       </div>
 
@@ -1940,7 +1952,120 @@ function RootDomainDnsLedger({
           title={t("resource.domains.dnsDeleteRecord")}
         />
       ) : null}
+
+      {txtOpen ? (
+        <TxtVerifyDialog
+          close={() => setTxtOpen(false)}
+          submit={async (body) => {
+            await client.domain.rootDomains.dnsRecords.create(rootDomainId, body, { idempotencyKey: newIdempotencyKey() });
+            setBuild((value) => value + 1);
+          }}
+          t={t}
+        />
+      ) : null}
     </section>
+  );
+}
+
+/**
+ * The third-party platform TXT verification assistant: WeChat MP, WeChat
+ * Pay, QQ and the like prove domain ownership by looking up a TXT record
+ * whose host and value the platform dictates. The dialog creates exactly
+ * that record — type locked to TXT, provider default line, standard TTL —
+ * so the operator never hand-shapes a verification row in the main strip.
+ */
+function TxtVerifyDialog({
+  close,
+  submit,
+  t,
+}: {
+  close(): void;
+  submit(body: CreateDomainDnsRecordRequest): Promise<void>;
+  t: Translator;
+}) {
+  const [preset, setPreset] = useState("_dnsauth");
+  const [host, setHost] = useState("_dnsauth");
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!host.trim() || !value.trim()) return;
+    setBusy(true);
+    setError(undefined);
+    void submit({
+      recordType: DnsRecordFormValues_typed("TXT"),
+      host: host.trim(),
+      recordValue: value.trim(),
+      ttlSeconds: 600,
+    })
+      .then(close)
+      .catch((cause) => setError(errorText(cause, t)))
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <DialogBackdrop close={close}>
+      <div aria-modal="true" className="dialog delivery-dialog" role="dialog">
+        <header>
+          <h2>{t("resource.domains.dnsTxtVerifyTitle")}</h2>
+          <DialogCloseButton close={close} label={t("resource.domains.cancel")} />
+        </header>
+        <form onSubmit={onSubmit}>
+          <p className="form-hint">{t("resource.domains.dnsTxtVerifyHint")}</p>
+          <label>
+            <span>{t("resource.domains.dnsTxtVerifyPlatform")}</span>
+            <select
+              onChange={(event) => {
+                const next = event.target.value;
+                setPreset(next);
+                if (next !== "") setHost(next);
+              }}
+              value={preset}
+            >
+              <option value="_dnsauth">{t("resource.domains.dnsTxtVerifyPresetDnsAuth")}</option>
+              <option value="">{t("resource.domains.dnsTxtVerifyPresetCustom")}</option>
+            </select>
+          </label>
+          <label>
+            <span>{t("resource.domains.dnsRecordHost")}</span>
+            <input
+              autoFocus
+              autoComplete="off"
+              onChange={(event) => setHost(event.target.value)}
+              placeholder="_dnsauth / mp_verify_xxx"
+              required
+              type="text"
+              value={host}
+            />
+          </label>
+          <label>
+            <span>{t("resource.domains.dnsRecordValue")}</span>
+            <input
+              autoComplete="off"
+              onChange={(event) => setValue(event.target.value)}
+              required
+              type="text"
+              value={value}
+            />
+          </label>
+          {error ? (
+            <div className="error-banner" role="alert">
+              {error}
+            </div>
+          ) : null}
+          <footer className="dialog-footer">
+            <button className="secondary-button" disabled={busy} onClick={close} type="button">
+              {t("resource.domains.cancel")}
+            </button>
+            <button className="command-button" disabled={busy} type="submit">
+              {t("resource.domains.dnsSaveRecord")}
+            </button>
+          </footer>
+        </form>
+      </div>
+    </DialogBackdrop>
   );
 }
 
