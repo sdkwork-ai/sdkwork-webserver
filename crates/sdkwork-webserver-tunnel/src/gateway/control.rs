@@ -14,7 +14,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::watch;
 
 use sdkwork_webserver_tunnel_core::{
-    parse_allowed_ips, Device, DeviceId, DevicePlatform, Result, RouteId, RouteMatcher,
+    parse_allowed_ips, AuthPolicy, Device, DeviceId, DevicePlatform, Result, RouteId, RouteMatcher,
     RoutePolicy, SessionId, TunnelError, TunnelProtocolKind, TunnelRoute, TunnelTarget,
 };
 use sdkwork_webserver_tunnel_protocol::{
@@ -514,6 +514,11 @@ async fn flush_pending_declarations(
                     (!policy.allowed_ips.is_empty())
                         .then(|| policy.allowed_ips.iter().map(ToString::to_string).collect())
                 },
+                auth: Some(declaration.policy_or_default().auth.wire_label().to_owned()),
+                visitor_tokens: {
+                    let policy = declaration.policy_or_default();
+                    (!policy.visitor_tokens.is_empty()).then(|| policy.visitor_tokens.clone())
+                },
             });
         if write_message_bounded(control, &message).await.is_err() {
             return;
@@ -598,10 +603,19 @@ fn validate_registration(
         .map(parse_allowed_ips)
         .transpose()?
         .unwrap_or_default();
+    // Visitor authentication travels with the registration: the gateway has
+    // no other source for the agent's template policy, and dropping it made a
+    // bearer-protected HTTP route register as deny-everything. An absent
+    // label means `none`, so a pre-existing agent keeps working unchanged.
+    let auth = match request.auth.as_deref() {
+        Some(label) => AuthPolicy::from_wire_label(label)?,
+        None => AuthPolicy::None,
+    };
     let policy = RoutePolicy {
         allow_public: request.allow_public,
         allowed_ips,
-        ..RoutePolicy::private()
+        auth,
+        visitor_tokens: request.visitor_tokens.clone().unwrap_or_default(),
     };
     let route = TunnelRoute::new(
         route_id,

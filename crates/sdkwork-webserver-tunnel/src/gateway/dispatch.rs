@@ -170,10 +170,12 @@ pub(crate) fn admit(
     match shared.acl.evaluate(policy, ip, bearer) {
         crate::security::AclDecision::Admit => Ok(()),
         crate::security::AclDecision::DeniedByNetwork => {
+            shared.metrics.record_relay_denied();
             tracing::info!(%ip, "tunnel relay denied by network policy");
             Err(TunnelError::AuthorizationDenied)
         }
         crate::security::AclDecision::DeniedByAuth => {
+            shared.metrics.record_relay_denied();
             tracing::info!(%ip, "tunnel relay denied: visitor authentication required");
             Err(TunnelError::AuthorizationDenied)
         }

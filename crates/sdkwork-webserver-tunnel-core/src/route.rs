@@ -239,6 +239,15 @@ impl TunnelRoute {
                 ),
             });
         }
+        // A bearer route with no tokens is unreachable for the same reason:
+        // every visitor would be rejected, and the operator would see a
+        // registered route instead of a configuration error.
+        if policy.bearer_without_tokens() {
+            return Err(TunnelError::Validation {
+                field: ValidationField::Config,
+                reason: "a bearer_token route requires at least one visitor token".to_owned(),
+            });
+        }
         Ok(Self {
             id,
             name,
@@ -454,6 +463,44 @@ mod tests {
             RoutePolicy::private(),
         );
         assert!(route.is_err(), "a target port of 0 is not routable");
+    }
+
+    #[test]
+    fn bearer_route_without_visitor_tokens_is_rejected() {
+        // `auth = bearer_token` with an empty token list rejects every
+        // visitor, so the route would register into permanent
+        // unreachability. Fail at construction instead: the operator sees a
+        // configuration error, not a route that never answers.
+        let route = TunnelRoute::new(
+            RouteId::parse("route_web").expect("valid id"),
+            "web",
+            TunnelProtocolKind::Http,
+            RouteMatcher::domain("demo.sdkwork.link").expect("valid domain"),
+            local_target(3000),
+            RoutePolicy {
+                auth: AuthPolicy::BearerToken,
+                ..RoutePolicy::private()
+            },
+        );
+        assert!(
+            matches!(route, Err(TunnelError::Validation { .. })),
+            "bearer_token without tokens must be rejected, got {route:?}"
+        );
+
+        // The same policy with one token is the usable shape.
+        assert!(TunnelRoute::new(
+            RouteId::parse("route_web").expect("valid id"),
+            "web",
+            TunnelProtocolKind::Http,
+            RouteMatcher::domain("demo.sdkwork.link").expect("valid domain"),
+            local_target(3000),
+            RoutePolicy {
+                auth: AuthPolicy::BearerToken,
+                visitor_tokens: vec!["t0ken".to_owned()],
+                ..RoutePolicy::private()
+            },
+        )
+        .is_ok());
     }
 
     #[test]

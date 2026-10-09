@@ -437,6 +437,12 @@ async fn route_admitted_request(
                         Err(crate::tunnel_bridge::TunnelRelayError::NoRoute) => {
                             text_response(StatusCode::NOT_FOUND, "cluster route is unavailable\n")
                         }
+                        Err(crate::tunnel_bridge::TunnelRelayError::Denied { .. }) => {
+                            // Cluster relays carry the member's own credential,
+                            // never a route policy, so a denial here means the
+                            // lease raced teardown.
+                            text_response(StatusCode::FORBIDDEN, "cluster relay denied\n")
+                        }
                         Err(crate::tunnel_bridge::TunnelRelayError::Failure(error)) => {
                             tracing::warn!(
                                 host = %host,
@@ -1375,11 +1381,37 @@ async fn relay_registered_tunnel(
         Err(crate::tunnel_bridge::TunnelRelayError::NoRoute) => {
             text_response(StatusCode::NOT_FOUND, "tunnel route is not registered\n")
         }
+        Err(crate::tunnel_bridge::TunnelRelayError::Denied { bearer_required }) => {
+            denied_tunnel_response(bearer_required)
+        }
         Err(crate::tunnel_bridge::TunnelRelayError::Failure(error)) => {
             tracing::warn!(host = %host, error = %error, "tunnel relay failed");
             text_response(StatusCode::BAD_GATEWAY, "tunnel relay failed\n")
         }
     }
+}
+
+/// Response for a visitor turned away by a route's admission policy: 401 with
+/// a challenge when the route wants a bearer token, 403 otherwise.
+///
+/// A denial is not a relay failure — answering 502 told the visitor the tunnel
+/// was broken while the tunnel was behaving exactly as configured.
+fn denied_tunnel_response(bearer_required: bool) -> Response<Body> {
+    if bearer_required {
+        let mut response = text_response(
+            StatusCode::UNAUTHORIZED,
+            "a visitor token is required for this tunnel route\n",
+        );
+        response.headers_mut().insert(
+            axum::http::header::WWW_AUTHENTICATE,
+            HeaderValue::from_static("Bearer realm=\"tunnel\""),
+        );
+        return response;
+    }
+    text_response(
+        StatusCode::FORBIDDEN,
+        "this tunnel route does not admit this visitor\n",
+    )
 }
 
 fn classify_request(

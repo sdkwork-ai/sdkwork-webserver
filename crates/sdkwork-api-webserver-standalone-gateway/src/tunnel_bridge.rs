@@ -87,6 +87,37 @@ fn cluster_failure(message: String) -> TunnelRelayError {
     TunnelRelayError::Failure(sdkwork_webserver_tunnel_core::TunnelError::ConnectionFailed(message))
 }
 
+/// Classifies one failed relay open: a missing route falls through to the
+/// normal virtual-host handling, an admission denial becomes its own status
+/// class, and everything else is a relay failure.
+///
+/// The denial branch re-reads the route's policy purely to pick the status
+/// code: the registration is still live (the registry only removes a route
+/// with its session), so the lookup cannot disagree with the admission
+/// decision that just ran.
+fn classify_relay_failure(
+    shared: &Arc<GatewayShared>,
+    host: &str,
+    error: sdkwork_webserver_tunnel_core::TunnelError,
+) -> TunnelRelayError {
+    use sdkwork_webserver_tunnel_core::TunnelError;
+    match error {
+        TunnelError::RouteNotFound => TunnelRelayError::NoRoute,
+        TunnelError::AuthorizationDenied => {
+            let lowered = host.trim().to_ascii_lowercase();
+            let bearer_required = shared
+                .registry
+                .match_domain(&lowered)
+                .is_some_and(|registered| {
+                    registered.route.policy.auth
+                        == sdkwork_webserver_tunnel_core::AuthPolicy::BearerToken
+                });
+            TunnelRelayError::Denied { bearer_required }
+        }
+        other => TunnelRelayError::Failure(other),
+    }
+}
+
 /// Bridges one upgraded visitor socket to one upgraded upstream socket until
 /// either side closes or the pump lifetime expires.
 async fn pump_websocket(
@@ -169,6 +200,16 @@ pub(crate) enum TunnelRelayError {
     /// No tunnel route matched; the caller falls through to the normal
     /// virtual-host/404 handling.
     NoRoute,
+    /// The route exists but its admission policy turned this visitor away.
+    /// `bearer_required` distinguishes "present a token" (HTTP 401 with a
+    /// challenge) from "your network is not on the allow-list" (HTTP 403),
+    /// which a single `Failure` mapping could not express: every denial used
+    /// to answer 502, telling the visitor the tunnel was broken when in fact
+    /// it was working exactly as configured.
+    Denied {
+        /// True when the route demands a visitor bearer token.
+        bearer_required: bool,
+    },
     /// The relay was denied (ACL/auth) or failed mid-relay; surface as an
     /// HTTP status instead of falling through.
     Failure(sdkwork_webserver_tunnel_core::TunnelError),
@@ -203,10 +244,7 @@ pub(crate) async fn relay_tunnel_http(
             },
         )
         .await
-        .map_err(|error| match error {
-            sdkwork_webserver_tunnel_core::TunnelError::RouteNotFound => TunnelRelayError::NoRoute,
-            other => TunnelRelayError::Failure(other),
-        })?;
+        .map_err(|error| classify_relay_failure(shared, host, error))?;
 
     // The downstream upgrade must be captured before the request is split.
     let downstream_upgrade = if is_websocket {

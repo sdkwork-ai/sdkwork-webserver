@@ -147,6 +147,18 @@ pub struct RegisterRoute {
     /// unrestricted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_ips: Option<Vec<String>>,
+    /// `auth` from the route policy (`none` / `bearer_token`). Absent means
+    /// `none`, so an agent that predates visitor-token support keeps
+    /// registering exactly what it used to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<String>,
+    /// `visitor_tokens` from the route policy: the shared bearer tokens a
+    /// visitor must present on an `auth = bearer_token` route. Without this
+    /// field on the wire the gateway could never enforce the policy the
+    /// agent declares, so a bearer-protected route registered as
+    /// deny-everything instead of "token required".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visitor_tokens: Option<Vec<String>>,
 }
 
 /// Gateway → agent registration outcome, including the public URL for HTTP
@@ -211,6 +223,14 @@ pub struct DeclareRoute {
     /// declared route keeps the network restriction the operator asked for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_ips: Option<Vec<String>>,
+    /// Requested `auth` (`none` / `bearer_token`). Absent leaves the agent's
+    /// local template policy in charge, which is what an operator running an
+    /// older control plane expects.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<String>,
+    /// Requested `visitor_tokens` for an `auth = bearer_token` declaration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visitor_tokens: Option<Vec<String>>,
 }
 
 /// Gateway → agent control error.
@@ -370,6 +390,8 @@ mod tests {
                 target: "127.0.0.1:3000".to_owned(),
                 allow_public: false,
                 allowed_ips: Some(vec!["203.0.113.0/24".to_owned()]),
+                auth: Some("bearer_token".to_owned()),
+                visitor_tokens: Some(vec!["visitor-t0ken".to_owned()]),
             }),
             ControlMessage::RegisterRouteResult(RegisterRouteResult {
                 route_id: "route_web".to_owned(),
@@ -392,6 +414,8 @@ mod tests {
                 port: None,
                 allow_public: false,
                 allowed_ips: Some(vec!["198.51.100.0/24".to_owned()]),
+                auth: Some("bearer_token".to_owned()),
+                visitor_tokens: Some(vec!["declared-t0ken".to_owned()]),
             }),
             ControlMessage::Heartbeat,
             ControlMessage::HeartbeatAck,
@@ -424,6 +448,8 @@ mod tests {
             target: "127.0.0.1:22".to_owned(),
             allow_public: false,
             allowed_ips: Some(vec!["10.0.0.0/8".to_owned(), "203.0.113.7/32".to_owned()]),
+            auth: Some("none".to_owned()),
+            visitor_tokens: None,
         });
         let text = String::from_utf8(with_list.encode().expect("encode")).expect("utf8");
         assert!(text.contains("10.0.0.0/8"), "{text}");
@@ -438,10 +464,46 @@ mod tests {
             target: "127.0.0.1:22".to_owned(),
             allow_public: false,
             allowed_ips: None,
+            auth: None,
+            visitor_tokens: None,
         });
         let text = String::from_utf8(without_list.encode().expect("encode")).expect("utf8");
         assert!(!text.contains("allowedIps"), "{text}");
+        assert!(!text.contains("visitorTokens"), "{text}");
         assert_eq!(round_trip(without_list.clone()), without_list);
+    }
+
+    #[test]
+    fn visitor_auth_policy_round_trips_and_stays_absent_when_unset() {
+        // The gateway rebuilds its route policy from these fields; a policy
+        // that fails to travel means a bearer-protected route registers as
+        // deny-everything. Absence must stay absence (an N-1 agent sends
+        // neither field and keeps the old `auth = none` behaviour).
+        let protected = ControlMessage::RegisterRoute(RegisterRoute {
+            route_id: "route_web".to_owned(),
+            name: "web".to_owned(),
+            protocol: "http".to_owned(),
+            domain: Some("demo.sdkwork.link".to_owned()),
+            port: None,
+            target: "127.0.0.1:3000".to_owned(),
+            allow_public: false,
+            allowed_ips: None,
+            auth: Some("bearer_token".to_owned()),
+            visitor_tokens: Some(vec!["t1".to_owned(), "t2".to_owned()]),
+        });
+        let text = String::from_utf8(protected.encode().expect("encode")).expect("utf8");
+        assert!(text.contains(r#""auth":"bearer_token""#), "{text}");
+        assert!(text.contains(r#""visitorTokens":["t1","t2"]"#), "{text}");
+        assert_eq!(round_trip(protected.clone()), protected);
+
+        // A message from an older agent: unknown-to-it fields absent.
+        let legacy: RegisterRoute = serde_json::from_str(
+            r#"{"routeId":"route_web","name":"web","protocol":"http","domain":"demo.sdkwork.link",
+                "target":"127.0.0.1:3000","allowPublic":true}"#,
+        )
+        .expect("legacy registration decodes");
+        assert_eq!(legacy.auth, None);
+        assert_eq!(legacy.visitor_tokens, None);
     }
 
     #[test]

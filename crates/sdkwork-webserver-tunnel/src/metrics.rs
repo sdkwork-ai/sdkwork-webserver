@@ -20,6 +20,7 @@ pub struct TunnelMetrics {
     reconnects: AtomicU64,
     errors: AtomicU64,
     auth_failures: AtomicU64,
+    relay_denied: AtomicU64,
     routes_active: AtomicI64,
 }
 
@@ -92,6 +93,15 @@ impl TunnelMetrics {
         self.auth_failures.fetch_add(1, Ordering::Relaxed);
     }
 
+    /// Records one visitor turned away by a route's admission policy (network
+    /// allow-list or missing/wrong visitor token). Kept apart from
+    /// [`Self::record_auth_failure`], which counts *agent* credential
+    /// failures: an operator alerting on agent auth failures must not be
+    /// paged by visitors hitting a private route.
+    pub fn record_relay_denied(&self) {
+        self.relay_denied.fetch_add(1, Ordering::Relaxed);
+    }
+
     /// Snapshot of every counter, used by status APIs and tests.
     pub fn snapshot(&self) -> TunnelMetricsSnapshot {
         TunnelMetricsSnapshot {
@@ -108,6 +118,7 @@ impl TunnelMetrics {
             reconnects: self.reconnects.load(Ordering::Relaxed),
             errors: self.errors.load(Ordering::Relaxed),
             auth_failures: self.auth_failures.load(Ordering::Relaxed),
+            relay_denied: self.relay_denied.load(Ordering::Relaxed),
             routes_active: u64::try_from(self.routes_active.load(Ordering::Relaxed)).unwrap_or(0),
         }
     }
@@ -188,6 +199,12 @@ impl TunnelMetrics {
             "counter",
         );
         emit(
+            "sdkwork_tunnel_relay_denied",
+            "Visitor relays denied by route admission policy",
+            snapshot.relay_denied,
+            "counter",
+        );
+        emit(
             "sdkwork_tunnel_routes_active",
             "Currently registered tunnel routes",
             snapshot.routes_active,
@@ -229,6 +246,8 @@ pub struct TunnelMetricsSnapshot {
     pub errors: u64,
     /// Failed authentications.
     pub auth_failures: u64,
+    /// Visitor relays denied by route admission policy.
+    pub relay_denied: u64,
     /// Currently registered routes.
     pub routes_active: u64,
 }
@@ -279,8 +298,23 @@ mod tests {
             "sdkwork_tunnel_bytes_out",
             "sdkwork_tunnel_reconnects",
             "sdkwork_tunnel_errors",
+            "sdkwork_tunnel_auth_failures",
+            "sdkwork_tunnel_relay_denied",
+            "sdkwork_tunnel_routes_active",
         ] {
             assert!(text.contains(name), "missing {name}");
         }
+    }
+
+    #[test]
+    fn visitor_denials_are_counted_separately_from_agent_auth_failures() {
+        // An operator alerting on agent credential failures must not be paged
+        // by visitors hitting a private route.
+        let metrics = TunnelMetrics::new();
+        metrics.record_relay_denied();
+        metrics.record_relay_denied();
+        let snapshot = metrics.snapshot();
+        assert_eq!(snapshot.relay_denied, 2);
+        assert_eq!(snapshot.auth_failures, 0);
     }
 }

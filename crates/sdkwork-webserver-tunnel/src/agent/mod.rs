@@ -15,7 +15,8 @@ use tokio::io::{copy_bidirectional, AsyncWriteExt};
 use tokio::sync::{mpsc, watch};
 
 use sdkwork_webserver_tunnel_core::{
-    Device, Result, RouteId, TunnelConfig, TunnelError, TunnelRouteTemplate, TunnelTarget,
+    AuthPolicy, Device, Result, RouteId, TunnelConfig, TunnelError, TunnelRouteTemplate,
+    TunnelTarget,
 };
 use sdkwork_webserver_tunnel_protocol::{
     frame, AuthResult, Authenticate, ControlMessage, DataStreamHeader, DeclareRoute, ErrorCode,
@@ -612,7 +613,43 @@ async fn handle_declaration(
         );
         return Ok(());
     }
-    let request = ControlMessage::RegisterRoute(registration_request(template, route_id));
+    // The declaration carries the operator's admission policy; the target
+    // still comes from the local template (PRD §45 SSRF boundary). Fields the
+    // gateway did not send leave the local template's policy in charge, so an
+    // older control plane behaves exactly as before.
+    let declared_auth = match declaration.auth.as_deref() {
+        Some(label) => match AuthPolicy::from_wire_label(label) {
+            Ok(auth) => Some(auth),
+            Err(error) => {
+                tracing::warn!(
+                    declaration = %declaration.name,
+                    %error,
+                    "gateway declaration carries an unknown auth policy; ignored"
+                );
+                return Ok(());
+            }
+        },
+        None => None,
+    };
+    let mut effective = TunnelRouteTemplate::clone(template);
+    effective.policy = Some(
+        template
+            .policy_or_default()
+            .with_declared_auth(declared_auth, declaration.visitor_tokens.clone()),
+    );
+    if let Err(error) = effective.validate() {
+        // A declaration that asks for an unusable policy (bearer on a raw
+        // TCP/UDP route, or bearer with no tokens) is refused here instead of
+        // being registered into permanent unreachability. It must not end the
+        // session: the agent keeps serving every other route.
+        tracing::warn!(
+            declaration = %declaration.name,
+            %error,
+            "gateway declaration asks for an unusable route policy; ignored"
+        );
+        return Ok(());
+    }
+    let request = ControlMessage::RegisterRoute(registration_request(&effective, route_id));
     write_msg(control, &request).await?;
     // Await the registration outcome, ignoring interleaved acks.
     loop {
@@ -917,7 +954,9 @@ fn protocol_label(protocol: sdkwork_webserver_tunnel_core::TunnelProtocolKind) -
 /// Single builder so initial registration, hot re-registration and
 /// gateway-declared routes always transmit an identical policy — including
 /// the network allow-list, which is the only admission channel the raw TCP
-/// and UDP planes can use.
+/// and UDP planes can use, and the visitor-token policy, which the gateway
+/// cannot enforce unless it travels with the registration (FRP
+/// `httpUser`/`httpPassword` parity).
 fn registration_request(template: &TunnelRouteTemplate, route_id: &RouteId) -> RegisterRoute {
     let policy = template.policy_or_default();
     RegisterRoute {
@@ -930,6 +969,8 @@ fn registration_request(template: &TunnelRouteTemplate, route_id: &RouteId) -> R
         allow_public: policy.allow_public,
         allowed_ips: (!policy.allowed_ips.is_empty())
             .then(|| policy.allowed_ips.iter().map(ToString::to_string).collect()),
+        auth: Some(policy.auth.wire_label().to_owned()),
+        visitor_tokens: (!policy.visitor_tokens.is_empty()).then(|| policy.visitor_tokens.clone()),
     }
 }
 
