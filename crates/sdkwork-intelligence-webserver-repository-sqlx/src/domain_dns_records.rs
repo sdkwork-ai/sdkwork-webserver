@@ -522,3 +522,117 @@ fn map_dns_record_row(row: &EngineRow) -> Result<DomainDnsRecordResponse, sqlx::
         synced_at: instant_from_row(row, "synced_at")?,
     })
 }
+
+
+impl WebRepository {
+    /// Uploads (or wholly replaces) the root domain's WeChat verification
+    /// file; answers the write's timestamp. The unique constraint on
+    /// `root_domain_id` makes "one file per root domain, replaced whole"
+    /// true at the schema level.
+    pub(super) async fn upsert_root_domain_wechat_verification_repo(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        file_name: &str,
+        content: &str,
+    ) -> WebServiceResult<String> {
+        let root_internal_id = self
+            .root_domain_internal_id(tenant_id, root_domain_id)
+            .await?;
+        let row_id = next_id(self.id_generator())?;
+        let row_uuid = new_uuid();
+        let row = sqlx::query(
+            "INSERT INTO webserver_domain_wechat_verification (
+                id, uuid, tenant_id, root_domain_id, file_name, content, updated_at
+             ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
+             ON CONFLICT (root_domain_id) DO UPDATE
+               SET file_name = EXCLUDED.file_name, content = EXCLUDED.content,
+                   updated_at = NOW(), deleted_at = NULL
+             RETURNING updated_at",
+        )
+        .bind(row_id)
+        .bind(&row_uuid)
+        .bind(tenant_id)
+        .bind(root_internal_id)
+        .bind(file_name)
+        .bind(content)
+        .fetch_one(self.pool())
+        .await
+        .map_err(|error| store_error("upsert webserver_domain_wechat_verification", error))?;
+        Ok(instant_from_row(&row, "updated_at").map_err(|error| store_error("map wechat verification updated_at", error))?)
+    }
+
+    /// Reads the root domain's WeChat verification file as
+    /// `(file_name, content, updated_at)`; `None` when none is configured.
+    pub(super) async fn root_domain_wechat_verification_repo(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+    ) -> WebServiceResult<Option<(String, String, String)>> {
+        let root_internal_id = self
+            .root_domain_internal_id(tenant_id, root_domain_id)
+            .await?;
+        let row = sqlx::query(
+            "SELECT file_name, content, updated_at
+             FROM webserver_domain_wechat_verification
+             WHERE root_domain_id = $1 AND deleted_at IS NULL",
+        )
+        .bind(root_internal_id)
+        .fetch_optional(self.pool())
+        .await
+        .map_err(|error| store_error("read webserver_domain_wechat_verification", error))?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let file_name: String = row
+            .try_get("file_name")
+            .map_err(|error| store_error("map wechat verification file name", error))?;
+        let content: String = row
+            .try_get("content")
+            .map_err(|error| store_error("map wechat verification content", error))?;
+        let updated_at = instant_from_row(&row, "updated_at").map_err(|error| store_error("map wechat verification updated_at", error))?;
+        Ok(Some((file_name, content, updated_at)))
+    }
+
+    /// Deletes the root domain's WeChat verification file; `false` when
+    /// there was none.
+    pub(super) async fn delete_root_domain_wechat_verification_repo(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+    ) -> WebServiceResult<bool> {
+        let root_internal_id = self
+            .root_domain_internal_id(tenant_id, root_domain_id)
+            .await?;
+        let deleted = sqlx::query(
+            "DELETE FROM webserver_domain_wechat_verification WHERE root_domain_id = $1",
+        )
+        .bind(root_internal_id)
+        .execute(self.pool())
+        .await
+        .map_err(|error| store_error("delete webserver_domain_wechat_verification", error))?
+        .rows_affected();
+        Ok(deleted > 0)
+    }
+
+    /// Resolves a root domain's internal id; `NotFound` when the uuid is
+    /// unknown to the tenant.
+    async fn root_domain_internal_id(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+    ) -> WebServiceResult<i64> {
+        let row = sqlx::query(
+            "SELECT id FROM webserver_root_domain
+             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
+        )
+        .bind(tenant_id)
+        .bind(root_domain_id)
+        .fetch_optional(self.pool())
+        .await
+        .map_err(|error| store_error("resolve webserver_root_domain", error))?
+        .ok_or_else(|| WebServiceError::not_found("root domain not found"))?;
+        row.try_get("id")
+            .map_err(|error| store_error("map webserver_root_domain id", error))
+    }
+}

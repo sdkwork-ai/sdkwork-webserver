@@ -43,7 +43,15 @@
       },
       {
         "crate": "sdkwork-api-webserver-standalone-gateway",
-        "surface": "tunnel_bridge module; data-plane lifecycle spawn; Host-based relay dispatch; operations /tunnel/* REST; /metrics tunnel section"
+        "surface": "tunnel_bridge module; data-plane lifecycle spawn; Host-based relay dispatch; operations /tunnel/* REST (status, routes, machines); /metrics tunnel section"
+      },
+      {
+        "crate": "sdkwork-routes-webserver-backend-api",
+        "surface": "backend-admin tunnel machine surface: /backend/v3/api/tunnel_machines* over WebBackendApi (web.tunnel.read / web.tunnel.write)"
+      },
+      {
+        "crate": "sdkwork-intelligence-webserver-service",
+        "surface": "tunnel_machines module: proxies machine operations to the data plane operations listener (SDKWORK_WEBSERVER_TUNNEL_OPERATIONS_URL + the shared operations token file); 503 when unconfigured, never an empty machine list"
       }
     ]
   },
@@ -60,11 +68,40 @@
     "relay targets always come from agent-local configuration (PRD 45)",
     "control plane and data plane ride separate QUIC streams (PRD 21)",
     "data-plane payloads are raw bytes; only control messages and the stream header are framed (PRD 20)",
-    "secrets live in environment variables, never in configuration files (PRD 40)"
+    "secrets live in environment variables, never in configuration files (PRD 40)",
+    "one route policy evaluator serves every visitor plane (dedicated listeners, HTTP, and the HTTP CONNECT multiplexer)",
+    "a secret route key never appears in a route listing, status payload, or log (TunnelRoute.secret_key is serde-skipped)",
+    "the machine inventory is the only source of machine identity: an unknown device cannot be switched off, and a refused device is never recorded",
+    "the machine inventory survives disconnects (history, traffic totals and the switch persist) while live state (online, session, routes) is always read from its owner, so the console cannot disagree with the forwarding decisions",
+    "switching a machine off takes effect on its live session and on the next reconnect, not only after a restart",
+    "HTTP header rewriting is validated where it is configured (configuration load, registration, declaration) and never at request time: framing/hop-by-hop headers and Host are refused outright, header values cannot contain control characters, and a rewrite declared on a plane that carries no headers is a configuration error rather than a silent no-op",
+    "header rewriting cannot widen access: admission reads the visitor address and credential from the connection, never from a header, and the rewrite is applied after the infrastructure headers so an operator's explicit value wins over a derived one",
+    "a route's rewriting policy travels with its registration, because the gateway is the only hop that parses HTTP; an agent that predates the field registers an empty policy and the relay is byte-identical to before",
+    "the agent's gateway address list is ordered and validated at configuration time: only an attempt that never became established advances to the next address, while a session that was established returns the agent to the primary, and the reconnect backoff curve is untouched by failover",
+    "one gateway address reproduces the single-endpoint behaviour exactly (the failover cursor is a no-op when the list has one entry)",
+    "the UDP datagram ceiling is an acceptance rule, never a buffer size: the read buffer always fits the protocol maximum, so an oversized datagram is dropped whole and counted on every platform instead of being silently truncated into the service (Linux truncates, Windows raises WSAEMSGSIZE)",
+    "transport tunables (keep-alive, heartbeat timeout, stream ceiling, UDP packet size) are validated as a set at configuration time and applied identically by the gateway and the agent; an unusable combination is a configuration error, never a silent clamp",
+    "a required heartbeat re-authentication scope is advertised in the authentication result and enforced on the control plane: the agent re-presents the token before each heartbeat, a missing or wrong token closes the session, and the token never appears in a log, an error message, or a rejection reply",
+    "every connection-side knob exposed on the command line is validated through the same core model the runtime reads, and verify reports the connection preflight (endpoints in failover order, DNS server, dial source, user claim, loginFailExit) in both text and JSON, so a usage error surfaces before the first reconnect rather than during one",
+    "a configured DNS server is used for the gateway host and nothing else falls back to the system resolver: a name that does not resolve becomes an address-related failure that failover may act on, never a silent lookup through a resolver the operator excluded",
+    "the configured DNS server is an IP literal (resolving the resolver is a dependency loop), the resolver answers only for the record types it was asked about, and every malformed, mismatched, or non-zero-rcode reply is an error rather than an empty answer",
+    "per-route listeners bind the configured proxy address and nothing else: reachable on the address the operator chose, unreachable on the addresses they did not, and a hostname or host:port form is refused at configuration time",
+    "a configured dial source address is bound before connecting to a local target (and only there), an address-family mismatch is a dial error rather than a silent fallback to the kernel's choice, and the knob never changes how the gateway connection is made",
+    "the CLI log level is validated before the subscriber is installed, so an unusable level fails at startup instead of silently matching nothing, and the global flag is removed from the argument list before command dispatch",
+    "a route's operator annotations are bounded at both ends (the agent validates before sending, the gateway re-validates what a peer sent), are carried and listed, and never take part in routing or authorization",
+    "a rejected credential is classified apart from an unreachable address: failover never advances on it, and loginFailExit stops the agent with the reason instead of retrying forever",
+    "a user's identity is resolved from the token it authenticated with, never from the name it claims: a claimed user that the token does not speak for is refused, and a shared token may speak for none",
+    "a user's routes live in that user's id namespace, derived identically by the agent and the gateway and verified on registration, so two users may serve a route of the same name and neither can register inside the other's namespace",
+    "per-user ceilings (routes, public ports, concurrent machines) are counted from the live registry and session table, a re-registration replaces rather than adds, and a machine being admitted never counts itself",
+    "a scope this design cannot honour (FRP NewWorkConns) is refused at configuration time with the reason, because relayed streams are opened inside the authenticated connection and a per-stream token would look like protection without being any"
   ],
   "knownLimitations": [
     "in-memory gateway state; declarations for offline devices are lost on restart",
-    "gateway-side route removal does not notify the agent; templates re-register on reconnect",
-    "mTLS, ACME, bandwidth limits, UDP, multi-gateway, P2P are P1/P2 and not implemented"
+    "the machine inventory is in-memory too: restarting the gateway forgets offline machines and their traffic totals (persistent reporting into the management plane is a planned additive step)",
+    "gateway-side route removal does not notify the agent's local templates; templates re-register on reconnect (use AgentRuntime::reload to change a running agent's routes)",
+    "admin machine management is a proxy to the data plane operations listener on the same host; a management plane that cannot reach it reports 503 rather than a cached or empty list",
+    "no SSH server: FRP's sshTunnelGateway / ssh -R zero-install access is a deliberate non-goal; stcp + visitor covers the same outcome (docs/tunnel.md, SSH section)",
+    "proxy compression and connection pooling (FRP B5/B7) are not implemented; QUIC already multiplexes and compresses headers",
+    "mTLS (agent-side certificates), tunnel-specific ACME, multi-gateway routing, and P2P/Mesh (xtcp) are P1/P2 and not implemented"
   ]
 }

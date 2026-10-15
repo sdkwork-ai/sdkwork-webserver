@@ -692,6 +692,110 @@
       "rateLimitTier": null
     },
     {
+      "method": "GET",
+      "path": "/backend/v3/api/root_domains/{rootDomainId}/verification_file",
+      "operationId": "rootDomains.wechatVerification.retrieve",
+      "tags": [
+        "domain"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.applications.read",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "PUT",
+      "path": "/backend/v3/api/root_domains/{rootDomainId}/verification_file",
+      "operationId": "rootDomains.wechatVerification.upsert",
+      "tags": [
+        "domain"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.applications.write",
+      "idempotent": true,
+      "rateLimitTier": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/backend/v3/api/root_domains/{rootDomainId}/verification_file",
+      "operationId": "rootDomains.wechatVerification.delete",
+      "tags": [
+        "domain"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.applications.write",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "POST",
+      "path": "/backend/v3/api/root_domains/{rootDomainId}/verification_file/check",
+      "operationId": "rootDomains.wechatVerification.check",
+      "tags": [
+        "domain"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.applications.write",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
       "method": "POST",
       "path": "/backend/v3/api/root_domains/{rootDomainId}/dns_records/sync",
       "operationId": "rootDomains.dnsRecords.sync",
@@ -2197,6 +2301,136 @@
       "apiSurface": "backend-api",
       "permission": "web.cluster.read",
       "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "GET",
+      "path": "/backend/v3/api/tunnel_machines",
+      "operationId": "tunnelMachines.list",
+      "tags": [
+        "tunnel"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.tunnel.read",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "GET",
+      "path": "/backend/v3/api/tunnel_machines/{deviceId}",
+      "operationId": "tunnelMachines.retrieve",
+      "tags": [
+        "tunnel"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.tunnel.read",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "PUT",
+      "path": "/backend/v3/api/tunnel_machines/{deviceId}/enabled",
+      "operationId": "tunnelMachines.enabled.update",
+      "tags": [
+        "tunnel"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.tunnel.write",
+      "idempotent": false,
+      "rateLimitTier": null
+    },
+    {
+      "method": "POST",
+      "path": "/backend/v3/api/tunnel_machines/{deviceId}/routes",
+      "operationId": "tunnelMachines.routes.create",
+      "tags": [
+        "tunnel"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.tunnel.write",
+      "idempotent": true,
+      "rateLimitTier": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/backend/v3/api/tunnel_machines/{deviceId}/routes/{routeId}",
+      "operationId": "tunnelMachines.routes.delete",
+      "tags": [
+        "tunnel"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "routeAuth": "dual-token",
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-webserver",
+        "apiAuthority": "sdkwork-webserver-backend-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "backend-api",
+      "permission": "web.tunnel.write",
+      "idempotent": true,
       "rateLimitTier": null
     },
     {

@@ -26,6 +26,7 @@ use tokio::sync::mpsc;
 
 use sdkwork_webserver_tunnel_core::{RouteId, TunnelError};
 use sdkwork_webserver_tunnel_protocol::packet_frame;
+use sdkwork_webserver_tunnel_protocol::packet_frame::PACKET_LENGTH_BYTES;
 
 use super::{dispatch, GatewayShared};
 
@@ -39,9 +40,6 @@ const UDP_SETUP_TTL: Duration = Duration::from_secs(15);
 /// exactly one spawned setup task, so this bounds the spawn fan-out a
 /// spoofed-source flood can create; visitors beyond it are dropped and retry.
 const UDP_PENDING_SETUP_CEILING: usize = 1024;
-const UDP_DATAGRAM_CEILING: usize =
-    sdkwork_webserver_tunnel_protocol::packet_frame::MAX_PACKET_PAYLOAD
-        + sdkwork_webserver_tunnel_protocol::packet_frame::PACKET_LENGTH_BYTES;
 /// Deadline for one datagram forward into a session stream. The port loop is
 /// single-threaded per port: without a deadline, one agent that stops reading
 /// its session parks the whole port (no reaping, no setups, no forwarding for
@@ -187,6 +185,26 @@ impl Drop for VisitorSession {
     }
 }
 
+/// Largest datagram the relay can read at all: the protocol maximum payload
+/// plus the frame length prefix.
+fn protocol_datagram_ceiling() -> usize {
+    packet_frame::MAX_PACKET_PAYLOAD + PACKET_LENGTH_BYTES
+}
+
+/// True when the OS refused a datagram because it did not fit the read buffer.
+///
+/// Windows returns `WSAEMSGSIZE` (10040) for a datagram larger than the
+/// supplied buffer; Linux truncates instead and never reports it, so the
+/// numeric check is Windows-specific and the Linux path is covered by the
+/// length comparison after a successful read.
+fn datagram_exceeded_the_read_buffer(error: &std::io::Error) -> bool {
+    // Windows returns `WSAEMSGSIZE` (10040) for a datagram larger than the
+    // supplied buffer. Linux truncates instead and never reports it, so this
+    // is false there and the Linux path is covered by the length comparison
+    // after a successful read.
+    error.raw_os_error() == Some(10040)
+}
+
 async fn udp_port_loop(shared: Arc<GatewayShared>, port: u16, listener: Arc<UdpSocket>) {
     let mut sessions: HashMap<SocketAddr, VisitorSession> = HashMap::new();
     // Setups in flight, keyed by visitor. The setup runs off the port loop so
@@ -194,8 +212,16 @@ async fn udp_port_loop(shared: Arc<GatewayShared>, port: u16, listener: Arc<UdpS
     // the port; until it reports, retransmits from the same visitor are
     // dropped (the client retransmits — standard UDP semantics).
     let mut pending: HashMap<SocketAddr, std::time::Instant> = HashMap::new();
+    // FRP `transport.udpPacketSize`: the configured ceiling decides what the
+    // relay *accepts*, but the read buffer is always sized for the protocol
+    // maximum. Sizing the buffer to the ceiling instead would be wrong on both
+    // platforms: Linux truncates the datagram silently (handing the service
+    // corrupt input, the one outcome a drop must prevent), and Windows raises
+    // `WSAEMSGSIZE` (a read error that looks like a listener failure).
+    let mut visitor_buffer = vec![0_u8; protocol_datagram_ceiling()];
+    let datagram_ceiling = shared.udp_datagram_ceiling;
+    let max_payload = datagram_ceiling - PACKET_LENGTH_BYTES;
     let (events_tx, mut events_rx) = mpsc::channel::<SessionEvent>(64);
-    let mut visitor_buffer = vec![0_u8; UDP_DATAGRAM_CEILING];
     let mut reap = tokio::time::interval(UDP_REAP_INTERVAL);
     reap.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
@@ -243,6 +269,19 @@ async fn udp_port_loop(shared: Arc<GatewayShared>, port: u16, listener: Arc<UdpS
             read = listener.recv_from(&mut visitor_buffer) => {
                 match read {
                     Ok((size, visitor)) => {
+                        if size > max_payload {
+                            // FRP `transport.udpPacketSize` semantics: the
+                            // ceiling decides what the relay accepts. A
+                            // datagram above it is dropped whole — UDP has no
+                            // partial delivery, and forwarding a shortened
+                            // datagram would hand the service corrupt input.
+                            shared.metrics.record_udp_datagram_too_large();
+                            tracing::debug!(
+                                %visitor, port, size, max_payload,
+                                "udp datagram exceeds the configured packet size; dropped"
+                            );
+                            continue;
+                        }
                         let payload =
                             Bytes::copy_from_slice(&visitor_buffer[..size]);
                         match sessions.get_mut(&visitor) {
@@ -279,6 +318,18 @@ async fn udp_port_loop(shared: Arc<GatewayShared>, port: u16, listener: Arc<UdpS
                                 ));
                             }
                         }
+                    }
+                    Err(error) if datagram_exceeded_the_read_buffer(&error) => {
+                        // Windows reports an oversized datagram as a read
+                        // error instead of truncating it: same configured
+                        // ceiling, same drop, same counter — not a listener
+                        // failure.
+                        shared.metrics.record_udp_datagram_too_large();
+                        tracing::debug!(
+                            port,
+                            max_payload,
+                            "udp datagram exceeds the read buffer; dropped"
+                        );
                     }
                     Err(error) => {
                         tracing::warn!(port, error = %error, "udp listener read failed");
@@ -443,17 +494,25 @@ async fn open_session(
     // Reader task: framed tunnel packets → back to the visitor from the
     // well-known port. Ends on FIN (ConnectionClosed) or error.
     let last_activity = Arc::new(AtomicU64::new(now_millis()));
+    let max_response_payload = shared.udp_datagram_ceiling - PACKET_LENGTH_BYTES;
     let reader_task = {
         let listener = Arc::clone(listener);
         let events = events.clone();
         let metrics = shared.metrics.clone();
         let idle_marker = Arc::clone(&last_activity);
-        let mut scratch = BytesMut::with_capacity(UDP_DATAGRAM_CEILING);
+        let mut scratch = BytesMut::with_capacity(protocol_datagram_ceiling());
         tokio::spawn(async move {
             let outcome = async {
                 loop {
                     let datagram = packet_frame::read_packet(&mut read_half, &mut scratch).await?;
                     touch(&idle_marker);
+                    // The configured ceiling applies to both directions: a
+                    // datagram the agent framed above it is dropped here rather
+                    // than handed to a visitor whose path cannot carry it.
+                    if datagram.len() > max_response_payload {
+                        metrics.record_udp_datagram_too_large();
+                        continue;
+                    }
                     metrics.add_bytes_out(u64::try_from(datagram.len()).unwrap_or(u64::MAX));
                     listener
                         .send_to(&datagram, visitor)

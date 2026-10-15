@@ -354,6 +354,17 @@ export const webserverWorkspaceZhCn = {
   "resource.domains.dnsSyncedAt": "同步时间",
   "resource.domains.dnsSync": "云账号同步",
   "resource.domains.dnsResolution": "域名解析",
+  "resource.domains.wechatVerifyFile": "认证文件",
+  "resource.domains.wechatVerifyTitle": "微信公众号域名认证文件",
+  "resource.domains.wechatVerifyHint": "在微信公众号/小程序后台下载 MP_verify_xxx.txt,把文件名与内容原样保存到该域名;边缘将在 https://<域名>/<文件名> 原样提供,然后回平台完成验证。根域名行与子域名行管理的是同一个根域名的认证文件。",
+  "resource.domains.wechatVerifyFileName": "文件名",
+  "resource.domains.wechatVerifyContent": "文件内容",
+  "resource.domains.wechatVerifyCheck": "自检",
+  "resource.domains.wechatVerifyDelete": "删除文件",
+  "resource.domains.wechatVerifyDeleteConfirm": "删除认证文件?边缘立即停止提供该文件,重新保存前平台验证会失败。",
+  "resource.domains.wechatVerifyMatched": "自检通过:线上内容与保存的文件逐字节一致。",
+  "resource.domains.wechatVerifyReachableMismatch": "文件可达,但线上内容与保存的不一致。",
+  "resource.domains.wechatVerifyUnreachable": "暂不可达:请检查域名解析与证书后重新自检。",
   "resource.domains.dnsTxtVerify": "TXT 认证",
   "resource.domains.dnsTxtVerifyTitle": "TXT 域名认证",
   "resource.domains.dnsTxtVerifyHint": "从认证平台(微信公众号 MP、微信支付、QQ 互联等)复制主机记录与记录值,在此保存为 TXT 记录,然后回到平台点击验证。",
@@ -668,4 +679,13 @@ export const webserverWorkspaceZhCn = {
   "action.cluster-instances.maintain": "标记维护",
   "action.cluster-instances.endMaintenance": "结束维护",
   "action.cluster-instances.delete": "注销实例",
-} as const;
+  // 隧道机器：运维面上的平台基础设施。两个面用同一份文案，因为机器清单只有
+  // 一种读法；显式写出 admin 前缀的一对，避免将来出现控制台变体时被静默继承。
+  "resource.tunnel-machines.label": "隧道机器",
+  "resource.tunnel-machines.description": "隧道网关托管的连接端机器：存活、路由、流量与开关",
+  "resource.tunnel-machines.admin.label": "隧道机器",
+  "resource.tunnel-machines.admin.description": "隧道网关托管的连接端机器：存活、路由、流量与开关",
+  "action.tunnel-machines.disable": "关闭机器",
+  "action.tunnel-machines.enable": "开启机器",
+  "action.tunnel-machines.declare-route": "声明路由",
+  "action.tunnel-machines.remove-route": "删除路由",} as const;

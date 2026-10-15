@@ -8,6 +8,7 @@ pub mod metrics;
 pub mod observability;
 pub mod problem;
 pub mod provider;
+pub mod tunnel;
 pub mod usage;
 
 pub use app_ports::{
@@ -27,4 +28,5 @@ pub use sdkwork_webserver_core::{
     web_is_production_like_environment, web_platform_operator_tenant_id,
     web_use_dev_inline_auth_resolver,
 };
+pub use tunnel::*;
 pub use usage::*;

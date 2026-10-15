@@ -23,6 +23,7 @@ namespace SDKWork.WebserverBackendSdk
         public AgentApi Agent { get; }
         public AuditApi Audit { get; }
         public ClusterApi Cluster { get; }
+        public TunnelApi Tunnel { get; }
         public TrafficUsageApi TrafficUsage { get; }
         public MetricsSummaryApi MetricsSummary { get; }
 
@@ -43,6 +44,7 @@ namespace SDKWork.WebserverBackendSdk
             Agent = new AgentApi(_httpClient);
             Audit = new AuditApi(_httpClient);
             Cluster = new ClusterApi(_httpClient);
+            Tunnel = new TunnelApi(_httpClient);
             TrafficUsage = new TrafficUsageApi(_httpClient);
             MetricsSummary = new MetricsSummaryApi(_httpClient);
         }
@@ -64,6 +66,7 @@ namespace SDKWork.WebserverBackendSdk
             Agent = new AgentApi(_httpClient);
             Audit = new AuditApi(_httpClient);
             Cluster = new ClusterApi(_httpClient);
+            Tunnel = new TunnelApi(_httpClient);
             TrafficUsage = new TrafficUsageApi(_httpClient);
             MetricsSummary = new MetricsSummaryApi(_httpClient);
         }

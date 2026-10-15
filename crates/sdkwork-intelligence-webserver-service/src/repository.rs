@@ -738,6 +738,32 @@ pub trait WebRepositoryPort: Send + Sync {
         root_domain_id: &str,
     ) -> WebServiceResult<()>;
 
+    /// Uploads (or wholly replaces) the root domain's WeChat verification
+    /// file; answers the write's timestamp.
+    async fn upsert_root_domain_wechat_verification(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        file_name: &str,
+        content: &str,
+    ) -> WebServiceResult<String>;
+
+    /// Reads the root domain's WeChat verification file as
+    /// `(file_name, content, updated_at)`; `None` when none is configured.
+    async fn root_domain_wechat_verification(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+    ) -> WebServiceResult<Option<(String, String, String)>>;
+
+    /// Deletes the root domain's WeChat verification file; `false` when
+    /// there was none.
+    async fn delete_root_domain_wechat_verification(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+    ) -> WebServiceResult<bool>;
+
     async fn update_root_domain(
         &self,
         tenant_id: i64,

@@ -370,6 +370,17 @@ export const webserverWorkspaceEnUs = {
   "resource.domains.dnsSyncedAt": "Synced",
   "resource.domains.dnsSync": "Sync via cloud account",
   "resource.domains.dnsResolution": "DNS resolution",
+  "resource.domains.wechatVerifyFile": "Verification file",
+  "resource.domains.wechatVerifyTitle": "WeChat MP domain verification file",
+  "resource.domains.wechatVerifyHint": "Download MP_verify_xxx.txt from the WeChat MP / mini-program console, save its name and content here verbatim, and the edge serves it at https://<domain>/<fileName>. The apex row and a subdomain row manage the same root-domain file.",
+  "resource.domains.wechatVerifyFileName": "File name",
+  "resource.domains.wechatVerifyContent": "File content",
+  "resource.domains.wechatVerifyCheck": "Self-check",
+  "resource.domains.wechatVerifyDelete": "Delete file",
+  "resource.domains.wechatVerifyDeleteConfirm": "Delete the verification file? The edge stops serving it immediately, and the platform check will fail until a file is saved again.",
+  "resource.domains.wechatVerifyMatched": "Self-check passed: the served body matches the saved file.",
+  "resource.domains.wechatVerifyReachableMismatch": "Reachable, but the served body differs from the saved file.",
+  "resource.domains.wechatVerifyUnreachable": "Not reachable yet: check DNS and TLS, then run the self-check again.",
   "resource.domains.dnsTxtVerify": "TXT verification",
   "resource.domains.dnsTxtVerifyTitle": "TXT domain verification",
   "resource.domains.dnsTxtVerifyHint": "Copy the host record and value from the verifying platform (WeChat MP / WeChat Pay / QQ and the like), save them here as a TXT record, then run the check on that platform.",
@@ -699,4 +710,15 @@ export const webserverWorkspaceEnUs = {
   "action.cluster-instances.maintain": "Mark maintenance",
   "action.cluster-instances.endMaintenance": "End maintenance",
   "action.cluster-instances.delete": "Unregister",
-} as const;
+  // Tunnel machines: platform infrastructure on the operations surface. The
+  // label and description are the same on both surfaces because the machine
+  // list has exactly one reading; keeping the admin-prefixed pair explicit
+  // means a future console variant cannot silently inherit it.
+  "resource.tunnel-machines.label": "Tunnel Machines",
+  "resource.tunnel-machines.description": "Connector machines the tunnel gateway manages: liveness, routes, traffic and the operator switch",
+  "resource.tunnel-machines.admin.label": "Tunnel Machines",
+  "resource.tunnel-machines.admin.description": "Connector machines the tunnel gateway manages: liveness, routes, traffic and the operator switch",
+  "action.tunnel-machines.disable": "Switch machine off",
+  "action.tunnel-machines.enable": "Switch machine on",
+  "action.tunnel-machines.declare-route": "Declare route",
+  "action.tunnel-machines.remove-route": "Remove route",} as const;

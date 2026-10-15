@@ -14,6 +14,7 @@ use sdkwork_webserver_tunnel_core::{
     DeviceId, Result, RouteId, SessionSnapshot, TunnelError, TunnelRoute, TunnelRouteTemplate,
 };
 
+use crate::gateway::devices::TunnelDeviceView;
 use crate::gateway::GatewayShared;
 
 /// 离线设备的待声明队列上限:每台设备最多排队多少条声明。
@@ -71,6 +72,10 @@ pub struct TunnelStatus {
     pub routes: u32,
     /// Currently served TCP listener ports (gateway).
     pub ports: Vec<u16>,
+    /// The multiplexed HTTP `CONNECT` ingress port (FRP `tcpmux` parity), when
+    /// the gateway serves one: a single port that reaches every route.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub multiplexer_port: Option<u16>,
     /// Metric snapshot.
     #[serde(flatten)]
     pub metrics: TunnelMetricsSnapshot,
@@ -115,6 +120,26 @@ pub trait TunnelService: Send + Sync {
 
     /// Aggregate status.
     async fn status(&self) -> Result<TunnelStatus>;
+
+    /// Lists the machines (devices) this gateway manages, most recently seen
+    /// first, each joined with the routes it currently serves.
+    ///
+    /// This is the operator-facing inventory an admin console renders: it
+    /// survives disconnects, remembers traffic totals and the enable switch,
+    /// and never duplicates live state that other components own.
+    async fn list_devices(&self) -> Result<Vec<TunnelDeviceView>>;
+
+    /// One machine's detail, or [`TunnelError::DeviceNotFound`].
+    async fn device(&self, device_id: &DeviceId) -> Result<TunnelDeviceView>;
+
+    /// Switches a machine on or off. A disabled machine is refused at
+    /// authentication and its live session is closed, so "off" means off
+    /// rather than "off at the next reconnect".
+    async fn set_device_enabled(
+        &self,
+        device_id: &DeviceId,
+        enabled: bool,
+    ) -> Result<TunnelDeviceView>;
 }
 
 /// [`TunnelService`] implementation over a running gateway.
@@ -170,7 +195,8 @@ impl TunnelService for GatewayTunnelService {
                 .as_ref()
                 .map(|domain| format!("https://{domain}")),
             error: Some(
-                "declaration queued; the agent activates it when it matches a local template"
+                "declaration queued; the agent activates it when it matches a local template, \
+                 applying the declared admission policy over its own"
                     .to_owned(),
             ),
         })
@@ -240,8 +266,103 @@ impl TunnelService for GatewayTunnelService {
                 listeners.dedup();
                 listeners
             },
+            multiplexer_port: self.shared.multiplexer_port(),
             metrics,
         })
+    }
+
+    async fn list_devices(&self) -> Result<Vec<TunnelDeviceView>> {
+        Ok(self
+            .shared
+            .devices
+            .list()
+            .into_iter()
+            .map(|record| self.device_view(record))
+            .collect())
+    }
+
+    async fn device(&self, device_id: &DeviceId) -> Result<TunnelDeviceView> {
+        let record = self
+            .shared
+            .devices
+            .get(device_id)
+            .ok_or(TunnelError::DeviceNotFound)?;
+        Ok(self.device_view(record))
+    }
+
+    async fn set_device_enabled(
+        &self,
+        device_id: &DeviceId,
+        enabled: bool,
+    ) -> Result<TunnelDeviceView> {
+        if !self.shared.devices.set_enabled(device_id, enabled) {
+            return Err(TunnelError::DeviceNotFound);
+        }
+        // Switching a machine off must take effect now: leaving its session
+        // running would keep forwarding traffic for a machine the operator
+        // just took out of service, which is the opposite of what the switch
+        // says.
+        if !enabled {
+            if let Some(session_id) = self.shared.sessions.session_of_device(device_id) {
+                if let Some(entry) = self
+                    .shared
+                    .sessions
+                    .remove(&session_id, &self.shared.metrics)
+                {
+                    entry.connection.close("disabled by an administrator");
+                }
+                self.shared
+                    .devices
+                    .observe_disconnect(device_id, chrono::Utc::now());
+            }
+        }
+        tracing::info!(device = %device_id, enabled, "tunnel machine switch changed");
+        self.device(device_id).await
+    }
+}
+
+impl GatewayTunnelService {
+    /// Joins one inventory record with the live session and route state that
+    /// other components own.
+    fn device_view(&self, record: crate::gateway::devices::DeviceRecord) -> TunnelDeviceView {
+        let session_id = self.shared.sessions.session_of_device(&record.device.id);
+        let session_key = session_id.as_ref().map(ToString::to_string);
+        let mut routes: Vec<TunnelRoute> = Vec::new();
+        let mut unhealthy: Vec<RouteId> = Vec::new();
+        // Routes belong to a *session*, so a machine that is offline has none:
+        // its routes were unregistered when the session ended. Filtering by the
+        // session id keeps the console honest — it never shows a route that no
+        // longer forwards.
+        for route in self.shared.registry.list() {
+            if route.session_id.as_ref() != session_id.as_ref() {
+                continue;
+            }
+            if let Some(registered) = self.shared.registry.get(&route.id) {
+                if !registered.health.is_healthy() {
+                    unhealthy.push(route.id.clone());
+                }
+            }
+            routes.push(route);
+        }
+        routes.sort_by(|left, right| left.id.cmp(&right.id));
+        unhealthy.sort();
+        TunnelDeviceView {
+            device: record.device,
+            online: session_id.is_some(),
+            session_id: session_key,
+            enabled: record.enabled,
+            first_seen: record.first_seen,
+            last_seen: record.last_seen,
+            connected_at: record.connected_at,
+            disconnected_at: record.disconnected_at,
+            remote_addr: record.remote_addr,
+            bytes_in: record.bytes_in,
+            bytes_out: record.bytes_out,
+            sessions_total: record.sessions_total,
+            route_ids: routes.iter().map(|route| route.id.clone()).collect(),
+            routes,
+            unhealthy_route_ids: unhealthy,
+        }
     }
 }
 
@@ -266,10 +387,14 @@ mod tests {
             auth_window_secs: 60,
             route_port_min: 1024,
             route_port_max: u16::MAX,
+            tcpmux_port: None,
             limits: Default::default(),
             timeouts: Default::default(),
             network: Default::default(),
             domain_suffixes: vec!["sdkwork.link".to_owned()],
+            auth_scopes: Vec::new(),
+            proxy_bind_addr: std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
+            users: Vec::new(),
             metrics: std::sync::Arc::new(crate::TunnelMetrics::new()),
         };
         let gateway = TunnelGateway::spawn(options, None)

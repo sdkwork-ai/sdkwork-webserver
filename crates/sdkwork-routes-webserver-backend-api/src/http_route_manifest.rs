@@ -160,6 +160,30 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "rootDomains.dnsRecords.status.update",
     ).with_required_permission("web.applications.write").with_idempotent(true),
     HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/root_domains/{rootDomainId}/verification_file",
+        "domain",
+        "rootDomains.wechatVerification.retrieve",
+    ).with_required_permission("web.applications.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Put,
+        "/backend/v3/api/root_domains/{rootDomainId}/verification_file",
+        "domain",
+        "rootDomains.wechatVerification.upsert",
+    ).with_required_permission("web.applications.write").with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Delete,
+        "/backend/v3/api/root_domains/{rootDomainId}/verification_file",
+        "domain",
+        "rootDomains.wechatVerification.delete",
+    ).with_required_permission("web.applications.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/backend/v3/api/root_domains/{rootDomainId}/verification_file/check",
+        "domain",
+        "rootDomains.wechatVerification.check",
+    ).with_required_permission("web.applications.write"),
+    HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/root_domains/{rootDomainId}/dns_records/sync",
         "domain",
@@ -507,6 +531,36 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "cluster",
         "clusters.overview.retrieve",
     ).with_required_permission("web.cluster.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/tunnel_machines",
+        "tunnel",
+        "tunnelMachines.list",
+    ).with_required_permission("web.tunnel.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/tunnel_machines/{deviceId}",
+        "tunnel",
+        "tunnelMachines.retrieve",
+    ).with_required_permission("web.tunnel.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Put,
+        "/backend/v3/api/tunnel_machines/{deviceId}/enabled",
+        "tunnel",
+        "tunnelMachines.enabled.update",
+    ).with_required_permission("web.tunnel.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/backend/v3/api/tunnel_machines/{deviceId}/routes",
+        "tunnel",
+        "tunnelMachines.routes.create",
+    ).with_required_permission("web.tunnel.write").with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Delete,
+        "/backend/v3/api/tunnel_machines/{deviceId}/routes/{routeId}",
+        "tunnel",
+        "tunnelMachines.routes.delete",
+    ).with_required_permission("web.tunnel.write").with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/clusters/instances/{instanceId}/heartbeats",

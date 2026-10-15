@@ -152,12 +152,11 @@ pub fn merge_overlay(base: &Value, overlay: &Value) -> Result<Value, WebServerCo
 }
 
 fn parse_toml_file(path: &Path) -> Result<Value, WebServerConfigError> {
-    let text =
-        crate::fs_bounds::read_text_capped(path, crate::fs_bounds::MAX_IMPORT_SOURCE_BYTES)
-            .map_err(|source| WebServerConfigError::Read {
-                path: path.to_path_buf(),
-                source,
-            })?;
+    let text = crate::fs_bounds::read_text_capped(path, crate::fs_bounds::MAX_IMPORT_SOURCE_BYTES)
+        .map_err(|source| WebServerConfigError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?;
     let value: toml::Value =
         toml::from_str(&text).map_err(|source| WebServerConfigError::Toml {
             path: path.to_path_buf(),
@@ -2477,6 +2476,17 @@ impl<'a> Materializer<'a> {
                     "tls_cert_pem_env",
                     "tlsKeyPemEnv",
                     "tls_key_pem_env",
+                    "routePortMin",
+                    "route_port_min",
+                    "routePortMax",
+                    "route_port_max",
+                    "tcpmuxPort",
+                    "tcpmux_port",
+                    "authScopes",
+                    "auth_scopes",
+                    "proxyBindAddr",
+                    "proxy_bind_addr",
+                    "users",
                 ],
             )?;
             let mut mapped = json!({
@@ -2497,6 +2507,192 @@ impl<'a> Materializer<'a> {
                     mapped[target] = entry.clone();
                 }
             }
+            // The registrable public port range for `tcp`/`udp` routes is a
+            // gateway registration policy: an operator must be able to narrow
+            // it where the tunnel is configured (docs/tunnel.md §gateway).
+            // Ports are u16, so an out-of-range value is a configuration error
+            // rather than a silent truncation.
+            for (camel, snake, target) in [
+                ("routePortMin", "route_port_min", "routePortMin"),
+                ("routePortMax", "route_port_max", "routePortMax"),
+                // The multiplexed ingress port (FRP `tcpmux` parity): one port
+                // that reaches every route through HTTP CONNECT.
+                ("tcpmuxPort", "tcpmux_port", "tcpmuxPort"),
+            ] {
+                if let Some(entry) = gateway.get(camel).or_else(|| gateway.get(snake)) {
+                    let port = entry
+                        .as_i64()
+                        .or_else(|| entry.as_u64().and_then(|value| i64::try_from(value).ok()))
+                        .ok_or_else(|| {
+                            materialize_error(
+                                &format!("server.toml.tunnel.gateway.{snake}"),
+                                "must be an integer port number",
+                            )
+                        })?;
+                    if !(0..=i64::from(u16::MAX)).contains(&port) {
+                        return Err(materialize_error(
+                            &format!("server.toml.tunnel.gateway.{snake}"),
+                            format!("port {port} is outside 0..=65535"),
+                        ));
+                    }
+                    mapped[target] = json!(port);
+                }
+            }
+            // FRP `auth.additionalScopes`: parsed through the core model so the
+            // TOML surface accepts exactly the spellings the runtime can
+            // honour, and `newWorkConns` is refused with the explanation that
+            // it has no equivalent here rather than silently doing nothing.
+            if let Some(entry) = gateway.get("authScopes").or_else(|| gateway.get("auth_scopes")) {
+                let entries = entry.as_array().ok_or_else(|| {
+                    materialize_error(
+                        "server.toml.tunnel.gateway.authScopes",
+                        "must be an array of scope labels",
+                    )
+                })?;
+                let mut labels = Vec::with_capacity(entries.len());
+                for value in entries {
+                    let label = value.as_str().ok_or_else(|| {
+                        materialize_error(
+                            "server.toml.tunnel.gateway.authScopes",
+                            "every entry must be a scope label string",
+                        )
+                    })?;
+                    let scope = sdkwork_webserver_tunnel_core::AuthScope::parse(label).map_err(
+                        |error| {
+                            materialize_error(
+                                "server.toml.tunnel.gateway.authScopes",
+                                error.to_string(),
+                            )
+                        },
+                    )?;
+                    labels.push(Value::String(scope.wire_label().to_owned()));
+                }
+                mapped["authScopes"] = Value::Array(labels);
+            }
+            // FRP `proxyBindAddr`: the address per-route listeners bind.
+            // Validated through the core model so a hostname or a `host:port`
+            // form is a configuration error rather than a silently ignored
+            // value that binds somewhere the operator did not ask for.
+            if let Some(entry) = gateway
+                .get("proxyBindAddr")
+                .or_else(|| gateway.get("proxy_bind_addr"))
+            {
+                let raw = entry.as_str().ok_or_else(|| {
+                    materialize_error(
+                        "server.toml.tunnel.gateway.proxyBindAddr",
+                        "must be an IP address string",
+                    )
+                })?;
+                let parsed: sdkwork_webserver_tunnel_core::TunnelGatewayConfig =
+                    serde_json::from_value(json!({
+                        "listen": "0.0.0.0:0",
+                        "proxyBindAddr": raw,
+                    }))
+                    .map_err(|error| {
+                        materialize_error(
+                            "server.toml.tunnel.gateway.proxyBindAddr",
+                            error.to_string(),
+                        )
+                    })?;
+                parsed.proxy_bind_addr().map_err(|error| {
+                    materialize_error("server.toml.tunnel.gateway.proxyBindAddr", error)
+                })?;
+                mapped["proxyBindAddr"] = json!(raw.trim());
+            }
+            // Per-user credentials and quotas (FRP `user`, made enforceable):
+            // `[[tunnel.gateway.users]]` entries with name, tokenEnv and
+            // optional ceilings. Every entry is validated through the core
+            // model, so the file cannot describe a user the runtime would
+            // refuse to enforce.
+            if let Some(entry) = gateway.get("users") {
+                let entries = entry.as_array().ok_or_else(|| {
+                    materialize_error(
+                        "server.toml.tunnel.gateway.users",
+                        "must be an array of user tables",
+                    )
+                })?;
+                let mut users = Vec::with_capacity(entries.len());
+                for (index, value) in entries.iter().enumerate() {
+                    let scope = format!("server.toml.tunnel.gateway.users[{index}]");
+                    let table = value.as_object().ok_or_else(|| {
+                        materialize_error(
+                            "server.toml.tunnel.gateway.users",
+                            "every entry must be a table",
+                        )
+                    })?;
+                    check_supported_keys(
+                        table,
+                        &scope,
+                        &[
+                            "name",
+                            "tokenEnv",
+                            "token_env",
+                            "maxRoutes",
+                            "max_routes",
+                            "maxPorts",
+                            "max_ports",
+                            "maxDevices",
+                            "max_devices",
+                        ],
+                    )?;
+                    let name = table.get("name").and_then(Value::as_str).ok_or_else(|| {
+                        materialize_error(
+                            &format!("{scope}.name"),
+                            "a user needs a name",
+                        )
+                    })?;
+                    let token_env = table
+                        .get("tokenEnv")
+                        .or_else(|| table.get("token_env"))
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| {
+                            materialize_error(
+                                &format!("{scope}.tokenEnv"),
+                                "a user needs the environment variable holding its token",
+                            )
+                        })?;
+                    let mut user = json!({
+                        "name": name.trim(),
+                        "tokenEnv": token_env.trim(),
+                    });
+                    for (camel, snake, target) in [
+                        ("maxRoutes", "max_routes", "maxRoutes"),
+                        ("maxPorts", "max_ports", "maxPorts"),
+                        ("maxDevices", "max_devices", "maxDevices"),
+                    ] {
+                        if let Some(quota) = table.get(camel).or_else(|| table.get(snake)) {
+                            let value = quota.as_u64().ok_or_else(|| {
+                                materialize_error(
+                                    &format!("{scope}.{camel}"),
+                                    "must be a positive integer",
+                                )
+                            })?;
+                            user[target] = json!(value);
+                        }
+                    }
+                    let parsed: sdkwork_webserver_tunnel_core::TunnelUserConfig =
+                        serde_json::from_value(user).map_err(|error| {
+                            materialize_error(
+                                &scope,
+                                error.to_string(),
+                            )
+                        })?;
+                    parsed.validate().map_err(|error| {
+                        materialize_error(
+                            &scope,
+                            error.to_string(),
+                        )
+                    })?;
+                    users.push(json!({
+                        "name": name.trim(),
+                        "tokenEnv": token_env.trim(),
+                        "maxRoutes": parsed.max_routes,
+                        "maxPorts": parsed.max_ports,
+                        "maxDevices": parsed.max_devices,
+                    }));
+                }
+                mapped["users"] = Value::Array(users);
+            }
             value["gateway"] = mapped;
         }
         if let Some(agent) = tunnel.get("agent").and_then(Value::as_object) {
@@ -2505,6 +2701,7 @@ impl<'a> Materializer<'a> {
                 "server.toml.tunnel.agent",
                 &[
                     "endpoint",
+                    "endpoints",
                     "tokenEnv",
                     "token_env",
                     "deviceIdEnv",
@@ -2513,12 +2710,70 @@ impl<'a> Materializer<'a> {
                     "device_name",
                     "domainSuffix",
                     "domain_suffix",
+                    "user",
+                    "loginFailExit",
+                    "login_fail_exit",
                     "tls",
                 ],
             )?;
             let mut mapped = json!({});
             if let Some(entry) = agent.get("endpoint") {
                 mapped["endpoint"] = entry.clone();
+            }
+            // FRP `loginFailExit`: stop instead of retrying when the gateway
+            // rejects our credentials. A non-boolean is refused rather than
+            // coerced, because "true" spelled as a string would silently keep
+            // the retry behaviour it was meant to switch off.
+            if let Some(entry) = agent
+                .get("loginFailExit")
+                .or_else(|| agent.get("login_fail_exit"))
+            {
+                let value = entry.as_bool().ok_or_else(|| {
+                    materialize_error(
+                        "server.toml.tunnel.agent.loginFailExit",
+                        "must be true or false",
+                    )
+                })?;
+                mapped["loginFailExit"] = json!(value);
+            }
+            // The machine's user claim (FRP `user`). Validated here so a typo
+            // is a configuration error on the agent, not a registration the
+            // gateway refuses with "the token does not speak for that user".
+            if let Some(entry) = agent.get("user") {
+                let raw = entry.as_str().ok_or_else(|| {
+                    materialize_error("server.toml.tunnel.agent.user", "must be a user name")
+                })?;
+                if !raw.trim().is_empty() {
+                    sdkwork_webserver_tunnel_core::validate_user_name(raw).map_err(|error| {
+                        materialize_error("server.toml.tunnel.agent.user", error.to_string())
+                    })?;
+                    mapped["user"] = json!(raw.trim());
+                }
+            }
+            // Ordered failover addresses (FRP `serverAddr` list). Each entry is
+            // validated here so a typo is a configuration error naming the key,
+            // instead of a fallback that silently never works.
+            if let Some(entry) = agent.get("endpoints") {
+                let entries = entry.as_array().ok_or_else(|| {
+                    materialize_error(
+                        "server.toml.tunnel.agent.endpoints",
+                        "must be an array of host:port addresses",
+                    )
+                })?;
+                let mut addresses = Vec::with_capacity(entries.len());
+                for value in entries {
+                    let address = value.as_str().ok_or_else(|| {
+                        materialize_error(
+                            "server.toml.tunnel.agent.endpoints",
+                            "every entry must be a host:port string",
+                        )
+                    })?;
+                    sdkwork_webserver_tunnel_core::validate_endpoint_authority(address).map_err(
+                        |error| materialize_error("server.toml.tunnel.agent.endpoints", error.to_string()),
+                    )?;
+                    addresses.push(Value::String(address.trim().to_owned()));
+                }
+                mapped["endpoints"] = Value::Array(addresses);
             }
             for (source, target) in [
                 ("tokenEnv", "tokenEnv"),
@@ -2569,14 +2824,94 @@ impl<'a> Materializer<'a> {
                     "initial_backoff",
                     "maxBackoffSecs",
                     "max_backoff",
+                    "keepAliveIntervalSecs",
+                    "keep_alive_interval",
+                    "heartbeatTimeoutSecs",
+                    "heartbeat_timeout",
+                    "udpPacketSize",
+                    "udp_packet_size",
+                    "maxConcurrentStreams",
+                    "max_concurrent_streams",
+                    "dialServerLocalIP",
+                    "dial_server_local_ip",
+                    "dialLocalAddr",
+                    "dial_local_addr",
+                    "dnsServer",
+                    "dns_server",
                 ],
             )?;
-            value["network"] = json!({
+            let mut mapped = json!({
                 "heartbeatIntervalSecs": network.get("heartbeatIntervalSecs").or_else(|| network.get("heartbeat_interval")).and_then(Value::as_u64).unwrap_or(10),
                 "reconnect": network.get("reconnect").and_then(Value::as_bool).unwrap_or(true),
                 "initialBackoffSecs": network.get("initialBackoffSecs").or_else(|| network.get("initial_backoff")).and_then(Value::as_u64).unwrap_or(1),
                 "maxBackoffSecs": network.get("maxBackoffSecs").or_else(|| network.get("max_backoff")).and_then(Value::as_u64).unwrap_or(60),
             });
+            // Transport tunables (FRP `quic.keepalivePeriod`,
+            // `transport.heartbeatTimeout`, `transport.udpPacketSize`,
+            // `quic.maxIncomingStreams`). Absent keys stay absent so the core
+            // defaults (derived, not hard-coded) apply; a present key is
+            // validated here with the config path in the message.
+            for (camel, snake, target) in [
+                ("keepAliveIntervalSecs", "keep_alive_interval", "keepAliveIntervalSecs"),
+                ("heartbeatTimeoutSecs", "heartbeat_timeout", "heartbeatTimeoutSecs"),
+                ("udpPacketSize", "udp_packet_size", "udpPacketSize"),
+                ("maxConcurrentStreams", "max_concurrent_streams", "maxConcurrentStreams"),
+            ] {
+                let Some(entry) = network.get(camel).or_else(|| network.get(snake)) else {
+                    continue;
+                };
+                let value = entry.as_u64().ok_or_else(|| {
+                    materialize_error(
+                        &format!("server.toml.tunnel.network.{camel}"),
+                        "must be a non-negative integer",
+                    )
+                })?;
+                mapped[target] = json!(value);
+            }
+            // FRP `transport.dialServerLocalIP`: the source address for target
+            // dials. Parsed as an IP so a hostname is a configuration error
+            // rather than an address the kernel would refuse at the first
+            // relayed connection.
+            if let Some(entry) = network
+                .get("dialServerLocalIP")
+                .or_else(|| network.get("dial_server_local_ip"))
+                .or_else(|| network.get("dialLocalAddr"))
+                .or_else(|| network.get("dial_local_addr"))
+            {
+                let raw = entry.as_str().ok_or_else(|| {
+                    materialize_error(
+                        "server.toml.tunnel.network.dialServerLocalIP",
+                        "must be an IP address string",
+                    )
+                })?;
+                let parsed: std::net::IpAddr = raw.trim().parse().map_err(|_| {
+                    materialize_error(
+                        "server.toml.tunnel.network.dialServerLocalIP",
+                        format!("`{raw}` is not a literal IP address"),
+                    )
+                })?;
+                mapped["dialLocalAddr"] = json!(parsed.to_string());
+            }
+            // FRP `dnsServer`: the resolver the agent uses for the gateway
+            // host. Validated through the core model, so a hostname — which
+            // would put the system resolver back into the path the operator
+            // just removed — is a configuration error.
+            if let Some(entry) = network
+                .get("dnsServer")
+                .or_else(|| network.get("dns_server"))
+            {
+                let raw = entry.as_str().ok_or_else(|| {
+                    materialize_error(
+                        "server.toml.tunnel.network.dnsServer",
+                        "must be an IP address string, optionally with a port",
+                    )
+                })?;
+                sdkwork_webserver_tunnel_core::parse_dns_server(raw).map_err(|error| {
+                    materialize_error("server.toml.tunnel.network.dnsServer", error)
+                })?;
+                mapped["dnsServer"] = json!(raw.trim());
+            }
+            value["network"] = mapped;
         }
         if let Some(timeout) = tunnel.get("timeout").and_then(Value::as_object) {
             check_supported_keys(
@@ -2606,23 +2941,31 @@ impl<'a> Materializer<'a> {
                     "max_routes",
                     "maxControlMessageBytes",
                     "max_control_message_bytes",
+                    "maxConnections",
+                    "max_connections",
                 ],
             )?;
-            let pick = |camel: &str, snake: &str| {
-                limits
-                    .get(camel)
-                    .or_else(|| limits.get(snake))
-                    .and_then(Value::as_u64)
-                    .map(Value::from)
-                    .unwrap_or(Value::Null)
-            };
-            value["limits"] = json!({
-                "maxDevices": pick("maxDevices", "max_devices"),
-                "maxSessions": pick("maxSessions", "max_sessions"),
-                "maxStreamsPerSession": pick("maxStreamsPerSession", "max_streams_per_session"),
-                "maxRoutes": pick("maxRoutes", "max_routes"),
-                "maxControlMessageBytes": pick("maxControlMessageBytes", "max_control_message_bytes"),
-            });
+            // Only the ceilings the operator wrote are emitted. Emitting
+            // `null` for the rest made every *partial* `[tunnel.limits]` table
+            // fail deserialization ("invalid type: null, expected u32") even
+            // though every key is optional by contract.
+            let mut mapped: Map<String, Value> = Map::new();
+            for (camel, snake) in [
+                ("maxDevices", "max_devices"),
+                ("maxSessions", "max_sessions"),
+                ("maxStreamsPerSession", "max_streams_per_session"),
+                ("maxRoutes", "max_routes"),
+                ("maxControlMessageBytes", "max_control_message_bytes"),
+                // The gateway-wide connection ceiling was in the runtime model
+                // but not on the TOML surface, so the value an operator wrote
+                // here was rejected while the default silently applied.
+                ("maxConnections", "max_connections"),
+            ] {
+                if let Some(entry) = limits.get(camel).or_else(|| limits.get(snake)) {
+                    mapped.insert(camel.to_owned(), entry.clone());
+                }
+            }
+            value["limits"] = Value::Object(mapped);
         }
         if let Some(routes) = tunnel.get("routes").and_then(Value::as_array) {
             let mut mapped_routes = Vec::with_capacity(routes.len());
@@ -2633,7 +2976,32 @@ impl<'a> Materializer<'a> {
                 check_supported_keys(
                     route,
                     "server.toml.tunnel.routes[]",
-                    &["name", "protocol", "domain", "port", "target", "policy"],
+                    &[
+                        "name",
+                        "protocol",
+                        "domain",
+                        "port",
+                        "target",
+                        "policy",
+                        "proxyProtocol",
+                        "proxy_protocol",
+                        "locations",
+                        "bandwidthLimit",
+                        "bandwidth_limit",
+                        "loadBalancerGroup",
+                        "load_balancer_group",
+                        "healthCheck",
+                        "health_check",
+                        "secretKeyEnv",
+                        "secret_key_env",
+                        "hostHeaderRewrite",
+                        "host_header_rewrite",
+                        "requestHeaders",
+                        "request_headers",
+                        "responseHeaders",
+                        "response_headers",
+                        "annotations",
+                    ],
                 )?;
                 let mut mapped = json!({
                     "name": route.get("name").and_then(Value::as_str)
@@ -2648,6 +3016,299 @@ impl<'a> Materializer<'a> {
                 }
                 if let Some(port) = route.get("port") {
                     mapped["port"] = port.clone();
+                }
+                // PROXY protocol toward the agent's local target (FRP
+                // `transport.proxyProtocolVersion` parity): a route-level
+                // transport choice, validated here so a typo cannot silently
+                // relay un-prefixed traffic to a service that requires it.
+                if let Some(version) = route
+                    .get("proxyProtocol")
+                    .or_else(|| route.get("proxy_protocol"))
+                {
+                    let label = version.as_str().ok_or_else(|| {
+                        materialize_error(
+                            "server.toml.tunnel.routes[].proxyProtocol",
+                            "must be a string (v1 or v2)",
+                        )
+                    })?;
+                    if sdkwork_webserver_tunnel_core::ProxyProtocolVersion::parse(label).is_none() {
+                        return Err(materialize_error(
+                            "server.toml.tunnel.routes[].proxyProtocol",
+                            format!(
+                                "`{label}` is not a PROXY protocol version (expected v1 or v2)"
+                            ),
+                        ));
+                    }
+                    mapped["proxyProtocol"] = json!(label);
+                }
+                // Path claims (FRP `locations` parity) are validated here so a
+                // typo cannot reach the agent as a route that owns a host but
+                // answers no path.
+                if let Some(locations) = route.get("locations") {
+                    let entries = locations.as_array().ok_or_else(|| {
+                        materialize_error(
+                            "server.toml.tunnel.routes[].locations",
+                            "must be an array of path prefixes",
+                        )
+                    })?;
+                    let mut normalized = Vec::with_capacity(entries.len());
+                    for entry in entries {
+                        let raw = entry.as_str().ok_or_else(|| {
+                            materialize_error(
+                                "server.toml.tunnel.routes[].locations",
+                                "entries must be strings",
+                            )
+                        })?;
+                        let location = sdkwork_webserver_tunnel_core::validate_location(raw)
+                            .map_err(|error| {
+                                materialize_error(
+                                    "server.toml.tunnel.routes[].locations",
+                                    error.to_string(),
+                                )
+                            })?;
+                        if !normalized.contains(&location) {
+                            normalized.push(location);
+                        }
+                    }
+                    mapped["locations"] = json!(normalized);
+                }
+                // Bandwidth ceiling (FRP `transport.bandwidthLimit` parity).
+                // Written the way operators write it — `"2MB"`, `"512KB"` —
+                // or as a plain byte-per-second integer; both normalize to
+                // bytes per second in the runtime model.
+                if let Some(limit) = route
+                    .get("bandwidthLimit")
+                    .or_else(|| route.get("bandwidth_limit"))
+                {
+                    let bytes = match limit {
+                        Value::String(raw) => sdkwork_webserver_tunnel_core::parse_bandwidth_limit(
+                            raw,
+                        )
+                        .map_err(|error| {
+                            materialize_error(
+                                "server.toml.tunnel.routes[].bandwidthLimit",
+                                error.to_string(),
+                            )
+                        })?,
+                        Value::Number(number) => {
+                            let value = number.as_u64().filter(|value| *value > 0).ok_or_else(
+                                || {
+                                    materialize_error(
+                                        "server.toml.tunnel.routes[].bandwidthLimit",
+                                        "must be a positive byte-per-second number or a size like \"2MB\"",
+                                    )
+                                },
+                            )?;
+                            value
+                        }
+                        _ => {
+                            return Err(materialize_error(
+                                "server.toml.tunnel.routes[].bandwidthLimit",
+                                "must be a size string (\"2MB\") or a byte-per-second number",
+                            ))
+                        }
+                    };
+                    mapped["bandwidthLimitBytesPerSecond"] = json!(bytes);
+                }
+                // Secret route key source (FRP `sk` parity): the name of an
+                // environment variable, never the key itself.
+                if let Some(env_name) = route
+                    .get("secretKeyEnv")
+                    .or_else(|| route.get("secret_key_env"))
+                {
+                    let raw = env_name.as_str().ok_or_else(|| {
+                        materialize_error(
+                            "server.toml.tunnel.routes[].secretKeyEnv",
+                            "must be an environment variable name",
+                        )
+                    })?;
+                    if raw.trim().is_empty() {
+                        return Err(materialize_error(
+                            "server.toml.tunnel.routes[].secretKeyEnv",
+                            "must not be empty",
+                        ));
+                    }
+                    mapped["secretKeyEnv"] = json!(raw.trim());
+                }
+                // Load-balancer group (FRP `loadBalancer.group` parity).
+                if let Some(group) = route
+                    .get("loadBalancerGroup")
+                    .or_else(|| route.get("load_balancer_group"))
+                {
+                    let raw = group.as_str().ok_or_else(|| {
+                        materialize_error(
+                            "server.toml.tunnel.routes[].loadBalancerGroup",
+                            "must be a group name string",
+                        )
+                    })?;
+                    let group = sdkwork_webserver_tunnel_core::validate_load_balancer_group(raw)
+                        .map_err(|error| {
+                            materialize_error(
+                                "server.toml.tunnel.routes[].loadBalancerGroup",
+                                error.to_string(),
+                            )
+                        })?;
+                    mapped["loadBalancerGroup"] = json!(group);
+                }
+                // Health probe (FRP `healthCheck` parity).
+                if let Some(health) = route
+                    .get("healthCheck")
+                    .or_else(|| route.get("health_check"))
+                {
+                    let table = health.as_object().ok_or_else(|| {
+                        materialize_error(
+                            "server.toml.tunnel.routes[].healthCheck",
+                            "must be a table",
+                        )
+                    })?;
+                    check_supported_keys(
+                        table,
+                        "server.toml.tunnel.routes[].healthCheck",
+                        &[
+                            "kind",
+                            "type",
+                            "intervalSeconds",
+                            "interval_seconds",
+                            "interval",
+                            "timeoutSeconds",
+                            "timeout_seconds",
+                            "timeout",
+                            "maxFailed",
+                            "max_failed",
+                            "path",
+                        ],
+                    )?;
+                    let pick = |camel: &str, snake: &str| {
+                        table
+                            .get(camel)
+                            .or_else(|| table.get(snake))
+                            .and_then(Value::as_i64)
+                    };
+                    let kind_raw = table
+                        .get("kind")
+                        .or_else(|| table.get("type"))
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| {
+                            materialize_error(
+                                "server.toml.tunnel.routes[].healthCheck.kind",
+                                "kind is required (tcp or http)",
+                            )
+                        })?;
+                    let kind = sdkwork_webserver_tunnel_core::HealthCheckKind::parse(kind_raw)
+                        .ok_or_else(|| {
+                            materialize_error(
+                                "server.toml.tunnel.routes[].healthCheck.kind",
+                                format!("`{kind_raw}` must be tcp or http"),
+                            )
+                        })?;
+                    mapped["healthCheck"] = json!({
+                        "kind": match kind {
+                            sdkwork_webserver_tunnel_core::HealthCheckKind::Tcp => "tcp",
+                            sdkwork_webserver_tunnel_core::HealthCheckKind::Http => "http",
+                        },
+                        "intervalSeconds": pick("intervalSeconds", "interval_seconds")
+                            .or_else(|| pick("interval", "interval"))
+                            .unwrap_or(10),
+                        "timeoutSeconds": pick("timeoutSeconds", "timeout_seconds")
+                            .or_else(|| pick("timeout", "timeout"))
+                            .unwrap_or(3),
+                        "maxFailed": pick("maxFailed", "max_failed").unwrap_or(1),
+                        "path": table.get("path").cloned().unwrap_or(Value::Null),
+                    });
+                }
+                // HTTP header rewriting (FRP `hostHeaderRewrite` +
+                // `requestHeaders.set` / `responseHeaders.set`). Parsed into the
+                // core model here so a bad name or value is a *configuration*
+                // error with a config path, not a runtime failure on live
+                // traffic.
+                if let Some(host) = route
+                    .get("hostHeaderRewrite")
+                    .or_else(|| route.get("host_header_rewrite"))
+                {
+                    let raw = host.as_str().ok_or_else(|| {
+                        materialize_error(
+                            "server.toml.tunnel.routes[].hostHeaderRewrite",
+                            "must be a host or host:port string",
+                        )
+                    })?;
+                    mapped["hostHeaderRewrite"] = json!(raw.trim());
+                }
+                for (camel, snake, target, direction) in [
+                    (
+                        "requestHeaders",
+                        "request_headers",
+                        "requestHeaders",
+                        sdkwork_webserver_tunnel_core::HeaderDirection::Request,
+                    ),
+                    (
+                        "responseHeaders",
+                        "response_headers",
+                        "responseHeaders",
+                        sdkwork_webserver_tunnel_core::HeaderDirection::Response,
+                    ),
+                ] {
+                    let Some(headers) = route.get(camel).or_else(|| route.get(snake)) else {
+                        continue;
+                    };
+                    let scope = format!("server.toml.tunnel.routes[].{camel}");
+                    let set_scope = format!("{scope}.set");
+                    let table = headers.as_object().ok_or_else(|| {
+                        materialize_error(&scope, "must be a table with a `set` map")
+                    })?;
+                    check_supported_keys(table, &scope, &["set"])?;
+                    let mut set = std::collections::BTreeMap::new();
+                    if let Some(entries) = table.get("set") {
+                        let entries = entries.as_object().ok_or_else(|| {
+                            materialize_error(&set_scope, "must be a table of header name → value")
+                        })?;
+                        for (name, value) in entries {
+                            let value = value.as_str().ok_or_else(|| {
+                                materialize_error(
+                                    &set_scope,
+                                    format!("header `{name}` must have a string value"),
+                                )
+                            })?;
+                            // Validate each pair through the core model, so the
+                            // TOML surface cannot accept something the gateway
+                            // would later refuse to apply.
+                            let pair = sdkwork_webserver_tunnel_core::HeaderPair::parse(
+                                name, value, direction,
+                            )
+                            .map_err(|error| {
+                                materialize_error(&set_scope, error.to_string())
+                            })?;
+                            set.insert(pair.name.clone(), pair.value.clone());
+                        }
+                    }
+                    mapped[target] = json!({ "set": set });
+                }
+                // Operator metadata (FRP `annotations`): `[tunnel.routes.annotations]`
+                // as a flat string table, validated by the route model so the
+                // file cannot describe metadata the agent would refuse to send.
+                if let Some(annotations) = route.get("annotations") {
+                    let scope = "server.toml.tunnel.routes[].annotations";
+                    let table = annotations
+                        .as_object()
+                        .ok_or_else(|| materialize_error(scope, "must be a table of key → value"))?;
+                    let entries: std::collections::BTreeMap<String, String> = table
+                        .iter()
+                        .map(|(key, value)| {
+                            value
+                                .as_str()
+                                .map(|value| (key.clone(), value.to_owned()))
+                                .ok_or_else(|| {
+                                    materialize_error(
+                                        scope,
+                                        format!("annotation `{key}` must have a string value"),
+                                    )
+                                })
+                        })
+                        .collect::<std::result::Result<_, _>>()?;
+                    sdkwork_webserver_tunnel_core::route::validate_annotations(&entries).map_err(
+                        |error| materialize_error(scope, error.to_string()),
+                    )?;
+                    mapped["annotations"] = serde_json::to_value(entries)
+                        .map_err(|error| materialize_error(scope, error.to_string()))?;
                 }
                 if let Some(policy) = route.get("policy").and_then(Value::as_object) {
                     check_supported_keys(
@@ -3053,11 +3714,11 @@ fn load_snippet_directives(
     path: &str,
 ) -> Result<Vec<NginxDirective>, WebServerConfigError> {
     let snippet = resolve_snippet_path(module_dir, pattern)?;
-    let text = crate::fs_bounds::read_text_capped(
-        &snippet,
-        crate::fs_bounds::MAX_IMPORT_SOURCE_BYTES,
-    )
-    .map_err(|error| materialize_error(path, format!("read snippet `{pattern}`: {error}")))?;
+    let text =
+        crate::fs_bounds::read_text_capped(&snippet, crate::fs_bounds::MAX_IMPORT_SOURCE_BYTES)
+            .map_err(|error| {
+                materialize_error(path, format!("read snippet `{pattern}`: {error}"))
+            })?;
     parse_nginx_config(&text, &snippet)
         .map_err(|error| materialize_error(path, format!("parse snippet `{pattern}`: {error}")))
 }
@@ -3614,6 +4275,958 @@ allow_public = true
         assert_eq!(routes.len(), 1);
         assert_eq!(routes[0].domain.as_deref(), Some("demo.sdkwork.link"));
         assert!(routes[0].policy_or_default().allow_public);
+    }
+
+    #[test]
+    fn materializes_tunnel_gateway_route_port_range_and_connection_ceiling() {
+        // The route-port range and the gateway connection ceiling are
+        // registration policies an operator must be able to set where the
+        // tunnel is configured; both were rejected by the TOML surface while
+        // `docs/tunnel.md` documented them (and the CLI/JSON model accepted
+        // them), so the default silently applied instead.
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.gateway]
+listen = "127.0.0.1:8443"
+route_port_min = 2048
+routePortMax = 4096
+[tunnel.limits]
+maxRoutes = 12
+max_connections = 64
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        let gateway = config.gateway_or_default();
+        assert_eq!(gateway.route_port_min, 2048);
+        assert_eq!(gateway.route_port_max, 4096);
+        let limits = config.limits_or_default();
+        assert_eq!(limits.max_routes, 12);
+        assert_eq!(limits.max_connections, 64);
+        // Untouched keys keep their documented defaults.
+        assert_eq!(limits.max_devices, 10_000);
+        assert_eq!(limits.max_streams_per_session, 256);
+    }
+
+    /// The FRP-shaped header rewriting surface: `hostHeaderRewrite` plus
+    /// `[tunnel.routes.requestHeaders]` / `[tunnel.routes.responseHeaders]`
+    /// with a `set` map.
+    #[test]
+    fn materializes_tunnel_route_header_rewriting() {
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[[tunnel.routes]]
+name = "web"
+protocol = "http"
+domain = "demo.sdkwork.link"
+target = "127.0.0.1:3000"
+hostHeaderRewrite = "backend.internal:8080"
+[tunnel.routes.requestHeaders]
+set = { "X-From" = "edge", "X-Tenant" = "acme" }
+[tunnel.routes.responseHeaders]
+set = { "X-Served-By" = "sdkwork" }
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        let template = &config.routes.as_ref().expect("routes")[0];
+        let rewrite = template.header_rewrite().expect("rewrite validates");
+        assert_eq!(rewrite.host(), Some("backend.internal:8080"));
+        assert_eq!(rewrite.request_set().len(), 2);
+        assert_eq!(rewrite.response_set().len(), 1);
+        // Names are canonicalized to lower case; values are preserved.
+        assert!(
+            rewrite
+                .request_set()
+                .iter()
+                .any(|pair| pair.name == "x-from" && pair.value == "edge")
+        );
+        // The route the agent would register carries the same policy.
+        let route = template
+            .to_route(sdkwork_webserver_tunnel_core::RouteId::parse("route_web").expect("id"))
+            .expect("route builds");
+        assert_eq!(route.headers, rewrite);
+    }
+
+    /// A framing header inside a `set` map is a configuration error, not
+    /// something the gateway silently refuses to apply at request time.
+    #[test]
+    fn a_framing_header_in_a_set_map_is_a_configuration_error() {
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[[tunnel.routes]]
+name = "web"
+protocol = "http"
+domain = "demo.sdkwork.link"
+target = "127.0.0.1:3000"
+[tunnel.routes.requestHeaders]
+set = { "Content-Length" = "0" }
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let error = Materializer::materialize_tunnel(&effective)
+            .expect_err("a framing header cannot be rewritten");
+        assert!(
+            format!("{error}").contains("framing or hop-by-hop"),
+            "unexpected error: {error}"
+        );
+    }
+
+    /// Header rewriting is an HTTP-plane feature: declaring it on a TCP route
+    /// would advertise something that can never take effect.
+    #[test]
+    fn header_rewriting_on_a_tcp_route_is_a_configuration_error() {
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[[tunnel.routes]]
+name = "db"
+protocol = "tcp"
+port = 20001
+target = "127.0.0.1:5432"
+hostHeaderRewrite = "backend.internal"
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        let template = &config.routes.as_ref().expect("routes")[0];
+        let error = template
+            .header_rewrite()
+            .expect_err("a tcp route cannot rewrite headers");
+        assert!(error.to_string().contains("HTTP-only"), "{error}");
+    }
+
+    /// The ordered gateway address list (FRP `serverAddr` list parity).
+    #[test]
+    fn materializes_the_tunnel_agent_gateway_address_list() {
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.agent]
+endpoint = "gw1.sdkwork.link:8443"
+endpoints = ["gw2.sdkwork.link:8443", "gw3.sdkwork.link:8443"]
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        let agent = config.agent_or_default();
+        assert_eq!(
+            agent.gateway_endpoints(),
+            vec![
+                "gw1.sdkwork.link:8443".to_owned(),
+                "gw2.sdkwork.link:8443".to_owned(),
+                "gw3.sdkwork.link:8443".to_owned(),
+            ]
+        );
+        config.validate().expect("the list validates");
+    }
+
+    /// A fallback that cannot be dialled is worse than none: a malformed
+    /// address is a configuration error naming the key.
+    #[test]
+    fn a_malformed_gateway_address_in_the_list_is_a_configuration_error() {
+        for address in ["gw2.sdkwork.link", "gw2.sdkwork.link:0", "https://gw2:8443"] {
+            let toml_text = format!(
+                r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.agent]
+endpoint = "gw1.sdkwork.link:8443"
+endpoints = ["{address}"]
+"#
+            );
+            let value: toml::Value = toml::from_str(&toml_text).expect("toml parses");
+            let effective: Value = serde_json::to_value(&value).expect("converts");
+            let error = Materializer::materialize_tunnel(&effective)
+                .expect_err("a malformed address cannot be materialized");
+            assert!(
+                format!("{error}").contains("server.toml.tunnel.agent.endpoints"),
+                "unexpected error: {error}"
+            );
+        }
+    }
+
+    /// Transport tunables on the `[tunnel.network]` surface.
+    #[test]
+    fn materializes_tunnel_transport_tunables() {
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.network]
+heartbeat_interval = 10
+keepAliveIntervalSecs = 2
+heartbeatTimeoutSecs = 45
+udp_packet_size = 1200
+maxConcurrentStreams = 64
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        let network = config.network_or_default();
+        assert_eq!(network.keep_alive_interval_secs, Some(2));
+        assert_eq!(network.heartbeat_timeout_secs, Some(45));
+        assert_eq!(network.udp_packet_size, Some(1_200));
+        assert_eq!(network.max_concurrent_streams, Some(64));
+        config.validate().expect("the tunables validate");
+
+        // Absent keys stay absent: the derived defaults are what applies, and
+        // the model must not bake the derivation into the file.
+        let defaults = sdkwork_webserver_tunnel_core::TunnelNetworkConfig::default();
+        assert_eq!(defaults.keep_alive_interval_secs, None);
+        assert_eq!(defaults.heartbeat_timeout_secs, None);
+        assert_eq!(defaults.udp_packet_size, None);
+        assert_eq!(defaults.max_concurrent_streams, None);
+    }
+
+    /// An unusable tunable is a configuration error, not a silent clamp.
+    #[test]
+    fn an_unusable_transport_tunable_is_a_configuration_error() {
+        for (key, value_text) in [
+            ("udpPacketSize", "128"),
+            ("maxConcurrentStreams", "4"),
+            ("heartbeatTimeoutSecs", "3"),
+        ] {
+            let toml_text = format!(
+                r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.network]
+heartbeat_interval = 10
+{key} = {value_text}
+"#
+            );
+            let value: toml::Value = toml::from_str(&toml_text).expect("toml parses");
+            let effective: Value = serde_json::to_value(&value).expect("converts");
+            let tunnel = Materializer::materialize_tunnel(&effective)
+                .expect("materializes")
+                .expect("tunnel section present");
+            let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+                serde_json::from_value(tunnel).expect("tunnel model parses");
+            assert!(
+                config.validate().is_err(),
+                "{key} = {value_text} must be refused"
+            );
+        }
+    }
+
+    /// FRP `auth.additionalScopes` on the `[tunnel.gateway]` surface.
+    #[test]
+    fn materializes_gateway_auth_scopes() {
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.gateway]
+listen = "127.0.0.1:8443"
+authScopes = ["HeartBeats"]
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        assert_eq!(
+            config.gateway_or_default().auth_scopes,
+            vec![sdkwork_webserver_tunnel_core::AuthScope::Heartbeats]
+        );
+        // Absent stays absent: the hardening is opt-in.
+        assert!(sdkwork_webserver_tunnel_core::TunnelGatewayConfig::default()
+            .auth_scopes
+            .is_empty());
+    }
+
+    /// `newWorkConns` has no equivalent in this design (streams are opened
+    /// inside the authenticated connection), so configuring it is refused with
+    /// the explanation instead of being accepted as a no-op.
+    #[test]
+    fn new_work_conns_is_a_configuration_error_not_a_silent_no_op() {
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.gateway]
+listen = "127.0.0.1:8443"
+authScopes = ["newWorkConns"]
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let error = Materializer::materialize_tunnel(&effective)
+            .expect_err("a scope without an equivalent must be refused");
+        assert!(
+            format!("{error}").contains("no equivalent"),
+            "unexpected error: {error}"
+        );
+    }
+
+    /// Per-user credentials and quotas (FRP `user`, made enforceable).
+    #[test]
+    fn materializes_gateway_users_with_their_quotas() {
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.gateway]
+listen = "127.0.0.1:8443"
+[[tunnel.gateway.users]]
+name = "team-a"
+tokenEnv = "TEAM_A_TOKEN"
+maxRoutes = 20
+max_ports = 5
+maxDevices = 3
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        let users = &config.gateway_or_default().users;
+        assert_eq!(users.len(), 1);
+        assert_eq!(users[0].name, "team-a");
+        assert_eq!(users[0].token_env, "TEAM_A_TOKEN");
+        assert_eq!(users[0].max_routes, Some(20));
+        assert_eq!(users[0].max_ports, Some(5));
+        assert_eq!(users[0].max_devices, Some(3));
+        config.validate().expect("the user table validates");
+
+        // Absent stays absent: no users means no per-user quota, which is the
+        // pre-user behaviour.
+        assert!(sdkwork_webserver_tunnel_core::TunnelGatewayConfig::default()
+            .users
+            .is_empty());
+    }
+
+    /// A user entry that cannot be enforced is a configuration error.
+    #[test]
+    fn an_unenforceable_user_entry_is_a_configuration_error() {
+        for (entry, expected) in [
+            (r#"[[tunnel.gateway.users]]
+name = "team a"
+tokenEnv = "TEAM_A_TOKEN""#, "may only contain"),
+            (r#"[[tunnel.gateway.users]]
+name = "team-a"
+tokenEnv = """#, "environment variable"),
+            (r#"[[tunnel.gateway.users]]
+name = "team-a"
+tokenEnv = "TEAM_A_TOKEN"
+maxRoutes = 0"#, "at least 1"),
+        ] {
+            let toml_text = format!(
+                r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.gateway]
+listen = "127.0.0.1:8443"
+{entry}
+"#
+            );
+            let value: toml::Value = toml::from_str(&toml_text).expect("toml parses");
+            let effective: Value = serde_json::to_value(&value).expect("converts");
+            let error = Materializer::materialize_tunnel(&effective)
+                .expect_err("an unenforceable user must be refused");
+            assert!(
+                format!("{error}").contains(expected),
+                "expected `{expected}` in: {error}"
+            );
+        }
+    }
+
+    /// The machine's user claim is validated where it is written.
+    #[test]
+    fn materializes_the_agent_user_claim() {
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.agent]
+endpoint = "gw1.sdkwork.link:8443"
+user = "team-a"
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        assert_eq!(config.agent_or_default().user, "team-a");
+    }
+
+    /// FRP `loginFailExit` on the `[tunnel.agent]` surface, refused when it is
+    /// not a boolean: a quoted "true" would silently switch nothing off.
+    #[test]
+    fn materializes_login_fail_exit_and_refuses_a_non_boolean() {
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.agent]
+endpoint = "gw1.sdkwork.link:8443"
+loginFailExit = true
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        assert!(config.agent_or_default().login_fail_exit);
+        // The default stays FRP's opposite, on purpose (see the field docs).
+        assert!(!sdkwork_webserver_tunnel_core::TunnelAgentConfig::default().login_fail_exit);
+
+        let bad = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.agent]
+endpoint = "gw1.sdkwork.link:8443"
+loginFailExit = "true"
+"#;
+        let value: toml::Value = toml::from_str(bad).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let error = Materializer::materialize_tunnel(&effective)
+            .expect_err("a quoted boolean must be refused");
+        assert!(
+            format!("{error}").contains("must be true or false"),
+            "unexpected error: {error}"
+        );
+    }
+
+    /// Operator metadata (FRP `annotations`) on a route, bounded at load time.
+    #[test]
+    fn materializes_route_annotations_and_refuses_unusable_ones() {
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[[tunnel.routes]]
+name = "web"
+protocol = "http"
+domain = "docs.sdkwork.link"
+target = "127.0.0.1:8080"
+[tunnel.routes.annotations]
+owner = "team-a"
+ticket = "OPS-1"
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        let route = &config.routes_or_empty()[0];
+        assert_eq!(route.annotations.get("owner").map(String::as_str), Some("team-a"));
+        assert_eq!(route.annotations.get("ticket").map(String::as_str), Some("OPS-1"));
+        // The template validates into a route that carries them.
+        route
+            .to_route(
+                sdkwork_webserver_tunnel_core::RouteId::parse("route_web").expect("id"),
+            )
+            .expect("route materializes")
+            .annotations
+            .get("owner")
+            .expect("owner survives materialization");
+
+        // An unusable key is a configuration error with the config path, not a
+        // runtime surprise at the gateway.
+        let bad = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[[tunnel.routes]]
+name = "web"
+protocol = "http"
+domain = "docs.sdkwork.link"
+target = "127.0.0.1:8080"
+[tunnel.routes.annotations]
+"has space" = "value"
+"#;
+        let value: toml::Value = toml::from_str(bad).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let error = Materializer::materialize_tunnel(&effective)
+            .expect_err("an unusable annotation key must be refused");
+        assert!(
+            format!("{error}").contains("may only contain"),
+            "unexpected error: {error}"
+        );
+    }
+
+    /// FRP `proxyBindAddr`: a literal IP, and nothing else.
+    #[test]
+    fn materializes_proxy_bind_addr_and_refuses_anything_but_an_ip() {
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.gateway]
+listen = "0.0.0.0:8443"
+proxyBindAddr = "127.0.0.1"
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        let gateway = config.gateway_or_default();
+        assert_eq!(gateway.proxy_bind_addr, "127.0.0.1");
+        assert_eq!(
+            gateway.proxy_bind_addr().expect("parses"),
+            std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
+        );
+        config.validate().expect("the address validates");
+        // The default is every interface, i.e. the previous behaviour.
+        assert_eq!(
+            sdkwork_webserver_tunnel_core::TunnelGatewayConfig::default().proxy_bind_addr,
+            "0.0.0.0"
+        );
+
+        // A hostname or a `host:port` form would bind somewhere the operator
+        // did not ask for (a port here is overwritten by each route's own), so
+        // both are configuration errors.
+        for bad in ["gateway.sdkwork.link", "127.0.0.1:8080", ""] {
+            let toml_text = format!(
+                r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.gateway]
+listen = "0.0.0.0:8443"
+proxyBindAddr = "{bad}"
+"#
+            );
+            let value: toml::Value = toml::from_str(&toml_text).expect("toml parses");
+            let effective: Value = serde_json::to_value(&value).expect("converts");
+            let error = Materializer::materialize_tunnel(&effective)
+                .expect_err("only a literal IP is accepted");
+            assert!(
+                format!("{error}").contains("proxyBindAddr"),
+                "the error names the field for `{bad}`: {error}"
+            );
+        }
+    }
+
+    /// FRP `transport.dialServerLocalIP`: a literal IP, and nothing else.
+    #[test]
+    fn materializes_dial_server_local_ip_and_refuses_a_hostname() {
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.network]
+dialServerLocalIP = "10.0.0.5"
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        assert_eq!(
+            config.network_or_default().dial_local_addr,
+            Some("10.0.0.5".parse().expect("ip"))
+        );
+        // Absent means "let the kernel choose", which is the previous
+        // behaviour and the right default for most machines.
+        assert_eq!(
+            sdkwork_webserver_tunnel_core::TunnelNetworkConfig::default().dial_local_addr,
+            None
+        );
+
+        let bad = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.network]
+dialServerLocalIP = "eth0"
+"#;
+        let value: toml::Value = toml::from_str(bad).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let error = Materializer::materialize_tunnel(&effective)
+            .expect_err("a hostname is not a source address");
+        assert!(
+            format!("{error}").contains("not a literal IP address"),
+            "unexpected error: {error}"
+        );
+    }
+
+    /// FRP `dnsServer`: an IP with an optional port, never a name.
+    #[test]
+    fn materializes_dns_server_and_refuses_a_name() {
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.network]
+dnsServer = "10.0.0.53:5353"
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        assert_eq!(
+            config.network_or_default().dns_server.as_deref(),
+            Some("10.0.0.53:5353")
+        );
+        config.validate().expect("the DNS server validates");
+        // Absent means the system resolver, i.e. the previous behaviour.
+        assert_eq!(
+            sdkwork_webserver_tunnel_core::TunnelNetworkConfig::default().dns_server,
+            None
+        );
+
+        let bad = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.network]
+dnsServer = "resolver.internal"
+"#;
+        let value: toml::Value = toml::from_str(bad).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let error = Materializer::materialize_tunnel(&effective)
+            .expect_err("resolving the resolver is a dependency loop");
+        assert!(
+            format!("{error}").contains("dnsServer"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn an_out_of_range_tunnel_route_port_is_a_configuration_error() {
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.gateway]
+listen = "127.0.0.1:8443"
+routePortMin = 70000
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let error = Materializer::materialize_tunnel(&effective)
+            .expect_err("a port above 65535 cannot be materialized");
+        assert!(
+            format!("{error}").contains("65535"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn a_partial_tunnel_limits_table_keeps_the_other_defaults() {
+        // Every `[tunnel.limits]` key is optional: a table that sets one
+        // ceiling must not null out the rest and fail deserialization.
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.limits]
+max_sessions = 7
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let encoded = tunnel.to_string();
+        assert!(
+            !encoded.contains("null"),
+            "absent ceilings must be omitted, not nulled: {encoded}"
+        );
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        assert_eq!(config.limits_or_default().max_sessions, 7);
+        assert_eq!(config.limits_or_default().max_connections, 8_192);
+    }
+
+    #[test]
+    fn materializes_a_proxy_protocol_route_and_refuses_an_unknown_version() {
+        // FRP parity: `transport.proxyProtocolVersion` is a per-route choice,
+        // so it belongs on the route template where the target lives.
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[[tunnel.routes]]
+name = "audited"
+protocol = "tcp"
+port = 7022
+target = "127.0.0.1:22"
+proxy_protocol = "v1"
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        let routes = config.routes_or_empty();
+        assert_eq!(routes.len(), 1);
+        assert_eq!(
+            routes[0].proxy_protocol,
+            Some(sdkwork_webserver_tunnel_core::ProxyProtocolVersion::V1)
+        );
+        // The template must still validate with the new field set.
+        routes[0].validate().expect("template validates");
+
+        let bad = toml_text.replace("proxy_protocol = \"v1\"", "proxyProtocol = \"v3\"");
+        let value: toml::Value = toml::from_str(&bad).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let error = Materializer::materialize_tunnel(&effective)
+            .expect_err("an unknown PROXY protocol version must be refused");
+        assert!(format!("{error}").contains("v1 or v2"), "got: {error}");
+    }
+
+    #[test]
+    fn materializes_location_path_claims_and_refuses_an_unusable_prefix() {
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[[tunnel.routes]]
+name = "api"
+protocol = "http"
+domain = "split.sdkwork.link"
+target = "127.0.0.1:3000"
+locations = ["/api/", "/api/v2"]
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        let routes = config.routes_or_empty();
+        // `/api/` and `/api/v2` normalize and stay a two-entry claim.
+        assert_eq!(
+            routes[0].locations,
+            vec!["/api".to_owned(), "/api/v2".to_owned()]
+        );
+        let route = routes[0]
+            .to_route(sdkwork_webserver_tunnel_core::RouteId::parse("route_api").expect("id"))
+            .expect("materializes");
+        assert_eq!(route.matches_path("/api/users"), Some(4));
+        assert_eq!(route.matches_path("/api/v2/users"), Some(7));
+        assert_eq!(route.matches_path("/other"), None);
+
+        let bad = toml_text.replace(
+            r#"locations = ["/api/", "/api/v2"]"#,
+            r#"locations = ["api"]"#,
+        );
+        let value: toml::Value = toml::from_str(&bad).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let error = Materializer::materialize_tunnel(&effective)
+            .expect_err("a location without a leading slash must be refused");
+        assert!(
+            format!("{error}").contains("must start with `/`"),
+            "got: {error}"
+        );
+    }
+
+    #[test]
+    fn materializes_a_bandwidth_ceiling_from_a_size_string_or_a_number() {
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[[tunnel.routes]]
+name = "slow"
+protocol = "http"
+domain = "slow.sdkwork.link"
+target = "127.0.0.1:3000"
+bandwidthLimit = "2MB"
+[[tunnel.routes]]
+name = "slower"
+protocol = "tcp"
+port = 7022
+target = "127.0.0.1:22"
+bandwidth_limit = 8192
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        let routes = config.routes_or_empty();
+        assert_eq!(
+            routes[0].bandwidth_limit_bytes_per_second,
+            Some(2 * 1024 * 1024)
+        );
+        assert_eq!(routes[1].bandwidth_limit_bytes_per_second, Some(8_192));
+        for route in routes {
+            route.validate().expect("templates with a ceiling validate");
+        }
+
+        // A zero ceiling is refused: "unlimited" and "no traffic" are opposite
+        // readings of the same number.
+        let bad = toml_text.replace("bandwidthLimit = \"2MB\"", "bandwidthLimit = \"0\"");
+        let value: toml::Value = toml::from_str(&bad).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let error = Materializer::materialize_tunnel(&effective)
+            .expect_err("a zero ceiling must be refused");
+        assert!(
+            format!("{error}").contains("greater than zero"),
+            "got: {error}"
+        );
+    }
+
+    #[test]
+    fn materializes_a_load_balancer_group_with_a_health_probe() {
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[[tunnel.routes]]
+name = "web"
+protocol = "http"
+domain = "lb.sdkwork.link"
+target = "127.0.0.1:3000"
+load_balancer_group = "web"
+[tunnel.routes.health_check]
+kind = "http"
+path = "/health"
+interval_seconds = 5
+timeout = 2
+max_failed = 3
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        let routes = config.routes_or_empty();
+        assert_eq!(routes[0].load_balancer_group.as_deref(), Some("web"));
+        let probe = routes[0].health_check.clone().expect("probe materialized");
+        assert_eq!(
+            probe.kind,
+            sdkwork_webserver_tunnel_core::HealthCheckKind::Http
+        );
+        assert_eq!(probe.path.as_deref(), Some("/health"));
+        assert_eq!(probe.interval_seconds, 5);
+        assert_eq!(probe.timeout_seconds, 2);
+        assert_eq!(probe.max_failed, 3);
+        routes[0]
+            .validate()
+            .expect("the grouped template validates");
+
+        // The probe itself is validated at load time: a path on a TCP probe
+        // would silently check the socket while the operator believes an HTTP
+        // probe is running.
+        let bad = toml_text.replace("kind = \"http\"", "kind = \"tcp\"");
+        let value: toml::Value = toml::from_str(&bad).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        assert!(
+            config.routes_or_empty()[0].validate().is_err(),
+            "a tcp probe with a path must not validate"
+        );
+
+        // An unknown kind is refused where it is written.
+        let bad_kind = toml_text.replace("kind = \"http\"", "kind = \"icmp\"");
+        let value: toml::Value = toml::from_str(&bad_kind).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let error = Materializer::materialize_tunnel(&effective)
+            .expect_err("an unknown probe kind must be refused");
+        assert!(format!("{error}").contains("tcp or http"), "got: {error}");
+    }
+
+    #[test]
+    fn materializes_the_multiplexed_ingress_port() {
+        let toml_text = r#"
+specVersion = 1
+[tunnel]
+enabled = true
+[tunnel.gateway]
+listen = "0.0.0.0:8443"
+tcpmux_port = 8444
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        assert_eq!(
+            config.gateway_or_default().tcpmux_port,
+            Some(8444),
+            "the multiplexed ingress port reaches the gateway model"
+        );
+
+        // An out-of-range port is a configuration error, not a truncation.
+        let bad = toml_text.replace("tcpmux_port = 8444", "tcpmux_port = 70000");
+        let value: toml::Value = toml::from_str(&bad).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let error = Materializer::materialize_tunnel(&effective)
+            .expect_err("an out-of-range multiplexer port must be refused");
+        assert!(format!("{error}").contains("65535"), "got: {error}");
+
+        // The camelCase spelling works too, and the default is "no ingress".
+        let camel = toml_text.replace("tcpmux_port", "tcpmuxPort");
+        let value: toml::Value = toml::from_str(&camel).expect("toml parses");
+        let effective: Value = serde_json::to_value(&value).expect("converts");
+        let tunnel = Materializer::materialize_tunnel(&effective)
+            .expect("materializes")
+            .expect("tunnel section present");
+        let config: sdkwork_webserver_tunnel_core::TunnelConfig =
+            serde_json::from_value(tunnel).expect("tunnel model parses");
+        assert_eq!(config.gateway_or_default().tcpmux_port, Some(8444));
+        assert_eq!(
+            sdkwork_webserver_tunnel_core::TunnelGatewayConfig::default().tcpmux_port,
+            None
+        );
     }
 
     /// Minimal single-server typed-TOML document with an inline certificate,

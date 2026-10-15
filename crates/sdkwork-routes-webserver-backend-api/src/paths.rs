@@ -20,6 +20,11 @@ pub const ROOT_DOMAIN_DNS_RECORD: &str =
     "/backend/v3/api/root_domains/{rootDomainId}/dns_records/{recordId}";
 pub const ROOT_DOMAIN_DNS_RECORD_STATUS: &str =
     "/backend/v3/api/root_domains/{rootDomainId}/dns_records/{recordId}/status";
+
+pub const ROOT_DOMAIN_WECHAT_VERIFICATION: &str =
+    "/backend/v3/api/root_domains/{rootDomainId}/verification_file";
+pub const ROOT_DOMAIN_WECHAT_VERIFICATION_CHECK: &str =
+    "/backend/v3/api/root_domains/{rootDomainId}/verification_file/check";
 pub const ROOT_DOMAIN_DNS_RECORDS_SYNC: &str =
     "/backend/v3/api/root_domains/{rootDomainId}/dns_records/sync";
 pub const DOMAINS: &str = "/backend/v3/api/domains";
@@ -82,6 +87,17 @@ pub const CLUSTER_INSTANCE_HEARTBEATS: &str =
 pub const CLUSTER_MESSAGES: &str = "/backend/v3/api/clusters/messages";
 pub const CLUSTER_EVENTS: &str = "/backend/v3/api/clusters/events";
 pub const CLUSTER_OVERVIEW: &str = "/backend/v3/api/clusters/overview";
+/// Tunnel connector machines (FRP-style nodes) the gateway manages.
+pub const TUNNEL_MACHINES: &str = "/backend/v3/api/tunnel_machines";
+/// One tunnel machine.
+pub const TUNNEL_MACHINE: &str = "/backend/v3/api/tunnel_machines/{deviceId}";
+/// Operator switch for one tunnel machine.
+pub const TUNNEL_MACHINE_ENABLED: &str = "/backend/v3/api/tunnel_machines/{deviceId}/enabled";
+/// Route declarations for one tunnel machine.
+pub const TUNNEL_MACHINE_ROUTES: &str = "/backend/v3/api/tunnel_machines/{deviceId}/routes";
+/// One declared route of one tunnel machine.
+pub const TUNNEL_MACHINE_ROUTE: &str =
+    "/backend/v3/api/tunnel_machines/{deviceId}/routes/{routeId}";
 pub const AGENT_HEARTBEAT: &str = "/backend/v3/api/agent/heartbeat";
 pub const AGENT_SYNC: &str = "/backend/v3/api/agent/sync";
 pub const TRAFFIC_USAGE: &str = "/backend/v3/api/traffic_usage";

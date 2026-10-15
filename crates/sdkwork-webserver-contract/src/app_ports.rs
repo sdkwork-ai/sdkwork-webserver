@@ -5,6 +5,7 @@ use crate::cluster::*;
 use crate::dto::*;
 use crate::metrics::*;
 use crate::problem::WebServiceResult;
+use crate::tunnel::*;
 use crate::usage::*;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -662,6 +663,59 @@ pub trait WebBackendApi: Send + Sync {
         request: &CreateRootDomainHostnameRequest,
     ) -> WebServiceResult<DomainResponse>;
 
+    /// Reads the root domain's WeChat MP domain-ownership verification file;
+    /// `fileName` absent means none is configured.
+    async fn retrieve_root_domain_wechat_verification(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+    ) -> WebServiceResult<DomainWechatVerificationResponse> {
+        let _ = (context, root_domain_id);
+        Err(crate::problem::WebServiceError::Internal(
+            "root domain API is not implemented".to_owned(),
+        ))
+    }
+
+    /// Uploads (or wholly replaces) the root domain's WeChat verification
+    /// file. Content is stored byte-exact: the platform compares bytes.
+    async fn upsert_root_domain_wechat_verification(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+        request: &UpsertDomainWechatVerificationRequest,
+    ) -> WebServiceResult<DomainWechatVerificationResponse> {
+        let _ = (context, root_domain_id, request);
+        Err(crate::problem::WebServiceError::Internal(
+            "root domain API is not implemented".to_owned(),
+        ))
+    }
+
+    /// Deletes the root domain's WeChat verification file.
+    async fn delete_root_domain_wechat_verification(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+    ) -> WebServiceResult<()> {
+        let _ = (context, root_domain_id);
+        Err(crate::problem::WebServiceError::Internal(
+            "root domain API is not implemented".to_owned(),
+        ))
+    }
+
+    /// Self-checks the file the way the WeChat crawler reads it: fetch
+    /// `https(s)://<hostname>/<fileName>` and compare byte-for-byte. Never
+    /// throws; transport failures fold into the returned facts.
+    async fn check_root_domain_wechat_verification(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+    ) -> WebServiceResult<DomainWechatVerificationCheckResponse> {
+        let _ = (context, root_domain_id);
+        Err(crate::problem::WebServiceError::Internal(
+            "root domain API is not implemented".to_owned(),
+        ))
+    }
+
     /// Pages the Zone's synced DNS resolution records, optionally restricted
     /// to one subdomain. The read is over the last cloud-account sync's
     /// snapshot: it never contacts the provider, so a page render costs a
@@ -1116,6 +1170,56 @@ pub trait WebBackendApi: Send + Sync {
         &self,
         context: &WebBackendRequestContext,
     ) -> WebServiceResult<ClusterOverviewResponse>;
+
+    /// Lists the tunnel connector machines the gateway manages.
+    ///
+    /// The reach is a property of this operation, not of the caller: these are
+    /// infrastructure machines (platform tenant), and a tenant-bound context is
+    /// refused rather than narrowed, so a misrouted admin page fails loudly
+    /// instead of rendering an empty machine list as "no machines".
+    async fn list_tunnel_machines(
+        &self,
+        context: &WebBackendRequestContext,
+    ) -> WebServiceResult<TunnelMachineListResponse>;
+
+    /// One managed machine, or a `NotFound` when no such machine is known.
+    async fn retrieve_tunnel_machine(
+        &self,
+        context: &WebBackendRequestContext,
+        device_id: &str,
+    ) -> WebServiceResult<TunnelMachineResponse>;
+
+    /// Switches a machine on or off.
+    ///
+    /// Off means off *now*: the machine's live session is closed and further
+    /// sessions are refused until it is switched back on.
+    async fn set_tunnel_machine_enabled(
+        &self,
+        context: &WebBackendRequestContext,
+        device_id: &str,
+        request: &SetTunnelMachineEnabledRequest,
+    ) -> WebServiceResult<TunnelMachineResponse>;
+
+    /// Declares a route for one machine.
+    ///
+    /// The declaration carries no target: the agent activates it only when it
+    /// matches one of its own local templates and always dials its own
+    /// configured target (PRD §45 SSRF boundary).
+    async fn create_tunnel_machine_route(
+        &self,
+        context: &WebBackendRequestContext,
+        device_id: &str,
+        request: &CreateTunnelMachineRouteRequest,
+    ) -> WebServiceResult<TunnelMachineRouteDeclarationResponse>;
+
+    /// Removes one route from the gateway and, when the machine is online,
+    /// tells the machine to stop serving it.
+    async fn delete_tunnel_machine_route(
+        &self,
+        context: &WebBackendRequestContext,
+        device_id: &str,
+        route_id: &str,
+    ) -> WebServiceResult<()>;
 
     async fn list_cluster_heartbeats(
         &self,

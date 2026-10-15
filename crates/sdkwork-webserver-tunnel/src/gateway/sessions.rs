@@ -123,6 +123,18 @@ impl SessionTable {
         inner.by_device.get(device_id).cloned()
     }
 
+    /// Looks up the device behind a session id.
+    pub fn device_of_session(&self, session_id: &SessionId) -> Option<DeviceId> {
+        let inner = self
+            .inner
+            .read()
+            .expect("session table lock is never held across awaits");
+        inner
+            .by_id
+            .get(session_id)
+            .map(|entry| entry.device.id.clone())
+    }
+
     /// Refreshes the heartbeat instant of a live session.
     pub fn touch(&self, session_id: &SessionId) -> Result<()> {
         let mut inner = self

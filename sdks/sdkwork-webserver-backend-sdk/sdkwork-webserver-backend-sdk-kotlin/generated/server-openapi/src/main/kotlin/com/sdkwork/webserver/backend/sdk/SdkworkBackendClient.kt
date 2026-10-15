@@ -16,6 +16,7 @@ import com.sdkwork.webserver.backend.sdk.api.WebserverConfigApi
 import com.sdkwork.webserver.backend.sdk.api.AgentApi
 import com.sdkwork.webserver.backend.sdk.api.AuditApi
 import com.sdkwork.webserver.backend.sdk.api.ClusterApi
+import com.sdkwork.webserver.backend.sdk.api.TunnelApi
 import com.sdkwork.webserver.backend.sdk.api.TrafficUsageApi
 import com.sdkwork.webserver.backend.sdk.api.MetricsSummaryApi
 
@@ -36,6 +37,7 @@ open class SdkworkBackendClient {
     lateinit var agent: AgentApi
     lateinit var audit: AuditApi
     lateinit var cluster: ClusterApi
+    lateinit var tunnel: TunnelApi
     lateinit var trafficUsage: TrafficUsageApi
     lateinit var metricsSummary: MetricsSummaryApi
 
@@ -55,6 +57,7 @@ open class SdkworkBackendClient {
         agent = AgentApi(httpClient)
         audit = AuditApi(httpClient)
         cluster = ClusterApi(httpClient)
+        tunnel = TunnelApi(httpClient)
         trafficUsage = TrafficUsageApi(httpClient)
         metricsSummary = MetricsSummaryApi(httpClient)
     }
@@ -75,6 +78,7 @@ open class SdkworkBackendClient {
         agent = AgentApi(httpClient)
         audit = AuditApi(httpClient)
         cluster = ClusterApi(httpClient)
+        tunnel = TunnelApi(httpClient)
         trafficUsage = TrafficUsageApi(httpClient)
         metricsSummary = MetricsSummaryApi(httpClient)
     }

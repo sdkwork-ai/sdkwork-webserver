@@ -64,6 +64,7 @@ client.SetHeader("X-Custom-Header", "value");
 - `client.Agent` - agent API
 - `client.Audit` - audit API
 - `client.Cluster` - cluster API
+- `client.Tunnel` - tunnel API
 - `client.TrafficUsage` - traffic_usage API
 - `client.MetricsSummary` - metrics_summary API
 
@@ -240,6 +241,14 @@ Console.WriteLine(result);
 ```csharp
 // Retrieve the cluster health overview for status polling
 var result = await client.Cluster.ClustersOverviewRetrieveAsync();
+Console.WriteLine(result);
+```
+
+### tunnel
+
+```csharp
+// List the tunnel connector machines this gateway manages
+var result = await client.Tunnel.MachinesListAsync();
 Console.WriteLine(result);
 ```
 

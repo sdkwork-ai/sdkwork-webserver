@@ -159,6 +159,64 @@ impl WechatVerificationSource for DeployWechatVerificationSource {
     }
 }
 
+/// 生产读取源之二：Web Server 控制面自己的验证文件（admin 面上传，存于
+/// `webserver_domain_wechat_verification`）。与 Deploy 源并列——两个控制面
+/// 各自管理自己的域名登记，边缘按主机名先查 Deploy 库、再查 Web Server 库。
+#[cfg(feature = "management")]
+pub(crate) struct WebserverWechatVerificationSource {
+    pool: sqlx::PgPool,
+}
+
+#[cfg(feature = "management")]
+impl WebserverWechatVerificationSource {
+    pub(crate) fn new(pool: sqlx::PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[cfg(feature = "management")]
+#[async_trait]
+impl WechatVerificationSource for WebserverWechatVerificationSource {
+    async fn lookup(&self, hostname: &str) -> Option<WechatVerificationFile> {
+        let (file_name, content) =
+            sdkwork_intelligence_webserver_repository_sqlx::wechat_verification_by_hostname_lookup(
+                &self.pool, hostname,
+            )
+            .await
+            .ok()??;
+        Some(WechatVerificationFile { file_name, content })
+    }
+}
+
+/// 合并读取源：同一个主机名先问 Deploy 控制面，再问 Web Server 控制面。
+/// 两个登记各自独立，命中其一即可；都未命中才放行。
+#[cfg(feature = "management")]
+pub(crate) struct MergedWechatVerificationSource {
+    first: Arc<dyn WechatVerificationSource>,
+    second: Arc<dyn WechatVerificationSource>,
+}
+
+#[cfg(feature = "management")]
+impl MergedWechatVerificationSource {
+    pub(crate) fn new(
+        first: Arc<dyn WechatVerificationSource>,
+        second: Arc<dyn WechatVerificationSource>,
+    ) -> Self {
+        Self { first, second }
+    }
+}
+
+#[cfg(feature = "management")]
+#[async_trait]
+impl WechatVerificationSource for MergedWechatVerificationSource {
+    async fn lookup(&self, hostname: &str) -> Option<WechatVerificationFile> {
+        match self.first.lookup(hostname).await {
+            Some(file) => Some(file),
+            None => self.second.lookup(hostname).await,
+        }
+    }
+}
+
 static SHARED_SOURCE: ArcSwapOption<CachedWechatVerificationSource> = ArcSwapOption::const_empty();
 
 /// 装载进程级共享读取源（网站数据面启动时调用一次；重复装载以最后一次
@@ -323,14 +381,11 @@ mod tests {
             );
         }
         // 大小写敏感：微信的名字不做大小写归一。
-        assert!(serve_wechat_verification_file(
-            &cached,
-            "www.example.com",
-            "/mp_verify_abc.txt",
-            "GET"
-        )
-        .await
-        .is_none());
+        assert!(
+            serve_wechat_verification_file(&cached, "www.example.com", "/mp_verify_abc.txt", "GET")
+                .await
+                .is_none()
+        );
     }
 
     #[tokio::test]
@@ -349,14 +404,16 @@ mod tests {
                 .expect("a write against a claimed file must be refused");
         assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
         // 同样的写动词落在没有文件的主机上则放行——那是宿主应用的资源。
-        assert!(serve_wechat_verification_file(
-            &cached,
-            "other.example.com",
-            "/MP_verify_abc.txt",
-            "PUT"
-        )
-        .await
-        .is_none());
+        assert!(
+            serve_wechat_verification_file(
+                &cached,
+                "other.example.com",
+                "/MP_verify_abc.txt",
+                "PUT"
+            )
+            .await
+            .is_none()
+        );
     }
 
     /// 缓存有界：超过上限的不同主机名不会让地图单调增长。

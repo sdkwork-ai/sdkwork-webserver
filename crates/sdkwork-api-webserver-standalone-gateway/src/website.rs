@@ -2659,12 +2659,22 @@ fn install_wechat_verification_source() {
         return;
     };
     let sdkwork_database_sqlx::DatabasePool::Postgres(pool, _) = pool;
-    let source =
-        crate::data_plane::wechat_verify::CachedWechatVerificationSource::new(std::sync::Arc::new(
+    // 两个控制面各自的验证文件登记，边缘按主机名先 Deploy、再 Web Server
+    // 合并查找；Web Server 侧的读取走该表所属的 repository 契约，边缘不另
+    // 写一份 SQL。
+    let merged = crate::data_plane::wechat_verify::MergedWechatVerificationSource::new(
+        std::sync::Arc::new(
             crate::data_plane::wechat_verify::DeployWechatVerificationSource::new(
-                sdkwork_api_webserver_assembly::DeployRepository::new_lookup(pool),
+                sdkwork_api_webserver_assembly::DeployRepository::new_lookup(pool.clone()),
             ),
-        ));
+        ),
+        std::sync::Arc::new(
+            crate::data_plane::wechat_verify::WebserverWechatVerificationSource::new(pool),
+        ),
+    );
+    let source = crate::data_plane::wechat_verify::CachedWechatVerificationSource::new(
+        std::sync::Arc::new(merged),
+    );
     crate::data_plane::wechat_verify::install_shared_source(source);
 }
 

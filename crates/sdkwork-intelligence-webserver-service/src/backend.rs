@@ -17,7 +17,9 @@ use sdkwork_webserver_contract::{
     METRICS_LAST_SEVEN_DAYS_SPAN, METRICS_WINDOW_CURRENT_MONTH, METRICS_WINDOW_LAST_7_DAYS,
     METRICS_WINDOW_LIFETIME, METRICS_WINDOW_TODAY, METRICS_WINDOWS, MetricsSeriesWindow,
     MetricsSummaryQuery, MetricsSummaryResponse, MetricsWindowBounds, MetricsWindowRequest,
-    TrafficUsageStatisticsQuery, TrafficUsageStatisticsResponse, TrafficUsageWindow,
+    CreateTunnelMachineRouteRequest, SetTunnelMachineEnabledRequest, TrafficUsageStatisticsQuery,
+    TrafficUsageStatisticsResponse, TrafficUsageWindow, TunnelMachineListResponse,
+    TunnelMachineResponse, TunnelMachineRouteDeclarationResponse,
     UpdateApplicationRequest, UpdateCertificateRequest, UpdateClusterHostRequest,
     UpdateClusterInstanceRequest, UpdateClusterRequest, UpdateDomainApplicationBindingRequest,
     UpdateDomainDnsRecordRequest, UpdateNginxConfigRequest, UpdateRootDomainRequest, WebAppApi,
@@ -406,6 +408,24 @@ impl WebService {
             ssl_enabled: request.ssl_enabled,
             ssl_provider: request.ssl_provider.clone(),
         })
+    }
+}
+
+/// Authorizes the tunnel-machine surface.
+///
+/// Tunnel machines are platform infrastructure (a connector node is not a
+/// tenant's resource), so a tenant-bound context is refused rather than
+/// narrowed: an empty machine list would look exactly like "there are no
+/// machines" and an operator would debug the wrong thing. Reads and writes are
+/// additionally gated by `web.tunnel.read` / `web.tunnel.write` at the route
+/// layer, so this check answers "may this principal see platform machines at
+/// all", never "which machines".
+fn require_tunnel_operator(context: &WebBackendRequestContext) -> WebServiceResult<()> {
+    let tenant_id = context.tenant_id.map(|id| id.to_string());
+    if web_is_platform_operator_tenant(tenant_id.as_deref()) {
+        Ok(())
+    } else {
+        Err(WebServiceError::Forbidden)
     }
 }
 
@@ -895,6 +915,47 @@ impl WebBackendApi for WebService {
     /// unconfigured id, an account that cannot see the zone) is a validation
     /// error the operator can fix; a provider refusal is an internal failure
     /// carrying the provider's own words.
+    async fn retrieve_root_domain_wechat_verification(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+    ) -> WebServiceResult<sdkwork_webserver_contract::DomainWechatVerificationResponse> {
+        let tenant_id = Self::require_backend_tenant(context)?;
+        self.retrieve_wechat_verification(tenant_id, root_domain_id)
+            .await
+    }
+
+    async fn upsert_root_domain_wechat_verification(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+        request: &sdkwork_webserver_contract::UpsertDomainWechatVerificationRequest,
+    ) -> WebServiceResult<sdkwork_webserver_contract::DomainWechatVerificationResponse> {
+        let tenant_id = Self::require_backend_tenant(context)?;
+        self.upsert_wechat_verification(tenant_id, root_domain_id, request)
+            .await
+    }
+
+    async fn delete_root_domain_wechat_verification(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+    ) -> WebServiceResult<()> {
+        let tenant_id = Self::require_backend_tenant(context)?;
+        self.delete_wechat_verification(tenant_id, root_domain_id)
+            .await
+    }
+
+    async fn check_root_domain_wechat_verification(
+        &self,
+        context: &WebBackendRequestContext,
+        root_domain_id: &str,
+    ) -> WebServiceResult<sdkwork_webserver_contract::DomainWechatVerificationCheckResponse> {
+        let tenant_id = Self::require_backend_tenant(context)?;
+        self.check_wechat_verification(tenant_id, root_domain_id)
+            .await
+    }
+
     async fn sync_root_domain_dns_records(
         &self,
         context: &WebBackendRequestContext,
@@ -1885,6 +1946,53 @@ impl WebBackendApi for WebService {
         context: &WebBackendRequestContext,
     ) -> WebServiceResult<ClusterOverviewResponse> {
         self.cluster_overview(context).await
+    }
+
+    async fn list_tunnel_machines(
+        &self,
+        context: &WebBackendRequestContext,
+    ) -> WebServiceResult<TunnelMachineListResponse> {
+        require_tunnel_operator(context)?;
+        crate::tunnel_machines::list_machines().await
+    }
+
+    async fn retrieve_tunnel_machine(
+        &self,
+        context: &WebBackendRequestContext,
+        device_id: &str,
+    ) -> WebServiceResult<TunnelMachineResponse> {
+        require_tunnel_operator(context)?;
+        crate::tunnel_machines::retrieve_machine(device_id).await
+    }
+
+    async fn set_tunnel_machine_enabled(
+        &self,
+        context: &WebBackendRequestContext,
+        device_id: &str,
+        request: &SetTunnelMachineEnabledRequest,
+    ) -> WebServiceResult<TunnelMachineResponse> {
+        require_tunnel_operator(context)?;
+        crate::tunnel_machines::set_machine_enabled(device_id, request).await
+    }
+
+    async fn create_tunnel_machine_route(
+        &self,
+        context: &WebBackendRequestContext,
+        device_id: &str,
+        request: &CreateTunnelMachineRouteRequest,
+    ) -> WebServiceResult<TunnelMachineRouteDeclarationResponse> {
+        require_tunnel_operator(context)?;
+        crate::tunnel_machines::create_machine_route(device_id, request).await
+    }
+
+    async fn delete_tunnel_machine_route(
+        &self,
+        context: &WebBackendRequestContext,
+        _device_id: &str,
+        route_id: &str,
+    ) -> WebServiceResult<()> {
+        require_tunnel_operator(context)?;
+        crate::tunnel_machines::delete_machine_route(route_id).await
     }
 
     async fn list_cluster_heartbeats(

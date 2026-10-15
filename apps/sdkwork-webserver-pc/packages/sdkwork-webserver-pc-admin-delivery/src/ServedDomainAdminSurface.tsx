@@ -6,10 +6,13 @@ import type {
   DomainDnsRecordStatusRequest,
   UpdateDomainDnsRecordRequest,
   DomainVerifyResponse,
+  DomainWechatVerificationCheckResponse,
+  DomainWechatVerificationResponse,
   RootDomainResponse,
+  UpsertDomainWechatVerificationRequest,
 } from "@sdkwork/webserver-pc-admin-core";
 import type { WebserverLocale } from "@sdkwork/webserver-pc-commons";
-import { ArrowLeft, BadgeCheck, CirclePause, CirclePlay, FileKey2, Globe2, Network, Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowLeft, BadgeCheck, CirclePause, CirclePlay, FileCheck2, FileKey2, Globe2, Network, Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Route, Routes, useParams } from "react-router-dom";
 
@@ -172,6 +175,8 @@ function RootDomainLedger({
   // list effect's dependency array below and refetched the ledger forever.
   const t = useMemo(() => translator(locale), [locale]);
   const [roots, setRoots] = useState<RootDomainResponse[] | null>(null);
+  // 微信认证文件对话框的目标根域名(每根域名一份文件,根域名行即入口)。
+  const [verifyFileRoot, setVerifyFileRoot] = useState<RootDomainResponse>();
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
   // Mutations request a re-read by bumping this counter rather than by
@@ -491,6 +496,16 @@ function RootDomainLedger({
                             table for, and neither is guessable from an icon
                             alone. The literal word stays inside the accessible
                             name so the label still matches what is read out. */}
+                        <button
+                          aria-label={`${t("resource.domains.wechatVerifyFile")} · ${root.hostname}`}
+                          className="table-action table-action-text"
+                          onClick={() => setVerifyFileRoot(root)}
+                          title={t("resource.domains.wechatVerifyTitle")}
+                          type="button"
+                        >
+                          <FileCheck2 size={15} />
+                          <span>{t("resource.domains.wechatVerifyFile")}</span>
+                        </button>
                         <Link
                           aria-label={`${t("resource.domains.dnsResolution")} · ${root.hostname}`}
                           className="table-action table-action-text"
@@ -650,6 +665,24 @@ function RootDomainLedger({
               ? t("resource.domains.pauseRootTitle")
               : t("resource.domains.resumeRootTitle")
           }
+        />
+      ) : null}
+
+      {verifyFileRoot ? (
+        <WechatVerifyFileDialog
+          close={() => setVerifyFileRoot(undefined)}
+          locale={locale}
+          rootDomainId={verifyFileRoot.id}
+          service={{
+            check: (id) => client.domain.rootDomains.wechatVerification.check(id),
+            remove: (id) => client.domain.rootDomains.wechatVerification.delete(id),
+            retrieve: (id) => client.domain.rootDomains.wechatVerification.retrieve(id),
+            upsert: (id, body) =>
+              client.domain.rootDomains.wechatVerification.upsert(id, body, {
+                idempotencyKey: newIdempotencyKey(),
+              }),
+          }}
+          t={t}
         />
       ) : null}
     </section>
@@ -924,6 +957,8 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
   // 解析概要 per hostname row: one zone-wide snapshot read, grouped by the
   // matched subdomain id the snapshot rows carry.
   const [resolutionGroups, setResolutionGroups] = useState<Map<string, DomainDnsRecordResponse[]>>(new Map());
+  // 微信认证文件对话框:子域名行与根域名行管理同一个根域名文件。
+  const [verifyFileHostname, setVerifyFileHostname] = useState<ApplicationDomainResponse>();
   // The ledger's own cloud-account sync: the one gesture here that touches
   // the provider, shared with the hostname detail page.
   const [syncing, setSyncing] = useState(false);
@@ -1173,6 +1208,16 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
                           the step that turns a declared hostname into one a
                           certificate can cover — and on an already-verified row it
                           is a control that does nothing. */}
+                      <button
+                        aria-label={`${t("resource.domains.wechatVerifyFile")} ${hostname.hostname}`}
+                        className="table-action"
+                        disabled={busy}
+                        onClick={() => setVerifyFileHostname(hostname)}
+                        title={t("resource.domains.wechatVerifyTitle")}
+                        type="button"
+                      >
+                        <FileCheck2 size={16} />
+                      </button>
                       {hostname.isVerified ? null : (
                         <button
                           aria-label={`${t("resource.domains.verify")} ${hostname.hostname}`}
@@ -1307,6 +1352,24 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
           title={t("resource.domains.delete")}
         />
       ) : null}
+
+      {verifyFileHostname ? (
+        <WechatVerifyFileDialog
+          close={() => setVerifyFileHostname(undefined)}
+          locale={locale}
+          rootDomainId={rootDomainId}
+          service={{
+            check: (id) => client.domain.rootDomains.wechatVerification.check(id),
+            remove: (id) => client.domain.rootDomains.wechatVerification.delete(id),
+            retrieve: (id) => client.domain.rootDomains.wechatVerification.retrieve(id),
+            upsert: (id, body) =>
+              client.domain.rootDomains.wechatVerification.upsert(id, body, {
+                idempotencyKey: newIdempotencyKey(),
+              }),
+          }}
+          t={t}
+        />
+      ) : null}
     </section>
   );
 }
@@ -1358,6 +1421,175 @@ function DnsRecordFormValues_from(record: DomainDnsRecordResponse): DnsRecordFor
     ttlSeconds: record.ttlSeconds === undefined ? "" : String(record.ttlSeconds),
     recordLine: record.recordLine ?? "",
   };
+}
+
+/**
+ * 微信公众号/小程序域名归属认证文件:平台上下载 MP_verify_xxx.txt,把文件名
+ * 与内容按原文保存到根域名;边缘数据面对该根域名及其子域名按请求主机名
+ * 原样提供这份文件。自检按微信爬虫的视角取回比对,失败也只陈述事实。
+ */
+function WechatVerifyFileDialog({
+  close,
+  locale,
+  rootDomainId,
+  service,
+  t,
+}: {
+  close(): void;
+  locale: WebserverLocale;
+  rootDomainId: string;
+  service: {
+    check(rootDomainId: string): Promise<DomainWechatVerificationCheckResponse>;
+    remove(rootDomainId: string): Promise<void>;
+    retrieve(rootDomainId: string): Promise<DomainWechatVerificationResponse>;
+    upsert(rootDomainId: string, body: UpsertDomainWechatVerificationRequest): Promise<DomainWechatVerificationResponse>;
+  };
+  t: Translator;
+}) {
+  const [fileName, setFileName] = useState("");
+  const [content, setContent] = useState("");
+  const [existing, setExisting] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<string>();
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const [checkResult, setCheckResult] = useState<DomainWechatVerificationCheckResponse>();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    void service.retrieve(rootDomainId).then((result) => {
+      if (!active) return;
+      setFileName(result.fileName ?? "");
+      setContent(result.content ?? "");
+      setExisting(result.fileName !== undefined);
+      setUpdatedAt(result.updatedAt);
+      setLoading(false);
+    }).catch((cause) => {
+      if (!active) return;
+      setError(errorText(cause, t));
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, [rootDomainId, service, t]);
+
+  async function save() {
+    if (!fileName.trim() || !content) { setError(t("resource.domains.dnsValueRequired")); return; }
+    setBusy(true); setError(undefined);
+    try {
+      await service.upsert(rootDomainId, { fileName: fileName.trim(), content });
+      close();
+    } catch (cause) {
+      setError(errorText(cause, t));
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    setBusy(true); setError(undefined);
+    try {
+      await service.remove(rootDomainId);
+      close();
+    } catch (cause) {
+      setError(errorText(cause, t));
+      setBusy(false);
+      setConfirmingDelete(false);
+    }
+  }
+
+  async function runCheck() {
+    setBusy(true); setError(undefined); setCheckResult(undefined);
+    try {
+      setCheckResult(await service.check(rootDomainId));
+    } catch (cause) {
+      setError(errorText(cause, t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const verdict = checkResult === undefined ? undefined
+    : checkResult.matched ? t("resource.domains.wechatVerifyMatched")
+    : checkResult.reachable ? t("resource.domains.wechatVerifyReachableMismatch")
+    : t("resource.domains.wechatVerifyUnreachable");
+
+  return (
+    <DialogBackdrop close={close}>
+      <div aria-modal="true" className="dialog delivery-dialog" role="dialog">
+        <header>
+          <h2>{t("resource.domains.wechatVerifyTitle")}</h2>
+          <DialogCloseButton close={close} label={t("resource.domains.cancel")} />
+        </header>
+        {loading ? (
+          <p className="form-hint">{t("resource.domains.loading")}</p>
+        ) : (
+          <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
+            <p className="form-hint">{t("resource.domains.wechatVerifyHint")}</p>
+            {existing && updatedAt ? <p className="form-hint">{formatInstant(updatedAt, locale)}</p> : null}
+            <div className="form-grid single-column">
+              <label>
+                <span>{t("resource.domains.wechatVerifyFileName")}</span>
+                <input
+                  autoComplete="off"
+                  autoFocus
+                  onChange={(event) => setFileName(event.target.value)}
+                  placeholder="MP_verify_xxxxxxxxxx.txt"
+                  required
+                  type="text"
+                  value={fileName}
+                />
+              </label>
+              <label>
+                <span>{t("resource.domains.wechatVerifyContent")}</span>
+                <textarea
+                  autoComplete="off"
+                  onChange={(event) => setContent(event.target.value)}
+                  required
+                  rows={4}
+                  value={content}
+                />
+              </label>
+            </div>
+            {verdict ? (
+              <div className={checkResult?.matched ? "verification-success" : "verification-pending"}>
+                <BadgeCheck size={19} />
+                <span>
+                  {verdict}
+                  {checkResult?.detail ? ` ${checkResult.detail}` : ""}
+                  {checkResult?.scheme ? ` (${checkResult.scheme.toUpperCase()})` : ""}
+                </span>
+              </div>
+            ) : null}
+            {error ? (
+              <div className="error-banner" role="alert">
+                {error}
+              </div>
+            ) : null}
+            <footer className="dialog-footer">
+              {existing ? (
+                confirmingDelete ? (
+                  <button className="danger-button" disabled={busy} onClick={() => void remove()} type="button">
+                    {t("resource.domains.wechatVerifyDeleteConfirm")}
+                  </button>
+                ) : (
+                  <button className="danger-button" disabled={busy} onClick={() => setConfirmingDelete(true)} type="button">
+                    {t("resource.domains.wechatVerifyDelete")}
+                  </button>
+                )
+              ) : null}
+              <button className="secondary-button" disabled={busy || !existing} onClick={() => void runCheck()} type="button">
+                {t("resource.domains.wechatVerifyCheck")}
+              </button>
+              <button className="command-button" disabled={busy} type="submit">
+                {t("resource.domains.dnsSaveRecord")}
+              </button>
+            </footer>
+          </form>
+        )}
+      </div>
+    </DialogBackdrop>
+  );
 }
 
 /**

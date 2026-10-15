@@ -69,6 +69,9 @@ pub enum TunnelError {
     /// No route matched the request.
     #[error("tunnel route not found")]
     RouteNotFound,
+    /// A load-balancer group matched, but every member is unhealthy.
+    #[error("no healthy tunnel replica is available")]
+    NoHealthyReplica,
     /// The route is already registered by another owner.
     #[error("tunnel route conflicts with an existing registration: {0}")]
     RouteConflict(String),

@@ -77,6 +77,9 @@ impl ErrorCode {
             | TunnelError::DeviceNotFound
             | TunnelError::SessionNotFound
             | TunnelError::TargetUnreachable(_)
+            // A load-balancer group with no healthy replica is an availability
+            // fact, not a protocol or credential problem.
+            | TunnelError::NoHealthyReplica
             | TunnelError::Timeout(_) => Self::Internal,
         }
     }
@@ -94,6 +97,14 @@ pub struct Hello {
     pub device_name: String,
     /// Reported platform label.
     pub platform: String,
+    /// User this machine claims to serve (FRP `user`).
+    ///
+    /// A request, not a fact: the gateway resolves the effective user from the
+    /// token and refuses a contradictory claim, so the field can never be used
+    /// to spend another team's quota. Absent means "no user", which is what an
+    /// agent predating the field sends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
 }
 
 /// Agent → gateway credential presentation (PRD §25).
@@ -119,10 +130,31 @@ pub struct AuthResult {
     /// Failure detail (present when `!ok`; never echoes the token).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// Scopes the gateway requires the agent to re-authenticate in (FRP
+    /// `auth.additionalScopes`).
+    ///
+    /// Advertised rather than configured twice: the agent attaches its token
+    /// exactly where the gateway checks it, so the two sides cannot drift into
+    /// "hardening enabled on one side only", which would lock every agent out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required_scopes: Option<Vec<String>>,
+}
+
+/// Agent → gateway token re-presentation (FRP `auth.additionalScopes`
+/// `HeartBeats`).
+///
+/// Sent alongside a heartbeat once the gateway advertised
+/// [`AuthResult::required_scopes`]. A gateway that did not ask for it treats
+/// the message as an ordinary unknown control message.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Reauthenticate {
+    /// Bearer token, re-presented. Transient; never logged or echoed.
+    pub token: String,
 }
 
 /// Agent → gateway route registration (PRD §55 hot updates).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RegisterRoute {
     /// Requested route id (agent-derived from the template name).
@@ -159,6 +191,48 @@ pub struct RegisterRoute {
     /// deny-everything instead of "token required".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visitor_tokens: Option<Vec<String>>,
+    /// PROXY protocol version (`v1` / `v2`) the agent prepends toward its
+    /// local target, so the gateway's route listing shows what the service
+    /// behind the tunnel actually receives. Absent means no header.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy_protocol: Option<String>,
+    /// Path prefixes this route answers on its host (FRP `locations` parity).
+    /// Absent or empty means every path of the host.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locations: Option<Vec<String>>,
+    /// Relay ceiling in bytes per second, each direction (FRP
+    /// `transport.bandwidthLimit` parity). Absent means unlimited.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bandwidth_limit_bytes_per_second: Option<u64>,
+    /// Load-balancer group (FRP `loadBalancer.group` parity): registrations
+    /// sharing a group and a matcher are replicas of one service.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub load_balancer_group: Option<String>,
+    /// Health probe the agent runs against its own target (FRP `healthCheck`
+    /// parity). Absent means the gateway treats the route as always healthy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health_check: Option<sdkwork_webserver_tunnel_core::HealthCheckConfig>,
+    /// Shared secret for an `stcp`/`sudp` route (FRP `sk` parity). Present only
+    /// on secret registrations: it travels inside the encrypted control plane
+    /// and is never echoed back in a listing or a result message.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret_key: Option<String>,
+    /// HTTP header rewriting the gateway applies on this route's HTTP plane
+    /// (FRP `hostHeaderRewrite` + `requestHeaders.set` / `responseHeaders.set`).
+    ///
+    /// It travels with the registration because the gateway is the only hop
+    /// that parses HTTP: without it a route's rewrite policy would be invisible
+    /// to the process that has to apply it. Absent means "rewrite nothing", so
+    /// an agent predating this field keeps registering exactly what it used to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub headers: Option<sdkwork_webserver_tunnel_core::RouteHeaderRewrite>,
+    /// Free-form operator metadata (FRP `annotations`).
+    ///
+    /// Absent means "none", and the gateway bounds what it accepts, so an agent
+    /// cannot use it as unbounded per-route storage. Carried and listed, never
+    /// interpreted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub annotations: Option<std::collections::BTreeMap<String, String>>,
 }
 
 /// Gateway → agent registration outcome, including the public URL for HTTP
@@ -201,7 +275,7 @@ pub struct UnregisterRouteResult {
 /// when — the declaration matches one of its locally configured templates;
 /// the target always comes from the agent's own configuration, never from
 /// the gateway (PRD §45 SSRF boundary).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct DeclareRoute {
     /// Correlation id: the declared route's name (agents derive route ids
@@ -231,6 +305,26 @@ pub struct DeclareRoute {
     /// Requested `visitor_tokens` for an `auth = bearer_token` declaration.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visitor_tokens: Option<Vec<String>>,
+    /// Requested PROXY protocol version (`v1` / `v2`) toward the local
+    /// target. Absent leaves the agent's local template in charge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy_protocol: Option<String>,
+    /// Requested path prefixes (FRP `locations` parity). Absent leaves the
+    /// agent's local template in charge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locations: Option<Vec<String>>,
+    /// Requested relay ceiling in bytes per second, each direction. Absent
+    /// leaves the agent's local template in charge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bandwidth_limit_bytes_per_second: Option<u64>,
+    /// Requested load-balancer group. Absent leaves the agent's local
+    /// template in charge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub load_balancer_group: Option<String>,
+    /// Requested health probe. Absent leaves the agent's local template in
+    /// charge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health_check: Option<sdkwork_webserver_tunnel_core::HealthCheckConfig>,
 }
 
 /// Gateway → agent control error.
@@ -269,8 +363,29 @@ pub enum ControlMessage {
     Heartbeat,
     /// Gateway liveness ack.
     HeartbeatAck,
+    /// Agent → gateway token re-presentation, sent with a heartbeat once the
+    /// gateway advertised `heartbeats` in its required scopes (FRP
+    /// `auth.additionalScopes`).
+    Reauthenticate(Reauthenticate),
+    /// Agent → gateway health verdict for one route (FRP `healthCheck`
+    /// parity): the agent probes its own target and reports the outcome, which
+    /// is what lets the gateway steer a load-balancer group away from a
+    /// replica that cannot serve.
+    RouteHealth(RouteHealthReport),
     /// Control-plane failure.
     Error(ErrorMessage),
+}
+
+/// One route's health as its owning agent observed it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteHealthReport {
+    /// Route the verdict applies to.
+    pub route_id: String,
+    /// True while the agent's probe succeeds.
+    pub healthy: bool,
+    /// Consecutive failed probes; `0` on success.
+    pub consecutive_failures: u32,
 }
 
 impl ControlMessage {
@@ -365,6 +480,7 @@ mod tests {
             device_id: "dev_home-pc".to_owned(),
             device_name: "home-pc".to_owned(),
             platform: "windows".to_owned(),
+            user: None,
         });
         assert_eq!(round_trip(message.clone()), message);
     }
@@ -380,6 +496,7 @@ mod tests {
                 session_id: Some("session_a".to_owned()),
                 protocol: Some(ProtocolVersion::v1()),
                 error: None,
+                required_scopes: Some(vec!["newWorkConns".to_owned()]),
             }),
             ControlMessage::RegisterRoute(RegisterRoute {
                 route_id: "route_web".to_owned(),
@@ -392,6 +509,9 @@ mod tests {
                 allowed_ips: Some(vec!["203.0.113.0/24".to_owned()]),
                 auth: Some("bearer_token".to_owned()),
                 visitor_tokens: Some(vec!["visitor-t0ken".to_owned()]),
+                proxy_protocol: Some("v1".to_owned()),
+                locations: None,
+                ..RegisterRoute::default()
             }),
             ControlMessage::RegisterRouteResult(RegisterRouteResult {
                 route_id: "route_web".to_owned(),
@@ -416,6 +536,9 @@ mod tests {
                 allowed_ips: Some(vec!["198.51.100.0/24".to_owned()]),
                 auth: Some("bearer_token".to_owned()),
                 visitor_tokens: Some(vec!["declared-t0ken".to_owned()]),
+                proxy_protocol: Some("v2".to_owned()),
+                locations: None,
+                ..DeclareRoute::default()
             }),
             ControlMessage::Heartbeat,
             ControlMessage::HeartbeatAck,
@@ -450,6 +573,9 @@ mod tests {
             allowed_ips: Some(vec!["10.0.0.0/8".to_owned(), "203.0.113.7/32".to_owned()]),
             auth: Some("none".to_owned()),
             visitor_tokens: None,
+            proxy_protocol: None,
+            locations: None,
+            ..RegisterRoute::default()
         });
         let text = String::from_utf8(with_list.encode().expect("encode")).expect("utf8");
         assert!(text.contains("10.0.0.0/8"), "{text}");
@@ -466,11 +592,111 @@ mod tests {
             allowed_ips: None,
             auth: None,
             visitor_tokens: None,
+            proxy_protocol: None,
+            locations: None,
+            ..RegisterRoute::default()
         });
         let text = String::from_utf8(without_list.encode().expect("encode")).expect("utf8");
         assert!(!text.contains("allowedIps"), "{text}");
         assert!(!text.contains("visitorTokens"), "{text}");
+        assert!(!text.contains("proxyProtocol"), "{text}");
         assert_eq!(round_trip(without_list.clone()), without_list);
+    }
+
+    #[test]
+    fn header_rewriting_travels_with_the_registration_and_absent_stays_absent() {
+        // The gateway is the hop that parses HTTP, so a route's rewriting
+        // policy is only actionable if it arrives with the registration.
+        let rewritten = ControlMessage::RegisterRoute(RegisterRoute {
+            route_id: "route_web".to_owned(),
+            name: "web".to_owned(),
+            protocol: "http".to_owned(),
+            domain: Some("demo.sdkwork.link".to_owned()),
+            target: "127.0.0.1:3000".to_owned(),
+            allow_public: true,
+            headers: Some(sdkwork_webserver_tunnel_core::RouteHeaderRewrite {
+                host: Some("backend.internal".to_owned()),
+                request_set: vec![sdkwork_webserver_tunnel_core::HeaderPair::parse(
+                    "X-From",
+                    "edge",
+                    sdkwork_webserver_tunnel_core::HeaderDirection::Request,
+                )
+                .expect("pair")],
+                response_set: vec![sdkwork_webserver_tunnel_core::HeaderPair::parse(
+                    "X-Served-By",
+                    "sdkwork",
+                    sdkwork_webserver_tunnel_core::HeaderDirection::Response,
+                )
+                .expect("pair")],
+            }),
+            ..RegisterRoute::default()
+        });
+        let text = String::from_utf8(rewritten.encode().expect("encode")).expect("utf8");
+        assert!(text.contains(r#""host":"backend.internal""#), "{text}");
+        assert!(text.contains(r#""requestSet""#), "{text}");
+        assert_eq!(round_trip(rewritten.clone()), rewritten);
+
+        // A route that rewrites nothing carries no field at all, and an older
+        // agent's registration decodes to "rewrite nothing" rather than to a
+        // policy the gateway would have to invent.
+        let plain = ControlMessage::RegisterRoute(RegisterRoute {
+            route_id: "route_plain".to_owned(),
+            name: "plain".to_owned(),
+            protocol: "http".to_owned(),
+            domain: Some("plain.sdkwork.link".to_owned()),
+            target: "127.0.0.1:3000".to_owned(),
+            allow_public: true,
+            ..RegisterRoute::default()
+        });
+        let text = String::from_utf8(plain.encode().expect("encode")).expect("utf8");
+        assert!(!text.contains("headers"), "{text}");
+        let legacy: RegisterRoute = serde_json::from_str(
+            r#"{"routeId":"route_plain","name":"plain","protocol":"http",
+                "domain":"plain.sdkwork.link","target":"127.0.0.1:3000","allowPublic":true}"#,
+        )
+        .expect("legacy registration decodes");
+        assert_eq!(legacy.headers, None);
+    }
+
+    /// The scope advertisement and the token re-presentation (FRP
+    /// `auth.additionalScopes`): a gateway that requires it must be able to say
+    /// so, and an agent must be able to answer, without either side guessing.
+    #[test]
+    fn auth_scopes_are_advertised_and_re_presented_additively() {
+        let advertised = ControlMessage::AuthResult(AuthResult {
+            ok: true,
+            session_id: Some("session_r".to_owned()),
+            protocol: Some(ProtocolVersion::v1()),
+            error: None,
+            required_scopes: Some(vec!["heartbeats".to_owned()]),
+        });
+        let text = String::from_utf8(advertised.encode().expect("encode")).expect("utf8");
+        assert!(
+            text.contains(r#""requiredScopes":["heartbeats"]"#),
+            "{text}"
+        );
+        assert_eq!(round_trip(advertised.clone()), advertised);
+
+        let reauth = ControlMessage::Reauthenticate(Reauthenticate {
+            token: "re-presented-token".to_owned(),
+        });
+        assert_eq!(round_trip(reauth.clone()), reauth);
+
+        // A gateway that requires nothing omits the field, and an older
+        // gateway's result (no field at all) decodes to "nothing required"
+        // rather than to an invented scope.
+        let plain = ControlMessage::AuthResult(AuthResult {
+            ok: true,
+            session_id: Some("session_p".to_owned()),
+            protocol: Some(ProtocolVersion::v1()),
+            error: None,
+            required_scopes: None,
+        });
+        let text = String::from_utf8(plain.encode().expect("encode")).expect("utf8");
+        assert!(!text.contains("requiredScopes"), "{text}");
+        let legacy: AuthResult = serde_json::from_str(r#"{"ok":true,"sessionId":"session_l"}"#)
+            .expect("legacy auth result decodes");
+        assert_eq!(legacy.required_scopes, None);
     }
 
     #[test]
@@ -490,10 +716,14 @@ mod tests {
             allowed_ips: None,
             auth: Some("bearer_token".to_owned()),
             visitor_tokens: Some(vec!["t1".to_owned(), "t2".to_owned()]),
+            proxy_protocol: Some("v1".to_owned()),
+            locations: None,
+            ..RegisterRoute::default()
         });
         let text = String::from_utf8(protected.encode().expect("encode")).expect("utf8");
         assert!(text.contains(r#""auth":"bearer_token""#), "{text}");
         assert!(text.contains(r#""visitorTokens":["t1","t2"]"#), "{text}");
+        assert!(text.contains(r#""proxyProtocol":"v1""#), "{text}");
         assert_eq!(round_trip(protected.clone()), protected);
 
         // A message from an older agent: unknown-to-it fields absent.
@@ -504,6 +734,22 @@ mod tests {
         .expect("legacy registration decodes");
         assert_eq!(legacy.auth, None);
         assert_eq!(legacy.visitor_tokens, None);
+        assert_eq!(legacy.proxy_protocol, None);
+        assert_eq!(legacy.locations, None);
+
+        // Locations travel the same way as the policy: a route that claims
+        // only some paths of its host must be dispatched by that claim.
+        let located = ControlMessage::RegisterRoute(RegisterRoute {
+            route_id: "route_api".to_owned(),
+            name: "api".to_owned(),
+            protocol: "http".to_owned(),
+            domain: Some("demo.sdkwork.link".to_owned()),
+            locations: Some(vec!["/api".to_owned(), "/admin/".to_owned()]),
+            ..RegisterRoute::default()
+        });
+        let text = String::from_utf8(located.encode().expect("encode")).expect("utf8");
+        assert!(text.contains(r#""locations":["/api","/admin/"]"#), "{text}");
+        assert_eq!(round_trip(located.clone()), located);
     }
 
     #[test]
@@ -676,6 +922,7 @@ mod tests {
             session_id: None,
             protocol: None,
             error: Some("authentication failed".to_owned()),
+            required_scopes: None,
         });
         let text = String::from_utf8(failure.encode().expect("encode")).expect("utf8");
         assert!(

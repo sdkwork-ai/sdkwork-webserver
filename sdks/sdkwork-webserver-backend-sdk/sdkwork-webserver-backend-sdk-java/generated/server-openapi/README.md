@@ -75,6 +75,7 @@ client.getHttpClient().setHeader("X-Custom-Header", "value");
 - `client.getAgent()` - agent API
 - `client.getAudit()` - audit API
 - `client.getCluster()` - cluster API
+- `client.getTunnel()` - tunnel API
 - `client.getTrafficUsage()` - traffic_usage API
 - `client.getMetricsSummary()` - metrics_summary API
 
@@ -231,6 +232,14 @@ System.out.println(result);
 ```java
 // Retrieve the cluster health overview for status polling
 ClustersOverviewRetrieveResponse result = client.getCluster().clustersOverviewRetrieve();
+System.out.println(result);
+```
+
+### tunnel
+
+```java
+// List the tunnel connector machines this gateway manages
+TunnelMachinesListResponse result = client.getTunnel().machinesList();
 System.out.println(result);
 ```
 

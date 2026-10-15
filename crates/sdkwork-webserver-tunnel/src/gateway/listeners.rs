@@ -73,6 +73,15 @@ impl TcpListenerSet {
         tracing::info!(port, "tunnel tcp listener bound");
     }
 
+    /// True when this port already has a listener.
+    ///
+    /// A load-balancer group's second member must register without rebinding
+    /// the port: the listener is per port, and each accepted connection is
+    /// dispatched to whichever group member the registry selects.
+    pub(crate) fn is_served(&self, port: u16) -> bool {
+        self.ports.contains_key(&port)
+    }
+
     /// Releases one route's port claim. A caller naming a route that does not
     /// own the port is refused, so a stale teardown can never close a live
     /// listener.
@@ -169,7 +178,7 @@ async fn relay(
     if let Err(error) = downstream.set_nodelay(true) {
         tracing::debug!(%peer, port, error = %error, "could not disable Nagle on the visitor socket");
     }
-    match dispatch::connect_tcp_stream(&shared, port, peer.ip()).await {
+    match dispatch::connect_tcp_stream(&shared, port, peer).await {
         Ok(mut relayed) => {
             let outcome = copy_bidirectional(&mut downstream, &mut relayed).await;
             match outcome {

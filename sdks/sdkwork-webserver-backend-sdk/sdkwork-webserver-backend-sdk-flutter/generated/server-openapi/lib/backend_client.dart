@@ -14,6 +14,7 @@ import 'src/api/webserver_config.dart';
 import 'src/api/agent.dart';
 import 'src/api/audit.dart';
 import 'src/api/cluster.dart';
+import 'src/api/tunnel.dart';
 import 'src/api/traffic_usage.dart';
 import 'src/api/metrics_summary.dart';
 
@@ -34,6 +35,7 @@ class SdkworkBackendClient {
   late final AgentApi agent;
   late final AuditApi audit;
   late final ClusterApi cluster;
+  late final TunnelApi tunnel;
   late final TrafficUsageApi trafficUsage;
   late final MetricsSummaryApi metricsSummary;
 
@@ -54,6 +56,7 @@ class SdkworkBackendClient {
     agent = AgentApi(_httpClient);
     audit = AuditApi(_httpClient);
     cluster = ClusterApi(_httpClient);
+    tunnel = TunnelApi(_httpClient);
     trafficUsage = TrafficUsageApi(_httpClient);
     metricsSummary = MetricsSummaryApi(_httpClient);
   }

@@ -4124,6 +4124,7 @@ dependencies = [
  "sdkwork-drive-internal-sdk-generated-rust",
  "sdkwork-iam-bootstrap",
  "sdkwork-iam-web-adapter",
+ "sdkwork-intelligence-webserver-repository-sqlx",
  "sdkwork-knowledgebase-internal-sdk-generated-rust",
  "sdkwork-utils-rust",
  "sdkwork-web-axum",

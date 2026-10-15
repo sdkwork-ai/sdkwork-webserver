@@ -1,5 +1,147 @@
 import Foundation
 
+public struct TunnelMachineRouteResponse: Codable {
+    public let routeId: String?
+    public let name: String?
+    public let protocol_: String?
+    public let domain: String?
+    public let port: Int?
+    public let secretName: String?
+    public let locations: [String]?
+    public let loadBalancerGroup: String?
+    public let bandwidthLimitBytesPerSecond: String?
+    public let proxyProtocol: String?
+    public let allowPublic: Bool?
+    public let auth: String?
+    public let allowedIps: [String]?
+    public let healthy: Bool?
+
+
+    public init(routeId: String? = nil, name: String? = nil, protocol_: String? = nil, domain: String? = nil, port: Int? = nil, secretName: String? = nil, locations: [String]? = nil, loadBalancerGroup: String? = nil, bandwidthLimitBytesPerSecond: String? = nil, proxyProtocol: String? = nil, allowPublic: Bool? = nil, auth: String? = nil, allowedIps: [String]? = nil, healthy: Bool? = nil) {
+        self.routeId = routeId
+        self.name = name
+        self.protocol_ = protocol_
+        self.domain = domain
+        self.port = port
+        self.secretName = secretName
+        self.locations = locations
+        self.loadBalancerGroup = loadBalancerGroup
+        self.bandwidthLimitBytesPerSecond = bandwidthLimitBytesPerSecond
+        self.proxyProtocol = proxyProtocol
+        self.allowPublic = allowPublic
+        self.auth = auth
+        self.allowedIps = allowedIps
+        self.healthy = healthy
+    }
+}
+
+public struct TunnelMachineResponse: Codable {
+    public let deviceId: String?
+    public let deviceName: String?
+    public let platform: String?
+    public let online: Bool?
+    public let enabled: Bool?
+    public let sessionId: String?
+    public let firstSeenAt: String?
+    public let lastSeenAt: String?
+    public let connectedAt: String?
+    public let disconnectedAt: String?
+    public let remoteAddr: String?
+    public let bytesIn: String?
+    public let bytesOut: String?
+    public let sessionsTotal: String?
+    public let routeCount: String?
+    public let healthyRouteCount: String?
+    public let unhealthyRouteIds: [String]?
+    public let routes: [TunnelMachineRouteResponse]?
+
+
+    public init(deviceId: String? = nil, deviceName: String? = nil, platform: String? = nil, online: Bool? = nil, enabled: Bool? = nil, sessionId: String? = nil, firstSeenAt: String? = nil, lastSeenAt: String? = nil, connectedAt: String? = nil, disconnectedAt: String? = nil, remoteAddr: String? = nil, bytesIn: String? = nil, bytesOut: String? = nil, sessionsTotal: String? = nil, routeCount: String? = nil, healthyRouteCount: String? = nil, unhealthyRouteIds: [String]? = nil, routes: [TunnelMachineRouteResponse]? = nil) {
+        self.deviceId = deviceId
+        self.deviceName = deviceName
+        self.platform = platform
+        self.online = online
+        self.enabled = enabled
+        self.sessionId = sessionId
+        self.firstSeenAt = firstSeenAt
+        self.lastSeenAt = lastSeenAt
+        self.connectedAt = connectedAt
+        self.disconnectedAt = disconnectedAt
+        self.remoteAddr = remoteAddr
+        self.bytesIn = bytesIn
+        self.bytesOut = bytesOut
+        self.sessionsTotal = sessionsTotal
+        self.routeCount = routeCount
+        self.healthyRouteCount = healthyRouteCount
+        self.unhealthyRouteIds = unhealthyRouteIds
+        self.routes = routes
+    }
+}
+
+public struct TunnelMachineListResponse: Codable {
+    public let machines: [TunnelMachineResponse]?
+
+
+    public init(machines: [TunnelMachineResponse]? = nil) {
+        self.machines = machines
+    }
+}
+
+public struct SetTunnelMachineEnabledRequest: Codable {
+    public let enabled: Bool?
+
+
+    public init(enabled: Bool? = nil) {
+        self.enabled = enabled
+    }
+}
+
+public struct CreateTunnelMachineRouteRequest: Codable {
+    public let name: String?
+    public let protocol_: String?
+    public let domain: String?
+    public let port: Int?
+    public let allowPublic: Bool?
+    public let allowedIps: [String]?
+    public let auth: String?
+    public let visitorTokens: [String]?
+    public let locations: [String]?
+    public let bandwidthLimitBytesPerSecond: String?
+    public let proxyProtocol: String?
+    public let loadBalancerGroup: String?
+
+
+    public init(name: String? = nil, protocol_: String? = nil, domain: String? = nil, port: Int? = nil, allowPublic: Bool? = nil, allowedIps: [String]? = nil, auth: String? = nil, visitorTokens: [String]? = nil, locations: [String]? = nil, bandwidthLimitBytesPerSecond: String? = nil, proxyProtocol: String? = nil, loadBalancerGroup: String? = nil) {
+        self.name = name
+        self.protocol_ = protocol_
+        self.domain = domain
+        self.port = port
+        self.allowPublic = allowPublic
+        self.allowedIps = allowedIps
+        self.auth = auth
+        self.visitorTokens = visitorTokens
+        self.locations = locations
+        self.bandwidthLimitBytesPerSecond = bandwidthLimitBytesPerSecond
+        self.proxyProtocol = proxyProtocol
+        self.loadBalancerGroup = loadBalancerGroup
+    }
+}
+
+public struct TunnelMachineRouteDeclarationResponse: Codable {
+    public let routeId: String?
+    public let active: Bool?
+    public let publicUrl: String?
+    public let detail: String?
+
+
+    public init(routeId: String? = nil, active: Bool? = nil, publicUrl: String? = nil, detail: String? = nil) {
+        self.routeId = routeId
+        self.active = active
+        self.publicUrl = publicUrl
+        self.detail = detail
+    }
+}
+
 public struct ClusterHeartbeatSampleResponse: Codable {
     public let id: String?
     public let status: Int?
@@ -3135,6 +3277,58 @@ public struct ClustersEventsListResponse: Codable {
 }
 
 public struct ClustersOverviewRetrieveResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct TunnelMachinesListResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct TunnelMachinesRetrieveResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct TunnelMachinesEnabledUpdateResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct TunnelMachinesRoutesCreateResponse201: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?

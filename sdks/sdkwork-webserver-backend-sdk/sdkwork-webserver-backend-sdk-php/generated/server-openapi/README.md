@@ -64,6 +64,7 @@ $client->setHeader('X-Custom-Header', 'value');
 - `$client->agent` - agent API
 - `$client->audit` - audit API
 - `$client->cluster` - cluster API
+- `$client->tunnel` - tunnel API
 - `$client->trafficUsage` - traffic_usage API
 - `$client->metricsSummary` - metrics_summary API
 
@@ -219,6 +220,16 @@ var_dump($result);
 
 // Retrieve the cluster health overview for status polling
 $result = $client->cluster->clustersOverviewRetrieve();
+var_dump($result);
+```
+
+### tunnel
+
+```php
+<?php
+
+// List the tunnel connector machines this gateway manages
+$result = $client->tunnel->machinesList();
 var_dump($result);
 ```
 

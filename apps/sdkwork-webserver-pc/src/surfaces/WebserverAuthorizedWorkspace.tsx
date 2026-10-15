@@ -12,6 +12,7 @@ import { webserverModule as mcpAdminModule, McpAdminSurface, type McpAdminSurfac
 import { webserverModule as pluginsAdminModule, PluginsAdminSurface, type PluginsAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-plugins";
 import { webserverModule as skillsAdminModule, SkillsAdminSurface, type SkillsAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-skills";
 import { webserverModule as storageModule, type StorageCenterResource } from "@sdkwork/webserver-pc-admin-storage";
+import { webserverModule as tunnelAdminModule } from "@sdkwork/webserver-pc-admin-tunnel";
 import { hasWebserverAdminAccess, type WebserverPcModuleDefinition, type WebserverPcSurface, type WebserverResourceKey } from "@sdkwork/webserver-pc-commons";
 import type { WebserverLocale } from "@sdkwork/webserver-pc-core";
 import { CloudAccountManagementSurface, webserverModule as cloudAccountModule } from "@sdkwork/webserver-pc-console-cloud-account";
@@ -66,7 +67,7 @@ export const consoleModules = [deliveryModule, marketplaceModule, pluginsModule,
 // operator actually remediates. Re-adding any of the four here would reintroduce
 // a single-node control surface next to the cluster one, which is the duplicate
 // the removal is meant to end.
-export const adminModules = [appsAdminModule, appTemplatesAdminModule, deliveryAdminModule, cloudAccountAdminModule, iamAdminModule, clusterModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule, storageModule, dataStatisticsAdminModule] satisfies readonly WebserverPcModuleDefinition[];
+export const adminModules = [appsAdminModule, appTemplatesAdminModule, deliveryAdminModule, cloudAccountAdminModule, iamAdminModule, clusterModule, tunnelAdminModule, auditModule, pluginsAdminModule, skillsAdminModule, mcpAdminModule, storageModule, dataStatisticsAdminModule] satisfies readonly WebserverPcModuleDefinition[];
 const LazyAdminSurface = lazy(() => import("./WebserverAdminSurface.tsx").then((module) => ({ default: module.WebserverAdminSurface })));
 
 /**

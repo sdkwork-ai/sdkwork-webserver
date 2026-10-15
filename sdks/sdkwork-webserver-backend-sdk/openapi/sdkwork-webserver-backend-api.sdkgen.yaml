@@ -2096,6 +2096,270 @@
         "x-sdkwork-route-auth": "dual-token"
       }
     },
+    "/backend/v3/api/root_domains/{rootDomainId}/verification_file": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/RootDomainIdParam"
+        }
+      ],
+      "get": {
+        "operationId": "rootDomains.wechatVerification.retrieve",
+        "summary": "Read the root domain's WeChat MP domain-ownership verification file",
+        "description": "The platform-issued MP_verify_xxx.txt file this root domain publishes, if any. The edge serves it verbatim at https://<hostname>/<fileName> for the root domain's hostname and every registered subdomain under it; the apex row and a subdomain row manage the same file.",
+        "tags": [
+          "domain"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.applications.read",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "responses": {
+          "200": {
+            "description": "Verification file state read successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/DomainWechatVerificationResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      },
+      "put": {
+        "operationId": "rootDomains.wechatVerification.upsert",
+        "summary": "Upload (or wholly replace) the root domain's WeChat verification file",
+        "description": "Content is stored byte-exact: the platform compares bytes, so nothing is normalized. A fresh platform file replaces the previous one whole.",
+        "tags": [
+          "domain"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.applications.write",
+        "x-sdkwork-idempotent": true,
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertDomainWechatVerificationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verification file stored successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/DomainWechatVerificationResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      },
+      "delete": {
+        "operationId": "rootDomains.wechatVerification.delete",
+        "summary": "Delete the root domain's WeChat verification file",
+        "tags": [
+          "domain"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.applications.write",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "responses": {
+          "204": {
+            "description": "Verification file deleted successfully."
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
+    },
+    "/backend/v3/api/root_domains/{rootDomainId}/verification_file/check": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/RootDomainIdParam"
+        }
+      ],
+      "post": {
+        "operationId": "rootDomains.wechatVerification.check",
+        "summary": "Self-check the root domain's WeChat verification file",
+        "description": "Fetches https://<hostname>/<fileName> the way the WeChat crawler does (falling back to http to separate \"no TLS\" from \"no DNS\") and compares the body byte-for-byte with the stored file. Never throws: transport failures fold into the returned facts.",
+        "tags": [
+          "domain"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.applications.write",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "responses": {
+          "200": {
+            "description": "Probe outcome.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/DomainWechatVerificationCheckResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
+    },
     "/backend/v3/api/root_domains/{rootDomainId}/dns_records/sync": {
       "parameters": [
         {
@@ -6428,6 +6692,479 @@
         "x-sdkwork-route-auth": "dual-token"
       }
     },
+    "/backend/v3/api/tunnel_machines": {
+      "get": {
+        "operationId": "tunnelMachines.list",
+        "summary": "List the tunnel connector machines this gateway manages",
+        "description": "Machines are the connector nodes running the tunnel agent: a device identity, its liveness, the routes it serves, the traffic it moved and the operator switch that takes it out of service. The list survives disconnects, so an offline machine is still managed and still shows its history.\n",
+        "tags": [
+          "tunnel"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.tunnel.read",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "responses": {
+          "200": {
+            "description": "Machine list returned successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/TunnelMachineListResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal is not authorised to manage tunnel machines.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The tunnel data plane is not reachable from this deployment.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
+    },
+    "/backend/v3/api/tunnel_machines/{deviceId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TunnelDeviceIdParam"
+        }
+      ],
+      "get": {
+        "operationId": "tunnelMachines.retrieve",
+        "summary": "Retrieve one managed tunnel machine",
+        "tags": [
+          "tunnel"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.tunnel.read",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "responses": {
+          "200": {
+            "description": "Machine returned successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/TunnelMachineResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal is not authorised to manage tunnel machines.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The tunnel data plane is not reachable from this deployment.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
+    },
+    "/backend/v3/api/tunnel_machines/{deviceId}/enabled": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TunnelDeviceIdParam"
+        }
+      ],
+      "put": {
+        "operationId": "tunnelMachines.enabled.update",
+        "summary": "Switch one tunnel machine on or off",
+        "description": "Switching a machine off takes effect immediately: its live session is closed and further sessions are refused until it is switched back on. An unknown machine is refused rather than created, because the machine inventory is the only source of machine identity.\n",
+        "tags": [
+          "tunnel"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.tunnel.write",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetTunnelMachineEnabledRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Machine switch applied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/TunnelMachineResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal is not authorised to manage tunnel machines.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The tunnel data plane is not reachable from this deployment.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
+    },
+    "/backend/v3/api/tunnel_machines/{deviceId}/routes": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TunnelDeviceIdParam"
+        }
+      ],
+      "post": {
+        "operationId": "tunnelMachines.routes.create",
+        "summary": "Declare a route for one tunnel machine",
+        "description": "The declaration carries no target: the machine activates it only when it matches one of its own locally configured templates and always dials its own configured target (PRD 45 SSRF boundary). A queued declaration (`active: false`) becomes active when the machine connects and recognizes the template.\n",
+        "tags": [
+          "tunnel"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.tunnel.write",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "x-sdkwork-idempotent": true,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTunnelMachineRouteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Declaration accepted (possibly queued).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/TunnelMachineRouteDeclarationResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal is not authorised to manage tunnel machines.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The tunnel data plane is not reachable from this deployment.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
+    },
+    "/backend/v3/api/tunnel_machines/{deviceId}/routes/{routeId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TunnelDeviceIdParam"
+        },
+        {
+          "$ref": "#/components/parameters/TunnelRouteIdParam"
+        }
+      ],
+      "delete": {
+        "operationId": "tunnelMachines.routes.delete",
+        "summary": "Remove one route from a tunnel machine",
+        "tags": [
+          "tunnel"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-api-authority": "sdkwork-webserver-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "web.tunnel.write",
+        "x-sdkwork-owner": "sdkwork-webserver",
+        "x-sdkwork-idempotent": true,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Route removed."
+          },
+          "403": {
+            "description": "The principal is not authorised to manage tunnel machines.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The tunnel data plane is not reachable from this deployment.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-route-auth": "dual-token"
+      }
+    },
     "/backend/v3/api/clusters/instances/{instanceId}/heartbeats": {
       "parameters": [
         {
@@ -7504,6 +8241,26 @@
           "format": "uuid"
         }
       },
+      "TunnelDeviceIdParam": {
+        "name": "deviceId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "TunnelRouteIdParam": {
+        "name": "routeId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        }
+      },
       "ClusterInstanceIdParam": {
         "name": "instanceId",
         "in": "path",
@@ -7515,6 +8272,315 @@
       }
     },
     "schemas": {
+      "TunnelMachineRouteResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "routeId",
+          "name",
+          "protocol",
+          "allowPublic",
+          "auth",
+          "healthy"
+        ],
+        "properties": {
+          "routeId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "http",
+              "tcp",
+              "udp",
+              "stcp",
+              "sudp"
+            ]
+          },
+          "domain": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "secretName": {
+            "type": "string"
+          },
+          "locations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "loadBalancerGroup": {
+            "type": "string"
+          },
+          "bandwidthLimitBytesPerSecond": {
+            "type": "string",
+            "format": "int64",
+            "pattern": "^-?[0-9]+$",
+            "x-sdkwork-int64-string": true
+          },
+          "proxyProtocol": {
+            "type": "string",
+            "enum": [
+              "v1",
+              "v2"
+            ]
+          },
+          "allowPublic": {
+            "type": "boolean"
+          },
+          "auth": {
+            "type": "string",
+            "enum": [
+              "none",
+              "allowed_ips",
+              "bearer_token"
+            ]
+          },
+          "allowedIps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "healthy": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TunnelMachineResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "deviceId",
+          "deviceName",
+          "platform",
+          "online",
+          "enabled",
+          "firstSeenAt",
+          "lastSeenAt",
+          "bytesIn",
+          "bytesOut",
+          "sessionsTotal",
+          "routeCount",
+          "healthyRouteCount"
+        ],
+        "properties": {
+          "deviceId": {
+            "type": "string"
+          },
+          "deviceName": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "online": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "firstSeenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "connectedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "disconnectedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "remoteAddr": {
+            "type": "string"
+          },
+          "bytesIn": {
+            "type": "string",
+            "format": "int64",
+            "pattern": "^-?[0-9]+$",
+            "x-sdkwork-int64-string": true
+          },
+          "bytesOut": {
+            "type": "string",
+            "format": "int64",
+            "pattern": "^-?[0-9]+$",
+            "x-sdkwork-int64-string": true
+          },
+          "sessionsTotal": {
+            "type": "string",
+            "format": "int64",
+            "pattern": "^-?[0-9]+$",
+            "x-sdkwork-int64-string": true
+          },
+          "routeCount": {
+            "type": "string",
+            "format": "int64",
+            "pattern": "^-?[0-9]+$",
+            "x-sdkwork-int64-string": true
+          },
+          "healthyRouteCount": {
+            "type": "string",
+            "format": "int64",
+            "pattern": "^-?[0-9]+$",
+            "x-sdkwork-int64-string": true
+          },
+          "unhealthyRouteIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TunnelMachineRouteResponse"
+            }
+          }
+        }
+      },
+      "TunnelMachineListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "machines"
+        ],
+        "properties": {
+          "machines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TunnelMachineResponse"
+            }
+          }
+        }
+      },
+      "SetTunnelMachineEnabledRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CreateTunnelMachineRouteRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "protocol"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "http",
+              "tcp",
+              "udp",
+              "stcp",
+              "sudp"
+            ]
+          },
+          "domain": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "allowPublic": {
+            "type": "boolean"
+          },
+          "allowedIps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "auth": {
+            "type": "string",
+            "enum": [
+              "none",
+              "allowed_ips",
+              "bearer_token"
+            ]
+          },
+          "visitorTokens": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "locations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bandwidthLimitBytesPerSecond": {
+            "type": "string",
+            "format": "int64",
+            "pattern": "^-?[0-9]+$",
+            "x-sdkwork-int64-string": true
+          },
+          "proxyProtocol": {
+            "type": "string",
+            "enum": [
+              "v1",
+              "v2"
+            ]
+          },
+          "loadBalancerGroup": {
+            "type": "string"
+          }
+        }
+      },
+      "TunnelMachineRouteDeclarationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "routeId",
+          "active"
+        ],
+        "properties": {
+          "routeId": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "publicUrl": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      },
       "ClusterHeartbeatSampleResponse": {
         "type": "object",
         "additionalProperties": false,
@@ -8494,6 +9560,84 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "DomainWechatVerificationResponse": {
+        "type": "object",
+        "required": [
+          "rootDomainId"
+        ],
+        "properties": {
+          "rootDomainId": {
+            "type": "string"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "平台发放的文件名(如 MP_verify_xxx.txt),按精确名称服务"
+          },
+          "content": {
+            "type": "string",
+            "description": "文件原文,逐字节保存与返回"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "最近一次上传/替换的时间"
+          }
+        }
+      },
+      "UpsertDomainWechatVerificationRequest": {
+        "type": "object",
+        "required": [
+          "fileName",
+          "content"
+        ],
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.txt$",
+            "description": "平台发放的文件名,必须是 .txt 结尾"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 2048,
+            "description": "文件原文,逐字节保存与返回"
+          }
+        }
+      },
+      "DomainWechatVerificationCheckResponse": {
+        "type": "object",
+        "required": [
+          "reachable",
+          "matched",
+          "checkedAt"
+        ],
+        "properties": {
+          "reachable": {
+            "type": "boolean",
+            "description": "是否有任一协议取回了 2xx 响应"
+          },
+          "matched": {
+            "type": "boolean",
+            "description": "取回内容是否与保存的文件逐字节一致"
+          },
+          "statusCode": {
+            "type": "integer",
+            "format": "int32",
+            "description": "命中方案的 HTTP 状态码"
+          },
+          "scheme": {
+            "type": "string",
+            "description": "命中方案(https 或 http)"
+          },
+          "detail": {
+            "type": "string",
+            "description": "未通过时的一句话事实"
+          },
+          "checkedAt": {
+            "type": "string",
+            "description": "自检时间"
           }
         }
       },

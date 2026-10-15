@@ -17,6 +17,7 @@ public class SdkworkBackendClient {
     public let agent: AgentApi
     public let audit: AuditApi
     public let cluster: ClusterApi
+    public let tunnel: TunnelApi
     public let trafficUsage: TrafficUsageApi
     public let metricsSummary: MetricsSummaryApi
 
@@ -36,6 +37,7 @@ public class SdkworkBackendClient {
         self.agent = AgentApi(client: httpClient)
         self.audit = AuditApi(client: httpClient)
         self.cluster = ClusterApi(client: httpClient)
+        self.tunnel = TunnelApi(client: httpClient)
         self.trafficUsage = TrafficUsageApi(client: httpClient)
         self.metricsSummary = MetricsSummaryApi(client: httpClient)
     }
@@ -56,6 +58,7 @@ public class SdkworkBackendClient {
         self.agent = AgentApi(client: httpClient)
         self.audit = AuditApi(client: httpClient)
         self.cluster = ClusterApi(client: httpClient)
+        self.tunnel = TunnelApi(client: httpClient)
         self.trafficUsage = TrafficUsageApi(client: httpClient)
         self.metricsSummary = MetricsSummaryApi(client: httpClient)
     }

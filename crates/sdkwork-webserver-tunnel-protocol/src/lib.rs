@@ -23,10 +23,10 @@ pub use frame::{
 };
 pub use message::{
     route_from_wire, session_from_wire, session_to_wire, AuthResult, Authenticate, ControlMessage,
-    DeclareRoute, ErrorCode, ErrorMessage, Hello, ProtocolVersion, RegisterRoute,
-    RegisterRouteResult, UnregisterRoute, UnregisterRouteResult,
+    DeclareRoute, ErrorCode, ErrorMessage, Hello, ProtocolVersion, Reauthenticate, RegisterRoute,
+    RegisterRouteResult, RouteHealthReport, UnregisterRoute, UnregisterRouteResult,
 };
 pub use packet_frame::{
     decode_packet, encode_packet, read_packet, MAX_PACKET_PAYLOAD, PACKET_LENGTH_BYTES,
 };
-pub use stream_header::DataStreamHeader;
+pub use stream_header::{DataStreamHeader, VisitorAddress, VisitorStreamHeader};

@@ -690,6 +690,48 @@ pub struct DomainVerifyResponse {
 /// provider's answer; a write through the management plane
 /// (`dnsRecords.create`/`update`) joins the same table, so the page always
 /// reads one place.
+/// 微信公众号/小程序域名归属验证文件的当前状态。
+///
+/// 平台要求在域名根路径可访问一个形如 `MP_verify_xxxxx.txt` 的校验文件后
+/// 才能完成归属验证。本响应返回该根域名当前保存的文件名与原文；
+/// `fileName` 缺省表示尚未配置。
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct DomainWechatVerificationResponse {
+    #[serde(rename = "rootDomainId")]
+    pub root_domain_id: String,
+    #[serde(rename = "fileName", skip_serializing_if = "Option::is_none")]
+    pub file_name: Option<String>,
+    /// 文件内容原样返回，供控制台展示与复制；微信按精确字节比对。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    #[serde(rename = "updatedAt", skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+}
+
+/// 上传（或替换）微信验证文件。
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UpsertDomainWechatVerificationRequest {
+    #[serde(rename = "fileName")]
+    pub file_name: String,
+    pub content: String,
+}
+
+/// 微信验证文件自检结果：服务端按微信爬虫的视角取回
+/// `https(s)://<hostname>/<fileName>` 并与保存内容逐字节比对。
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DomainWechatVerificationCheckResponse {
+    pub reachable: bool,
+    pub matched: bool,
+    #[serde(rename = "statusCode", skip_serializing_if = "Option::is_none")]
+    pub status_code: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheme: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    #[serde(rename = "checkedAt")]
+    pub checked_at: String,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DomainDnsRecordResponse {
     pub id: String,

@@ -117,3 +117,6 @@ target-verify/
 # Docker runtime materialized state (entrypoint-generated)
 deployments/docker/state/
 
+
+# Temporary local scripts (never commit)
+tmp_*.py

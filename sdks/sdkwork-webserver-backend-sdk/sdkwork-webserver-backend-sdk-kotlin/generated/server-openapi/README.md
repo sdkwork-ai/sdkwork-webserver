@@ -67,6 +67,7 @@ val client = SdkworkBackendClient(config)
 - `client.agent` - agent API
 - `client.audit` - audit API
 - `client.cluster` - cluster API
+- `client.tunnel` - tunnel API
 - `client.trafficUsage` - traffic_usage API
 - `client.metricsSummary` - metrics_summary API
 
@@ -233,6 +234,14 @@ println(result)
 ```kotlin
 // Retrieve the cluster health overview for status polling
 val result = client.cluster.clustersOverviewRetrieve()
+println(result)
+```
+
+### tunnel
+
+```kotlin
+// List the tunnel connector machines this gateway manages
+val result = client.tunnel.machinesList()
 println(result)
 ```
 

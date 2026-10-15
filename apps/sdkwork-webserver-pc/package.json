@@ -57,6 +57,7 @@
     "@sdkwork/webserver-pc-admin-shell": "workspace:*",
     "@sdkwork/webserver-pc-admin-skills": "workspace:*",
     "@sdkwork/webserver-pc-admin-storage": "workspace:*",
+    "@sdkwork/webserver-pc-admin-tunnel": "workspace:*",
     "@sdkwork/webserver-pc-admin-webserver-config": "workspace:*",
     "@sdkwork/webserver-pc-commons": "workspace:*",
     "@sdkwork/webserver-pc-console-cloud-account": "workspace:*",

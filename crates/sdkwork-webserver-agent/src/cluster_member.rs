@@ -610,11 +610,16 @@ where
         ClusterTransport::Tunnel { host, shared } => {
             let visitor = sdkwork_webserver_tunnel::gateway::RelayVisitor {
                 ip: std::net::IpAddr::from([127, 0, 0, 1]),
+                // The member is the visitor here, and it is dialing from an
+                // ephemeral local socket the relay never sees.
+                port: 0,
                 bearer: None,
             };
             let relayed = tokio::time::timeout(
                 Duration::from_secs(10),
-                shared.connect_http_stream(host, visitor),
+                // The route's own locations select it, so the member hands the
+                // relay the same path it is about to request.
+                shared.connect_http_stream(host, path, visitor),
             )
             .await
             .map_err(|_| MemberError::Transient("tunnel stream timed out".to_owned()))?
@@ -719,9 +724,7 @@ fn member_response_body(raw: &[u8]) -> Result<std::borrow::Cow<'_, [u8]>, Member
         let value = value.trim();
         if name == "content-length" {
             content_length = value.parse::<usize>().ok();
-        } else if name == "transfer-encoding"
-            && value.to_ascii_lowercase().contains("chunked")
-        {
+        } else if name == "transfer-encoding" && value.to_ascii_lowercase().contains("chunked") {
             chunked = true;
         }
     }
@@ -754,9 +757,7 @@ fn member_response_body(raw: &[u8]) -> Result<std::borrow::Cow<'_, [u8]>, Member
 fn decode_chunked_body(mut body: &[u8], out: &mut Vec<u8>) -> Result<(), MemberError> {
     loop {
         let Some(line_end) = body.windows(2).position(|window| window == b"\r\n") else {
-            return Err(MemberError::Transient(
-                "malformed chunked body".to_owned(),
-            ));
+            return Err(MemberError::Transient("malformed chunked body".to_owned()));
         };
         let size_text = std::str::from_utf8(&body[..line_end])
             .map_err(|_| MemberError::Transient("malformed chunk size".to_owned()))?;

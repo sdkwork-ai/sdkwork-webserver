@@ -21,6 +21,15 @@ pub struct TunnelMetrics {
     errors: AtomicU64,
     auth_failures: AtomicU64,
     relay_denied: AtomicU64,
+    health_failures: AtomicU64,
+    no_healthy_replica: AtomicU64,
+    visitor_streams: AtomicU64,
+    visitor_streams_closed: AtomicU64,
+    visitor_auth_failures: AtomicU64,
+    /// Datagrams dropped because they exceeded the configured packet size.
+    udp_datagrams_too_large: AtomicU64,
+    /// Stream sequence a client-side opener (the visitor runtime) uses.
+    visitor_stream_sequence: AtomicU64,
     routes_active: AtomicI64,
 }
 
@@ -56,6 +65,13 @@ impl TunnelMetrics {
     pub fn record_stream_open(&self) {
         self.streams_total.fetch_add(1, Ordering::Relaxed);
         self.bump_active(&self.streams_active, 1);
+    }
+
+    /// Next stream sequence for a client-side opener (visitor runtime): the
+    /// gateway assigns ids to the streams it opens, and a visitor must not
+    /// guess one it did not create.
+    pub fn next_stream_id(&self) -> u64 {
+        self.visitor_stream_sequence.fetch_add(1, Ordering::Relaxed) + 1
     }
 
     /// Records one data stream closed.
@@ -102,6 +118,51 @@ impl TunnelMetrics {
         self.relay_denied.fetch_add(1, Ordering::Relaxed);
     }
 
+    /// Records one failed health probe reported by an agent, and one request
+    /// turned away because a load-balancer group had no healthy replica.
+    pub fn record_health_failure(&self) {
+        self.health_failures.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Records one request rejected because every replica was unhealthy.
+    pub fn record_no_healthy_replica(&self) {
+        self.no_healthy_replica.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Records one visitor stream bridged to a provider (FRP `stcp`/`sudp`).
+    pub fn record_visitor_stream_open(&self) {
+        self.visitor_streams.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Records one bridged visitor stream closing.
+    pub fn record_visitor_stream_close(&self) {
+        self.visitor_streams_closed.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Records one visitor rejected for a wrong or missing secret key.
+    ///
+    /// Separate from [`Self::record_auth_failure`] (agent credentials) so an
+    /// alert on agent authentication cannot be triggered by visitors guessing
+    /// a secret-route key.
+    pub fn record_visitor_auth_failure(&self) {
+        self.visitor_auth_failures.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Records one UDP datagram dropped for exceeding the configured packet
+    /// size (FRP `transport.udpPacketSize`).
+    ///
+    /// Counted rather than logged per packet: a service that consistently
+    /// emits oversized datagrams would otherwise flood the log, and the rate
+    /// is exactly what tells an operator to raise the ceiling.
+    pub fn record_udp_datagram_too_large(&self) {
+        self.udp_datagrams_too_large.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Datagrams dropped for exceeding the configured packet size.
+    pub fn udp_datagrams_too_large(&self) -> u64 {
+        self.udp_datagrams_too_large.load(Ordering::Relaxed)
+    }
+
     /// Snapshot of every counter, used by status APIs and tests.
     pub fn snapshot(&self) -> TunnelMetricsSnapshot {
         TunnelMetricsSnapshot {
@@ -119,6 +180,12 @@ impl TunnelMetrics {
             errors: self.errors.load(Ordering::Relaxed),
             auth_failures: self.auth_failures.load(Ordering::Relaxed),
             relay_denied: self.relay_denied.load(Ordering::Relaxed),
+            health_failures: self.health_failures.load(Ordering::Relaxed),
+            no_healthy_replica: self.no_healthy_replica.load(Ordering::Relaxed),
+            visitor_streams: self.visitor_streams.load(Ordering::Relaxed),
+            udp_datagrams_too_large: self.udp_datagrams_too_large.load(Ordering::Relaxed),
+            visitor_streams_closed: self.visitor_streams_closed.load(Ordering::Relaxed),
+            visitor_auth_failures: self.visitor_auth_failures.load(Ordering::Relaxed),
             routes_active: u64::try_from(self.routes_active.load(Ordering::Relaxed)).unwrap_or(0),
         }
     }
@@ -205,10 +272,40 @@ impl TunnelMetrics {
             "counter",
         );
         emit(
+            "sdkwork_tunnel_health_failures",
+            "Failed route health probes reported by agents",
+            snapshot.health_failures,
+            "counter",
+        );
+        emit(
+            "sdkwork_tunnel_no_healthy_replica",
+            "Requests rejected because no replica of a load balancer group was healthy",
+            snapshot.no_healthy_replica,
+            "counter",
+        );
+        emit(
+            "sdkwork_tunnel_visitor_streams",
+            "Visitor streams bridged to a provider (secret routes)",
+            snapshot.visitor_streams,
+            "counter",
+        );
+        emit(
+            "sdkwork_tunnel_visitor_auth_failures",
+            "Visitors rejected for a wrong or missing secret key",
+            snapshot.visitor_auth_failures,
+            "counter",
+        );
+        emit(
             "sdkwork_tunnel_routes_active",
             "Currently registered tunnel routes",
             snapshot.routes_active,
             "gauge",
+        );
+        emit(
+            "sdkwork_tunnel_udp_datagrams_too_large",
+            "UDP datagrams dropped for exceeding the configured packet size",
+            snapshot.udp_datagrams_too_large,
+            "counter",
         );
         text
     }
@@ -248,6 +345,19 @@ pub struct TunnelMetricsSnapshot {
     pub auth_failures: u64,
     /// Visitor relays denied by route admission policy.
     pub relay_denied: u64,
+    /// Failed route health probes reported by agents.
+    pub health_failures: u64,
+    /// Requests rejected because no replica of a load-balancer group was
+    /// healthy.
+    pub no_healthy_replica: u64,
+    /// Visitor streams bridged to a provider (FRP `stcp`/`sudp`).
+    pub visitor_streams: u64,
+    /// UDP datagrams dropped for exceeding the configured packet size.
+    pub udp_datagrams_too_large: u64,
+    /// Bridged visitor streams that have closed.
+    pub visitor_streams_closed: u64,
+    /// Visitors rejected for a wrong or missing secret key.
+    pub visitor_auth_failures: u64,
     /// Currently registered routes.
     pub routes_active: u64,
 }
@@ -300,6 +410,10 @@ mod tests {
             "sdkwork_tunnel_errors",
             "sdkwork_tunnel_auth_failures",
             "sdkwork_tunnel_relay_denied",
+            "sdkwork_tunnel_health_failures",
+            "sdkwork_tunnel_no_healthy_replica",
+            "sdkwork_tunnel_visitor_streams",
+            "sdkwork_tunnel_visitor_auth_failures",
             "sdkwork_tunnel_routes_active",
         ] {
             assert!(text.contains(name), "missing {name}");

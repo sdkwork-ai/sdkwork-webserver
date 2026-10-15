@@ -12,6 +12,518 @@ List<dynamic>? _sdkworkAsList(dynamic value) {
   return value is List ? value : null;
 }
 
+class TunnelMachineRouteResponse {
+  final String routeId;
+  final String name;
+  final String protocol;
+  final String? domain;
+  final int? port;
+  final String? secretName;
+  final List<String>? locations;
+  final String? loadBalancerGroup;
+  final String? bandwidthLimitBytesPerSecond;
+  final String? proxyProtocol;
+  final bool allowPublic;
+  final String auth;
+  final List<String>? allowedIps;
+  final bool healthy;
+
+  TunnelMachineRouteResponse({
+    required this.routeId,
+    required this.name,
+    required this.protocol,
+    this.domain,
+    this.port,
+    this.secretName,
+    this.locations,
+    this.loadBalancerGroup,
+    this.bandwidthLimitBytesPerSecond,
+    this.proxyProtocol,
+    required this.allowPublic,
+    required this.auth,
+    this.allowedIps,
+    required this.healthy
+  });
+
+  factory TunnelMachineRouteResponse.fromJson(Map<String, dynamic> json) {
+    return TunnelMachineRouteResponse(
+      routeId: (() {
+        final value = json['routeId']?.toString();
+        if (value == null) {
+          throw FormatException('TunnelMachineRouteResponse.routeId is required');
+        }
+        return value;
+      })(),
+      name: (() {
+        final value = json['name']?.toString();
+        if (value == null) {
+          throw FormatException('TunnelMachineRouteResponse.name is required');
+        }
+        return value;
+      })(),
+      protocol: (() {
+        final value = json['protocol']?.toString();
+        if (value == null) {
+          throw FormatException('TunnelMachineRouteResponse.protocol is required');
+        }
+        return value;
+      })(),
+      domain: json['domain']?.toString(),
+      port: json['port'] is int ? json['port'] : null,
+      secretName: json['secretName']?.toString(),
+      locations: (() {
+        final list = _sdkworkAsList(json['locations']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      loadBalancerGroup: json['loadBalancerGroup']?.toString(),
+      bandwidthLimitBytesPerSecond: json['bandwidthLimitBytesPerSecond']?.toString(),
+      proxyProtocol: json['proxyProtocol']?.toString(),
+      allowPublic: (() {
+        final value = json['allowPublic'];
+        if (value is! bool) {
+          throw FormatException('TunnelMachineRouteResponse.allowPublic is required');
+        }
+        return value;
+      })(),
+      auth: (() {
+        final value = json['auth']?.toString();
+        if (value == null) {
+          throw FormatException('TunnelMachineRouteResponse.auth is required');
+        }
+        return value;
+      })(),
+      allowedIps: (() {
+        final list = _sdkworkAsList(json['allowedIps']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      healthy: (() {
+        final value = json['healthy'];
+        if (value is! bool) {
+          throw FormatException('TunnelMachineRouteResponse.healthy is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'routeId': routeId,
+      'name': name,
+      'protocol': protocol,
+      'domain': domain,
+      'port': port,
+      'secretName': secretName,
+      'locations': locations?.map((item) => item).toList(),
+      'loadBalancerGroup': loadBalancerGroup,
+      'bandwidthLimitBytesPerSecond': bandwidthLimitBytesPerSecond,
+      'proxyProtocol': proxyProtocol,
+      'allowPublic': allowPublic,
+      'auth': auth,
+      'allowedIps': allowedIps?.map((item) => item).toList(),
+      'healthy': healthy,
+    };
+  }
+}
+
+class TunnelMachineResponse {
+  final String deviceId;
+  final String deviceName;
+  final String platform;
+  final bool online;
+  final bool enabled;
+  final String? sessionId;
+  final String firstSeenAt;
+  final String lastSeenAt;
+  final String? connectedAt;
+  final String? disconnectedAt;
+  final String? remoteAddr;
+  final String bytesIn;
+  final String bytesOut;
+  final String sessionsTotal;
+  final String routeCount;
+  final String healthyRouteCount;
+  final List<String>? unhealthyRouteIds;
+  final List<TunnelMachineRouteResponse>? routes;
+
+  TunnelMachineResponse({
+    required this.deviceId,
+    required this.deviceName,
+    required this.platform,
+    required this.online,
+    required this.enabled,
+    this.sessionId,
+    required this.firstSeenAt,
+    required this.lastSeenAt,
+    this.connectedAt,
+    this.disconnectedAt,
+    this.remoteAddr,
+    required this.bytesIn,
+    required this.bytesOut,
+    required this.sessionsTotal,
+    required this.routeCount,
+    required this.healthyRouteCount,
+    this.unhealthyRouteIds,
+    this.routes
+  });
+
+  factory TunnelMachineResponse.fromJson(Map<String, dynamic> json) {
+    return TunnelMachineResponse(
+      deviceId: (() {
+        final value = json['deviceId']?.toString();
+        if (value == null) {
+          throw FormatException('TunnelMachineResponse.deviceId is required');
+        }
+        return value;
+      })(),
+      deviceName: (() {
+        final value = json['deviceName']?.toString();
+        if (value == null) {
+          throw FormatException('TunnelMachineResponse.deviceName is required');
+        }
+        return value;
+      })(),
+      platform: (() {
+        final value = json['platform']?.toString();
+        if (value == null) {
+          throw FormatException('TunnelMachineResponse.platform is required');
+        }
+        return value;
+      })(),
+      online: (() {
+        final value = json['online'];
+        if (value is! bool) {
+          throw FormatException('TunnelMachineResponse.online is required');
+        }
+        return value;
+      })(),
+      enabled: (() {
+        final value = json['enabled'];
+        if (value is! bool) {
+          throw FormatException('TunnelMachineResponse.enabled is required');
+        }
+        return value;
+      })(),
+      sessionId: json['sessionId']?.toString(),
+      firstSeenAt: (() {
+        final value = json['firstSeenAt']?.toString();
+        if (value == null) {
+          throw FormatException('TunnelMachineResponse.firstSeenAt is required');
+        }
+        return value;
+      })(),
+      lastSeenAt: (() {
+        final value = json['lastSeenAt']?.toString();
+        if (value == null) {
+          throw FormatException('TunnelMachineResponse.lastSeenAt is required');
+        }
+        return value;
+      })(),
+      connectedAt: json['connectedAt']?.toString(),
+      disconnectedAt: json['disconnectedAt']?.toString(),
+      remoteAddr: json['remoteAddr']?.toString(),
+      bytesIn: (() {
+        final value = json['bytesIn']?.toString();
+        if (value == null) {
+          throw FormatException('TunnelMachineResponse.bytesIn is required');
+        }
+        return value;
+      })(),
+      bytesOut: (() {
+        final value = json['bytesOut']?.toString();
+        if (value == null) {
+          throw FormatException('TunnelMachineResponse.bytesOut is required');
+        }
+        return value;
+      })(),
+      sessionsTotal: (() {
+        final value = json['sessionsTotal']?.toString();
+        if (value == null) {
+          throw FormatException('TunnelMachineResponse.sessionsTotal is required');
+        }
+        return value;
+      })(),
+      routeCount: (() {
+        final value = json['routeCount']?.toString();
+        if (value == null) {
+          throw FormatException('TunnelMachineResponse.routeCount is required');
+        }
+        return value;
+      })(),
+      healthyRouteCount: (() {
+        final value = json['healthyRouteCount']?.toString();
+        if (value == null) {
+          throw FormatException('TunnelMachineResponse.healthyRouteCount is required');
+        }
+        return value;
+      })(),
+      unhealthyRouteIds: (() {
+        final list = _sdkworkAsList(json['unhealthyRouteIds']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      routes: (() {
+        final list = _sdkworkAsList(json['routes']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : TunnelMachineRouteResponse.fromJson(map);
+      })())
+            .whereType<TunnelMachineRouteResponse>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'deviceId': deviceId,
+      'deviceName': deviceName,
+      'platform': platform,
+      'online': online,
+      'enabled': enabled,
+      'sessionId': sessionId,
+      'firstSeenAt': firstSeenAt,
+      'lastSeenAt': lastSeenAt,
+      'connectedAt': connectedAt,
+      'disconnectedAt': disconnectedAt,
+      'remoteAddr': remoteAddr,
+      'bytesIn': bytesIn,
+      'bytesOut': bytesOut,
+      'sessionsTotal': sessionsTotal,
+      'routeCount': routeCount,
+      'healthyRouteCount': healthyRouteCount,
+      'unhealthyRouteIds': unhealthyRouteIds?.map((item) => item).toList(),
+      'routes': routes?.map((item) => item.toJson()).toList(),
+    };
+  }
+}
+
+class TunnelMachineListResponse {
+  final List<TunnelMachineResponse> machines;
+
+  TunnelMachineListResponse({
+    required this.machines
+  });
+
+  factory TunnelMachineListResponse.fromJson(Map<String, dynamic> json) {
+    return TunnelMachineListResponse(
+      machines: (() {
+        final list = _sdkworkAsList(json['machines']);
+        if (list == null) {
+          throw FormatException('TunnelMachineListResponse.machines is required');
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : TunnelMachineResponse.fromJson(map);
+      })())
+            .whereType<TunnelMachineResponse>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'machines': machines.map((item) => item.toJson()).toList(),
+    };
+  }
+}
+
+class SetTunnelMachineEnabledRequest {
+  final bool enabled;
+
+  SetTunnelMachineEnabledRequest({
+    required this.enabled
+  });
+
+  factory SetTunnelMachineEnabledRequest.fromJson(Map<String, dynamic> json) {
+    return SetTunnelMachineEnabledRequest(
+      enabled: (() {
+        final value = json['enabled'];
+        if (value is! bool) {
+          throw FormatException('SetTunnelMachineEnabledRequest.enabled is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'enabled': enabled,
+    };
+  }
+}
+
+class CreateTunnelMachineRouteRequest {
+  final String name;
+  final String protocol;
+  final String? domain;
+  final int? port;
+  final bool? allowPublic;
+  final List<String>? allowedIps;
+  final String? auth;
+  final List<String>? visitorTokens;
+  final List<String>? locations;
+  final String? bandwidthLimitBytesPerSecond;
+  final String? proxyProtocol;
+  final String? loadBalancerGroup;
+
+  CreateTunnelMachineRouteRequest({
+    required this.name,
+    required this.protocol,
+    this.domain,
+    this.port,
+    this.allowPublic,
+    this.allowedIps,
+    this.auth,
+    this.visitorTokens,
+    this.locations,
+    this.bandwidthLimitBytesPerSecond,
+    this.proxyProtocol,
+    this.loadBalancerGroup
+  });
+
+  factory CreateTunnelMachineRouteRequest.fromJson(Map<String, dynamic> json) {
+    return CreateTunnelMachineRouteRequest(
+      name: (() {
+        final value = json['name']?.toString();
+        if (value == null) {
+          throw FormatException('CreateTunnelMachineRouteRequest.name is required');
+        }
+        return value;
+      })(),
+      protocol: (() {
+        final value = json['protocol']?.toString();
+        if (value == null) {
+          throw FormatException('CreateTunnelMachineRouteRequest.protocol is required');
+        }
+        return value;
+      })(),
+      domain: json['domain']?.toString(),
+      port: json['port'] is int ? json['port'] : null,
+      allowPublic: json['allowPublic'] is bool ? json['allowPublic'] : null,
+      allowedIps: (() {
+        final list = _sdkworkAsList(json['allowedIps']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      auth: json['auth']?.toString(),
+      visitorTokens: (() {
+        final list = _sdkworkAsList(json['visitorTokens']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      locations: (() {
+        final list = _sdkworkAsList(json['locations']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      bandwidthLimitBytesPerSecond: json['bandwidthLimitBytesPerSecond']?.toString(),
+      proxyProtocol: json['proxyProtocol']?.toString(),
+      loadBalancerGroup: json['loadBalancerGroup']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'name': name,
+      'protocol': protocol,
+      'domain': domain,
+      'port': port,
+      'allowPublic': allowPublic,
+      'allowedIps': allowedIps?.map((item) => item).toList(),
+      'auth': auth,
+      'visitorTokens': visitorTokens?.map((item) => item).toList(),
+      'locations': locations?.map((item) => item).toList(),
+      'bandwidthLimitBytesPerSecond': bandwidthLimitBytesPerSecond,
+      'proxyProtocol': proxyProtocol,
+      'loadBalancerGroup': loadBalancerGroup,
+    };
+  }
+}
+
+class TunnelMachineRouteDeclarationResponse {
+  final String routeId;
+  final bool active;
+  final String? publicUrl;
+  final String? detail;
+
+  TunnelMachineRouteDeclarationResponse({
+    required this.routeId,
+    required this.active,
+    this.publicUrl,
+    this.detail
+  });
+
+  factory TunnelMachineRouteDeclarationResponse.fromJson(Map<String, dynamic> json) {
+    return TunnelMachineRouteDeclarationResponse(
+      routeId: (() {
+        final value = json['routeId']?.toString();
+        if (value == null) {
+          throw FormatException('TunnelMachineRouteDeclarationResponse.routeId is required');
+        }
+        return value;
+      })(),
+      active: (() {
+        final value = json['active'];
+        if (value is! bool) {
+          throw FormatException('TunnelMachineRouteDeclarationResponse.active is required');
+        }
+        return value;
+      })(),
+      publicUrl: json['publicUrl']?.toString(),
+      detail: json['detail']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'routeId': routeId,
+      'active': active,
+      'publicUrl': publicUrl,
+      'detail': detail,
+    };
+  }
+}
+
 class ClusterHeartbeatSampleResponse {
   final String id;
   final int status;
@@ -10533,6 +11045,190 @@ class ClustersOverviewRetrieveResponse {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('ClustersOverviewRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class TunnelMachinesListResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  TunnelMachinesListResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory TunnelMachinesListResponse.fromJson(Map<String, dynamic> json) {
+    return TunnelMachinesListResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('TunnelMachinesListResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('TunnelMachinesListResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('TunnelMachinesListResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class TunnelMachinesRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  TunnelMachinesRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory TunnelMachinesRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return TunnelMachinesRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('TunnelMachinesRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('TunnelMachinesRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('TunnelMachinesRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class TunnelMachinesEnabledUpdateResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  TunnelMachinesEnabledUpdateResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory TunnelMachinesEnabledUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return TunnelMachinesEnabledUpdateResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('TunnelMachinesEnabledUpdateResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('TunnelMachinesEnabledUpdateResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('TunnelMachinesEnabledUpdateResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class TunnelMachinesRoutesCreateResponse201 {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  TunnelMachinesRoutesCreateResponse201({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory TunnelMachinesRoutesCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return TunnelMachinesRoutesCreateResponse201(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('TunnelMachinesRoutesCreateResponse201.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('TunnelMachinesRoutesCreateResponse201.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('TunnelMachinesRoutesCreateResponse201.traceId is required');
         }
         return value;
       })()

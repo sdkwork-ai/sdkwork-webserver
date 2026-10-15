@@ -69,6 +69,7 @@ client.SetHeader("X-Custom-Header", "value")
 - `client.Agent` - agent API
 - `client.Audit` - audit API
 - `client.Cluster` - cluster API
+- `client.Tunnel` - tunnel API
 - `client.TrafficUsage` - traffic_usage API
 - `client.MetricsSummary` - metrics_summary API
 
@@ -274,6 +275,17 @@ fmt.Println(result)
 ```go
 // Retrieve the cluster health overview for status polling
 result, err := client.Cluster.ClustersOverviewRetrieve()
+if err != nil {
+    panic(err)
+}
+fmt.Println(result)
+```
+
+### tunnel
+
+```go
+// List the tunnel connector machines this gateway manages
+result, err := client.Tunnel.MachinesList()
 if err != nil {
     panic(err)
 }

@@ -7,7 +7,7 @@
 //! data-stream opening, and stream-header framing. The caller owns the
 //! protocol spoken over the returned stream.
 
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -18,7 +18,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 use sdkwork_webserver_tunnel_core::{
     Result, RouteId, RoutePolicy, SessionId, StreamId, TunnelError,
 };
-use sdkwork_webserver_tunnel_protocol::DataStreamHeader;
+use sdkwork_webserver_tunnel_protocol::{DataStreamHeader, VisitorAddress};
 use sdkwork_webserver_tunnel_transport::TunnelStream;
 
 use super::GatewayShared;
@@ -28,8 +28,19 @@ use super::GatewayShared;
 pub struct RelayVisitor<'a> {
     /// Client IP, after the caller's trusted-proxy resolution.
     pub ip: IpAddr,
+    /// Client source port, or 0 when the calling plane does not expose it.
+    /// Forwarded to the agent so a PROXY-protocol route can name the real
+    /// source port; `0` is the protocol's own "unknown" encoding.
+    pub port: u16,
     /// Visitor bearer token (HTTP `Authorization: Bearer …`), if any.
     pub bearer: Option<&'a str>,
+}
+
+impl RelayVisitor<'_> {
+    /// The visitor address as the agent receives it.
+    fn address(&self) -> VisitorAddress {
+        VisitorAddress::new(self.ip, self.port)
+    }
 }
 
 /// A relayed data stream with byte accounting wired into tunnel metrics.
@@ -37,6 +48,13 @@ pub struct RelayVisitor<'a> {
 pub struct RelayedStream {
     inner: Box<dyn TunnelStream>,
     metrics: Arc<crate::TunnelMetrics>,
+    /// Machine inventory, so relayed bytes are also credited to the device
+    /// that served them — an admin console shows per-machine traffic, and the
+    /// process-wide counters alone cannot answer "which machine moved this".
+    devices: Arc<crate::gateway::devices::DeviceRegistry>,
+    /// Device owning the session this stream rides on, resolved once when the
+    /// stream opens (the session table is keyed by session, not by device).
+    device_id: Option<sdkwork_webserver_tunnel_core::DeviceId>,
     stream_id: StreamId,
     route_id: String,
     session_id: String,
@@ -79,6 +97,12 @@ impl AsyncRead for RelayedStream {
             if read > 0 {
                 self.read_bytes.fetch_add(read, Ordering::Relaxed);
                 self.metrics.add_bytes_out(read);
+                // Per-machine accounting rides the same observation: the byte
+                // was just counted globally, and the operator also wants to
+                // know which machine moved it.
+                if let Some(device_id) = self.device_id.as_ref() {
+                    self.devices.add_traffic(device_id, 0, read);
+                }
             }
         }
         outcome
@@ -93,8 +117,13 @@ impl AsyncWrite for RelayedStream {
     ) -> Poll<std::io::Result<usize>> {
         let outcome = Pin::new(&mut *self.inner).poll_write(cx, buf);
         if let Poll::Ready(Ok(written)) = &outcome {
-            self.metrics
-                .add_bytes_in(u64::try_from(*written).unwrap_or(u64::MAX));
+            let written = u64::try_from(*written).unwrap_or(u64::MAX);
+            self.metrics.add_bytes_in(written);
+            if written > 0 {
+                if let Some(device_id) = self.device_id.as_ref() {
+                    self.devices.add_traffic(device_id, written, 0);
+                }
+            }
         }
         outcome
     }
@@ -110,30 +139,167 @@ impl AsyncWrite for RelayedStream {
 
 impl TunnelStream for RelayedStream {}
 
+/// Diagnostics without leaking the transport: the stream identity is what a
+/// caller (or a failing assertion) needs to correlate a relay with a route.
+impl std::fmt::Debug for RelayedStream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RelayedStream")
+            .field("stream_id", &self.stream_id.to_string())
+            .field("route_id", &self.route_id)
+            .field("session_id", &self.session_id)
+            .field("egress_bytes", &self.read_bytes.load(Ordering::Relaxed))
+            .finish()
+    }
+}
+
 impl Drop for RelayedStream {
     fn drop(&mut self) {
         self.metrics.record_stream_close();
     }
 }
 
+/// An admitted HTTP relay: the byte stream plus the route policy the caller
+/// must apply to the HTTP messages it writes and reads on it.
+///
+/// It deliberately stays usable *as* the stream (`AsyncRead`/`AsyncWrite`
+/// delegate to the relayed bytes): a caller that only pumps bytes keeps
+/// working, while a caller that parses HTTP can reach the rewriting policy
+/// instead of silently relaying without it.
+#[derive(Debug)]
+pub struct HttpRelay {
+    /// The visitor ⇄ agent byte stream.
+    pub stream: RelayedStream,
+    /// Route id, so a caller can log or measure per route without a second
+    /// lookup.
+    pub route_id: String,
+    /// Header rewriting this route declares (empty for most routes).
+    pub headers: sdkwork_webserver_tunnel_core::RouteHeaderRewrite,
+}
+
+impl AsyncRead for HttpRelay {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.stream).poll_read(cx, buf)
+    }
+}
+
+impl AsyncWrite for HttpRelay {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        Pin::new(&mut self.stream).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.stream).poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.stream).poll_shutdown(cx)
+    }
+}
+
 /// HTTP relay admission: matches `host` against registered domain routes
 /// and opens a data stream toward the owning agent (PRD §30 flow).
+/// HTTP relay admission: matches `host` and `path` against registered domain
+/// routes and opens a data stream toward the owning agent (PRD §30 flow).
+///
+/// The path decides between several routes that share a host with disjoint
+/// location prefixes (FRP `locations` parity); a host whose routes all decline
+/// the path has no route here, and the caller keeps its own routing.
 pub async fn connect_http_stream(
     shared: &Arc<GatewayShared>,
     host: &str,
+    path: &str,
     visitor: RelayVisitor<'_>,
-) -> Result<RelayedStream> {
+) -> Result<HttpRelay> {
     let lowered = host.trim().to_ascii_lowercase();
-    let registered = shared
-        .registry
-        .match_domain(&lowered)
-        .ok_or(TunnelError::RouteNotFound)?;
+    // Selection, not lookup: a load-balancer group may offer several replicas,
+    // and the unhealthy ones are skipped here (FRP `healthCheck` +
+    // `loadBalancer` parity).
+    let registered = match shared.registry.select_domain_path(&lowered, path) {
+        crate::gateway::registry::RouteSelection::Selected(route) => route,
+        crate::gateway::registry::RouteSelection::NoHealthyReplica => {
+            return Err(TunnelError::NoHealthyReplica)
+        }
+        crate::gateway::registry::RouteSelection::NoRoute => {
+            return Err(TunnelError::RouteNotFound)
+        }
+    };
     admit(shared, &registered.route.policy, visitor.ip, visitor.bearer)?;
     let owner: SessionId = registered
         .session()
         .cloned()
         .ok_or(TunnelError::RouteNotFound)?;
-    open_data_stream(shared, &owner, &registered.route.id).await
+    let stream = open_data_stream(
+        shared,
+        &owner,
+        &registered.route.id,
+        Some(visitor.address()),
+        registered.limiter.clone(),
+    )
+    .await?;
+    Ok(HttpRelay {
+        stream,
+        route_id: registered.route.id.to_string(),
+        headers: registered.route.headers.clone(),
+    })
+}
+
+/// Secret-route admission (FRP `stcp`/`sudp` parity): the visitor names the
+/// route and presents its shared key, and the gateway bridges the resulting
+/// stream to the provider's local target.
+///
+/// Unlike the public planes there is no host or port to match, so the key *is*
+/// the admission control: a wrong key and an unknown name produce the same
+/// refusal, because telling a caller that a name exists but the key is wrong
+/// would turn the endpoint into a name oracle.
+pub async fn connect_secret_stream(
+    shared: &Arc<GatewayShared>,
+    name: &str,
+    key: &str,
+    requested_protocol: &str,
+    visitor: Option<VisitorAddress>,
+) -> Result<RelayedStream> {
+    let registered = match shared.registry.select_secret(name) {
+        crate::gateway::registry::RouteSelection::Selected(route) => route,
+        crate::gateway::registry::RouteSelection::NoHealthyReplica => {
+            return Err(TunnelError::NoHealthyReplica)
+        }
+        crate::gateway::registry::RouteSelection::NoRoute => {
+            return Err(TunnelError::AuthenticationFailed)
+        }
+    };
+    if !registered.route.secret_key_matches(key) {
+        shared.metrics.record_visitor_auth_failure();
+        return Err(TunnelError::AuthenticationFailed);
+    }
+    // The protocol is part of the request: a datagram visitor must never be
+    // handed a stream route (or the other way round), because the two sides
+    // would then disagree about whether the bytes are framed.
+    if registered.route.protocol.wire_label() != requested_protocol {
+        return Err(TunnelError::InvalidRoute(format!(
+            "route `{name}` is {} and cannot serve a {requested_protocol} visitor",
+            registered.route.protocol.wire_label()
+        )));
+    }
+    let owner: SessionId = registered
+        .session()
+        .cloned()
+        .ok_or(TunnelError::RouteNotFound)?;
+    open_data_stream(
+        shared,
+        &owner,
+        &registered.route.id,
+        visitor,
+        registered.limiter.clone(),
+    )
+    .await
 }
 
 /// TCP relay admission: matches a gateway listener port against registered
@@ -143,18 +309,30 @@ pub async fn connect_http_stream(
 pub async fn connect_tcp_stream(
     shared: &Arc<GatewayShared>,
     port: u16,
-    client_ip: IpAddr,
+    client: SocketAddr,
 ) -> Result<RelayedStream> {
-    let registered = shared
-        .registry
-        .match_port(port)
-        .ok_or(TunnelError::RouteNotFound)?;
-    admit(shared, &registered.route.policy, client_ip, None)?;
+    let registered = match shared.registry.select_port(port) {
+        crate::gateway::registry::RouteSelection::Selected(route) => route,
+        crate::gateway::registry::RouteSelection::NoHealthyReplica => {
+            return Err(TunnelError::NoHealthyReplica)
+        }
+        crate::gateway::registry::RouteSelection::NoRoute => {
+            return Err(TunnelError::RouteNotFound)
+        }
+    };
+    admit(shared, &registered.route.policy, client.ip(), None)?;
     let owner: SessionId = registered
         .session()
         .cloned()
         .ok_or(TunnelError::RouteNotFound)?;
-    open_data_stream(shared, &owner, &registered.route.id).await
+    open_data_stream(
+        shared,
+        &owner,
+        &registered.route.id,
+        Some(VisitorAddress::new(client.ip(), client.port())),
+        registered.limiter.clone(),
+    )
+    .await
 }
 
 /// Shared admission gate for every relay plane (HTTP, TCP, UDP datagram
@@ -182,10 +360,12 @@ pub(crate) fn admit(
     }
 }
 
-async fn open_data_stream(
+pub(crate) async fn open_data_stream(
     shared: &Arc<GatewayShared>,
     session_id: &SessionId,
     route_id: &RouteId,
+    visitor: Option<VisitorAddress>,
+    limiter: Option<Arc<super::rate_limit::RouteRateLimiter>>,
 ) -> Result<RelayedStream> {
     let permit = shared.sessions.try_acquire_stream(session_id)?;
     let connection = shared
@@ -196,7 +376,7 @@ async fn open_data_stream(
     let open_budget = shared.timeouts.stream_open_duration();
     let open = async {
         let mut stream = connection.open_stream().await?;
-        let header = DataStreamHeader::new(route_id, next_id);
+        let header = DataStreamHeader::with_visitor(route_id, next_id, visitor);
         let frame = header.to_frame()?;
         stream
             .write_all(&frame)
@@ -208,7 +388,7 @@ async fn open_data_stream(
             .map_err(|error| TunnelError::ConnectionFailed(error.to_string()))?;
         Ok::<Box<dyn TunnelStream>, TunnelError>(stream)
     };
-    let stream = match tokio::time::timeout(open_budget, open).await {
+    let opened = match tokio::time::timeout(open_budget, open).await {
         Ok(Ok(stream)) => stream,
         Ok(Err(error)) => {
             shared.metrics.record_error();
@@ -226,6 +406,20 @@ async fn open_data_stream(
             return Err(TunnelError::Timeout("stream open"));
         }
     };
+    // A route with a ceiling relays through a pacing wrapper; the limiter is
+    // shared per route, so concurrent streams split one budget rather than
+    // each getting the full rate.
+    let stream: Box<dyn TunnelStream> = match limiter {
+        Some(limiter) => {
+            tracing::debug!(
+                route = %route_id,
+                bytes_per_second = limiter.bytes_per_second(),
+                "relaying through a rate-limited stream"
+            );
+            Box::new(super::rate_limit::RateLimitedStream::new(opened, limiter))
+        }
+        None => opened,
+    };
     shared.metrics.record_stream_open();
     tracing::debug!(
         session = %session_id,
@@ -236,6 +430,8 @@ async fn open_data_stream(
     Ok(RelayedStream {
         inner: stream,
         metrics: shared.metrics.clone(),
+        devices: shared.devices.clone(),
+        device_id: shared.session_device(session_id),
         stream_id: next_id,
         route_id: route_id.to_string(),
         session_id: session_id.to_string(),

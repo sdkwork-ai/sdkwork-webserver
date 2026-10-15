@@ -103,15 +103,17 @@ fn classify_relay_failure(
     use sdkwork_webserver_tunnel_core::TunnelError;
     match error {
         TunnelError::RouteNotFound => TunnelRelayError::NoRoute,
+        TunnelError::NoHealthyReplica => TunnelRelayError::Unavailable,
         TunnelError::AuthorizationDenied => {
             let lowered = host.trim().to_ascii_lowercase();
-            let bearer_required = shared
-                .registry
-                .match_domain(&lowered)
-                .is_some_and(|registered| {
-                    registered.route.policy.auth
-                        == sdkwork_webserver_tunnel_core::AuthPolicy::BearerToken
-                });
+            let bearer_required =
+                shared
+                    .registry
+                    .match_domain(&lowered)
+                    .is_some_and(|registered| {
+                        registered.route.policy.auth
+                            == sdkwork_webserver_tunnel_core::AuthPolicy::BearerToken
+                    });
             TunnelRelayError::Denied { bearer_required }
         }
         other => TunnelRelayError::Failure(other),
@@ -210,6 +212,10 @@ pub(crate) enum TunnelRelayError {
         /// True when the route demands a visitor bearer token.
         bearer_required: bool,
     },
+    /// Every replica of a load-balancer group is unhealthy: the visitor must
+    /// see "temporarily unavailable" (503), not "not found" (404, implying the
+    /// host is unclaimed) and not a relay error (502).
+    Unavailable,
     /// The relay was denied (ACL/auth) or failed mid-relay; surface as an
     /// HTTP status instead of falling through.
     Failure(sdkwork_webserver_tunnel_core::TunnelError),
@@ -225,6 +231,7 @@ pub(crate) async fn relay_tunnel_http(
     limits: RelayBodyLimits,
     host: &str,
     visitor_ip: IpAddr,
+    visitor_port: u16,
     mut request: axum::http::Request<Body>,
 ) -> Result<axum::response::Response<Body>, TunnelRelayError> {
     let is_websocket = is_upgrade_request(&request);
@@ -235,16 +242,22 @@ pub(crate) async fn relay_tunnel_http(
         .and_then(|value| value.strip_prefix("Bearer "))
         .map(str::to_owned);
 
-    let stream = shared
+    let relay = shared
         .connect_http_stream(
             host,
+            request.uri().path(),
             RelayVisitor {
                 ip: visitor_ip,
+                port: visitor_port,
                 bearer: bearer.as_deref(),
             },
         )
         .await
         .map_err(|error| classify_relay_failure(shared, host, error))?;
+    // The route's rewriting policy is read before the stream is consumed by
+    // the hyper handshake; an empty policy leaves the message untouched.
+    let rewrite = relay.headers.clone();
+    let stream = relay.stream;
 
     // The downstream upgrade must be captured before the request is split.
     let downstream_upgrade = if is_websocket {
@@ -256,6 +269,12 @@ pub(crate) async fn relay_tunnel_http(
     let (mut parts, body) = request.into_parts();
     strip_hop_by_hop_headers(&mut parts.headers, is_websocket);
     inject_forwarded_headers(&mut parts.headers, visitor_ip);
+    // The route's own rewriting is applied last, so an operator's explicit
+    // value wins over the derived one (FRP `hostHeaderRewrite` /
+    // `requestHeaders.set`). Admission decisions never read these headers: the
+    // visitor address used for `allowed_ips` came from the connection, not
+    // from a header, so a rewrite cannot widen access.
+    apply_header_rewrite(&mut parts.headers, &rewrite, HeaderSide::Request);
     // Enforce the admission limits on the relayed stream: a visitor must not
     // reach an unbounded body past the edge's configured ceilings just
     // because this host is served through a tunnel.
@@ -315,13 +334,15 @@ pub(crate) async fn relay_tunnel_http(
             axum::http::header::CONNECTION,
             axum::http::HeaderValue::from_static("upgrade"),
         );
+        apply_header_rewrite(&mut parts.headers, &rewrite, HeaderSide::Response);
         return Ok(axum::response::Response::from_parts(
             parts,
             Body::new(empty_body),
         ));
     }
 
-    let (parts, response_body) = response.into_parts();
+    let (mut parts, response_body) = response.into_parts();
+    apply_header_rewrite(&mut parts.headers, &rewrite, HeaderSide::Response);
     let response_trailer_policy = relay_trailer_policy(&parts.headers, &limits);
     Ok(axum::response::Response::from_parts(
         parts,
@@ -341,6 +362,65 @@ fn is_upgrade_request(request: &axum::http::Request<Body>) -> bool {
         .map(|value| value.to_ascii_lowercase().contains("upgrade"))
         .unwrap_or(false);
     connection_upgrades && request.headers().get(axum::http::header::UPGRADE).is_some()
+}
+
+/// Which side of the relay a rewrite applies to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HeaderSide {
+    /// The request the agent forwards to its local target.
+    Request,
+    /// The response the visitor receives.
+    Response,
+}
+
+/// Applies the route's header rewriting (FRP `hostHeaderRewrite`,
+/// `requestHeaders.set`, `responseHeaders.set`).
+///
+/// Every name and value here was validated when the route was built —
+/// configuration load, registration, or declaration — so this function cannot
+/// inject a header the operator did not write: it only copies validated pairs
+/// into the message, and a value that hyper still refuses is skipped rather
+/// than allowed to fail a live request.
+fn apply_header_rewrite(
+    headers: &mut axum::http::HeaderMap,
+    rewrite: &sdkwork_webserver_tunnel_core::RouteHeaderRewrite,
+    side: HeaderSide,
+) {
+    if rewrite.is_empty() {
+        return;
+    }
+    if side == HeaderSide::Request {
+        if let Some(host) = rewrite.host() {
+            match axum::http::HeaderValue::from_str(host) {
+                Ok(value) => {
+                    headers.insert(axum::http::header::HOST, value);
+                }
+                Err(_) => {
+                    tracing::warn!(host, "tunnel route host rewrite is not a header value");
+                }
+            }
+        }
+    }
+    let pairs = match side {
+        HeaderSide::Request => rewrite.request_set(),
+        HeaderSide::Response => rewrite.response_set(),
+    };
+    for pair in pairs {
+        match (
+            axum::http::HeaderName::from_bytes(pair.name.as_bytes()),
+            axum::http::HeaderValue::from_str(&pair.value),
+        ) {
+            (Ok(name), Ok(value)) => {
+                headers.insert(name, value);
+            }
+            _ => {
+                tracing::warn!(
+                    header = pair.name.as_str(),
+                    "tunnel route header rewrite was refused by the HTTP layer"
+                );
+            }
+        }
+    }
 }
 
 /// FRP-parity visitor identity propagation: appends the visitor address to

@@ -16,6 +16,7 @@ import com.sdkwork.webserver.backend.sdk.api.WebserverConfigApi;
 import com.sdkwork.webserver.backend.sdk.api.AgentApi;
 import com.sdkwork.webserver.backend.sdk.api.AuditApi;
 import com.sdkwork.webserver.backend.sdk.api.ClusterApi;
+import com.sdkwork.webserver.backend.sdk.api.TunnelApi;
 import com.sdkwork.webserver.backend.sdk.api.TrafficUsageApi;
 import com.sdkwork.webserver.backend.sdk.api.MetricsSummaryApi;
 
@@ -35,6 +36,7 @@ public class SdkworkBackendClient {
     private AgentApi agent;
     private AuditApi audit;
     private ClusterApi cluster;
+    private TunnelApi tunnel;
     private TrafficUsageApi trafficUsage;
     private MetricsSummaryApi metricsSummary;
 
@@ -54,6 +56,7 @@ public class SdkworkBackendClient {
         this.agent = new AgentApi(httpClient);
         this.audit = new AuditApi(httpClient);
         this.cluster = new ClusterApi(httpClient);
+        this.tunnel = new TunnelApi(httpClient);
         this.trafficUsage = new TrafficUsageApi(httpClient);
         this.metricsSummary = new MetricsSummaryApi(httpClient);
     }
@@ -74,6 +77,7 @@ public class SdkworkBackendClient {
         this.agent = new AgentApi(httpClient);
         this.audit = new AuditApi(httpClient);
         this.cluster = new ClusterApi(httpClient);
+        this.tunnel = new TunnelApi(httpClient);
         this.trafficUsage = new TrafficUsageApi(httpClient);
         this.metricsSummary = new MetricsSummaryApi(httpClient);
     }
@@ -132,6 +136,10 @@ public class SdkworkBackendClient {
 
     public ClusterApi getCluster() {
         return this.cluster;
+    }
+
+    public TunnelApi getTunnel() {
+        return this.tunnel;
     }
 
     public TrafficUsageApi getTrafficUsage() {

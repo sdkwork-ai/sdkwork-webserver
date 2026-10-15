@@ -27,6 +27,8 @@ export type {
   CreateDomainDnsRecordRequest,
   DnsAccountResponse,
   DomainDnsRecordStatusRequest,
+  DomainWechatVerificationCheckResponse,
+  DomainWechatVerificationResponse,
   UpdateDomainDnsRecordRequest,
   DomainDnsRecordResponse,
   DomainDnsSyncResponse,
@@ -52,6 +54,11 @@ export type {
   TrafficUsageStatisticsResponse,
   TrafficUsageTenantTotal,
   TrafficUsageTotal,
+  TunnelMachineListResponse,
+  TunnelMachineResponse,
+  TunnelMachineRouteDeclarationResponse,
+  TunnelMachineRouteResponse,
+  UpsertDomainWechatVerificationRequest,
 } from "@sdkwork/webserver-backend-sdk";
 
 export type WebserverAdminSdkClient = SdkworkBackendClient;
@@ -159,6 +166,66 @@ export function createWebserverAdminRegistry(client: WebserverAdminSdkClient): W
         { id: "endDate", type: "date" },
       ],
     },
+    // Tunnel machines: the connector nodes the reverse tunnel gateway manages.
+    //
+    // The switch is offered in the direction the selected machine's current
+    // state allows, and taking a machine out of service asks for confirmation:
+    // it ends the machine's live session, so it is a service-affecting action
+    // rather than a checkbox. Route declaration deliberately carries no target
+    // field — the machine activates a declaration only when it matches one of
+    // its own local templates and always dials its own configured target.
+    "tunnel-machines": {
+      ...source(
+        () => client.tunnel.tunnelMachines.list().then((response) => ({
+          items: response.machines,
+          pageInfo: {
+            page: 1,
+            pageSize: Math.max(response.machines.length, 1),
+            hasMore: false,
+            mode: "offset" as const,
+          },
+        })),
+        [
+          action("disable", "Switch machine off", {}, (context) => client.tunnel.tunnelMachines.enabled.update(selectedId(context, "deviceId"), { enabled: false }), {
+            availableWhen: ({ selectedItem }) => instanceFlag(selectedItem, "enabled") === true,
+            dangerous: true,
+            permission: "web.tunnel.write",
+            requiresConfirmation: true,
+            selection: true,
+          }),
+          action("enable", "Switch machine on", {}, (context) => client.tunnel.tunnelMachines.enabled.update(selectedId(context, "deviceId"), { enabled: true }), {
+            availableWhen: ({ selectedItem }) => instanceFlag(selectedItem, "enabled") === false,
+            permission: "web.tunnel.write",
+            selection: true,
+          }),
+          action("declare-route", "Declare route", { name: "", protocol: "http", domain: "", allowPublic: false }, (context) => client.tunnel.tunnelMachines.routes.create(
+            selectedId(context, "deviceId"),
+            {
+              name: requiredText(context.body.name, "Name", 128),
+              protocol: tunnelProtocol(context.body.protocol),
+              domain: optionalText(context.body.domain, "Domain", 253),
+              allowPublic: context.body.allowPublic === true,
+            },
+            idempotencyParams(context),
+          ), {
+            permission: "web.tunnel.write",
+            requiredFields: ["name"],
+            resultFields: ["routeId", "active", "publicUrl", "detail"],
+            selection: true,
+          }),
+          action("remove-route", "Remove route", { routeId: "" }, (context) => client.tunnel.tunnelMachines.routes.delete(
+            selectedId(context, "deviceId"),
+            requiredText(context.body.routeId, "Route id", 160),
+            idempotencyParams(context),
+          ), {
+            dangerous: true,
+            permission: "web.tunnel.write",
+            requiredFields: ["routeId"],
+            selection: true,
+          }),
+        ],
+      ),
+    },
   };
 }
 
@@ -174,6 +241,18 @@ function selectedId(context: WebserverResourceActionContext, key: string): strin
  * no state to apply.
  */
 function instanceFlag(item: Record<string, unknown> | undefined, key: string): boolean | undefined { const value = item?.[key]; return typeof value === "boolean" ? value : undefined; }
+/**
+ * Reads the relay kind off a declaration body.
+ *
+ * The contract accepts five kinds and the machine decides whether the
+ * declaration matches one of its own templates, so an unknown kind is a client
+ * error here rather than a declaration the machine silently ignores.
+ */
+function tunnelProtocol(value: unknown): "http" | "tcp" | "udp" | "stcp" | "sudp" {
+  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (text === "http" || text === "tcp" || text === "udp" || text === "stcp" || text === "sudp") return text;
+  throw new Error("Protocol must be http, tcp, udp, stcp, or sudp");
+}
 function idempotencyParams(context: WebserverResourceActionContext): { idempotencyKey: string } { const idempotencyKey = context.idempotencyKey?.trim(); if (!idempotencyKey) throw new Error("Idempotency key is required"); return { idempotencyKey }; }
 function filterValue(filters: Readonly<Record<string, string>> | undefined, key: string): string | undefined { const value = filters?.[key]?.trim(); return value || undefined; }
 

@@ -5,13 +5,13 @@ Generated SDKWork v3 dual-token transport SDK.
 ## Installation
 
 ```bash
-cargo add sdkwork-webserver-backend-sdk-generated-rust
+cargo add sdkwork-webserver-backend-sdk
 ```
 
 ## Quick Start
 
 ```rust
-use sdkwork_webserver_backend_sdk_generated_rust::{SdkworkBackendClient, SdkworkConfig};
+use sdkwork_webserver_backend_sdk::{SdkworkBackendClient, SdkworkConfig};
 
 
 #[tokio::main]
@@ -57,6 +57,7 @@ client.set_header("X-Custom-Header", "value");
 - `client.agent()` - agent API
 - `client.audit()` - audit API
 - `client.cluster()` - cluster API
+- `client.tunnel()` - tunnel API
 - `client.traffic_usage()` - traffic_usage API
 - `client.metrics_summary()` - metrics_summary API
 
@@ -226,6 +227,14 @@ let result = client.cluster().clusters_overview_retrieve().await?;
 println!("{result:?}");
 ```
 
+### tunnel
+
+```rust
+// List the tunnel connector machines this gateway manages
+let result = client.tunnel().machines_list().await?;
+println!("{result:?}");
+```
+
 ### traffic_usage
 
 ```rust
@@ -255,7 +264,7 @@ println!("{result:?}");
 ## Error Handling
 
 ```rust
-use sdkwork_webserver_backend_sdk_generated_rust::{SdkworkBackendClient, SdkworkConfig};
+use sdkwork_webserver_backend_sdk::{SdkworkBackendClient, SdkworkConfig};
 
 
 let client = SdkworkBackendClient::new(SdkworkConfig::new("http://localhost:3800"))?;

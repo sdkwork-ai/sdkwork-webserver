@@ -55,6 +55,7 @@ client.set_header('X-Custom-Header', 'value')
 - `client.agent` - agent API
 - `client.audit` - audit API
 - `client.cluster` - cluster API
+- `client.tunnel` - tunnel API
 - `client.traffic_usage` - traffic_usage API
 - `client.metrics_summary` - metrics_summary API
 
@@ -182,6 +183,14 @@ puts result.inspect
 ```ruby
 # Retrieve the cluster health overview for status polling
 result = client.cluster.clusters_overview_retrieve()
+puts result.inspect
+```
+
+### tunnel
+
+```ruby
+# List the tunnel connector machines this gateway manages
+result = client.tunnel.machines_list()
 puts result.inspect
 ```
 

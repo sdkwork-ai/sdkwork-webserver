@@ -18,63 +18,144 @@ pub use acl::{AclDecision, RouteAcl};
 /// never live in configuration files).
 #[derive(Debug, Clone)]
 pub struct TokenAuthenticator {
-    tokens: Vec<String>,
+    entries: Vec<TokenEntry>,
+}
+
+/// One accepted credential and the user it speaks for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TokenEntry {
+    token: String,
+    /// `None` for a shared token: it authenticates a machine but speaks for no
+    /// user, so the session is unlabelled and the global limits apply.
+    user: Option<String>,
 }
 
 impl TokenAuthenticator {
-    /// Builds the authenticator from already-resolved tokens.
+    /// Builds the authenticator from already-resolved shared tokens.
     pub fn new(tokens: Vec<String>) -> Self {
         Self {
-            tokens: tokens
+            entries: tokens
                 .into_iter()
                 .filter(|token| !token.is_empty())
+                .map(|token| TokenEntry { token, user: None })
                 .collect(),
         }
+    }
+
+    /// Builds the authenticator from shared tokens plus per-user ones.
+    ///
+    /// A user-bound token is what turns FRP's `user` label into a boundary: the
+    /// session's user comes from the credential, so an agent cannot claim a
+    /// name it holds no token for, and per-user quotas cannot be escaped by
+    /// relabelling.
+    pub fn with_users(tokens: Vec<String>, users: Vec<(String, String)>) -> Self {
+        let mut authenticator = Self::new(tokens);
+        for (user, token) in users {
+            let token = token.trim().to_owned();
+            let user = user.trim().to_owned();
+            if token.is_empty() || user.is_empty() {
+                continue;
+            }
+            authenticator.entries.push(TokenEntry {
+                token,
+                user: Some(user),
+            });
+        }
+        authenticator
     }
 
     /// Resolves tokens from environment variable names; unset or empty
     /// variables contribute nothing. Returns an authenticator even when no
     /// variable is set, but [`Self::verify`] then fails closed.
     pub fn from_env(env_names: &[String]) -> Self {
-        let tokens = env_names
-            .iter()
-            .filter_map(|name| std::env::var(name).ok())
-            .flat_map(|value| {
-                value
-                    .split(',')
-                    .map(str::trim)
-                    .filter(|token| !token.is_empty())
-                    .map(str::to_owned)
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-        Self::new(tokens)
+        Self::new(resolve_env_tokens(env_names))
     }
 
     /// True when at least one token is configured; a gateway without any
     /// token refuses every agent (fail closed).
     pub fn is_configured(&self) -> bool {
-        !self.tokens.is_empty()
+        !self.entries.is_empty()
     }
 
     /// Verifies a presented token in constant time per comparison.
     pub fn verify(&self, presented: &str) -> bool {
-        self.tokens
+        self.entries
             .iter()
-            .any(|candidate| sdkwork_utils_rust::crypto::secure_compare(candidate, presented))
+            .any(|entry| sdkwork_utils_rust::crypto::secure_compare(&entry.token, presented))
     }
 
-    /// Verifies a token and ties it to the device identity claim. V1 tokens
-    /// are shared credentials; any valid token authenticates any declared
-    /// device id. Device-bound credentials arrive with mTLS (P1).
-    pub fn authenticate(&self, device_id: &DeviceId, token: &str) -> Result<()> {
-        if self.verify(token) {
-            Ok(())
-        } else {
-            tracing::warn!(%device_id, "tunnel authentication failed");
-            Err(TunnelError::AuthenticationFailed)
+    /// The user this token speaks for, when it is a user-bound credential.
+    ///
+    /// Every entry is compared in constant time, and only the user is returned:
+    /// the caller never learns which token matched, only whose it is.
+    pub fn user_for(&self, presented: &str) -> Option<&str> {
+        let mut matched: Option<&str> = None;
+        for entry in &self.entries {
+            if sdkwork_utils_rust::crypto::secure_compare(&entry.token, presented) {
+                if entry.user.is_some() {
+                    matched = entry.user.as_deref();
+                }
+            }
         }
+        matched
     }
+
+    /// Verifies a token and ties it to the identity the agent claims.
+    ///
+    /// Two rules, both fail-closed:
+    ///
+    /// - an unknown token is refused;
+    /// - an agent that claims a user must hold a token bound to **that** user.
+    ///   A shared token may not claim any user at all, because accepting the
+    ///   claim would let one machine spend another team's quota and appear in
+    ///   that team's listings.
+    pub fn authenticate(
+        &self,
+        device_id: &DeviceId,
+        token: &str,
+        claimed_user: Option<&str>,
+    ) -> Result<()> {
+        if !self.verify(token) {
+            tracing::warn!(%device_id, "tunnel authentication failed");
+            return Err(TunnelError::AuthenticationFailed);
+        }
+        if let Some(claimed) = claimed_user.map(str::trim).filter(|user| !user.is_empty()) {
+            if self.user_for(token) != Some(claimed) {
+                tracing::warn!(
+                    %device_id,
+                    claimed,
+                    "tunnel authentication refused: the token does not speak for that user"
+                );
+                return Err(TunnelError::AuthenticationFailed);
+            }
+        }
+        Ok(())
+    }
+
+    /// The user a verified session belongs to, resolved from its token.
+    pub fn user_of(&self, token: &str) -> Option<String> {
+        self.user_for(token).map(str::to_owned)
+    }
+}
+
+/// Resolves comma-separated tokens from environment variable names.
+///
+/// Public because the gateway composes shared tokens and per-user ones in one
+/// authenticator: both must resolve the same way, or a credential would work
+/// on one path and not the other.
+pub fn resolve_env_tokens(env_names: &[String]) -> Vec<String> {
+    env_names
+        .iter()
+        .filter_map(|name| std::env::var(name).ok())
+        .flat_map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|token| !token.is_empty())
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }
 
 /// Fixed-window authentication attempt limiter per peer IP (PRD §107 DoS
@@ -185,8 +266,45 @@ mod tests {
         assert!(authenticator.verify("beta"));
         assert!(!authenticator.verify("gamma"));
         let device = DeviceId::parse("dev_test").expect("valid id");
-        assert!(authenticator.authenticate(&device, "alpha").is_ok());
-        assert!(authenticator.authenticate(&device, "nope").is_err());
+        assert!(authenticator.authenticate(&device, "alpha", None).is_ok());
+        assert!(authenticator.authenticate(&device, "nope", None).is_err());
+        // A shared token speaks for no user, so it may not claim one: accepting
+        // the claim would let any machine spend another team's quota.
+        assert!(authenticator.authenticate(&device, "alpha", Some("team-a")).is_err());
+    }
+
+    /// Per-user credentials: the user comes from the token, never from the
+    /// claim, and a mismatching claim is refused.
+    #[test]
+    fn user_bound_tokens_decide_the_user_and_refuse_a_foreign_claim() {
+        let authenticator = TokenAuthenticator::with_users(
+            vec!["shared".to_owned()],
+            vec![
+                ("team-a".to_owned(), "token-a".to_owned()),
+                ("team-b".to_owned(), "token-b".to_owned()),
+            ],
+        );
+        assert!(authenticator.verify("token-a"));
+        assert_eq!(authenticator.user_for("token-a"), Some("team-a"));
+        assert_eq!(authenticator.user_for("shared"), None);
+        assert_eq!(authenticator.user_for("unknown"), None);
+
+        let device = DeviceId::parse("dev_team").expect("valid id");
+        assert!(authenticator
+            .authenticate(&device, "token-a", Some("team-a"))
+            .is_ok());
+        // Right token, wrong team.
+        assert!(authenticator
+            .authenticate(&device, "token-a", Some("team-b"))
+            .is_err());
+        // Right team, wrong token.
+        assert!(authenticator
+            .authenticate(&device, "token-b", Some("team-a"))
+            .is_err());
+        // No claim at all is fine: the session is simply labelled by its token.
+        assert!(authenticator.authenticate(&device, "token-a", None).is_ok());
+        assert_eq!(authenticator.user_of("token-a").as_deref(), Some("team-a"));
+        assert_eq!(authenticator.user_of("shared"), None);
     }
 
     #[test]
@@ -194,7 +312,7 @@ mod tests {
         let authenticator = TokenAuthenticator::new(vec![String::new()]);
         assert!(!authenticator.is_configured());
         let device = DeviceId::parse("dev_test").expect("valid id");
-        assert!(authenticator.authenticate(&device, "").is_err());
+        assert!(authenticator.authenticate(&device, "", None).is_err());
     }
 
     #[test]

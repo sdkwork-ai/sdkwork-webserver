@@ -13,6 +13,8 @@ pub mod repository;
 pub mod runtime_assignment_ops;
 pub mod source_import;
 pub mod tls_material_distribution;
+pub mod tunnel_machines;
+pub mod wechat_verification;
 
 pub use cluster_ops::{ClusterMachineCredential, ClusterSweepReport};
 pub use domain_verification::{

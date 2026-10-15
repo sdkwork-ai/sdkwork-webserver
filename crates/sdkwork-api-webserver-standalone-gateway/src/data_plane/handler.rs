@@ -290,9 +290,32 @@ async fn route_admitted_request(
     // provider is briefly down both answer 503. On an entry point with no
     // delivery surface the probe is false, so this is the plain "check the
     // registry before local routing" of the non-publishing shape.
-    if let Some(host) = registered_tunnel_host(&state, &authority) {
+    //
+    // The path is part of the question: a route may claim only some paths of
+    // its host (`locations`, FRP parity), and a path it does not claim must
+    // keep falling through to the local routing instead of being answered by
+    // the tunnel.
+    if let Some(host) = registered_tunnel_host(&state, &authority, &path) {
         if !website_surface_declares_host(&state, &authority) {
-            return relay_registered_tunnel(&state, admitted, &host, client_ip, request).await;
+            // The visitor port is only knowable when the connection peer *is*
+            // the visitor: behind a trusted proxy the forwarded headers carry
+            // an address, never a port, and inventing one would put a wrong
+            // source port into a PROXY-protocol header. `0` is the protocol's
+            // own "unknown" encoding.
+            let visitor_port = if peer.ip() == client_ip {
+                peer.port()
+            } else {
+                0
+            };
+            return relay_registered_tunnel(
+                &state,
+                admitted,
+                &host,
+                client_ip,
+                visitor_port,
+                request,
+            )
+            .await;
         }
     }
     if let Some(executor) = state.website_delivery.clone() {
@@ -443,6 +466,10 @@ async fn route_admitted_request(
                             // lease raced teardown.
                             text_response(StatusCode::FORBIDDEN, "cluster relay denied\n")
                         }
+                        Err(crate::tunnel_bridge::TunnelRelayError::Unavailable) => text_response(
+                            StatusCode::SERVICE_UNAVAILABLE,
+                            "no healthy cluster instance is available\n",
+                        ),
                         Err(crate::tunnel_bridge::TunnelRelayError::Failure(error)) => {
                             tracing::warn!(
                                 host = %host,
@@ -1321,16 +1348,19 @@ fn website_surface_declares_host(state: &ListenerState, authority: &str) -> bool
         .is_some_and(|runtime_set| runtime_set.declares_authority(authority))
 }
 
-/// Normalized host of a registered tunnel route for this request's authority,
-/// or `None` when no agent has registered the host on this gateway.
+/// Normalized host of a registered tunnel route that serves this request's
+/// path, or `None` when no agent has registered it on this gateway.
 ///
 /// Borrows instead of taking the request so a caller can decide whether to
 /// hand the request over before giving up ownership of it.
-fn registered_tunnel_host(state: &ListenerState, authority: &str) -> Option<String> {
+fn registered_tunnel_host(state: &ListenerState, authority: &str, path: &str) -> Option<String> {
     let tunnel_shared = state.runtime.tunnel.as_ref()?;
     let host = sdkwork_webserver_core::normalize_authority_host(authority)
         .unwrap_or_else(|| authority.to_ascii_lowercase());
-    tunnel_shared.registry.match_domain(&host).map(|_| host)
+    tunnel_shared
+        .registry
+        .match_domain_path(&host, path)
+        .map(|_| host)
 }
 
 /// Relays a request whose Host matches a registered tunnel route to the owning
@@ -1345,6 +1375,7 @@ async fn relay_registered_tunnel(
     admitted: &mut super::request_gate::RequestAdmissionPermit,
     host: &str,
     client_ip: IpAddr,
+    visitor_port: u16,
     request: Request<Body>,
 ) -> Response<Body> {
     let Some(tunnel_shared) = state.runtime.tunnel.as_ref() else {
@@ -1362,6 +1393,7 @@ async fn relay_registered_tunnel(
         relay_limits,
         host,
         client_ip,
+        visitor_port,
         request,
     )
     .await
@@ -1383,6 +1415,16 @@ async fn relay_registered_tunnel(
         }
         Err(crate::tunnel_bridge::TunnelRelayError::Denied { bearer_required }) => {
             denied_tunnel_response(bearer_required)
+        }
+        Err(crate::tunnel_bridge::TunnelRelayError::Unavailable) => {
+            // The host *is* claimed by the tunnel; every replica behind it is
+            // down. 404 would say "nobody serves this host" and 502 would say
+            // "the relay broke" — neither is true.
+            tracing::warn!(host = %host, "tunnel relay refused: no healthy replica");
+            text_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "no healthy replica is available for this tunnel route\n",
+            )
         }
         Err(crate::tunnel_bridge::TunnelRelayError::Failure(error)) => {
             tracing::warn!(host = %host, error = %error, "tunnel relay failed");

@@ -133,9 +133,6 @@ importers:
       '@sdkwork/core-pc-react':
         specifier: '*'
         version: link:../../../../../sdkwork-core/sdkwork-core-pc-react
-      '@sdkwork/ui-pc-react':
-        specifier: workspace:*
-        version: link:../../../../../sdkwork-ui/sdkwork-ui-pc-react
       '@sdkwork/utils':
         specifier: workspace:*
         version: link:../../../../../sdkwork-utils/packages/sdkwork-utils-typescript
@@ -148,6 +145,10 @@ importers:
       react-dom:
         specifier: '>=18.2.0 <20.0.0'
         version: 19.2.4(react@19.2.8)
+    devDependencies:
+      '@sdkwork/ui-pc-react':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-ui/sdkwork-ui-pc-react
 
   ../sdkwork-appbase/packages/mobile-react/foundation/sdkwork-shell-mobile-react:
     dependencies:
@@ -157,9 +158,6 @@ importers:
       '@sdkwork/core-pc-react':
         specifier: '*'
         version: link:../../../../../sdkwork-core/sdkwork-core-pc-react
-      '@sdkwork/ui-pc-react':
-        specifier: '*'
-        version: link:../../../../../sdkwork-ui/sdkwork-ui-pc-react
       '@sdkwork/utils':
         specifier: workspace:*
         version: link:../../../../../sdkwork-utils/packages/sdkwork-utils-typescript
@@ -169,6 +167,10 @@ importers:
       react-dom:
         specifier: '>=18.2.0 <20.0.0'
         version: 19.2.4(react@19.2.4)
+    devDependencies:
+      '@sdkwork/ui-pc-react':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-ui/sdkwork-ui-pc-react
 
   ../sdkwork-appbase/packages/pc-react/foundation/sdkwork-appbase-pc-react:
     dependencies:
@@ -1814,10 +1816,10 @@ importers:
         specifier: ^29.0.1
         version: 29.1.1
       react:
-        specifier: 19.2.8
+        specifier: 'catalog:'
         version: 19.2.8
       react-dom:
-        specifier: 19.2.8
+        specifier: 'catalog:'
         version: 19.2.8(react@19.2.8)
       react-hook-form:
         specifier: ^7.72.1
@@ -2122,6 +2124,9 @@ importers:
       '@sdkwork/webserver-pc-admin-storage':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-admin-storage
+      '@sdkwork/webserver-pc-admin-tunnel':
+        specifier: workspace:*
+        version: link:packages/sdkwork-webserver-pc-admin-tunnel
       '@sdkwork/webserver-pc-admin-webserver-config':
         specifier: workspace:*
         version: link:packages/sdkwork-webserver-pc-admin-webserver-config
@@ -2337,6 +2342,12 @@ importers:
         specifier: ^7.18.4
         version: 7.18.4(react-dom@19.3.0(react@19.2.8))(react@19.2.8)
 
+  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-diagnostics:
+    dependencies:
+      '@sdkwork/webserver-pc-commons':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-commons
+
   apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-iam:
     dependencies:
       '@sdkwork/drive-upload-image-core':
@@ -2400,6 +2411,12 @@ importers:
         specifier: ^7.18.4
         version: 7.18.4(react-dom@19.3.0(react@19.2.8))(react@19.2.8)
 
+  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-nginx:
+    dependencies:
+      '@sdkwork/webserver-pc-commons':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-commons
+
   apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-plugins:
     dependencies:
       '@sdkwork/sdk-common':
@@ -2414,6 +2431,36 @@ importers:
       '@sdkwork/webserver-pc-console-plugins':
         specifier: workspace:*
         version: link:../sdkwork-webserver-pc-console-plugins
+      react:
+        specifier: 'catalog:'
+        version: 19.2.8
+      react-router-dom:
+        specifier: ^7.18.4
+        version: 7.18.4(react-dom@19.3.0(react@19.2.8))(react@19.2.8)
+
+  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-servers:
+    dependencies:
+      '@sdkwork/webserver-pc-commons':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-commons
+
+  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-servers-explorer:
+    dependencies:
+      '@sdkwork/sdk-common':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      '@sdkwork/ui-pc-react':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-ui/sdkwork-ui-pc-react
+      '@sdkwork/webserver-pc-admin-core':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-admin-core
+      '@sdkwork/webserver-pc-commons':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-commons
+      lucide-react:
+        specifier: 'catalog:'
+        version: 1.52.0(@types/react@19.3.0)(react@19.2.8)
       react:
         specifier: 'catalog:'
         version: 19.2.8
@@ -2480,6 +2527,30 @@ importers:
       sdkwork-drive-pc-core:
         specifier: workspace:*
         version: link:../../../../../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-core
+
+  apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-tunnel:
+    dependencies:
+      '@sdkwork/sdk-common':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      '@sdkwork/ui-pc-react':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-ui/sdkwork-ui-pc-react
+      '@sdkwork/webserver-pc-admin-core':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-admin-core
+      '@sdkwork/webserver-pc-commons':
+        specifier: workspace:*
+        version: link:../sdkwork-webserver-pc-commons
+      lucide-react:
+        specifier: 'catalog:'
+        version: 1.52.0(@types/react@19.3.0)(react@19.2.8)
+      react:
+        specifier: 'catalog:'
+        version: 19.2.8
+      react-router-dom:
+        specifier: ^7.18.4
+        version: 7.18.4(react-dom@19.3.0(react@19.2.8))(react@19.2.8)
 
   apps/sdkwork-webserver-pc/packages/sdkwork-webserver-pc-admin-webserver-config:
     dependencies:

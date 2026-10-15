@@ -1,11 +1,54 @@
 use sdkwork_database_id::SnowflakeIdGenerator;
-use sqlx::{Database, Pool};
+use sdkwork_webserver_contract::{WebServiceError, WebServiceResult};
+use sqlx::{Database, Pool, Row};
 
 mod resolution_cache;
 mod runtime;
 
 pub use resolution_cache::{SqlxResolutionCache, resolution_cache_from_shared_pool};
 pub use runtime::{WebRuntime, bootstrap_web_runtime_from_env};
+
+/// The WeChat verification file a request hostname resolves to, via its root
+/// domain. Exposed for the standalone gateway's data plane: the edge answers
+/// `https://<hostname>/<fileName>` from here for the apex and every registered
+/// subdomain of the root domain.
+///
+/// Self-contained on purpose: it needs only a PostgreSQL pool, so it does not
+/// depend on the domain-repository engine surface.
+pub async fn wechat_verification_by_hostname_lookup(
+    pool: &sqlx::PgPool,
+    hostname: &str,
+) -> WebServiceResult<Option<(String, String)>> {
+    let normalized = hostname.trim().trim_end_matches('.').to_ascii_lowercase();
+    let row = sqlx::query(
+        "SELECT v.file_name, v.content
+         FROM webserver_domain_wechat_verification v
+         JOIN webserver_root_domain r ON r.id = v.root_domain_id
+         LEFT JOIN webserver_domain d
+           ON d.root_domain_id = r.id AND d.hostname = $1 AND d.deleted_at IS NULL
+         WHERE r.deleted_at IS NULL AND (r.hostname = $1 OR d.id IS NOT NULL)
+         ORDER BY r.id DESC
+         LIMIT 1",
+    )
+    .bind(&normalized)
+    .fetch_optional(pool)
+    .await
+    .map_err(|error| {
+        WebServiceError::Internal(format!(
+            "read webserver_domain_wechat_verification by hostname: {error}"
+        ))
+    })?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let file_name: String = row
+        .try_get("file_name")
+        .map_err(|error| WebServiceError::Internal(format!("map file name: {error}")))?;
+    let content: String = row
+        .try_get("content")
+        .map_err(|error| WebServiceError::Internal(format!("map content: {error}")))?;
+    Ok(Some((file_name, content)))
+}
 
 /// Marks a dynamically assembled SQL statement as audited for sqlx 0.9's
 /// compile-time injection check (`SqlSafeStr`).

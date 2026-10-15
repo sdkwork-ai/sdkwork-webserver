@@ -68,6 +68,7 @@ const client = new SdkworkBackendClient({
 - `client.agent` - agent API
 - `client.audit` - audit API
 - `client.cluster` - cluster API
+- `client.tunnel` - tunnel API
 - `client.trafficUsage` - traffic_usage API
 - `client.metricsSummary` - metrics_summary API
 
@@ -221,6 +222,13 @@ const result = await client.audit.auditLogs.list(params);
 ```typescript
 // Retrieve the cluster health overview for status polling
 const result = await client.cluster.overview.retrieve();
+```
+
+### tunnel
+
+```typescript
+// List the tunnel connector machines this gateway manages
+const result = await client.tunnel.tunnelMachines.list();
 ```
 
 ### traffic_usage

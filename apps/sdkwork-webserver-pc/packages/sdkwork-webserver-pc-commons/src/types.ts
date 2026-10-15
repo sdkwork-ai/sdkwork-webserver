@@ -95,7 +95,12 @@ export type WebserverResourceKey =
   // `dataStatistics` section groups. Both read the Web Server's own traffic
   // contract, and which tenant scope answers is decided server-side.
   | "dashboard"
-  | "traffic-usage";
+  | "traffic-usage"
+  // Tunnel machines: the connector nodes the reverse tunnel gateway manages.
+  // Platform infrastructure rather than a tenant resource, so the entry lives
+  // under the `/admin/tunnel` module subtree with its own `web.tunnel.*`
+  // permission pair — reading the cluster must not imply managing machines.
+  | "tunnel-machines";
 
 export interface WebserverModuleEntry {
   description: string;

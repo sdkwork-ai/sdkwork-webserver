@@ -14,25 +14,44 @@
 pub mod config;
 pub mod device;
 pub mod error;
+pub mod headers;
+pub mod health;
 pub mod ids;
 pub mod policy;
+pub mod proxy_protocol;
 pub mod route;
 pub mod session;
+pub mod verify;
 
 pub use config::{
+    parse_dns_server,
+    validate_endpoint_authority, TunnelUserConfig,
     TunnelAgentConfig, TunnelAgentTlsConfig, TunnelConfig, TunnelGatewayConfig, TunnelLimitsConfig,
     TunnelNetworkConfig, TunnelRouteTemplate, TunnelTimeoutConfig, DEFAULT_HEARTBEAT_INTERVAL_SECS,
-    DEFAULT_TUNNEL_PORT,
+    DEFAULT_PROXY_BIND_ADDR, DEFAULT_TUNNEL_PORT,
 };
-pub use device::{Device, DevicePlatform};
+pub use device::{validate_user_name, Device, DevicePlatform, MAX_USER_NAME_LEN};
 pub use error::{Result, TunnelError, ValidationField};
+pub use headers::{
+    HeaderDirection, HeaderPair, HeaderSetConfig, RouteHeaderRewrite, MAX_HEADER_PAIRS,
+};
+pub use health::{
+    validate_load_balancer_group, HealthCheckConfig, HealthCheckKind, DEFAULT_HEALTH_INTERVAL_SECS,
+    DEFAULT_HEALTH_MAX_FAILED, DEFAULT_HEALTH_TIMEOUT_SECS,
+};
 pub use ids::{DeviceId, RouteId, SessionId, StreamId};
-pub use policy::{parse_allowed_ips, AuthPolicy, RoutePolicy};
+pub use policy::{parse_allowed_ips, AuthPolicy, AuthScope, RoutePolicy};
+pub use proxy_protocol::ProxyProtocolVersion;
 pub use route::{
-    local_target, local_udp_target, public_url, RouteMatcher, TunnelProtocolKind, TunnelRoute,
-    TunnelTarget,
+    derived_route_id, namespaced_name,
+    local_target, local_udp_target, location_matches, parse_bandwidth_limit, public_url,
+    validate_location, RouteMatcher, TunnelProtocolKind, TunnelRoute, TunnelTarget,
 };
 pub use session::{SessionSnapshot, SessionState, TunnelSession};
+pub use verify::{
+    registered_matcher, report_to_result, verify_config, verify_template_standalone, Finding,
+    Severity, VerificationReport,
+};
 
 /// Protocol name advertised during the STP handshake.
 pub const TUNNEL_PROTOCOL_NAME: &str = "STP";

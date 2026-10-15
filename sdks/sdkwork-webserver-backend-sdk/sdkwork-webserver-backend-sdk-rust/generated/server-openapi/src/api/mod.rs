@@ -28,6 +28,8 @@ pub mod audit;
 pub use audit::AuditApi;
 pub mod cluster;
 pub use cluster::ClusterApi;
+pub mod tunnel;
+pub use tunnel::TunnelApi;
 pub mod traffic_usage;
 pub use traffic_usage::TrafficUsageApi;
 pub mod metrics_summary;

@@ -19,10 +19,12 @@
 
 pub mod agent;
 pub mod cli;
+pub mod dns;
 pub mod gateway;
 pub mod metrics;
 pub mod security;
 pub mod service;
+pub mod visitor;
 
 pub use agent::{AgentEvent, AgentRuntime, AgentRuntimeOptions, RouteReadiness, RouteRejection};
 pub use gateway::{
@@ -32,6 +34,10 @@ pub use metrics::{TunnelMetrics, TunnelMetricsSnapshot};
 pub use security::{AuthRateLimiter, RouteAcl, TokenAuthenticator};
 pub use service::{
     GatewayTunnelService, RouteRegistration, TunnelRole, TunnelService, TunnelStatus,
+};
+pub use visitor::{
+    validate_entries as validate_visitor_entries, VisitorEntry, VisitorEvent, VisitorRuntime,
+    VisitorRuntimeOptions,
 };
 
 /// Test-only TLS material helpers shared by composition tests.

@@ -19,6 +19,7 @@ use SDKWork\Webserver\BackendSdk\Api\WebserverConfigApi;
 use SDKWork\Webserver\BackendSdk\Api\AgentApi;
 use SDKWork\Webserver\BackendSdk\Api\AuditApi;
 use SDKWork\Webserver\BackendSdk\Api\ClusterApi;
+use SDKWork\Webserver\BackendSdk\Api\TunnelApi;
 use SDKWork\Webserver\BackendSdk\Api\TrafficUsageApi;
 use SDKWork\Webserver\BackendSdk\Api\MetricsSummaryApi;
 
@@ -39,6 +40,7 @@ final class SdkworkBackendClient
     public AgentApi $agent;
     public AuditApi $audit;
     public ClusterApi $cluster;
+    public TunnelApi $tunnel;
     public TrafficUsageApi $trafficUsage;
     public MetricsSummaryApi $metricsSummary;
 
@@ -59,6 +61,7 @@ final class SdkworkBackendClient
         $this->agent = new AgentApi($this->http);
         $this->audit = new AuditApi($this->http);
         $this->cluster = new ClusterApi($this->http);
+        $this->tunnel = new TunnelApi($this->http);
         $this->trafficUsage = new TrafficUsageApi($this->http);
         $this->metricsSummary = new MetricsSummaryApi($this->http);
     }

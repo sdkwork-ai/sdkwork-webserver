@@ -16,6 +16,7 @@ import { WebserverConfigApi, createWebserverConfigApi } from './api/webserver-co
 import { AgentApi, createAgentApi } from './api/agent';
 import { AuditApi, createAuditApi } from './api/audit';
 import { ClusterApi, createClusterApi } from './api/cluster';
+import { TunnelApi, createTunnelApi } from './api/tunnel';
 import { TrafficUsageApi, createTrafficUsageApi } from './api/traffic-usage';
 import { MetricsSummaryApi, createMetricsSummaryApi } from './api/metrics-summary';
 
@@ -36,6 +37,7 @@ export class SdkworkBackendClient {
   public readonly agent: AgentApi;
   public readonly audit: AuditApi;
   public readonly cluster: ClusterApi;
+  public readonly tunnel: TunnelApi;
   public readonly trafficUsage: TrafficUsageApi;
   public readonly metricsSummary: MetricsSummaryApi;
 
@@ -68,6 +70,8 @@ export class SdkworkBackendClient {
     this.audit = createAuditApi(this.httpClient);
 
     this.cluster = createClusterApi(this.httpClient);
+
+    this.tunnel = createTunnelApi(this.httpClient);
 
     this.trafficUsage = createTrafficUsageApi(this.httpClient);
 

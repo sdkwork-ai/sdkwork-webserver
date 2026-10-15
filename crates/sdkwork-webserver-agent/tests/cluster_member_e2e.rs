@@ -429,6 +429,9 @@ fn tunnel_route_template(admin_port: u16) -> TunnelRouteTemplate {
             allow_public: true,
             ..RoutePolicy::private()
         }),
+        proxy_protocol: None,
+        locations: Vec::new(),
+        ..TunnelRouteTemplate::default()
     }
 }
 
@@ -494,6 +497,8 @@ async fn member_registers_heartbeats_and_syncs_over_the_tunnel() {
     .expect("valid device");
     let mut agent = AgentRuntime::spawn(AgentRuntimeOptions {
         endpoint: RemoteEndpoint::new("127.0.0.1", quic_port),
+        alternates: Vec::new(),
+        login_fail_exit: false,
         tls: tls::ClientTlsOptions {
             pinned_server_sha256: Some(material.sha256.clone()),
             ..tls::ClientTlsOptions::default()

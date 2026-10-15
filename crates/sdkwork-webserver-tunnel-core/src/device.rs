@@ -55,6 +55,14 @@ pub struct Device {
     pub name: String,
     /// Reported operating environment.
     pub platform: DevicePlatform,
+    /// User this machine serves, as the agent claims it (FRP `user`).
+    ///
+    /// A **claim**, not a fact: the gateway resolves the effective user from
+    /// the token the session authenticated with and refuses a contradictory
+    /// claim, so a machine can never label itself into another team's quota or
+    /// another team's listings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
 }
 
 impl Device {
@@ -67,8 +75,62 @@ impl Device {
                 reason: "device name must be 1..=128 characters".to_owned(),
             });
         }
-        Ok(Self { id, name, platform })
+        Ok(Self {
+            id,
+            name,
+            platform,
+            user: None,
+        })
     }
+
+    /// Attaches the user this machine claims to serve.
+    ///
+    /// The name is validated here so a typo is a startup error on the agent
+    /// rather than a registration the gateway refuses with "not your user".
+    pub fn with_user(mut self, user: Option<String>) -> Result<Self> {
+        self.user = match user.map(|user| user.trim().to_owned()) {
+            Some(user) if user.is_empty() => None,
+            Some(user) => {
+                validate_user_name(&user)?;
+                Some(user)
+            }
+            None => None,
+        };
+        Ok(self)
+    }
+}
+
+/// Maximum length of a user name.
+pub const MAX_USER_NAME_LEN: usize = 64;
+
+/// Validates a user name (FRP `user` parity).
+///
+/// Shared by the gateway's user table and the agent's claim, so both sides
+/// agree on what a name may look like before any registration happens.
+///
+/// The charset matches what a route id may contain (`[A-Za-z0-9_-]`): a user
+/// name becomes part of every route id it owns, and a name that needed
+/// escaping would make that derivation ambiguous — two different users could
+/// then derive one id, which is exactly the collision namespacing exists to
+/// remove.
+pub fn validate_user_name(name: &str) -> Result<()> {
+    let name = name.trim();
+    if name.is_empty() || name.len() > MAX_USER_NAME_LEN {
+        return Err(TunnelError::Validation {
+            field: ValidationField::Config,
+            reason: format!("a tunnel user name must be 1..={MAX_USER_NAME_LEN} characters"),
+        });
+    }
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+    {
+        return Err(TunnelError::Validation {
+            field: ValidationField::Config,
+            reason: format!("user `{name}` may only contain letters, digits, `-`, and `_`"),
+        });
+    }
+    Ok(())
 }
 
 #[cfg(test)]

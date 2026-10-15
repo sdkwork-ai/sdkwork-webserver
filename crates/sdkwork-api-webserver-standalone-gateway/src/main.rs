@@ -363,6 +363,50 @@ fn validate_config(path: PathBuf, format_override: Option<ConfigFormat>) -> Main
         compiled.config().tls_policies.len(),
         revision.skipped.len(),
     );
+    validate_tunnel_section(compiled.config())?;
+    Ok(())
+}
+
+/// Runs the tunnel preflight over a compiled configuration (`frps verify`
+/// parity for the server side).
+///
+/// Load-time validation already checks shape. The preflight adds what only a
+/// whole configuration can show — a zero-byte listening surface in the delivery
+/// router, two routes claiming one host, an HTTP route whose probe stores so
+/// few bytes that it can never be up — and it is the reason `validate` can be
+/// used as a deployment gate instead of "start it and watch".
+fn validate_tunnel_section(config: &sdkwork_webserver_core::WebServerAppConfig) -> MainResult<()> {
+    let Some(tunnel) = config.tunnel.as_ref() else {
+        return Ok(());
+    };
+    if !tunnel.enabled {
+        println!("tunnel: disabled");
+        return Ok(());
+    }
+    // The tunnel section is validated offline, exactly as the tunnel CLI's
+    // `verify` command does it for a route set, so `validate` is a deployment
+    // gate rather than a syntax check.
+    let report = sdkwork_webserver_tunnel_core::verify_config(
+        tunnel,
+        // Secrets belong to the deployment, not to the file being validated:
+        // `validate` reports that a variable is *named*, not that it is set.
+        false,
+    );
+    for finding in &report.findings {
+        println!(
+            "tunnel {:<7} {:<24} {}",
+            finding.severity.label(),
+            finding.scope,
+            finding.message
+        );
+    }
+    if !report.is_ok() {
+        return Err(io::Error::other(format!(
+            "tunnel configuration has {} error(s)",
+            report.count(sdkwork_webserver_tunnel_core::Severity::Error)
+        ))
+        .into());
+    }
     Ok(())
 }
 
@@ -490,9 +534,7 @@ fn spawn_certificate_expiry_sampler() {
                 _ = tokio::time::sleep(std::time::Duration::from_secs(interval_secs)) => {}
                 _ = shutdown_signal() => return,
             }
-            let Some(summary) =
-                sdkwork_api_webserver_assembly::certificate_expiry_summary()
-                    .await
+            let Some(summary) = sdkwork_api_webserver_assembly::certificate_expiry_summary().await
             else {
                 if !announced_absence {
                     announced_absence = true;
@@ -726,4 +768,83 @@ async fn shutdown_signal() {
     }
 
     tracing::info!("shutdown signal received");
+}
+
+#[cfg(test)]
+mod validate_tunnel_tests {
+    use super::*;
+
+    fn config_with_tunnel(tunnel: serde_json::Value) -> sdkwork_webserver_core::WebServerAppConfig {
+        let document = serde_json::json!({
+            "schemaVersion": 1,
+            "kind": "sdkwork.webserver.app",
+            "appKey": "validate-tunnel-test",
+            "listeners": [{
+                "id": "main",
+                "bind": "127.0.0.1",
+                "port": 8080,
+                "protocols": ["http1"],
+                "defaultVirtualHostRef": "main-host"
+            }],
+            "virtualHosts": [{
+                "id": "main-host",
+                "listenerRefs": ["main"],
+                "serverNames": ["main.test"],
+                "routes": [{
+                    "id": "root",
+                    "match": {"pathType": "prefix", "path": "/"},
+                    "resourceRef": "static"
+                }]
+            }],
+            "resources": [{
+                "id": "static",
+                "type": "static",
+                "root": "/srv/www"
+            }],
+            "tunnel": tunnel,
+        });
+        serde_json::from_value(document).expect("config parses")
+    }
+
+    #[test]
+    fn the_validate_command_gates_on_tunnel_semantics() {
+        // A clean route set passes: `validate` is usable as a deployment gate.
+        let healthy = config_with_tunnel(serde_json::json!({
+            "enabled": true,
+            "routes": [{
+                "name": "web",
+                "protocol": "http",
+                "domain": "demo.sdkwork.link",
+                "target": "127.0.0.1:3000"
+            }]
+        }));
+        validate_tunnel_section(&healthy).expect("a healthy tunnel section validates");
+
+        // Two routes on one host is the failure that otherwise only appears at
+        // registration time, in production, from an agent log.
+        let conflicting = config_with_tunnel(serde_json::json!({
+            "enabled": true,
+            "routes": [
+                {
+                    "name": "web",
+                    "protocol": "http",
+                    "domain": "demo.sdkwork.link",
+                    "target": "127.0.0.1:3000"
+                },
+                {
+                    "name": "api",
+                    "protocol": "http",
+                    "domain": "demo.sdkwork.link",
+                    "target": "127.0.0.1:3001"
+                }
+            ]
+        }));
+        let error = validate_tunnel_section(&conflicting)
+            .expect_err("a surface conflict must fail validation");
+        assert!(error.to_string().contains("1 error(s)"), "{error}");
+
+        // A disabled capability is reported, not silently skipped.
+        let disabled = config_with_tunnel(serde_json::json!({ "enabled": false }));
+        validate_tunnel_section(&disabled).expect("a disabled tunnel still validates");
+    }
 }

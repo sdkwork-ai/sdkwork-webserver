@@ -12,7 +12,8 @@ from .webserver_config import WebserverConfigApi
 from .agent import AgentApi
 from .audit import AuditApi
 from .cluster import ClusterApi
+from .tunnel import TunnelApi
 from .traffic_usage import TrafficUsageApi
 from .metrics_summary import MetricsSummaryApi
 
-__all__ = ['ApplicationApi', 'ApplicationDomainApi', 'CertificateApi', 'DomainApi', 'ApplicationSourceVersionApi', 'ApplicationDeploymentApi', 'CertificateDistributionApi', 'NginxApi', 'ServerApi', 'ServerFileApi', 'WebserverConfigApi', 'AgentApi', 'AuditApi', 'ClusterApi', 'TrafficUsageApi', 'MetricsSummaryApi']
+__all__ = ['ApplicationApi', 'ApplicationDomainApi', 'CertificateApi', 'DomainApi', 'ApplicationSourceVersionApi', 'ApplicationDeploymentApi', 'CertificateDistributionApi', 'NginxApi', 'ServerApi', 'ServerFileApi', 'WebserverConfigApi', 'AgentApi', 'AuditApi', 'ClusterApi', 'TunnelApi', 'TrafficUsageApi', 'MetricsSummaryApi']

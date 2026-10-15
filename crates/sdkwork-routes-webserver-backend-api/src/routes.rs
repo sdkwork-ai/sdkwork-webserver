@@ -15,13 +15,14 @@ use sdkwork_webserver_contract::{
     UpdateDomainApplicationBindingRequest, UpdateDomainDnsRecordRequest, UpdateNginxConfigRequest,
     UpdateRootDomainRequest,
     WebBackendApi, WebBackendRequestContext,
+    UpsertDomainWechatVerificationRequest,
 };
 use serde::Deserialize;
 use std::sync::Arc;
 
 use crate::{
     agent_routes, auth::require_backend_context, cluster_routes, metrics_summary_routes, paths,
-    traffic_usage_routes,
+    traffic_usage_routes, tunnel_machine_routes,
 };
 use sdkwork_routes_webserver_common::{
     WebApiError, accepted_async, created_resource, no_content, ok_application_page,
@@ -110,6 +111,16 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn WebBackendApi>) -> Rout
         .route(
             paths::ROOT_DOMAIN_DNS_RECORD_STATUS,
             axum::routing::patch(set_root_domain_dns_record_status),
+        )
+        .route(
+            paths::ROOT_DOMAIN_WECHAT_VERIFICATION,
+            get(retrieve_root_domain_wechat_verification)
+                .put(upsert_root_domain_wechat_verification)
+                .delete(delete_root_domain_wechat_verification),
+        )
+        .route(
+            paths::ROOT_DOMAIN_WECHAT_VERIFICATION_CHECK,
+            post(check_root_domain_wechat_verification),
         )
         .route(
             paths::ROOT_DOMAIN_DNS_RECORDS_SYNC,
@@ -246,6 +257,26 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn WebBackendApi>) -> Rout
         .route(
             paths::CLUSTER_OVERVIEW,
             get(cluster_routes::retrieve_cluster_overview),
+        )
+        .route(
+            paths::TUNNEL_MACHINES,
+            get(tunnel_machine_routes::list_tunnel_machines),
+        )
+        .route(
+            paths::TUNNEL_MACHINE,
+            get(tunnel_machine_routes::retrieve_tunnel_machine),
+        )
+        .route(
+            paths::TUNNEL_MACHINE_ENABLED,
+            axum::routing::put(tunnel_machine_routes::set_tunnel_machine_enabled),
+        )
+        .route(
+            paths::TUNNEL_MACHINE_ROUTES,
+            post(tunnel_machine_routes::create_tunnel_machine_route),
+        )
+        .route(
+            paths::TUNNEL_MACHINE_ROUTE,
+            axum::routing::delete(tunnel_machine_routes::delete_tunnel_machine_route),
         )
         .route(
             paths::TRAFFIC_USAGE,
@@ -641,6 +672,63 @@ async fn set_root_domain_dns_record_status(
         state
             .api
             .set_root_domain_dns_record_status(&context, &root_domain_id, &record_id, &request)
+            .await,
+    )
+}
+
+async fn retrieve_root_domain_wechat_verification(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Path(root_domain_id): Path<String>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    ok_resource(
+        state
+            .api
+            .retrieve_root_domain_wechat_verification(&context, &root_domain_id)
+            .await,
+    )
+}
+
+async fn upsert_root_domain_wechat_verification(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Path(root_domain_id): Path<String>,
+    Json(request): Json<UpsertDomainWechatVerificationRequest>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    ok_resource(
+        state
+            .api
+            .upsert_root_domain_wechat_verification(&context, &root_domain_id, &request)
+            .await,
+    )
+}
+
+async fn delete_root_domain_wechat_verification(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Path(root_domain_id): Path<String>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    no_content(
+        state
+            .api
+            .delete_root_domain_wechat_verification(&context, &root_domain_id)
+            .await,
+    )
+}
+
+async fn check_root_domain_wechat_verification(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Path(root_domain_id): Path<String>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    ok_resource(
+        state
+            .api
+            .check_root_domain_wechat_verification(&context, &root_domain_id)
             .await,
     )
 }

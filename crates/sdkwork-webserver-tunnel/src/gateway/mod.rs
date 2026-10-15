@@ -8,32 +8,39 @@
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU16, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use tokio::sync::{watch, Mutex as AsyncMutex};
 
 use sdkwork_webserver_tunnel_core::{
-    DeviceId, Result, SessionId, TunnelConfig, TunnelLimitsConfig, TunnelNetworkConfig,
-    TunnelRouteTemplate, TunnelTimeoutConfig,
+    DeviceId, Result, SessionId, TunnelConfig, TunnelError, TunnelLimitsConfig,
+    TunnelNetworkConfig, TunnelRouteTemplate, TunnelTimeoutConfig, ValidationField,
 };
 use sdkwork_webserver_tunnel_transport::{
     QuicServerTransport, TunnelConnection, TunnelServerTransport,
 };
 
 use crate::metrics::TunnelMetrics;
-use crate::security::{AuthRateLimiter, RouteAcl, TokenAuthenticator};
+use crate::security::{
+    resolve_env_tokens as resolve_shared_tokens, AuthRateLimiter, RouteAcl, TokenAuthenticator,
+};
 use crate::service::TunnelService;
 
 pub mod control;
+pub mod devices;
 pub mod dispatch;
+pub mod health;
 pub mod listeners;
+pub(crate) mod rate_limit;
 pub mod registry;
 pub mod sessions;
+pub mod tcpmux;
 pub(crate) mod udp_listeners;
+pub mod visitor;
 
-pub use dispatch::{RelayVisitor, RelayedStream};
+pub use dispatch::{HttpRelay, RelayVisitor, RelayedStream};
 pub use registry::RegisteredRoute;
 pub use sessions::{SessionEntry, SessionTable};
 
@@ -47,6 +54,9 @@ pub struct GatewayShared {
     pub timeouts: TunnelTimeoutConfig,
     /// Route registry (PRD §29).
     pub registry: registry::RouteRegistry,
+    /// Machine inventory: which devices this gateway manages, their history,
+    /// traffic totals and the operator enable switch.
+    pub devices: Arc<devices::DeviceRegistry>,
     /// Live session table (PRD §57).
     pub sessions: SessionTable,
     /// Visitor access-control evaluator (PRD §46).
@@ -57,6 +67,18 @@ pub struct GatewayShared {
     pub rate_limiter: AuthRateLimiter,
     /// Required suffixes for agent-registered domain routes.
     pub domain_suffixes: Vec<String>,
+    /// Places an agent must re-present its token, beyond the handshake (FRP
+    /// `auth.additionalScopes`); advertised in the authentication result and
+    /// enforced on the control plane.
+    pub auth_scopes: Vec<sdkwork_webserver_tunnel_core::AuthScope>,
+    /// Per-user credentials and quotas (FRP `user`, made enforceable).
+    ///
+    /// The token table is built from these entries, so a user's quota always
+    /// belongs to the credential that authenticates it, and a route's user is
+    /// resolved from the token rather than from the registration.
+    pub users: Vec<sdkwork_webserver_tunnel_core::TunnelUserConfig>,
+    /// Address the per-route 	cp/udp listeners bind (FRP proxyBindAddr).
+    pub proxy_bind_addr: std::net::IpAddr,
     /// Inclusive public-port range a `tcp`/`udp` route may register; see
     /// [`TunnelGatewayOptions::route_port_min`].
     pub route_port_min: u16,
@@ -76,6 +98,14 @@ pub struct GatewayShared {
     pub(crate) tcp: Mutex<listeners::TcpListenerSet>,
     /// Public UDP listeners for `udp` routes (datagram relay).
     pub(crate) udp: Mutex<udp_listeners::UdpListenerSet>,
+    /// Largest UDP datagram the relay accepts, framing prefix included
+    /// (FRP `transport.udpPacketSize`, resolved from `[tunnel.network]`).
+    pub udp_datagram_ceiling: usize,
+    /// The **bound** multiplexed ingress port, or `0` when the ingress is
+    /// disabled. Written once at startup, after the bind resolves (a requested
+    /// port of 0 is replaced by the OS choice, and the status surface must
+    /// report what actually listens, not what was asked for).
+    multiplexer_port: AtomicU16,
     stream_counter: AtomicU64,
 }
 
@@ -88,6 +118,9 @@ impl GatewayShared {
             limits: options.limits.clone(),
             timeouts: options.timeouts.clone(),
             registry: registry::RouteRegistry::new(),
+            devices: Arc::new(devices::DeviceRegistry::new(
+                usize::try_from(options.limits.max_devices).unwrap_or(usize::MAX),
+            )),
             sessions: SessionTable::new(options.limits.max_streams_per_session),
             acl: RouteAcl,
             authenticator: options.authenticator.clone(),
@@ -99,13 +132,31 @@ impl GatewayShared {
                 options.limits.max_connections.max(1) as usize,
             )),
             domain_suffixes: options.domain_suffixes.clone(),
+            auth_scopes: options.auth_scopes.clone(),
+            users: options.users.clone(),
+            proxy_bind_addr: options.proxy_bind_addr,
             route_port_min: options.route_port_min,
             route_port_max: options.route_port_max,
             pending_declarations: AsyncMutex::new(HashMap::new()),
             tcp: Mutex::new(listeners::TcpListenerSet::default()),
             udp: Mutex::new(udp_listeners::UdpListenerSet::default()),
+            // The ceiling is the configured payload size plus the frame length
+            // prefix, so a datagram at the ceiling is read whole and one above
+            // it is over the read buffer (and dropped, counted).
+            udp_datagram_ceiling: options.network.udp_packet_size_bytes()
+                + sdkwork_webserver_tunnel_protocol::packet_frame::PACKET_LENGTH_BYTES,
+            multiplexer_port: AtomicU16::new(0),
             stream_counter: AtomicU64::new(0),
         })
+    }
+
+    /// The gateway's declared user, when present.
+    ///
+    /// Absent means "no per-user quota": a user the operator never declared
+    /// keeps the global limits, which is exactly the pre-user behaviour.
+    #[must_use]
+    pub fn user(&self, name: &str) -> Option<&sdkwork_webserver_tunnel_core::TunnelUserConfig> {
+        self.users.iter().find(|user| user.name.trim() == name)
     }
 
     /// The next per-gateway data-stream sequence number.
@@ -114,23 +165,56 @@ impl GatewayShared {
         sdkwork_webserver_tunnel_core::StreamId::new(value.saturating_add(1))
     }
 
-    /// Relays an HTTP visitor stream matched by host (PRD §30). The caller
-    /// speaks whatever protocol it wants over the returned bytes.
+    /// Records the multiplexed ingress port that actually bound.
+    pub(crate) fn set_multiplexer_port(&self, port: u16) {
+        self.multiplexer_port.store(port, Ordering::Relaxed);
+    }
+
+    /// The multiplexed ingress port (FRP `tcpmux` parity), when enabled.
+    pub fn multiplexer_port(&self) -> Option<u16> {
+        match self.multiplexer_port.load(Ordering::Relaxed) {
+            0 => None,
+            port => Some(port),
+        }
+    }
+
+    /// The device behind a live session, when that session is still live.
+    ///
+    /// Session bookkeeping and the machine inventory are keyed differently (by
+    /// session and by device); this is the one place that maps between them, so
+    /// operator-facing records are never derived from an assumption about
+    /// which id means what.
+    pub fn session_device(
+        &self,
+        session_id: &sdkwork_webserver_tunnel_core::SessionId,
+    ) -> Option<DeviceId> {
+        self.sessions.device_of_session(session_id)
+    }
+
+    /// Relays an HTTP visitor stream matched by host and request path
+    /// (PRD §30, FRP `locations` parity). The caller speaks whatever protocol
+    /// it wants over the returned bytes.
+    ///
+    /// Returns the admission, not just the stream: the route's HTTP header
+    /// rewriting (FRP `hostHeaderRewrite` / `requestHeaders.set` /
+    /// `responseHeaders.set`) belongs to the hop that parses HTTP, and only the
+    /// selection that happened here knows which route's policy applies.
     pub async fn connect_http_stream(
         self: &Arc<Self>,
         host: &str,
+        path: &str,
         visitor: RelayVisitor<'_>,
-    ) -> Result<RelayedStream> {
-        dispatch::connect_http_stream(self, host, visitor).await
+    ) -> Result<HttpRelay> {
+        dispatch::connect_http_stream(self, host, path, visitor).await
     }
 
     /// Relays a TCP visitor stream matched by gateway port (PRD §31).
     pub async fn connect_tcp_stream(
         self: &Arc<Self>,
         port: u16,
-        client_ip: std::net::IpAddr,
+        client: std::net::SocketAddr,
     ) -> Result<RelayedStream> {
-        dispatch::connect_tcp_stream(self, port, client_ip).await
+        dispatch::connect_tcp_stream(self, port, client).await
     }
 
     /// Session snapshots enriched with route ids (PRD §82 status surface).
@@ -173,6 +257,10 @@ pub struct TunnelGatewayOptions {
     pub route_port_min: u16,
     /// Inclusive upper bound; see [`Self::route_port_min`].
     pub route_port_max: u16,
+    /// Optional single multiplexed ingress port speaking HTTP `CONNECT`
+    /// (FRP `tcpmux` parity, as a public ingress): one port reaches every
+    /// registered route, host-routed first and port-routed second.
+    pub tcpmux_port: Option<u16>,
     /// Resource ceilings.
     pub limits: TunnelLimitsConfig,
     /// Timeouts.
@@ -181,6 +269,17 @@ pub struct TunnelGatewayOptions {
     pub network: TunnelNetworkConfig,
     /// Allowed domain suffixes for registered domain routes.
     pub domain_suffixes: Vec<String>,
+    /// Places an agent must re-present its token, beyond the handshake (FRP
+    /// `auth.additionalScopes`); advertised in the authentication result and
+    pub auth_scopes: Vec<sdkwork_webserver_tunnel_core::AuthScope>,
+    /// Per-user credentials and quotas (FRP `user`, made enforceable).
+    ///
+    /// The token table is built from these entries, so a user's quota always
+    /// belongs to the credential that authenticates it, and a route's user is
+    /// resolved from the token rather than from the registration.
+    pub users: Vec<sdkwork_webserver_tunnel_core::TunnelUserConfig>,
+    /// Address the per-route 	cp/udp listeners bind (FRP proxyBindAddr).
+    pub proxy_bind_addr: std::net::IpAddr,
     /// Shared metrics.
     pub metrics: Arc<TunnelMetrics>,
 }
@@ -195,21 +294,42 @@ impl TunnelGatewayOptions {
         key_pem: Vec<u8>,
     ) -> Self {
         let gateway = config.gateway_or_default();
+        // Per-user tokens are resolved here, at composition time: the
+        // authenticator then knows which user each credential speaks for, and
+        // nothing downstream has to trust a claimed name.
+        let user_tokens: Vec<(String, String)> = gateway
+            .users
+            .iter()
+            .filter_map(|user| {
+                let token = std::env::var(user.token_env.trim()).ok()?;
+                let token = token.trim().to_owned();
+                (!token.is_empty()).then(|| (user.name.trim().to_owned(), token))
+            })
+            .collect();
         Self {
             bind,
             cert_pem,
             key_pem,
-            authenticator: TokenAuthenticator::from_env(&gateway.agent_token_env),
+            authenticator: TokenAuthenticator::with_users(
+                resolve_shared_tokens(&gateway.agent_token_env),
+                user_tokens,
+            ),
             tls_cert_pem_env: gateway.tls_cert_pem_env.clone(),
             tls_key_pem_env: gateway.tls_key_pem_env.clone(),
             auth_max_failures: 10,
             auth_window_secs: 60,
             route_port_min: gateway.route_port_min,
             route_port_max: gateway.route_port_max,
+            tcpmux_port: gateway.tcpmux_port,
             limits: config.limits_or_default(),
             timeouts: config.timeout_or_default(),
             network: config.network_or_default(),
             domain_suffixes: gateway.domain_suffixes.clone(),
+            auth_scopes: gateway.auth_scopes.clone(),
+            proxy_bind_addr: gateway
+                .proxy_bind_addr()
+                .unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)),
+            users: gateway.users.clone(),
             metrics: Arc::new(TunnelMetrics::new()),
         }
     }
@@ -221,6 +341,8 @@ impl TunnelGatewayOptions {
 pub enum GatewayEvent {
     /// The QUIC listener is bound and accepting.
     Listening(SocketAddr),
+    /// The multiplexed HTTP `CONNECT` ingress is bound and accepting.
+    MultiplexerListening(u16),
     /// An agent completed authentication.
     SessionReady {
         /// Session identity.
@@ -243,9 +365,13 @@ pub struct TunnelGateway {
     shared: Arc<GatewayShared>,
     transport: Arc<QuicServerTransport>,
     quic_port: u16,
+    /// Bound multiplexer port, when the HTTP `CONNECT` ingress is enabled.
+    tcpmux_port: Option<u16>,
     stop_tx: watch::Sender<bool>,
     accept_task: tokio::task::JoinHandle<()>,
     sweeper_task: tokio::task::JoinHandle<()>,
+    /// Accept loop for the multiplexed ingress, when enabled.
+    tcpmux_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl TunnelGateway {
@@ -295,6 +421,45 @@ impl TunnelGateway {
                 heartbeat_sweeper(shared, &options.network, &options.timeouts, &mut stop_rx).await;
             })
         };
+        // The multiplexed ingress is optional: a gateway that has not been
+        // asked for it binds nothing, so an operator cannot open a port by
+        // upgrading.
+        let (tcpmux_task, tcpmux_port) = match options.tcpmux_port {
+            Some(requested) => {
+                match tokio::net::TcpListener::bind(("0.0.0.0", requested)).await {
+                    Ok(listener) => {
+                        let bound = listener
+                            .local_addr()
+                            .map(|addr| addr.port())
+                            .unwrap_or(requested);
+                        tracing::info!(
+                            port = bound,
+                            "tunnel multiplexer listening (HTTP CONNECT reaches every route)"
+                        );
+                        if let Some(events) = events.as_ref() {
+                            let _ = events.try_send(GatewayEvent::MultiplexerListening(bound));
+                        }
+                        shared.set_multiplexer_port(bound);
+                        let shared = shared.clone();
+                        let stop_rx = stop_rx.clone();
+                        let task = tokio::spawn(async move {
+                            tcpmux::accept_loop(shared, listener, stop_rx.clone()).await;
+                        });
+                        (Some(task), Some(bound))
+                    }
+                    Err(error) => {
+                        // A port the operator explicitly asked for must not be
+                        // silently skipped: the gateway refuses to start with
+                        // half of its configured ingress.
+                        return Err(TunnelError::Validation {
+                            field: ValidationField::Config,
+                            reason: format!("tcpmuxPort {requested} could not be bound: {error}"),
+                        });
+                    }
+                }
+            }
+            None => (None, None),
+        };
         tracing::info!(%local_addr, "tunnel gateway listening");
         if let Some(events) = events.as_ref() {
             let _ = events.try_send(GatewayEvent::Listening(local_addr));
@@ -303,15 +468,22 @@ impl TunnelGateway {
             shared,
             transport,
             quic_port: local_addr.port(),
+            tcpmux_port,
             stop_tx,
             accept_task,
             sweeper_task,
+            tcpmux_task,
         })
     }
 
     /// The bound QUIC listener port (resolved from an ephemeral bind).
     pub fn quic_port(&self) -> u16 {
         self.quic_port
+    }
+
+    /// The bound multiplexer port, when the multiplexed ingress is enabled.
+    pub fn tcpmux_port(&self) -> Option<u16> {
+        self.tcpmux_port
     }
 
     /// Shared state for dispatch, service, and status surfaces.
@@ -336,6 +508,9 @@ impl TunnelGateway {
         self.transport.close();
         let _ = self.accept_task.await;
         let _ = self.sweeper_task.await;
+        if let Some(task) = self.tcpmux_task {
+            let _ = task.await;
+        }
         self.shared
             .tcp
             .lock()
@@ -405,10 +580,11 @@ async fn heartbeat_sweeper(
     timeouts: &TunnelTimeoutConfig,
     stop: &mut watch::Receiver<bool>,
 ) {
-    // A session is stale after roughly three missed heartbeats, bounded by
-    // the configured idle timeout (PRD §28, §51).
+    // A session is stale after three missed heartbeats, bounded by the
+    // configured idle timeout — or after the explicitly configured
+    // `heartbeatTimeoutSecs` (PRD §28, §51; FRP `transport.heartbeatTimeout`).
     let heartbeat = Duration::from_secs(network.heartbeat_interval_secs.max(1));
-    let stale_after = timeouts.idle_duration().min(heartbeat * 3);
+    let stale_after = network.stale_after(timeouts.idle_duration());
     let mut ticker = tokio::time::interval(heartbeat.max(Duration::from_secs(1)));
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
@@ -433,9 +609,12 @@ fn transport_options(
     sdkwork_webserver_tunnel_transport::TransportOptions {
         max_idle_timeout_ms: u32::try_from(timeouts.idle_duration().as_millis())
             .unwrap_or(u32::MAX),
-        keep_alive_interval_ms: Some(
-            u32::try_from((network.heartbeat_interval_secs.max(1) * 1000) / 2).unwrap_or(u32::MAX),
-        ),
-        max_concurrent_bidi_streams: limits.max_streams_per_session.max(16),
+        // Keep-alive cadence is configurable (FRP `quic.keepalivePeriod`); the
+        // default is half the heartbeat interval, so a missed heartbeat is
+        // noticed before the session expires.
+        keep_alive_interval_ms: network
+            .keep_alive_interval()
+            .map(|interval| u32::try_from(interval.as_millis()).unwrap_or(u32::MAX)),
+        max_concurrent_bidi_streams: network.max_concurrent_streams(limits.max_streams_per_session),
     }
 }

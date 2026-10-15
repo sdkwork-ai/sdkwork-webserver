@@ -55,6 +55,7 @@ async fn raw_client_connects_to_gateway() {
             device_id: "dev_probe".to_owned(),
             device_name: "probe".to_owned(),
             platform: "linux".to_owned(),
+            user: None,
         },
     );
     let frame = hello.to_frame().expect("frame");

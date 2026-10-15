@@ -6,6 +6,7 @@
 //! environment-variable *names* resolved at runtime (`SDKWORK_TUNNEL_TOKEN`
 //! and friends), so real credentials never reach configuration files or git.
 
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -18,6 +19,52 @@ use crate::{ids::RouteId, policy::RoutePolicy};
 pub const DEFAULT_HEARTBEAT_INTERVAL_SECS: u64 = 10;
 /// Default QUIC tunnel listener port.
 pub const DEFAULT_TUNNEL_PORT: u16 = 8443;
+/// Default address per-route `tcp`/`udp` listeners bind (FRP `proxyBindAddr`).
+pub const DEFAULT_PROXY_BIND_ADDR: &str = "0.0.0.0";
+/// Default port for a configured DNS server (FRP `dnsServer`).
+pub const DEFAULT_DNS_PORT: u16 = 53;
+
+/// Parses a configured DNS server: `ip` or `ip:port`.
+///
+/// A hostname is refused rather than resolved: resolving the resolver is a
+/// dependency loop, and it would put the system resolver back into the path the
+/// operator removed by configuring this at all.
+pub fn parse_dns_server(raw: &str) -> std::result::Result<std::net::SocketAddr, String> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return Err("dnsServer must not be empty".to_owned());
+    }
+    if let Ok(ip) = raw.parse::<std::net::IpAddr>() {
+        return Ok(std::net::SocketAddr::new(ip, DEFAULT_DNS_PORT));
+    }
+    raw.parse::<std::net::SocketAddr>()
+        .map_err(|_| format!("dnsServer `{raw}` must be an IP address, optionally with a port"))
+}
+
+/// The `[tunnel.gateway]` section's own accessors.
+impl TunnelGatewayConfig {
+    /// The address per-route listeners bind, parsed.
+    ///
+    /// A literal IP only: a hostname would have to be resolved once per
+    /// registration (and could resolve differently between two routes on one
+    /// gateway), and a `host:port` form would fight the route's own port.
+    pub fn proxy_bind_addr(&self) -> std::result::Result<std::net::IpAddr, String> {
+        let raw = self.proxy_bind_addr.trim();
+        if raw.is_empty() {
+            return Err("tunnel gateway proxyBindAddr must not be empty".to_owned());
+        }
+        if raw.contains(':') && raw.parse::<std::net::IpAddr>().is_err() {
+            // `1.2.3.4:80` or `host:port`: the port would be ignored, so say so
+            // instead of binding somewhere the operator did not ask for.
+            return Err(format!(
+                "tunnel gateway proxyBindAddr `{raw}` must be an IP address without a port"
+            ));
+        }
+        raw.parse::<std::net::IpAddr>().map_err(|_| {
+            format!("tunnel gateway proxyBindAddr `{raw}` must be a literal IP address")
+        })
+    }
+}
 
 /// The `[tunnel]` configuration section.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -96,6 +143,15 @@ impl TunnelConfig {
             return Ok(());
         }
         let gateway = self.gateway_or_default();
+        // The proxy bind address must be a literal IP: a hostname here would be
+        // resolved per registration, and a port would be overwritten by the
+        // route's own port, so both are refused rather than silently ignored.
+        gateway
+            .proxy_bind_addr()
+            .map_err(|error| crate::TunnelError::Validation {
+                field: ValidationField::Config,
+                reason: error,
+            })?;
         if gateway.route_port_min == 0 || gateway.route_port_min > gateway.route_port_max {
             return Err(crate::TunnelError::Validation {
                 field: crate::ValidationField::Config,
@@ -107,6 +163,31 @@ impl TunnelConfig {
         }
         for template in self.routes_or_empty() {
             template.validate()?;
+        }
+        // Every gateway address is checked when the section is present: a
+        // fallback that cannot be dialled is worse than no fallback, because
+        // the operator believes failover is configured.
+        if let Some(agent) = self.agent.as_ref() {
+            agent.validate_endpoints()?;
+        }
+        // Network tunables are validated as a set, because their relationships
+        // are what an operator gets wrong (a heartbeat timeout below the
+        // heartbeat interval expires the session before it can be refreshed).
+        self.network_or_default().validate_network()?;
+        // Users: each entry valid, and names unique. Two entries sharing one
+        // name would make "which quota applies" ambiguous, and the first match
+        // would silently win.
+        let mut seen_users: Vec<&str> = Vec::with_capacity(gateway.users.len());
+        for user in &gateway.users {
+            user.validate()?;
+            let name = user.name.trim();
+            if seen_users.contains(&name) {
+                return Err(crate::TunnelError::Validation {
+                    field: crate::ValidationField::Config,
+                    reason: format!("tunnel gateway user `{name}` is declared twice"),
+                });
+            }
+            seen_users.push(name);
         }
         Ok(())
     }
@@ -145,6 +226,101 @@ pub struct TunnelGatewayConfig {
     /// Inclusive upper bound of the registrable public port range; see
     /// [`Self::route_port_min`].
     pub route_port_max: u16,
+    /// Optional single multiplexed ingress port speaking HTTP `CONNECT`
+    /// (FRP `tcpmux` parity, expressed as a public ingress).
+    ///
+    /// One port then reaches **every** tunneled route: the request's
+    /// `CONNECT host:port` target is resolved against the domain registry
+    /// first and the port registry second, so a network that only permits one
+    /// outbound port no longer forces one public port per route. `None`
+    /// (the default) binds nothing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tcpmux_port: Option<u16>,
+    /// Places an agent must re-present its token, beyond the handshake (FRP
+    /// `auth.additionalScopes`).
+    ///
+    /// The gateway advertises the effective list in its `AuthResult`, so an
+    /// agent attaches the token exactly where it is required and the two sides
+    /// cannot drift; an agent that predates the advertisement is refused only
+    /// when an operator opted in, which is why the default is empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub auth_scopes: Vec<crate::policy::AuthScope>,
+    /// Address the per-route `tcp`/`udp` listeners bind (FRP `proxyBindAddr`).
+    ///
+    /// Default `0.0.0.0`: every interface. A host with several addresses
+    /// (public plus a private management network) sets this so that
+    /// agent-registered ports are reachable exactly where the operator
+    /// intends, instead of everywhere the machine happens to be attached.
+    pub proxy_bind_addr: String,
+    /// Per-user credentials and quotas (FRP `user`, made enforceable).
+    ///
+    /// FRP's `user` is a label: any client may claim any name, so it groups
+    /// proxies in a dashboard but cannot bound what one team consumes on a
+    /// shared gateway. Here a user owns a token and its own ceilings, which is
+    /// what makes both the isolation and the quota real: an agent that
+    /// authenticates with team A's token **is** team A, and cannot claim to be
+    /// team B.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub users: Vec<TunnelUserConfig>,
+}
+
+/// One user of a shared gateway: its credential source and its ceilings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default, deny_unknown_fields)]
+pub struct TunnelUserConfig {
+    /// User name an agent claims and that appears in listings.
+    pub name: String,
+    /// Environment variable holding this user's token, resolved at startup.
+    ///
+    /// A *name*, never the token itself: credentials stay in the environment,
+    /// and the gateway never reads one from a configuration file.
+    pub token_env: String,
+    /// Maximum live routes this user may register; absent falls back to the
+    /// global `limits.maxRoutes`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_routes: Option<u32>,
+    /// Maximum public TCP/UDP ports this user may occupy at once; absent falls
+    /// back to "as many as the global limits allow".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_ports: Option<u32>,
+    /// Maximum concurrent sessions (machines) for this user; absent falls back
+    /// to the global `limits.maxDevices`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_devices: Option<u32>,
+}
+
+impl TunnelUserConfig {
+    /// Validates one user entry.
+    pub fn validate(&self) -> Result<()> {
+        let name = self.name.trim();
+        // One name validator for the whole workspace: the agent's claim and the
+        // gateway's table must not disagree about what a user name may be.
+        crate::device::validate_user_name(name)?;
+        if self.token_env.trim().is_empty() {
+            return Err(crate::TunnelError::Validation {
+                field: crate::ValidationField::Config,
+                reason: format!(
+                    "user `{name}` must name the environment variable holding its token"
+                ),
+            });
+        }
+        for (label, value) in [
+            ("maxRoutes", self.max_routes),
+            ("maxPorts", self.max_ports),
+            ("maxDevices", self.max_devices),
+        ] {
+            if value == Some(0) {
+                // Zero is not "no quota": it is a user that can do nothing,
+                // which an operator means as "disabled" — say so explicitly by
+                // omitting the user, or set a real ceiling.
+                return Err(crate::TunnelError::Validation {
+                    field: crate::ValidationField::Config,
+                    reason: format!("user `{name}`: {label} must be at least 1 when set"),
+                });
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Default for TunnelGatewayConfig {
@@ -159,6 +335,10 @@ impl Default for TunnelGatewayConfig {
             // default, matching ngrok/rathole remote-port policy.
             route_port_min: 1024,
             route_port_max: u16::MAX,
+            tcpmux_port: None,
+            auth_scopes: Vec::new(),
+            proxy_bind_addr: DEFAULT_PROXY_BIND_ADDR.to_owned(),
+            users: Vec::new(),
         }
     }
 }
@@ -169,6 +349,16 @@ impl Default for TunnelGatewayConfig {
 pub struct TunnelAgentConfig {
     /// Gateway endpoint advertised to agents, `host:port` (QUIC/UDP).
     pub endpoint: String,
+    /// Additional gateway addresses, tried in order after `endpoint` whenever
+    /// the agent cannot reach the current one (FRP's ordered `serverAddr`
+    /// list).
+    ///
+    /// The list is what makes a gateway rollout survivable: an agent whose
+    /// primary is being restarted moves to the next address instead of
+    /// retrying one dead port until the operator intervenes. Entries are
+    /// validated at configuration load, so a typo is a startup error rather
+    /// than a fallback that never happens.
+    pub endpoints: Vec<String>,
     /// Environment variable holding the agent bearer token
     /// (default `SDKWORK_TUNNEL_TOKEN`, PRD §40).
     pub token_env: String,
@@ -178,6 +368,26 @@ pub struct TunnelAgentConfig {
     pub device_name: String,
     /// Subdomain suffix used to expand auto-generated expose domains.
     pub domain_suffix: String,
+    /// User this machine serves (FRP `user`).
+    ///
+    /// A claim: the gateway resolves the effective user from the token and
+    /// refuses a contradictory one, so this only ever *names* the team whose
+    /// quotas and listings the machine wants to appear in.
+    pub user: String,
+    /// Stop instead of retrying when the gateway rejects our credentials.
+    ///
+    /// FRP's `loginFailExit` defaults to **true**; here it defaults to false,
+    /// because this agent is a service whose contract is "keep working through
+    /// a gateway outage" (PRD §27) and a fleet that silently exits on one bad
+    /// rollout is worse than one that retries with backoff and reports the
+    /// reason. Setting it to true gives FRP's behaviour: a rejected credential
+    /// is an operator error, not an outage, so the process stops with the
+    /// reason in its log rather than hammering a gateway that will never say
+    /// yes.
+    ///
+    /// Only a *credential rejection* ends the process; a transport failure, a
+    /// timeout, or an unreachable gateway keep retrying.
+    pub login_fail_exit: bool,
     /// Server TLS verification policy for the agent side.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tls: Option<TunnelAgentTlsConfig>,
@@ -187,13 +397,100 @@ impl Default for TunnelAgentConfig {
     fn default() -> Self {
         Self {
             endpoint: String::new(),
+            endpoints: Vec::new(),
             token_env: "SDKWORK_TUNNEL_TOKEN".to_owned(),
             device_id_env: "SDKWORK_TUNNEL_DEVICE_ID".to_owned(),
             device_name: String::new(),
             domain_suffix: String::new(),
+            user: String::new(),
+            // FRP ships `loginFailExit = true`; see the field's documentation
+            // for why this agent defaults to the opposite.
+            login_fail_exit: false,
             tls: None,
         }
     }
+}
+
+impl TunnelAgentConfig {
+    /// The gateway addresses to try, in preference order, deduplicated.
+    ///
+    /// `endpoint` stays first so a configuration that sets both keys keeps its
+    /// primary where the operator put it, and an empty list reproduces the
+    /// single-address behaviour exactly.
+    #[must_use]
+    pub fn gateway_endpoints(&self) -> Vec<String> {
+        let mut ordered: Vec<String> = Vec::with_capacity(self.endpoints.len() + 1);
+        for candidate in std::iter::once(&self.endpoint).chain(self.endpoints.iter()) {
+            let candidate = candidate.trim();
+            if candidate.is_empty() || ordered.iter().any(|seen| seen == candidate) {
+                continue;
+            }
+            ordered.push(candidate.to_owned());
+        }
+        ordered
+    }
+
+    /// Validates every configured address as a `host:port` authority.
+    pub fn validate_endpoints(&self) -> Result<()> {
+        for candidate in self.gateway_endpoints() {
+            validate_endpoint_authority(&candidate)?;
+        }
+        Ok(())
+    }
+}
+
+/// Validates one `host:port` gateway address.
+///
+/// Deliberately stricter than "does it parse": an address with a scheme, a
+/// path, or a port of 0 is a configuration mistake that would otherwise
+/// surface as an unreachable gateway — the same failure shape as an outage,
+/// which is exactly what an operator cannot debug from a log line.
+pub fn validate_endpoint_authority(raw: &str) -> Result<()> {
+    let candidate = raw.trim();
+    if candidate.is_empty() {
+        return Err(crate::TunnelError::Validation {
+            field: crate::ValidationField::Config,
+            reason: "a gateway endpoint must not be empty".to_owned(),
+        });
+    }
+    if candidate.contains("://") || candidate.contains('/') || candidate.contains('?') {
+        return Err(crate::TunnelError::Validation {
+            field: crate::ValidationField::Config,
+            reason: format!("gateway endpoint `{candidate}` must be a host:port authority"),
+        });
+    }
+    if candidate.chars().any(char::is_whitespace) {
+        return Err(crate::TunnelError::Validation {
+            field: crate::ValidationField::Config,
+            reason: format!("gateway endpoint `{candidate}` must not contain whitespace"),
+        });
+    }
+    let (host, port) =
+        candidate
+            .rsplit_once(':')
+            .ok_or_else(|| crate::TunnelError::Validation {
+                field: crate::ValidationField::Config,
+                reason: format!("gateway endpoint `{candidate}` must be host:port"),
+            })?;
+    if host.is_empty() {
+        return Err(crate::TunnelError::Validation {
+            field: crate::ValidationField::Config,
+            reason: format!("gateway endpoint `{candidate}` has an empty host"),
+        });
+    }
+    let port = port
+        .parse::<u16>()
+        .map_err(|_| crate::TunnelError::Validation {
+            field: crate::ValidationField::Config,
+            reason: format!("gateway endpoint `{candidate}` has an invalid port"),
+        })?;
+    if port == 0 {
+        return Err(crate::TunnelError::Validation {
+            field: crate::ValidationField::Config,
+            reason: format!("gateway endpoint `{candidate}` must not use port 0"),
+        });
+    }
+    Ok(())
 }
 
 /// Agent-side TLS verification options.
@@ -226,6 +523,58 @@ pub struct TunnelNetworkConfig {
     pub initial_backoff_secs: u64,
     /// Reconnect backoff ceiling seconds.
     pub max_backoff_secs: u64,
+    /// QUIC keep-alive probing interval in seconds (FRP
+    /// `transport.tcpMuxKeepaliveInterval` / `quic.keepalivePeriod` parity).
+    ///
+    /// `None` keeps the derived default (half the heartbeat cadence); `Some(0)`
+    /// disables probing, which is only sane where an idle connection is
+    /// expected and the peer's idle timeout is long enough to match.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keep_alive_interval_secs: Option<u64>,
+    /// How long a session may go without a heartbeat before the gateway
+    /// considers it stale (FRP `transport.heartbeatTimeout` parity).
+    ///
+    /// `None` keeps the derived rule `min(idle, heartbeat x 3)`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub heartbeat_timeout_secs: Option<u64>,
+    /// Largest UDP payload the relay frames, in bytes (FRP
+    /// `transport.udpPacketSize` parity).
+    ///
+    /// `None` keeps the protocol ceiling (65,507 bytes, the largest payload an
+    /// IPv4 datagram can carry). Lowering it is how an operator avoids
+    /// fragmentation on a constrained path; a datagram above it is dropped and
+    /// counted, never truncated, because a truncated datagram is a corrupt
+    /// datagram.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub udp_packet_size: Option<u32>,
+    /// Maximum concurrent bidirectional streams per QUIC connection (FRP
+    /// `quic.maxIncomingStreams` parity).
+    ///
+    /// `None` keeps each role's fallback (the gateway's
+    /// `limits.maxStreamsPerSession`, the agent's protocol default), so the two
+    /// sides agree unless an operator deliberately separates them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_concurrent_streams: Option<u32>,
+    /// Source address the agent binds before dialing a route's local target
+    /// (FRP `transport.dialServerLocalIP`).
+    ///
+    /// A multi-homed machine reaches the same service on different networks,
+    /// and the service (or the ACL in front of it) decides by source address:
+    /// with this unset the kernel picks an egress address, which is usually
+    /// right and occasionally exactly wrong. Only target dials are affected —
+    /// the gateway connection keeps its own transport.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dial_local_addr: Option<std::net::IpAddr>,
+    /// DNS server the agent resolves the gateway host through (FRP
+    /// `dnsServer`), as `ip` or `ip:port`.
+    ///
+    /// Unset means the system resolver, which is what every deployment has
+    /// today. Set means *only* this server: a split-horizon or offline network
+    /// publishes the gateway's name in its own resolver, and silently falling
+    /// back to the system one would resolve through a resolver the operator
+    /// explicitly did not choose.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dns_server: Option<String>,
 }
 
 impl Default for TunnelNetworkConfig {
@@ -235,7 +584,137 @@ impl Default for TunnelNetworkConfig {
             reconnect: true,
             initial_backoff_secs: 1,
             max_backoff_secs: 60,
+            keep_alive_interval_secs: None,
+            heartbeat_timeout_secs: None,
+            udp_packet_size: None,
+            max_concurrent_streams: None,
+            dial_local_addr: None,
+            dns_server: None,
         }
+    }
+}
+
+/// Smallest UDP payload ceiling an operator may configure.
+///
+/// Below a DNS-sized datagram the relay would be useless, and a value this low
+/// is far more likely to be a unit mistake (bytes vs. kilobytes) than a real
+/// intent.
+pub const MIN_UDP_PACKET_SIZE: u32 = 512;
+/// Largest UDP payload ceiling: the maximum IPv4 UDP payload.
+///
+/// Mirrors `sdkwork_webserver_tunnel_protocol::packet_frame::MAX_PACKET_PAYLOAD`
+/// (the protocol crate depends on this one, so the number is restated here
+/// rather than imported — and a mismatch would be caught by the relay refusing
+/// to frame a datagram the configuration allowed).
+pub const MAX_UDP_PACKET_SIZE: u32 = 65_507;
+
+impl TunnelNetworkConfig {
+    /// The keep-alive interval to apply, given the heartbeat cadence.
+    ///
+    /// One rule for both roles: an explicit value wins (with `0` meaning "do
+    /// not probe"), otherwise the connection is probed at half the heartbeat
+    /// cadence so a missed heartbeat is noticed before the session expires.
+    #[must_use]
+    pub fn keep_alive_interval(&self) -> Option<Duration> {
+        match self.keep_alive_interval_secs {
+            Some(0) => None,
+            Some(seconds) => Some(Duration::from_secs(seconds)),
+            None => Some(Duration::from_millis(
+                (self.heartbeat_interval_secs.max(1) * 1000) / 2,
+            )),
+        }
+    }
+
+    /// How long a session may stay silent before it is considered stale.
+    ///
+    /// An explicit `heartbeatTimeout` wins; otherwise the rule is
+    /// `min(idle, heartbeat x 3)`: three missed heartbeats, capped by the
+    /// transport's own idle timeout so the two never disagree about which side
+    /// gives up first.
+    #[must_use]
+    pub fn stale_after(&self, idle: Duration) -> Duration {
+        let derived = idle.min(Duration::from_secs(self.heartbeat_interval_secs.max(1) * 3));
+        match self.heartbeat_timeout_secs {
+            Some(seconds) => Duration::from_secs(seconds.max(1)),
+            None => derived,
+        }
+    }
+
+    /// The UDP payload ceiling in bytes.
+    #[must_use]
+    pub fn udp_packet_size_bytes(&self) -> usize {
+        match self.udp_packet_size {
+            Some(size) => size.clamp(MIN_UDP_PACKET_SIZE, MAX_UDP_PACKET_SIZE) as usize,
+            None => MAX_UDP_PACKET_SIZE as usize,
+        }
+    }
+
+    /// The streams-per-connection ceiling, given the role's fallback.
+    ///
+    /// The floor of 16 matches the transport: a connection needs room for the
+    /// control stream plus concurrent data streams, and a smaller value would
+    /// make the tunnel unusable while looking like a network problem.
+    #[must_use]
+    pub fn max_concurrent_streams(&self, fallback: u32) -> u32 {
+        self.max_concurrent_streams
+            .unwrap_or(fallback)
+            .clamp(16, 65_536)
+    }
+
+    /// Validates the tunables, including the relationships between them.
+    pub fn validate_network(&self) -> Result<()> {
+        if let Some(keep_alive) = self.keep_alive_interval_secs {
+            if keep_alive > 3_600 {
+                return Err(crate::TunnelError::Validation {
+                    field: crate::ValidationField::Config,
+                    reason: format!(
+                        "keepAliveIntervalSecs {keep_alive} must be 0 (disabled) or at most 3600"
+                    ),
+                });
+            }
+        }
+        if let Some(timeout) = self.heartbeat_timeout_secs {
+            let heartbeat = self.heartbeat_interval_secs.max(1);
+            if timeout < heartbeat {
+                // Without this the session would expire before its first
+                // heartbeat could arrive, which looks exactly like a broken
+                // network and is really a unit mistake.
+                return Err(crate::TunnelError::Validation {
+                    field: crate::ValidationField::Config,
+                    reason: format!(
+                        "heartbeatTimeoutSecs {timeout} must be at least the heartbeat interval {heartbeat}"
+                    ),
+                });
+            }
+        }
+        if let Some(size) = self.udp_packet_size {
+            if !(MIN_UDP_PACKET_SIZE..=MAX_UDP_PACKET_SIZE).contains(&size) {
+                return Err(crate::TunnelError::Validation {
+                    field: crate::ValidationField::Config,
+                    reason: format!(
+                        "udpPacketSize {size} must be between {MIN_UDP_PACKET_SIZE} and {MAX_UDP_PACKET_SIZE} bytes"
+                    ),
+                });
+            }
+        }
+        if let Some(streams) = self.max_concurrent_streams {
+            if !(16..=65_536).contains(&streams) {
+                return Err(crate::TunnelError::Validation {
+                    field: crate::ValidationField::Config,
+                    reason: format!("maxConcurrentStreams {streams} must be between 16 and 65536"),
+                });
+            }
+        }
+        if let Some(server) = &self.dns_server {
+            // Parsed here, not at the first reconnect: a hostname or a typo must
+            // be a startup error, because at reconnect time it would look like
+            // "the gateway is unreachable".
+            parse_dns_server(server).map_err(|reason| crate::TunnelError::Validation {
+                field: crate::ValidationField::Config,
+                reason,
+            })?;
+        }
+        Ok(())
     }
 }
 
@@ -344,6 +823,54 @@ pub struct TunnelRouteTemplate {
     /// Access policy overrides.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub policy: Option<RoutePolicy>,
+    /// PROXY protocol version prepended toward the local target (FRP
+    /// `transport.proxyProtocolVersion` parity). Absent keeps the stream raw.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proxy_protocol: Option<crate::proxy_protocol::ProxyProtocolVersion>,
+    /// Path prefixes this route answers on its host (FRP `locations` parity).
+    /// Empty (the default) means the route owns every path of the host.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub locations: Vec<String>,
+    /// Relay ceiling in bytes per second, each direction (FRP
+    /// `transport.bandwidthLimit` parity). Absent means unlimited.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bandwidth_limit_bytes_per_second: Option<u64>,
+    /// Load-balancer group (FRP `loadBalancer.group` parity): routes sharing a
+    /// group and a matcher are replicas of one service.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub load_balancer_group: Option<String>,
+    /// Agent-side health probe for this route (FRP `healthCheck` parity).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health_check: Option<crate::health::HealthCheckConfig>,
+    /// Name of the environment variable holding the shared secret a visitor
+    /// must present for an `stcp`/`sudp` route (FRP `sk` parity).
+    ///
+    /// A *name*, never the key itself: credentials stay in the environment
+    /// (component invariant "secrets live in environment variables, never in
+    /// configuration files"), are resolved by the agent at startup, and reach
+    /// the gateway only inside the encrypted registration message.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret_key_env: Option<String>,
+    /// Replace the `Host` header before the request reaches the agent (FRP
+    /// `hostHeaderRewrite`). HTTP routes only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_header_rewrite: Option<String>,
+    /// Headers set on the request forwarded to the agent (FRP
+    /// `requestHeaders.set`). HTTP routes only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_headers: Option<crate::headers::HeaderSetConfig>,
+    /// Headers set on the response returned to the visitor (FRP
+    /// `responseHeaders.set`). HTTP routes only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_headers: Option<crate::headers::HeaderSetConfig>,
+    /// Free-form operator metadata carried on the route (FRP `annotations`).
+    ///
+    /// Declared as a table (`[tunnel.routes.annotations] owner = "team-a"`),
+    /// bounded and validated by the route model, and never used for routing or
+    /// authorization — it exists so a console can group and filter by whatever
+    /// the fleet agrees on.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub annotations: BTreeMap<String, String>,
 }
 
 impl TunnelRouteTemplate {
@@ -402,8 +929,55 @@ impl TunnelRouteTemplate {
                 })?;
                 RouteMatcher::Port(port)
             }
+            // Secret kinds open no public surface: the route name *is* the
+            // name a visitor asks for, and a domain or port on the template
+            // would promise a surface the gateway never binds.
+            TunnelProtocolKind::Stcp | TunnelProtocolKind::Sudp => {
+                if self.domain.is_some() || self.port.is_some() {
+                    return Err(TunnelError::Validation {
+                        field: ValidationField::Config,
+                        reason: format!(
+                            "secret route `{}` must not declare a domain or port (visitors ask for it by name)",
+                            self.name
+                        ),
+                    });
+                }
+                // The key's *source* is configuration; the key itself is not.
+                // Without one the agent cannot authenticate a single visitor,
+                // so the omission is a configuration error, not a default.
+                if self
+                    .secret_key_env
+                    .as_deref()
+                    .map(str::trim)
+                    .is_none_or(str::is_empty)
+                {
+                    return Err(TunnelError::Validation {
+                        field: ValidationField::Config,
+                        reason: format!(
+                            "secret route `{}` requires secretKeyEnv (the environment variable holding the shared key)",
+                            self.name
+                        ),
+                    });
+                }
+                RouteMatcher::secret(&self.name)?
+            }
         };
         Ok((RouteId::parse(format!("route_{}", self.name))?, matcher))
+    }
+
+    /// Derives this template's route id inside a user's namespace.
+    ///
+    /// Route ids and secret names are gateway-global, so two teams could not
+    /// both serve a template called `web`: the second registration collided
+    /// with the first team's id and was refused. Namespacing the derived
+    /// identity is what makes FRP's `user` an actual namespace rather than a
+    /// label — `team-a`'s `web` and `team-b`'s `web` become two routes.
+    ///
+    /// The same derivation is what the gateway checks a registration against,
+    /// so a machine cannot register inside a namespace its token does not
+    /// speak for.
+    pub fn route_id_for_user(&self, user: Option<&str>) -> Result<RouteId> {
+        crate::route::derived_route_id(user, &self.name)
     }
 
     /// Materializes a concrete [`TunnelRoute`] with a caller-supplied id
@@ -418,7 +992,88 @@ impl TunnelRouteTemplate {
             matcher,
             self.target()?,
             self.policy_or_default(),
-        )
+        )?
+        .with_proxy_protocol(self.proxy_protocol)?
+        .with_locations(self.locations.clone())?
+        .with_bandwidth_limit(self.bandwidth_limit_bytes_per_second)?
+        .with_load_balancing(self.load_balancer_group.clone(), self.health_check.clone())?
+        .with_headers(self.header_rewrite()?)?
+        .with_annotations(self.annotations.clone())
+    }
+
+    /// Builds this template's HTTP header rewriting policy.
+    ///
+    /// Public because two callers need it without materializing a route: the
+    /// offline preflight (`verify`) reports the policy, and the agent puts it
+    /// on the registration wire.
+    pub fn header_rewrite(&self) -> Result<crate::headers::RouteHeaderRewrite> {
+        use crate::headers::{HeaderDirection, RouteHeaderRewrite};
+
+        let request_set = match self.request_headers.as_ref() {
+            Some(config) => config.to_pairs(HeaderDirection::Request)?,
+            None => Vec::new(),
+        };
+        let response_set = match self.response_headers.as_ref() {
+            Some(config) => config.to_pairs(HeaderDirection::Response)?,
+            None => Vec::new(),
+        };
+        let host = self
+            .host_header_rewrite
+            .as_deref()
+            .map(str::trim)
+            .filter(|host| !host.is_empty())
+            .map(str::to_owned);
+        let rewrite = RouteHeaderRewrite {
+            host,
+            request_set,
+            response_set,
+        };
+        rewrite.validate()?;
+        rewrite.validate_for_protocol(self.protocol)?;
+        Ok(rewrite)
+    }
+
+    /// Reads the shared secret from the environment variable this template
+    /// names (FRP `sk` parity), or `None` for a public route.
+    ///
+    /// Separate from [`Self::to_route`] on purpose: materialization stays pure
+    /// (the gateway validates declarations without ever holding a key), while
+    /// the agent — the only role that must authenticate visitors — resolves it
+    /// here at startup and fails loudly when it is missing or too short.
+    pub fn secret_key_from_env(&self) -> Result<Option<String>> {
+        if !self.protocol.is_secret() {
+            return Ok(None);
+        }
+        let env_name = self
+            .secret_key_env
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| TunnelError::Validation {
+                field: ValidationField::Config,
+                reason: format!(
+                    "secret route `{}` requires secretKeyEnv (the environment variable holding the shared key)",
+                    self.name
+                ),
+            })?;
+        let key = std::env::var(env_name).map_err(|_| TunnelError::Validation {
+            field: ValidationField::Config,
+            reason: format!(
+                "secret route `{}`: environment variable `{env_name}` is not set",
+                self.name
+            ),
+        })?;
+        let key = key.trim().to_owned();
+        if key.len() < 8 || key.len() > 128 {
+            return Err(TunnelError::Validation {
+                field: ValidationField::Config,
+                reason: format!(
+                    "secret route `{}`: `{env_name}` must hold a key of 8..=128 characters",
+                    self.name
+                ),
+            });
+        }
+        Ok(Some(key))
     }
 }
 
@@ -489,6 +1144,9 @@ mod tests {
             port: None,
             target: "127.0.0.1:3000".to_owned(),
             policy: None,
+            proxy_protocol: None,
+            locations: Vec::new(),
+            ..TunnelRouteTemplate::default()
         };
         assert!(template.validate().is_err());
     }
@@ -502,6 +1160,9 @@ mod tests {
             port: None,
             target: "127.0.0.1:3000".to_owned(),
             policy: None,
+            proxy_protocol: None,
+            locations: Vec::new(),
+            ..TunnelRouteTemplate::default()
         };
         template.validate().expect("valid template");
         let route = template
@@ -565,6 +1226,197 @@ mod tests {
         assert!(gateway.tls_key_pem_env.is_none());
     }
 
+    /// FRP's ordered `serverAddr` list: the primary stays first, duplicates
+    /// and blanks are dropped, and an empty list keeps the old behaviour.
+    #[test]
+    fn the_gateway_address_list_is_ordered_and_deduplicated() {
+        let agent = TunnelAgentConfig {
+            endpoint: "gw1.sdkwork.link:8443".to_owned(),
+            endpoints: vec![
+                "gw2.sdkwork.link:8443".to_owned(),
+                "gw1.sdkwork.link:8443".to_owned(),
+                "  ".to_owned(),
+                "gw3.sdkwork.link:8443".to_owned(),
+            ],
+            ..TunnelAgentConfig::default()
+        };
+        assert_eq!(
+            agent.gateway_endpoints(),
+            vec![
+                "gw1.sdkwork.link:8443".to_owned(),
+                "gw2.sdkwork.link:8443".to_owned(),
+                "gw3.sdkwork.link:8443".to_owned(),
+            ]
+        );
+        agent.validate_endpoints().expect("all addresses are valid");
+
+        // A configuration that sets only the list still works: the first entry
+        // is the primary.
+        let list_only = TunnelAgentConfig {
+            endpoint: String::new(),
+            endpoints: vec!["gw9.sdkwork.link:8443".to_owned()],
+            ..TunnelAgentConfig::default()
+        };
+        assert_eq!(
+            list_only.gateway_endpoints(),
+            vec!["gw9.sdkwork.link:8443".to_owned()]
+        );
+
+        // No address at all is not an error here: an agent without a gateway
+        // is a runtime decision (the CLI insists on one), not a config shape
+        // the model has to reject.
+        assert!(TunnelAgentConfig::default().gateway_endpoints().is_empty());
+    }
+
+    /// A fallback that cannot be dialled is worse than no fallback, so a
+    /// malformed address is a configuration error.
+    #[test]
+    fn a_malformed_gateway_address_is_a_configuration_error() {
+        for address in [
+            "gw1.sdkwork.link",
+            "quic://gw1.sdkwork.link:8443",
+            "gw1.sdkwork.link:8443/tunnel",
+            "gw1.sdkwork.link:0",
+            "gw1.sdkwork.link:not-a-port",
+            ":8443",
+        ] {
+            let agent = TunnelAgentConfig {
+                endpoint: address.to_owned(),
+                ..TunnelAgentConfig::default()
+            };
+            assert!(
+                agent.validate_endpoints().is_err(),
+                "`{address}` must be refused"
+            );
+        }
+        // Enabled configuration: the tunnel section validates through it.
+        let config = TunnelConfig {
+            enabled: true,
+            agent: Some(TunnelAgentConfig {
+                endpoint: "gw1.sdkwork.link:8443".to_owned(),
+                endpoints: vec!["gw2.sdkwork.link:8443".to_owned()],
+                ..TunnelAgentConfig::default()
+            }),
+            ..TunnelConfig::disabled()
+        };
+        config.validate().expect("a valid list passes");
+
+        // Disabled: nothing is validated, so a half-written section cannot
+        // break a deployment that never uses the tunnel (PRD §77).
+        let disabled = TunnelConfig {
+            enabled: false,
+            agent: Some(TunnelAgentConfig {
+                endpoint: "not-an-address".to_owned(),
+                ..TunnelAgentConfig::default()
+            }),
+            ..TunnelConfig::disabled()
+        };
+        disabled
+            .validate()
+            .expect("disabled config always validates");
+    }
+
+    /// The transport tunables: derived defaults, explicit overrides, and the
+    /// relationships that make a configuration unusable.
+    #[test]
+    fn transport_tunables_are_derived_then_overridable() {
+        use std::time::Duration;
+
+        let derived = TunnelNetworkConfig::default();
+        assert_eq!(derived.keep_alive_interval(), Some(Duration::from_secs(5)));
+        assert_eq!(
+            derived.stale_after(Duration::from_secs(300)),
+            Duration::from_secs(30)
+        );
+        assert_eq!(derived.udp_packet_size_bytes(), 65_507);
+        assert_eq!(derived.max_concurrent_streams(256), 256);
+
+        let explicit = TunnelNetworkConfig {
+            heartbeat_interval_secs: 10,
+            keep_alive_interval_secs: Some(2),
+            heartbeat_timeout_secs: Some(45),
+            udp_packet_size: Some(1_200),
+            max_concurrent_streams: Some(64),
+            ..TunnelNetworkConfig::default()
+        };
+        explicit.validate_network().expect("valid tunables");
+        assert_eq!(explicit.keep_alive_interval(), Some(Duration::from_secs(2)));
+        // The explicit timeout wins over `min(idle, heartbeat x 3)`.
+        assert_eq!(
+            explicit.stale_after(Duration::from_secs(300)),
+            Duration::from_secs(45)
+        );
+        assert_eq!(explicit.udp_packet_size_bytes(), 1_200);
+        assert_eq!(explicit.max_concurrent_streams(256), 64);
+
+        // `0` disables keep-alive probing rather than meaning "no interval".
+        let no_probe = TunnelNetworkConfig {
+            keep_alive_interval_secs: Some(0),
+            ..TunnelNetworkConfig::default()
+        };
+        no_probe.validate_network().expect("0 is a valid choice");
+        assert_eq!(no_probe.keep_alive_interval(), None);
+    }
+
+    #[test]
+    fn unusable_transport_tunables_are_configuration_errors() {
+        // A heartbeat timeout below the heartbeat cadence expires the session
+        // before its first heartbeat can arrive.
+        let too_tight = TunnelNetworkConfig {
+            heartbeat_interval_secs: 10,
+            heartbeat_timeout_secs: Some(5),
+            ..TunnelNetworkConfig::default()
+        };
+        let error = too_tight
+            .validate_network()
+            .expect_err("a timeout under one heartbeat interval is refused");
+        assert!(
+            error.to_string().contains("at least the heartbeat"),
+            "{error}"
+        );
+
+        // A UDP ceiling outside the representable range is a unit mistake.
+        for size in [1_u32, 511, 65_508] {
+            let bad = TunnelNetworkConfig {
+                udp_packet_size: Some(size),
+                ..TunnelNetworkConfig::default()
+            };
+            assert!(
+                bad.validate_network().is_err(),
+                "udpPacketSize {size} must be refused"
+            );
+        }
+
+        // A stream ceiling below the transport's floor would leave no room for
+        // the control stream.
+        for streams in [1_u32, 15, 65_537] {
+            let bad = TunnelNetworkConfig {
+                max_concurrent_streams: Some(streams),
+                ..TunnelNetworkConfig::default()
+            };
+            assert!(
+                bad.validate_network().is_err(),
+                "maxConcurrentStreams {streams} must be refused"
+            );
+        }
+
+        // An absurd keep-alive interval is refused; the range is generous on
+        // purpose (probe every hour is a choice, probe every 2 hours is a typo).
+        let bad = TunnelNetworkConfig {
+            keep_alive_interval_secs: Some(7_200),
+            ..TunnelNetworkConfig::default()
+        };
+        assert!(bad.validate_network().is_err());
+
+        // And the tunnel section validates through it.
+        let config = TunnelConfig {
+            enabled: true,
+            network: Some(too_tight),
+            ..TunnelConfig::disabled()
+        };
+        assert!(config.validate().is_err());
+    }
+
     #[test]
     fn udp_template_resolves_a_datagram_target_and_requires_a_port() {
         let template = TunnelRouteTemplate {
@@ -574,6 +1426,9 @@ mod tests {
             port: Some(7053),
             target: "127.0.0.1:53".to_owned(),
             policy: None,
+            proxy_protocol: None,
+            locations: Vec::new(),
+            ..TunnelRouteTemplate::default()
         };
         template.validate().expect("valid udp template");
         assert_eq!(
@@ -609,6 +1464,9 @@ mod tests {
             port: None,
             target: "127.0.0.1:3000".to_owned(),
             policy: None,
+            proxy_protocol: None,
+            locations: Vec::new(),
+            ..TunnelRouteTemplate::default()
         };
         let valid = build("home-web_2");
         valid.validate().expect("a DNS-label-shaped name is fine");
@@ -641,6 +1499,9 @@ mod tests {
             port: None,
             target: "not-a-socket-address".to_owned(),
             policy: None,
+            proxy_protocol: None,
+            locations: Vec::new(),
+            ..TunnelRouteTemplate::default()
         }];
         let disabled = TunnelConfig {
             enabled: false,

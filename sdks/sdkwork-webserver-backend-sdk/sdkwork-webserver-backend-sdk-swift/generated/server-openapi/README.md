@@ -62,6 +62,7 @@ client.setHeader("X-Custom-Header", value: "value")
 - `client.agent` - agent API
 - `client.audit` - audit API
 - `client.cluster` - cluster API
+- `client.tunnel` - tunnel API
 - `client.trafficUsage` - traffic_usage API
 - `client.metricsSummary` - metrics_summary API
 
@@ -228,6 +229,14 @@ print(result)
 ```swift
 // Retrieve the cluster health overview for status polling
 let result = try await client.cluster.clustersOverviewRetrieve()
+print(result)
+```
+
+### tunnel
+
+```swift
+// List the tunnel connector machines this gateway manages
+let result = try await client.tunnel.machinesList()
 print(result)
 ```
 

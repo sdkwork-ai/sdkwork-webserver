@@ -58,6 +58,7 @@ client.setHeader('X-Custom-Header', 'value');
 - `client.agent` - agent API
 - `client.audit` - audit API
 - `client.cluster` - cluster API
+- `client.tunnel` - tunnel API
 - `client.trafficUsage` - traffic_usage API
 - `client.metricsSummary` - metrics_summary API
 
@@ -210,6 +211,13 @@ print(result);
 ```dart
 // Retrieve the cluster health overview for status polling
 final result = await client.cluster.clustersOverviewRetrieve();
+print(result);
+```
+
+### tunnel
+```dart
+// List the tunnel connector machines this gateway manages
+final result = await client.tunnel.machinesList();
 print(result);
 ```
 

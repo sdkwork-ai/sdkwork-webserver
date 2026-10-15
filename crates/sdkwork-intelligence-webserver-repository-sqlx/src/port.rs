@@ -267,6 +267,35 @@ impl WebRepositoryPort for WebRepository {
             .await
     }
 
+    async fn upsert_root_domain_wechat_verification(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        file_name: &str,
+        content: &str,
+    ) -> WebServiceResult<String> {
+        self.upsert_root_domain_wechat_verification_repo(tenant_id, root_domain_id, file_name, content)
+            .await
+    }
+
+    async fn root_domain_wechat_verification(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+    ) -> WebServiceResult<Option<(String, String, String)>> {
+        self.root_domain_wechat_verification_repo(tenant_id, root_domain_id)
+            .await
+    }
+
+    async fn delete_root_domain_wechat_verification(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+    ) -> WebServiceResult<bool> {
+        self.delete_root_domain_wechat_verification_repo(tenant_id, root_domain_id)
+            .await
+    }
+
     async fn update_root_domain(
         &self,
         tenant_id: i64,

@@ -94,6 +94,91 @@ impl AuthPolicy {
     }
 }
 
+/// Places where an agent must re-present its bearer token, beyond the initial
+/// handshake (FRP `auth.additionalScopes`).
+///
+/// The tunnel authenticates a session once, and everything inside it is then
+/// implicitly trusted. This scope makes the one place where that trust is
+/// worth re-checking explicit: [`Self::Heartbeats`] — the agent re-presents
+/// the token with each liveness ping, so a session that outlives a credential
+/// rotation stops being renewed instead of staying alive until the transport
+/// drops.
+///
+/// **FRP's `NewWorkConns` has no equivalent here, on purpose.** In FRP a work
+/// connection is a *separate* TCP connection that frpc opens toward frps, so
+/// it needs its own credential; in this design every relayed stream is opened
+/// *inside* the already-authenticated QUIC connection by the gateway, so there
+/// is no second connection an attacker could open without credentials, and
+/// putting a token on the stream header would look like protection without
+/// adding any. The guarantee is structural, not configured — which is why
+/// configuring `newWorkConns` is refused with that explanation instead of
+/// being accepted as a no-op.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AuthScope {
+    /// Re-present the token with each heartbeat.
+    Heartbeats,
+}
+
+impl AuthScope {
+    /// Every scope, in a stable order (the wire advertisement is sorted).
+    pub const ALL: [Self; 1] = [Self::Heartbeats];
+
+    /// The canonical wire/config label.
+    #[must_use]
+    pub const fn wire_label(self) -> &'static str {
+        match self {
+            Self::Heartbeats => "heartbeats",
+        }
+    }
+
+    /// Parses a label produced by [`Self::wire_label`].
+    ///
+    /// Accepts the spellings an operator is likely to write (FRP uses
+    /// `HeartBeats`) and refuses everything else, including FRP's
+    /// `NewWorkConns` — a typo, or a scope this design cannot honour, must not
+    /// silently leave the hardening disabled.
+    pub fn parse(raw: &str) -> Result<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "heartbeats" | "heartbeat" => Ok(Self::Heartbeats),
+            "newworkconns" | "newworkconnections" | "workconns" => Err(TunnelError::Validation {
+                field: ValidationField::Config,
+                reason: "auth scope `newWorkConns` has no equivalent here: relayed streams are \
+                         opened inside the authenticated connection, so there is no separate work \
+                         connection to authenticate"
+                    .to_owned(),
+            }),
+            other => Err(TunnelError::Validation {
+                field: ValidationField::Config,
+                reason: format!("unknown auth scope `{other}` (expected heartbeats)"),
+            }),
+        }
+    }
+
+    /// Parses and validates a scope list, rejecting duplicates.
+    pub fn parse_list(entries: &[String]) -> Result<Vec<Self>> {
+        let mut parsed: Vec<Self> = Vec::with_capacity(entries.len());
+        for entry in entries {
+            let scope = Self::parse(entry)?;
+            if parsed.contains(&scope) {
+                return Err(TunnelError::Validation {
+                    field: ValidationField::Config,
+                    reason: format!("auth scope `{}` is listed twice", scope.wire_label()),
+                });
+            }
+            parsed.push(scope);
+        }
+        parsed.sort_unstable();
+        Ok(parsed)
+    }
+
+    /// True when `scopes` contains this scope.
+    #[must_use]
+    pub fn is_required_in(self, scopes: &[Self]) -> bool {
+        scopes.contains(&self)
+    }
+}
+
 /// Per-route access policy.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -307,5 +392,55 @@ mod tests {
         assert!(AuthPolicy::BearerToken.is_satisfiable_on(TunnelProtocolKind::Http));
         assert!(!AuthPolicy::BearerToken.is_satisfiable_on(TunnelProtocolKind::Tcp));
         assert!(!AuthPolicy::BearerToken.is_satisfiable_on(TunnelProtocolKind::Udp));
+    }
+}
+
+#[cfg(test)]
+mod auth_scope_tests {
+    use super::*;
+
+    #[test]
+    fn scope_labels_round_trip_and_accept_the_frp_spelling() {
+        assert_eq!(
+            AuthScope::parse("HeartBeats").expect("FRP spelling"),
+            AuthScope::Heartbeats
+        );
+        assert_eq!(
+            AuthScope::parse(" heartbeats ").expect("padded"),
+            AuthScope::Heartbeats
+        );
+        assert_eq!(AuthScope::Heartbeats.wire_label(), "heartbeats");
+    }
+
+    /// `newWorkConns` is refused with the reason, not silently accepted: a
+    /// scope that cannot be honoured must not look like one that is.
+    #[test]
+    fn new_work_conns_is_refused_with_an_explanation() {
+        for label in ["newWorkConns", "NewWorkConns", "workconns"] {
+            let error = AuthScope::parse(label).expect_err("no equivalent here");
+            assert!(
+                error.to_string().contains("no equivalent"),
+                "unexpected error for {label}: {error}"
+            );
+        }
+        let unknown = AuthScope::parse("teleport").expect_err("unknown scope");
+        assert!(
+            unknown.to_string().contains("unknown auth scope"),
+            "{unknown}"
+        );
+    }
+
+    #[test]
+    fn scope_lists_reject_duplicates_and_sort() {
+        let parsed = AuthScope::parse_list(&["HeartBeats".to_owned()]).expect("parses");
+        assert_eq!(parsed, vec![AuthScope::Heartbeats]);
+
+        let duplicate = AuthScope::parse_list(&["heartbeats".to_owned(), "HeartBeats".to_owned()])
+            .expect_err("duplicates are refused");
+        assert!(duplicate.to_string().contains("twice"), "{duplicate}");
+
+        assert!(AuthScope::parse_list(&[]).expect("empty").is_empty());
+        assert!(AuthScope::Heartbeats.is_required_in(&[AuthScope::Heartbeats]));
+        assert!(!AuthScope::Heartbeats.is_required_in(&[]));
     }
 }

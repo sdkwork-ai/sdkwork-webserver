@@ -1,7 +1,7 @@
 import { backendApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { ApplicationDomainResponse, CreateDomainDnsRecordRequest, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainDnsRecordResponse, DomainDnsRecordStatusRequest, DomainDnsSyncResponse, DomainVerifyResponse, PageInfo, RootDomainResponse, UpdateDomainApplicationBindingRequest, UpdateDomainDnsRecordRequest, UpdateRootDomainRequest } from '../types';
+import type { ApplicationDomainResponse, CreateDomainDnsRecordRequest, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainDnsRecordResponse, DomainDnsRecordStatusRequest, DomainDnsSyncResponse, DomainVerifyResponse, DomainWechatVerificationCheckResponse, DomainWechatVerificationResponse, PageInfo, RootDomainResponse, UpdateDomainApplicationBindingRequest, UpdateDomainDnsRecordRequest, UpdateRootDomainRequest, UpsertDomainWechatVerificationRequest } from '../types';
 
 
 export interface DomainApplicationBindingUpdateParams {
@@ -40,6 +40,45 @@ export class DomainApplicationBindingApi {
       {}
     );
     return this.client.request<void>(backendApiPath(`/domains/${serializePathParameter(domainId, { name: 'domainId', style: 'simple', explode: false })}/application_binding`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}) });
+  }
+}
+
+export interface DomainRootDomainsWechatVerificationUpsertParams {
+  idempotencyKey: string;
+}
+
+export class DomainRootDomainsWechatVerificationApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** Read the root domain's WeChat MP domain-ownership verification file */
+  async retrieve(rootDomainId: string, requestOptions?: ApiRequestOptions): Promise<DomainWechatVerificationResponse> {
+    return this.client.request<DomainWechatVerificationResponse>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}/verification_file`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  }
+
+/** Upload (or wholly replace) the root domain's WeChat verification file */
+  async upsert(rootDomainId: string, body: UpsertDomainWechatVerificationRequest, params: DomainRootDomainsWechatVerificationUpsertParams, requestOptions?: ApiRequestOptions): Promise<DomainWechatVerificationResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<DomainWechatVerificationResponse>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}/verification_file`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PUT' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+
+/** Delete the root domain's WeChat verification file */
+  async delete(rootDomainId: string, requestOptions?: ApiRequestOptions): Promise<void> {
+    return this.client.request<void>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}/verification_file`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
+  }
+
+/** Self-check the root domain's WeChat verification file */
+  async check(rootDomainId: string, requestOptions?: ApiRequestOptions): Promise<DomainWechatVerificationCheckResponse> {
+    return this.client.request<DomainWechatVerificationCheckResponse>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}/verification_file/check`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, sdkworkUnwrapKind: 'item' });
   }
 }
 
@@ -220,11 +259,13 @@ export class DomainRootDomainsApi {
   private client: HttpClient;
   public readonly subdomains: DomainRootDomainsSubdomainsApi;
   public readonly dnsRecords: DomainRootDomainsDnsRecordsApi;
+  public readonly wechatVerification: DomainRootDomainsWechatVerificationApi;
 
   constructor(client: HttpClient) {
     this.client = client;
     this.subdomains = new DomainRootDomainsSubdomainsApi(client);
     this.dnsRecords = new DomainRootDomainsDnsRecordsApi(client);
+    this.wechatVerification = new DomainRootDomainsWechatVerificationApi(client);
   }
 
 

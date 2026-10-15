@@ -21,6 +21,7 @@ type SdkworkBackendClient struct {
     Agent *api.AgentApi
     Audit *api.AuditApi
     Cluster *api.ClusterApi
+    Tunnel *api.TunnelApi
     TrafficUsage *api.TrafficUsageApi
     MetricsSummary *api.MetricsSummaryApi
 }
@@ -48,6 +49,7 @@ func NewSdkworkBackendClientWithConfig(config sdkhttp.Config) *SdkworkBackendCli
         Agent: api.NewAgentApi(client),
         Audit: api.NewAuditApi(client),
         Cluster: api.NewClusterApi(client),
+        Tunnel: api.NewTunnelApi(client),
         TrafficUsage: api.NewTrafficUsageApi(client),
         MetricsSummary: api.NewMetricsSummaryApi(client),
     }
