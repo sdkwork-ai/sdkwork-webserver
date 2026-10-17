@@ -1229,8 +1229,9 @@ fn read_ingress_token(
 }
 
 /// Rejects secret files that group or other users can read or write. On Unix
-/// the mode must not expose any group/other bits (for example `0644` and
-/// `0600` are accepted, `0660`/`0664` are not); Windows ACLs are not checked.
+/// the mode must not expose any group/other bits, so `0600` is accepted and
+/// `0644` is not; `0660`/`0664` are likewise rejected. Windows ACLs are not
+/// checked.
 fn validate_secret_file_permissions(
     metadata: &std::fs::Metadata,
     config_key: &str,
@@ -1979,19 +1980,40 @@ mod tests {
     fn secret_file_reader_rejects_blank_whitespace_and_oversize_values() {
         let root = tempfile::tempdir().unwrap();
         let token = root.path().join("token");
+        // The reader rejects any file a group or other user can reach, so the
+        // fixture must be owner-only. Leaving the mode to the ambient umask
+        // makes this test pass under a restrictive login umask and fail on a
+        // stock CI runner (which creates 0644 files), so set it explicitly.
+        restrict_to_owner(&token);
         std::fs::write(&token, "0123456789abcdef").unwrap();
+        restrict_to_owner(&token);
         assert_eq!(
             read_ingress_token(&token, DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV).unwrap(),
             "0123456789abcdef"
         );
         std::fs::write(&token, "0123456789abcde f").unwrap();
+        restrict_to_owner(&token);
         assert!(read_ingress_token(&token, DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV).is_err());
         std::fs::write(
             &token,
             vec![b'x'; MAXIMUM_INGRESS_TOKEN_FILE_BYTES as usize + 1],
         )
         .unwrap();
+        restrict_to_owner(&token);
         assert!(read_ingress_token(&token, DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV).is_err());
+    }
+
+    /// Restricts a file to its owner, matching the production secret-file
+    /// contract. `std::fs::write` keeps an existing file's mode but creates a
+    /// new one from the ambient umask, so this has to run after every write.
+    fn restrict_to_owner(path: &Path) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        #[cfg(not(unix))]
+        let _ = path;
     }
 
     #[test]
