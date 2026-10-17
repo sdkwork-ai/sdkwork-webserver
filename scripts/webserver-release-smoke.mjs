@@ -244,6 +244,35 @@ function waitForSmokePostgres(containerName) {
   throw new Error('disposable PostgreSQL did not become ready for the release smoke test');
 }
 
+/**
+ * Creates the workspace schema up front. The server migration opens with
+ * `CREATE SCHEMA`, which fails with "no schema has been selected to create in"
+ * when the schema does not exist yet, and the migration runs with a
+ * `search_path` pinned to that schema. The CI PostgreSQL verifier seeds the same
+ * schema before its own runs for the same reason.
+ */
+function createSmokePostgresSchema(containerName) {
+  run(
+    'docker',
+    [
+      'exec',
+      '--env',
+      `PGPASSWORD=${SMOKE_POSTGRES_PASSWORD}`,
+      containerName,
+      'psql',
+      '--username',
+      SMOKE_POSTGRES_USER,
+      '--dbname',
+      SMOKE_POSTGRES_DATABASE,
+      '--set',
+      'ON_ERROR_STOP=1',
+      '--command',
+      `CREATE SCHEMA IF NOT EXISTS ${SMOKE_POSTGRES_DATABASE};`,
+    ],
+    { timeoutMs: 60_000 },
+  );
+}
+
 function resolveSmokePostgresPort(containerName) {
   const result = run('docker', ['port', containerName, '5432/tcp'], { timeoutMs: 30_000 });
   const match = /:(?<port>[0-9]{1,5})\s*$/u.exec(String(result.stdout).trim());
@@ -290,6 +319,7 @@ async function bindSmokeDatabase() {
   activeSmokeContainer = containerName;
   try {
     waitForSmokePostgres(containerName);
+    createSmokePostgresSchema(containerName);
     const port = resolveSmokePostgresPort(containerName);
     activeSmokeDatabase =
       `postgresql://${SMOKE_POSTGRES_USER}:${SMOKE_POSTGRES_PASSWORD}@127.0.0.1:${port}/${SMOKE_POSTGRES_DATABASE}`

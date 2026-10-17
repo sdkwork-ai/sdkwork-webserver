@@ -131,6 +131,30 @@ test('release smoke names its disposable database as a canonical SDKWork identit
   );
 });
 
+test('release smoke seeds the workspace schema before the migration runs', () => {
+  const source = readSmokeSource();
+  // The server migration opens with CREATE SCHEMA under a pinned search_path and
+  // fails with "no schema has been selected to create in" when the schema is
+  // absent. The CI PostgreSQL verifier seeds it for the same reason, so the smoke
+  // must do it between readiness and the first migration.
+  assert.match(
+    source,
+    /function createSmokePostgresSchema\(containerName\)/u,
+    'the smoke must seed the workspace schema',
+  );
+  assert.match(
+    source,
+    /CREATE SCHEMA IF NOT EXISTS \$\{SMOKE_POSTGRES_DATABASE\};/u,
+    'the seeded schema must be the workspace database schema',
+  );
+  const bind = source.slice(source.indexOf('async function bindSmokeDatabase'));
+  assert.match(
+    bind,
+    /waitForSmokePostgres\(containerName\);\s*createSmokePostgresSchema\(containerName\);/u,
+    'the schema must be seeded after readiness and before the URL is handed over',
+  );
+});
+
 test('release smoke points the packaged gateway at the provisioned database', () => {
   const source = readSmokeSource();
   // A provisioned database that is not handed to the gateway is useless: the
