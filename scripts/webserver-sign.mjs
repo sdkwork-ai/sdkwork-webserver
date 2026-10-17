@@ -11,10 +11,18 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { bundleToJSON } from '@sigstore/bundle';
+import {
+  CIContextProvider,
+  DEFAULT_REKOR_URL,
+  FulcioSigner,
+  MessageSignatureBundleBuilder,
+  RekorWitness,
+} from '@sigstore/sign';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { sign, verify } from 'sigstore';
+import { verify } from 'sigstore';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUTPUT_ROOT = path.join(REPO_ROOT, 'dist', 'release');
@@ -37,6 +45,20 @@ const OFFICIAL_WORKFLOW_IDENTITIES = [
   '^https://github\\.com/sdkwork-ai/sdkwork-github-workflow/\\.github/workflows/sdkwork-package\\.yml@[0-9a-f]{40}$',
 ].join('|');
 const GITHUB_OIDC_ISSUER = 'https://token.actions.githubusercontent.com';
+// Release archives are built reproducibly (SOURCE_DATE_EPOCH plus a pinned
+// tar mtime), so an unchanged commit produces a byte-identical archive and
+// therefore an identical digest on every attempt. Rekor deduplicates entries
+// by (identity, digest), so a re-run legitimately hits
+// `409 an equivalent entry already exists`.
+//
+// The top-level `sign()` helper from the `sigstore` package hardcodes
+// `fetchOnConflict: false` (node_modules/sigstore/dist/config.js) and its
+// SignOptions type does not expose the flag, so that entry point always treats
+// a re-run as a fatal error. @sigstore/sign exports the same builder with the
+// flag settable, so the witness is assembled here instead. `fetchOnConflict`
+// makes the client fetch the existing entry by UUID and reuse it, which is the
+// correct outcome: the existing tlog entry already attests this exact digest.
+const REKOR_FETCH_ON_CONFLICT = true;
 
 function parseArgs(argv) {
   const settings = {
@@ -130,7 +152,19 @@ async function signArtifact(artifact) {
     throw new Error('Sigstore signing requires GitHub Actions OIDC or SIGSTORE_ID_TOKEN');
   }
   const payload = readRegularFile(artifact.archive, MAX_ARCHIVE_BYTES, 'release archive');
-  const bundle = await sign(payload, { tlogUpload: true });
+  const identityProvider = process.env.SIGSTORE_ID_TOKEN
+    ? { getToken: async () => process.env.SIGSTORE_ID_TOKEN }
+    : new CIContextProvider('sigstore');
+  const builder = new MessageSignatureBundleBuilder({
+    signer: new FulcioSigner({ identityProvider }),
+    witnesses: [
+      new RekorWitness({
+        rekorBaseURL: DEFAULT_REKOR_URL,
+        fetchOnConflict: REKOR_FETCH_ON_CONFLICT,
+      }),
+    ],
+  });
+  const bundle = bundleToJSON(await builder.create({ data: payload }));
   writeAtomic(artifact.bundle, `${JSON.stringify(bundle)}\n`);
   console.log(`[sdkwork-webserver-sign] signed ${path.basename(artifact.archive)}`);
 }

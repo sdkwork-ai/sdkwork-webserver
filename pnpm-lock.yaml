@@ -106,6 +106,12 @@ importers:
       '@sdkwork/ui-pc-react':
         specifier: workspace:*
         version: link:../sdkwork-ui/sdkwork-ui-pc-react
+      '@sigstore/bundle':
+        specifier: 5.0.0
+        version: 5.0.0
+      '@sigstore/sign':
+        specifier: 5.0.0
+        version: 5.0.0
       sigstore:
         specifier: 5.0.0
         version: 5.0.0
