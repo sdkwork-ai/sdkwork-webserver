@@ -940,7 +940,8 @@ mod tests {
     }
 
     #[test]
-    fn absolute_record_names_rebuild_the_owner_against_the_queried_zone() {        assert_eq!(
+    fn absolute_record_names_rebuild_the_owner_against_the_queried_zone() {
+        assert_eq!(
             absolute_record_name("www", "example.com"),
             "www.example.com".to_string()
         );

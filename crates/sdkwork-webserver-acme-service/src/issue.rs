@@ -9,13 +9,13 @@ use tokio::sync::Semaphore;
 
 use crate::account_store::{AcmeAccountStore, MemoryAcmeAccountStore};
 use crate::challenge_policy::{
-    ChallengeAvailability, DeclaredChallengeMethod, ResolvedChallenge, resolve_challenge_method,
+    resolve_challenge_method, ChallengeAvailability, DeclaredChallengeMethod, ResolvedChallenge,
 };
 use crate::challenge_store::ChallengeStore;
 use crate::config::AcmeConfig;
 use crate::dns::{Dns01Presenter, DnsRecordChange, DnsZoneInventory, DnsZoneRecord};
 use crate::http_client::{AcmeHttpClientFactory, PlatformVerifierClientFactory};
-use crate::lets_encrypt::{AcmeChallengeMode, issue_lets_encrypt};
+use crate::lets_encrypt::{issue_lets_encrypt, AcmeChallengeMode};
 use crate::model::IssuedCertificateMaterial;
 use crate::self_signed::{certificate_evidence_from_pem, issue_self_signed};
 use crate::{AcmeServiceError, AcmeServiceResult};
@@ -1123,18 +1123,14 @@ mod tests {
         )
         .expect("config");
         let issuer = CertificateIssuer::new(config, "/tmp/certs/live").expect("issuer");
-        assert!(
-            issuer
-                .issue(3, &["../escape".to_string()], "safe-name", "ECDSA")
-                .await
-                .is_err()
-        );
-        assert!(
-            issuer
-                .issue(3, &["dev.localhost".to_string()], "../escape", "ECDSA")
-                .await
-                .is_err()
-        );
+        assert!(issuer
+            .issue(3, &["../escape".to_string()], "safe-name", "ECDSA")
+            .await
+            .is_err());
+        assert!(issuer
+            .issue(3, &["dev.localhost".to_string()], "../escape", "ECDSA")
+            .await
+            .is_err());
     }
 
     #[tokio::test]

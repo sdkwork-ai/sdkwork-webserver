@@ -197,7 +197,11 @@ async fn route_annotations_travel_with_the_registration() {
     assert_eq!(ready.len(), 1);
 
     // The gateway stored exactly what the operator declared.
-    let routes = gateway.service().list_routes().await.expect("routes listing");
+    let routes = gateway
+        .service()
+        .list_routes()
+        .await
+        .expect("routes listing");
     let registered = routes
         .iter()
         .find(|route| route.name == "annotated")
@@ -296,7 +300,10 @@ async fn login_fail_exit_decides_whether_a_rejected_credential_stops_the_agent()
     {
         after_stop.push(format!("{event:?}"));
     }
-    assert!(after_stop.is_empty(), "no events after Stopped: {after_stop:?}");
+    assert!(
+        after_stop.is_empty(),
+        "no events after Stopped: {after_stop:?}"
+    );
 
     // 2. Default (switch off): the same rejection schedules a retry.
     let mut retrying = AgentRuntime::spawn(agent_options(false));
@@ -716,9 +723,7 @@ async fn a_required_heartbeat_reauth_is_advertised_and_enforced() {
         let mut stream = connection.open_stream().await.expect("control stream");
         let hello = sdkwork_webserver_tunnel_protocol::ControlMessage::Hello(
             sdkwork_webserver_tunnel_protocol::Hello {
-                protocol_versions: vec![
-                    sdkwork_webserver_tunnel_protocol::ProtocolVersion::v1(),
-                ],
+                protocol_versions: vec![sdkwork_webserver_tunnel_protocol::ProtocolVersion::v1()],
                 device_id: "dev_raw_reauth".to_owned(),
                 device_name: "raw-reauth".to_owned(),
                 platform: "linux".to_owned(),
@@ -750,8 +755,8 @@ async fn a_required_heartbeat_reauth_is_advertised_and_enforced() {
         .await
         .expect("auth result within 5s")
         .expect("auth result read");
-        let decoded = sdkwork_webserver_tunnel_protocol::ControlMessage::from_frame(&reply)
-            .expect("decodes");
+        let decoded =
+            sdkwork_webserver_tunnel_protocol::ControlMessage::from_frame(&reply).expect("decodes");
         match decoded {
             sdkwork_webserver_tunnel_protocol::ControlMessage::AuthResult(result) => {
                 assert!(result.ok);
@@ -766,8 +771,7 @@ async fn a_required_heartbeat_reauth_is_advertised_and_enforced() {
 
         // A heartbeat with no re-presentation: the reply is an authentication
         // error, and the session does not survive it.
-        let heartbeat =
-            sdkwork_webserver_tunnel_protocol::ControlMessage::Heartbeat;
+        let heartbeat = sdkwork_webserver_tunnel_protocol::ControlMessage::Heartbeat;
         stream
             .write_all(&heartbeat.to_frame().expect("frame"))
             .await
@@ -783,8 +787,8 @@ async fn a_required_heartbeat_reauth_is_advertised_and_enforced() {
         .await
         .expect("the refusal arrives")
         .expect("reply read");
-        let decoded = sdkwork_webserver_tunnel_protocol::ControlMessage::from_frame(&reply)
-            .expect("decodes");
+        let decoded =
+            sdkwork_webserver_tunnel_protocol::ControlMessage::from_frame(&reply).expect("decodes");
         match decoded {
             sdkwork_webserver_tunnel_protocol::ControlMessage::Error(error) => {
                 assert_eq!(
@@ -1371,9 +1375,12 @@ async fn dial_server_local_ip_decides_the_source_of_target_dials() {
     // Two sessions from the same machine: one letting the kernel choose, one
     // pinned to another address of the loopback range.
     let mut observed = Vec::new();
-    for (index, source) in [None, Some("127.0.0.2".parse::<std::net::IpAddr>().expect("ip"))]
-        .into_iter()
-        .enumerate()
+    for (index, source) in [
+        None,
+        Some("127.0.0.2".parse::<std::net::IpAddr>().expect("ip")),
+    ]
+    .into_iter()
+    .enumerate()
     {
         let public_port = available_port();
         let template = TunnelRouteTemplate {
@@ -1455,7 +1462,9 @@ async fn dial_server_local_ip_decides_the_source_of_target_dials() {
 /// Answers a single `A` question and ignores everything else, which is enough
 /// to prove that the agent used *this* resolver: the name it is asked for does
 /// not exist in any system resolver.
-async fn spawn_stub_dns_server(answer: Option<std::net::Ipv4Addr>) -> (u16, tokio::task::JoinHandle<()>) {
+async fn spawn_stub_dns_server(
+    answer: Option<std::net::Ipv4Addr>,
+) -> (u16, tokio::task::JoinHandle<()>) {
     let socket = tokio::net::UdpSocket::bind("127.0.0.1:0")
         .await
         .expect("dns bind");
@@ -1557,7 +1566,11 @@ async fn dns_server_resolves_the_gateway_name_the_system_cannot() {
         spawn_stub_dns_server(Some(std::net::Ipv4Addr::LOCALHOST)).await;
     let mut agent = AgentRuntime::spawn(agent_options(answering_port));
     let ready = wait_for_ready(&mut agent).await;
-    assert_eq!(ready.len(), 1, "the gateway name resolved through dnsServer");
+    assert_eq!(
+        ready.len(),
+        1,
+        "the gateway name resolved through dnsServer"
+    );
     agent.shutdown().await;
     answering_task.abort();
 

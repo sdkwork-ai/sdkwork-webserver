@@ -2542,7 +2542,10 @@ impl<'a> Materializer<'a> {
             // TOML surface accepts exactly the spellings the runtime can
             // honour, and `newWorkConns` is refused with the explanation that
             // it has no equivalent here rather than silently doing nothing.
-            if let Some(entry) = gateway.get("authScopes").or_else(|| gateway.get("auth_scopes")) {
+            if let Some(entry) = gateway
+                .get("authScopes")
+                .or_else(|| gateway.get("auth_scopes"))
+            {
                 let entries = entry.as_array().ok_or_else(|| {
                     materialize_error(
                         "server.toml.tunnel.gateway.authScopes",
@@ -2636,10 +2639,7 @@ impl<'a> Materializer<'a> {
                         ],
                     )?;
                     let name = table.get("name").and_then(Value::as_str).ok_or_else(|| {
-                        materialize_error(
-                            &format!("{scope}.name"),
-                            "a user needs a name",
-                        )
+                        materialize_error(&format!("{scope}.name"), "a user needs a name")
                     })?;
                     let token_env = table
                         .get("tokenEnv")
@@ -2671,18 +2671,11 @@ impl<'a> Materializer<'a> {
                         }
                     }
                     let parsed: sdkwork_webserver_tunnel_core::TunnelUserConfig =
-                        serde_json::from_value(user).map_err(|error| {
-                            materialize_error(
-                                &scope,
-                                error.to_string(),
-                            )
-                        })?;
-                    parsed.validate().map_err(|error| {
-                        materialize_error(
-                            &scope,
-                            error.to_string(),
-                        )
-                    })?;
+                        serde_json::from_value(user)
+                            .map_err(|error| materialize_error(&scope, error.to_string()))?;
+                    parsed
+                        .validate()
+                        .map_err(|error| materialize_error(&scope, error.to_string()))?;
                     users.push(json!({
                         "name": name.trim(),
                         "tokenEnv": token_env.trim(),
@@ -2769,7 +2762,12 @@ impl<'a> Materializer<'a> {
                         )
                     })?;
                     sdkwork_webserver_tunnel_core::validate_endpoint_authority(address).map_err(
-                        |error| materialize_error("server.toml.tunnel.agent.endpoints", error.to_string()),
+                        |error| {
+                            materialize_error(
+                                "server.toml.tunnel.agent.endpoints",
+                                error.to_string(),
+                            )
+                        },
                     )?;
                     addresses.push(Value::String(address.trim().to_owned()));
                 }
@@ -2852,10 +2850,22 @@ impl<'a> Materializer<'a> {
             // defaults (derived, not hard-coded) apply; a present key is
             // validated here with the config path in the message.
             for (camel, snake, target) in [
-                ("keepAliveIntervalSecs", "keep_alive_interval", "keepAliveIntervalSecs"),
-                ("heartbeatTimeoutSecs", "heartbeat_timeout", "heartbeatTimeoutSecs"),
+                (
+                    "keepAliveIntervalSecs",
+                    "keep_alive_interval",
+                    "keepAliveIntervalSecs",
+                ),
+                (
+                    "heartbeatTimeoutSecs",
+                    "heartbeat_timeout",
+                    "heartbeatTimeoutSecs",
+                ),
                 ("udpPacketSize", "udp_packet_size", "udpPacketSize"),
-                ("maxConcurrentStreams", "max_concurrent_streams", "maxConcurrentStreams"),
+                (
+                    "maxConcurrentStreams",
+                    "max_concurrent_streams",
+                    "maxConcurrentStreams",
+                ),
             ] {
                 let Some(entry) = network.get(camel).or_else(|| network.get(snake)) else {
                     continue;
@@ -3274,9 +3284,7 @@ impl<'a> Materializer<'a> {
                             let pair = sdkwork_webserver_tunnel_core::HeaderPair::parse(
                                 name, value, direction,
                             )
-                            .map_err(|error| {
-                                materialize_error(&set_scope, error.to_string())
-                            })?;
+                            .map_err(|error| materialize_error(&set_scope, error.to_string()))?;
                             set.insert(pair.name.clone(), pair.value.clone());
                         }
                     }
@@ -3287,9 +3295,9 @@ impl<'a> Materializer<'a> {
                 // file cannot describe metadata the agent would refuse to send.
                 if let Some(annotations) = route.get("annotations") {
                     let scope = "server.toml.tunnel.routes[].annotations";
-                    let table = annotations
-                        .as_object()
-                        .ok_or_else(|| materialize_error(scope, "must be a table of key → value"))?;
+                    let table = annotations.as_object().ok_or_else(|| {
+                        materialize_error(scope, "must be a table of key → value")
+                    })?;
                     let entries: std::collections::BTreeMap<String, String> = table
                         .iter()
                         .map(|(key, value)| {
@@ -3304,9 +3312,8 @@ impl<'a> Materializer<'a> {
                                 })
                         })
                         .collect::<std::result::Result<_, _>>()?;
-                    sdkwork_webserver_tunnel_core::route::validate_annotations(&entries).map_err(
-                        |error| materialize_error(scope, error.to_string()),
-                    )?;
+                    sdkwork_webserver_tunnel_core::route::validate_annotations(&entries)
+                        .map_err(|error| materialize_error(scope, error.to_string()))?;
                     mapped["annotations"] = serde_json::to_value(entries)
                         .map_err(|error| materialize_error(scope, error.to_string()))?;
                 }
@@ -4347,12 +4354,10 @@ set = { "X-Served-By" = "sdkwork" }
         assert_eq!(rewrite.request_set().len(), 2);
         assert_eq!(rewrite.response_set().len(), 1);
         // Names are canonicalized to lower case; values are preserved.
-        assert!(
-            rewrite
-                .request_set()
-                .iter()
-                .any(|pair| pair.name == "x-from" && pair.value == "edge")
-        );
+        assert!(rewrite
+            .request_set()
+            .iter()
+            .any(|pair| pair.name == "x-from" && pair.value == "edge"));
         // The route the agent would register carries the same policy.
         let route = template
             .to_route(sdkwork_webserver_tunnel_core::RouteId::parse("route_web").expect("id"))
@@ -4563,9 +4568,11 @@ authScopes = ["HeartBeats"]
             vec![sdkwork_webserver_tunnel_core::AuthScope::Heartbeats]
         );
         // Absent stays absent: the hardening is opt-in.
-        assert!(sdkwork_webserver_tunnel_core::TunnelGatewayConfig::default()
-            .auth_scopes
-            .is_empty());
+        assert!(
+            sdkwork_webserver_tunnel_core::TunnelGatewayConfig::default()
+                .auth_scopes
+                .is_empty()
+        );
     }
 
     /// `newWorkConns` has no equivalent in this design (streams are opened
@@ -4625,25 +4632,36 @@ maxDevices = 3
 
         // Absent stays absent: no users means no per-user quota, which is the
         // pre-user behaviour.
-        assert!(sdkwork_webserver_tunnel_core::TunnelGatewayConfig::default()
-            .users
-            .is_empty());
+        assert!(
+            sdkwork_webserver_tunnel_core::TunnelGatewayConfig::default()
+                .users
+                .is_empty()
+        );
     }
 
     /// A user entry that cannot be enforced is a configuration error.
     #[test]
     fn an_unenforceable_user_entry_is_a_configuration_error() {
         for (entry, expected) in [
-            (r#"[[tunnel.gateway.users]]
+            (
+                r#"[[tunnel.gateway.users]]
 name = "team a"
-tokenEnv = "TEAM_A_TOKEN""#, "may only contain"),
-            (r#"[[tunnel.gateway.users]]
+tokenEnv = "TEAM_A_TOKEN""#,
+                "may only contain",
+            ),
+            (
+                r#"[[tunnel.gateway.users]]
 name = "team-a"
-tokenEnv = """#, "environment variable"),
-            (r#"[[tunnel.gateway.users]]
+tokenEnv = """#,
+                "environment variable",
+            ),
+            (
+                r#"[[tunnel.gateway.users]]
 name = "team-a"
 tokenEnv = "TEAM_A_TOKEN"
-maxRoutes = 0"#, "at least 1"),
+maxRoutes = 0"#,
+                "at least 1",
+            ),
         ] {
             let toml_text = format!(
                 r#"
@@ -4752,13 +4770,17 @@ ticket = "OPS-1"
         let config: sdkwork_webserver_tunnel_core::TunnelConfig =
             serde_json::from_value(tunnel).expect("tunnel model parses");
         let route = &config.routes_or_empty()[0];
-        assert_eq!(route.annotations.get("owner").map(String::as_str), Some("team-a"));
-        assert_eq!(route.annotations.get("ticket").map(String::as_str), Some("OPS-1"));
+        assert_eq!(
+            route.annotations.get("owner").map(String::as_str),
+            Some("team-a")
+        );
+        assert_eq!(
+            route.annotations.get("ticket").map(String::as_str),
+            Some("OPS-1")
+        );
         // The template validates into a route that carries them.
         route
-            .to_route(
-                sdkwork_webserver_tunnel_core::RouteId::parse("route_web").expect("id"),
-            )
+            .to_route(sdkwork_webserver_tunnel_core::RouteId::parse("route_web").expect("id"))
             .expect("route materializes")
             .annotations
             .get("owner")

@@ -153,7 +153,9 @@ async fn call(
         .and_then(|line| line.split_whitespace().nth(1))
         .and_then(|code| code.parse().ok())
         .ok_or_else(|| {
-            WebServiceError::Internal("the tunnel data plane answered with an unusable status line".to_owned())
+            WebServiceError::Internal(
+                "the tunnel data plane answered with an unusable status line".to_owned(),
+            )
         })?;
     // The operations listener answers with `Connection: close` and a
     // Content-Length body; a missing body is legitimate for 204.
@@ -189,7 +191,9 @@ fn expect_ok(response: ProxyResponse) -> WebServiceResult<serde_json::Value> {
 /// JSON → contract, refusing a shape the console cannot render.
 fn machine_from_json(value: &serde_json::Value) -> WebServiceResult<TunnelMachineResponse> {
     serde_json::from_value(value.clone()).map_err(|error| {
-        WebServiceError::Internal(format!("machine payload does not match the contract: {error}"))
+        WebServiceError::Internal(format!(
+            "machine payload does not match the contract: {error}"
+        ))
     })
 }
 
@@ -200,9 +204,10 @@ pub(crate) async fn list_machines() -> WebServiceResult<TunnelMachineListRespons
         .get("machines")
         .cloned()
         .unwrap_or_else(|| serde_json::Value::Array(Vec::new()));
-    let machines: Vec<TunnelMachineResponse> = serde_json::from_value(machines).map_err(|error| {
-        WebServiceError::Internal(format!("machine list does not match the contract: {error}"))
-    })?;
+    let machines: Vec<TunnelMachineResponse> =
+        serde_json::from_value(machines).map_err(|error| {
+            WebServiceError::Internal(format!("machine list does not match the contract: {error}"))
+        })?;
     Ok(TunnelMachineListResponse { machines })
 }
 

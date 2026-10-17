@@ -86,4 +86,3 @@ pub(crate) fn open_contained(
         .map_err(|_| PathContainmentError::Unresolvable)?;
     Ok(ContainedTarget::File(file, metadata))
 }
-

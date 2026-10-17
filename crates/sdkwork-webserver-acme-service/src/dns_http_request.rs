@@ -82,10 +82,10 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::dns::{
-    Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest, DnsProviderKind,
-    dns_relative_record_name,
+    dns_relative_record_name, Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest,
+    DnsProviderKind,
 };
-use crate::dns_http::{DnsApiClient, DnsApiResponse, templated_request};
+use crate::dns_http::{templated_request, DnsApiClient, DnsApiResponse};
 use crate::{AcmeServiceError, AcmeServiceResult};
 
 /// Ceiling for one account's configuration.

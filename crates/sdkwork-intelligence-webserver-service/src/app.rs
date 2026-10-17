@@ -1651,7 +1651,7 @@ impl WebAppApi for WebService {
 
 #[cfg(test)]
 mod tests {
-    use super::{MAX_DEPLOYMENT_ARTIFACT_BYTES, MAX_ENV_VARIABLE_VALUE_BYTES, WebService};
+    use super::{WebService, MAX_DEPLOYMENT_ARTIFACT_BYTES, MAX_ENV_VARIABLE_VALUE_BYTES};
     use sdkwork_webserver_contract::{
         ApplicationStoreListing, CreateDeploymentRequest, CreateDomainRequest,
         CreateEnvVariableRequest, CreateHealthCheckRequest, IssueCertificateRequest, MediaResource,
@@ -1797,10 +1797,11 @@ mod tests {
     fn store_listing_requires_a_canonical_icon_for_release() {
         assert!(WebService::validate_store_listing(None, false).is_ok());
         assert!(WebService::validate_store_listing(None, true).is_err());
-        assert!(
-            WebService::validate_store_listing(Some(&ApplicationStoreListing::default()), true,)
-                .is_err()
-        );
+        assert!(WebService::validate_store_listing(
+            Some(&ApplicationStoreListing::default()),
+            true,
+        )
+        .is_err());
 
         let valid = ApplicationStoreListing {
             icon: Some(test_store_image("icon-1", "image/png", 1024, 1024)),
@@ -1915,13 +1916,11 @@ mod tests {
             ssl_provider: Some("letsencrypt".to_owned()),
         };
         assert!(WebService::validate_domain_request(&domain).is_ok());
-        assert!(
-            WebService::validate_domain_request(&CreateDomainRequest {
-                hostname: "bad host".to_owned(),
-                ..domain.clone()
-            })
-            .is_err()
-        );
+        assert!(WebService::validate_domain_request(&CreateDomainRequest {
+            hostname: "bad host".to_owned(),
+            ..domain.clone()
+        })
+        .is_err());
 
         let variable = CreateEnvVariableRequest {
             key: "API_BASE_URL".to_owned(),

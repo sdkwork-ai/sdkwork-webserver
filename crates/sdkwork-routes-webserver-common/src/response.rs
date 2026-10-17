@@ -1,9 +1,9 @@
-use axum::Json;
 use axum::http::{HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
+use axum::Json;
 use sdkwork_utils_rust::{
-    PageInfo, PageMode, SDKWORK_TRACE_ID_HEADER, SdkWorkApiResponse, SdkWorkPageData,
-    SdkWorkResourceData,
+    PageInfo, PageMode, SdkWorkApiResponse, SdkWorkPageData, SdkWorkResourceData,
+    SDKWORK_TRACE_ID_HEADER,
 };
 use sdkwork_webserver_contract::{
     ApplicationPage, AuditLogPage, CertificateDistributionPage, CertificatePage, ClusterEventPage,
@@ -14,7 +14,7 @@ use sdkwork_webserver_contract::{
 };
 use serde::Serialize;
 
-use crate::{WebApiError, correlation::resolved_trace_id};
+use crate::{correlation::resolved_trace_id, WebApiError};
 
 fn attach_trace_header(response: &mut Response, trace_id: &str) {
     if let (Ok(name), Ok(value)) = (
@@ -496,7 +496,7 @@ pub fn no_content(result: WebServiceResult<()>) -> Result<Response, WebApiError>
 mod tests {
     use axum::body::to_bytes;
     use axum::http::StatusCode;
-    use sdkwork_utils_rust::{SDKWORK_SUCCESS_CODE, SdkWorkApiResponse, SdkWorkResourceData};
+    use sdkwork_utils_rust::{SdkWorkApiResponse, SdkWorkResourceData, SDKWORK_SUCCESS_CODE};
     use sdkwork_webserver_contract::{AgentSyncResponse, CertificateOperationAcceptedResponse};
 
     use super::{accepted_async, ok_resource};

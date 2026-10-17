@@ -1,11 +1,11 @@
 use chrono::{Duration, TimeZone, Utc};
 use rcgen::{
-    CertificateParams, DistinguishedName, DnType, KeyPair, PKCS_ECDSA_P256_SHA256, PKCS_RSA_SHA256,
-    RsaKeySize,
+    CertificateParams, DistinguishedName, DnType, KeyPair, RsaKeySize, PKCS_ECDSA_P256_SHA256,
+    PKCS_RSA_SHA256,
 };
 use sdkwork_deploy_core::{
-    CERTIFICATE_KEY_ALGORITHM_ECDSA, CERTIFICATE_KEY_ALGORITHM_RSA,
-    validate_certificate_key_algorithm,
+    validate_certificate_key_algorithm, CERTIFICATE_KEY_ALGORITHM_ECDSA,
+    CERTIFICATE_KEY_ALGORITHM_RSA,
 };
 use sdkwork_utils_rust::crypto::sha256_hash;
 use time::OffsetDateTime;
@@ -214,11 +214,11 @@ mod tests {
             .subject_alternative_name()
             .expect("SAN extension")
             .expect("SAN present");
-        assert!(
-            sans.value.general_names.iter().any(
-                |name| matches!(name, GeneralName::DNSName(value) if *value == "dev.localhost")
-            )
-        );
+        assert!(sans
+            .value
+            .general_names
+            .iter()
+            .any(|name| matches!(name, GeneralName::DNSName(value) if *value == "dev.localhost")));
 
         let evidence = certificate_evidence_from_pem(&material.cert_pem).expect("evidence");
         assert_eq!(material.not_before, evidence.not_before);

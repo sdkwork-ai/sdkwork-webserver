@@ -7,9 +7,9 @@
 //! the service's concern, not this layer's.
 
 use axum::{
-    Extension, Json,
     extract::{Path, State},
     response::Response,
+    Extension, Json,
 };
 use sdkwork_webserver_contract::{
     CreateTunnelMachineRouteRequest, SetTunnelMachineEnabledRequest, WebBackendRequestContext,
@@ -17,7 +17,7 @@ use sdkwork_webserver_contract::{
 
 use crate::auth::require_backend_context;
 use crate::routes::BackendState;
-use sdkwork_routes_webserver_common::{WebApiError, created_resource, no_content, ok_resource};
+use sdkwork_routes_webserver_common::{created_resource, no_content, ok_resource, WebApiError};
 
 pub(crate) async fn list_tunnel_machines(
     State(state): State<BackendState>,

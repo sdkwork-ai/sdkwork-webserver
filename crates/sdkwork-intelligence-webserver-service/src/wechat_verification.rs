@@ -23,15 +23,11 @@ pub(crate) const WECHAT_VERIFICATION_CONTENT_MAX: usize = 2048;
 fn normalize_file_name(value: &str) -> WebServiceResult<String> {
     let trimmed = value.trim();
     if trimmed.is_empty() || trimmed.len() > WECHAT_VERIFICATION_FILE_NAME_MAX {
-        return Err(WebServiceError::validation(
-            "file name must be 1..64 bytes",
-        ));
+        return Err(WebServiceError::validation("file name must be 1..64 bytes"));
     }
     let lowered = trimmed.to_ascii_lowercase();
     if !lowered.ends_with(".txt") {
-        return Err(WebServiceError::validation(
-            "file name must end with .txt",
-        ));
+        return Err(WebServiceError::validation("file name must end with .txt"));
     }
     // 微信历史上发放过带下划线与连字符的名字；语义上只要求"名字以 .txt
     // 结尾且不含路径分隔符"，逐字符白名单封住路径逃逸。
@@ -50,9 +46,7 @@ fn normalize_file_name(value: &str) -> WebServiceResult<String> {
 
 fn normalize_content(value: &str) -> WebServiceResult<String> {
     if value.is_empty() {
-        return Err(WebServiceError::validation(
-            "content must not be empty",
-        ));
+        return Err(WebServiceError::validation("content must not be empty"));
     }
     if value.len() > WECHAT_VERIFICATION_CONTENT_MAX {
         return Err(WebServiceError::validation(
@@ -84,14 +78,12 @@ impl WebService {
             .root_domain_wechat_verification(tenant_id, root_domain_id)
             .await?
         {
-            Some((file_name, content, updated_at)) => {
-                Ok(DomainWechatVerificationResponse {
-                    root_domain_id: root_domain_id.to_owned(),
-                    file_name: Some(file_name),
-                    content: Some(content),
-                    updated_at: Some(updated_at),
-                })
-            }
+            Some((file_name, content, updated_at)) => Ok(DomainWechatVerificationResponse {
+                root_domain_id: root_domain_id.to_owned(),
+                file_name: Some(file_name),
+                content: Some(content),
+                updated_at: Some(updated_at),
+            }),
             None => Ok(DomainWechatVerificationResponse {
                 root_domain_id: root_domain_id.to_owned(),
                 ..Default::default()

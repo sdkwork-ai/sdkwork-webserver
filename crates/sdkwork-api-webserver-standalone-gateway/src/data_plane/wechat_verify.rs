@@ -381,11 +381,14 @@ mod tests {
             );
         }
         // 大小写敏感：微信的名字不做大小写归一。
-        assert!(
-            serve_wechat_verification_file(&cached, "www.example.com", "/mp_verify_abc.txt", "GET")
-                .await
-                .is_none()
-        );
+        assert!(serve_wechat_verification_file(
+            &cached,
+            "www.example.com",
+            "/mp_verify_abc.txt",
+            "GET"
+        )
+        .await
+        .is_none());
     }
 
     #[tokio::test]
@@ -404,16 +407,14 @@ mod tests {
                 .expect("a write against a claimed file must be refused");
         assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
         // 同样的写动词落在没有文件的主机上则放行——那是宿主应用的资源。
-        assert!(
-            serve_wechat_verification_file(
-                &cached,
-                "other.example.com",
-                "/MP_verify_abc.txt",
-                "PUT"
-            )
-            .await
-            .is_none()
-        );
+        assert!(serve_wechat_verification_file(
+            &cached,
+            "other.example.com",
+            "/MP_verify_abc.txt",
+            "PUT"
+        )
+        .await
+        .is_none());
     }
 
     /// 缓存有界：超过上限的不同主机名不会让地图单调增长。

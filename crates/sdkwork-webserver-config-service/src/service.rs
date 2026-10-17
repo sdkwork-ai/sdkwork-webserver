@@ -401,7 +401,9 @@ impl WebserverConfigService {
                 .map_err(|error| WebserverConfigError::Io(error.to_string()))?;
             tokio::fs::rename(&temporary, &absolute)
                 .await
-                .map_err(|error| WebserverConfigError::Io(format!("atomic replace failed: {error}")))
+                .map_err(|error| {
+                    WebserverConfigError::Io(format!("atomic replace failed: {error}"))
+                })
         }
         .await;
         if written.is_err() {

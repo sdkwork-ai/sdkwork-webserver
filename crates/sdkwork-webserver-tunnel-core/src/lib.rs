@@ -24,10 +24,9 @@ pub mod session;
 pub mod verify;
 
 pub use config::{
-    parse_dns_server,
-    validate_endpoint_authority, TunnelUserConfig,
-    TunnelAgentConfig, TunnelAgentTlsConfig, TunnelConfig, TunnelGatewayConfig, TunnelLimitsConfig,
-    TunnelNetworkConfig, TunnelRouteTemplate, TunnelTimeoutConfig, DEFAULT_HEARTBEAT_INTERVAL_SECS,
+    parse_dns_server, validate_endpoint_authority, TunnelAgentConfig, TunnelAgentTlsConfig,
+    TunnelConfig, TunnelGatewayConfig, TunnelLimitsConfig, TunnelNetworkConfig,
+    TunnelRouteTemplate, TunnelTimeoutConfig, TunnelUserConfig, DEFAULT_HEARTBEAT_INTERVAL_SECS,
     DEFAULT_PROXY_BIND_ADDR, DEFAULT_TUNNEL_PORT,
 };
 pub use device::{validate_user_name, Device, DevicePlatform, MAX_USER_NAME_LEN};
@@ -43,9 +42,9 @@ pub use ids::{DeviceId, RouteId, SessionId, StreamId};
 pub use policy::{parse_allowed_ips, AuthPolicy, AuthScope, RoutePolicy};
 pub use proxy_protocol::ProxyProtocolVersion;
 pub use route::{
-    derived_route_id, namespaced_name,
-    local_target, local_udp_target, location_matches, parse_bandwidth_limit, public_url,
-    validate_location, RouteMatcher, TunnelProtocolKind, TunnelRoute, TunnelTarget,
+    derived_route_id, local_target, local_udp_target, location_matches, namespaced_name,
+    parse_bandwidth_limit, public_url, validate_location, RouteMatcher, TunnelProtocolKind,
+    TunnelRoute, TunnelTarget,
 };
 pub use session::{SessionSnapshot, SessionState, TunnelSession};
 pub use verify::{

@@ -270,7 +270,9 @@ mod tests {
         assert!(authenticator.authenticate(&device, "nope", None).is_err());
         // A shared token speaks for no user, so it may not claim one: accepting
         // the claim would let any machine spend another team's quota.
-        assert!(authenticator.authenticate(&device, "alpha", Some("team-a")).is_err());
+        assert!(authenticator
+            .authenticate(&device, "alpha", Some("team-a"))
+            .is_err());
     }
 
     /// Per-user credentials: the user comes from the token, never from the

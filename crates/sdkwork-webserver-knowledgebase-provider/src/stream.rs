@@ -70,7 +70,10 @@ impl WebsiteProviderContentStream for BoundedWikiContentStream {
             }
             None => {
                 self.source = None;
-                if self.expected.is_some_and(|expected| self.delivered != expected) {
+                if self
+                    .expected
+                    .is_some_and(|expected| self.delivered != expected)
+                {
                     return Err(WebsiteProviderError::new(
                         WebsiteProviderErrorKind::ContractMismatch,
                     ));

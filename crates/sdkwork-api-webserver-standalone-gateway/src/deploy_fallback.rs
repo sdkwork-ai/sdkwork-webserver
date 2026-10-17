@@ -228,7 +228,6 @@ fn remember_resolution(
     cache
 }
 
-
 /// Resolves unmatched hosts through the Deploy control plane and serves the
 /// resolved site with a dedicated website delivery executor. Built by the
 /// website data plane bootstrap when the app config declares an enabled
@@ -618,10 +617,7 @@ impl DeployFallbackResolver {
                 Some(compiled) => compiled,
                 None => {
                     let compiled = match self
-                        .compile_site_async(
-                            descriptor.clone(),
-                            Some(descriptor_sha256.clone()),
-                        )
+                        .compile_site_async(descriptor.clone(), Some(descriptor_sha256.clone()))
                         .await
                     {
                         Ok(compiled) => compiled,
@@ -699,7 +695,13 @@ impl DeployFallbackResolver {
         let node_uuid = self.runtime_registry_node_uuid();
         let environment = self.environment;
         tokio::task::spawn_blocking(move || {
-            compile_site_snapshot(generation, node_uuid, environment, descriptor_json, expected_sha256)
+            compile_site_snapshot(
+                generation,
+                node_uuid,
+                environment,
+                descriptor_json,
+                expected_sha256,
+            )
         })
         .await
         .map_err(|_| contract_error("app-domain fallback compile task failed"))?

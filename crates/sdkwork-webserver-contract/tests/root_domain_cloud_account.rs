@@ -103,8 +103,8 @@ fn the_account_id_shape_rule_bounds_and_filters_the_value() {
 fn the_partial_edit_tells_an_absent_binding_from_an_explicit_unbind() {
     // Absent: leave the stored binding alone. This is the reading every other
     // member of the request has, and it is the one that must not be lost.
-    let untouched: UpdateRootDomainRequest = serde_json::from_str(r#"{"displayName":"SDKWork"}"#)
-        .expect("descriptive edit parses");
+    let untouched: UpdateRootDomainRequest =
+        serde_json::from_str(r#"{"displayName":"SDKWork"}"#).expect("descriptive edit parses");
     assert_eq!(untouched.cloud_account_id, None);
 
     // Explicit null: unbind. The outer `Some` is "the caller named this member";

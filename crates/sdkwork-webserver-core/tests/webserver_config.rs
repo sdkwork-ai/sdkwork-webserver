@@ -350,11 +350,15 @@ fn default_request_body_limit_covers_a_base64_encoded_object_payload() {
         "default maxRequestBodyBytes {limit} must cover the base64 wire size {wire_bytes} of a legal 8 MiB object",
     );
     // 也不能顺手放开成无界：仍然要有明确上限，并且低于配置校验的硬顶。
-    assert!(limit <= 64 * 1024 * 1024, "default limit {limit} is unexpectedly large");
+    assert!(
+        limit <= 64 * 1024 * 1024,
+        "default limit {limit} is unexpectedly large"
+    );
 }
 
 #[test]
-fn resource_pressure_defaults_are_finite_and_compile() {    let directory = TempDir::new().expect("create temp directory");
+fn resource_pressure_defaults_are_finite_and_compile() {
+    let directory = TempDir::new().expect("create temp directory");
     let mut config = base_config();
     config["deployment"] = json!({"resourcePressure": {}});
     let path = write_config(directory.path(), &config);

@@ -406,7 +406,13 @@ async fn run_loop(
             endpoint: endpoint.authority(),
         });
         match connect_session(
-            &options, &endpoint, &state_tx, &state_rx, &mut reload, &stop, &events,
+            &options,
+            &endpoint,
+            &state_tx,
+            &state_rx,
+            &mut reload,
+            &stop,
+            &events,
         )
         .await
         {
@@ -645,10 +651,7 @@ async fn connect_session(
         Ok(resolved) => resolved,
         Err(error) => return SessionAttempt::failed(error),
     };
-    let connection = match transport
-        .connect(&connected_endpoint, &server_name)
-        .await
-    {
+    let connection = match transport.connect(&connected_endpoint, &server_name).await {
         Ok(connection) => connection,
         Err(error) => return SessionAttempt::failed(error.to_string()),
     };
@@ -843,8 +846,9 @@ async fn authenticate(
             // configured on two sides.
             heartbeat_reauth: required_scopes.is_some_and(|scopes| {
                 scopes.iter().any(|scope| {
-                    sdkwork_webserver_tunnel_core::AuthScope::parse(scope)
-                        .is_ok_and(|scope| scope == sdkwork_webserver_tunnel_core::AuthScope::Heartbeats)
+                    sdkwork_webserver_tunnel_core::AuthScope::parse(scope).is_ok_and(|scope| {
+                        scope == sdkwork_webserver_tunnel_core::AuthScope::Heartbeats
+                    })
                 })
             }),
         }),
@@ -1760,7 +1764,7 @@ async fn handle_data_stream(
                 metrics.record_stream_close();
                 return;
             }
-    };
+        };
     match copy_bidirectional(&mut local, &mut stream).await {
         Ok((inbound, outbound)) => {
             tracing::trace!(route = %route_id, inbound, outbound, "tunnel data relay finished");
@@ -2351,8 +2355,8 @@ mod tests {
     /// the same derivation the gateway uses when they are unset.
     #[test]
     fn transport_options_follow_the_configured_network_tunables() {
-        let base = |network: sdkwork_webserver_tunnel_core::TunnelNetworkConfig| {
-            AgentRuntimeOptions {
+        let base =
+            |network: sdkwork_webserver_tunnel_core::TunnelNetworkConfig| AgentRuntimeOptions {
                 endpoint: RemoteEndpoint::new("gw.sdkwork.link", 8443),
                 alternates: Vec::new(),
                 login_fail_exit: false,
@@ -2368,8 +2372,7 @@ mod tests {
                 network,
                 timeouts: TunnelConfig::disabled().timeout_or_default(),
                 metrics: Arc::new(TunnelMetrics::new()),
-            }
-        };
+            };
 
         // Derived: probe at half the heartbeat cadence, protocol default
         // stream ceiling.
@@ -2380,22 +2383,20 @@ mod tests {
         assert_eq!(derived.max_concurrent_bidi_streams, 512);
 
         // Configured: both knobs follow the file, and `0` disables probing.
-        let configured = transport_options(&base(
-            sdkwork_webserver_tunnel_core::TunnelNetworkConfig {
+        let configured =
+            transport_options(&base(sdkwork_webserver_tunnel_core::TunnelNetworkConfig {
                 keep_alive_interval_secs: Some(2),
                 max_concurrent_streams: Some(64),
                 ..sdkwork_webserver_tunnel_core::TunnelNetworkConfig::default()
-            },
-        ));
+            }));
         assert_eq!(configured.keep_alive_interval_ms, Some(2_000));
         assert_eq!(configured.max_concurrent_bidi_streams, 64);
 
-        let no_probe = transport_options(&base(
-            sdkwork_webserver_tunnel_core::TunnelNetworkConfig {
+        let no_probe =
+            transport_options(&base(sdkwork_webserver_tunnel_core::TunnelNetworkConfig {
                 keep_alive_interval_secs: Some(0),
                 ..sdkwork_webserver_tunnel_core::TunnelNetworkConfig::default()
-            },
-        ));
+            }));
         assert_eq!(no_probe.keep_alive_interval_ms, None);
     }
 

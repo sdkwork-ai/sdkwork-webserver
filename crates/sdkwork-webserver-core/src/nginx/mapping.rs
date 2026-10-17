@@ -3034,14 +3034,16 @@ impl<'a> Mapper<'a> {
                 "`auth_basic` requires `auth_basic_user_file`",
             ));
         };
-        let contents =
-            crate::fs_bounds::read_text_capped(Path::new(path), crate::fs_bounds::MAX_IMPORT_SOURCE_BYTES)
-                .map_err(|error| {
-                    NginxConfigError::unsupported(
-                        location,
-                        format!("cannot read auth_basic_user_file `{path}`: {error}"),
-                    )
-                })?;
+        let contents = crate::fs_bounds::read_text_capped(
+            Path::new(path),
+            crate::fs_bounds::MAX_IMPORT_SOURCE_BYTES,
+        )
+        .map_err(|error| {
+            NginxConfigError::unsupported(
+                location,
+                format!("cannot read auth_basic_user_file `{path}`: {error}"),
+            )
+        })?;
         let users = parse_htpasswd(&contents).map_err(|error| {
             NginxConfigError::unsupported(
                 location,

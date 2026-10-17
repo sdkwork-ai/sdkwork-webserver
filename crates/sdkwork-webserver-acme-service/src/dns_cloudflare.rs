@@ -10,10 +10,10 @@ use http::Method;
 use serde::Deserialize;
 
 use crate::dns::{
-    ACME_CHALLENGE_LABEL, Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest,
-    DnsAccountVerification, DnsProviderKind, DnsRecordChange, DnsZoneRecord,
+    Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest, DnsAccountVerification, DnsProviderKind,
+    DnsRecordChange, DnsZoneRecord, ACME_CHALLENGE_LABEL,
 };
-use crate::dns_http::{DnsApiClient, json_request};
+use crate::dns_http::{json_request, DnsApiClient};
 use crate::{AcmeServiceError, AcmeServiceResult};
 
 pub const CLOUDFLARE_DEFAULT_BASE_URL: &str = "https://api.cloudflare.com/client/v4";
@@ -289,7 +289,9 @@ impl CloudflareDns01Presenter {
         change: &DnsRecordChange,
     ) -> AcmeServiceResult<DnsZoneRecord> {
         let url = match record_ref {
-            Some(record_ref) => format!("{}/zones/{zone_id}/dns_records/{record_ref}", self.base_url),
+            Some(record_ref) => {
+                format!("{}/zones/{zone_id}/dns_records/{record_ref}", self.base_url)
+            }
             None => format!("{}/zones/{zone_id}/dns_records", self.base_url),
         };
         let http_request =
@@ -439,7 +441,8 @@ impl Dns01Presenter for CloudflareDns01Presenter {
         change: &DnsRecordChange,
     ) -> AcmeServiceResult<DnsZoneRecord> {
         let zone_id = self.resolve_zone_id(zone_apex).await?;
-        self.record_write(Method::POST, &zone_id, None, change).await
+        self.record_write(Method::POST, &zone_id, None, change)
+            .await
     }
 
     /// `PUT /zones/{id}/dns_records/{recordId}` — Cloudflare's replace-in-place
@@ -488,7 +491,7 @@ impl Dns01Presenter for CloudflareDns01Presenter {
     ) -> AcmeServiceResult<DnsZoneRecord> {
         Err(AcmeServiceError::provider(
             "Cloudflare does not support pausing individual records; delete the \
-             record to take the name out of resolution"
+             record to take the name out of resolution",
         ))
     }
 }
@@ -684,7 +687,7 @@ mod tests {
     use axum::http::StatusCode;
     use axum::routing::{delete, get, post};
     use axum::{Json, Router};
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
 
     #[derive(Default)]
     struct StubState {
@@ -874,13 +877,11 @@ mod tests {
         let base_url = spawn_stub(state.clone()).await;
         let presenter = presenter(base_url, Some("zone-1".to_string()));
 
-        assert!(
-            presenter
-                .verify_account("example.com")
-                .await
-                .expect("verified")
-                .is_verified()
-        );
+        assert!(presenter
+            .verify_account("example.com")
+            .await
+            .expect("verified")
+            .is_verified());
         assert_eq!(
             state.requests.lock().expect("lock").len(),
             1,
@@ -1025,7 +1026,7 @@ mod record_inventory_tests {
     use axum::response::{IntoResponse, Response};
     use axum::routing::get;
     use axum::{Json, Router};
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
 
     /// Two pages, driven by `result_info.total_pages` rather than the row
     /// count, so the walk must read the page metadata it claims to follow.
@@ -1108,7 +1109,7 @@ mod duplicate_publish_tests {
     use axum::response::{IntoResponse, Response};
     use axum::routing::post;
     use axum::{Json, Router};
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
 
     /// A create the provider answers with "already exists" resolves the record
     /// by an exact read and comes back as success — the trait's "publish for a
@@ -1223,7 +1224,9 @@ mod record_write_tests {
             .route("/zones/{zone}/dns_records", post(create_record))
             .route("/zones/{zone}/dns_records/{record}", delete(delete_record))
             .with_state(captured.clone());
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
         let address = listener.local_addr().expect("addr");
         tokio::spawn(async move {
             let _ = axum::serve(listener, app).await;
@@ -1236,8 +1239,8 @@ mod record_write_tests {
         )
         .expect("presenter");
 
-        let change = DnsRecordChange::new("A", "www", "203.0.113.9", None, None, None)
-            .expect("change");
+        let change =
+            DnsRecordChange::new("A", "www", "203.0.113.9", None, None, None).expect("change");
         let record = presenter
             .create_record("example.com", &change)
             .await
@@ -1258,7 +1261,10 @@ mod record_write_tests {
         assert_eq!(requests[0].2["name"], "www");
         assert_eq!(requests[0].2["type"], "A");
         assert_eq!(requests[0].2["content"], "203.0.113.9");
-        assert_eq!(requests[0].2["ttl"], 1, "a change without a TTL writes auto");
+        assert_eq!(
+            requests[0].2["ttl"], 1,
+            "a change without a TTL writes auto"
+        );
         assert_eq!(requests[1].0, "DELETE");
     }
 }

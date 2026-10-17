@@ -3,34 +3,34 @@
 use async_trait::async_trait;
 use chrono::{Datelike, Duration, NaiveDate, Utc};
 use sdkwork_webserver_contract::{
-    ClusterEventPage, ClusterHeartbeatSamplePage, ClusterHostPage, ClusterHostResponse,
-    ClusterInstancePage, ClusterInstanceResponse, ClusterOverviewResponse, ClusterPage,
-    ClusterResponse, ClusterSyncManifest, CreateApplicationRequest, CreateClusterRequest,
+    cloud_account_id_shape_error, web_is_platform_operator_tenant, ClusterEventPage,
+    ClusterHeartbeatSamplePage, ClusterHostPage, ClusterHostResponse, ClusterInstancePage,
+    ClusterInstanceResponse, ClusterOverviewResponse, ClusterPage, ClusterResponse,
+    ClusterSyncManifest, CreateApplicationRequest, CreateClusterRequest,
     CreateDomainDnsRecordRequest, CreateDomainRequest, CreateListenerCertificateBindingRequest,
     CreateManagedDomainRequest, CreateNginxConfigRequest, CreateRootDomainHostnameRequest,
     CreateRootDomainRequest, CreateServerRequest, CreateSourceVersionRequest,
-    DEFAULT_TRAFFIC_USAGE_TOP_APPS, DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS,
-    DomainDnsRecordStatusRequest, EnqueueClusterPeerMessagesRequest,
-    EnqueueClusterPeerMessagesResponse, ImportGitSourceVersionRequest, IssueCertificateRequest,
-    ListApplicationsQuery, ListDomainDnsRecordsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
-    MAX_TRAFFIC_USAGE_TOP_APPS, MAX_TRAFFIC_USAGE_WINDOW_DAYS, METRICS_ENTITY_TENANTS,
-    METRICS_LAST_SEVEN_DAYS_SPAN, METRICS_WINDOW_CURRENT_MONTH, METRICS_WINDOW_LAST_7_DAYS,
-    METRICS_WINDOW_LIFETIME, METRICS_WINDOW_TODAY, METRICS_WINDOWS, MetricsSeriesWindow,
+    CreateTunnelMachineRouteRequest, DomainDnsRecordStatusRequest,
+    EnqueueClusterPeerMessagesRequest, EnqueueClusterPeerMessagesResponse,
+    ImportGitSourceVersionRequest, IssueCertificateRequest, ListApplicationsQuery,
+    ListDomainDnsRecordsQuery, ListNginxConfigsQuery, ListRootDomainsQuery, MetricsSeriesWindow,
     MetricsSummaryQuery, MetricsSummaryResponse, MetricsWindowBounds, MetricsWindowRequest,
-    CreateTunnelMachineRouteRequest, SetTunnelMachineEnabledRequest, TrafficUsageStatisticsQuery,
-    TrafficUsageStatisticsResponse, TrafficUsageWindow, TunnelMachineListResponse,
-    TunnelMachineResponse, TunnelMachineRouteDeclarationResponse,
-    UpdateApplicationRequest, UpdateCertificateRequest, UpdateClusterHostRequest,
-    UpdateClusterInstanceRequest, UpdateClusterRequest, UpdateDomainApplicationBindingRequest,
-    UpdateDomainDnsRecordRequest, UpdateNginxConfigRequest, UpdateRootDomainRequest, WebAppApi,
-    WebAppRequestContext, WebAppResourceScope, WebBackendApi, WebBackendRequestContext,
-    WebServiceError, WebServiceResult, cloud_account_id_shape_error,
-    web_is_platform_operator_tenant,
+    SetTunnelMachineEnabledRequest, TrafficUsageStatisticsQuery, TrafficUsageStatisticsResponse,
+    TrafficUsageWindow, TunnelMachineListResponse, TunnelMachineResponse,
+    TunnelMachineRouteDeclarationResponse, UpdateApplicationRequest, UpdateCertificateRequest,
+    UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest,
+    UpdateDomainApplicationBindingRequest, UpdateDomainDnsRecordRequest, UpdateNginxConfigRequest,
+    UpdateRootDomainRequest, WebAppApi, WebAppRequestContext, WebAppResourceScope, WebBackendApi,
+    WebBackendRequestContext, WebServiceError, WebServiceResult, DEFAULT_TRAFFIC_USAGE_TOP_APPS,
+    DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS, MAX_TRAFFIC_USAGE_TOP_APPS, MAX_TRAFFIC_USAGE_WINDOW_DAYS,
+    METRICS_ENTITY_TENANTS, METRICS_LAST_SEVEN_DAYS_SPAN, METRICS_WINDOWS,
+    METRICS_WINDOW_CURRENT_MONTH, METRICS_WINDOW_LAST_7_DAYS, METRICS_WINDOW_LIFETIME,
+    METRICS_WINDOW_TODAY,
 };
 
 use crate::repository::{
-    DnsRecordSnapshotRow, DomainDnsRecordFilter, DomainDnsRecordUpsert, DomainDnsSnapshotWrite,
-    RootDomainDnsSyncTarget, domain_asset_for_record,
+    domain_asset_for_record, DnsRecordSnapshotRow, DomainDnsRecordFilter, DomainDnsRecordUpsert,
+    DomainDnsSnapshotWrite, RootDomainDnsSyncTarget,
 };
 use crate::{AuditLogWrite, WebService};
 use sdkwork_webserver_acme_service::DnsRecordChange;
@@ -63,12 +63,13 @@ fn normalize_dns_record_change(
             WebServiceError::validation("ttlSeconds must be a positive number of seconds")
         })?),
     };
-    let priority = match request.priority() {
-        None => None,
-        Some(value) => Some(u32::try_from(value).map_err(|_| {
-            WebServiceError::validation("priority must be a non-negative number")
-        })?),
-    };
+    let priority =
+        match request.priority() {
+            None => None,
+            Some(value) => Some(u32::try_from(value).map_err(|_| {
+                WebServiceError::validation("priority must be a non-negative number")
+            })?),
+        };
     DnsRecordChange::new(
         request.record_type(),
         owner,
@@ -135,9 +136,7 @@ impl DnsRecordChangeFields for UpdateDomainDnsRecordRequest {
 
 /// The provider family a write was answered by, read off the issuer's own
 /// configured registry rather than restated by the caller.
-fn issuer_provider_name(
-    issuer: &sdkwork_webserver_acme_service::CertificateIssuer,
-) -> String {
+fn issuer_provider_name(issuer: &sdkwork_webserver_acme_service::CertificateIssuer) -> String {
     issuer
         .dns_accounts()
         .first()
@@ -159,9 +158,7 @@ fn issuer_account_id(
             issuer
                 .dns_accounts()
                 .iter()
-                .find(|account| {
-                    account.zone_apex.eq_ignore_ascii_case(&target.hostname)
-                })
+                .find(|account| account.zone_apex.eq_ignore_ascii_case(&target.hostname))
                 .map(|account| account.account_id.clone())
         })
         .unwrap_or_else(|| "resolved".to_owned())
@@ -707,11 +704,7 @@ impl WebBackendApi for WebService {
         let change = normalize_dns_record_change(request, &target.hostname)?;
         let record = self
             .certificate_issuer
-            .create_dns_record(
-                target.cloud_account_id.as_deref(),
-                &target.hostname,
-                change,
-            )
+            .create_dns_record(target.cloud_account_id.as_deref(), &target.hostname, change)
             .await
             .map_err(map_dns_sync_error)?;
         let hostname_assets = self
@@ -2489,17 +2482,18 @@ fn parse_traffic_usage_date(field: &str, value: &str) -> WebServiceResult<NaiveD
 #[cfg(test)]
 mod tests {
     use super::{
-        MAX_NGINX_CONFIG_BYTES, WebService, require_traffic_usage_platform_operator,
-        resolve_traffic_usage_window, validate_create_nginx_config_request,
-        validate_create_server_request, validate_tenant_scope_hash,
-        validate_update_nginx_config_request,
+        require_traffic_usage_platform_operator, resolve_traffic_usage_window,
+        validate_create_nginx_config_request, validate_create_server_request,
+        validate_tenant_scope_hash, validate_update_nginx_config_request, WebService,
+        MAX_NGINX_CONFIG_BYTES,
     };
     use chrono::{Duration, Utc};
     use sdkwork_webserver_contract::{
-        CreateNginxConfigRequest, CreateServerRequest, DEFAULT_TRAFFIC_USAGE_TOP_APPS,
+        web_platform_operator_tenant_id, CreateNginxConfigRequest, CreateServerRequest,
+        TrafficUsageStatisticsQuery, UpdateNginxConfigRequest, WebAppResourceScope,
+        WebBackendRequestContext, DEFAULT_TRAFFIC_USAGE_TOP_APPS,
         DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS, MAX_TRAFFIC_USAGE_TOP_APPS,
-        MAX_TRAFFIC_USAGE_WINDOW_DAYS, TrafficUsageStatisticsQuery, UpdateNginxConfigRequest,
-        WebAppResourceScope, WebBackendRequestContext, web_platform_operator_tenant_id,
+        MAX_TRAFFIC_USAGE_WINDOW_DAYS,
     };
 
     fn traffic_usage_query(
@@ -2584,15 +2578,13 @@ mod tests {
             MAX_TRAFFIC_USAGE_WINDOW_DAYS
         );
 
-        assert!(
-            resolve_traffic_usage_window(&traffic_usage_query(
-                Some("2026-01-01"),
-                Some("2027-01-03"),
-                None,
-                None,
-            ))
-            .is_err()
-        );
+        assert!(resolve_traffic_usage_window(&traffic_usage_query(
+            Some("2026-01-01"),
+            Some("2027-01-03"),
+            None,
+            None,
+        ))
+        .is_err());
     }
 
     #[test]

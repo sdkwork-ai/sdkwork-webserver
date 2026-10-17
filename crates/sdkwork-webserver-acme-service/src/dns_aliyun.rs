@@ -17,11 +17,11 @@ use serde::Deserialize;
 use sha1::Sha1;
 
 use crate::dns::{
-    ACME_CHALLENGE_LABEL, Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest,
-    DnsAccountVerification, DnsProviderKind, DnsRecordChange, DnsZoneRecord, absolute_record_name,
-    normalize_dns_name,
+    absolute_record_name, normalize_dns_name, Dns01Presenter, Dns01RecordHandle,
+    Dns01RecordRequest, DnsAccountVerification, DnsProviderKind, DnsRecordChange, DnsZoneRecord,
+    ACME_CHALLENGE_LABEL,
 };
-use crate::dns_http::{DnsApiClient, json_request};
+use crate::dns_http::{json_request, DnsApiClient};
 use crate::{AcmeServiceError, AcmeServiceResult};
 
 pub const ALIYUN_DEFAULT_BASE_URL: &str = "https://alidns.aliyuncs.com";
@@ -366,15 +366,16 @@ impl AliyunDns01Presenter {
             params.push(("Line", line));
         }
         let body = self
-            .call(action, &params, &aliyun_timestamp(), &aliyun_signature_nonce())
+            .call(
+                action,
+                &params,
+                &aliyun_timestamp(),
+                &aliyun_signature_nonce(),
+            )
             .await?;
-        body.record_id
-            .filter(|id| !id.is_empty())
-            .ok_or_else(|| {
-                AcmeServiceError::provider(format!(
-                    "Aliyun accepted {action} without a RecordId"
-                ))
-            })
+        body.record_id.filter(|id| !id.is_empty()).ok_or_else(|| {
+            AcmeServiceError::provider(format!("Aliyun accepted {action} without a RecordId"))
+        })
     }
 
     /// The snapshot row a completed write produces: the owner joined onto the
@@ -730,7 +731,7 @@ mod tests {
     use axum::extract::{Query, State};
     use axum::routing::get;
     use axum::{Json, Router};
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
 
     #[derive(Default)]
     struct StubState {
@@ -931,13 +932,11 @@ mod tests {
         let base_url = spawn_stub(state.clone()).await;
         let presenter = presenter(base_url);
 
-        assert!(
-            presenter
-                .verify_account("example.com")
-                .await
-                .expect("verified")
-                .is_verified()
-        );
+        assert!(presenter
+            .verify_account("example.com")
+            .await
+            .expect("verified")
+            .is_verified());
         let requests = state.requests.lock().expect("lock");
         assert_eq!(requests.len(), 1);
         assert!(
@@ -1078,7 +1077,7 @@ mod record_inventory_tests {
     use axum::extract::{Query, State};
     use axum::routing::get;
     use axum::{Json, Router};
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
 
     /// Answers two full pages then a short one, so the inventory walk has to
     /// follow its pagination instead of stopping at the first page.
@@ -1176,11 +1175,9 @@ mod record_inventory_tests {
         assert_eq!(first_page_row.ttl_seconds, Some(600));
         assert_eq!(first_page_row.record_line.as_deref(), Some("default"));
         assert_eq!(first_page_row.provider_record_ref.as_deref(), Some("rec-0"));
-        assert!(
-            !records
-                .iter()
-                .any(|record| record.record_name.contains("broken"))
-        );
+        assert!(!records
+            .iter()
+            .any(|record| record.record_name.contains("broken")));
     }
 }
 
@@ -1275,8 +1272,12 @@ mod record_write_tests {
         }
 
         let captured: Arc<Mutex<Vec<HashMap<String, String>>>> = Arc::new(Mutex::new(Vec::new()));
-        let app = Router::new().route("/", get(handler)).with_state(captured.clone());
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let app = Router::new()
+            .route("/", get(handler))
+            .with_state(captured.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
         let address = listener.local_addr().expect("addr");
         tokio::spawn(async move {
             let _ = axum::serve(listener, app).await;
@@ -1289,8 +1290,15 @@ mod record_write_tests {
         )
         .expect("presenter");
 
-        let change = DnsRecordChange::new("MX", "@", "mail.example.com", Some(600), Some(10), Some("default"))
-            .expect("change");
+        let change = DnsRecordChange::new(
+            "MX",
+            "@",
+            "mail.example.com",
+            Some(600),
+            Some(10),
+            Some("default"),
+        )
+        .expect("change");
         let record = presenter
             .create_record("example.com", &change)
             .await
@@ -1305,7 +1313,10 @@ mod record_write_tests {
         );
         assert_eq!(requests[0].get("RR").map(String::as_str), Some("@"));
         assert_eq!(requests[0].get("Type").map(String::as_str), Some("MX"));
-        assert_eq!(requests[0].get("Value").map(String::as_str), Some("mail.example.com"));
+        assert_eq!(
+            requests[0].get("Value").map(String::as_str),
+            Some("mail.example.com")
+        );
         assert_eq!(requests[0].get("TTL").map(String::as_str), Some("600"));
         assert_eq!(requests[0].get("Priority").map(String::as_str), Some("10"));
         assert_eq!(requests[0].get("Line").map(String::as_str), Some("default"));
@@ -1322,8 +1333,12 @@ mod record_write_tests {
         }
 
         let captured: Arc<Mutex<Vec<HashMap<String, String>>>> = Arc::new(Mutex::new(Vec::new()));
-        let app = Router::new().route("/", get(handler)).with_state(captured.clone());
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let app = Router::new()
+            .route("/", get(handler))
+            .with_state(captured.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
         let address = listener.local_addr().expect("addr");
         tokio::spawn(async move {
             let _ = axum::serve(listener, app).await;
@@ -1349,7 +1364,13 @@ mod record_write_tests {
             requests[0].get("Action").map(String::as_str),
             Some("SetDomainRecordStatus")
         );
-        assert_eq!(requests[0].get("Status").map(String::as_str), Some("Disable"));
-        assert_eq!(requests[1].get("Status").map(String::as_str), Some("Enable"));
+        assert_eq!(
+            requests[0].get("Status").map(String::as_str),
+            Some("Disable")
+        );
+        assert_eq!(
+            requests[1].get("Status").map(String::as_str),
+            Some("Enable")
+        );
     }
 }

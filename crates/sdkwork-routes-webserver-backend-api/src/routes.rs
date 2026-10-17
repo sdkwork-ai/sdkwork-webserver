@@ -1,21 +1,19 @@
 use axum::{
-    Extension, Json, Router,
     extract::{Path, Query, State},
     response::Response,
     routing::{get, post},
+    Extension, Json, Router,
 };
 use sdkwork_webserver_contract::{
-    CreateApplicationRequest, CreateDomainRequest, CreateListenerCertificateBindingRequest,
-    CreateManagedDomainRequest, CreateNginxConfigRequest, CreateRootDomainHostnameRequest,
-    CreateDomainDnsRecordRequest, CreateRootDomainRequest, CreateServerRequest,
-    CreateSourceVersionRequest, DomainDnsRecordStatusRequest,
-    ImportGitSourceVersionRequest, IssueCertificateRequest, ListApplicationsQuery,
-    ListAuditLogsQuery, ListDomainDnsRecordsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
-    RevokeCertificateRequest, UpdateApplicationRequest, UpdateCertificateRequest,
-    UpdateDomainApplicationBindingRequest, UpdateDomainDnsRecordRequest, UpdateNginxConfigRequest,
-    UpdateRootDomainRequest,
-    WebBackendApi, WebBackendRequestContext,
-    UpsertDomainWechatVerificationRequest,
+    CreateApplicationRequest, CreateDomainDnsRecordRequest, CreateDomainRequest,
+    CreateListenerCertificateBindingRequest, CreateManagedDomainRequest, CreateNginxConfigRequest,
+    CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
+    CreateSourceVersionRequest, DomainDnsRecordStatusRequest, ImportGitSourceVersionRequest,
+    IssueCertificateRequest, ListApplicationsQuery, ListAuditLogsQuery, ListDomainDnsRecordsQuery,
+    ListNginxConfigsQuery, ListRootDomainsQuery, RevokeCertificateRequest,
+    UpdateApplicationRequest, UpdateCertificateRequest, UpdateDomainApplicationBindingRequest,
+    UpdateDomainDnsRecordRequest, UpdateNginxConfigRequest, UpdateRootDomainRequest,
+    UpsertDomainWechatVerificationRequest, WebBackendApi, WebBackendRequestContext,
 };
 use serde::Deserialize;
 use std::sync::Arc;
@@ -25,11 +23,11 @@ use crate::{
     traffic_usage_routes, tunnel_machine_routes,
 };
 use sdkwork_routes_webserver_common::{
-    WebApiError, accepted_async, created_resource, no_content, ok_application_page,
-    ok_audit_log_page, ok_certificate_distribution_page, ok_certificate_page, ok_deployment_page,
-    ok_dns_account_page, ok_domain_dns_record_page, ok_domain_page,
-    ok_listener_certificate_binding_page, ok_nginx_config_page, ok_resource, ok_root_domain_page,
-    ok_server_page, ok_source_version_page, validate_pagination_query,
+    accepted_async, created_resource, no_content, ok_application_page, ok_audit_log_page,
+    ok_certificate_distribution_page, ok_certificate_page, ok_deployment_page, ok_dns_account_page,
+    ok_domain_dns_record_page, ok_domain_page, ok_listener_certificate_binding_page,
+    ok_nginx_config_page, ok_resource, ok_root_domain_page, ok_server_page, ok_source_version_page,
+    validate_pagination_query, WebApiError,
 };
 
 /// Router state shared by every handler of this surface.

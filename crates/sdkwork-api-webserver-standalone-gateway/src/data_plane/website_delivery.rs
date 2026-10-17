@@ -302,7 +302,9 @@ fn classify_client(
     // One lowercase and one parser pass serve every classification below;
     // the second half of this function used to recompute both per request.
     let ua_lower = user_agent.as_ref().map(|value| value.to_ascii_lowercase());
-    let ua_parsed = user_agent.as_ref().and_then(|value| Parser::new().parse(value));
+    let ua_parsed = user_agent
+        .as_ref()
+        .and_then(|value| Parser::new().parse(value));
     if let Some(lower) = &ua_lower {
         let parsed = ua_parsed.as_ref();
         if parsed.is_some_and(|value| value.category == "crawler")
@@ -355,7 +357,10 @@ fn classify_client(
         ));
     }
     // Shared Adaptive Web mobile UA regex (SDKWORK_DEPLOY_SPEC.md §8).
-    if user_agent.as_deref().is_some_and(matches_adaptive_mobile_user_agent) {
+    if user_agent
+        .as_deref()
+        .is_some_and(matches_adaptive_mobile_user_agent)
+    {
         return Ok((
             Some(WebsiteClientClass::Mobile),
             Some(WebsiteClientClassificationSource::UserAgent),

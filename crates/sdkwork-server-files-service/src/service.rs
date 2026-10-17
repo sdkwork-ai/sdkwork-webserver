@@ -3,7 +3,6 @@
 
 use std::path::{Path, PathBuf};
 
-
 use super::operations::{operations_for, ProjectClassification};
 use super::path_security::{
     display_path, is_sensitive_file_name, resolve_contained_path, validate_allowed_root,
@@ -302,9 +301,7 @@ impl ServerFilesService {
                     }
                     Ok(bytes)
                 }
-                super::contained_io::ContainedTarget::Directory(_) => {
-                    Err(ReadFileError::NotAFile)
-                }
+                super::contained_io::ContainedTarget::Directory(_) => Err(ReadFileError::NotAFile),
             }
         })
         .await

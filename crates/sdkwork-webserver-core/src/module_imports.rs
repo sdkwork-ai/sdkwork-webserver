@@ -702,9 +702,7 @@ fn probe_upstream_target(url: &str) -> bool {
     if spawn.is_err() {
         return false;
     }
-    receiver
-        .recv_timeout(PROBE_TOTAL_DEADLINE)
-        .unwrap_or(false)
+    receiver.recv_timeout(PROBE_TOTAL_DEADLINE).unwrap_or(false)
 }
 
 fn probe_authority(url: &str) -> Option<String> {

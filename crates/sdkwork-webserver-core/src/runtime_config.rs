@@ -253,11 +253,9 @@ fn module_import_id_from_nginx_sidecar(path: &Path) -> Result<String, String> {
 }
 
 fn expand_import_aggregator_conf(aggregator: &Path) -> Result<Vec<WebserverImportEntry>, String> {
-    let text = crate::fs_bounds::read_text_capped(
-        aggregator,
-        crate::fs_bounds::MAX_IMPORT_SOURCE_BYTES,
-    )
-    .map_err(|error| format!("read import aggregator {}: {error}", aggregator.display()))?;
+    let text =
+        crate::fs_bounds::read_text_capped(aggregator, crate::fs_bounds::MAX_IMPORT_SOURCE_BYTES)
+            .map_err(|error| format!("read import aggregator {}: {error}", aggregator.display()))?;
     let parsed = parse_nginx_config(&text, aggregator)
         .map_err(|error| format!("parse import aggregator {}: {error}", aggregator.display()))?;
     let base = aggregator.parent().unwrap_or_else(|| Path::new("/"));

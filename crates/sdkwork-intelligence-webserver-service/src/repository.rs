@@ -14,9 +14,9 @@ use sdkwork_webserver_contract::{
     CreateManagedDomainRequest, CreateNginxConfigRequest, CreatePlatformTargetRequest,
     CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
     CreateServerResponse, CreateSourceVersionRequest, DeploymentPage, DeploymentResponse,
-    DomainDnsRecordPage, DomainDnsRecordResponse, DomainPage, DomainResponse, EnvVariablePage, EnvVariableResponse,
-    HealthCheckPage, HealthCheckResponse, IssueCertificateRequest, ListApplicationsQuery,
-    ListAuditLogsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
+    DomainDnsRecordPage, DomainDnsRecordResponse, DomainPage, DomainResponse, EnvVariablePage,
+    EnvVariableResponse, HealthCheckPage, HealthCheckResponse, IssueCertificateRequest,
+    ListApplicationsQuery, ListAuditLogsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
     ListenerCertificateBindingPage, ListenerCertificateBindingResponse, NginxConfigPage,
     NginxConfigResponse, NginxStatusResponse, PlatformTargetPage, PlatformTargetResponse,
     RevokeCertificateRequest, RootDomainPage, RootDomainResponse, RuntimeAssignment,
@@ -1512,7 +1512,7 @@ pub trait WebRepositoryPort: Send + Sync {
     async fn expire_cluster_peer_messages(&self, now: &str, limit: i32) -> WebServiceResult<u64>;
 
     async fn purge_cluster_heartbeats(&self, older_than: &str, limit: i32)
-    -> WebServiceResult<u64>;
+        -> WebServiceResult<u64>;
 }
 
 #[cfg(test)]

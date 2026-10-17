@@ -232,8 +232,7 @@ fn canonicalize_or_ancestor(path: &Path) -> std::io::Result<PathBuf> {
 pub fn is_sensitive_file_name(file_name: &str) -> bool {
     let name = file_name.to_ascii_lowercase();
     let sensitive_extensions = [
-        "pem", "key", "p12", "pfx", "ppk", "kdbx", "keystore", "jks", "gpg",
-        "tfvars",
+        "pem", "key", "p12", "pfx", "ppk", "kdbx", "keystore", "jks", "gpg", "tfvars",
     ];
     let sensitive_names = [
         "id_rsa",

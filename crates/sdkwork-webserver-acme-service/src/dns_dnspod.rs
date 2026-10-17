@@ -11,11 +11,11 @@ use http::Method;
 use serde::Deserialize;
 
 use crate::dns::{
-    ACME_CHALLENGE_LABEL, Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest,
-    DnsAccountVerification, DnsProviderKind, DnsRecordChange, DnsZoneRecord, absolute_record_name,
-    normalize_dns_name,
+    absolute_record_name, normalize_dns_name, Dns01Presenter, Dns01RecordHandle,
+    Dns01RecordRequest, DnsAccountVerification, DnsProviderKind, DnsRecordChange, DnsZoneRecord,
+    ACME_CHALLENGE_LABEL,
 };
-use crate::dns_http::{DnsApiClient, form_request};
+use crate::dns_http::{form_request, DnsApiClient};
 use crate::{AcmeServiceError, AcmeServiceResult};
 
 pub const DNSPOD_DEFAULT_BASE_URL: &str = "https://dnsapi.cn";
@@ -265,9 +265,7 @@ impl DnspodDns01Presenter {
             .map(|record| record.id)
             .filter(|id| !id.is_empty())
             .ok_or_else(|| {
-                AcmeServiceError::provider(format!(
-                    "DNSPod accepted {action} without a record id"
-                ))
+                AcmeServiceError::provider(format!("DNSPod accepted {action} without a record id"))
             })
     }
 
@@ -609,7 +607,7 @@ mod tests {
     use axum::extract::State;
     use axum::routing::post;
     use axum::{Form, Json, Router};
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
 
     /// One captured call: the action name and the form fields it carried.
     type CapturedCall = (String, Vec<(String, String)>);
@@ -843,13 +841,11 @@ mod tests {
         let base_url = spawn_stub(state.clone()).await;
         let presenter = presenter(base_url);
 
-        assert!(
-            presenter
-                .verify_account("example.com")
-                .await
-                .expect("verified")
-                .is_verified()
-        );
+        assert!(presenter
+            .verify_account("example.com")
+            .await
+            .expect("verified")
+            .is_verified());
         assert_eq!(state.requests.lock().expect("lock").len(), 1);
     }
 
@@ -915,7 +911,7 @@ mod record_inventory_tests {
     use axum::extract::State;
     use axum::routing::post;
     use axum::{Form, Json, Router};
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
 
     /// Answers one page of mixed rows and verifies the inventory carries the
     /// provider's own spellings with the owner rebuilt against the zone.
@@ -999,7 +995,7 @@ mod duplicate_publish_tests {
     use super::*;
     use axum::routing::post;
     use axum::{Json, Router};
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
 
     /// The vendor's duplicate refusal followed by an exact read must come back
     /// as success carrying the existing record's id. A row whose value differs
@@ -1094,7 +1090,9 @@ mod record_write_tests {
             .route("/Record.Create", post(record_create))
             .route("/Record.Status", post(record_status))
             .with_state(captured.clone());
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
         let address = listener.local_addr().expect("addr");
         tokio::spawn(async move {
             let _ = axum::serve(listener, app).await;
@@ -1133,14 +1131,20 @@ mod record_write_tests {
         assert_eq!(get(create_fields, "domain").as_deref(), Some("example.com"));
         assert_eq!(get(create_fields, "sub_domain").as_deref(), Some("@"));
         assert_eq!(get(create_fields, "record_type").as_deref(), Some("MX"));
-        assert_eq!(get(create_fields, "value").as_deref(), Some("mail.example.com"));
+        assert_eq!(
+            get(create_fields, "value").as_deref(),
+            Some("mail.example.com")
+        );
         assert_eq!(get(create_fields, "ttl").as_deref(), Some("600"));
         assert_eq!(get(create_fields, "record_line_id").as_deref(), Some("0"));
         assert_eq!(get(create_fields, "mx").as_deref(), Some("10"));
 
         let (status_action, status_fields) = &requests[1];
         assert_eq!(status_action, "Record.Status");
-        assert_eq!(get(status_fields, "record_id").as_deref(), Some("dnspod-new-1"));
+        assert_eq!(
+            get(status_fields, "record_id").as_deref(),
+            Some("dnspod-new-1")
+        );
         assert_eq!(get(status_fields, "status").as_deref(), Some("disable"));
     }
 }

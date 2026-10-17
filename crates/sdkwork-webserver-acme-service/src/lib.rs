@@ -25,11 +25,11 @@ mod self_signed;
 
 pub use account_store::{AcmeAccountStore, EncryptedFileAcmeAccountStore, MemoryAcmeAccountStore};
 pub use ari::AriRenewalWindow;
-pub use caa::{AcmeDirectoryProfile, acme_directory_profile};
+pub use caa::{acme_directory_profile, AcmeDirectoryProfile};
 pub use challenge_policy::{
-    CHALLENGE_METHOD_AUTO, CHALLENGE_METHOD_DNS_01, CHALLENGE_METHOD_HTTP_01,
-    ChallengeAvailability, DeclaredChallengeMethod, ResolvedChallenge,
-    contains_wildcard_identifier, resolve_challenge_method,
+    contains_wildcard_identifier, resolve_challenge_method, ChallengeAvailability,
+    DeclaredChallengeMethod, ResolvedChallenge, CHALLENGE_METHOD_AUTO, CHALLENGE_METHOD_DNS_01,
+    CHALLENGE_METHOD_HTTP_01,
 };
 pub use challenge_store::ChallengeStore;
 pub use config::{
@@ -37,20 +37,20 @@ pub use config::{
     MIN_ACME_OPERATION_TIMEOUT_MS,
 };
 pub use dns::{
-    ACME_CHALLENGE_LABEL, Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest,
-    DnsAccountVerification, DnsProviderKind, DnsRecordChange, DnsZoneInventory, DnsZoneRecord,
-    InMemoryDns01Presenter, ManualDns01Presenter, MANAGED_RECORD_TYPES, absolute_record_name,
-    dns_relative_record_name, dns01_record_name, dns01_txt_value, normalize_dns_name,
-    normalize_record_owner,
+    absolute_record_name, dns01_record_name, dns01_txt_value, dns_relative_record_name,
+    normalize_dns_name, normalize_record_owner, Dns01Presenter, Dns01RecordHandle,
+    Dns01RecordRequest, DnsAccountVerification, DnsProviderKind, DnsRecordChange, DnsZoneInventory,
+    DnsZoneRecord, InMemoryDns01Presenter, ManualDns01Presenter, ACME_CHALLENGE_LABEL,
+    MANAGED_RECORD_TYPES,
 };
 pub use dns_account::{
-    DispatchingDns01Presenter, DnsAccountDescriptor, DnsAccountVerificationReport, DnsCloudAccount,
-    DnsCloudAccountConfig, DnsCloudAccountRegistry, MAX_DNS_ACCOUNTS_FILE_BYTES,
-    load_dns_account_configs,
+    load_dns_account_configs, DispatchingDns01Presenter, DnsAccountDescriptor,
+    DnsAccountVerificationReport, DnsCloudAccount, DnsCloudAccountConfig, DnsCloudAccountRegistry,
+    MAX_DNS_ACCOUNTS_FILE_BYTES,
 };
-pub use dns_aliyun::{ALIYUN_DEFAULT_BASE_URL, AliyunDns01Presenter};
-pub use dns_cloudflare::{CLOUDFLARE_DEFAULT_BASE_URL, CloudflareDns01Presenter};
-pub use dns_dnspod::{DNSPOD_DEFAULT_BASE_URL, DnspodDns01Presenter};
+pub use dns_aliyun::{AliyunDns01Presenter, ALIYUN_DEFAULT_BASE_URL};
+pub use dns_cloudflare::{CloudflareDns01Presenter, CLOUDFLARE_DEFAULT_BASE_URL};
+pub use dns_dnspod::{DnspodDns01Presenter, DNSPOD_DEFAULT_BASE_URL};
 pub use dns_http::DnsApiClient;
 pub use dns_http_request::{HttpRequestDns01Presenter, MAX_HTTP_REQUEST_CONFIG_BYTES};
 pub use dns_zone::{DnsZoneResolver, SingleZoneResolver};

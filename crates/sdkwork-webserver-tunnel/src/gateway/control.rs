@@ -19,8 +19,8 @@ use sdkwork_webserver_tunnel_core::{
     TunnelTarget,
 };
 use sdkwork_webserver_tunnel_protocol::{
-    frame, AuthResult, Authenticate, ControlMessage, ErrorCode, ErrorMessage, Hello, ProtocolVersion,
-    RegisterRoute, RegisterRouteResult, UnregisterRouteResult,
+    frame, AuthResult, Authenticate, ControlMessage, ErrorCode, ErrorMessage, Hello,
+    ProtocolVersion, RegisterRoute, RegisterRouteResult, UnregisterRouteResult,
 };
 use sdkwork_webserver_tunnel_transport::{TunnelConnection, TunnelStream};
 
@@ -89,7 +89,12 @@ fn check_user_device_quota(
         .iter()
         .filter(|record| record.device.user.as_deref() == Some(user))
         .filter(|record| &record.device.id != device_id)
-        .filter(|record| shared.sessions.session_of_device(&record.device.id).is_some())
+        .filter(|record| {
+            shared
+                .sessions
+                .session_of_device(&record.device.id)
+                .is_some()
+        })
         .count();
     if online >= max_devices as usize {
         tracing::warn!(user, max_devices, "tunnel user device ceiling reached");

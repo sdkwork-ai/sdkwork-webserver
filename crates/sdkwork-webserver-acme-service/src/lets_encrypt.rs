@@ -11,7 +11,7 @@ use rcgen::{CertificateParams, DistinguishedName};
 use crate::account_store::AcmeAccountStore;
 use crate::challenge_store::ChallengeStore;
 use crate::dns::{
-    Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest, dns01_record_name, dns01_txt_value,
+    dns01_record_name, dns01_txt_value, Dns01Presenter, Dns01RecordHandle, Dns01RecordRequest,
 };
 use crate::http_client::AcmeHttpClientFactory;
 use crate::model::IssuedCertificateMaterial;

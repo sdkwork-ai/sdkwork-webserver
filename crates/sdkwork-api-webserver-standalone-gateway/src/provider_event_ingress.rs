@@ -438,7 +438,11 @@ async fn receive_event(
     if !delivery_matches_event(subscription, &headers, &event) {
         return StatusCode::BAD_REQUEST;
     }
-    match tokio::time::timeout(MAXIMUM_EVENT_PROCESSING, state.processor.process_event(event)).await
+    match tokio::time::timeout(
+        MAXIMUM_EVENT_PROCESSING,
+        state.processor.process_event(event),
+    )
+    .await
     {
         Ok(Ok(_)) => StatusCode::NO_CONTENT,
         Ok(Err(WebsiteProviderEventProcessError::Parse(_))) => StatusCode::BAD_REQUEST,

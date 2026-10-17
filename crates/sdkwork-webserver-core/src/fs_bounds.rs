@@ -30,9 +30,7 @@ pub(crate) fn read_text_capped(path: &Path, max_bytes: u64) -> std::io::Result<S
     }
     let mut file = File::open(path)?;
     let mut bytes = Vec::with_capacity(metadata.len().min(max_bytes) as usize);
-    file.by_ref()
-        .take(max_bytes + 1)
-        .read_to_end(&mut bytes)?;
+    file.by_ref().take(max_bytes + 1).read_to_end(&mut bytes)?;
     if bytes.len() as u64 > max_bytes {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,

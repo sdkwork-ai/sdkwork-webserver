@@ -36,7 +36,7 @@ pub fn normalize_audit_instant(value: &str, bound: AuditInstantBound) -> Result<
 
 #[cfg(test)]
 mod tests {
-    use super::{AuditInstantBound, normalize_audit_instant};
+    use super::{normalize_audit_instant, AuditInstantBound};
 
     #[test]
     fn accepts_rfc3339_and_date_only() {

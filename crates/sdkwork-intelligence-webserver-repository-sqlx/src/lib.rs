@@ -5,8 +5,8 @@ use sqlx::{Database, Pool, Row};
 mod resolution_cache;
 mod runtime;
 
-pub use resolution_cache::{SqlxResolutionCache, resolution_cache_from_shared_pool};
-pub use runtime::{WebRuntime, bootstrap_web_runtime_from_env};
+pub use resolution_cache::{resolution_cache_from_shared_pool, SqlxResolutionCache};
+pub use runtime::{bootstrap_web_runtime_from_env, WebRuntime};
 
 /// The WeChat verification file a request hostname resolves to, via its root
 /// domain. Exposed for the standalone gateway's data plane: the edge answers
